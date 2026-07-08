@@ -30,7 +30,7 @@ Zero dependencies — Python 3.10+ standard library only.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@main"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v0.1.0"
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -56,7 +56,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@main
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v0.1.0   # pin a release; @main is latest
     with:
       test-command: "pytest -q"
       comment: "true"                 # posts the verdict as a PR comment
