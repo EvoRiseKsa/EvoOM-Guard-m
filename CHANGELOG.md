@@ -9,6 +9,13 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [2.1.2] — 2026-07-10
+
+### Changed
+- **Action description shortened** to satisfy the GitHub Marketplace 125-character
+  limit (surfaced by the Marketplace validation on the v2.1.1 release form). The
+  full description lives in the README; no behavior change.
+
 ## [2.1.1] — 2026-07-10
 
 ### Added

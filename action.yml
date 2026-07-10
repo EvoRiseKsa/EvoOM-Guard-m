@@ -3,11 +3,10 @@
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
 name: "EvoOM Guard"
-description: >
-  AI patch verification gate. Verifies a PR's source changes against the repo's
-  own test suite and REJECTS any edit to the tests or their configuration — so an
-  agent cannot pass by gaming the harness. The verdict is read from a judge-owned
-  JUnit report (not stdout), so a forged "N passed" cannot fool it.
+# Marketplace requires < 125 characters; the full story lives in the README.
+description: >-
+  Catches AI agents gaming your tests: runs the repo's suite and REJECTS any
+  edit to the test harness. Unforgeable verdict.
 branding:
   icon: "shield"
   color: "red"

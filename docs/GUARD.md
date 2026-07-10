@@ -56,14 +56,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v2.1.1   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v2.1.2   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v2.1.1"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v2.1.2"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --test-command "pytest -q" < pr.diff
 ```
@@ -71,7 +71,7 @@ evo-guard guard --diff - --test-command "pytest -q" < pr.diff
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v2.1.1`** — a release tag. The recommended pin and the right choice for
+> - **`@v2.1.2`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -138,7 +138,7 @@ Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v2.1.1   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v2.1.2   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # or "rejected-only" to gate only reward-hacks
@@ -155,7 +155,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v2.1.1"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v2.1.2"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
