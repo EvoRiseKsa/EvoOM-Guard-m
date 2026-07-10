@@ -9,6 +9,34 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [2.2.0] — 2026-07-10
+
+**The first evidence release** — the gate starts its evolution from deny-rules
+toward an evidence-based change-integrity engine (see `ROADMAP.md`).
+
+### Added
+- **Changed-line coverage evidence** (`--diff-coverage`, the `cov` extra): one
+  extra suite run under a judge-owned `coverage` measurement answers *which
+  changed lines did the suite actually execute?* Non-executable changed lines
+  are excluded via coverage's own statement knowledge; non-Python files are
+  reported as unmeasured, never silently counted. Evidence by default;
+  `--min-diff-coverage PCT` turns it into a gate — a hollow `PASS` (suite green,
+  changed lines unexecuted) becomes `FAIL` with the new reason code
+  `diff_coverage_below_threshold`. The output carries its own honesty line:
+  *executed is not asserted*.
+- **Independent Verifier Pack** (`--verifier-pack DIR`): judge-owned tests /
+  invariants the candidate has never seen, mounted into the throwaway copy at
+  `evoguard_verifier_pack/` at judgment time and collected with the suite
+  (pytest runners). Counters visible-test overfitting; a candidate that writes
+  under the mount point is `REJECTED`; the pack's content digest lands in the
+  attestation.
+- **Attestation block** in every verdict JSON: `candidate_sha256`,
+  `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, timestamps and
+  versions — a signed verdict is now bound to what was judged and under which
+  policy, not only to its own bytes (the step before in-toto/Sigstore).
+- JSON contract moves to `schema_version` **1.2** (additive fields + one new
+  reason code).
+
 ## [2.1.2] — 2026-07-10
 
 ### Changed

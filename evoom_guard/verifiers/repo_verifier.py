@@ -74,6 +74,7 @@ trust boundary in ``docs/GUARD.md``).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -947,6 +948,35 @@ class RepoVerifier:
                     artifact={"files_changed": changed},
                 )
 
+            # Mount the Independent Verifier Pack (judge-owned, hidden from the
+            # candidate: it arrives at judgment time, read from OUTSIDE the repo).
+            # Guard already rejects any candidate path under the mount point, so a
+            # pre-planted directory here is unreachable; belt-and-braces: refuse to
+            # merge into an existing one.
+            pack_sha256 = None
+            pack_dir = str(problem.get("verifier_pack", "") or "")
+            if pack_dir:
+                mount = os.path.join(copy, "evoguard_verifier_pack")
+                if os.path.exists(mount):
+                    return VerdictResult(
+                        passed=False, score=0.05,
+                        diagnostics=(
+                            "the repo already contains 'evoguard_verifier_pack/' — the "
+                            "judge-owned pack mount point must not exist in the tree"
+                        ),
+                        artifact={"files_changed": changed},
+                    )
+                shutil.copytree(pack_dir, mount)
+                digest = hashlib.sha256()
+                for dirpath, dirnames, filenames in os.walk(mount):
+                    dirnames.sort()
+                    for fn in sorted(filenames):
+                        rel = os.path.relpath(os.path.join(dirpath, fn), mount)
+                        digest.update(rel.encode("utf-8"))
+                        with open(os.path.join(dirpath, fn), "rb") as pf:
+                            digest.update(pf.read())
+                pack_sha256 = digest.hexdigest()
+
             # Apply deletions to the copy so the verdict reflects the real merge
             # (a removed source file should be *absent* when the suite runs).
             for rel in deleted_paths:
@@ -1053,7 +1083,8 @@ class RepoVerifier:
                 )
             elapsed = time.perf_counter() - t0
 
-            junit = parse_junit_xml(_read_text_or_none(host_xml) or "")
+            xml_text = _read_text_or_none(host_xml) or ""
+            junit = parse_junit_xml(xml_text)
             if junit is None:
                 # Directory-based runners (Maven Surefire) write one report file per
                 # test class into a judge-owned dir derived as ``<report>.d``.
@@ -1077,6 +1108,8 @@ class RepoVerifier:
                     "files_deleted": deleted_paths,
                     "verdict_source": "junit+exit" if junit is not None else "exit",
                     "tamper": tampered,
+                    "junit_sha256": hashlib.sha256(xml_text.encode("utf-8")).hexdigest() if xml_text else None,
+                    "verifier_pack_sha256": pack_sha256,
                 },
             )
         finally:

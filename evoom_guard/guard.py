@@ -38,6 +38,7 @@ Guard never claims the subprocess is a security sandbox.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import os
 import shutil
@@ -79,7 +80,10 @@ _PROTECTED_GLOBS = (
 #         REJECTED, and a deleted *source* file is applied to the verified tree (so
 #         the verdict matches the merge). The optional ``deleted_not_gated`` array
 #         was renamed to ``deleted`` to reflect that deletions are no longer ungated.
-SCHEMA_VERSION = "1.1"
+#   1.2 — additive evidence fields: ``diff_coverage`` (changed-line coverage, opt-in)
+#         and ``attestation`` (context binding for the signed verdict); one new
+#         reason code, ``diff_coverage_below_threshold``.
+SCHEMA_VERSION = "1.2"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -102,6 +106,12 @@ REASON_EMPTY_DIFF = "empty_diff"
 REASON_BINARY_PATCH = "binary_patch"
 REASON_REVERSE_APPLY_FAILED = "reverse_apply_failed"
 REASON_NO_VERIFIABLE_CHANGES = "no_verifiable_changes"
+REASON_DIFF_COVERAGE_BELOW_THRESHOLD = "diff_coverage_below_threshold"
+
+# The judge-owned directory an Independent Verifier Pack is mounted at inside
+# the throwaway copy. It arrives at judgment time (the candidate never saw it),
+# and a candidate that tries to pre-plant or edit it is rejected outright.
+VERIFIER_PACK_DIR = "evoguard_verifier_pack"
 
 
 @dataclass
@@ -123,6 +133,8 @@ class GuardResult:
     base_reconstruction: str | None = None  # "ok" | "failed" (only for --diff)
     reason_code: str = ""                  # stable machine code for the cause (see REASON_*)
     isolation: str = "subprocess"          # how the suite ran: subprocess / docker / gvisor
+    diff_coverage: dict[str, Any] | None = None   # changed-line coverage evidence (opt-in)
+    attestation: dict[str, Any] | None = None     # context binding for the signed verdict
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -144,6 +156,8 @@ class GuardResult:
             "verdict_source": self.verdict_source,
             "source": self.source,
             "base_reconstruction": self.base_reconstruction,
+            "diff_coverage": self.diff_coverage,
+            "attestation": self.attestation,
             "diagnostics": self.diagnostics[:2000],
         }
 
@@ -215,6 +229,9 @@ def guard(
     isolation: str = "subprocess",
     docker_image: str | None = None,
     docker_network: str = "none",
+    verifier_pack: str | None = None,
+    diff_coverage: bool = False,
+    min_diff_coverage: float | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -247,6 +264,19 @@ def guard(
     read-only container (``docker_image`` required; defence in depth for semi-trusted
     code — not a complete boundary for hostile code). Default ``"subprocess"`` is
     unchanged.
+
+    ``verifier_pack`` mounts an **Independent Verifier Pack** — a directory of
+    judge-owned tests/invariants the candidate has never seen — into the copy at
+    ``evoguard_verifier_pack/`` at judgment time. The suite then also collects the
+    pack's tests, so a candidate overfitted to the visible tests fails the hidden
+    ones. A candidate that writes anywhere under that directory is ``REJECTED``.
+
+    ``diff_coverage=True`` adds **changed-line coverage evidence** (one extra
+    suite run under ``coverage``): which changed lines the suite actually
+    executed. Evidence only, unless ``min_diff_coverage`` sets a gate: a ``PASS``
+    whose measured changed-line coverage is below the threshold becomes ``FAIL``
+    (``diff_coverage_below_threshold``). Executed is not asserted — see
+    :mod:`evoom_guard.evidence`.
     """
     changed = changed_paths(candidate)
     # Deletions are gated too: deleting a protected harness file is as much a
@@ -263,6 +293,8 @@ def guard(
     )
 
     def _is_violation(p: str) -> bool:
+        if p == VERIFIER_PACK_DIR or p.startswith(VERIFIER_PACK_DIR + "/"):
+            return True  # the judge-owned pack mount point — never writable
         if is_judge_autoexec(p):
             return True  # auto-exec runs in the judge process — never exempt
         if not (is_protected(p, protected) or is_protected_config(p) or is_protected_ci(p)):
@@ -292,6 +324,8 @@ def guard(
         problem["allow_new_tests"] = True
     if safe_deleted:
         problem["deleted"] = safe_deleted
+    if verifier_pack:
+        problem["verifier_pack"] = os.path.abspath(verifier_pack)
 
     verdict = RepoVerifier(
         timeout=timeout, mem_limit_mb=mem_limit_mb,
@@ -345,6 +379,45 @@ def guard(
             "the test session produced no clean verdict (collection/usage error)"
         ), REASON_NO_TEST_VERDICT
 
+    # Changed-line coverage evidence (opt-in; one extra suite run). Only when the
+    # suite actually ran — a REJECTED/ERROR verdict has nothing to measure.
+    coverage_evidence: dict[str, Any] | None = None
+    if diff_coverage and v in (PASS, FAIL) and isolation == "subprocess":
+        from evoom_guard.evidence import collect_diff_coverage
+
+        coverage_evidence = collect_diff_coverage(
+            repo_path, candidate,
+            deleted=tuple(safe_deleted), test_command=test_command, timeout=timeout,
+        )
+        if (
+            v == PASS
+            and min_diff_coverage is not None
+            and coverage_evidence.get("measured")
+            and float(coverage_evidence.get("percent", 100.0)) < min_diff_coverage
+        ):
+            v, code = FAIL, REASON_DIFF_COVERAGE_BELOW_THRESHOLD
+            reason = (
+                "the suite passes but executed only "
+                f"{coverage_evidence['executed']}/{coverage_evidence['total']} of the "
+                f"changed lines ({coverage_evidence['percent']}% < the required "
+                f"{min_diff_coverage:g}%) — the change is largely unexercised by the "
+                "tests that judged it"
+            )
+
+    attestation: dict[str, Any] = {
+        "created_utc": _utc_now(),
+        "guard_version": __version__,
+        "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
+        "deleted_paths": list(safe_deleted),
+        "test_command": list(test_command) if test_command else "default:python -m pytest",
+        "policy_sha256": hashlib.sha256(json.dumps({
+            "protected": sorted(protected), "allow": sorted(allow),
+            "allow_new_tests": allow_new_tests, "isolation": isolation,
+        }, sort_keys=True).encode("utf-8")).hexdigest(),
+        "junit_sha256": art.get("junit_sha256"),
+        "verifier_pack_sha256": art.get("verifier_pack_sha256"),
+    }
+
     return GuardResult(
         verdict=v,
         passed=(v == PASS),
@@ -359,7 +432,15 @@ def guard(
         diagnostics=verdict.diagnostics or "",
         reason_code=code,
         isolation=isolation,
+        diff_coverage=coverage_evidence,
+        attestation=attestation,
     )
+
+
+def _utc_now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
@@ -473,6 +554,9 @@ def guard_from_diff(
     isolation: str = "subprocess",
     docker_image: str | None = None,
     docker_network: str = "none",
+    verifier_pack: str | None = None,
+    diff_coverage: bool = False,
+    min_diff_coverage: float | None = None,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -530,6 +614,8 @@ def guard_from_diff(
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit_mb,
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+            verifier_pack=verifier_pack,
+            diff_coverage=diff_coverage, min_diff_coverage=min_diff_coverage,
         )
         result.source = "diff"
         result.base_reconstruction = "ok"
@@ -568,6 +654,19 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
         lines.append(f"| Input | {r.source} |")
     if r.base_reconstruction:
         lines.append(f"| Base reconstruction | {r.base_reconstruction} |")
+    if r.diff_coverage is not None:
+        dc = r.diff_coverage
+        if dc.get("measured"):
+            lines.append(
+                f"| Changed lines executed | {dc['executed']}/{dc['total']} "
+                f"({dc['percent']}%) |"
+            )
+        else:
+            lines.append(f"| Changed lines executed | not measured — {dc.get('note', '')} |")
+    if r.attestation and r.attestation.get("verifier_pack_sha256"):
+        lines.append(
+            f"| Verifier pack | `{str(r.attestation['verifier_pack_sha256'])[:12]}…` |"
+        )
     if r.protected_violations:
         lines += [
             "",
@@ -578,6 +677,20 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
             "A patch must fix the **source under test**, never the tests or their "
             "configuration. This is rejected before the suite runs.",
         ]
+    if r.diff_coverage is not None and r.diff_coverage.get("measured"):
+        missed = {
+            p: d["missed"] for p, d in r.diff_coverage.get("files", {}).items() if d.get("missed")
+        }
+        if missed:
+            lines += [
+                "",
+                "<details><summary>Changed lines the suite never executed</summary>",
+                "",
+                *[f"- `{p}`: lines {', '.join(map(str, ln))}" for p, ln in sorted(missed.items())],
+                "",
+                f"<sub>{r.diff_coverage.get('caveat', '')}</sub>",
+                "</details>",
+            ]
     if deleted:
         lines += [
             "",

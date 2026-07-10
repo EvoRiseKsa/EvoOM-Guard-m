@@ -40,6 +40,8 @@ evo-guard = "evoom_guard.cli:main"
 [project.optional-dependencies]
 # Ed25519 verdict signing (evo-guard keygen / --sign-key / verify-verdict).
 sign = ["cryptography>=41"]
+# Changed-line coverage evidence (evo-guard guard --diff-coverage).
+cov = ["coverage>=7"]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "coverage>=7", "cryptography>=41"]
 
 [tool.setuptools]
@@ -68,8 +70,8 @@ warn_unused_ignores = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-# The 'sign' extra is optional: type-checking must pass without it installed.
-module = "cryptography.*"
+# The 'sign'/'cov' extras are optional: type-checking must pass without them.
+module = ["cryptography.*", "coverage", "coverage.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

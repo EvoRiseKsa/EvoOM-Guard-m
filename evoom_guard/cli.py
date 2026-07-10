@@ -127,6 +127,24 @@ def build_parser() -> argparse.ArgumentParser:
         "tests/config/auto-exec stay rejected). Default: off; or .evoguard.json.",
     )
     g_p.add_argument(
+        "--verifier-pack", dest="verifier_pack", default=None,
+        help="directory of judge-owned tests/invariants the candidate has never "
+        "seen; mounted read-only into the copy at evoguard_verifier_pack/ at "
+        "judgment time and collected by the suite (pytest runners)",
+    )
+    g_p.add_argument(
+        "--diff-coverage", dest="diff_coverage", action="store_true",
+        help="measure which changed lines the suite actually executed (one extra "
+        "suite run under coverage; needs the 'cov' extra). Evidence only unless "
+        "--min-diff-coverage is set. Executed is not asserted.",
+    )
+    g_p.add_argument(
+        "--min-diff-coverage", dest="min_diff_coverage", type=float, default=None,
+        help="gate: a PASS whose measured changed-line coverage is below this "
+        "percentage becomes FAIL (diff_coverage_below_threshold); implies "
+        "--diff-coverage",
+    )
+    g_p.add_argument(
         "--timeout", type=int, default=None,
         help="per-run suite timeout in seconds (default: 120; or .evoguard.json)",
     )
@@ -336,6 +354,9 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
+            verifier_pack=args.verifier_pack,
+            diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
+            min_diff_coverage=args.min_diff_coverage,
         )
     elif args.base and args.head:
         candidate, deleted = candidate_from_dirs(args.base, args.head)
@@ -346,6 +367,9 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
+            verifier_pack=args.verifier_pack,
+            diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
+            min_diff_coverage=args.min_diff_coverage,
         )
         result.source = "base/head"
     elif args.repo and args.patch:
@@ -355,6 +379,9 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
+            verifier_pack=args.verifier_pack,
+            diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
+            min_diff_coverage=args.min_diff_coverage,
         )
         result.source = "edit blocks"
     else:

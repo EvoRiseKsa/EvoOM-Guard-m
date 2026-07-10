@@ -142,6 +142,33 @@ evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1
 
 See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
 
+## Evidence beyond "the tests passed" (v2.2)
+
+A green suite is one signal, not a proof. Guard can now attach two more
+independent pieces of evidence to every verdict:
+
+```bash
+# Which changed lines did the suite actually EXECUTE? (one extra suite run,
+# needs the 'cov' extra). Evidence by default; --min-diff-coverage makes it a gate:
+evo-guard guard . --diff - --diff-coverage --min-diff-coverage 80
+
+# Judge-owned tests the agent has NEVER seen (org invariants, hidden
+# integration checks) — mounted at judgment time, collected with the suite:
+evo-guard guard . --diff - --verifier-pack /secure/org-pack
+```
+
+- A `PASS` whose changed lines were never executed is a **hollow pass** — the
+  report shows exactly which lines the suite never reached, and the optional
+  threshold flips it to `FAIL` (`diff_coverage_below_threshold`). Honest limit,
+  stated in the output itself: *executed is not asserted* — coverage is a floor
+  of scrutiny, not proof of correctness.
+- A patch overfitted to the visible tests fails the **Independent Verifier
+  Pack** it never saw (the documented answer to visible-test overfitting).
+  A candidate that tries to write into the pack mount is `REJECTED`.
+- Every verdict now carries an **attestation block** (candidate/policy/report
+  digests, timestamp, versions) — so a signed verdict is bound to *what* was
+  judged, under *which* policy, not just to its own bytes.
+
 ## What Guard honestly is (and is not)
 
 - The verdict comes from **running your repo's own test suite** in a subprocess
