@@ -166,6 +166,37 @@ def build_parser() -> argparse.ArgumentParser:
         help="write a SARIF 2.1.0 report here (for GitHub code-scanning / the Security tab)",
     )
     g_p.add_argument("--report", default=None, help="write the Markdown report here (else stdout)")
+    g_p.add_argument(
+        "--sign-key", dest="sign_key", default=None,
+        help="Ed25519 private key (PEM) to sign the --json verdict with; writes a "
+        "detached base64 signature to <json>.sig (needs the 'sign' extra)",
+    )
+
+    # ----- keygen ---------------------------------------------------------- #
+    k_p = sub.add_parser(
+        "keygen",
+        help="generate an Ed25519 keypair for verdict signing (needs the 'sign' extra)",
+    )
+    k_p.add_argument(
+        "--key", default="evoguard-signing.pem",
+        help="private key output path (default: evoguard-signing.pem; keep it a CI secret)",
+    )
+    k_p.add_argument(
+        "--pub", default="evoguard-signing.pub",
+        help="public key output path (default: evoguard-signing.pub; distribute freely)",
+    )
+
+    # ----- verify-verdict --------------------------------------------------- #
+    v_p = sub.add_parser(
+        "verify-verdict",
+        help="verify a signed verdict file offline (exit 0 valid / 1 invalid)",
+    )
+    v_p.add_argument("verdict", help="the JSON verdict file whose bytes were signed")
+    v_p.add_argument(
+        "--sig", default=None,
+        help="the detached signature (default: <verdict>.sig)",
+    )
+    v_p.add_argument("--pub", required=True, help="the judge's Ed25519 public key (PEM)")
 
     # ----- doctor -------------------------------------------------------- #
     d_p = sub.add_parser(
@@ -343,6 +374,14 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         out(report)
     if args.json_out:
         write_json(result, args.json_out, deleted=deleted)
+    if getattr(args, "sign_key", None):
+        if not args.json_out:
+            out("--sign-key needs --json: the signature covers the JSON verdict file")
+            return 2
+        from evoom_guard.signing import sign_file
+
+        sig = sign_file(args.json_out, args.sign_key)
+        out(f"signed {args.json_out} -> {sig}")
     if args.sarif:
         write_sarif(result, args.sarif)
     return result.exit_code
@@ -510,6 +549,33 @@ def cmd_init(args: argparse.Namespace, *, out: Callable[[str], None] = print) ->
     return 0
 
 
+def cmd_keygen(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
+    """Execute ``evo-guard keygen`` — generate an Ed25519 signing keypair."""
+    from evoom_guard.signing import generate_keypair
+
+    try:
+        generate_keypair(args.key, args.pub)
+    except FileExistsError as exc:
+        out(str(exc))
+        return 2
+    out(f"wrote {args.key} (private — keep it a CI secret) and {args.pub} (public)")
+    return 0
+
+
+def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
+    """Execute ``evo-guard verify-verdict`` — offline signature check (exit 0/1)."""
+    from evoom_guard.signing import verify_file
+
+    sig = args.sig or (args.verdict + ".sig")
+    try:
+        ok = verify_file(args.verdict, sig, args.pub)
+    except (OSError, ValueError) as exc:
+        out(f"unusable input: {exc}")
+        return 2
+    out("signature: VALID" if ok else "signature: INVALID — the verdict bytes changed after signing")
+    return 0 if ok else 1
+
+
 def cmd_version(_args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     out(f"evo-guard {__version__}")
     return 0
@@ -524,6 +590,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_doctor(args)
     if args.command == "init":
         return cmd_init(args)
+    if args.command == "keygen":
+        return cmd_keygen(args)
+    if args.command == "verify-verdict":
+        return cmd_verify_verdict(args)
     if args.command == "version":
         return cmd_version(args)
     return 2  # unreachable: subparser is required

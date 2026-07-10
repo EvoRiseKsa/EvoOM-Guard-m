@@ -122,6 +122,20 @@ Project defaults can live in a `.evoguard.json` at the repo root (itself a
 protected file — a patch cannot edit its own gate). Python API:
 `from evoom_guard.guard import guard, guard_from_diff, render_report`.
 
+## Signed verdicts (optional)
+
+With the `sign` extra, the judge can sign every JSON verdict with an Ed25519
+key, making the *record* as tamper-evident as the *run* — a `FAIL` cannot be
+quietly edited into a `PASS` in some artifact bucket:
+
+```bash
+evo-guard keygen                                   # once: the judge's identity
+evo-guard guard ... --json v.json --sign-key evoguard-signing.pem
+evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1
+```
+
+See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
+
 ## What Guard honestly is (and is not)
 
 - The verdict comes from **running your repo's own test suite** in a subprocess
@@ -146,7 +160,9 @@ protected file — a patch cannot edit its own gate). Python API:
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
-| [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs on a real repo (clean → PASS; tamper → REJECTED) |
+| [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs: a real repo, and a hard ungameable benchmark (cheat → REJECTED; honest → PASS) |
+| [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
+| [`ROADMAP.md`](ROADMAP.md) | Where this is heading: the patch gate inside an agent-governance fabric |
 | [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |
 | [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md) | The docker/gVisor isolation modes and their threat model |

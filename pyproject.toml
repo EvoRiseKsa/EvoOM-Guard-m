@@ -38,7 +38,9 @@ Issues = "https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues"
 evo-guard = "evoom_guard.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "coverage>=7"]
+# Ed25519 verdict signing (evo-guard keygen / --sign-key / verify-verdict).
+sign = ["cryptography>=41"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "coverage>=7", "cryptography>=41"]
 
 [tool.setuptools]
 license-files = ["LICENSE"]
@@ -64,6 +66,11 @@ files = ["evoom_guard"]
 warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# The 'sign' extra is optional: type-checking must pass without it installed.
+module = "cryptography.*"
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["evoom_guard"]

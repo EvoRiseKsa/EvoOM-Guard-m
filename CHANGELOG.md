@@ -9,6 +9,23 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [2.1.0] — 2026-07-10
+
+### Added
+- **Signed verdicts** (the `sign` extra — the core stays stdlib-only):
+  `evo-guard keygen` generates an Ed25519 judge keypair; `evo-guard guard …
+  --json v.json --sign-key key.pem` writes a detached base64 signature of the
+  verdict file's exact bytes to `v.json.sig`; `evo-guard verify-verdict` checks
+  it offline (exit 0 valid / 1 invalid). A post-signing byte change — the
+  `FAIL`→`PASS` artifact forgery — flips verification to invalid (adversarial
+  test included). See `docs/SIGNED_VERDICTS.md`.
+- **`ROADMAP.md`**: the patch gate placed inside the agent-governance picture
+  (signed evidence chains, capability ledgers).
+- **`docs/PROOFS.md`**: a second live proof on a hard, ungameable counting
+  benchmark (fresh-randomized suite, oracle-free huge-`n` identities, strict
+  time budget): the cheat patch is `REJECTED` before the suite runs; an honest
+  `O(log n · m²)` solution earns `PASS` under the exit-code oracle.
+
 ## [2.0.0] — 2026-07-10
 
 **Consolidation release.** This repository's v0.1.0 was a fresh extraction of the

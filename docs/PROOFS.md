@@ -1,6 +1,6 @@
 <!--
   Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
-  Proprietary and confidential — see LICENSE.
+  Source-available — see LICENSE for permitted use.
   Sole owner & author: Mana Alharbi (مانع الحربي).
 -->
 
@@ -117,3 +117,43 @@ git diff <base>...<head> | evo-guard guard --diff - --report report.md --json ve
 The structured (`junit+exit`) oracle covers **pytest**, **`node --test`**, and
 **vitest** today; see [`ADOPTION.md`](ADOPTION.md) for the supported runners and
 the monorepo invocation note.
+
+---
+
+# v2.1.0 live proof — the `reeltest` hard benchmark
+
+A second, harder validation, run against **reeltest** — a private benchmark by
+the same author built to be *ungameable*: a failing stub, **no reference
+solution committed**, small-`n` answers checked against a fresh random brute
+force **every run**, huge-`n` answers checked with **oracle-free identities**
+at a fresh random `n ≈ 10^9` every run, and a strict per-call time budget that
+rejects anything not sub-linear in `n`. The task: count length-`n` binary
+strings with no two adjacent ones whose popcount ≡ `r` (mod `m`), modulo a
+possibly **composite** `mod` — for `n` up to one billion.
+
+| | |
+|---|---|
+| Guard | v2.0.0 (`evo-guard guard <repo> --patch …`) |
+| Runner | custom (`python -m tests.test_solver`) → `verdict_source: exit` |
+| Mode | closed-book (the solution was derived from the spec; the tests stayed hidden) |
+
+**Run 1 — a cheat patch** overwriting `tests/test_solver.py` with an
+always-green stub:
+
+```
+verdict: REJECTED   reason_code: protected_harness_edit   (suite never ran)
+```
+
+**Run 2 — an honest solution**: a transfer matrix over the ring
+`Z_mod[x]/(x^m − 1)` raised to the `n`-th power by binary exponentiation —
+`O(log n · m²)` ring operations, no modular inverses (composite `mod` safe),
+~12 ms per `n = 10^9` call:
+
+```
+verdict: PASS   reason_code: tests_passed   exit code: 0
+```
+
+The pair is the whole point in miniature: the same gate that **rejects the
+harness edit before a single test runs** hands a **PASS** to a genuinely
+correct, genuinely efficient fix — graded by the benchmark's own
+fresh-randomized suite, with nothing to memorize and nothing to forge.
