@@ -19,12 +19,33 @@ evidence — never trust a model's opinion of its own output.*
 - ✅ v2.1.0: **signed verdicts** — Ed25519 detached signatures over the JSON
   verdict (`keygen` / `--sign-key` / `verify-verdict`), making the *record* as
   tamper-evident as the *run*. See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
-- Next candidates (driven by [user feedback](../../issues)):
-  - richer language coverage where a structured (non-forgeable) report format
-    exists; bare `go test -json` and friends stay exit-code-only by design;
-  - a baseline scan mode (verdict for the repo as-is, no patch) for adopting
-    Guard on an existing codebase;
-  - `--allow-new-tests` graduation from feature mode to a first-class policy.
+- ✅ v2.2.0: **evidence beyond "the tests passed"** — changed-line coverage,
+  Independent Verifier Packs, per-verdict attestation.
+- ✅ v2.3.0: **assurance profile** — every verdict states its `report_integrity`
+  honestly (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)).
+
+### The headline next direction: an external black-box judge
+
+The single most valuable thing Guard can build. Today the code under test runs
+in the **same process** as the report writer, so a deliberate in-process patch
+can forge the JUnit report and exit code (`report_integrity:
+same_process_candidate_writable` — proven by an adversarial test). No in-process
+change fixes this; the candidate has full authority over its own process.
+
+The fix is architectural: run the candidate in one container reachable only
+through an API / stdin / protocol, and a **separate judge** that owns the
+verifier pack, drives inputs, observes outputs, and writes the report **without
+ever importing the candidate's code**. That makes `report_integrity`
+`external_isolated` and turns "checks the candidate can't game" from a
+qualified claim into a real one. Natural fit for API/HTTP/CLI/DB targets;
+library targets need a thin RPC wrapper.
+
+- Other near-term candidates (driven by [user feedback](../../issues)):
+  - a baseline scan mode (verdict for the repo as-is, no patch);
+  - `mounts_ro` wired for read-only external evidence in the container modes;
+  - `minimize_patch` surfaced as **extraneous-change detection** (which hunks
+    the evidence does *not* require) — after the judge boundary is hardened, so
+    it doesn't repeat a forgeable verdict.
 
 ## Pillar 2 — the evidence chain (integration: Sentinel AI)
 

@@ -83,7 +83,10 @@ _PROTECTED_GLOBS = (
 #   1.2 — additive evidence fields: ``diff_coverage`` (changed-line coverage, opt-in)
 #         and ``attestation`` (context binding for the signed verdict); one new
 #         reason code, ``diff_coverage_below_threshold``.
-SCHEMA_VERSION = "1.2"
+#   1.3 — additive ``assurance`` object stating how much the verdict can be trusted
+#         (harness_integrity / report_integrity / candidate_isolation). Honesty:
+#         report_integrity is same_process_candidate_writable — see _assurance_profile.
+SCHEMA_VERSION = "1.3"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -147,6 +150,7 @@ class GuardResult:
     isolation: str = "subprocess"          # how the suite ran: subprocess / docker / gvisor
     diff_coverage: dict[str, Any] | None = None   # changed-line coverage evidence (opt-in)
     attestation: dict[str, Any] | None = None     # context binding for the signed verdict
+    assurance: dict[str, Any] | None = None       # how much the verdict can be trusted
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -168,6 +172,7 @@ class GuardResult:
             "verdict_source": self.verdict_source,
             "source": self.source,
             "base_reconstruction": self.base_reconstruction,
+            "assurance": self.assurance,
             "diff_coverage": self.diff_coverage,
             "attestation": self.attestation,
             "diagnostics": self.diagnostics[:2000],
@@ -463,6 +468,7 @@ def guard(
         isolation=isolation,
         diff_coverage=coverage_evidence,
         attestation=attestation,
+        assurance=_assurance_profile(isolation, verifier_pack),
     )
 
 
@@ -470,6 +476,53 @@ def _utc_now() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# Assurance levels — see docs/ASSURANCE.md. The honest, load-bearing distinction
+# is between TWO integrity properties that people conflate:
+#
+#   * harness_integrity — can the patch change the CHECKS (tests/config/CI)?
+#     "pre_gate_enforced": no. This is a STATIC analysis of the diff done before
+#     anything runs, so runtime code cannot undo it. This guarantee is robust.
+#
+#   * report_integrity — can the code under test forge the RESULT (the JUnit
+#     report + exit code) from inside the run? For every runner today the answer
+#     is yes: the candidate's source runs in the same process as pytest and the
+#     report writer, so an ``atexit`` hook can overwrite the judge's report and
+#     ``os._exit(0)`` can force a zero exit. "same_process_candidate_writable"
+#     names this plainly. It is NOT closed by the container isolation modes
+#     (they isolate the host, not the report from the code). The real fix is an
+#     external black-box judge — see ROADMAP.md. There is an adversarial test
+#     that proves this so the claim can never silently drift to "unforgeable".
+#
+# So Guard reliably blocks the reward-hacks agents do in practice (editing or
+# deleting tests, deselecting in config, forging stdout — all caught) but does
+# NOT stop a patch that writes deliberate process-level forgery code into
+# source. Read report_integrity before trusting a PASS on untrusted authors.
+def _assurance_profile(isolation: str, verifier_pack: str | None) -> dict[str, Any]:
+    pack = None
+    if verifier_pack:
+        pack = {
+            "present": True,
+            "integrity": "diff_excluded",       # the patch cannot modify the pack
+            "secrecy": "none",                  # the running code can read it
+        }
+    overall = "isolated_repo_native" if isolation in ("docker", "gvisor") else "repo_native_same_process"
+    return {
+        "harness_integrity": "pre_gate_enforced",
+        "report_integrity": "same_process_candidate_writable",
+        "candidate_isolation": isolation,
+        "verifier_pack": pack,
+        "overall_profile": overall,
+        "note": (
+            "report_integrity is same_process_candidate_writable: a determined "
+            "in-process patch can forge the JUnit report and exit code together. "
+            "Guard blocks the harness edits/deletions and stdout forgery agents do "
+            "in practice; it does not stop deliberate process-level forgery in "
+            "source. The container modes isolate the host, not the report. See "
+            "docs/ASSURANCE.md."
+        ),
+    }
 
 
 def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
@@ -696,6 +749,24 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
         lines.append(
             f"| Verifier pack | `{str(r.attestation['verifier_pack_sha256'])[:12]}…` |"
         )
+    if r.assurance:
+        a = r.assurance
+        lines.append(
+            f"| Assurance | harness `{a['harness_integrity']}` · "
+            f"report `{a['report_integrity']}` · isolation `{a['candidate_isolation']}` |"
+        )
+    # On a PASS, spell out the report-integrity caveat so a green verdict is never
+    # read as a stronger guarantee than it is.
+    if r.verdict == PASS and r.assurance and r.assurance.get("report_integrity") == "same_process_candidate_writable":
+        lines += [
+            "",
+            "> <sub>**Assurance note:** this PASS means the repo's suite passed and the "
+            "test harness was left untouched. The result is read from a judge-owned "
+            "report, which resists stdout forgery — but the code under test runs in the "
+            "same process as the reporter, so a *deliberate* in-process forgery is not "
+            "caught here (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)). For untrusted "
+            "authors, gate on this in review.</sub>",
+        ]
     if r.protected_violations:
         lines += [
             "",

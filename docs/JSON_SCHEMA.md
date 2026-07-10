@@ -26,7 +26,7 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 
 ```json
 {
-  "schema_version": "1.2",
+  "schema_version": "1.3",
   "tool": "evoguard",
   "tool_version": "1.8.0",
   "verdict": "PASS",
@@ -61,6 +61,7 @@ auto-exec file) drives `REJECTED`. (Before `1.1` this array was named
 |---|---|---|
 | `schema_version` | string | Contract version. Pin on this. |
 | `diff_coverage` | object \| null | Changed-line coverage evidence (`--diff-coverage`): `measured`, `percent`, `executed`, `total`, per-file `executed`/`missed` lines, `caveat` ("executed is not asserted"). `null` when not requested. |
+| `assurance` | object | How much the verdict can be trusted: `harness_integrity` (`pre_gate_enforced`), `report_integrity` (`same_process_candidate_writable` — the code under test can forge the report in-process; see docs/ASSURANCE.md), `candidate_isolation`, `verifier_pack`, `overall_profile`, `note`. |
 | `attestation` | object \| null | Context binding for the (optionally signed) verdict: `candidate_sha256`, `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, `verifier_pack_manifest` (optional `pack.json` id/version), `created_utc`, `guard_version`, `test_command`, `deleted_paths`. |
 | `tool` | string | Always `"evoguard"`. |
 | `tool_version` | string | `evoom_guard.__version__`. |
@@ -119,3 +120,7 @@ patch). Exit code is `0` when supported, `1` otherwise.
 
 - New reason codes: `test_timeout`, `setup_timeout`, `setup_failed` (a run that timed out or whose setup failed is no longer mislabelled `patch_apply_failed`), and `diff_coverage_below_threshold` — a PASS-quality run gated to `FAIL` because the measured changed-line coverage fell below `--min-diff-coverage`.
 - New top-level fields `diff_coverage` and `attestation` (additive; `null` when absent).
+
+## 1.3 additions
+
+- New `assurance` object on every verdict. Its `report_integrity` is `same_process_candidate_writable` for all current runners — a deliberate in-process patch can forge the JUnit report and exit code together. This is documented, not a defect to hide; the fix is the external black-box judge (ROADMAP.md).
