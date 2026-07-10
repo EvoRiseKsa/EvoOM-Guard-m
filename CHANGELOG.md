@@ -9,6 +9,12 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [2.1.1] — 2026-07-10
+
+### Added
+- **GitHub Marketplace branding** on the composite Action (`branding: shield /
+  red`) — required for the Marketplace listing; no behavior change.
+
 ## [2.1.0] — 2026-07-10
 
 ### Added

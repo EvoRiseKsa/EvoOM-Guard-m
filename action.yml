@@ -8,6 +8,9 @@ description: >
   own test suite and REJECTS any edit to the tests or their configuration — so an
   agent cannot pass by gaming the harness. The verdict is read from a judge-owned
   JUnit report (not stdout), so a forged "N passed" cannot fool it.
+branding:
+  icon: "shield"
+  color: "red"
 
 inputs:
   base-ref:
