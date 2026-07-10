@@ -20,22 +20,38 @@ passing"` deselect, print a fake `9999 passed` to stdout, or drop a
 
 Guard closes that hole with two mechanisms:
 
-1. **The harness is untouchable.** Any edit — or **deletion** — of the tests,
-   their configuration (`pyproject.toml`, `pytest.ini`, `vitest.config.*`,
-   `Makefile`, CI workflows, …), or an auto-executed file (`sitecustomize.py`,
-   `*.pth`) is **REJECTED before the suite even runs**. `package.json` is
-   dual-purpose, so instead of blocking it wholesale, its test-harness fields are
-   restored from the pristine original.
-2. **The verdict cannot be forged.** Tests run against a throwaway copy of your
-   repo, and the verdict is read from a **judge-owned JUnit report + the process
-   exit code** — never scraped from stdout. A patch that prints `9999 passed`,
-   or plants a fake report, moves nothing — and an exit-code ⟷ report
-   disagreement is surfaced as its own **`TAMPERED`** verdict, never read as a
-   pass. (There are adversarial tests for exactly these attacks in `tests/`;
-   the catalogue of covered reward-hacks is
-   [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md).)
+1. **The harness is untouchable** (a robust guarantee). Any edit — or
+   **deletion** — of the tests, their configuration (`pyproject.toml`,
+   `pytest.ini`, `vitest.config.*`, `Makefile`, CI workflows, …), or an
+   auto-executed file (`sitecustomize.py`, `*.pth`) is **REJECTED before the
+   suite even runs**. This is a *static* check on the patch's file list, so
+   runtime code cannot undo it. `package.json` is dual-purpose, so instead of
+   blocking it wholesale, its test-harness fields are restored from the pristine
+   original.
+2. **The result is judge-owned, not scraped from stdout.** Tests run against a
+   throwaway copy, and the verdict is read from a **judge-owned JUnit report +
+   the process exit code** — never from stdout. A patch that prints `9999
+   passed` moves nothing, and an exit-code ⟷ report disagreement is its own
+   **`TAMPERED`** verdict. This blocks the reward-hacks agents do **in
+   practice** (harness edits/deletions, config deselects, stdout forgery — all
+   caught, with adversarial tests in `tests/` and the
+   [catalogue](docs/REWARD_HACKING_CATALOG.md)).
 
-Structured, forgery-resistant verdicts (`junit+exit`) cover **eight runners**:
+> **Honest boundary — read this.** Mechanism 2 is *not* unforgeable. Your tests
+> and the report writer run in the **same process** as the code under test, so a
+> patch that deliberately writes process-level forgery into source (an `atexit`
+> hook that overwrites the report and calls `os._exit(0)`) *can* fake a `PASS`.
+> Guard ships an adversarial test that proves this, and every verdict carries an
+> **`assurance` profile** naming its `report_integrity` as
+> `same_process_candidate_writable`. The container isolation modes protect the
+> host, **not** the report. The real fix — an external black-box judge that
+> never runs the candidate in its own process — is the headline item on the
+> [roadmap](ROADMAP.md). See [`docs/ASSURANCE.md`](docs/ASSURANCE.md). In short:
+> Guard catches the cheats that happen in the wild and slip past review; it does
+> not stop a patch that writes blatant forgery code into source (which review
+> catches loudly). Gate accordingly for untrusted authors.
+
+Structured, judge-owned verdicts (`junit+exit`) cover **eight runners**:
 pytest, `node --test`, vitest, jest, gotestsum (Go), rspec (Ruby), mocha, and
 Maven/Surefire (Java). Any other test command is graded by exit code — still
 never by stdout.
@@ -186,8 +202,13 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
   auto-exec files, path escapes — see the adversarial tests and
   [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md)), not
   claimed as absolute immunity.
+- **The result is forgeable by deliberate in-process code** (the honest boundary
+  above): the verdict is trustworthy against the common cheats, not against a
+  patch that writes report-forgery into source. Read the `assurance` profile's
+  `report_integrity` field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 - Custom (non-adapter) test commands are graded by exit code only — still not
-  stdout-forgeable, but with a coarser gradient.
+  stdout-forgeable, but with a coarser gradient (and, like every runner today,
+  in-process-forgeable).
 - **`ModuleNotFoundError` under the judge?** Prefer `python -m pytest` over bare
   `pytest` in `--test-command`: the `-m` form puts the repo copy's root on
   `sys.path` (exactly like the default command), so top-level packages import
@@ -203,6 +224,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs: a real repo, and a hard ungameable benchmark (cheat → REJECTED; honest → PASS) |
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
 | [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, tamper-proof invariants (and their honest limits) |
+| [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
 | [`ROADMAP.md`](ROADMAP.md) | Where this is heading: the patch gate inside an agent-governance fabric |
 | [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |

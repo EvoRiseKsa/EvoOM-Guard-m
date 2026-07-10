@@ -9,6 +9,36 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [2.3.0] — 2026-07-10
+
+An adversarial review demonstrated a real forgery of the core verdict; this
+release makes the boundary honest and machine-readable rather than papering over
+it. No behavioural regression — the reward-hacks Guard blocked before, it still
+blocks.
+
+### Security / honesty (the important part)
+- **Corrected the "cannot be forged" claim.** A patch that runs in the test
+  process can register an `atexit` hook, overwrite the judge-owned JUnit report,
+  and call `os._exit(0)` — forging a `PASS` on a genuinely failing test. This is
+  now **proven by an adversarial test** (`tests/test_report_integrity.py`) and
+  named plainly everywhere. Guard still blocks the reward-hacks agents do in
+  practice (harness edits/deletions, config deselects, stdout forgery — all with
+  tests); it does not stop deliberate in-process report forgery, which the
+  container modes do **not** fix (they isolate the host, not the report).
+- **New `assurance` object on every verdict** (`schema_version` → 1.3):
+  `harness_integrity` (`pre_gate_enforced` — robust), `report_integrity`
+  (`same_process_candidate_writable` — the honest boundary), `candidate_isolation`,
+  `verifier_pack`, `overall_profile`. A `PASS` report now spells out the caveat
+  inline. See the new [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
+- **ROADMAP**: the **external black-box judge** (candidate never runs in the
+  judge's process) is now the explicit headline direction — the only thing that
+  turns `report_integrity` into a real guarantee.
+
+### Changed
+- README mechanism 2 reworded from "the verdict cannot be forged" to "the result
+  is judge-owned, not scraped from stdout", with a prominent honest-boundary
+  callout. Marketing materials updated to match (no "unforgeable").
+
 ## [2.2.1] — 2026-07-10
 
 Launch-hardening from an adversarial review — no new surface, higher fidelity.
