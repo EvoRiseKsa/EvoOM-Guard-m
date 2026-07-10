@@ -249,6 +249,7 @@ def guard(
     verifier_pack: str | None = None,
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
+    blackbox: bool = False,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -346,6 +347,55 @@ def guard(
         problem["deleted"] = safe_deleted
     if verifier_pack:
         problem["verifier_pack"] = os.path.abspath(verifier_pack)
+
+    # Black-box mode: the verdict is produced by the judge's OWN pytest over the
+    # judge-owned pack, which never imports the candidate — closing same-process
+    # report forgery. Requires a pack (there is nothing to assert otherwise); the
+    # harness-integrity checks above still apply.
+    if blackbox and not (unsafe or violations or not all_touched):
+        from evoom_guard.blackbox import run_blackbox
+
+        if not verifier_pack:
+            return GuardResult(
+                verdict=ERROR, passed=False,
+                reason="--blackbox requires --verifier-pack (the judge-owned protocol tests)",
+                files_changed=changed, protected_violations=[],
+                risk_level=risk_score(_risk_map(repo_path, candidate)).level,
+                risk_score=risk_score(_risk_map(repo_path, candidate)).score,
+                reason_code=REASON_NO_VERIFIABLE_CHANGES, isolation=isolation,
+                assurance=_assurance_profile(isolation, verifier_pack, blackbox=True),
+            )
+        bx = run_blackbox(
+            repo_path, candidate, os.path.abspath(verifier_pack), timeout=timeout,
+        )
+        rmap_bx = _risk_map(repo_path, candidate)
+        for d in all_touched:
+            if d in deleted and d not in rmap_bx:
+                rmap_bx[d] = (0, len(_read_repo_file(repo_path, d).splitlines()))
+        risk_bx = risk_score(rmap_bx, protected=_PROTECTED_GLOBS + tuple(protected))
+        if not bx.ran:
+            v_bx, code_bx = ERROR, (REASON_TEST_TIMEOUT if bx.error == "timeout" else REASON_NO_TEST_VERDICT)
+            reason_bx = bx.error or "the black-box pack produced no verdict"
+        elif bx.passed:
+            v_bx, code_bx, reason_bx = PASS, REASON_TESTS_PASSED, (
+                f"the black-box pack passed ({bx.tests_passed}/{bx.tests_total}) — "
+                "the candidate satisfied the judge-owned protocol tests, judged from "
+                "outside its own process"
+            )
+        else:
+            v_bx, code_bx, reason_bx = FAIL, REASON_TESTS_FAILED, (
+                f"the black-box pack failed ({bx.tests_passed}/{bx.tests_total})"
+            )
+        return GuardResult(
+            verdict=v_bx, passed=(v_bx == PASS), reason=reason_bx,
+            files_changed=changed, protected_violations=[],
+            risk_level=risk_bx.level, risk_score=risk_bx.score,
+            tests_passed=bx.tests_passed if bx.ran else None,
+            tests_total=bx.tests_total if bx.ran else None,
+            verdict_source="blackbox" if bx.ran else None,
+            diagnostics=bx.diagnostics, reason_code=code_bx, isolation=isolation,
+            assurance=_assurance_profile(isolation, verifier_pack, blackbox=True),
+        )
 
     verdict = RepoVerifier(
         timeout=timeout, mem_limit_mb=mem_limit_mb,
@@ -499,13 +549,33 @@ def _utc_now() -> str:
 # deleting tests, deselecting in config, forging stdout — all caught) but does
 # NOT stop a patch that writes deliberate process-level forgery code into
 # source. Read report_integrity before trusting a PASS on untrusted authors.
-def _assurance_profile(isolation: str, verifier_pack: str | None) -> dict[str, Any]:
+def _assurance_profile(
+    isolation: str, verifier_pack: str | None, *, blackbox: bool = False
+) -> dict[str, Any]:
     pack = None
     if verifier_pack:
         pack = {
             "present": True,
             "integrity": "diff_excluded",       # the patch cannot modify the pack
             "secrecy": "none",                  # the running code can read it
+        }
+    if blackbox:
+        # The verdict is produced by the judge's own process, which never runs
+        # the candidate's code — the same-process forgery is closed by construction.
+        return {
+            "harness_integrity": "pre_gate_enforced",
+            "report_integrity": "external_process_isolated",
+            "candidate_isolation": isolation,
+            "verifier_pack": pack,
+            "overall_profile": "black_box_external_judge",
+            "note": (
+                "report_integrity is external_process_isolated: the verdict comes "
+                "from the judge's own pytest over judge-owned protocol tests, which "
+                "never import the candidate — so in-process report/exit forgery "
+                "cannot reach it. Holds only when the pack invokes the candidate "
+                "across a process boundary (a CLI/service via EVOGUARD_TARGET), not "
+                "by importing it. See docs/BLACKBOX.md."
+            ),
         }
     overall = "isolated_repo_native" if isolation in ("docker", "gvisor") else "repo_native_same_process"
     return {
@@ -519,8 +589,8 @@ def _assurance_profile(isolation: str, verifier_pack: str | None) -> dict[str, A
             "in-process patch can forge the JUnit report and exit code together. "
             "Guard blocks the harness edits/deletions and stdout forgery agents do "
             "in practice; it does not stop deliberate process-level forgery in "
-            "source. The container modes isolate the host, not the report. See "
-            "docs/ASSURANCE.md."
+            "source. The container modes isolate the host, not the report. Use "
+            "--blackbox for external_process_isolated. See docs/ASSURANCE.md."
         ),
     }
 
@@ -639,6 +709,7 @@ def guard_from_diff(
     verifier_pack: str | None = None,
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
+    blackbox: bool = False,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -698,6 +769,7 @@ def guard_from_diff(
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             verifier_pack=verifier_pack,
             diff_coverage=diff_coverage, min_diff_coverage=min_diff_coverage,
+            blackbox=blackbox,
         )
         result.source = "diff"
         result.base_reconstruction = "ok"

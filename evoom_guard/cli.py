@@ -135,6 +135,14 @@ def build_parser() -> argparse.ArgumentParser:
         "See docs/VERIFIER_PACKS.md.",
     )
     g_p.add_argument(
+        "--blackbox", dest="blackbox", action="store_true",
+        help="external black-box judge (needs --verifier-pack): the verdict comes "
+        "from the JUDGE's own pytest over the pack, which never imports the "
+        "candidate — closing same-process report forgery (report_integrity: "
+        "external_process_isolated). The pack invokes the candidate across a "
+        "process boundary via $EVOGUARD_TARGET. See docs/BLACKBOX.md.",
+    )
+    g_p.add_argument(
         "--diff-coverage", dest="diff_coverage", action="store_true",
         help="measure which changed lines the suite actually executed (one extra "
         "suite run under coverage; needs the 'cov' extra). Evidence only unless "
@@ -361,6 +369,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             verifier_pack=args.verifier_pack,
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
+            blackbox=args.blackbox,
         )
     elif args.base and args.head:
         candidate, deleted = candidate_from_dirs(args.base, args.head)
@@ -374,6 +383,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             verifier_pack=args.verifier_pack,
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
+            blackbox=args.blackbox,
         )
         result.source = "base/head"
     elif args.repo and args.patch:
@@ -386,6 +396,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             verifier_pack=args.verifier_pack,
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
+            blackbox=args.blackbox,
         )
         result.source = "edit blocks"
     else:

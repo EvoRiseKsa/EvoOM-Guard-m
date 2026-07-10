@@ -68,6 +68,10 @@ inputs:
     description: "Path to a directory of judge-owned tests/invariants the patch cannot modify (org-owned checks injected at judgment time). Mounted read-only into the verified copy and collected with the suite (pytest runners). NOT hidden from the running code — see docs/VERIFIER_PACKS.md."
     required: false
     default: ""
+  blackbox:
+    description: "'true' runs the external black-box judge (needs verifier-pack): the verdict comes from the judge's own pytest over the pack, which never imports the candidate — closing same-process report forgery. See docs/BLACKBOX.md."
+    required: false
+    default: "false"
   diff-coverage:
     description: "'true' measures which changed lines the suite actually executed (one extra suite run; installs the 'cov' extra). Evidence only unless min-diff-coverage is set."
     required: false
@@ -127,6 +131,7 @@ runs:
         if [ -n "${{ inputs.mem-limit }}" ]; then ARGS+=(--mem-limit "${{ inputs.mem-limit }}"); fi
         if [ -n "${{ inputs.sarif }}" ]; then ARGS+=(--sarif "${{ inputs.sarif }}"); fi
         if [ -n "${{ inputs.verifier-pack }}" ]; then ARGS+=(--verifier-pack "${{ inputs.verifier-pack }}"); fi
+        if [ "${{ inputs.blackbox }}" = "true" ]; then ARGS+=(--blackbox); fi
         if [ "${{ inputs.diff-coverage }}" = "true" ]; then ARGS+=(--diff-coverage); fi
         if [ -n "${{ inputs.min-diff-coverage }}" ]; then ARGS+=(--min-diff-coverage "${{ inputs.min-diff-coverage }}"); fi
         set +e

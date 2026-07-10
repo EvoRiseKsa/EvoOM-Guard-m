@@ -37,19 +37,34 @@ Guard closes that hole with two mechanisms:
    caught, with adversarial tests in `tests/` and the
    [catalogue](docs/REWARD_HACKING_CATALOG.md)).
 
-> **Honest boundary — read this.** Mechanism 2 is *not* unforgeable. Your tests
-> and the report writer run in the **same process** as the code under test, so a
-> patch that deliberately writes process-level forgery into source (an `atexit`
-> hook that overwrites the report and calls `os._exit(0)`) *can* fake a `PASS`.
-> Guard ships an adversarial test that proves this, and every verdict carries an
-> **`assurance` profile** naming its `report_integrity` as
+> **Honest boundary — read this.** By default, mechanism 2 is *not* unforgeable.
+> Your tests and the report writer run in the **same process** as the code under
+> test, so a patch that deliberately writes process-level forgery into source (an
+> `atexit` hook that overwrites the report and calls `os._exit(0)`) *can* fake a
+> `PASS`. Guard ships an adversarial test that proves this, and every verdict
+> carries an **`assurance` profile** naming its `report_integrity` as
 > `same_process_candidate_writable`. The container isolation modes protect the
-> host, **not** the report. The real fix — an external black-box judge that
-> never runs the candidate in its own process — is the headline item on the
-> [roadmap](ROADMAP.md). See [`docs/ASSURANCE.md`](docs/ASSURANCE.md). In short:
-> Guard catches the cheats that happen in the wild and slip past review; it does
-> not stop a patch that writes blatant forgery code into source (which review
-> catches loudly). Gate accordingly for untrusted authors.
+> host, **not** the report. **The fix ships as `--blackbox`** (below): the
+> verdict then comes from the judge's own process and the same forgery is caught.
+> See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
+
+### Close the forgery hole: `--blackbox` (external judge)
+
+For targets with a process/protocol boundary (a CLI, an HTTP service, a
+DB-backed program), the black-box judge produces the verdict from **its own
+pytest over judge-owned tests that never import your code** — so a patch cannot
+forge the report from inside the run:
+
+```bash
+evo-guard guard ./repo --patch candidate.txt \
+    --verifier-pack examples/blackbox-pack --blackbox
+```
+
+The pack invokes the candidate across a process boundary (via `$EVOGUARD_TARGET`)
+and asserts on its outputs. `report_integrity` becomes
+`external_process_isolated`, and the *identical* `atexit`+`os._exit` forgery that
+fakes a `PASS` under the default judge yields the correct `FAIL` (proven in
+`tests/test_blackbox.py`). See [`docs/BLACKBOX.md`](docs/BLACKBOX.md).
 
 Structured, judge-owned verdicts (`junit+exit`) cover **eight runners**:
 pytest, `node --test`, vitest, jest, gotestsum (Go), rspec (Ruby), mocha, and
@@ -225,6 +240,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
 | [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, tamper-proof invariants (and their honest limits) |
 | [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
+| [`docs/BLACKBOX.md`](docs/BLACKBOX.md) | The `--blackbox` external judge: closing same-process report forgery |
 | [`ROADMAP.md`](ROADMAP.md) | Where this is heading: the patch gate inside an agent-governance fabric |
 | [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |

@@ -1,0 +1,5 @@
+{
+  "id": "example-calc-protocol",
+  "version": "1.0.0",
+  "description": "Black-box protocol tests for the calc CLI (invoked out-of-process)."
+}

@@ -9,6 +9,42 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.0.0] — 2026-07-10
+
+**The external black-box judge — the report-integrity boundary is now closeable.**
+
+v2.3.0 disclosed, with a proof, that the default same-process judge can be
+forged: a patch that writes an `atexit` hook + `os._exit(0)` + a fake
+`--junitxml` fakes a `PASS`. This release ships the fix.
+
+### Added
+- **`--blackbox` external judge** (needs `--verifier-pack`): the verdict comes
+  from the **judge's own pytest** over a pack of judge-owned tests that **never
+  import the candidate**. The candidate is exercised only across a process
+  boundary — the pack invokes it as a subprocess via `$EVOGUARD_TARGET` /
+  `$EVOGUARD_PYTHON` and asserts on its outputs. Forgery code in the candidate's
+  source runs only in those child processes and cannot reach the judge's report.
+  `report_integrity` becomes **`external_process_isolated`** and
+  `overall_profile` **`black_box_external_judge`**.
+  See [`docs/BLACKBOX.md`](docs/BLACKBOX.md) and `examples/blackbox-pack/`.
+- **Before/after proof** (`tests/test_blackbox.py`): the *identical* forgery that
+  `tests/test_report_integrity.py` shows faking a `PASS` under the default judge
+  is **caught** (`FAIL`) under `--blackbox`. Harness-integrity rejection still
+  applies in black-box mode.
+- GitHub Action gains a `blackbox` input.
+
+### Changed
+- README leads the honest-boundary callout to the `--blackbox` fix; ASSURANCE and
+  ROADMAP mark the external judge as shipped (hardening — container-per-candidate,
+  HTTP/DB helpers — is the next step). Marketing updated: the pitch is now
+  "closes the forgery hole for CLI/service targets", not a qualified caveat.
+
+### Note
+- Major version bump: `--blackbox` changes the trust story materially (a real
+  `report_integrity` guarantee for protocol targets). The default judge, the JSON
+  contract (`schema_version` 1.3), and every existing flag are unchanged and
+  backward-compatible.
+
 ## [2.3.0] — 2026-07-10
 
 An adversarial review demonstrated a real forgery of the core verdict; this

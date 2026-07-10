@@ -24,21 +24,18 @@ evidence — never trust a model's opinion of its own output.*
 - ✅ v2.3.0: **assurance profile** — every verdict states its `report_integrity`
   honestly (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)).
 
-### The headline next direction: an external black-box judge
+### ✅ Shipped: the external black-box judge (`--blackbox`)
 
-The single most valuable thing Guard can build. Today the code under test runs
-in the **same process** as the report writer, so a deliberate in-process patch
-can forge the JUnit report and exit code (`report_integrity:
-same_process_candidate_writable` — proven by an adversarial test). No in-process
-change fixes this; the candidate has full authority over its own process.
-
-The fix is architectural: run the candidate in one container reachable only
-through an API / stdin / protocol, and a **separate judge** that owns the
-verifier pack, drives inputs, observes outputs, and writes the report **without
-ever importing the candidate's code**. That makes `report_integrity`
-`external_isolated` and turns "checks the candidate can't game" from a
-qualified claim into a real one. Natural fit for API/HTTP/CLI/DB targets;
-library targets need a thin RPC wrapper.
+The single most valuable thing Guard has built. The default judge runs the
+candidate in the **same process** as the report writer, so a deliberate
+in-process patch can forge the report + exit code. `--blackbox` closes it: the
+verdict comes from the judge's own pytest over judge-owned protocol tests that
+never import the candidate; the candidate is exercised only across a process
+boundary (`$EVOGUARD_TARGET`). `report_integrity` becomes
+`external_process_isolated`, and the identical forgery that fakes a PASS under
+the default judge is **caught** (proven in `tests/test_blackbox.py`). See
+[`docs/BLACKBOX.md`](docs/BLACKBOX.md). Next hardening: a container per
+candidate, and HTTP/DB target helpers alongside the CLI convention.
 
 - Other near-term candidates (driven by [user feedback](../../issues)):
   - a baseline scan mode (verdict for the repo as-is, no patch);

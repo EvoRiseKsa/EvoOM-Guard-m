@@ -70,11 +70,13 @@ robust fix is to stop running the candidate in the judge's own process.
 
 ## The fix on the roadmap: an external black-box judge
 
-The candidate runs in one container exposed only through an API / stdin / a
-protocol; a separate judge container owns the verifier pack, drives inputs,
-observes outputs, and writes the report — and never imports the candidate's
-code. Then `report_integrity` becomes `external_isolated` and the forgery test
-flips. This is the headline direction in [`ROADMAP.md`](../ROADMAP.md).
+**Shipped in v3.0 as `--blackbox`** (see [`BLACKBOX.md`](BLACKBOX.md)): the
+verdict comes from the judge's own pytest over a pack of judge-owned tests that
+never import the candidate; the candidate is exercised only across a process
+boundary. `report_integrity` becomes `external_process_isolated`, and the same
+forgery that fakes a PASS under the default judge is caught. The remaining work
+is hardening (container-per-candidate, HTTP/DB target helpers) — see
+[`ROADMAP.md`](../ROADMAP.md).
 
 ## `overall_profile` levels
 
@@ -83,8 +85,7 @@ flips. This is the headline direction in [`ROADMAP.md`](../ROADMAP.md).
 | `static_gate` | only the harness-integrity check ran (no suite) |
 | `repo_native_same_process` | suite ran; candidate + report share one process (subprocess mode) |
 | `isolated_repo_native` | suite ran in a container (host isolated); report still same-process |
-| `external_pack_readonly` | *(roadmap)* org pack mounted read-only, still visible to the candidate |
-| `black_box_external_judge` | *(roadmap)* judge never runs the candidate in its own process |
+| `black_box_external_judge` | **shipped (`--blackbox`)** — verdict from the judge's own process; the candidate runs only across a process boundary. `report_integrity: external_process_isolated`. See [`BLACKBOX.md`](BLACKBOX.md). |
 
 ## How to use it
 
