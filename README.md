@@ -152,8 +152,8 @@ independent pieces of evidence to every verdict:
 # needs the 'cov' extra). Evidence by default; --min-diff-coverage makes it a gate:
 evo-guard guard . --diff - --diff-coverage --min-diff-coverage 80
 
-# Judge-owned tests the agent has NEVER seen (org invariants, hidden
-# integration checks) — mounted at judgment time, collected with the suite:
+# Judge-owned tests the PATCH CANNOT MODIFY (org invariants, integration
+# checks) — injected at judgment time, collected with the suite:
 evo-guard guard . --diff - --verifier-pack /secure/org-pack
 ```
 
@@ -163,8 +163,11 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
   stated in the output itself: *executed is not asserted* — coverage is a floor
   of scrutiny, not proof of correctness.
 - A patch overfitted to the visible tests fails the **Independent Verifier
-  Pack** it never saw (the documented answer to visible-test overfitting).
-  A candidate that tries to write into the pack mount is `REJECTED`.
+  Pack** — org-owned checks the patch cannot change, injected at judgment time.
+  A candidate that tries to write into the pack mount is `REJECTED`. Honest
+  scope: the pack is **tamper-proof, not secret** — the running test code can
+  read the pack files, so it is an integrity control (centralised, unmodifiable
+  invariants), not a hidden oracle. See [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
 - Every verdict now carries an **attestation block** (candidate/policy/report
   digests, timestamp, versions) — so a signed verdict is bound to *what* was
   judged, under *which* policy, not just to its own bytes.
@@ -199,6 +202,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs: a real repo, and a hard ungameable benchmark (cheat → REJECTED; honest → PASS) |
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
+| [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, tamper-proof invariants (and their honest limits) |
 | [`ROADMAP.md`](ROADMAP.md) | Where this is heading: the patch gate inside an agent-governance fabric |
 | [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |

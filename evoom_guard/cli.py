@@ -128,9 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_p.add_argument(
         "--verifier-pack", dest="verifier_pack", default=None,
-        help="directory of judge-owned tests/invariants the candidate has never "
-        "seen; mounted read-only into the copy at evoguard_verifier_pack/ at "
-        "judgment time and collected by the suite (pytest runners)",
+        help="directory of judge-owned tests/invariants the PATCH CANNOT MODIFY "
+        "(org-owned checks injected at judgment time); mounted into the copy at "
+        "evoguard_verifier_pack/ and collected by the suite (pytest). Note: the "
+        "running code CAN read the pack — it is tamper-proof, not secret. "
+        "See docs/VERIFIER_PACKS.md.",
     )
     g_p.add_argument(
         "--diff-coverage", dest="diff_coverage", action="store_true",
@@ -236,8 +238,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="where to write the workflow (default: .github/workflows/evoguard.yml)",
     )
     i_p.add_argument(
-        "--test-command", dest="test_command", default="pytest -q",
-        help="test command to embed in the workflow (default: pytest -q)",
+        "--test-command", dest="test_command", default="python -m pytest -q",
+        help="test command to embed in the workflow (default: python -m pytest -q — "
+        "the -m form puts the repo root on sys.path so top-level packages import "
+        "without an install/conftest)",
     )
     i_p.add_argument(
         "--ref", default=f"v{__version__}",

@@ -10,9 +10,12 @@ The core claims under test:
   * changed-line arithmetic is exact (FILE and PATCH blocks, new files);
   * a green suite that never EXECUTES the changed lines is exposed — and can be
     gated (``min_diff_coverage`` flips a hollow PASS to FAIL);
-  * a pack test the candidate has never seen fails an overfitted patch even
-    though the visible suite passes — and the candidate cannot pre-plant or
-    write into the pack mount point;
+  * a pack test the patch cannot modify fails an overfitted patch even though
+    the visible suite passes — and the candidate cannot pre-plant or write into
+    the pack mount point;
+  * the pack is tamper-proof but NOT secret — a documented limitation: code
+    under test can read the pack off disk (guarded by an explicit test so the
+    claim can never silently drift back to "hidden");
   * the attestation block binds the verdict to the candidate/policy digests and
     survives the signing roundtrip byte-for-byte.
 """
@@ -217,6 +220,41 @@ class VerifierPackTests(unittest.TestCase):
             r = guard(repo, _block("pkg/m.py", new), verifier_pack=self._pack(tmp))
             self.assertIsNone(r.diff_coverage)
 
+    def test_pack_is_tamper_proof_but_not_secret(self) -> None:
+        # HONESTY GUARD: an adversarial patch can read the pack off disk and echo
+        # the expected value. This test PINS that documented limitation so no doc
+        # or help text can silently reclaim "hidden / never seen".
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(tmp)
+            evil = (
+                "import glob, re\n"
+                "def uncovered(x):\n"
+                "    for p in glob.glob('evoguard_verifier_pack/**/*.py', recursive=True):\n"
+                "        m = re.search(r'uncovered\\((\\d+)\\)\\s*==\\s*(\\d+)', open(p).read())\n"
+                "        if m and int(m.group(1)) == x:\n"
+                "            return int(m.group(2))\n"
+                "    return 0\n"
+                "def covered(x):\n    return x + 1\n"
+            )
+            r = guard(repo, _block("pkg/m.py", evil), verifier_pack=self._pack(tmp))
+            # It PASSES the pack by reading it — proving secrecy is not provided.
+            self.assertEqual(r.verdict, PASS)
+            self.assertEqual((r.tests_passed, r.tests_total), (2, 2))
+
+    def test_pack_manifest_lands_in_attestation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(tmp)
+            pack = self._pack(tmp)
+            with open(os.path.join(pack, "pack.json"), "w", encoding="utf-8") as f:
+                json.dump({"id": "org-invariants", "version": "1.3.0"}, f)
+            new = TWO_FUNCS.replace("return x + 1", "return 1 + x")
+            r = guard(repo, _block("pkg/m.py", new), verifier_pack=pack)
+            assert r.attestation is not None
+            self.assertEqual(
+                r.attestation["verifier_pack_manifest"],
+                {"id": "org-invariants", "version": "1.3.0"},
+            )
+
 
 class AttestationTests(unittest.TestCase):
     def test_attestation_binds_candidate_and_policy(self) -> None:
@@ -262,6 +300,37 @@ class AttestationTests(unittest.TestCase):
             self.assertIn("attestation", payload)
             self.assertTrue(payload["attestation"]["candidate_sha256"])
             self.assertEqual(cli.main(["verify-verdict", jout, "--pub", pub]), 0)
+
+
+class ReasonCodeAndRiskTests(unittest.TestCase):
+    def test_timeout_is_test_timeout_not_patch_apply_failed(self) -> None:
+        from evoom_guard.guard import REASON_TEST_TIMEOUT
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, "repo")
+            _write(repo, "pkg/__init__.py", "")
+            _write(repo, "pkg/m.py", "def f():\n    return 1\n")
+            _write(
+                repo, "tests/test_slow.py",
+                "import time\n\ndef test_slow():\n    time.sleep(30)\n",
+            )
+            r = guard(repo, _block("pkg/m.py", "def f():\n    return 2\n"), timeout=1)
+            self.assertEqual(r.reason_code, REASON_TEST_TIMEOUT)
+            self.assertNotEqual(r.reason_code, "patch_apply_failed")
+
+    def test_deletion_raises_blast_radius(self) -> None:
+        # Deleting a large source file must not read as lower risk than editing it.
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, "repo")
+            _write(repo, "pkg/__init__.py", "")
+            _write(repo, "pkg/big.py", "\n".join(f"x{i} = {i}" for i in range(300)) + "\n")
+            _write(repo, "tests/test_x.py", "def test_ok():\n    assert True\n")
+            # A no-op source addition + a big deletion.
+            r = guard(
+                repo, _block("pkg/note.py", "# note\n"),
+                deleted=("pkg/big.py",),
+            )
+            self.assertEqual(r.risk_level, "high")  # 300 removed lines dominate
 
 
 if __name__ == "__main__":

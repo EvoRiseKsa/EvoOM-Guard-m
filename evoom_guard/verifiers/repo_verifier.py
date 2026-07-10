@@ -954,6 +954,7 @@ class RepoVerifier:
             # pre-planted directory here is unreachable; belt-and-braces: refuse to
             # merge into an existing one.
             pack_sha256 = None
+            pack_manifest: dict | None = None
             pack_dir = str(problem.get("verifier_pack", "") or "")
             if pack_dir:
                 mount = os.path.join(copy, "evoguard_verifier_pack")
@@ -976,6 +977,19 @@ class RepoVerifier:
                         with open(os.path.join(dirpath, fn), "rb") as pf:
                             digest.update(pf.read())
                 pack_sha256 = digest.hexdigest()
+                # Optional ``pack.json`` manifest turns a folder of tests into a
+                # versioned, auditable policy pack (id / version / description).
+                manifest_path = os.path.join(mount, "pack.json")
+                if os.path.isfile(manifest_path):
+                    try:
+                        with open(manifest_path, encoding="utf-8") as mf:
+                            m = json.load(mf)
+                        if isinstance(m, dict):
+                            pack_manifest = {
+                                k: m[k] for k in ("id", "version", "description") if k in m
+                            }
+                    except (OSError, ValueError):
+                        pack_manifest = None  # a malformed manifest is not fatal
 
             # Apply deletions to the copy so the verdict reflects the real merge
             # (a removed source file should be *absent* when the suite runs).
@@ -1029,7 +1043,7 @@ class RepoVerifier:
                         passed=False,
                         score=0.0,
                         diagnostics=f"setup command timed out after {self.timeout}s",
-                        artifact={"elapsed": self.timeout, "files_changed": changed},
+                        artifact={"elapsed": self.timeout, "files_changed": changed, "outcome": "setup_timeout"},
                     )
                 if r_setup.returncode != 0:
                     diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
@@ -1037,7 +1051,7 @@ class RepoVerifier:
                         passed=False,
                         score=0.0,
                         diagnostics=f"setup command failed (exit {r_setup.returncode}): {diag}",
-                        artifact={"files_changed": changed},
+                        artifact={"files_changed": changed, "outcome": "setup_failed"},
                     )
 
             # The machine-readable verdict is written to a JUnit report the JUDGE
@@ -1073,7 +1087,7 @@ class RepoVerifier:
                     passed=False,
                     score=0.0,
                     diagnostics=f"test suite timed out after {self.timeout}s",
-                    artifact={"elapsed": self.timeout, "files_changed": changed},
+                    artifact={"elapsed": self.timeout, "files_changed": changed, "outcome": "test_timeout"},
                 )
             except FileNotFoundError:
                 return VerdictResult(
@@ -1110,6 +1124,7 @@ class RepoVerifier:
                     "tamper": tampered,
                     "junit_sha256": hashlib.sha256(xml_text.encode("utf-8")).hexdigest() if xml_text else None,
                     "verifier_pack_sha256": pack_sha256,
+                    "verifier_pack_manifest": pack_manifest,
                 },
             )
         finally:

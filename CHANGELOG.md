@@ -9,6 +9,38 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [2.2.1] — 2026-07-10
+
+Launch-hardening from an adversarial review — no new surface, higher fidelity.
+
+### Fixed
+- **`evo-guard init` now scaffolds `python -m pytest -q`** (was bare `pytest -q`),
+  matching the documented default so a generated workflow imports top-level
+  packages without an install/conftest.
+- **Timeouts and setup failures get their own reason codes** — `test_timeout`,
+  `setup_timeout`, `setup_failed` — instead of being mislabelled
+  `patch_apply_failed` (the patch *did* apply; the run timed out).
+- **Deletions now count toward the blast-radius score** — a change that removes
+  source files no longer reads as *lower* risk than one that edits them.
+
+### Added
+- **GitHub Action exposes the v2.2 evidence flags**: `verifier-pack`,
+  `diff-coverage`, `min-diff-coverage` inputs, forwarded to the CLI (with the
+  `cov` extra installed only when coverage is requested). A parity test fails if
+  any gate-relevant CLI flag is missing from the Action.
+- **Optional `pack.json` manifest** for a Verifier Pack (`id` / `version` /
+  `description`) — surfaced in the verdict attestation for auditable policy
+  versioning.
+
+### Changed (honesty)
+- **Verifier Pack docs/help corrected**: a pack is **tamper-proof, not secret**.
+  The running test code *can* read the pack off disk, so it is an integrity
+  control (org-owned, unmodifiable invariants), not a hidden oracle. New
+  `docs/VERIFIER_PACKS.md` states the guarantee and its limit; an adversarial
+  test pins the limitation so the claim cannot silently drift back to "hidden".
+- Action description: "Unforgeable verdict" → "Judge-owned verdict" (no absolute
+  claim beyond what the design supports).
+
 ## [2.2.0] — 2026-07-10
 
 **The first evidence release** — the gate starts its evolution from deny-rules
@@ -25,11 +57,14 @@ toward an evidence-based change-integrity engine (see `ROADMAP.md`).
   `diff_coverage_below_threshold`. The output carries its own honesty line:
   *executed is not asserted*.
 - **Independent Verifier Pack** (`--verifier-pack DIR`): judge-owned tests /
-  invariants the candidate has never seen, mounted into the throwaway copy at
-  `evoguard_verifier_pack/` at judgment time and collected with the suite
-  (pytest runners). Counters visible-test overfitting; a candidate that writes
-  under the mount point is `REJECTED`; the pack's content digest lands in the
-  attestation.
+  invariants the **patch cannot modify** (org-owned checks injected at judgment
+  time), mounted into the throwaway copy at `evoguard_verifier_pack/` and
+  collected with the suite (pytest runners). Counters visible-test overfitting;
+  a candidate that writes under the mount point is `REJECTED`; the pack's content
+  digest — and an optional `pack.json` manifest (id/version) — land in the
+  attestation. Honest scope: **tamper-proof, not secret** — the running code can
+  read the pack; the guarantee is that the patch cannot change the checks (see
+  `docs/VERIFIER_PACKS.md`).
 - **Attestation block** in every verdict JSON: `candidate_sha256`,
   `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, timestamps and
   versions — a signed verdict is now bound to what was judged and under which

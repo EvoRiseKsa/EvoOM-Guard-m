@@ -61,7 +61,7 @@ auto-exec file) drives `REJECTED`. (Before `1.1` this array was named
 |---|---|---|
 | `schema_version` | string | Contract version. Pin on this. |
 | `diff_coverage` | object \| null | Changed-line coverage evidence (`--diff-coverage`): `measured`, `percent`, `executed`, `total`, per-file `executed`/`missed` lines, `caveat` ("executed is not asserted"). `null` when not requested. |
-| `attestation` | object \| null | Context binding for the (optionally signed) verdict: `candidate_sha256`, `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, `created_utc`, `guard_version`, `test_command`, `deleted_paths`. |
+| `attestation` | object \| null | Context binding for the (optionally signed) verdict: `candidate_sha256`, `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, `verifier_pack_manifest` (optional `pack.json` id/version), `created_utc`, `guard_version`, `test_command`, `deleted_paths`. |
 | `tool` | string | Always `"evoguard"`. |
 | `tool_version` | string | `evoom_guard.__version__`. |
 | `verdict` | string | `PASS` \| `REJECTED` \| `FAIL` \| `ERROR` \| `TAMPERED`. |
@@ -117,5 +117,5 @@ patch). Exit code is `0` when supported, `1` otherwise.
 
 ## 1.2 additions
 
-- New reason code: `diff_coverage_below_threshold` — a PASS-quality run gated to `FAIL` because the measured changed-line coverage fell below `--min-diff-coverage`.
+- New reason codes: `test_timeout`, `setup_timeout`, `setup_failed` (a run that timed out or whose setup failed is no longer mislabelled `patch_apply_failed`), and `diff_coverage_below_threshold` — a PASS-quality run gated to `FAIL` because the measured changed-line coverage fell below `--min-diff-coverage`.
 - New top-level fields `diff_coverage` and `attestation` (additive; `null` when absent).
