@@ -6,7 +6,7 @@ name: "EvoOM Guard"
 # Marketplace requires < 125 characters; the full story lives in the README.
 description: >-
   Catches AI agents gaming your tests: runs the repo's suite and REJECTS any
-  edit to the test harness. Unforgeable verdict.
+  edit to the test harness. Judge-owned verdict.
 branding:
   icon: "shield"
   color: "red"
@@ -64,6 +64,18 @@ inputs:
     description: "Address-space cap (MB) for the test subprocess; 0 disables it (needed for Node/V8 suites)."
     required: false
     default: ""
+  verifier-pack:
+    description: "Path to a directory of judge-owned tests/invariants the patch cannot modify (org-owned checks injected at judgment time). Mounted read-only into the verified copy and collected with the suite (pytest runners). NOT hidden from the running code — see docs/VERIFIER_PACKS.md."
+    required: false
+    default: ""
+  diff-coverage:
+    description: "'true' measures which changed lines the suite actually executed (one extra suite run; installs the 'cov' extra). Evidence only unless min-diff-coverage is set."
+    required: false
+    default: "false"
+  min-diff-coverage:
+    description: "Gate: a PASS whose measured changed-line coverage is below this percentage becomes FAIL (diff_coverage_below_threshold). Implies diff-coverage."
+    required: false
+    default: ""
 
 outputs:
   verdict:
@@ -80,7 +92,14 @@ runs:
 
     - name: Install EvoGuard
       shell: bash
-      run: pip install -q "${{ github.action_path }}"
+      run: |
+        # Install the 'cov' extra only when changed-line coverage is requested,
+        # so the default install stays dependency-free.
+        if [ "${{ inputs.diff-coverage }}" = "true" ] || [ -n "${{ inputs.min-diff-coverage }}" ]; then
+          pip install -q "${{ github.action_path }}[cov]"
+        else
+          pip install -q "${{ github.action_path }}"
+        fi
 
     - name: Run EvoGuard
       id: guard
@@ -107,6 +126,9 @@ runs:
         if [ -n "${{ inputs.timeout }}" ]; then ARGS+=(--timeout "${{ inputs.timeout }}"); fi
         if [ -n "${{ inputs.mem-limit }}" ]; then ARGS+=(--mem-limit "${{ inputs.mem-limit }}"); fi
         if [ -n "${{ inputs.sarif }}" ]; then ARGS+=(--sarif "${{ inputs.sarif }}"); fi
+        if [ -n "${{ inputs.verifier-pack }}" ]; then ARGS+=(--verifier-pack "${{ inputs.verifier-pack }}"); fi
+        if [ "${{ inputs.diff-coverage }}" = "true" ]; then ARGS+=(--diff-coverage); fi
+        if [ -n "${{ inputs.min-diff-coverage }}" ]; then ARGS+=(--min-diff-coverage "${{ inputs.min-diff-coverage }}"); fi
         set +e
         git diff "$BASE...HEAD" | evo-guard "${ARGS[@]}"
         GUARD_CODE=$?

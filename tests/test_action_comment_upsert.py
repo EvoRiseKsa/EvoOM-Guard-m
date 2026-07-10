@@ -55,6 +55,8 @@ class ActionCliParityTests(unittest.TestCase):
         "test-command", "protected", "allow", "allow-new-tests",
         "isolation", "docker-image", "docker-network",
         "timeout", "mem-limit", "sarif",
+        # v2.2 evidence flags — a Marketplace user must be able to reach them.
+        "verifier-pack", "diff-coverage", "min-diff-coverage",
     )
 
     def setUp(self) -> None:

@@ -107,6 +107,18 @@ REASON_BINARY_PATCH = "binary_patch"
 REASON_REVERSE_APPLY_FAILED = "reverse_apply_failed"
 REASON_NO_VERIFIABLE_CHANGES = "no_verifiable_changes"
 REASON_DIFF_COVERAGE_BELOW_THRESHOLD = "diff_coverage_below_threshold"
+REASON_TEST_TIMEOUT = "test_timeout"
+REASON_SETUP_TIMEOUT = "setup_timeout"
+REASON_SETUP_FAILED = "setup_failed"
+
+# Verifier ``outcome`` marker → (verdict, reason_code). The patch applied and the
+# session started, but did not produce a clean pass/fail — a timeout or a failed
+# setup step must NOT be mislabelled as "the patch did not apply".
+_OUTCOME_REASON = {
+    "test_timeout": (FAIL, REASON_TEST_TIMEOUT),
+    "setup_timeout": (ERROR, REASON_SETUP_TIMEOUT),
+    "setup_failed": (ERROR, REASON_SETUP_FAILED),
+}
 
 # The judge-owned directory an Independent Verifier Pack is mounted at inside
 # the throwaway copy. It arrives at judgment time (the candidate never saw it),
@@ -266,10 +278,13 @@ def guard(
     unchanged.
 
     ``verifier_pack`` mounts an **Independent Verifier Pack** — a directory of
-    judge-owned tests/invariants the candidate has never seen — into the copy at
-    ``evoguard_verifier_pack/`` at judgment time. The suite then also collects the
-    pack's tests, so a candidate overfitted to the visible tests fails the hidden
-    ones. A candidate that writes anywhere under that directory is ``REJECTED``.
+    judge-owned tests/invariants the **patch cannot modify** (org-owned checks
+    injected at judgment time) — into the copy at ``evoguard_verifier_pack/``. The
+    suite then also collects the pack's tests, so a candidate overfitted to the
+    visible tests fails the pack's checks. A candidate that writes anywhere under
+    that directory is ``REJECTED``. **Not secret:** the running test code *can*
+    read the pack files off disk; the guarantee is tamper-resistance (the patch
+    cannot change the checks), not secrecy. See ``docs/VERIFIER_PACKS.md``.
 
     ``diff_coverage=True`` adds **changed-line coverage evidence** (one extra
     suite run under ``coverage``): which changed lines the suite actually
@@ -332,7 +347,15 @@ def guard(
         isolation=isolation, docker_image=docker_image, docker_network=docker_network,
     ).verify(candidate, problem)
     art = verdict.artifact or {}
-    risk = risk_score(_risk_map(repo_path, candidate), protected=_PROTECTED_GLOBS + tuple(protected))
+    # Deletions count toward the blast radius too: a change that removes source
+    # files should not read as *lower* risk than one that edits them. Each deleted
+    # path contributes its base-file line count as removed lines (0 added).
+    rmap = _risk_map(repo_path, candidate)
+    for d in all_touched:
+        if d in deleted and d not in rmap:
+            base = _read_repo_file(repo_path, d)
+            rmap[d] = (0, len(base.splitlines()))
+    risk = risk_score(rmap, protected=_PROTECTED_GLOBS + tuple(protected))
 
     if not all_touched:
         v, reason, code = ERROR, (
@@ -370,6 +393,11 @@ def guard(
             f"the repo's tests fail on this patch "
             f"({art.get('tests_passed', 0)}/{art.get('tests_total')} passed)"
         ), REASON_TESTS_FAILED
+    elif art.get("outcome") in _OUTCOME_REASON:
+        # The patch applied and the session started, but timed out or its setup
+        # step failed — never mislabel these as "the patch did not apply".
+        v, code = _OUTCOME_REASON[art["outcome"]]
+        reason = verdict.diagnostics or f"run ended: {art['outcome']}"
     elif verdict.score <= 0.08:
         v, reason, code = ERROR, (
             "the patch did not apply cleanly (a PATCH anchor did not match)"
@@ -416,6 +444,7 @@ def guard(
         }, sort_keys=True).encode("utf-8")).hexdigest(),
         "junit_sha256": art.get("junit_sha256"),
         "verifier_pack_sha256": art.get("verifier_pack_sha256"),
+        "verifier_pack_manifest": art.get("verifier_pack_manifest"),
     }
 
     return GuardResult(
