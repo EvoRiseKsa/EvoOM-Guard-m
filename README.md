@@ -5,6 +5,12 @@
 
 # EvoOM Guard
 
+[![CI](https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/workflows/ci.yml/badge.svg)](https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/workflows/ci.yml)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-EvoOM%20Guard-B93A2B?logo=github)](https://github.com/marketplace/actions/evoom-guard)
+[![Release](https://img.shields.io/github/v/release/EvoRiseKsa/EvoOM-Guard-m?color=1E7B4F)](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/latest)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License: Source-available](https://img.shields.io/badge/license-source--available-lightgrey)](LICENSE)
+
 **An AI patch verification gate: does this patch fix the code — *without gaming the tests*?**
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they
