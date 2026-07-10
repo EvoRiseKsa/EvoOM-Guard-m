@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+# Source-available — see LICENSE for permitted use.
+# ─────────────────────────────────────────────────────────────────────────────
+# Manual release: creates the vX.Y.Z tag + GitHub Release and attaches the
+# zero-dependency single-file `evo-guard.pyz` (+ SHA256SUMS).
+#
+# Exists because tags created by GITHUB_TOKEN do not re-trigger the tag-push
+# CI jobs (GitHub's recursion guard), and some git proxies refuse tag pushes —
+# so this one workflow does the whole release end-to-end. Run it from the
+# Actions tab (or `gh workflow run release.yml -f tag=v2.0.0`).
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (must equal 'v' + evoom_guard.__version__)"
+        required: true
+        default: "v2.0.0"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version matches the requested tag
+        run: |
+          pip install -e ".[dev]"
+          V="$(python -c 'import evoom_guard; print(evoom_guard.__version__)')"
+          TAG="${{ inputs.tag }}"
+          echo "package=$V tag=$TAG"
+          test "v$V" = "$TAG"
+
+      - name: Tests must be green before a release
+        run: python -m pytest tests/ -q
+
+      - name: Build evo-guard.pyz
+        run: python ops/build_pyz.py -o dist/evo-guard.pyz
+
+      - name: Smoke-test the artifact
+        run: |
+          test "$(python dist/evo-guard.pyz version)" = "evo-guard ${TAG#v}"
+          python dist/evo-guard.pyz doctor
+        env:
+          TAG: ${{ inputs.tag }}
+
+      - name: Checksums (release integrity)
+        run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
+
+      - name: Create the tag + release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ inputs.tag }}" >/dev/null 2>&1 \
+            || gh release create "${{ inputs.tag }}" \
+                 --target "$GITHUB_SHA" \
+                 --title "${{ inputs.tag }}" \
+                 --generate-notes
+          gh release upload "${{ inputs.tag }}" dist/evo-guard.pyz dist/SHA256SUMS --clobber
