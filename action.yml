@@ -30,10 +30,42 @@ inputs:
     description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'."
     required: false
     default: "any-non-pass"
+  isolation:
+    description: "Isolation: 'subprocess' (default), 'docker', or 'gvisor' (the latter two need docker-image + a docker daemon; 'gvisor' also needs the runsc runtime)."
+    required: false
+    default: ""
+  docker-image:
+    description: "Container image for isolation 'docker'/'gvisor' (must carry the test runner, e.g. node:22-slim)."
+    required: false
+    default: ""
+  docker-network:
+    description: "Container network for isolation 'docker'/'gvisor' (default: 'none' — no network, the safe choice; pass a docker network name only if the suite genuinely needs it)."
+    required: false
+    default: ""
+  sarif:
+    description: "If set, write a SARIF 2.1.0 report to this workspace path (upload it with github/codeql-action/upload-sarif)."
+    required: false
+    default: ""
+  allow:
+    description: "Baseline allowlist: space-separated globs exempt from the test/config/CI rejection (never auto-exec/unsafe paths)."
+    required: false
+    default: ""
+  allow-new-tests:
+    description: "Feature mode: 'true' allows brand-new test files (edits to existing tests/config/auto-exec stay rejected)."
+    required: false
+    default: "false"
+  timeout:
+    description: "Per-run suite timeout in seconds."
+    required: false
+    default: ""
+  mem-limit:
+    description: "Address-space cap (MB) for the test subprocess; 0 disables it (needed for Node/V8 suites)."
+    required: false
+    default: ""
 
 outputs:
   verdict:
-    description: "PASS | REJECTED | FAIL | ERROR"
+    description: "PASS | REJECTED | FAIL | TAMPERED | ERROR"
     value: ${{ steps.guard.outputs.verdict }}
 
 runs:
@@ -44,11 +76,11 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install EvoOM Guard
+    - name: Install EvoGuard
       shell: bash
       run: pip install -q "${{ github.action_path }}"
 
-    - name: Run EvoOM Guard
+    - name: Run EvoGuard
       id: guard
       shell: bash
       working-directory: ${{ github.workspace }}
@@ -60,11 +92,19 @@ runs:
         if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
         echo "Diffing against base: $BASE"
         git fetch --no-tags --depth=1 origin "$BASE" 2>/dev/null || true
-        # The recommended path: pipe the diff; Guard reverse-applies it to the head
+        # The recommended path: pipe the diff; EvoGuard reverse-applies it to the head
         # checkout (this working dir) — no second checkout or worktree.
-        ARGS=(--diff - --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
+        ARGS=(guard --diff - --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
         if [ -n "${{ inputs.test-command }}" ]; then ARGS+=(--test-command "${{ inputs.test-command }}"); fi
         if [ -n "${{ inputs.protected }}" ]; then ARGS+=(--protected ${{ inputs.protected }}); fi
+        if [ -n "${{ inputs.allow }}" ]; then ARGS+=(--allow ${{ inputs.allow }}); fi
+        if [ "${{ inputs.allow-new-tests }}" = "true" ]; then ARGS+=(--allow-new-tests); fi
+        if [ -n "${{ inputs.isolation }}" ]; then ARGS+=(--isolation "${{ inputs.isolation }}"); fi
+        if [ -n "${{ inputs.docker-image }}" ]; then ARGS+=(--docker-image "${{ inputs.docker-image }}"); fi
+        if [ -n "${{ inputs.docker-network }}" ]; then ARGS+=(--docker-network "${{ inputs.docker-network }}"); fi
+        if [ -n "${{ inputs.timeout }}" ]; then ARGS+=(--timeout "${{ inputs.timeout }}"); fi
+        if [ -n "${{ inputs.mem-limit }}" ]; then ARGS+=(--mem-limit "${{ inputs.mem-limit }}"); fi
+        if [ -n "${{ inputs.sarif }}" ]; then ARGS+=(--sarif "${{ inputs.sarif }}"); fi
         set +e
         git diff "$BASE...HEAD" | evo-guard "${ARGS[@]}"
         GUARD_CODE=$?
@@ -85,10 +125,21 @@ runs:
           const fs = require('fs');
           const p = process.env.RUNNER_TEMP + '/guard-report.md';
           if (!fs.existsSync(p)) return;
-          const body = fs.readFileSync(p, 'utf8');
-          await github.rest.issues.createComment({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-            body,
+          // Stable hidden marker so re-runs UPDATE one sticky comment instead of
+          // appending a new one each push (see issue #16). Kept invisible (HTML
+          // comment) and unchanged across runs; the report content is unchanged.
+          const MARKER = '<!-- evoguard-report -->';
+          const body = MARKER + '\n' + fs.readFileSync(p, 'utf8');
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          // Find a prior EvoGuard comment by our marker; update it if present,
+          // otherwise create a fresh one.
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner, repo, issue_number, per_page: 100,
           });
+          const existing = comments.find((c) => c.body && c.body.includes(MARKER));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }

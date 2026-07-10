@@ -8,20 +8,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "evoom-guard"
-version = "0.1.0"
-description = "AI patch verification gate: verifies a patch against the repo's own tests and rejects any edit to the tests or their configuration. The verdict is read from a judge-owned report, never from stdout."
+description = "EvoOM Guard (EvoGuard) — AI patch verification gate: verifies a patch against the repo's own tests and rejects any edit to the tests or their configuration. The verdict is read from a judge-owned report, never from stdout."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Mana Alharbi (مانع الحربي)" }]
+maintainers = [{ name = "Mana Alharbi (مانع الحربي)" }]
 keywords = ["ai", "agents", "ci", "testing", "reward-hacking", "patch", "verification"]
 license = { file = "LICENSE" }
 classifiers = [
     "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Testing",
     "Topic :: Software Development :: Quality Assurance",
+    # Source-available (no redistribution): never publish to a public index.
+    "Private :: Do Not Upload",
 ]
-dependencies = []  # standard library only
+# The whole gate is stdlib-only — nothing to install beyond Python and git/patch.
+dependencies = []
+dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/EvoRiseKsa/EvoOM-Guard-m"
@@ -31,7 +38,36 @@ Issues = "https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues"
 evo-guard = "evoom_guard.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "coverage>=7"]
+
+[tool.setuptools]
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 include = ["evoom_guard*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "evoom_guard.__version__" }
+
+# ───────────────────────────── tooling ──────────────────────────────────────
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["evoom_guard"]
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[tool.coverage.run]
+source = ["evoom_guard"]
+branch = false
+
+[tool.coverage.report]
+fail_under = 80
