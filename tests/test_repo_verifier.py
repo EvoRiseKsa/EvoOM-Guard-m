@@ -3,13 +3,7 @@
 # Source-available — see LICENSE for permitted use.
 # Sole owner & author: Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
-"""Repo-level verifier tests (S19).
-
-The block-parsing and path-safety layers are pure functions (no subprocess).
-The end-to-end tests scaffold a tiny buggy repo in a temp dir and run a real
-pytest suite against candidate patches; they are skipped when pytest is not
-importable (the dev extra installs it).
-"""
+"""Repo-level verifier tests (S19)."""
 
 import importlib.util
 import json
@@ -21,18 +15,20 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evoom_guard.scoring import fraction_score
-from evoom_guard.repo_verifier import (
+from evoom_guard.verifiers.grading import fraction_score
+from evoom_guard.verifiers.repo_verifier import (
     RepoVerifier,
     apply_blocks_to_copy,
     distill_diagnostics,
     grade_repo_run,
     is_judge_autoexec,
     is_protected,
+    is_protected_ci,
     is_protected_config,
     is_safe_relpath,
     parse_blocks_lenient,
     parse_file_blocks,
+    parse_junit_dir,
     parse_junit_xml,
     parse_patch_blocks,
     parse_pytest_counts,
@@ -41,8 +37,6 @@ from evoom_guard.repo_verifier import (
 
 HAS_PYTEST = importlib.util.find_spec("pytest") is not None
 
-# The demo repo: mathx.average divides by len+1 (bug #1)
-# and mathx.clamp ignores the lower bound (bug #2). Two tests fail, one passes.
 BUGGY_MATHX = """\
 def average(nums):
     return sum(nums) / (len(nums) + 1)
@@ -162,9 +156,7 @@ class ParsingTests(unittest.TestCase):
     def test_no_patch_blocks(self) -> None:
         self.assertEqual(parse_patch_blocks(block("a.py", "x = 1")), [])
 
-    # lenient fallback — recover near-miss formats instead of discarding a fix.
     def test_lenient_recovers_single_bracket_patch_with_inferred_path(self) -> None:
-        # The exact shape observed live: single-angle <PATCH>, XML closers, no path.
         text = (
             "Here is the fix:\n<PATCH>\n<SEARCH>old line</SEARCH>\n"
             "<REPLACE>new line</REPLACE>\n</PATCH>\n"
@@ -201,12 +193,6 @@ class ParsingTests(unittest.TestCase):
 
 
 class DiagnosticsDistillationTests(unittest.TestCase):
-    """The diagnostics are the loop's senses (S19 fix).
-
-    Observed live: a raw 800-char tail was all fast-check stack trace, the
-    generator never saw the failing assertion, and the loop stagnated.
-    """
-
     def test_keeps_failure_essence_and_drops_stack_noise(self) -> None:
         out = (
             " FAIL  tests/quantity.test.ts > formatQuantity > trims zeros\n"
@@ -249,23 +235,57 @@ class SafetyTests(unittest.TestCase):
         self.assertTrue(is_protected("src/secret.py", ("src/secret.py",)))
 
     def test_protected_is_case_insensitive_without_overmatching(self) -> None:
-        # Judge files must be protected regardless of case (a candidate must not
-        # bypass the golden rule by uppercasing a path) — but whole segments and
-        # patterns are compared, so look-alikes are NOT over-matched.
         for path in ("TESTS/foo.py", "A/TEST/b.py", "Conftest.PY",
                      "TEST_x.py", "src/App_TEST.py"):
             self.assertTrue(is_protected(path), path)
         for path in ("latest/x.py", "testing/b.py", "contest.py",
                      "mytest.py", "src/attest.py", "greatest.py"):
             self.assertFalse(is_protected(path), path)
-        # extra globs match case-insensitively in both directions.
         self.assertTrue(is_protected("Foo/Bar.PY", ("foo/bar.py",)))
         self.assertTrue(is_protected("foo/bar.py", ("FOO/BAR.PY",)))
 
+    def test_ts_colocated_test_files_are_protected(self) -> None:
+        """vitest/jest colocated *.test.ts files must be protected by default.
+
+        These sit beside the source (not inside a tests/ dir), so the
+        directory-segment rule alone misses them — an agent could otherwise edit
+        e.g. src/finance/rounding.test.ts without triggering REJECTED.
+        """
+        for path in (
+            "src/components/Button.test.ts",
+            "src/utils/helpers.test.tsx",
+            "packages/shared/src/finance/rounding.test.ts",
+            "lib/auth.spec.ts",
+            "components/Modal.spec.tsx",
+            "app.test.js",
+            "utils.spec.js",
+            "__snapshots__/Button.test.ts.snap",
+            "SRC/BUTTON.TEST.TS",  # case-insensitive
+        ):
+            self.assertTrue(is_protected(path), path)
+        # Source files that merely contain "test" in their name must NOT match.
+        for path in ("src/Button.ts", "src/helpers.tsx", "test-utils.ts", "latest.ts"):
+            self.assertFalse(is_protected(path), path)
+
+    def test_lock_files_are_protected_config(self) -> None:
+        """Dependency lock files are a reward-hack vector: swapping them can
+        substitute patched library code that makes tests pass without fixing the bug.
+        """
+        for path in (
+            "pnpm-lock.yaml",
+            "package-lock.json",
+            "yarn.lock",
+            "Cargo.lock",
+            "Gemfile.lock",
+            "poetry.lock",
+            "apps/api/pnpm-lock.yaml",   # nested lock file
+            "PNPM-LOCK.YAML",             # case-insensitive
+        ):
+            self.assertTrue(is_protected_config(path), path)
+        # A file that happens to end in .lock but isn't a known lock file.
+        self.assertFalse(is_protected_config("src/mutex.lock"))
+
     def test_protected_config_files(self) -> None:
-        # Test-runner / build config is the harness the candidate may not edit:
-        # changing it (not the source) games the judge. Matched on basename,
-        # case-insensitively, anywhere in the tree.
         for path in (
             "pyproject.toml", "pytest.ini", ".pytest.ini", "tox.ini", "setup.cfg",
             "pkg/pyproject.toml", "PyProject.TOML",
@@ -273,8 +293,6 @@ class SafetyTests(unittest.TestCase):
             "foundry.toml", "slither.config.json",
         ):
             self.assertTrue(is_protected_config(path), path)
-        # Source files (even config-ish names) and the dual-purpose package.json
-        # are NOT rejected — only dedicated runner/build config is.
         for path in (
             "src/app.py", "config.py", "configuration.py", "settings.py",
             "package.json", "requirements.txt", "README.md",
@@ -282,18 +300,27 @@ class SafetyTests(unittest.TestCase):
         ):
             self.assertFalse(is_protected_config(path), path)
 
+    def test_evoguard_config_is_protected(self) -> None:
+        """EvoGuard's own .evoguard.json is harness config — editing it lets an agent
+        rewrite test_command / protected / setup_command to trivially pass the gate.
+        """
+        self.assertTrue(is_protected_config(".evoguard.json"))
+        self.assertTrue(is_protected_config("apps/api/.evoguard.json"))
+
+    def test_ci_workflow_and_action_files_are_protected(self) -> None:
+        """CI workflow / local action files define how the gate runs — protected."""
+        for path in (
+            ".github/workflows/evoguard.yml",
+            ".github/workflows/ci.yaml",
+            ".github/actions/evoguard/action.yml",
+            ".GITHUB/WORKFLOWS/x.yml",  # case-insensitive
+        ):
+            self.assertTrue(is_protected_ci(path), path)
+        for path in ("src/app.py", "docs/workflows.md", "github/workflows/x.yml"):
+            self.assertFalse(is_protected_ci(path), path)
+
 
 class RewardHackRejectionTests(unittest.TestCase):
-    """Regression: the golden rule covers test *configuration*, not only tests.
-
-    Demonstrated exploit (pre-fix): a candidate that never fixes the bug but adds
-    ``[tool.pytest.ini_options] addopts = "-k <passing test>"`` to ``pyproject.toml``
-    deselects the failing tests, so the suite reports a full pass (1/1) and the
-    loop hands back a "fix" that changed no source. Editing any test-runner / build
-    config is now rejected at the path gate, before the suite ever runs — so these
-    tests need no pytest installed (the rejection is pre-subprocess).
-    """
-
     def setUp(self) -> None:
         self.root = tempfile.mkdtemp(prefix="evo_rh_repo_")
         self.problem = {"name": "rh", "repo_path": self.root}
@@ -321,48 +348,97 @@ class RewardHackRejectionTests(unittest.TestCase):
         self.assertIn("configuration", r.diagnostics)
 
     def test_config_edit_via_surgical_patch_is_rejected(self) -> None:
-        # The PATCH path goes through the same gate as whole-file blocks.
         r = self.v.verify(patch_block("setup.cfg", "old", "new"), self.problem)
         self.assertFalse(r.passed)
         self.assertEqual(r.score, 0.05)
         self.assertIn("configuration", r.diagnostics)
 
     def test_config_edit_alongside_a_real_source_fix_is_still_rejected(self) -> None:
-        # Smuggling a config edit in with a legitimate-looking source block must
-        # not slip through: any protected path in the change set rejects the run.
         hyp = block("mathx.py", "x = 1") + "\n" + block("tox.ini", "[pytest]\n")
         r = self.v.verify(hyp, self.problem)
         self.assertFalse(r.passed)
         self.assertEqual(r.score, 0.05)
 
+    def test_ts_test_file_edit_is_rejected(self) -> None:
+        """Editing a *.test.ts file must be REJECTED before the suite runs."""
+        r = self.v.verify(
+            block("src/finance/rounding.test.ts", "// no tests"), self.problem
+        )
+        self.assertFalse(r.passed)
+        self.assertEqual(r.score, 0.05)
+        self.assertIn("forbidden", r.diagnostics)
+
+    def test_lock_file_edit_is_rejected(self) -> None:
+        """Editing pnpm-lock.yaml must be REJECTED before the suite runs."""
+        r = self.v.verify(
+            block("pnpm-lock.yaml", "lockfileVersion: '9.0'\n"), self.problem
+        )
+        self.assertFalse(r.passed)
+        self.assertEqual(r.score, 0.05)
+        self.assertIn("configuration", r.diagnostics)
+
+    def test_evoguard_config_edit_is_rejected(self) -> None:
+        """Editing .evoguard.json must be REJECTED before the suite runs."""
+        r = self.v.verify(
+            block(".evoguard.json", '{"test_command": ["true"]}'), self.problem
+        )
+        self.assertFalse(r.passed)
+        self.assertEqual(r.score, 0.05)
+        self.assertIn("configuration", r.diagnostics)
+
+    def test_ci_workflow_edit_is_rejected(self) -> None:
+        """Editing the CI workflow that runs the gate must be REJECTED."""
+        r = self.v.verify(
+            block(".github/workflows/evoguard.yml", "name: pwned\n"), self.problem
+        )
+        self.assertFalse(r.passed)
+        self.assertEqual(r.score, 0.05)
+        self.assertIn("forbidden", r.diagnostics)
+
+
+class SetupCommandTests(unittest.TestCase):
+    """setup_command runs before the suite; a failing setup is never a PASS."""
+
+    def test_setup_failure_is_not_pass(self) -> None:
+        """A non-zero setup_command short-circuits to a non-PASS verdict.
+
+        This needs no test runner: the verifier returns before the suite runs.
+        """
+        root = tempfile.mkdtemp(prefix="evo_setup_fail_")
+        try:
+            with open(os.path.join(root, "app.py"), "w", encoding="utf-8") as f:
+                f.write("x = 1\n")
+            v = RepoVerifier(
+                timeout=30,
+                setup_command=[sys.executable, "-c", "import sys; sys.exit(3)"],
+            )
+            r = v.verify(block("app.py", "x = 2\n"), {"repo_path": root})
+            self.assertFalse(r.passed)
+            self.assertEqual(r.score, 0.0)
+            self.assertIn("setup command failed", r.diagnostics)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
 
 class PackageJsonJudgeFieldsTests(unittest.TestCase):
-    """package.json is dual-purpose, so it isn't rejected like a dedicated config
-    file — instead its test-harness fields are restored from the pristine original,
-    neutralising a JS-judge reward-hack while keeping legitimate edits.
-    """
-
     @staticmethod
     def _pkg(**kw) -> str:
         return json.dumps(kw)
 
     def test_restores_narrowed_test_script(self) -> None:
         original = self._pkg(name="x", scripts={"test": "vitest run", "build": "tsc"})
-        # candidate keeps the bug; narrows the test script to only-passing specs.
         candidate = self._pkg(
             name="x", scripts={"test": "vitest run -t passing", "build": "tsc"}
         )
         out = json.loads(restore_judge_package_json(original, candidate))
-        self.assertEqual(out["scripts"]["test"], "vitest run")  # restored
+        self.assertEqual(out["scripts"]["test"], "vitest run")
 
     def test_keeps_legitimate_non_test_edits(self) -> None:
         original = self._pkg(scripts={"test": "vitest run"}, dependencies={"a": "1.0.0"})
-        # candidate adds a dependency and a build script — both must survive.
         candidate = self._pkg(
             scripts={"test": "vitest run", "build": "tsc"},
             dependencies={"a": "1.0.0", "b": "2.0.0"},
         )
-        # nothing judging changed → byte-for-byte unchanged.
         self.assertEqual(restore_judge_package_json(original, candidate), candidate)
 
     def test_restores_embedded_runner_config(self) -> None:
@@ -371,10 +447,9 @@ class PackageJsonJudgeFieldsTests(unittest.TestCase):
             scripts={"test": "jest"}, jest={"testMatch": ["**/passing.test.js"]}
         )
         out = json.loads(restore_judge_package_json(original, candidate))
-        self.assertEqual(out["jest"], {"testMatch": ["**/*.test.js"]})  # restored
+        self.assertEqual(out["jest"], {"testMatch": ["**/*.test.js"]})
 
     def test_strips_harness_when_original_had_none(self) -> None:
-        # repo had no package.json; a created one must not introduce a test harness.
         candidate = self._pkg(scripts={"test": "echo fake && exit 0"}, jest={"x": 1})
         out = json.loads(restore_judge_package_json(None, candidate))
         self.assertNotIn("jest", out)
@@ -382,7 +457,7 @@ class PackageJsonJudgeFieldsTests(unittest.TestCase):
 
     def test_restores_removed_test_script(self) -> None:
         original = self._pkg(scripts={"test": "vitest run"})
-        candidate = self._pkg(scripts={"build": "tsc"})  # dropped the test script
+        candidate = self._pkg(scripts={"build": "tsc"})
         out = json.loads(restore_judge_package_json(original, candidate))
         self.assertEqual(out["scripts"]["test"], "vitest run")
 
@@ -390,7 +465,6 @@ class PackageJsonJudgeFieldsTests(unittest.TestCase):
         self.assertEqual(restore_judge_package_json("{}", "not json {"), "not json {")
 
     def test_wired_into_apply_blocks(self) -> None:
-        # End-to-end through apply_blocks_to_copy (pure filesystem, no node needed).
         copy = tempfile.mkdtemp(prefix="evo_pkg_")
         try:
             with open(os.path.join(copy, "package.json"), "w", encoding="utf-8") as f:
@@ -400,8 +474,8 @@ class PackageJsonJudgeFieldsTests(unittest.TestCase):
             self.assertIsNone(err)
             with open(os.path.join(copy, "package.json"), encoding="utf-8") as f:
                 written = json.load(f)
-            self.assertEqual(written["scripts"]["test"], "vitest run")  # neutralised
-            self.assertEqual(written["scripts"]["build"], "tsc")        # legit kept
+            self.assertEqual(written["scripts"]["test"], "vitest run")
+            self.assertEqual(written["scripts"]["build"], "tsc")
         finally:
             shutil.rmtree(copy, ignore_errors=True)
 
@@ -464,7 +538,6 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
         self.assertIn("helpers/extra.py", r.artifact["files_changed"])
 
     def test_collection_error_scores_low_but_above_rejection(self) -> None:
-        # Removing the module the tests import breaks collection: no test ran.
         r = self.v.verify(block("mathx.py", "raise RuntimeError('boom')"), self.problem)
         self.assertFalse(r.passed)
         self.assertLessEqual(r.score, 0.10)
@@ -474,7 +547,6 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.v.verify(block("a.py", "x"), {"name": "x", "repo_path": "/nonexistent_xyz"})
 
-    # surgical PATCH edits (issue #15) ──────────────────────
     def _full_fix_patches(self) -> str:
         return (
             patch_block(
@@ -519,7 +591,6 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
         self.assertIn("NoMatchError", r.diagnostics)
 
     def test_patch_ambiguous_anchor_yields_diagnostic(self) -> None:
-        # "    return" begins all three functions — not a unique anchor.
         r = self.v.verify(patch_block("mathx.py", "    return", "    return  # x"), self.problem)
         self.assertFalse(r.passed)
         self.assertEqual(r.score, 0.08)
@@ -532,10 +603,6 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
         self.assertIn("not found", r.diagnostics)
 
     def test_lenient_format_is_recovered_end_to_end(self) -> None:
-        # Regression: a model emitted single-angle <PATCH> blocks with XML closers
-        # and no file path — a correct, winning fix that the strict parser would
-        # discard as "no parseable blocks" (score 0.02). With the target file
-        # known, the verifier now recovers and applies it for a real verdict.
         hyp = (
             "Here is the fix:\n"
             "<PATCH>\n<SEARCH>def average(nums):\n"
@@ -551,20 +618,119 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
         self.assertIn("mathx.py", r.artifact["files_changed"])
 
     def test_unparseable_output_still_scores_floor(self) -> None:
-        # No recoverable structure anywhere → still the 0.02 floor (unchanged).
         r = self.v.verify("just some prose, no edits", self.problem)
         self.assertFalse(r.passed)
         self.assertEqual(r.score, 0.02)
 
+    def test_setup_command_runs_before_suite(self) -> None:
+        """setup_command should execute inside the copy before test_command.
+
+        This is a pure-filesystem smoke test: setup_command writes a marker file
+        that test_command (a custom pytest) reads. If setup ran, the test passes;
+        if not, the test errors out.
+        """
+        # Create a repo whose test requires a file written by a setup step.
+        root = tempfile.mkdtemp(prefix="evo_setup_repo_")
+        try:
+            # The source is fine; the test checks that setup wrote a marker.
+            with open(os.path.join(root, "app.py"), "w", encoding="utf-8") as f:
+                f.write("x = 1\n")
+            with open(os.path.join(root, "test_setup.py"), "w", encoding="utf-8") as f:
+                f.write(
+                    "import os\n\n"
+                    "def test_setup_ran():\n"
+                    "    assert os.path.exists('setup_ran.marker'), "
+                    "'setup_command did not run'\n"
+                )
+            v = RepoVerifier(
+                timeout=30,
+                setup_command=[sys.executable, "-c",
+                               "open('setup_ran.marker', 'w').close()"],
+            )
+            r = v.verify(block("app.py", "x = 1\n"), {"repo_path": root})
+            self.assertTrue(r.passed, f"expected PASS, got: {r.diagnostics}")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_setup_command_stdout_does_not_affect_verdict(self) -> None:
+        """A forged pass summary printed by setup must not influence the verdict.
+
+        The verdict comes from the judge-owned JUnit report + the test command's
+        exit code, never from setup's stdout — so setup printing
+        '=== 9999 passed ===' cannot inflate the real test counts.
+        """
+        root = tempfile.mkdtemp(prefix="evo_setup_stdout_")
+        try:
+            with open(os.path.join(root, "app.py"), "w", encoding="utf-8") as f:
+                f.write("x = 1\n")
+            with open(os.path.join(root, "test_app.py"), "w", encoding="utf-8") as f:
+                f.write("from app import x\n\n\ndef test_x():\n    assert x == 1\n")
+            v = RepoVerifier(
+                timeout=30,
+                setup_command=[
+                    sys.executable, "-c",
+                    "print('=========== 9999 passed in 0.01s ===========')",
+                ],
+            )
+            r = v.verify(block("app.py", "x = 1\n"), {"repo_path": root})
+            self.assertTrue(r.passed, f"expected PASS, got: {r.diagnostics}")
+            # Real count from the JUnit report — not the forged 9999 from setup stdout.
+            self.assertEqual(r.artifact["tests_total"], 1)
+            self.assertEqual(r.artifact["tests_passed"], 1)
+            self.assertEqual(r.artifact["verdict_source"], "junit+exit")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
+class JUnitDirOracleTests(unittest.TestCase):
+    """Directory-of-reports merge (Maven Surefire writes one file per class)."""
+
+    def _dir(self) -> str:
+        return tempfile.mkdtemp(prefix="evo_junitdir_")
+
+    def test_merges_counts_across_files(self) -> None:
+        d = self._dir()
+        try:
+            with open(os.path.join(d, "TEST-A.xml"), "w", encoding="utf-8") as f:
+                f.write('<testsuite tests="3" failures="0" errors="0" skipped="0"/>')
+            with open(os.path.join(d, "TEST-B.xml"), "w", encoding="utf-8") as f:
+                f.write('<testsuite tests="2" failures="1" errors="0" skipped="0"/>')
+            j = parse_junit_dir(d)
+            assert j is not None
+            self.assertEqual((j.passed, j.total, j.failures, j.errors), (4, 5, 1, 0))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_missing_dir_yields_none(self) -> None:
+        self.assertIsNone(parse_junit_dir("/no/such/dir"))
+
+    def test_empty_or_non_report_dir_yields_none(self) -> None:
+        d = self._dir()
+        try:
+            with open(os.path.join(d, "notes.txt"), "w", encoding="utf-8") as f:
+                f.write("not a report")
+            self.assertIsNone(parse_junit_dir(d))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_hostile_dtd_file_is_skipped_not_counted(self) -> None:
+        # The per-file hardening (DTD/ENTITY refusal) still applies in the dir merge.
+        d = self._dir()
+        try:
+            with open(os.path.join(d, "TEST-evil.xml"), "w", encoding="utf-8") as f:
+                f.write('<!DOCTYPE x [<!ENTITY a "boom">]>\n<testsuite tests="9"/>')
+            with open(os.path.join(d, "TEST-ok.xml"), "w", encoding="utf-8") as f:
+                f.write('<testsuite tests="2" failures="0" errors="0" skipped="0"/>')
+            j = parse_junit_dir(d)
+            assert j is not None
+            # only the clean file is counted; the DTD file is refused
+            self.assertEqual((j.passed, j.total), (2, 2))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
 
 class JUnitOracleTests(unittest.TestCase):
-    """The verdict is read from the structured JUnit report + exit code, never
-    from stdout — so a forged ``"9999 passed"`` summary moves nothing. These are
-    pure-function tests (no subprocess), so they run without pytest installed.
-    """
-
     def test_counts_come_from_structured_xml(self) -> None:
-        # total excludes skipped (5-1=4); passed = 4 - 1 failure - 1 error = 2.
         j = parse_junit_xml(
             '<testsuites><testsuite tests="5" failures="1" errors="1" skipped="1"/></testsuites>'
         )
@@ -572,46 +738,40 @@ class JUnitOracleTests(unittest.TestCase):
         self.assertEqual((j.passed, j.total, j.failures, j.errors), (2, 4, 1, 1))
 
     def test_a_forged_stdout_summary_yields_no_counts(self) -> None:
-        # A fake "9999 passed" is plain text, not <testsuite> structure.
         self.assertIsNone(parse_junit_xml("\n====== 9999 passed in 0.01s ======\n"))
         self.assertIsNone(parse_junit_xml(""))
         self.assertIsNone(parse_junit_xml("<not-valid-xml"))
 
     def test_full_pass_requires_exit0_and_a_clean_report(self) -> None:
         j = parse_junit_xml('<testsuite tests="3" failures="0" errors="0" skipped="0"/>')
-        self.assertEqual(grade_repo_run(0, j, is_pytest=True), (True, 1.0, 3, 3))
+        self.assertEqual(grade_repo_run(0, j, report_expected=True), (True, 1.0, 3, 3))
 
     def test_partial_score_uses_the_report_fraction(self) -> None:
         j = parse_junit_xml('<testsuite tests="3" failures="1" errors="0" skipped="0"/>')
-        passed, score, p, t = grade_repo_run(1, j, is_pytest=True)
+        passed, score, p, t = grade_repo_run(1, j, report_expected=True)
         self.assertFalse(passed)
         self.assertEqual((p, t), (2, 3))
         self.assertAlmostEqual(score, fraction_score(2, 3))
 
     def test_exit0_with_a_failing_report_is_rejected_as_tamper(self) -> None:
-        # Exit code claims success but the report shows failures → no clean verdict.
         j = parse_junit_xml('<testsuite tests="3" failures="2" errors="0" skipped="0"/>')
-        self.assertEqual(grade_repo_run(0, j, is_pytest=True), (False, 0.10, 1, 3))
+        self.assertEqual(grade_repo_run(0, j, report_expected=True), (False, 0.10, 1, 3))
 
     def test_allpass_report_with_nonzero_exit_is_rejected_as_tamper(self) -> None:
-        # Report claims all-pass but the process failed → not rewarded.
         j = parse_junit_xml('<testsuite tests="3" failures="0" errors="0" skipped="0"/>')
-        passed, score, _, _ = grade_repo_run(1, j, is_pytest=True)
+        passed, score, _, _ = grade_repo_run(1, j, report_expected=True)
         self.assertFalse(passed)
         self.assertEqual(score, 0.10)
 
     def test_pytest_without_a_report_is_no_verdict(self) -> None:
-        self.assertEqual(grade_repo_run(0, None, is_pytest=True), (False, 0.10, 0, 0))
+        self.assertEqual(grade_repo_run(0, None, report_expected=True), (False, 0.10, 0, 0))
 
     def test_custom_runner_falls_back_to_exit_code(self) -> None:
-        self.assertEqual(grade_repo_run(0, None, is_pytest=False), (True, 1.0, 0, 0))
-        self.assertFalse(grade_repo_run(1, None, is_pytest=False)[0])
-        self.assertEqual(grade_repo_run(2, None, is_pytest=False), (False, 0.10, 0, 0))
+        self.assertEqual(grade_repo_run(0, None, report_expected=False), (True, 1.0, 0, 0))
+        self.assertFalse(grade_repo_run(1, None, report_expected=False)[0])
+        self.assertEqual(grade_repo_run(2, None, report_expected=False), (False, 0.10, 0, 0))
 
 
-# A reward-hack attempt: forge a passing summary on the judge's stdout AND stderr
-# at import time (so it runs the moment pytest imports the module under test). The
-# bytes are written straight to the file descriptors, bypassing any capture.
 _STDOUT_FORGERY = (
     "\n\nimport os as _os\n"
     "for _fd in (1, 2):\n"
@@ -623,8 +783,6 @@ _STDOUT_FORGERY = (
 
 
 class JudgeOracleRedTeamTests(unittest.TestCase):
-    """Adversarial: prove a candidate cannot forge a pass or inflate the score."""
-
     def setUp(self) -> None:
         self.root = tempfile.mkdtemp(prefix="evo_redteam_repo_")
         make_repo(self.root)
@@ -635,8 +793,6 @@ class JudgeOracleRedTeamTests(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def test_autoexec_and_runner_files_are_rejected_at_the_gate(self) -> None:
-        # No subprocess runs: these are rejected before the suite, so this needs
-        # no pytest. Each would otherwise run code inside the judge / redefine it.
         for path in (
             "sitecustomize.py", "usercustomize.py", "evil.pth", "pkg/sub/x.pth",
             "Makefile", "GNUmakefile", "noxfile.py",
@@ -644,7 +800,6 @@ class JudgeOracleRedTeamTests(unittest.TestCase):
             r = self.v.verify(block(path, "import os; os._exit(0)"), self.problem)
             self.assertFalse(r.passed, path)
             self.assertEqual(r.score, 0.05, path)
-        # Direct predicate checks, case-insensitive, without over-matching.
         self.assertTrue(is_judge_autoexec("SiteCustomize.PY"))
         self.assertTrue(is_judge_autoexec("a/b/plugin.pth"))
         self.assertFalse(is_judge_autoexec("customize.py"))
@@ -652,32 +807,24 @@ class JudgeOracleRedTeamTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_stdout_injection_cannot_inflate_the_partial_score(self) -> None:
-        # average is fixed (test passes) but clamp stays broken (test fails) → an
-        # honest 2/3. The candidate forges "9999 passed" on stdout/stderr; the old
-        # stdout-scraping judge would have summed it to ~10001/10002 ≈ 0.95 (the
-        # ceiling). The JUnit-oracle judge reports the true 2/3.
         candidate = block("mathx.py", HALF_FIXED_MATHX + _STDOUT_FORGERY)
         r = self.v.verify(candidate, self.problem)
         self.assertFalse(r.passed)
         self.assertEqual((r.artifact["tests_passed"], r.artifact["tests_total"]), (2, 3))
         self.assertAlmostEqual(r.score, fraction_score(2, 3))
-        self.assertLess(r.score, 0.9)  # NOT inflated toward the 0.95 ceiling
+        self.assertLess(r.score, 0.9)
         self.assertEqual(r.artifact["verdict_source"], "junit+exit")
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_stdout_injection_cannot_forge_a_full_pass(self) -> None:
-        # Nothing fixed (2 tests fail) but a forged all-pass summary is printed.
         candidate = block("mathx.py", BUGGY_MATHX + _STDOUT_FORGERY)
         r = self.v.verify(candidate, self.problem)
         self.assertFalse(r.passed)
         self.assertLess(r.score, 1.0)
-        self.assertEqual(r.artifact["tests_passed"], 1)  # only double() passes
+        self.assertEqual(r.artifact["tests_passed"], 1)
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_candidate_cannot_plant_a_fake_junit_report(self) -> None:
-        # The candidate fixes nothing and plants a fake all-pass JUnit file at the
-        # guessable basename. The judge reads its OWN report (written outside the
-        # repo copy), so the plant — landing inside the copy — is inert.
         fake = (
             '<?xml version="1.0"?><testsuites><testsuite name="x" '
             'tests="3" failures="0" errors="0" skipped="0"/></testsuites>'
@@ -690,7 +837,6 @@ class JudgeOracleRedTeamTests(unittest.TestCase):
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_an_honest_full_fix_still_passes(self) -> None:
-        # Control: the oracle must not be so strict it rejects a genuine fix.
         r = self.v.verify(block("mathx.py", FIXED_MATHX), self.problem)
         self.assertTrue(r.passed)
         self.assertEqual(r.score, 1.0)

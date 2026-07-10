@@ -92,6 +92,19 @@ class GuardGateTests(unittest.TestCase):
         self.assertEqual(r.verdict, REJECTED)
         self.assertIn("sitecustomize.py", r.protected_violations)
 
+    def test_editing_pom_xml_is_rejected(self) -> None:
+        # a Maven Surefire <excludes> in pom.xml can deselect failing tests.
+        cheat = _block("pom.xml", "<project><!-- surefire excludes --></project>\n")
+        r = guard(self.root, cheat)
+        self.assertEqual(r.verdict, REJECTED)
+        self.assertIn("pom.xml", r.protected_violations)
+
+    def test_pom_xml_can_be_allowlisted(self) -> None:
+        # an adopter who needs dependency edits can exempt pom.xml via --allow.
+        cheat = _block("pom.xml", "<project><!-- deps --></project>\n")
+        r = guard(self.root, cheat, allow=("pom.xml",))
+        self.assertNotEqual(r.verdict, REJECTED)
+
     def test_no_blocks_is_an_error(self) -> None:
         r = guard(self.root, "just some prose, no edits")
         self.assertEqual(r.verdict, ERROR)
@@ -103,6 +116,16 @@ class GuardGateTests(unittest.TestCase):
         self.assertIn("REJECTED", report)
         self.assertIn("Reward-hack", report)
         self.assertIn("tests/test_m.py", report)
+
+    def test_report_footer_describes_judge_honestly(self) -> None:
+        # The footer must describe the judge-owned verdict path + subprocess
+        # limits, and must NOT promise a "container judge" that this build does
+        # not ship (regression guard for the wording softened per issue #8).
+        cheat = _block("tests/test_m.py", "def test_dbl():\n    assert True\n")
+        report = render_report(guard(self.root, cheat))
+        self.assertIn("judge-owned JUnit report", report)
+        self.assertIn("subprocess", report)
+        self.assertNotIn("container judge", report)
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_correct_source_fix_passes(self) -> None:
@@ -159,6 +182,54 @@ class GuardDiffTests(unittest.TestCase):
         finally:
             shutil.rmtree(base, ignore_errors=True)
             shutil.rmtree(head, ignore_errors=True)
+
+
+class GuardDeletionTests(unittest.TestCase):
+    """Deletions are gated (schema 1.1): a deleted harness file is REJECTED, and a
+    deleted source file is applied to the verified tree so the verdict matches the
+    merge."""
+
+    def setUp(self) -> None:
+        self.root = tempfile.mkdtemp(prefix="evo_guard_del_")
+        _make_repo(self.root)
+        # a second, unrelated source module the visible test does NOT import
+        with open(os.path.join(self.root, "pkg", "extra.py"), "w", encoding="utf-8") as f:
+            f.write("VALUE = 1\n")
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_deleting_a_test_file_is_rejected(self) -> None:
+        # Removing a check is a reward-hack as direct as editing it.
+        r = guard(self.root, FIX, deleted=("tests/test_m.py",))
+        self.assertEqual(r.verdict, REJECTED)
+        self.assertIn("tests/test_m.py", r.protected_violations)
+
+    def test_deleting_config_is_rejected_even_delete_only(self) -> None:
+        # A delete-only change that removes the harness config is still REJECTED
+        # (not a vague ERROR).
+        r = guard(self.root, "", deleted=("pyproject.toml",))
+        self.assertEqual(r.verdict, REJECTED)
+        self.assertIn("pyproject.toml", r.protected_violations)
+
+    def test_deleting_unsafe_path_is_error(self) -> None:
+        r = guard(self.root, FIX, deleted=("../escape.py",))
+        self.assertEqual(r.verdict, ERROR)
+
+    @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
+    def test_deleting_an_unused_source_file_still_passes(self) -> None:
+        # extra.py is unused by the visible test; deleting it alongside the real fix
+        # leaves a green suite.
+        r = guard(self.root, FIX, deleted=("pkg/extra.py",))
+        self.assertEqual(r.verdict, PASS)
+
+    @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
+    def test_deleting_a_needed_source_file_breaks_the_suite(self) -> None:
+        # Proof the deletion is actually applied: removing the module the test
+        # imports makes the reconstructed-merge suite fail (it cannot import it).
+        r = guard(self.root, "", deleted=("pkg/m.py",))
+        self.assertEqual(r.verdict, FAIL)
+        self.assertFalse(r.passed)
 
 
 _BUGGY_M = "def dbl(x):\n    return x + x + 1\n"
@@ -309,13 +380,13 @@ class GuardCliTests(unittest.TestCase):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(_block("tests/test_m.py", "def test_dbl():\n    assert True\n"))
         try:
-            rc = cli_main([self.root, "--patch", patch])
+            rc = cli_main(["guard", self.root, "--patch", patch])
             self.assertEqual(rc, 1)
         finally:
             os.unlink(patch)
 
     def test_cli_usage_without_inputs(self) -> None:
-        rc = cli_main([self.root])
+        rc = cli_main(["guard", self.root])
         self.assertEqual(rc, 2)
 
     def test_cli_diff_mode_rejects_a_test_edit(self) -> None:
@@ -331,10 +402,92 @@ class GuardCliTests(unittest.TestCase):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(diff)
         try:
-            rc = cli_main([self.root, "--diff", path])
+            rc = cli_main(["guard", self.root, "--diff", path])
             self.assertEqual(rc, 1)  # REJECTED -> non-zero
         finally:
             os.unlink(path)
+
+
+class MemLimitOptionTests(unittest.TestCase):
+    """The ``--mem-limit`` CLI option threads the address-space cap to the judge.
+
+    Default behaviour is unchanged (1024 MB); ``0`` disables the cap, which is
+    required for Node/V8 suites that reserve far more virtual memory than any sane
+    ``RLIMIT_AS`` (the default cap would SIGABRT them).
+    """
+
+    def test_parser_default_and_override(self) -> None:
+        from evoom_guard.cli import build_parser
+
+        p = build_parser()
+        # The CLI defaults are now sentinels (None) so .evoguard.json can supply a
+        # value; the effective 1024 MB / 120 s are applied in cmd_guard (see the
+        # effective-default test below). Explicit values still parse.
+        self.assertIsNone(p.parse_args(["guard", "."]).mem_limit)
+        self.assertEqual(p.parse_args(["guard", ".", "--mem-limit", "0"]).mem_limit, 0)
+        self.assertIsNone(p.parse_args(["guard", "."]).timeout)
+        self.assertEqual(p.parse_args(["guard", ".", "--timeout", "5"]).timeout, 5)
+
+    def test_cmd_guard_applies_effective_defaults(self) -> None:
+        # With no flag and no config, cmd_guard resolves the built-in 1024 MB / 120 s
+        # and threads them to the judge. A protected-path patch makes the verifier
+        # short-circuit before running any suite, so this needs no pytest.
+        import evoom_guard.guard as guard_mod
+
+        seen: dict[str, int] = {}
+        real = guard_mod.RepoVerifier
+
+        class _Spy(real):  # type: ignore[misc, valid-type]
+            def __init__(self, *a, **kw):
+                seen["timeout"] = kw.get("timeout")
+                seen["mem_limit_mb"] = kw.get("mem_limit_mb")
+                super().__init__(*a, **kw)
+
+        guard_mod.RepoVerifier = _Spy  # type: ignore[misc]
+        pf = os.path.join(self.root, "cand.patch")
+        with open(pf, "w", encoding="utf-8") as f:
+            f.write("<<<FILE: tests/test_x.py>>>\n# protected — short-circuits\n<<<END FILE>>>")
+        try:
+            cli_main(["guard", self.root, "--patch", pf,
+                      "--config", os.path.join(self.root, "no-such-config.json")])
+        finally:
+            guard_mod.RepoVerifier = real  # type: ignore[misc]
+        self.assertEqual(seen.get("timeout"), 120)
+        self.assertEqual(seen.get("mem_limit_mb"), 1024)
+
+    def test_invalid_mem_limit_is_rejected_safely(self) -> None:
+        # A non-integer value is refused by argparse (exit 2), never silently ignored.
+        from evoom_guard.cli import build_parser
+
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["guard", ".", "--mem-limit", "notanumber"])
+
+    def test_guard_threads_mem_limit_to_verifier(self) -> None:
+        import evoom_guard.guard as guard_mod
+
+        seen: dict[str, int] = {}
+        real = guard_mod.RepoVerifier
+
+        class _Spy(real):  # type: ignore[misc, valid-type]
+            def __init__(self, *a, **kw):
+                seen["mem_limit_mb"] = kw.get("mem_limit_mb")
+                super().__init__(*a, **kw)
+
+        guard_mod.RepoVerifier = _Spy  # type: ignore[misc]
+        try:
+            guard_mod.guard(self.root, "<<<FILE: pkg/m.py>>>\n\n<<<END FILE>>>", mem_limit_mb=0)
+        finally:
+            guard_mod.RepoVerifier = real  # type: ignore[misc]
+        self.assertEqual(seen.get("mem_limit_mb"), 0)
+
+    def setUp(self) -> None:
+        self.root = tempfile.mkdtemp(prefix="evo_memlimit_")
+        os.makedirs(os.path.join(self.root, "pkg"))
+        with open(os.path.join(self.root, "pkg", "m.py"), "w", encoding="utf-8") as f:
+            f.write("def dbl(x):\n    return x * 2\n")
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
 
 
 if __name__ == "__main__":

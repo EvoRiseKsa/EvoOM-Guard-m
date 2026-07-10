@@ -10,14 +10,14 @@ human or — the motivating case — an AI agent):
 
     *Does this patch fix the code, **without gaming the tests**?*
 
-It is a thin, model-free composition of assets extracted from EvoOM:
+It is a thin, model-free composition of assets that already exist in EvoOM:
 
-  * the **reward-hack-resistant repo judge** (:class:`evoom_guard.repo_verifier.RepoVerifier`)
+  * the **reward-hack-resistant repo judge** (:class:`evoom_guard.verifiers.repo_verifier.RepoVerifier`)
     — applies the patch to a throwaway copy and reads the verdict from a
     *judge-owned* JUnit report + the process exit code, so the patch cannot fake a
     pass by writing to stdout, and is **rejected** outright if it edits the tests or
     their configuration; and
-  * the **blast-radius risk score** (:func:`evoom_guard.riskscore.risk_score`).
+  * the **blast-radius risk score** (:func:`evoom_guard.patchmin.risk_score`).
 
 The result is a single verdict — ``PASS`` / ``REJECTED`` / ``FAIL`` / ``ERROR`` — a
 process exit code suitable for CI, and a Markdown report suitable for a PR comment.
@@ -30,9 +30,9 @@ Two input shapes:
 
 Trust boundary (honest): the judge runs the repo's own test suite in a subprocess
 with rlimits and a timeout. That is fine for **trusted** repositories (your own
-code, gating a patch). For **untrusted** code, run inside the hardened container
-judge — see the README's trust-boundary section. Guard never claims the
-subprocess is a security sandbox.
+code, gating a patch). For **untrusted** code, run it inside a network-less
+container with CPU/memory limits — see the trust boundary in ``docs/GUARD.md``.
+Guard never claims the subprocess is a security sandbox.
 """
 
 from __future__ import annotations
@@ -46,12 +46,16 @@ import tempfile
 from dataclasses import dataclass
 from typing import Any
 
-from evoom_guard.riskscore import risk_score
-from evoom_guard.repo_verifier import (
+from evoom_guard import __version__
+from evoom_guard.patchmin import risk_score
+from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
+    _matches_globs,
+    is_addable_new_test,
     is_judge_autoexec,
     is_protected,
+    is_protected_ci,
     is_protected_config,
     is_safe_relpath,
     parse_file_blocks,
@@ -64,13 +68,40 @@ _PROTECTED_GLOBS = (
     "*tests/*", "*test/*", "test_*.py", "*_test.py", "conftest.py",
     "pyproject.toml", "*pytest.ini", "tox.ini", "setup.cfg",
     "*.pth", "sitecustomize.py", "usercustomize.py", "Makefile", "GNUmakefile", "noxfile.py",
+    # EvoGuard's own config + the CI that runs the gate (see is_protected_ci).
+    ".evoguard.json", "*.github/workflows/*", "*.github/actions/*",
 )
+
+# The machine-readable JSON contract version. Bump on any breaking change to the
+# JSON shape, verdict names, or reason codes (adapters pin on this — see
+# docs/JSON_SCHEMA.md).
+#   1.1 — deletions are now gated: a head that deletes a protected harness file is
+#         REJECTED, and a deleted *source* file is applied to the verified tree (so
+#         the verdict matches the merge). The optional ``deleted_not_gated`` array
+#         was renamed to ``deleted`` to reflect that deletions are no longer ungated.
+SCHEMA_VERSION = "1.1"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
 REJECTED = "REJECTED"  # the patch edits the tests / their config (reward-hack)
 FAIL = "FAIL"          # the patch applied and ran, but the tests fail
 ERROR = "ERROR"        # the patch did not apply / produced no parseable edits
+TAMPERED = "TAMPERED"  # the exit code and the judge-owned JUnit report disagree
+
+# Stable machine codes for the verdict's cause (never reword without a SCHEMA_VERSION
+# bump). The human ``reason`` may change freely; adapters key off ``reason_code``.
+REASON_TESTS_PASSED = "tests_passed"
+REASON_PROTECTED_HARNESS_EDIT = "protected_harness_edit"
+REASON_TESTS_FAILED = "tests_failed"
+REASON_NO_PARSEABLE_EDITS = "no_parseable_edits"
+REASON_UNSAFE_PATH = "unsafe_path"
+REASON_PATCH_APPLY_FAILED = "patch_apply_failed"
+REASON_NO_TEST_VERDICT = "no_test_verdict"
+REASON_JUNIT_EXIT_MISMATCH = "junit_exit_mismatch"
+REASON_EMPTY_DIFF = "empty_diff"
+REASON_BINARY_PATCH = "binary_patch"
+REASON_REVERSE_APPLY_FAILED = "reverse_apply_failed"
+REASON_NO_VERIFIABLE_CHANGES = "no_verifiable_changes"
 
 
 @dataclass
@@ -90,11 +121,18 @@ class GuardResult:
     diagnostics: str = ""
     source: str | None = None              # how the candidate was supplied (e.g. "diff")
     base_reconstruction: str | None = None  # "ok" | "failed" (only for --diff)
+    reason_code: str = ""                  # stable machine code for the cause (see REASON_*)
+    isolation: str = "subprocess"          # how the suite ran: subprocess / docker / gvisor
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema_version": SCHEMA_VERSION,
+            "tool": "evoguard",
+            "tool_version": __version__,
             "verdict": self.verdict,
             "passed": self.passed,
+            "exit_code": self.exit_code,
+            "reason_code": self.reason_code,
             "reason": self.reason,
             "files_changed": self.files_changed,
             "protected_violations": self.protected_violations,
@@ -102,6 +140,7 @@ class GuardResult:
             "risk_score": round(self.risk_score, 3),
             "tests_passed": self.tests_passed,
             "tests_total": self.tests_total,
+            "test_command_ran": self.verdict_source is not None,
             "verdict_source": self.verdict_source,
             "source": self.source,
             "base_reconstruction": self.base_reconstruction,
@@ -110,7 +149,11 @@ class GuardResult:
 
     @property
     def exit_code(self) -> int:
-        """0 only on a clean PASS; non-zero otherwise (CI-gate friendly)."""
+        """0 only on a clean PASS; non-zero otherwise (CI-gate friendly).
+
+        Every non-PASS verdict (REJECTED / FAIL / ERROR / TAMPERED) exits ``1``;
+        invalid CLI usage exits ``2`` (handled in the CLI, not here).
+        """
         return 0 if self.verdict == PASS else 1
 
 
@@ -161,54 +204,146 @@ def guard(
     repo_path: str,
     candidate: str,
     *,
+    deleted: tuple[str, ...] = (),
     test_command: list[str] | None = None,
+    setup_command: list[str] | None = None,
     protected: tuple[str, ...] = (),
+    allow: tuple[str, ...] = (),
+    allow_new_tests: bool = False,
     timeout: int = 120,
+    mem_limit_mb: int = 1024,
+    isolation: str = "subprocess",
+    docker_image: str | None = None,
+    docker_network: str = "none",
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
     The repo at ``repo_path`` is never modified — the judge works on a throwaway
-    copy. ``protected`` adds extra globs the patch may not touch (on top of the
-    built-in tests/config/auto-exec set).
+    copy. ``deleted`` lists repo-relative paths the change removes (from a base→head
+    diff): a deleted *source* file is applied to the verified copy so the verdict
+    matches the real merge, while deleting a protected harness file (a test, its
+    config, the gate's CI, or an auto-exec file) is a reward-hack and yields
+    ``REJECTED`` — removing a check is as much a hack as editing one.
+    ``protected`` adds extra globs the patch may not touch (on top of the
+    built-in tests/config/auto-exec set). ``mem_limit_mb`` is the address-space cap
+    for the test subprocess; pass ``0`` to disable it (required for Node/V8 suites,
+    which reserve far more virtual memory than any sane ``RLIMIT_AS``).
+    ``setup_command`` runs inside the repo copy before the test suite (e.g.
+    ``["pnpm", "install", "--frozen-lockfile"]``) — useful when dependency
+    installation is needed but should stay separate from the token-list
+    ``test_command``.
+
+    ``allow_new_tests`` (opt-in "feature mode", default off) lets a change add
+    **brand-new** test files while still rejecting any edit to an *existing* test or
+    to the harness/config/auto-exec/CI — so a feature PR can ship its own tests. New
+    test code still runs in the judge process; this is for trusted authors (see
+    ``docs/FEATURE_MODE.md``).
+
+    ``allow`` is an adopter-curated allowlist of globs (a *baseline*): a matching
+    path is exempt from the test/config/CI rejection — for a built-in pattern's false
+    positive or a known pre-existing hit. It never exempts auto-exec or unsafe paths.
+
+    ``isolation="docker"`` runs the suite inside a short-lived, network-less,
+    read-only container (``docker_image`` required; defence in depth for semi-trusted
+    code — not a complete boundary for hostile code). Default ``"subprocess"`` is
+    unchanged.
     """
     changed = changed_paths(candidate)
-    violations = sorted(
+    # Deletions are gated too: deleting a protected harness file is as much a
+    # reward-hack as editing it (removing a failing test/check), and a deleted
+    # *source* file must be applied to the verified tree so the verdict matches the
+    # real merge. Both the safety and protected-path checks therefore span the
+    # added/modified *and* deleted paths.
+    deleted_touched = [d for d in deleted if d not in changed]
+    all_touched = changed + deleted_touched
+    unsafe = sorted(p for p in all_touched if not is_safe_relpath(p))
+    new_paths = frozenset(
         p for p in changed
-        if is_protected(p, protected) or is_protected_config(p) or is_judge_autoexec(p)
+        if is_safe_relpath(p) and not os.path.exists(os.path.join(repo_path, p))
+    )
+
+    def _is_violation(p: str) -> bool:
+        if is_judge_autoexec(p):
+            return True  # auto-exec runs in the judge process — never exempt
+        if not (is_protected(p, protected) or is_protected_config(p) or is_protected_ci(p)):
+            return False
+        if _matches_globs(p, allow):
+            return False  # adopter-allowlisted (baseline)
+        return not (allow_new_tests and is_addable_new_test(p, protected, is_new=p in new_paths))
+
+    # A deleted path is never "new", so a protected deletion is always a violation
+    # (feature mode lets you *add* a new test, never *remove* an existing check).
+    violations = sorted(p for p in all_touched if _is_violation(p))
+    # Safe, non-protected deletions are applied to the verified copy.
+    safe_deleted = sorted(
+        d for d in deleted if is_safe_relpath(d) and not _is_violation(d)
     )
 
     problem: dict[str, Any] = {"name": "guard", "repo_path": repo_path}
     if test_command:
         problem["test_command"] = test_command
+    if setup_command:
+        problem["setup_command"] = setup_command
     if protected:
         problem["protected"] = list(protected)
+    if allow:
+        problem["allow"] = list(allow)
+    if allow_new_tests:
+        problem["allow_new_tests"] = True
+    if safe_deleted:
+        problem["deleted"] = safe_deleted
 
-    verdict = RepoVerifier(timeout=timeout).verify(candidate, problem)
+    verdict = RepoVerifier(
+        timeout=timeout, mem_limit_mb=mem_limit_mb,
+        isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+    ).verify(candidate, problem)
     art = verdict.artifact or {}
     risk = risk_score(_risk_map(repo_path, candidate), protected=_PROTECTED_GLOBS + tuple(protected))
 
-    if not changed:
-        v, reason = ERROR, (
+    if not all_touched:
+        v, reason, code = ERROR, (
             "no parseable edit blocks — the patch produced no <<<FILE>>> or "
-            "<<<PATCH>>> edits to verify"
-        )
+            "<<<PATCH>>> edits (and no deletions) to verify"
+        ), REASON_NO_PARSEABLE_EDITS
+    elif unsafe:
+        # An absolute path, a ``..`` escape, or anything leaving the repo root. The
+        # verifier already refused to apply it; name the real cause here rather than
+        # mislabel it as a failed patch anchor.
+        v, reason, code = ERROR, (
+            "the patch references an unsafe path (absolute, '..', or escaping the "
+            f"repo root) — refusing to apply: {', '.join(unsafe)}"
+        ), REASON_UNSAFE_PATH
     elif violations:
-        v, reason = REJECTED, (
-            "reward-hack guard: the patch edits the judging tests, their "
-            "configuration, or an auto-executed file — fix the source under test, "
-            f"not the harness ({', '.join(violations)})"
-        )
+        v, reason, code = REJECTED, (
+            "reward-hack guard: the patch edits or deletes the judging tests, their "
+            "configuration, the gate's CI/config, or an auto-executed file — fix the "
+            f"source under test, not the harness ({', '.join(violations)})"
+        ), REASON_PROTECTED_HARNESS_EDIT
+    elif art.get("tamper"):
+        # The two trustworthy signals (process exit code and the judge-owned JUnit
+        # report) disagree — a forced exit / rewritten ``$?``. Never read as a pass.
+        v, reason, code = TAMPERED, (
+            "tamper signature: the suite's exit code and its judge-owned JUnit report "
+            f"disagree ({art.get('tests_passed', 0)}/{art.get('tests_total', 0)} in the "
+            "report) — refusing to read this as a pass"
+        ), REASON_JUNIT_EXIT_MISMATCH
     elif verdict.passed:
-        v, reason = PASS, "all repo tests pass and the patch leaves the test harness untouched"
+        v, reason, code = PASS, (
+            "all repo tests pass and the patch leaves the test harness untouched"
+        ), REASON_TESTS_PASSED
     elif art.get("tests_total"):
-        v, reason = FAIL, (
+        v, reason, code = FAIL, (
             f"the repo's tests fail on this patch "
             f"({art.get('tests_passed', 0)}/{art.get('tests_total')} passed)"
-        )
+        ), REASON_TESTS_FAILED
     elif verdict.score <= 0.08:
-        v, reason = ERROR, "the patch did not apply cleanly (a PATCH anchor did not match)"
+        v, reason, code = ERROR, (
+            "the patch did not apply cleanly (a PATCH anchor did not match)"
+        ), REASON_PATCH_APPLY_FAILED
     else:
-        v, reason = FAIL, "the test session produced no clean verdict (collection/usage error)"
+        v, reason, code = FAIL, (
+            "the test session produced no clean verdict (collection/usage error)"
+        ), REASON_NO_TEST_VERDICT
 
     return GuardResult(
         verdict=v,
@@ -222,6 +357,8 @@ def guard(
         tests_total=art.get("tests_total"),
         verdict_source=art.get("verdict_source"),
         diagnostics=verdict.diagnostics or "",
+        reason_code=code,
+        isolation=isolation,
     )
 
 
@@ -285,12 +422,15 @@ def _reverse_apply(work_dir: str, diff_file: str) -> bool:
     return False
 
 
-def _diff_error(reason: str, *, base_reconstruction: str = "failed") -> GuardResult:
+def _diff_error(
+    reason: str, *, reason_code: str, base_reconstruction: str = "failed"
+) -> GuardResult:
     return GuardResult(
         verdict=ERROR, passed=False, reason=reason,
         files_changed=[], protected_violations=[],
         risk_level="low", risk_score=0.0, diagnostics="",
         source="diff", base_reconstruction=base_reconstruction,
+        reason_code=reason_code,
     )
 
 
@@ -324,8 +464,15 @@ def guard_from_diff(
     diff_text: str,
     *,
     test_command: list[str] | None = None,
+    setup_command: list[str] | None = None,
     protected: tuple[str, ...] = (),
+    allow: tuple[str, ...] = (),
+    allow_new_tests: bool = False,
     timeout: int = 120,
+    mem_limit_mb: int = 1024,
+    isolation: str = "subprocess",
+    docker_image: str | None = None,
+    docker_network: str = "none",
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -341,17 +488,19 @@ def guard_from_diff(
     unsafe path (absolute / ``..`` / repo escape), or does not reverse-apply.
     """
     if not (diff_text or "").strip():
-        return _diff_error("empty diff — nothing to verify"), []
+        return _diff_error("empty diff — nothing to verify", reason_code=REASON_EMPTY_DIFF), []
     if _is_binary_diff(diff_text):
         return _diff_error(
             "binary patches are not supported — Guard verifies text source changes; "
-            "the diff contains a binary file change"
+            "the diff contains a binary file change",
+            reason_code=REASON_BINARY_PATCH,
         ), []
     unsafe = sorted({p for p in _diff_target_paths(diff_text) if not is_safe_relpath(p)})
     if unsafe:
         return _diff_error(
             "the diff references unsafe path(s) outside the repo (absolute, '..', or "
-            f"escaping the root) — refusing to apply: {', '.join(unsafe)}"
+            f"escaping the root) — refusing to apply: {', '.join(unsafe)}",
+            reason_code=REASON_UNSAFE_PATH,
         ), []
 
     workdir = tempfile.mkdtemp(prefix="evo_guard_diff_")
@@ -365,16 +514,22 @@ def guard_from_diff(
         if not _reverse_apply(base, diff_file):
             return _diff_error(
                 "the diff did not reverse-apply to the working tree — make sure you "
-                "are in the head checkout and the diff is 'base...HEAD' (git/patch needed)"
+                "are in the head checkout and the diff is 'base...HEAD' (git/patch needed)",
+                reason_code=REASON_REVERSE_APPLY_FAILED,
             ), []
         candidate, deleted = candidate_from_dirs(base, head_dir)
-        if not candidate.strip():
+        if not candidate.strip() and not deleted:
             return _diff_error(
-                "the diff changed no verifiable source files", base_reconstruction="ok"
+                "the diff changed no verifiable source files",
+                reason_code=REASON_NO_VERIFIABLE_CHANGES, base_reconstruction="ok",
             ), deleted
         result = guard(
             base, candidate,
-            test_command=test_command, protected=protected, timeout=timeout,
+            deleted=tuple(deleted),
+            test_command=test_command, setup_command=setup_command,
+            protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
+            mem_limit_mb=mem_limit_mb,
+            isolation=isolation, docker_image=docker_image, docker_network=docker_network,
         )
         result.source = "diff"
         result.base_reconstruction = "ok"
@@ -383,10 +538,13 @@ def guard_from_diff(
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-_BADGE = {PASS: "✅ PASS", REJECTED: "⛔ REJECTED", FAIL: "❌ FAIL", ERROR: "⚠️ ERROR"}
+_BADGE = {
+    PASS: "✅ PASS", REJECTED: "⛔ REJECTED", FAIL: "❌ FAIL",
+    ERROR: "⚠️ ERROR", TAMPERED: "🚨 TAMPERED",
+}
 
 
-def render_report(result: GuardResult, *, deleted: list[str] | None = None, title: str = "EvoOM Guard") -> str:
+def render_report(result: GuardResult, *, deleted: list[str] | None = None, title: str = "EvoGuard") -> str:
     """Render a :class:`GuardResult` as a Markdown report (PR-comment ready)."""
     r = result
     tests = (
@@ -423,22 +581,41 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
     if deleted:
         lines += [
             "",
-            "> Note: these files were **deleted** in head and are not gated by Guard "
-            "(it verifies additions/modifications): " + ", ".join(f"`{p}`" for p in deleted),
+            "> Note: these files were **deleted** in head and applied to the verified "
+            "tree (a deletion of a test/config/CI/auto-exec file is instead "
+            "**REJECTED**): " + ", ".join(f"`{p}`" for p in deleted),
         ]
     if r.files_changed and not r.protected_violations:
         shown = ", ".join(f"`{p}`" for p in r.files_changed[:15])
         more = "" if len(r.files_changed) <= 15 else f" (+{len(r.files_changed) - 15} more)"
         lines += ["", f"<details><summary>Files changed</summary>\n\n{shown}{more}\n</details>"]
-    if r.diagnostics and r.verdict in (FAIL, ERROR):
+    if r.verdict == TAMPERED:
+        lines += [
+            "",
+            "### 🚨 Tamper signature: exit code ⟷ JUnit report disagree",
+            "",
+            "The process exit code and the judge-owned JUnit report — the two signals "
+            "the candidate cannot forge via stdout — **disagree**. This is treated as "
+            "tampering and is never read as a pass.",
+        ]
+    if r.diagnostics and r.verdict in (FAIL, ERROR, TAMPERED):
         diag = r.diagnostics.strip()[:1200]
         lines += ["", "<details><summary>Diagnostics</summary>\n", "```", diag, "```", "</details>"]
+    _judge = {
+        "docker": "in a network-less, read-only container (defence in depth — but a "
+                  "container shares the host kernel, so not a complete boundary)",
+        "gvisor": "in a network-less container under the gVisor (runsc) runtime — a "
+                  "separate user-space guest kernel (for untrusted code)",
+    }.get(
+        r.isolation,
+        "in a subprocess with rlimits + a timeout — fine for trusted repos, not a "
+        "sandbox for untrusted code; isolate it further (--isolation docker|gvisor) for that",
+    )
     lines += [
         "",
-        "<sub>EvoOM Guard reads the verdict from a judge-owned JUnit report + the "
+        "<sub>EvoGuard reads the verdict from a judge-owned JUnit report + the "
         "process exit code (not stdout), and rejects any edit to the tests or their "
-        "config. Trusted-repo subprocess judge; use the container judge for untrusted "
-        "code. See the README.</sub>",
+        f"config. The judge runs the suite {_judge}. See docs/GUARD.md.</sub>",
     ]
     return "\n".join(lines)
 
@@ -446,6 +623,66 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
 def write_json(result: GuardResult, path: str, *, deleted: list[str] | None = None) -> None:
     payload = result.to_dict()
     if deleted:
-        payload["deleted_not_gated"] = deleted
+        # Files deleted in head. Non-protected (source) deletions are applied to the
+        # verified tree; a protected-harness deletion instead drives REJECTED. (Was
+        # ``deleted_not_gated`` before schema 1.1, when deletions were ungated.)
+        payload["deleted"] = deleted
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
+
+
+def to_sarif(result: GuardResult) -> dict[str, Any]:
+    """Render the verdict as a minimal **SARIF 2.1.0** document for GitHub
+    code-scanning (the *Security* tab).
+
+    A clean ``PASS`` yields **no results** (no alert). Any non-``PASS`` verdict
+    yields one ``error``-level result whose ``ruleId`` is the stable ``reason_code``
+    and whose locations point at the protected-violation files (for ``REJECTED``) or
+    the changed files. SARIF is only a *view*; the decision stays the verdict + exit
+    code.
+    """
+    rules: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    if result.verdict != PASS:
+        rule_id = result.reason_code or result.verdict.lower()
+        located = result.protected_violations or result.files_changed
+        locations = [
+            {"physicalLocation": {"artifactLocation": {"uri": p}}} for p in located if p
+        ]
+        entry: dict[str, Any] = {
+            "ruleId": rule_id,
+            "level": "error",
+            "message": {"text": f"EvoGuard {result.verdict}: {result.reason}"},
+            "properties": {
+                "verdict": result.verdict,
+                "risk_level": result.risk_level,
+                "verdict_source": result.verdict_source,
+                "isolation": result.isolation,
+            },
+        }
+        if locations:
+            entry["locations"] = locations
+        results.append(entry)
+        rules.append({"id": rule_id, "name": result.verdict})
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "EvoGuard",
+                        "version": __version__,
+                        "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+                        "rules": rules,
+                    }
+                },
+                "results": results,
+            }
+        ],
+    }
+
+
+def write_sarif(result: GuardResult, path: str) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(to_sarif(result), f, indent=2)

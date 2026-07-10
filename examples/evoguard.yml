@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+# ─────────────────────────────────────────────────────────────────────────────
+# Example workflow — copy to `.github/workflows/evoguard.yml` in the repo you
+# want to protect. EvoGuard verifies each PR's source changes against the repo's
+# own tests and REJECTS any edit to the tests or their configuration.
+name: EvoGuard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write   # required to post the verdict as a PR comment
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # Guard needs the base commit to diff against
+
+      - uses: EvoRiseKsa/EvoOM-Guard-m@v2.0.0   # pin a release (@<sha> strictest, @main latest)
+        with:
+          test-command: "pytest -q"
+          comment: "true"           # post the verdict as a PR comment
+          fail-on: "any-non-pass"   # or "rejected-only" to gate only reward-hacks

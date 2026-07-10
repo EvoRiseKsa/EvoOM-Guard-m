@@ -1,35 +1,128 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+# Source-available — see LICENSE for permitted use.
+# ─────────────────────────────────────────────────────────────────────────────
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 jobs:
-  tests:
+  test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install
+
+      - name: Install (dev extras)
         run: pip install -e ".[dev]"
-      - name: Run the test suite
-        run: python -m pytest tests -q
-      - name: Smoke-test the CLI
+
+      - name: Lint (ruff)
+        run: ruff check evoom_guard/ tests/
+
+      - name: Type-check (mypy)
+        run: mypy evoom_guard/
+
+      - name: Tests + coverage
         run: |
-          evo-guard --version
-          # A cheat patch that edits a test must be REJECTED (exit 1).
+          coverage run -m pytest tests/ -q
+          coverage report
+
+      - name: Import smoke (stdlib-only core, no extras)
+        run: |
+          python -c "import evoom_guard, evoom_guard.guard, evoom_guard.cli; print('ok', evoom_guard.__version__)"
+
+      - name: CLI smoke — a cheat patch must be REJECTED
+        run: |
+          evo-guard version
           mkdir -p /tmp/demo/pkg /tmp/demo/tests
           printf 'def dbl(x):\n    return x + x + 1\n' > /tmp/demo/pkg/m.py
           printf 'from pkg.m import dbl\n\ndef test_dbl():\n    assert dbl(3) == 6\n' > /tmp/demo/tests/test_m.py
           printf '<<<FILE: tests/test_m.py>>>\ndef test_dbl():\n    assert True\n<<<END FILE>>>\n' > /tmp/cheat.txt
-          if evo-guard /tmp/demo --patch /tmp/cheat.txt; then
+          if evo-guard guard /tmp/demo --patch /tmp/cheat.txt; then
             echo "cheat patch was NOT rejected" && exit 1
           else
             echo "cheat patch correctly rejected"
           fi
+
+  e2e-runners:
+    # Exercise the structured-verdict oracle END-TO-END against real runners (not
+    # just the adapter wiring): vitest + node --test, producing junit+exit verdicts
+    # on a real PASS/FAIL. jest stays env-gated (see tests/test_jest_oracle.py);
+    # gVisor needs the runsc runtime and is validated out-of-band (docs/PROOFS.md).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the vitest CLI
+        run: npm install -g vitest
+      - name: Install (dev extras)
+        run: pip install -e ".[dev]"
+      - name: e2e — vitest + node --test oracles
+        run: python -m pytest tests/test_vitest_oracle.py tests/test_node_oracle.py -v
+
+  release-tag-guard:
+    # Fail the build if evoom_guard.__version__ has no matching git tag on a
+    # tagged commit — prevents the "documented install pins a tag that doesn't
+    # exist" defect.
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version matches tag
+        run: |
+          pip install -e .
+          V="$(python -c 'import evoom_guard; print(evoom_guard.__version__)')"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package=$V tag=$TAG"
+          test "$V" = "$TAG"
+
+  publish-pyz:
+    # On a version tag, build the zero-dependency single-file `evo-guard.pyz`
+    # and attach it to the GitHub Release, so adopters can run the gate without
+    # pip. Gated behind the version⟷tag check + tests.
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, release-tag-guard]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build evo-guard.pyz
+        run: python ops/build_pyz.py -o dist/evo-guard.pyz
+      - name: Smoke-test the artifact
+        run: |
+          test "$(python dist/evo-guard.pyz version)" = "evo-guard ${GITHUB_REF_NAME#v}"
+          python dist/evo-guard.pyz doctor
+      - name: Checksums (release integrity)
+        run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
+                 --notes "Automated release assets."
+          gh release upload "$GITHUB_REF_NAME" dist/evo-guard.pyz dist/SHA256SUMS --clobber

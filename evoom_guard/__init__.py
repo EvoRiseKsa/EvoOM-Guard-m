@@ -3,41 +3,23 @@
 # Source-available — see LICENSE for permitted use.
 # Sole owner & author: Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
-"""EvoOM Guard — an AI patch verification gate.
+"""EvoOM Guard (EvoGuard) — the merge gate an AI agent can't game the test harness.
 
-Does this patch fix the code **without gaming the tests**? Guard rejects any
-edit to the tests or their configuration before the suite runs, and reads the
-verdict from a judge-owned JUnit report + the process exit code — never from
-stdout — so a forged "9999 passed" cannot flip it.
+A reward-hack-resistant patch verification gate. Given a base repo and a candidate
+change (an edit-block patch, a base/head pair, or a unified diff), it decides
+whether the change fixes the repo **without gaming the tests**:
 
-Extracted as a standalone tool from the EvoOM verification platform.
+  * the verdict is read from a *judge-owned* JUnit report plus the process exit
+    code — never from stdout — so a forged ``"N passed"`` cannot fool it;
+  * any edit to the tests or their configuration is rejected *before* the suite
+    runs, so an agent cannot pass by rewriting the harness.
+
+The public surface is :func:`evoom_guard.guard.guard`, :func:`evoom_guard.guard.guard_from_diff`
+and the ``evo-guard guard`` CLI. The core is stdlib-only.
 """
 
-from evoom_guard.guard import (
-    ERROR,
-    FAIL,
-    PASS,
-    REJECTED,
-    GuardResult,
-    candidate_from_dirs,
-    guard,
-    guard_from_diff,
-    render_report,
-    write_json,
-)
+from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
-__version__ = "0.1.0"
+__all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__all__ = [
-    "PASS",
-    "REJECTED",
-    "FAIL",
-    "ERROR",
-    "GuardResult",
-    "guard",
-    "guard_from_diff",
-    "candidate_from_dirs",
-    "render_report",
-    "write_json",
-    "__version__",
-]
+__version__ = "2.0.0"
