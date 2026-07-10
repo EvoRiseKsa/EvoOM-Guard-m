@@ -65,7 +65,7 @@ no third-party dependencies, so this is a fast, clean install — no clone neede
 ```bash
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v2.1.2"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
-evo-guard guard --diff - --test-command "pytest -q" < pr.diff
+evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```
 
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
@@ -88,7 +88,7 @@ evo-guard guard --diff - --test-command "pytest -q" < pr.diff
 ```bash
 # Easiest: pipe a normal git diff from your working tree (the head checkout).
 # Guard reverse-applies it to reconstruct the base, then verifies — zero setup.
-git diff main...HEAD | evo-guard guard --diff - --test-command "pytest -q"
+git diff main...HEAD | evo-guard guard --diff - --test-command "python -m pytest -q"
 evo-guard guard --diff pr.diff --report report.md --json guard.json
 
 # Verify a candidate in EvoGuard's edit-block format against a repo:
@@ -96,7 +96,7 @@ evo-guard guard path/to/repo --patch candidate.txt
 echo "<<<FILE: src/x.py>>> … <<<END FILE>>>" | evo-guard guard path/to/repo --patch -
 
 # Verify a PR by diffing two explicit checkouts:
-evo-guard guard --base path/to/base --head path/to/head --test-command "pytest -q"
+evo-guard guard --base path/to/base --head path/to/head --test-command "python -m pytest -q"
 ```
 
 `evo-guard guard` prints a Markdown report and exits **0 only on `PASS`**, non-zero
@@ -159,7 +159,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
-    git diff "$BASE...HEAD" | evo-guard guard --diff - --test-command "pytest -q" --report "$GITHUB_STEP_SUMMARY"
+    git diff "$BASE...HEAD" | evo-guard guard --diff - --test-command "python -m pytest -q" --report "$GITHUB_STEP_SUMMARY"
 ```
 
 `evo-guard guard` returns a non-zero exit on anything but `PASS`, so the step fails the

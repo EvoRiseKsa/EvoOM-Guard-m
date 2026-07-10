@@ -17,7 +17,7 @@ release tag):
 
 ```bash
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v2.1.2"
-evo-guard init --test-command "pytest -q"     # writes .github/workflows/evoguard.yml
+evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
 
@@ -56,7 +56,7 @@ located on the offending files. Upload it with `github/codeql-action/upload-sari
 Drop a `.evoguard.json` at the repo root so you don't repeat flags:
 
 ```json
-{ "test_command": "pytest -q", "protected": ["migrations/*"], "timeout": 180 }
+{ "test_command": "python -m pytest -q", "protected": ["migrations/*"], "timeout": 180 }
 ```
 
 Explicit CLI flags always override it. `protected` adds globs the patch may not

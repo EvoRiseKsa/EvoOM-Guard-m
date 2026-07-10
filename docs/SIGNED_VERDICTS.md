@@ -28,7 +28,7 @@ evo-guard keygen --key evoguard-signing.pem --pub evoguard-signing.pub
 
 # Every run: sign the JSON verdict as it is written.
 git diff main...HEAD | evo-guard guard --diff - \
-    --test-command "pytest -q" \
+    --test-command "python -m pytest -q" \
     --json verdict.json --sign-key evoguard-signing.pem
 # -> verdict.json + verdict.json.sig (base64, detached)
 
