@@ -50,7 +50,7 @@ pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@main"   # pin a tag
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
-git diff main...HEAD | evo-guard guard --diff - --test-command "pytest -q"
+git diff main...HEAD | evo-guard guard --diff - --test-command "python -m pytest -q"
 ```
 
 You get a PR-ready Markdown report and a CI-friendly exit code:
@@ -73,7 +73,7 @@ SARIF 2.1.0 report (`--sarif`) for GitHub code scanning — see
 The fastest path — scaffold the workflow from inside your repo:
 
 ```bash
-evo-guard init --test-command "pytest -q"
+evo-guard init --test-command "python -m pytest -q"
 ```
 
 or drop the composite action in yourself:
@@ -88,7 +88,7 @@ steps:
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
   - uses: EvoRiseKsa/EvoOM-Guard-m@main   # pin a release tag or SHA (strictest)
     with:
-      test-command: "pytest -q"
+      test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
 ```
 
@@ -102,7 +102,7 @@ inputs: `isolation`/`docker-image`/`docker-network`, `sarif`, `allow`,
 
 ```bash
 # Two checkouts (what the Action does internally):
-evo-guard guard --base ./base-checkout --head ./head-checkout --test-command "pytest -q"
+evo-guard guard --base ./base-checkout --head ./head-checkout --test-command "python -m pytest -q"
 
 # An agent's edit blocks (<<<FILE: path>>> ... <<<END FILE>>> /
 # <<<PATCH: path>>> <<<SEARCH>>> ... <<<REPLACE>>> ... <<<END PATCH>>>):
@@ -158,6 +158,10 @@ See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
   claimed as absolute immunity.
 - Custom (non-adapter) test commands are graded by exit code only — still not
   stdout-forgeable, but with a coarser gradient.
+- **`ModuleNotFoundError` under the judge?** Prefer `python -m pytest` over bare
+  `pytest` in `--test-command`: the `-m` form puts the repo copy's root on
+  `sys.path` (exactly like the default command), so top-level packages import
+  without a `conftest.py` or an installed package.
 
 ## Docs
 
