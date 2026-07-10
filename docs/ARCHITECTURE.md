@@ -1,6 +1,6 @@
 <!--
   Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
-  Proprietary and confidential — see LICENSE.
+  Source-available — see LICENSE for permitted use.
   Sole owner & author: Mana Alharbi (مانع الحربي).
 -->
 
