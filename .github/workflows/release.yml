@@ -2,16 +2,22 @@
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-# Manual release: creates the vX.Y.Z tag + GitHub Release and attaches the
+# Release: creates the vX.Y.Z tag + GitHub Release and attaches the
 # zero-dependency single-file `evo-guard.pyz` (+ SHA256SUMS).
+#
+# Two triggers:
+#   * push of a branch named `release/vX.Y.Z` (the tag is derived from the
+#     branch name; the branch is deleted after a successful release), or
+#   * manual workflow_dispatch with a `tag` input (Actions tab).
 #
 # Exists because tags created by GITHUB_TOKEN do not re-trigger the tag-push
 # CI jobs (GitHub's recursion guard), and some git proxies refuse tag pushes —
-# so this one workflow does the whole release end-to-end. Run it from the
-# Actions tab (or `gh workflow run release.yml -f tag=v2.0.0`).
+# so this one workflow does the whole release end-to-end.
 name: Release
 
 on:
+  push:
+    branches: ['release/v*']
   workflow_dispatch:
     inputs:
       tag:
@@ -27,6 +33,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve the tag (input, or the release/* branch name)
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG="${GITHUB_REF_NAME#release/}"; fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "releasing $TAG from $GITHUB_SHA"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -35,7 +48,6 @@ jobs:
         run: |
           pip install -e ".[dev]"
           V="$(python -c 'import evoom_guard; print(evoom_guard.__version__)')"
-          TAG="${{ inputs.tag }}"
           echo "package=$V tag=$TAG"
           test "v$V" = "$TAG"
 
@@ -49,8 +61,6 @@ jobs:
         run: |
           test "$(python dist/evo-guard.pyz version)" = "evo-guard ${TAG#v}"
           python dist/evo-guard.pyz doctor
-        env:
-          TAG: ${{ inputs.tag }}
 
       - name: Checksums (release integrity)
         run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
@@ -59,9 +69,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${{ inputs.tag }}" >/dev/null 2>&1 \
-            || gh release create "${{ inputs.tag }}" \
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" \
                  --target "$GITHUB_SHA" \
-                 --title "${{ inputs.tag }}" \
+                 --title "$TAG" \
                  --generate-notes
-          gh release upload "${{ inputs.tag }}" dist/evo-guard.pyz dist/SHA256SUMS --clobber
+          gh release upload "$TAG" dist/evo-guard.pyz dist/SHA256SUMS --clobber
+
+      - name: Delete the release/* trigger branch (cleanup)
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$GITHUB_REF_NAME" || true
