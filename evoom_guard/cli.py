@@ -143,6 +143,18 @@ def build_parser() -> argparse.ArgumentParser:
         "process boundary via $EVOGUARD_TARGET. See docs/BLACKBOX.md.",
     )
     g_p.add_argument(
+        "--require-report-integrity", dest="require_report_integrity", default=None,
+        choices=("same_process_candidate_writable", "external_process_isolated"),
+        help="fail-closed policy: require at least this report_integrity level, or "
+        "the run returns ERROR (assurance_requirement_not_met) instead of shipping "
+        "a weaker guarantee. 'external_process_isolated' needs --blackbox.",
+    )
+    g_p.add_argument(
+        "--require-candidate-isolation", dest="require_candidate_isolation", default=None,
+        choices=("subprocess", "docker", "gvisor"),
+        help="fail-closed policy: require at least this candidate isolation, or ERROR.",
+    )
+    g_p.add_argument(
         "--diff-coverage", dest="diff_coverage", action="store_true",
         help="measure which changed lines the suite actually executed (one extra "
         "suite run under coverage; needs the 'cov' extra). Evidence only unless "
@@ -370,6 +382,8 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
             blackbox=args.blackbox,
+            require_report_integrity=args.require_report_integrity,
+            require_candidate_isolation=args.require_candidate_isolation,
         )
     elif args.base and args.head:
         candidate, deleted = candidate_from_dirs(args.base, args.head)
@@ -384,6 +398,8 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
             blackbox=args.blackbox,
+            require_report_integrity=args.require_report_integrity,
+            require_candidate_isolation=args.require_candidate_isolation,
         )
         result.source = "base/head"
     elif args.repo and args.patch:
@@ -397,6 +413,8 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
             blackbox=args.blackbox,
+            require_report_integrity=args.require_report_integrity,
+            require_candidate_isolation=args.require_candidate_isolation,
         )
         result.source = "edit blocks"
     else:

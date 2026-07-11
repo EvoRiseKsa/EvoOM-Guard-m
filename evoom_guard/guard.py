@@ -86,7 +86,10 @@ _PROTECTED_GLOBS = (
 #   1.3 — additive ``assurance`` object stating how much the verdict can be trusted
 #         (harness_integrity / report_integrity / candidate_isolation). Honesty:
 #         report_integrity is same_process_candidate_writable — see _assurance_profile.
-SCHEMA_VERSION = "1.3"
+#   1.4 — attestation gains ``mode`` (repo|blackbox); a new reason code
+#         ``assurance_requirement_not_met`` (the enforceable --require-* policy,
+#         fail-closed); black-box verdicts now carry attestation too.
+SCHEMA_VERSION = "1.4"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -113,6 +116,17 @@ REASON_DIFF_COVERAGE_BELOW_THRESHOLD = "diff_coverage_below_threshold"
 REASON_TEST_TIMEOUT = "test_timeout"
 REASON_SETUP_TIMEOUT = "setup_timeout"
 REASON_SETUP_FAILED = "setup_failed"
+REASON_ASSURANCE_REQUIREMENT_NOT_MET = "assurance_requirement_not_met"
+
+# Ordering of report-integrity levels, weakest → strongest. A caller can demand a
+# floor with require_report_integrity; if the run's actual level is below it, the
+# verdict is refused (fail-closed) rather than shipping a weaker guarantee than
+# was asked for. Enforced against what actually ran, never against a CLI wish.
+_REPORT_INTEGRITY_RANK = {
+    "same_process_candidate_writable": 0,
+    "external_process_isolated": 1,
+}
+_ISOLATION_RANK = {"subprocess": 0, "docker": 1, "gvisor": 2}
 
 # Verifier ``outcome`` marker → (verdict, reason_code). The patch applied and the
 # session started, but did not produce a clean pass/fail — a timeout or a failed
@@ -250,6 +264,8 @@ def guard(
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
     blackbox: bool = False,
+    require_report_integrity: str | None = None,
+    require_candidate_isolation: str | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -386,6 +402,16 @@ def guard(
             v_bx, code_bx, reason_bx = FAIL, REASON_TESTS_FAILED, (
                 f"the black-box pack failed ({bx.tests_passed}/{bx.tests_total})"
             )
+        assurance_bx = _assurance_profile(isolation, verifier_pack, blackbox=True)
+        # Enforceable assurance policy (fail-closed): refuse to ship a verdict whose
+        # actual assurance is below what the caller required.
+        shortfall_bx = _assurance_shortfall(
+            assurance_bx,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+        )
+        if shortfall_bx is not None:
+            v_bx, code_bx, reason_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall_bx
         return GuardResult(
             verdict=v_bx, passed=(v_bx == PASS), reason=reason_bx,
             files_changed=changed, protected_violations=[],
@@ -394,7 +420,14 @@ def guard(
             tests_total=bx.tests_total if bx.ran else None,
             verdict_source="blackbox" if bx.ran else None,
             diagnostics=bx.diagnostics, reason_code=code_bx, isolation=isolation,
-            assurance=_assurance_profile(isolation, verifier_pack, blackbox=True),
+            assurance=assurance_bx,
+            attestation=_build_attestation(
+                candidate, safe_deleted=safe_deleted, test_command=test_command,
+                protected=protected, allow=allow, allow_new_tests=allow_new_tests,
+                isolation=isolation,
+                art={"verifier_pack_sha256": bx.pack_sha256, "verifier_pack_manifest": bx.pack_manifest},
+                mode="blackbox",
+            ),
         )
 
     verdict = RepoVerifier(
@@ -487,20 +520,23 @@ def guard(
                 "tests that judged it"
             )
 
-    attestation: dict[str, Any] = {
-        "created_utc": _utc_now(),
-        "guard_version": __version__,
-        "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
-        "deleted_paths": list(safe_deleted),
-        "test_command": list(test_command) if test_command else "default:python -m pytest",
-        "policy_sha256": hashlib.sha256(json.dumps({
-            "protected": sorted(protected), "allow": sorted(allow),
-            "allow_new_tests": allow_new_tests, "isolation": isolation,
-        }, sort_keys=True).encode("utf-8")).hexdigest(),
-        "junit_sha256": art.get("junit_sha256"),
-        "verifier_pack_sha256": art.get("verifier_pack_sha256"),
-        "verifier_pack_manifest": art.get("verifier_pack_manifest"),
-    }
+    attestation = _build_attestation(
+        candidate, safe_deleted=safe_deleted, test_command=test_command,
+        protected=protected, allow=allow, allow_new_tests=allow_new_tests,
+        isolation=isolation, art=art, mode="repo",
+    )
+
+    assurance = _assurance_profile(isolation, verifier_pack)
+    # Enforceable assurance policy (fail-closed): the default judge is
+    # same_process_candidate_writable, so a --require-report-integrity of
+    # external_process_isolated here correctly refuses rather than overclaims.
+    shortfall = _assurance_shortfall(
+        assurance,
+        require_report_integrity=require_report_integrity,
+        require_candidate_isolation=require_candidate_isolation,
+    )
+    if shortfall is not None:
+        v, code, reason = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall
 
     return GuardResult(
         verdict=v,
@@ -518,7 +554,7 @@ def guard(
         isolation=isolation,
         diff_coverage=coverage_evidence,
         attestation=attestation,
-        assurance=_assurance_profile(isolation, verifier_pack),
+        assurance=assurance,
     )
 
 
@@ -549,6 +585,66 @@ def _utc_now() -> str:
 # deleting tests, deselecting in config, forging stdout — all caught) but does
 # NOT stop a patch that writes deliberate process-level forgery code into
 # source. Read report_integrity before trusting a PASS on untrusted authors.
+def _build_attestation(
+    candidate: str, *, safe_deleted: list[str], test_command: list[str] | None,
+    protected: tuple[str, ...], allow: tuple[str, ...], allow_new_tests: bool,
+    isolation: str, art: dict[str, Any], mode: str,
+) -> dict[str, Any]:
+    """Context binding for the (optionally signed) verdict. Shared by the default
+    and black-box paths so a black-box verdict is bound to what was judged too."""
+    return {
+        "created_utc": _utc_now(),
+        "guard_version": __version__,
+        "mode": mode,  # "repo" | "blackbox"
+        "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
+        "deleted_paths": list(safe_deleted),
+        "test_command": list(test_command) if test_command else "default:python -m pytest",
+        "policy_sha256": hashlib.sha256(json.dumps({
+            "protected": sorted(protected), "allow": sorted(allow),
+            "allow_new_tests": allow_new_tests, "isolation": isolation, "mode": mode,
+        }, sort_keys=True).encode("utf-8")).hexdigest(),
+        "junit_sha256": art.get("junit_sha256"),
+        "verifier_pack_sha256": art.get("verifier_pack_sha256"),
+        "verifier_pack_manifest": art.get("verifier_pack_manifest"),
+    }
+
+
+def _assurance_shortfall(
+    assurance: dict[str, Any],
+    *,
+    require_report_integrity: str | None,
+    require_candidate_isolation: str | None,
+) -> str | None:
+    """Return a human reason if the ACTUAL assurance is below what was required.
+
+    Fail-closed: the check is against what the run really delivered
+    (`assurance`), never against the requested CLI value — so Guard can never
+    claim an assurance level it did not enforce.
+    """
+    if require_report_integrity:
+        want = _REPORT_INTEGRITY_RANK.get(require_report_integrity)
+        got = _REPORT_INTEGRITY_RANK.get(assurance.get("report_integrity", ""), -1)
+        if want is None:
+            return f"unknown --require-report-integrity value: {require_report_integrity!r}"
+        if got < want:
+            return (
+                f"required report_integrity ≥ '{require_report_integrity}' but the run "
+                f"delivered '{assurance.get('report_integrity')}' "
+                "(use --blackbox for external_process_isolated)"
+            )
+    if require_candidate_isolation:
+        want_i = _ISOLATION_RANK.get(require_candidate_isolation)
+        got_i = _ISOLATION_RANK.get(assurance.get("candidate_isolation", ""), -1)
+        if want_i is None:
+            return f"unknown --require-candidate-isolation value: {require_candidate_isolation!r}"
+        if got_i < want_i:
+            return (
+                f"required candidate_isolation ≥ '{require_candidate_isolation}' but the "
+                f"run used '{assurance.get('candidate_isolation')}'"
+            )
+    return None
+
+
 def _assurance_profile(
     isolation: str, verifier_pack: str | None, *, blackbox: bool = False
 ) -> dict[str, Any]:
@@ -710,6 +806,8 @@ def guard_from_diff(
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
     blackbox: bool = False,
+    require_report_integrity: str | None = None,
+    require_candidate_isolation: str | None = None,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -770,6 +868,8 @@ def guard_from_diff(
             verifier_pack=verifier_pack,
             diff_coverage=diff_coverage, min_diff_coverage=min_diff_coverage,
             blackbox=blackbox,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
         )
         result.source = "diff"
         result.base_reconstruction = "ok"

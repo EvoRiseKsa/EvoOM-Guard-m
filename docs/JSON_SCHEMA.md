@@ -26,7 +26,7 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 
 ```json
 {
-  "schema_version": "1.3",
+  "schema_version": "1.4",
   "tool": "evoguard",
   "tool_version": "1.8.0",
   "verdict": "PASS",
@@ -124,3 +124,8 @@ patch). Exit code is `0` when supported, `1` otherwise.
 ## 1.3 additions
 
 - New `assurance` object on every verdict. Its `report_integrity` is `same_process_candidate_writable` for all current runners — a deliberate in-process patch can forge the JUnit report and exit code together. This is documented, not a defect to hide; the fix is the external black-box judge (ROADMAP.md).
+
+## 1.4 additions
+
+- Attestation gains `mode` (`repo` | `blackbox`); black-box verdicts now carry a full attestation (candidate/policy/pack digests).
+- New reason code `assurance_requirement_not_met`: a fail-closed `--require-report-integrity` / `--require-candidate-isolation` policy refused to ship a weaker guarantee than required.

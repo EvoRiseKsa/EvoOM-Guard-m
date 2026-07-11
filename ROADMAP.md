@@ -23,6 +23,8 @@ evidence — never trust a model's opinion of its own output.*
   Independent Verifier Packs, per-verdict attestation.
 - ✅ v2.3.0: **assurance profile** — every verdict states its `report_integrity`
   honestly (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)).
+- ✅ v3.0.0 / v3.1.0: **external black-box judge** (`--blackbox`), **enforceable
+  assurance policy** (`--require-*`, fail-closed), and black-box attestation.
 
 ### ✅ Shipped: the external black-box judge (`--blackbox`)
 
@@ -34,8 +36,17 @@ never import the candidate; the candidate is exercised only across a process
 boundary (`$EVOGUARD_TARGET`). `report_integrity` becomes
 `external_process_isolated`, and the identical forgery that fakes a PASS under
 the default judge is **caught** (proven in `tests/test_blackbox.py`). See
-[`docs/BLACKBOX.md`](docs/BLACKBOX.md). Next hardening: a container per
-candidate, and HTTP/DB target helpers alongside the CLI convention.
+[`docs/BLACKBOX.md`](docs/BLACKBOX.md).
+
+**The genuine next major direction** (a multi-week build, driven by real users
+rather than crammed pre-launch): a real *candidate sandbox* — build the patched
+candidate into an immutable artifact/OCI image, run it in a network-less
+container (`CandidateRunner` over the already-present `mounts_ro`/`tmpfs`/
+`judge_env` contract fields), and bind the verdict to the **artifact digest**,
+not just the source patch. That turns Guard from a source-patch gate into an
+artifact-behaviour judge across languages. It needs its own adversarial suite
+and docker e2e — the right thing to build *after* the tool has real adopters, not
+as a fifth pre-launch rewrite.
 
 - Other near-term candidates (driven by [user feedback](../../issues)):
   - a baseline scan mode (verdict for the repo as-is, no patch);

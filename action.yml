@@ -72,6 +72,14 @@ inputs:
     description: "'true' runs the external black-box judge (needs verifier-pack): the verdict comes from the judge's own pytest over the pack, which never imports the candidate — closing same-process report forgery. See docs/BLACKBOX.md."
     required: false
     default: "false"
+  require-report-integrity:
+    description: "Fail-closed policy: require at least this report_integrity level ('same_process_candidate_writable' or 'external_process_isolated') or the step ERRORs (assurance_requirement_not_met). 'external_process_isolated' needs blackbox."
+    required: false
+    default: ""
+  require-candidate-isolation:
+    description: "Fail-closed policy: require at least this candidate isolation ('subprocess'|'docker'|'gvisor') or the step ERRORs."
+    required: false
+    default: ""
   diff-coverage:
     description: "'true' measures which changed lines the suite actually executed (one extra suite run; installs the 'cov' extra). Evidence only unless min-diff-coverage is set."
     required: false
@@ -132,6 +140,8 @@ runs:
         if [ -n "${{ inputs.sarif }}" ]; then ARGS+=(--sarif "${{ inputs.sarif }}"); fi
         if [ -n "${{ inputs.verifier-pack }}" ]; then ARGS+=(--verifier-pack "${{ inputs.verifier-pack }}"); fi
         if [ "${{ inputs.blackbox }}" = "true" ]; then ARGS+=(--blackbox); fi
+        if [ -n "${{ inputs.require-report-integrity }}" ]; then ARGS+=(--require-report-integrity "${{ inputs.require-report-integrity }}"); fi
+        if [ -n "${{ inputs.require-candidate-isolation }}" ]; then ARGS+=(--require-candidate-isolation "${{ inputs.require-candidate-isolation }}"); fi
         if [ "${{ inputs.diff-coverage }}" = "true" ]; then ARGS+=(--diff-coverage); fi
         if [ -n "${{ inputs.min-diff-coverage }}" ]; then ARGS+=(--min-diff-coverage "${{ inputs.min-diff-coverage }}"); fi
         set +e

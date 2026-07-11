@@ -87,6 +87,38 @@ is hardening (container-per-candidate, HTTP/DB target helpers) — see
 | `isolated_repo_native` | suite ran in a container (host isolated); report still same-process |
 | `black_box_external_judge` | **shipped (`--blackbox`)** — verdict from the judge's own process; the candidate runs only across a process boundary. `report_integrity: external_process_isolated`. See [`BLACKBOX.md`](BLACKBOX.md). |
 
+## Enforcing assurance (fail-closed policy)
+
+`assurance` is not just a description — you can make it a **contract**. Require a
+floor, and Guard refuses (returns `ERROR` / `assurance_requirement_not_met`)
+rather than shipping a weaker guarantee than you asked for:
+
+```bash
+# CI insists the verdict came from the external judge; a same-process run is refused.
+evo-guard guard ./repo --patch p.txt \
+    --verifier-pack ./pack --blackbox \
+    --require-report-integrity external_process_isolated
+```
+
+The check is against **what actually ran**, never the requested value — so Guard
+can never claim a level it did not enforce. `--require-candidate-isolation`
+does the same for `subprocess < docker < gvisor`.
+
+## Composing external + internal coverage
+
+`--blackbox` judges **external behaviour** (the pack's protocol tests). It does
+not run the repo's own unit suite, so pair the two in CI when you want both — a
+narrow protocol test must not hide an internal regression:
+
+```yaml
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.1.0      # repo suite (same-process assurance)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.1.0      # external behaviour (blackbox)
+  with: { verifier-pack: ./pack, blackbox: "true",
+          require-report-integrity: external_process_isolated }
+```
+
+Both must pass to merge. Each verdict keeps its own crisp `report_integrity`.
+
 ## How to use it
 
 - **Trusted authors / your own code** (the primary use case): a `PASS` at

@@ -9,6 +9,33 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.1.0] — 2026-07-10
+
+Hardening from a deep architectural review — turns two `assurance` weaknesses it
+found into enforced guarantees, without the risky big-architecture rebuild
+(that's an explicit post-launch direction in `ROADMAP.md`).
+
+### Added
+- **Enforceable assurance policy** (`--require-report-integrity`,
+  `--require-candidate-isolation`; Action inputs too). Fail-closed: if the run's
+  *actual* assurance is below the requirement, the verdict is refused with
+  `ERROR` / `assurance_requirement_not_met` — Guard can never claim a level it
+  did not enforce. The check is against what ran, never the requested value.
+- **Black-box verdicts now carry a full attestation** (the review's gap):
+  `candidate_sha256`, `policy_sha256`, `verifier_pack_sha256`, the pack
+  `manifest`, and `mode: "blackbox"`. The pack's content digest binds the
+  verdict to exactly which protocol tests judged it.
+- **Adversarial test**: a candidate CLI that returns a wrong answer *and* forges
+  its own JUnit report cannot flip the black-box verdict — the judge grades by
+  its own exit code, so a child's forged report only touches counts.
+
+### Changed
+- `schema_version` → 1.4 (attestation `mode`; the new reason code). Attestation
+  is now built by one shared helper for both the repo and black-box paths.
+- Docs: ASSURANCE gains an *enforcing* + *composing external/internal* section;
+  ROADMAP names the real next major direction (an artifact-bound candidate
+  sandbox) and marks it as post-adopter work, not a pre-launch cram.
+
 ## [3.0.0] — 2026-07-10
 
 **The external black-box judge — the report-integrity boundary is now closeable.**

@@ -70,6 +70,38 @@ class BlackboxResult(NamedTuple):
     diagnostics: str
     ran: bool          # did the judge pack actually run to a verdict?
     error: str | None  # set when the run could not be graded (setup problem)
+    pack_sha256: str | None = None       # content digest of the judge-owned pack
+    pack_manifest: dict | None = None    # optional pack.json (id/version/…)
+
+
+def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:
+    """Content digest of the pack (order-independent) + optional pack.json.
+
+    The pack is judge-owned and lives OUTSIDE the candidate copy, so there is no
+    before/after to reconcile — the digest binds the verdict to exactly which
+    protocol tests judged it, for the attestation."""
+    import hashlib
+    import json as _json
+
+    digest = hashlib.sha256()
+    manifest: dict | None = None
+    for dirpath, dirnames, filenames in os.walk(pack_dir):
+        dirnames.sort()
+        for fn in sorted(filenames):
+            rel = os.path.relpath(os.path.join(dirpath, fn), pack_dir)
+            digest.update(rel.encode("utf-8"))
+            with open(os.path.join(dirpath, fn), "rb") as pf:
+                digest.update(pf.read())
+    mpath = os.path.join(pack_dir, "pack.json")
+    if os.path.isfile(mpath):
+        try:
+            with open(mpath, encoding="utf-8") as mf:
+                m = _json.load(mf)
+            if isinstance(m, dict):
+                manifest = {k: m[k] for k in ("id", "version", "description", "target_type") if k in m}
+        except (OSError, ValueError):
+            manifest = None
+    return digest.hexdigest(), manifest
 
 
 def _judge_command(pack_dir: str, xml_path: str) -> list[str]:
@@ -100,6 +132,7 @@ def run_blackbox(
     if not pack_dir or not os.path.isdir(pack_dir):
         return BlackboxResult(False, 0, 0, "", False, f"verifier pack not found: {pack_dir!r}")
 
+    pack_sha256, pack_manifest = _pack_digest_and_manifest(pack_dir)
     workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
     copy = os.path.join(workdir, "repo")
     try:
@@ -108,7 +141,7 @@ def run_blackbox(
             copy, parse_file_blocks(candidate), parse_patch_blocks(candidate)
         )
         if apply_error is not None:
-            return BlackboxResult(False, 0, 0, apply_error, False, "patch did not apply")
+            return BlackboxResult(False, 0, 0, apply_error, False, "patch did not apply", pack_sha256, pack_manifest)
 
         xml_path = os.path.join(workdir, "judge-blackbox.xml")
         env = {
@@ -131,7 +164,7 @@ def run_blackbox(
             )
         except subprocess.TimeoutExpired:
             return BlackboxResult(False, 0, 0, f"black-box pack timed out after {timeout}s",
-                                  False, "timeout")
+                                  False, "timeout", pack_sha256, pack_manifest)
         # Read the judge-owned report immediately (all pack subprocesses have
         # exited by now). The JUDGE's exit code is authoritative regardless.
         try:
@@ -150,11 +183,12 @@ def run_blackbox(
         else:
             tp, tt = (0, 0)
         if r.returncode == 0:
-            return BlackboxResult(True, tp or tt, tt, diagnostics, True, None)
+            return BlackboxResult(True, tp or tt, tt, diagnostics, True, None, pack_sha256, pack_manifest)
         if r.returncode == 1:
-            return BlackboxResult(False, tp, tt, diagnostics, True, None)
+            return BlackboxResult(False, tp, tt, diagnostics, True, None, pack_sha256, pack_manifest)
         # 2+ = pytest usage/collection error in the pack itself (author's bug).
         return BlackboxResult(False, tp, tt, diagnostics, False,
-                              f"black-box pack did not run cleanly (pytest exit {r.returncode})")
+                              f"black-box pack did not run cleanly (pytest exit {r.returncode})",
+                              pack_sha256, pack_manifest)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
