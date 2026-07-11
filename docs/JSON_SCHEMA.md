@@ -28,7 +28,7 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 {
   "schema_version": "1.5",
   "tool": "evoguard",
-  "tool_version": "3.2.2",
+  "tool_version": "3.2.3",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -106,7 +106,7 @@ patch). Exit code is `0` when supported, `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,
