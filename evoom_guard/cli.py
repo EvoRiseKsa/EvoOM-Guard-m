@@ -25,6 +25,14 @@ from collections.abc import Callable
 from evoom_guard import __version__
 
 
+def _configure_stdio() -> None:
+    """Make Unicode verdicts reliable on legacy Windows console code pages."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 def _read_text(path: str) -> str:
     """Read a file, or stdin when *path* is ``-``."""
     if path == "-":
@@ -652,6 +660,7 @@ def cmd_version(_args: argparse.Namespace, *, out: Callable[[str], None] = print
 
 def main(argv: list[str] | None = None) -> int:
     """The ``evo-guard`` entry point. Returns a process exit code."""
+    _configure_stdio()
     args = build_parser().parse_args(argv)
     if args.command == "guard":
         return cmd_guard(args)
