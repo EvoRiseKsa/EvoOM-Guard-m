@@ -95,7 +95,13 @@ _PROTECTED_GLOBS = (
 #         verdict is composite (repo suite AND pack) unless --blackbox-only, and
 #         the attestation gains isolation_evidence / deleted_paths_applied /
 #         repo_suite_* / base_sha / head_sha / junit_sha256.
-SCHEMA_VERSION = "1.5"
+#   1.6 — additive: ``baseline`` (opt-in before/after differential evidence with
+#         ``repair_effect``), one new reason code ``fix_not_demonstrated`` (the
+#         opt-in --require-demonstrated-fix gate), attestation gains
+#         base_tree_sha / head_tree_sha / policy_id / policy_version, and
+#         base_sha / head_sha are now bound in EVERY mode (repo-native too,
+#         not only black-box).
+SCHEMA_VERSION = "1.6"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -123,6 +129,7 @@ REASON_TEST_TIMEOUT = "test_timeout"
 REASON_SETUP_TIMEOUT = "setup_timeout"
 REASON_SETUP_FAILED = "setup_failed"
 REASON_ASSURANCE_REQUIREMENT_NOT_MET = "assurance_requirement_not_met"
+REASON_FIX_NOT_DEMONSTRATED = "fix_not_demonstrated"
 
 # Ordering of report-integrity levels, weakest → strongest. A caller can demand a
 # floor with require_report_integrity; if the run's actual level is below it, the
@@ -169,6 +176,7 @@ class GuardResult:
     reason_code: str = ""                  # stable machine code for the cause (see REASON_*)
     isolation: str = "subprocess"          # how the suite ran: subprocess / docker / gvisor
     diff_coverage: dict[str, Any] | None = None   # changed-line coverage evidence (opt-in)
+    baseline: dict[str, Any] | None = None        # before/after differential evidence (opt-in)
     attestation: dict[str, Any] | None = None     # context binding for the signed verdict
     assurance: dict[str, Any] | None = None       # how much the verdict can be trusted
 
@@ -194,6 +202,7 @@ class GuardResult:
             "base_reconstruction": self.base_reconstruction,
             "assurance": self.assurance,
             "diff_coverage": self.diff_coverage,
+            "baseline": self.baseline,
             "attestation": self.attestation,
             "diagnostics": self.diagnostics[:2000],
         }
@@ -282,6 +291,12 @@ def guard(
     require_candidate_isolation: str | None = None,
     base_sha: str | None = None,
     head_sha: str | None = None,
+    base_tree_sha: str | None = None,
+    head_tree_sha: str | None = None,
+    policy_id: str | None = None,
+    policy_version: str | None = None,
+    baseline_evidence: bool = False,
+    require_demonstrated_fix: bool = False,
     file_blocks: dict[str, str] | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
@@ -491,6 +506,10 @@ def guard(
                     "repo_suite_passed": repo_verdict.passed if repo_verdict is not None else None,
                     "base_sha": base_sha,
                     "head_sha": head_sha,
+                    "base_tree_sha": base_tree_sha,
+                    "head_tree_sha": head_tree_sha,
+                    "policy_id": policy_id,
+                    "policy_version": policy_version,
                 },
                 mode="blackbox",
             ),
@@ -600,10 +619,64 @@ def guard(
                 "tests that judged it"
             )
 
+    # Baseline differential evidence (opt-in; one extra suite run on the
+    # PRISTINE base — no candidate applied). "all tests pass on head" does not
+    # by itself show the change FIXED anything: the base may already have been
+    # green. The baseline run makes the counterfactual measurable:
+    #   baseline FAIL → candidate PASS, same tests/policy/env  ⇒ repair_effect
+    #   "demonstrated". Anything else ⇒ "not_demonstrated" (or "unmeasured"
+    # when the baseline produced no clean verdict). Evidence only, unless
+    # require_demonstrated_fix demotes an undemonstrated PASS to FAIL.
+    baseline_info: dict[str, Any] | None = None
+    if (
+        (baseline_evidence or require_demonstrated_fix)
+        and v in (PASS, FAIL)
+        and isolation == "subprocess"
+    ):
+        baseline_info = _run_baseline_suite(
+            repo_path, test_command=test_command, setup_command=setup_command,
+            timeout=timeout, mem_limit_mb=mem_limit_mb,
+        )
+        if baseline_info.get("verdict") == "NO_CLEAN_VERDICT":
+            baseline_info["repair_effect"] = "unmeasured"
+        elif baseline_info.get("verdict") == "FAIL" and v == PASS:
+            baseline_info["repair_effect"] = "demonstrated"
+        else:
+            baseline_info["repair_effect"] = "not_demonstrated"
+        baseline_info["note"] = (
+            "counterfactual test evidence, not a causal proof: the same judge, "
+            "policy and environment ran the suite on the pristine base and on "
+            "the candidate; 'demonstrated' means the base failed and the "
+            "candidate passed"
+        )
+        if (
+            require_demonstrated_fix
+            and v == PASS
+            and baseline_info["repair_effect"] != "demonstrated"
+        ):
+            v, code = FAIL, REASON_FIX_NOT_DEMONSTRATED
+            reason = (
+                "the suite passes on the candidate, but the fix is not "
+                "demonstrated: the pristine base "
+                + ("already passes the same suite"
+                   if baseline_info.get("verdict") == "PASS"
+                   else "produced no clean baseline verdict")
+                + " — --require-demonstrated-fix demands baseline FAIL → "
+                "candidate PASS under an unchanged harness"
+            )
+
     attestation = _build_attestation(
         candidate, safe_deleted=safe_deleted, test_command=test_command,
         protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-        isolation=isolation, art=art, mode="repo",
+        isolation=isolation, art={
+            **art,
+            # Repo-native verdicts are revision-bound too (1.6): black-box was
+            # the only mode carrying base/head before, which left the common
+            # Action path's signed verdicts unbound from the commit they judged.
+            "base_sha": base_sha, "head_sha": head_sha,
+            "base_tree_sha": base_tree_sha, "head_tree_sha": head_tree_sha,
+            "policy_id": policy_id, "policy_version": policy_version,
+        }, mode="repo",
     )
 
     assurance = _assurance_profile(isolation, verifier_pack)
@@ -633,9 +706,104 @@ def guard(
         reason_code=code,
         isolation=isolation,
         diff_coverage=coverage_evidence,
+        baseline=baseline_info,
         attestation=attestation,
         assurance=assurance,
     )
+
+
+def _run_baseline_suite(
+    repo_path: str,
+    *,
+    test_command: list[str] | None,
+    setup_command: list[str] | None,
+    timeout: int,
+    mem_limit_mb: int,
+) -> dict[str, Any]:
+    """Run the repo's suite on a PRISTINE copy (no candidate) — the baseline.
+
+    Subprocess judge only (mirrors diff-coverage's scope). The verdict here is
+    graded from the same judge-owned JUnit + exit-code channel as the main run,
+    so baseline evidence carries the same anti-forgery properties. Returns a
+    small dict: verdict (PASS | FAIL | NO_CLEAN_VERDICT), tests_passed,
+    tests_total.
+    """
+    import tempfile as _tempfile
+
+    from evoom_guard.adapters import instrument_command
+    from evoom_guard.verifiers.repo_verifier import (
+        RepoVerifier,
+        detect_tamper,
+        grade_repo_run,
+        parse_junit_dir,
+        parse_junit_xml,
+    )
+
+    rv = RepoVerifier(timeout=timeout, mem_limit_mb=mem_limit_mb)
+    workdir = _tempfile.mkdtemp(prefix="evo_baseline_")
+    copy = os.path.join(workdir, "repo")
+    try:
+        copy_repo_tree(repo_path, copy)
+        env = {
+            "PATH": os.environ.get("PATH", "/usr/bin"),
+            "HOME": workdir,
+            "LANG": "C.UTF-8",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONNOUSERSITE": "1",
+        }
+        if setup_command:
+            setup_env = dict(env)
+            setup_env["HOME"] = os.environ.get("HOME", workdir)
+            for _k, _v in os.environ.items():
+                if _k.startswith(("PNPM_", "NPM_", "YARN_", "NODE_", "npm_", "BUN_")):
+                    setup_env[_k] = _v
+            try:
+                r_setup = subprocess.run(
+                    list(setup_command), cwd=copy, capture_output=True,
+                    text=True, timeout=timeout, env=setup_env,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
+                        "tests_total": None}
+            if r_setup.returncode != 0:
+                return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
+                        "tests_total": None}
+        base_cmd = rv._command({"repo_path": repo_path})
+        if test_command:
+            base_cmd = list(test_command)
+        host_xml = os.path.join(workdir, "judge-result.xml")
+        cmd, report_expected, report_env = instrument_command(base_cmd, host_xml)
+        try:
+            r = subprocess.run(
+                cmd, cwd=copy, capture_output=True, text=True, timeout=timeout,
+                env={**env, **report_env},
+                preexec_fn=rv._limits() if os.name == "posix" else None,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
+                    "tests_total": None}
+        xml_text = ""
+        try:
+            with open(host_xml, encoding="utf-8") as f:
+                xml_text = f.read()
+        except OSError:
+            pass
+        junit = parse_junit_xml(xml_text)
+        if junit is None:
+            junit = parse_junit_dir(host_xml + ".d")
+        passed, _score, tp, tt = grade_repo_run(
+            r.returncode, junit, report_expected=report_expected
+        )
+        tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
+        if tampered or (junit is None and report_expected):
+            return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": tp, "tests_total": tt}
+        return {
+            "verdict": "PASS" if passed else "FAIL",
+            "tests_passed": tp,
+            "tests_total": tt,
+        }
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def _utc_now() -> str:
@@ -696,6 +864,13 @@ def _build_attestation(
         "repo_suite_passed": art.get("repo_suite_passed"),
         "base_sha": art.get("base_sha"),
         "head_sha": art.get("head_sha"),
+        # Exact-revision binding (1.6): tree hashes pin the CONTENT judged even
+        # when a commit SHA is unavailable (a plain `git diff` carries neither).
+        "base_tree_sha": art.get("base_tree_sha"),
+        "head_tree_sha": art.get("head_tree_sha"),
+        # Which repo policy produced this verdict (from .evoguard.json).
+        "policy_id": art.get("policy_id"),
+        "policy_version": art.get("policy_version"),
     }
 
 
@@ -950,6 +1125,14 @@ def guard_from_diff(
     blackbox_only: bool = False,
     require_report_integrity: str | None = None,
     require_candidate_isolation: str | None = None,
+    base_sha: str | None = None,
+    head_sha: str | None = None,
+    base_tree_sha: str | None = None,
+    head_tree_sha: str | None = None,
+    policy_id: str | None = None,
+    policy_version: str | None = None,
+    baseline_evidence: bool = False,
+    require_demonstrated_fix: bool = False,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -1018,7 +1201,14 @@ def guard_from_diff(
             blackbox=blackbox, blackbox_only=blackbox_only,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
-            base_sha=_diff_base_sha(diff_text), head_sha=_diff_head_sha(diff_text),
+            # Explicit CI-provided revision identity wins over what the diff
+            # text happens to carry (a plain `git diff` embeds neither SHA).
+            base_sha=base_sha or _diff_base_sha(diff_text),
+            head_sha=head_sha or _diff_head_sha(diff_text),
+            base_tree_sha=base_tree_sha, head_tree_sha=head_tree_sha,
+            policy_id=policy_id, policy_version=policy_version,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
             file_blocks=file_blocks,
         )
         result.source = "diff"
@@ -1067,6 +1257,20 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
             )
         else:
             lines.append(f"| Changed lines executed | not measured — {dc.get('note', '')} |")
+    if r.baseline is not None:
+        b = r.baseline
+        btests = (
+            f" ({b['tests_passed']}/{b['tests_total']})"
+            if b.get("tests_total") is not None else ""
+        )
+        lines.append(f"| Baseline (pristine base) | {b.get('verdict')}{btests} |")
+        lines.append(f"| Repair effect | **{b.get('repair_effect')}** |")
+    if r.attestation and r.attestation.get("policy_id"):
+        pv = r.attestation.get("policy_version")
+        lines.append(
+            f"| Policy | `{r.attestation['policy_id']}`"
+            + (f" v{pv}" if pv else "") + " |"
+        )
     if r.attestation and r.attestation.get("verifier_pack_sha256"):
         lines.append(
             f"| Verifier pack | `{str(r.attestation['verifier_pack_sha256'])[:12]}…` |"

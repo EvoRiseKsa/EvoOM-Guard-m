@@ -57,6 +57,8 @@ class ActionCliParityTests(unittest.TestCase):
         "timeout", "mem-limit", "sarif",
         # v2.2 evidence flags — a Marketplace user must be able to reach them.
         "verifier-pack", "blackbox", "require-report-integrity", "require-candidate-isolation", "diff-coverage", "min-diff-coverage",
+        # v3.3 differential evidence — the before/after counterfactual.
+        "baseline-evidence", "require-demonstrated-fix",
     )
 
     def setUp(self) -> None:

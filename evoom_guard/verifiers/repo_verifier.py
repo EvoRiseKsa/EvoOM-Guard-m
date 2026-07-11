@@ -1042,17 +1042,40 @@ class RepoVerifier:
                 pack_sha256 = digest.hexdigest()
                 # Optional ``pack.json`` manifest turns a folder of tests into a
                 # versioned, auditable policy pack (id / version / description).
+                # PRESENT-but-broken is fail-closed (mirrors the black-box judge):
+                # a contract that lost its identity must stop the run, not be
+                # silently judged as an anonymous folder.
                 manifest_path = os.path.join(mount, "pack.json")
                 if os.path.isfile(manifest_path):
                     try:
                         with open(manifest_path, encoding="utf-8") as mf:
                             m = json.load(mf)
-                        if isinstance(m, dict):
-                            pack_manifest = {
-                                k: m[k] for k in ("id", "version", "description") if k in m
-                            }
-                    except (OSError, ValueError):
-                        pack_manifest = None  # a malformed manifest is not fatal
+                    except (OSError, ValueError) as exc:
+                        return VerdictResult(
+                            passed=False, score=0.0,
+                            diagnostics=(
+                                f"verifier pack manifest is not readable JSON ({exc}) "
+                                "— fix or remove pack.json; check with "
+                                "`evo-guard pack-doctor`"
+                            ),
+                            artifact={"files_changed": changed, "outcome": "setup_failed"},
+                        )
+                    if not isinstance(m, dict) or any(
+                        not isinstance(m.get(k), str) or not m[k].strip()
+                        for k in ("id", "version")
+                    ):
+                        return VerdictResult(
+                            passed=False, score=0.0,
+                            diagnostics=(
+                                "verifier pack manifest must be a JSON object with "
+                                "required string fields 'id' and 'version' — check "
+                                "with `evo-guard pack-doctor`"
+                            ),
+                            artifact={"files_changed": changed, "outcome": "setup_failed"},
+                        )
+                    pack_manifest = {
+                        k: m[k] for k in ("id", "version", "description") if k in m
+                    }
 
             # Apply deletions to the copy so the verdict reflects the real merge
             # (a removed source file should be *absent* when the suite runs).

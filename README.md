@@ -104,7 +104,7 @@ extras (`cryptography`, `coverage`).
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.2.3"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.3.0"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -144,7 +144,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.3   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.0   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR

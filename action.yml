@@ -92,6 +92,14 @@ inputs:
     description: "Gate: a PASS whose measured changed-line coverage is below this percentage becomes FAIL (diff_coverage_below_threshold). Implies diff-coverage."
     required: false
     default: ""
+  baseline-evidence:
+    description: "'true' adds before/after differential evidence: the suite ALSO runs on the pristine base, and the report shows repair_effect ('demonstrated' only when base FAILs and candidate PASSes under the same judge). One extra suite run; evidence only."
+    required: false
+    default: "false"
+  require-demonstrated-fix:
+    description: "Gate (implies baseline-evidence): a PASS whose repair effect is not demonstrated (base already green, or no clean baseline) becomes FAIL (fix_not_demonstrated). For agent 'fix' PRs only — ordinary feature PRs start from a green base and would fail this."
+    required: false
+    default: "false"
 
 outputs:
   verdict:
@@ -143,6 +151,8 @@ runs:
         INPUT_REQUIRE_CANDIDATE_ISOLATION: ${{ inputs.require-candidate-isolation }}
         INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
         INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
+        INPUT_BASELINE_EVIDENCE: ${{ inputs.baseline-evidence }}
+        INPUT_REQUIRE_DEMONSTRATED_FIX: ${{ inputs.require-demonstrated-fix }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
@@ -198,6 +208,17 @@ runs:
         if [ -n "$INPUT_REQUIRE_CANDIDATE_ISOLATION" ]; then ARGS+=(--require-candidate-isolation "$INPUT_REQUIRE_CANDIDATE_ISOLATION"); fi
         if [ "$INPUT_DIFF_COVERAGE" = "true" ]; then ARGS+=(--diff-coverage); fi
         if [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then ARGS+=(--min-diff-coverage "$INPUT_MIN_DIFF_COVERAGE"); fi
+        if [ "$INPUT_BASELINE_EVIDENCE" = "true" ]; then ARGS+=(--baseline-evidence); fi
+        if [ "$INPUT_REQUIRE_DEMONSTRATED_FIX" = "true" ]; then ARGS+=(--require-demonstrated-fix); fi
+        # Exact-revision binding: a plain `git diff` carries no commit identity,
+        # so the signed/attested verdict would float free of the commit being
+        # merged. Resolve and pass the real commit + tree SHAs.
+        BASE_COMMIT="$(git rev-parse --verify --quiet "${BASE}^{commit}" || true)"
+        HEAD_COMMIT="$(git rev-parse HEAD)"
+        if [ -n "$BASE_COMMIT" ]; then
+          ARGS+=(--base-sha "$BASE_COMMIT" --base-tree-sha "$(git rev-parse "${BASE_COMMIT}^{tree}")")
+        fi
+        ARGS+=(--head-sha "$HEAD_COMMIT" --head-tree-sha "$(git rev-parse "HEAD^{tree}")")
         set +e
         evo-guard "${ARGS[@]}" < "$RUNNER_TEMP/guard.diff"
         GUARD_CODE=$?

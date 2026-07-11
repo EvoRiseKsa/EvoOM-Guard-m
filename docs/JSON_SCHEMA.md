@@ -28,7 +28,7 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 {
   "schema_version": "1.5",
   "tool": "evoguard",
-  "tool_version": "3.2.3",
+  "tool_version": "3.3.0",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -98,6 +98,33 @@ auto-exec file) drives `REJECTED`. (Before `1.1` this array was named
 | `ERROR` | `reverse_apply_failed` | `--diff` did not reverse-apply (stale base). |
 | `ERROR` | `no_verifiable_changes` | `--diff` reconstructed but changed no verifiable source. |
 
+### Added in 1.5 → 1.6 (additive)
+
+- **`baseline`** (object | null) — opt-in before/after differential evidence
+  (`--baseline-evidence`): the suite is ALSO run on the **pristine base** (no
+  candidate applied), graded from the same judge-owned JUnit + exit-code
+  channel. Fields: `verdict` (`PASS` | `FAIL` | `NO_CLEAN_VERDICT`),
+  `tests_passed`, `tests_total`, `repair_effect`
+  (`demonstrated` — base failed AND candidate passed under the same
+  judge/policy/env; `not_demonstrated`; `unmeasured`), `note`.
+- **`fix_not_demonstrated`** — new `reason_code`: the opt-in
+  `--require-demonstrated-fix` gate demoted a PASS whose repair effect was not
+  demonstrated (the base already passed, or no clean baseline verdict).
+- **Attestation gains** `base_tree_sha` / `head_tree_sha` (exact-content
+  binding even where no commit SHA exists) and `policy_id` / `policy_version`
+  (which `.evoguard.json` policy produced the verdict) — and `base_sha` /
+  `head_sha` are now bound in **every** mode (repo-native too; previously only
+  the black-box path carried them).
+- `.evoguard.json` is now **fail-closed**: a present-but-broken config (bad
+  JSON, unknown key, wrong-typed value) stops the run with exit 2 instead of
+  silently degrading to weaker defaults, and may carry the protected policy
+  contract: `require_report_integrity`, `require_candidate_isolation`,
+  `min_diff_coverage`, `policy_id`, `policy_version`.
+- `evo-guard verify-verdict` gains context checks: `--expect-head-sha`,
+  `--expect-base-sha`, `--expect-policy-sha`, `--expect-policy-id` — a valid
+  signature over the WRONG commit or policy now fails the check (chain of
+  custody, not just file integrity).
+
 ## `evo-guard doctor`
 
 `evo-guard doctor --json` reports the environment EvoGuard needs (it does **not** read a
@@ -106,7 +133,7 @@ patch). Exit code is `0` when supported, `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.2.3",
+  "version": "3.3.0",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

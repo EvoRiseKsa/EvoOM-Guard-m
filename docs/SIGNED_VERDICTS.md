@@ -16,7 +16,7 @@ the judge wrote.
 Requires the `sign` extra (the core gate stays stdlib-only):
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.2.3"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.3.0"
 ```
 
 ## Usage

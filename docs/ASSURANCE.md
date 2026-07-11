@@ -124,7 +124,7 @@ the pack's external protocol tests, and both must pass. A narrow protocol test
 can therefore never hide an internal regression:
 
 ```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.3      # repo suite AND external pack (composite)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.0      # repo suite AND external pack (composite)
   with: { verifier-pack: ./pack, blackbox: "true",
           require-report-integrity: external_process_isolated }
 ```

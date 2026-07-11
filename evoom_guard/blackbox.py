@@ -81,12 +81,26 @@ class BlackboxResult(NamedTuple):
     deleted_applied: list[str] | None = None  # deletions actually applied to the copy
 
 
+class PackManifestError(ValueError):
+    """A PRESENT-but-invalid ``pack.json`` — fail-closed, never silently dropped.
+
+    The manifest is what turns a folder of tests into a *versioned behaviour
+    contract* (id / version / description / target_type). A malformed manifest
+    silently ignored would let a contract quietly lose its identity while the
+    verdict still claims to have been judged by it. ``pack.json`` stays
+    optional; only a broken one is an error. Validate ahead of a run with
+    ``evo-guard pack-doctor <dir>``.
+    """
+
+
 def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:
     """Content digest of the pack (order-independent) + optional pack.json.
 
     The pack is judge-owned and lives OUTSIDE the candidate copy, so there is no
     before/after to reconcile — the digest binds the verdict to exactly which
-    protocol tests judged it, for the attestation."""
+    protocol tests judged it, for the attestation. Raises
+    :class:`PackManifestError` when ``pack.json`` exists but is unreadable, not
+    an object, or missing its required ``id``/``version`` strings."""
     import hashlib
     import json as _json
 
@@ -104,10 +118,24 @@ def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:
         try:
             with open(mpath, encoding="utf-8") as mf:
                 m = _json.load(mf)
-            if isinstance(m, dict):
-                manifest = {k: m[k] for k in ("id", "version", "description", "target_type") if k in m}
-        except (OSError, ValueError):
-            manifest = None
+        except (OSError, ValueError) as exc:
+            raise PackManifestError(
+                f"pack.json in {pack_dir!r} is not readable JSON ({exc}) — fix it "
+                "or remove it (a plain folder of tests is a valid pack); check "
+                "with `evo-guard pack-doctor`"
+            ) from exc
+        if not isinstance(m, dict):
+            raise PackManifestError(
+                f"pack.json in {pack_dir!r} must be a JSON object"
+            )
+        for key in ("id", "version"):
+            if not isinstance(m.get(key), str) or not m[key].strip():
+                raise PackManifestError(
+                    f"pack.json in {pack_dir!r} is missing required string "
+                    f"field {key!r} — a manifest names a versioned behaviour "
+                    "contract; check with `evo-guard pack-doctor`"
+                )
+        manifest = {k: m[k] for k in ("id", "version", "description", "target_type") if k in m}
     return digest.hexdigest(), manifest
 
 
@@ -148,7 +176,12 @@ def run_blackbox(
     if not pack_dir or not os.path.isdir(pack_dir):
         return BlackboxResult(False, 0, 0, "", False, f"verifier pack not found: {pack_dir!r}")
 
-    pack_sha256, pack_manifest = _pack_digest_and_manifest(pack_dir)
+    try:
+        pack_sha256, pack_manifest = _pack_digest_and_manifest(pack_dir)
+    except PackManifestError as exc:
+        # Fail-closed: a broken contract manifest must stop the run, never be
+        # silently dropped while the verdict claims the pack judged it.
+        return BlackboxResult(False, 0, 0, str(exc), False, "invalid pack manifest")
     workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
     copy = os.path.join(workdir, "repo")
     try:

@@ -21,7 +21,7 @@ jobs:
         with:
           fetch-depth: 0            # Guard needs the base commit to diff against
 
-      - uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.3   # pin a release (@<sha> strictest, @main latest)
+      - uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.0   # pin a release (@<sha> strictest, @main latest)
         with:
           test-command: "python -m pytest -q"
           comment: "true"           # post the verdict as a PR comment

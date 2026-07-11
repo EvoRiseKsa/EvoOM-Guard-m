@@ -126,4 +126,4 @@ def test_write_json_includes_deleted(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["verdict"] == PASS
     assert payload["deleted"] == ["gone.py"]
-    assert payload["schema_version"] == "1.5"
+    assert payload["schema_version"] == "1.6"

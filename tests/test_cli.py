@@ -218,7 +218,7 @@ def test_load_config_reads_known_keys(tmp_path):
     p = tmp_path / ".evoguard.json"
     p.write_text(json.dumps({
         "test_command": "pytest -q -x", "protected": ["a/*", "b/*"],
-        "timeout": 30, "mem_limit": 512, "unknown": "ignored",
+        "timeout": 30, "mem_limit": 512,
     }), encoding="utf-8")
     assert cli._load_config(str(p), out=_QUIET) == {
         "test_command": "pytest -q -x", "protected": ["a/*", "b/*"],
@@ -230,25 +230,77 @@ def test_load_config_missing_file_is_empty(tmp_path):
     assert cli._load_config(str(tmp_path / "nope.json")) == {}
 
 
-def test_load_config_invalid_json_warns_and_ignores(tmp_path, capsys):
+# The config file is protected harness policy: a broken file must STOP the run
+# (fail-closed), never silently degrade to weaker defaults (external review).
+
+def test_load_config_invalid_json_is_fail_closed(tmp_path):
     p = tmp_path / ".evoguard.json"
     p.write_text("{not json", encoding="utf-8")
-    assert cli._load_config(str(p)) == {}
-    assert "ignoring" in capsys.readouterr().out
+    with pytest.raises(cli.ConfigError):
+        cli._load_config(str(p), out=_QUIET)
 
 
-def test_load_config_non_object_ignored(tmp_path, capsys):
+def test_load_config_non_object_is_fail_closed(tmp_path):
     p = tmp_path / ".evoguard.json"
     p.write_text("[1, 2, 3]", encoding="utf-8")
-    assert cli._load_config(str(p)) == {}
-    assert "expected a JSON object" in capsys.readouterr().out
+    with pytest.raises(cli.ConfigError):
+        cli._load_config(str(p), out=_QUIET)
 
 
-def test_load_config_drops_wrong_typed_keys(tmp_path):
+def test_load_config_unknown_key_is_fail_closed(tmp_path):
+    # The classic policy typo: the misspelled floor must never be ignored while
+    # Guard keeps running WITHOUT the floor the owner believes is enforced.
     p = tmp_path / ".evoguard.json"
-    # timeout-as-str, protected-as-str, mem_limit-as-bool are all wrong-typed.
-    p.write_text(json.dumps({"timeout": "30", "protected": "a/*", "mem_limit": True}), encoding="utf-8")
-    assert cli._load_config(str(p), out=_QUIET) == {}
+    p.write_text(json.dumps({"require_report_isolation": "external"}), encoding="utf-8")
+    with pytest.raises(cli.ConfigError, match="unknown key"):
+        cli._load_config(str(p), out=_QUIET)
+
+
+def test_load_config_wrong_typed_keys_are_fail_closed(tmp_path):
+    for payload in ({"timeout": "30"}, {"protected": "a/*"}, {"mem_limit": True}):
+        p = tmp_path / ".evoguard.json"
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(cli.ConfigError):
+            cli._load_config(str(p), out=_QUIET)
+
+
+def test_load_config_reads_policy_contract_keys(tmp_path):
+    p = tmp_path / ".evoguard.json"
+    p.write_text(json.dumps({
+        "policy_id": "org/production-strong", "policy_version": "1",
+        "require_report_integrity": "external_process_isolated",
+        "require_candidate_isolation": "docker",
+        "min_diff_coverage": 80,
+    }), encoding="utf-8")
+    cfg = cli._load_config(str(p), out=_QUIET)
+    assert cfg["policy_id"] == "org/production-strong"
+    assert cfg["require_report_integrity"] == "external_process_isolated"
+    assert cfg["require_candidate_isolation"] == "docker"
+    assert cfg["min_diff_coverage"] == 80.0
+
+
+def test_load_config_invalid_policy_values_are_fail_closed(tmp_path):
+    for payload in (
+        {"require_report_integrity": "unbreakable"},
+        {"require_candidate_isolation": "vm"},
+        {"min_diff_coverage": 150},
+        {"policy_id": ""},
+    ):
+        p = tmp_path / ".evoguard.json"
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(cli.ConfigError):
+            cli._load_config(str(p), out=_QUIET)
+
+
+def test_cmd_guard_exits_2_on_broken_config(tmp_path):
+    # End-to-end: a broken config stops the RUN, before any judging.
+    p = tmp_path / ".evoguard.json"
+    p.write_text("{broken", encoding="utf-8")
+    patch = tmp_path / "cand.txt"
+    patch.write_text("<<<FILE: app.py>>>\nx = 1\n<<<END FILE>>>", encoding="utf-8")
+    code = cli.main(["guard", str(tmp_path), "--patch", str(patch),
+                     "--config", str(p)])
+    assert code == 2
 
 
 def test_load_config_reads_setup_command(tmp_path):
@@ -262,11 +314,13 @@ def test_load_config_reads_setup_command(tmp_path):
     assert cfg["test_command"] == ["vitest", "run"]
 
 
-def test_load_config_ignores_setup_command_as_string(tmp_path):
+def test_load_config_setup_command_as_string_is_fail_closed(tmp_path):
+    # A shell-string setup_command was previously silently dropped; splitting on
+    # spaces is unsafe for paths, so it is now an explicit config error.
     p = tmp_path / ".evoguard.json"
     p.write_text(json.dumps({"setup_command": "pnpm install"}), encoding="utf-8")
-    cfg = cli._load_config(str(p), out=_QUIET)
-    assert "setup_command" not in cfg
+    with pytest.raises(cli.ConfigError):
+        cli._load_config(str(p), out=_QUIET)
 
 
 _CFG_REPO_TEST = "from app import x\n\n\ndef test_x():\n    assert x == 1\n"

@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.3"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.3.0"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -75,6 +75,30 @@ allow **brand-new** test files while still rejecting edits to existing tests, th
 config, lock files, `conftest.py`, auto-exec, and CI. New test code still runs in
 the judge process, so it's for **trusted authors + review** — see
 [`FEATURE_MODE.md`](FEATURE_MODE.md).
+
+## 3½. The protected policy contract (`.evoguard.json`)
+
+`.evoguard.json` is itself protected harness (a candidate that edits it is
+REJECTED), so it can carry the *security policy* — not just runner settings —
+as a repository-contained contract no patch can weaken:
+
+```json
+{
+  "policy_id": "org/production-strong",
+  "policy_version": "1",
+  "test_command": ["python", "-m", "pytest", "-q"],
+  "require_report_integrity": "external_process_isolated",
+  "require_candidate_isolation": "docker",
+  "min_diff_coverage": 80
+}
+```
+
+The `policy_id`/`policy_version` land in the verdict's attestation, so a
+consumer knows exactly which policy produced a PASS (and
+`verify-verdict --expect-policy-id …` can demand it). **Fail-closed:** a
+present-but-broken config — unreadable JSON, an unknown key (a misspelled
+floor!), a wrong-typed value — stops the run with exit 2; it never silently
+degrades to weaker defaults. CLI flags still override valid config values.
 
 ## 4. Supported test runners — the compatibility matrix
 
@@ -149,7 +173,7 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.2.3` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.3.0` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

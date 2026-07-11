@@ -41,17 +41,50 @@ def _read_text(path: str) -> str:
         return f.read()
 
 
-def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, object]:
-    """Repo-level defaults from a ``.evoguard.json`` file, if present.
+class ConfigError(ValueError):
+    """A present-but-invalid ``.evoguard.json`` — the run must NOT continue.
 
-    Recognises ``test_command`` (a string or a token list), ``setup_command`` (a
-    token list only — a string value is silently ignored since splitting on spaces
-    is unsafe for paths), ``protected`` (a list of globs), ``timeout`` (int
-    seconds), ``mem_limit`` (int MB) and ``allow_new_tests`` (bool — opt-in feature
-    mode). A missing file yields no defaults; a
-    present-but-invalid file — or a key of the wrong type — is warned about and
-    skipped. Config never fails a run, and CLI flags always override it. JSON (not
-    TOML) keeps the core stdlib-only on Python 3.10, where ``tomllib`` is absent.
+    The config file is part of the protected harness (a candidate cannot edit
+    it), so it may carry security policy. A malformed file, an unknown key (a
+    typo like ``require_report_isolation``), or a wrong-typed value used to be
+    warned about and silently skipped — which meant Guard would keep running
+    under WEAKER defaults than the repo owner wrote down (fail-open). An
+    external review flagged this; the contract is now fail-closed: broken
+    policy stops the run with exit 2, it never degrades it.
+    """
+
+
+# The full key vocabulary of .evoguard.json. Anything else is an error — a
+# misspelled policy key must never be silently ignored.
+_CONFIG_KEYS = frozenset({
+    "test_command", "setup_command", "protected", "allow",
+    "timeout", "mem_limit", "allow_new_tests",
+    # Protected policy contract (enforced fail-closed by the engine):
+    "require_report_integrity", "require_candidate_isolation",
+    "min_diff_coverage",
+    # Policy identity — surfaced in the attestation so a consumer knows which
+    # policy produced the verdict:
+    "policy_id", "policy_version",
+})
+_REPORT_INTEGRITY_VALUES = ("same_process_candidate_writable", "external_process_isolated")
+_ISOLATION_VALUES = ("subprocess", "docker", "gvisor")
+
+
+def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, object]:
+    """Repo-level policy from ``.evoguard.json`` — **fail-closed**.
+
+    Recognises ``test_command`` (string or token list), ``setup_command``
+    (token list), ``protected`` / ``allow`` (glob lists), ``timeout`` /
+    ``mem_limit`` (ints), ``allow_new_tests`` (bool), the protected assurance
+    floors ``require_report_integrity`` / ``require_candidate_isolation``,
+    ``min_diff_coverage`` (number, 0–100) and the policy identity
+    ``policy_id`` / ``policy_version`` (strings).
+
+    A missing file yields no defaults. A present-but-broken file — unreadable
+    JSON, a non-object, an unknown key, or a wrong-typed/invalid value —
+    raises :class:`ConfigError` instead of degrading to weaker defaults. CLI
+    flags still override valid config values. JSON (not TOML) keeps the core
+    stdlib-only on Python 3.10, where ``tomllib`` is absent.
     """
     if not path or not os.path.exists(path):
         return {}
@@ -59,31 +92,74 @@ def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, 
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError) as exc:
-        out(f"warning: ignoring {path}: not readable JSON ({exc})")
-        return {}
+        raise ConfigError(f"{path} is not readable JSON ({exc})") from exc
     if not isinstance(data, dict):
-        out(f"warning: ignoring {path}: expected a JSON object")
-        return {}
+        raise ConfigError(f"{path}: expected a JSON object, got {type(data).__name__}")
+    unknown = sorted(set(data) - _CONFIG_KEYS)
+    if unknown:
+        raise ConfigError(
+            f"{path}: unknown key(s) {', '.join(unknown)} — a misspelled policy "
+            "key must not be silently ignored; the accepted keys are: "
+            + ", ".join(sorted(_CONFIG_KEYS))
+        )
+
+    def _bad(key: str, why: str) -> ConfigError:
+        return ConfigError(f"{path}: invalid {key!r} — {why}")
+
     cfg: dict[str, object] = {}
-    tc = data.get("test_command")
-    if isinstance(tc, (str, list)):
+    if "test_command" in data:
+        tc = data["test_command"]
+        if not isinstance(tc, (str, list)) or (
+            isinstance(tc, list) and not all(isinstance(t, str) for t in tc)
+        ):
+            raise _bad("test_command", "expected a string or a list of strings")
         cfg["test_command"] = tc
-    sc = data.get("setup_command")
-    if isinstance(sc, list):
+    if "setup_command" in data:
+        sc = data["setup_command"]
+        if not isinstance(sc, list) or not all(isinstance(t, str) for t in sc):
+            raise _bad("setup_command", "expected a list of strings (never a "
+                       "shell string — splitting on spaces is unsafe for paths)")
         cfg["setup_command"] = sc
-    prot = data.get("protected")
-    if isinstance(prot, list):
-        cfg["protected"] = prot
-    alw = data.get("allow")
-    if isinstance(alw, list):
-        cfg["allow"] = alw
-    for key in ("timeout", "mem_limit"):
-        v = data.get(key)
-        if isinstance(v, int) and not isinstance(v, bool):
+    for key in ("protected", "allow"):
+        if key in data:
+            v = data[key]
+            if not isinstance(v, list) or not all(isinstance(g, str) for g in v):
+                raise _bad(key, "expected a list of glob strings")
             cfg[key] = v
-    ant = data.get("allow_new_tests")
-    if isinstance(ant, bool):
-        cfg["allow_new_tests"] = ant
+    for key in ("timeout", "mem_limit"):
+        if key in data:
+            v = data[key]
+            if not isinstance(v, int) or isinstance(v, bool):
+                raise _bad(key, "expected an integer")
+            cfg[key] = v
+    if "allow_new_tests" in data:
+        v = data["allow_new_tests"]
+        if not isinstance(v, bool):
+            raise _bad("allow_new_tests", "expected true or false")
+        cfg["allow_new_tests"] = v
+    if "require_report_integrity" in data:
+        v = data["require_report_integrity"]
+        if v not in _REPORT_INTEGRITY_VALUES:
+            raise _bad("require_report_integrity",
+                       f"expected one of {list(_REPORT_INTEGRITY_VALUES)}")
+        cfg["require_report_integrity"] = v
+    if "require_candidate_isolation" in data:
+        v = data["require_candidate_isolation"]
+        if v not in _ISOLATION_VALUES:
+            raise _bad("require_candidate_isolation",
+                       f"expected one of {list(_ISOLATION_VALUES)}")
+        cfg["require_candidate_isolation"] = v
+    if "min_diff_coverage" in data:
+        v = data["min_diff_coverage"]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not (0 <= v <= 100):
+            raise _bad("min_diff_coverage", "expected a number between 0 and 100")
+        cfg["min_diff_coverage"] = float(v)
+    for key in ("policy_id", "policy_version"):
+        if key in data:
+            v = data[key]
+            if not isinstance(v, str) or not v.strip():
+                raise _bad(key, "expected a non-empty string")
+            cfg[key] = v
     return cfg
 
 
@@ -172,6 +248,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="fail-closed policy: require at least this candidate isolation, or ERROR.",
     )
     g_p.add_argument(
+        "--baseline-evidence", dest="baseline_evidence", action="store_true",
+        help="differential evidence (opt-in): also run the suite on the PRISTINE "
+        "base (no candidate) and report repair_effect — 'demonstrated' only when "
+        "the base fails and the candidate passes under the same judge/policy/env. "
+        "Evidence only; the verdict is unchanged. Subprocess judge only.",
+    )
+    g_p.add_argument(
+        "--require-demonstrated-fix", dest="require_demonstrated_fix", action="store_true",
+        help="gate (opt-in, implies --baseline-evidence): a PASS whose repair "
+        "effect is not demonstrated (the base already passed, or no clean "
+        "baseline verdict) becomes FAIL (fix_not_demonstrated). For agent 'fix' "
+        "PRs; do NOT use on ordinary feature PRs, which start from a green base.",
+    )
+    g_p.add_argument(
+        "--base-sha", dest="base_sha", default=None,
+        help="base commit SHA to bind into the attestation (a plain git diff "
+        "carries no commit identity; CI should pass `git rev-parse <base>`)",
+    )
+    g_p.add_argument(
+        "--head-sha", dest="head_sha", default=None,
+        help="head commit SHA to bind into the attestation (CI: git rev-parse HEAD)",
+    )
+    g_p.add_argument(
+        "--base-tree-sha", dest="base_tree_sha", default=None,
+        help="base TREE SHA (git rev-parse <base>^{tree}) — pins the exact "
+        "content judged even where a commit SHA is unavailable",
+    )
+    g_p.add_argument(
+        "--head-tree-sha", dest="head_tree_sha", default=None,
+        help="head TREE SHA (git rev-parse HEAD^{tree})",
+    )
+    g_p.add_argument(
         "--diff-coverage", dest="diff_coverage", action="store_true",
         help="measure which changed lines the suite actually executed (one extra "
         "suite run under coverage; needs the 'cov' extra). Evidence only unless "
@@ -254,6 +362,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="the detached signature (default: <verdict>.sig)",
     )
     v_p.add_argument("--pub", required=True, help="the judge's Ed25519 public key (PEM)")
+    v_p.add_argument(
+        "--expect-head-sha", dest="expect_head_sha", default=None,
+        help="context check: the verdict's attestation.head_sha must equal this "
+        "(e.g. $GITHUB_SHA) — a valid signature over the WRONG commit fails",
+    )
+    v_p.add_argument(
+        "--expect-base-sha", dest="expect_base_sha", default=None,
+        help="context check: attestation.base_sha must equal this",
+    )
+    v_p.add_argument(
+        "--expect-policy-sha", dest="expect_policy_sha", default=None,
+        help="context check: attestation.policy_sha256 must equal this",
+    )
+    v_p.add_argument(
+        "--expect-policy-id", dest="expect_policy_id", default=None,
+        help="context check: attestation.policy_id must equal this",
+    )
 
     # ----- doctor -------------------------------------------------------- #
     d_p = sub.add_parser(
@@ -263,6 +388,17 @@ def build_parser() -> argparse.ArgumentParser:
     d_p.add_argument(
         "--json", dest="doctor_json", action="store_true",
         help="emit the environment report as JSON instead of human text",
+    )
+
+    # ----- pack-doctor ---------------------------------------------------- #
+    pd_p = sub.add_parser(
+        "pack-doctor",
+        help="validate a verifier pack directory (manifest schema, tests, digest)",
+    )
+    pd_p.add_argument("pack", help="the pack directory to validate")
+    pd_p.add_argument(
+        "--json", dest="pack_json", action="store_true",
+        help="emit the validation report as JSON",
     )
 
     # ----- init ---------------------------------------------------------- #
@@ -321,7 +457,12 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
 
     # Effective settings: an explicit CLI flag wins; else .evoguard.json; else the
     # built-in default. All CLI defaults are None so "given" is distinguishable.
-    cfg = _load_config(args.config, out=out)
+    # A present-but-broken config is fail-closed: exit 2, never weaker defaults.
+    try:
+        cfg = _load_config(args.config, out=out)
+    except ConfigError as exc:
+        out(f"config error (fail-closed): {exc}")
+        return 2
 
     cfg_tc = args.test_command if args.test_command is not None else cfg.get("test_command")
     if isinstance(cfg_tc, str):
@@ -366,6 +507,33 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         else (cfg_ant if isinstance(cfg_ant, bool) else False)
     )
 
+    # Protected policy contract: assurance floors + coverage gate + identity may
+    # live in the (candidate-untouchable) .evoguard.json; a CLI flag still wins.
+    # (_load_config already validated types fail-closed; the isinstance checks
+    # here only narrow for the type checker.)
+    _cfg_rri = cfg.get("require_report_integrity")
+    require_report_integrity: str | None = (
+        args.require_report_integrity
+        if args.require_report_integrity is not None
+        else (_cfg_rri if isinstance(_cfg_rri, str) else None)
+    )
+    _cfg_rci = cfg.get("require_candidate_isolation")
+    require_candidate_isolation: str | None = (
+        args.require_candidate_isolation
+        if args.require_candidate_isolation is not None
+        else (_cfg_rci if isinstance(_cfg_rci, str) else None)
+    )
+    _cfg_mdc = cfg.get("min_diff_coverage")
+    min_diff_coverage: float | None = (
+        args.min_diff_coverage
+        if args.min_diff_coverage is not None
+        else (_cfg_mdc if isinstance(_cfg_mdc, float) else None)
+    )
+    _cfg_pid = cfg.get("policy_id")
+    policy_id: str | None = _cfg_pid if isinstance(_cfg_pid, str) else None
+    _cfg_pv = cfg.get("policy_version")
+    policy_version: str | None = _cfg_pv if isinstance(_cfg_pv, str) else None
+
     # Auto-detect a Node.js project: V8 reserves huge virtual address space, which
     # makes RLIMIT_AS kill the test subprocess at startup. If package.json exists
     # and the user hasn't explicitly configured mem_limit (still at default 1024),
@@ -396,11 +564,16 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
             verifier_pack=args.verifier_pack,
-            diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
-            min_diff_coverage=args.min_diff_coverage,
+            diff_coverage=args.diff_coverage or min_diff_coverage is not None,
+            min_diff_coverage=min_diff_coverage,
             blackbox=args.blackbox, blackbox_only=args.blackbox_only,
-            require_report_integrity=args.require_report_integrity,
-            require_candidate_isolation=args.require_candidate_isolation,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            base_sha=args.base_sha, head_sha=args.head_sha,
+            base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
+            policy_id=policy_id, policy_version=policy_version,
+            baseline_evidence=args.baseline_evidence,
+            require_demonstrated_fix=args.require_demonstrated_fix,
         )
     elif args.base and args.head:
         # Structured candidate: never round-trip file content through the
@@ -420,11 +593,16 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
             verifier_pack=args.verifier_pack,
-            diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
-            min_diff_coverage=args.min_diff_coverage,
+            diff_coverage=args.diff_coverage or min_diff_coverage is not None,
+            min_diff_coverage=min_diff_coverage,
             blackbox=args.blackbox, blackbox_only=args.blackbox_only,
-            require_report_integrity=args.require_report_integrity,
-            require_candidate_isolation=args.require_candidate_isolation,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            base_sha=args.base_sha, head_sha=args.head_sha,
+            base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
+            policy_id=policy_id, policy_version=policy_version,
+            baseline_evidence=args.baseline_evidence,
+            require_demonstrated_fix=args.require_demonstrated_fix,
         )
         result.source = "base/head"
     elif args.repo and args.patch:
@@ -435,11 +613,16 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
             verifier_pack=args.verifier_pack,
-            diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
-            min_diff_coverage=args.min_diff_coverage,
+            diff_coverage=args.diff_coverage or min_diff_coverage is not None,
+            min_diff_coverage=min_diff_coverage,
             blackbox=args.blackbox, blackbox_only=args.blackbox_only,
-            require_report_integrity=args.require_report_integrity,
-            require_candidate_isolation=args.require_candidate_isolation,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            base_sha=args.base_sha, head_sha=args.head_sha,
+            base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
+            policy_id=policy_id, policy_version=policy_version,
+            baseline_evidence=args.baseline_evidence,
+            require_demonstrated_fix=args.require_demonstrated_fix,
         )
         result.source = "edit blocks"
     else:
@@ -648,7 +831,14 @@ def cmd_keygen(args: argparse.Namespace, *, out: Callable[[str], None] = print) 
 
 
 def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
-    """Execute ``evo-guard verify-verdict`` — offline signature check (exit 0/1)."""
+    """Execute ``evo-guard verify-verdict`` — signature + CONTEXT check (exit 0/1).
+
+    A valid signature only proves the verdict bytes did not change after
+    signing. The optional ``--expect-*`` flags make the check *contextual*:
+    a perfectly signed verdict for the WRONG commit / policy fails — which is
+    what a merge or deploy gate actually needs (chain of custody, not just
+    file integrity).
+    """
     from evoom_guard.signing import verify_file
 
     sig = args.sig or (args.verdict + ".sig")
@@ -657,8 +847,127 @@ def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] =
     except (OSError, ValueError) as exc:
         out(f"unusable input: {exc}")
         return 2
-    out("signature: VALID" if ok else "signature: INVALID — the verdict bytes changed after signing")
-    return 0 if ok else 1
+    if not ok:
+        out("signature: INVALID — the verdict bytes changed after signing")
+        return 1
+    out("signature: VALID")
+
+    expectations = (
+        ("head_sha", getattr(args, "expect_head_sha", None)),
+        ("base_sha", getattr(args, "expect_base_sha", None)),
+        ("policy_sha256", getattr(args, "expect_policy_sha", None)),
+        ("policy_id", getattr(args, "expect_policy_id", None)),
+    )
+    if not any(want for _f, want in expectations):
+        return 0
+    try:
+        with open(args.verdict, encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, ValueError) as exc:
+        out(f"context: UNCHECKABLE — the verdict is not readable JSON ({exc})")
+        return 1
+    att = payload.get("attestation") or {}
+    failed = False
+    for field, want in expectations:
+        if not want:
+            continue
+        got = att.get(field)
+        if got == want:
+            out(f"context: {field} matches ({want})")
+        else:
+            out(f"context: MISMATCH — {field} is {got!r}, expected {want!r}")
+            failed = True
+    if failed:
+        out("context: FAILED — the signature is valid but this verdict was not "
+            "produced for the expected revision/policy")
+        return 1
+    return 0
+
+
+# pack.json manifest contract: optional file, but if PRESENT it must be valid —
+# a broken manifest silently ignored would let a "versioned behavior contract"
+# quietly lose its identity.
+_PACK_REQUIRED = ("id", "version")
+_PACK_OPTIONAL = ("description", "target_type", "protocol")
+
+
+def validate_pack(pack_dir: str) -> dict[str, object]:
+    """Validate a verifier-pack directory; returns a report dict (see pack-doctor)."""
+    import hashlib as _hashlib
+
+    report: dict[str, object] = {"pack": pack_dir, "ok": False, "problems": []}
+    problems: list[str] = report["problems"]  # type: ignore[assignment]
+    if not os.path.isdir(pack_dir):
+        problems.append("not a directory")
+        return report
+    test_files = []
+    for dirpath, _dirs, files in os.walk(pack_dir):
+        for fn in files:
+            if fn.startswith("test_") and fn.endswith(".py"):
+                test_files.append(os.path.relpath(os.path.join(dirpath, fn), pack_dir))
+    report["test_files"] = sorted(test_files)
+    if not test_files:
+        problems.append("no pytest test files (test_*.py) — the judge would have nothing to run")
+    manifest_path = os.path.join(pack_dir, "pack.json")
+    if os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError) as exc:
+            problems.append(f"pack.json is not readable JSON ({exc})")
+            m = None
+        if m is not None:
+            if not isinstance(m, dict):
+                problems.append("pack.json must be a JSON object")
+            else:
+                for key in _PACK_REQUIRED:
+                    if not isinstance(m.get(key), str) or not str(m.get(key)).strip():
+                        problems.append(f"pack.json missing required string field {key!r}")
+                unknown = sorted(set(m) - set(_PACK_REQUIRED) - set(_PACK_OPTIONAL))
+                if unknown:
+                    problems.append(
+                        "pack.json has unknown field(s): " + ", ".join(unknown)
+                        + f" (accepted: {', '.join(_PACK_REQUIRED + _PACK_OPTIONAL)})"
+                    )
+                report["manifest"] = {
+                    k: m[k] for k in (*_PACK_REQUIRED, *_PACK_OPTIONAL) if k in m
+                }
+    else:
+        report["manifest"] = None  # optional — a folder of tests is a valid pack
+    digest = _hashlib.sha256()
+    for dirpath, dirnames, filenames in os.walk(pack_dir):
+        dirnames.sort()
+        for fn in sorted(filenames):
+            rel = os.path.relpath(os.path.join(dirpath, fn), pack_dir)
+            digest.update(rel.encode("utf-8"))
+            with open(os.path.join(dirpath, fn), "rb") as pf:
+                digest.update(pf.read())
+    report["pack_sha256"] = digest.hexdigest()
+    report["ok"] = not problems
+    return report
+
+
+def cmd_pack_doctor(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
+    """Execute ``evo-guard pack-doctor`` — validate a verifier pack (exit 0/1)."""
+    report = validate_pack(args.pack)
+    problems = report.get("problems")
+    problems_list = problems if isinstance(problems, list) else []
+    if getattr(args, "pack_json", False):
+        out(json.dumps(report, indent=2))
+    else:
+        out(f"pack: {report['pack']}")
+        mf = report.get("manifest")
+        if isinstance(mf, dict):
+            out(f"  manifest: id={mf.get('id')!r} version={mf.get('version')!r}")
+        elif "manifest" in report:
+            out("  manifest: none (optional — plain folder of judge tests)")
+        tf = report.get("test_files")
+        out(f"  test files: {len(tf) if isinstance(tf, list) else 0}")
+        out(f"  pack sha256: {report.get('pack_sha256', '')}")
+        for prob in problems_list:
+            out(f"  PROBLEM: {prob}")
+        out("  ok" if report["ok"] else "  INVALID")
+    return 0 if report["ok"] else 1
 
 
 def cmd_version(_args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
@@ -680,6 +989,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_keygen(args)
     if args.command == "verify-verdict":
         return cmd_verify_verdict(args)
+    if args.command == "pack-doctor":
+        return cmd_pack_doctor(args)
     if args.command == "version":
         return cmd_version(args)
     return 2  # unreachable: subparser is required

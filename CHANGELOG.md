@@ -9,6 +9,46 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.3.0] — 2026-07-11
+
+Three capability upgrades from an external architecture review, each turning an
+already-present asset into an enforced guarantee (schema 1.6, additive).
+
+### Added
+- **Baseline differential evidence** (`--baseline-evidence`, Action input
+  `baseline-evidence`): the suite also runs on the PRISTINE base, and the
+  verdict carries `baseline.repair_effect` — `demonstrated` only when the base
+  fails and the candidate passes under the same judge/policy/env. "All tests
+  pass on head" alone never showed the change fixed anything. Opt-in gate
+  `--require-demonstrated-fix` demotes an undemonstrated PASS to FAIL
+  (`fix_not_demonstrated`) — for agent "fix" PRs; feature PRs start green and
+  should not use it.
+- **Protected policy contract**: `.evoguard.json` may now carry
+  `require_report_integrity`, `require_candidate_isolation`,
+  `min_diff_coverage`, and a `policy_id`/`policy_version` identity that is
+  surfaced in the attestation and report — repository-contained,
+  candidate-untouchable policy instead of per-workflow flags.
+- **Exact-revision binding**: attestations now carry `base_sha`/`head_sha` in
+  every mode (repo-native previously dropped them — a plain `git diff` has no
+  commit identity) plus `base_tree_sha`/`head_tree_sha`; the Action resolves
+  and passes all four via `git rev-parse`.
+- **Context-aware `verify-verdict`**: `--expect-head-sha`, `--expect-base-sha`,
+  `--expect-policy-sha`, `--expect-policy-id` — a valid signature for the WRONG
+  commit/policy now fails, making the signed verdict consumable as a merge or
+  deploy gate (chain of custody, not just file integrity).
+- **`evo-guard pack-doctor`**: validates a verifier-pack directory (manifest
+  schema, judge test files, content digest) before it gates anything.
+
+### Fixed (security)
+- **`.evoguard.json` was fail-open**: a malformed file, an unknown key (the
+  classic misspelled-floor typo), or a wrong-typed value produced a warning and
+  was silently skipped — Guard kept running under WEAKER defaults than the repo
+  owner wrote down. Config errors are now fail-closed (exit 2, no judging).
+- **Pack manifests were fail-open**: a present-but-broken `pack.json` was
+  silently ignored while the verdict still implied a named contract judged the
+  run. Both judges (black-box and repo-native mount) now stop with a clean
+  named error instead.
+
 ## [3.2.3] — 2026-07-11
 
 A correctness + evidence pass driven by an external launch review and a live
