@@ -48,7 +48,7 @@ Guard closes that hole with two mechanisms:
 > verdict then comes from the judge's own process and the same forgery is caught.
 > See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 
-### Close the forgery hole: `--blackbox` (external judge)
+### Close the forgery hole: `--blackbox` (external isolated judge)
 
 For targets with a process/protocol boundary (a CLI, an HTTP service, a
 DB-backed program), the black-box judge produces the verdict from **its own
@@ -60,11 +60,29 @@ evo-guard guard ./repo --patch candidate.txt \
     --verifier-pack examples/blackbox-pack --blackbox
 ```
 
-The pack invokes the candidate across a process boundary (via `$EVOGUARD_TARGET`)
-and asserts on its outputs. `report_integrity` becomes
-`external_process_isolated`, and the *identical* `atexit`+`os._exit` forgery that
-fakes a `PASS` under the default judge yields the correct `FAIL` (proven in
-`tests/test_blackbox.py`). See [`docs/BLACKBOX.md`](docs/BLACKBOX.md).
+The pack invokes the candidate across a process boundary (via `$EVOGUARD_EXEC`,
+which runs it under the delivered isolation) and asserts on its outputs.
+`report_integrity` becomes `external_process_isolated`, and the *identical*
+`atexit`+`os._exit` forgery that fakes a `PASS` under the default judge yields
+the correct `FAIL` (proven in `tests/test_blackbox.py`). Three properties make
+this a real guarantee, not a label:
+
+- **Isolation is *delivered*, not requested.** `candidate_isolation` reports what
+  actually ran. Ask for `--isolation docker` with no daemon or a missing image
+  and Guard returns `ERROR` (`assurance_requirement_not_met`) — never a `PASS`
+  mislabelled `docker`. In a container the repo copy is mounted **read-only** and
+  the pack is **not mounted into the candidate at all** (proven against a real
+  daemon in CI, where a malicious candidate fails to write the host, open the
+  network, or reach the pack).
+- **The verdict is composite.** By default the repo's own suite **and** the
+  external pack must both pass — a green pack can never mask an internal
+  regression. Pure-CLI/service targets with no in-repo suite pass
+  `--blackbox-only`.
+- **Fail-closed policy.** `--require-report-integrity` / `--require-candidate-isolation`
+  turn the `assurance` profile into a contract: a run weaker than you required is
+  refused, never silently downgraded.
+
+See [`docs/BLACKBOX.md`](docs/BLACKBOX.md) and [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 
 Structured, judge-owned verdicts (`junit+exit`) cover **eight runners**:
 pytest, `node --test`, vitest, jest, gotestsum (Go), rspec (Ruby), mocha, and
@@ -125,9 +143,10 @@ steps:
 
 The step fails on any non-`PASS` verdict (set `fail-on: rejected-only` to gate
 only on reward-hacks). The report also lands in the job summary. Further
-inputs: `isolation`/`docker-image`/`docker-network`, `sarif`, `allow`,
-`allow-new-tests`, `timeout`, `mem-limit` — see [`action.yml`](action.yml) and
-[`docs/ADOPTION.md`](docs/ADOPTION.md).
+inputs: `verifier-pack`, `blackbox`/`blackbox-only`, `require-report-integrity`,
+`require-candidate-isolation`, `isolation`/`docker-image`/`docker-network`,
+`sarif`, `allow`, `allow-new-tests`, `timeout`, `mem-limit` — see
+[`action.yml`](action.yml) and [`docs/ADOPTION.md`](docs/ADOPTION.md).
 
 ## Other input shapes & useful flags
 
@@ -146,6 +165,12 @@ evo-guard guard ./repo --patch candidate.txt
 #                                 existing tests/config stay rejected
 #   --isolation docker|gvisor     run the suite in a network-less, read-only
 #                                 container (needs --docker-image + a daemon)
+#   --verifier-pack /secure/pack  org-owned tests the patch cannot modify
+#   --blackbox                    external isolated judge (needs --verifier-pack):
+#                                 verdict from the judge's own process; composite
+#                                 with the repo suite. --blackbox-only skips it.
+#   --require-report-integrity external_process_isolated   fail-closed floor
+#   --require-candidate-isolation docker                   fail-closed floor
 #   --timeout 300                 per-run suite timeout (seconds)
 #   --json out.json --report out.md --sarif out.sarif
 
@@ -217,10 +242,12 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
   auto-exec files, path escapes — see the adversarial tests and
   [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md)), not
   claimed as absolute immunity.
-- **The result is forgeable by deliberate in-process code** (the honest boundary
-  above): the verdict is trustworthy against the common cheats, not against a
-  patch that writes report-forgery into source. Read the `assurance` profile's
-  `report_integrity` field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
+- **The default judge's result is forgeable by deliberate in-process code** (the
+  honest boundary above): it is trustworthy against the common cheats, not
+  against a patch that writes report-forgery into source. The external isolated
+  judge (`--blackbox`) closes this — its verdict comes from a process the
+  candidate never runs in. Read the `assurance` profile's `report_integrity`
+  field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 - Custom (non-adapter) test commands are graded by exit code only — still not
   stdout-forgeable, but with a coarser gradient (and, like every runner today,
   in-process-forgeable).
