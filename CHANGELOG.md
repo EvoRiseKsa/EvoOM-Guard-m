@@ -9,6 +9,43 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.2.1] — 2026-07-11
+
+A pre-launch honesty + hardening pass from a critical review. No new features;
+the goal is that every public claim matches what the code actually does.
+
+### Fixed (security)
+- **Shell-free candidate launcher.** `CandidateRunner` built the container command
+  by string-joining into a `/bin/sh` script, interpolating `docker_image` /
+  `docker_network` / runtime — a command-injection surface (even though those
+  inputs are workflow-owner-controlled, not candidate-controlled). The launcher is
+  now a shell-free Python `os.execvp` that runs an argv **list**; a value like
+  `none; touch PWNED` is passed literally and never interpreted. Proven by
+  `tests/test_candidate_runner.py`.
+
+### Fixed (documentation accuracy — the claims now match the code)
+- **Removed the non-working Black-box HTTP example.** The hardened container is
+  `--network none` with no published port, so the documented host→container HTTP
+  call could not work. START_HERE now offers Basic Guard, Black-box CLI, and
+  container isolation (all tested); a tested HTTP recipe is explicitly on the
+  roadmap.
+- **Verifier Pack wording corrected.** Dropped the absolute "tamper-proof" /
+  "read-only" framing: in repo-native mode the pack is copied into the candidate
+  tree and shares its process/filesystem, so it is **patch-immutable, not
+  runtime-tamper-proof**. Runtime separation is the black-box + Docker path.
+  (README, `action.yml`, CLI help, `docs/VERIFIER_PACKS.md`.)
+- **Removed remaining absolute claims:** "the harness is untouchable" →
+  "protected harness paths are rejected before execution"; "unforgeable external
+  dimension" → "independent, judge-owned external evidence dimension"; the stale
+  "track the roadmap's external judge" (it shipped in v3.0/v3.2).
+- **ERROR verdict** documented completely (isolation-unavailable, timeout, setup
+  failure, unmet assurance floor — not only "patch did not apply").
+- **"Zero dependencies"** qualified: the *core* has none; signing/coverage are
+  optional extras.
+- Roadmap no longer says CI lacks a Docker daemon (the `blackbox-docker-e2e` job
+  runs one); example pins moved to `@v3.2.1`; file headers say "Maintained and
+  released by" rather than "Sole owner & author".
+
 ## [3.2.0] — 2026-07-11
 
 A second review reproduced four false-`PASS` paths in the v3.1 black-box mode and

@@ -50,13 +50,17 @@ a network-less, read-only container with the pack unmounted — and records
 `isolation_evidence` (delivered mode, `image_digest`, `network`, `runtime`) in the
 attestation. Requesting a container that cannot be delivered fails closed.
 
-**The genuine next direction** (driven by real users, validated on a host with a
-Docker daemon — this repo's CI has none, so the container path ships with unit +
-fail-closed tests and a daemon-gated e2e): build the patched candidate into an
-**immutable artifact/OCI image** and bind the verdict to the **artifact digest**,
-turning Guard from a source-patch gate into an artifact-behaviour judge across
-languages. The `CandidateRunner` boundary and `isolation_evidence` are the seam
-this builds on.
+The container path is exercised on a real Docker daemon in CI (the
+`blackbox-docker-e2e` job), where an adversarial candidate is confirmed unable to
+write the host, open the network, or reach the pack.
+
+**The genuine next direction** (driven by real users): build the patched
+candidate into an **immutable artifact/OCI image** and bind the verdict to the
+**artifact digest**, turning Guard from a source-patch gate into an
+artifact-behaviour judge across languages — and a documented, tested HTTP/service
+recipe (a controlled judge↔candidate channel, since the hardened container is
+`--network none`). The `CandidateRunner` boundary and `isolation_evidence` are the
+seam this builds on.
 
 - Other near-term candidates (driven by [user feedback](../../issues)):
   - a baseline scan mode (verdict for the repo as-is, no patch);

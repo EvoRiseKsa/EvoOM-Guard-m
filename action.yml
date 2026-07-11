@@ -65,7 +65,7 @@ inputs:
     required: false
     default: ""
   verifier-pack:
-    description: "Path to a directory of judge-owned tests/invariants the patch cannot modify (org-owned checks injected at judgment time). Mounted read-only into the verified copy and collected with the suite (pytest runners). NOT hidden from the running code — see docs/VERIFIER_PACKS.md."
+    description: "Path to a directory of judge-owned tests/invariants the patch cannot include or modify (org-owned checks injected at judgment time), collected with the suite (pytest runners). Honest scope: in repo-native mode it is not runtime-isolated from the candidate (same process/filesystem) and is not hidden from it — use blackbox with isolation docker for runtime separation. See docs/VERIFIER_PACKS.md."
     required: false
     default: ""
   blackbox:

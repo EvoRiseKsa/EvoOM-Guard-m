@@ -13,17 +13,15 @@ There are three ways to run it. Pick one — you do **not** need the others to s
 | Your need | Path | Command flag |
 |---|---|---|
 | Stop an AI agent from editing/deleting your tests, and run your suite | **Basic Guard** | *(none — the default)* |
-| Also verify a **CLI's** external behaviour, unforgeable | **Black-box CLI** | `--blackbox` + `--verifier-pack` |
-| Verify an **HTTP service** behind a real isolation boundary | **Black-box HTTP** | `--blackbox` + `--isolation docker` |
+| Also verify a **CLI's** external behaviour with a judge-owned external verdict | **Black-box CLI** | `--blackbox` + `--verifier-pack` |
+| Run the black-box candidate behind a real OS isolation boundary | **+ container** | `--isolation docker` (fail-closed) |
 
 Quick tree:
 
 ```
 Just want to block test-harness tampering?           → Basic Guard
-Want to check a program's behaviour from outside?    → Black-box
-   target is a CLI / `python -m tool`?               → Black-box CLI
-   target is an HTTP service?                        → Black-box HTTP
-Need a guaranteed OS isolation boundary?             → add --isolation docker (fail-closed)
+Want to check a CLI's behaviour from outside?         → Black-box CLI
+Need a guaranteed OS isolation boundary?              → add --isolation docker (fail-closed)
 ```
 
 ---
@@ -74,44 +72,37 @@ broken `mul` the pack never checks). Full walkthrough:
 
 ---
 
-## Path 3 — Black-box HTTP (isolated)
+## Path 3 — Add a real isolation boundary (to the black-box path)
 
-**When:** the target is an HTTP service and you want it judged behind a real
-container boundary.
+**When:** you run the black-box CLI path against semi-trusted code and want the
+candidate confined at the OS level, not just judged out-of-process.
 
-**Guarantees:** everything Path 2 gives, **plus** delivered isolation — the
-candidate runs in a network-less, read-only container with the pack unmounted;
-requesting `docker` with no daemon/image **fails closed** (`ERROR`), never a
-mislabelled `PASS`. Proven against a real daemon in CI
+**Guarantees:** the candidate runs in a network-less, read-only container — the
+repo copy is mounted read-only and the pack is **not mounted into the candidate at
+all**. Isolation is **delivered, not requested**: a missing daemon or image is
+`ERROR`, never a mislabelled `PASS`. Proven against a real daemon in CI, where a
+malicious candidate cannot write the host or reach the pack
 (`tests/test_blackbox_docker_e2e.py`).
 
 **Does NOT guarantee:** that the exact built artifact you deploy is the one judged
 (the verdict binds to the runtime image digest, not a separately built artifact —
 see [`ROADMAP.md`](../ROADMAP.md)).
 
-**The pack shape** — start the service via `$EVOGUARD_EXEC`, hit it over the loopback,
-assert on responses (adapt the CLI pack in `examples/blackbox-cli/pack/`):
-```python
-# pack/test_http.py  (sketch)
-import os, subprocess, sys, time, urllib.request
-
-def test_health():
-    exec_, py = os.environ["EVOGUARD_EXEC"], os.environ.get("EVOGUARD_PYTHON", "python3")
-    srv = subprocess.Popen([exec_, py, "-m", "myservice", "--port", "8080"])
-    try:
-        time.sleep(1.0)
-        body = urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=3).read()
-        assert body == b"ok"
-    finally:
-        srv.terminate()
-```
+**Try it (same example, now containerised):**
 ```bash
-evo-guard guard ./repo --patch p.txt --verifier-pack ./pack --blackbox \
+cd examples/blackbox-cli
+evo-guard guard ./sample_repo --patch patches/honest.txt --verifier-pack ./pack --blackbox \
     --isolation docker --docker-image python:3.12-slim \
     --require-candidate-isolation docker
 ```
 **Expected:** `✅ PASS` at `candidate_isolation: docker`; `⚠️ ERROR` if the daemon or
 image is missing (fail-closed).
+
+> **HTTP / networked services:** the black-box protocol works for any process
+> boundary, but a networked service needs a judge↔candidate channel that the
+> hardened `--network none` container deliberately does not provide. A documented,
+> tested HTTP recipe is on the [roadmap](../ROADMAP.md) — until then, wrap the
+> behaviour you care about behind a CLI entry point and use the CLI pack above.
 
 ---
 

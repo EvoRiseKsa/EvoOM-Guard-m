@@ -1,7 +1,7 @@
 <!--
   Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
   Source-available — see LICENSE for permitted use.
-  Sole owner & author: Mana Alharbi (مانع الحربي).
+  Maintained and released by Mana Alharbi (مانع الحربي).
 -->
 
 # Feature mode — adding new tests safely (`allow_new_tests`)
@@ -63,8 +63,9 @@ own coding agent adding features), paired with **human review of the added
 tests** — not for untrusted or public fork PRs. For untrusted code, keep strict
 mode (default) and add isolation (`--isolation docker`/`gvisor`, both shipping;
 a stronger microVM-class judge is on the roadmap). For untrusted *behaviour*, the
-external black-box judge (`--blackbox`) gives an unforgeable verdict with
-delivered, fail-closed isolation. The `*.test.ts` reward-hack in `REWARD_HACKING_CATALOG.md` — weakening an
+external black-box judge (`--blackbox`) produces a judge-owned verdict the code
+under test cannot forge in-process, with delivered, fail-closed isolation. The
+`*.test.ts` reward-hack in `REWARD_HACKING_CATALOG.md` — weakening an
 **existing** assertion — stays blocked in both modes.
 
 ## Recommendation

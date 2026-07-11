@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
-# Sole owner & author: Mana Alharbi (مانع الحربي).
+# Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
 """EvoOM Guard (EvoGuard) — the merge gate an AI agent can't game the test harness.
 
@@ -22,4 +22,4 @@ from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
 __all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__version__ = "3.2.0"
+__version__ = "3.2.1"

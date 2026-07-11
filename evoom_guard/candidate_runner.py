@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
-# Sole owner & author: Mana Alharbi (مانع الحربي).
+# Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
 """How the black-box judge *actually* runs the candidate — and proves it.
 
@@ -111,12 +111,7 @@ class CandidateRunner:
     def _prepare_subprocess(
         self, workdir: str, target: str
     ) -> tuple[str, dict[str, str], IsolationEvidence]:
-        launcher = self._write_launcher(
-            workdir,
-            "#!/bin/sh\n"
-            'cd "$EVOGUARD_TARGET" || exit 97\n'
-            'exec "$@"\n',
-        )
+        launcher = self._write_launcher(workdir, {"mode": "subprocess", "target": target})
         evidence = IsolationEvidence(
             requested=self.isolation,
             delivered="subprocess",
@@ -161,19 +156,22 @@ class CandidateRunner:
         # container) before we let any verdict claim it.
         self._delivery_probe(self.docker_image, runtime)
 
-        run = [
+        # A fully-resolved argv PREFIX (no shell, no env expansion). The launcher
+        # appends the pack's argv and execs it directly, so image/network/runtime/
+        # target are never interpolated into a shell string.
+        prefix = [
             "docker", "run", "--rm", "--network", self.docker_network,
             "--read-only", "--tmpfs", "/tmp:rw,exec",
             "--pids-limit", "256", "--cpus", "1",
             "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "LANG=C.UTF-8",
-            "-v", '"$EVOGUARD_TARGET":/candidate:ro', "-w", "/candidate",
+            "-v", f"{target}:/candidate:ro", "-w", "/candidate",
         ]
         if runtime:
-            run += ["--runtime", runtime]
+            prefix += ["--runtime", runtime]
         if self.mem_limit_mb > 0:
-            run += ["--memory", f"{self.mem_limit_mb}m"]
-        run += [self.docker_image, '"$@"']
-        launcher = self._write_launcher(workdir, "#!/bin/sh\nexec " + " ".join(run) + "\n")
+            prefix += ["--memory", f"{self.mem_limit_mb}m"]
+        prefix.append(self.docker_image)
+        launcher = self._write_launcher(workdir, {"mode": "docker", "prefix": prefix})
 
         evidence = IsolationEvidence(
             requested=self.isolation,
@@ -237,9 +235,35 @@ class CandidateRunner:
             )
 
     @staticmethod
-    def _write_launcher(workdir: str, body: str) -> str:
-        path = os.path.join(workdir, "evoguard_exec.sh")
+    def _write_launcher(workdir: str, cfg: dict[str, Any]) -> str:
+        """Write a SHELL-FREE launcher (+ its JSON config) and return its path.
+
+        The launcher execs the candidate via ``os.execvp`` with an argv **list**,
+        so no value (image / network / runtime / target) is ever interpolated into
+        a shell command — there is no shell, hence no command-injection surface.
+        The config travels in a sidecar JSON file, so nothing is embedded in code
+        either.
+        """
+        import json as _json
+
+        path = os.path.join(workdir, "evoguard_exec.py")
+        with open(path + ".json", "w", encoding="utf-8") as f:
+            _json.dump(cfg, f)
         with open(path, "w", encoding="utf-8") as f:
-            f.write(body)
+            f.write(
+                "#!/usr/bin/env python3\n"
+                "import json, os, sys\n"
+                "with open(__file__ + '.json', encoding='utf-8') as _f:\n"
+                "    CFG = json.load(_f)\n"
+                "argv = sys.argv[1:]\n"
+                "if not argv:\n"
+                "    sys.exit('evoguard launcher: no command given')\n"
+                "if CFG['mode'] == 'subprocess':\n"
+                "    os.chdir(CFG['target'])\n"
+                "    os.execvp(argv[0], argv)\n"
+                "else:\n"
+                "    cmd = CFG['prefix'] + argv\n"
+                "    os.execvp(cmd[0], cmd)\n"
+            )
         os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC | stat.S_IRUSR)
         return path

@@ -113,8 +113,9 @@ attestation's `isolation_evidence`.
 
 In black-box mode the verdict is **composite** by default: your repo's own suite
 *and* the external pack must both pass (harness-integrity always applies first).
-The pack adds an unforgeable external dimension; it never replaces the internal
-suite. Pure-CLI targets with no in-repo suite opt out with `--blackbox-only`.
+The pack adds an independent, judge-owned external evidence dimension; it never
+replaces the internal suite. Pure-CLI targets with no in-repo suite opt out with
+`--blackbox-only`.
 
 ## Composing external + internal coverage
 
@@ -123,7 +124,7 @@ the pack's external protocol tests, and both must pass. A narrow protocol test
 can therefore never hide an internal regression:
 
 ```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.0      # repo suite AND external pack (composite)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.1      # repo suite AND external pack (composite)
   with: { verifier-pack: ./pack, blackbox: "true",
           require-report-integrity: external_process_isolated }
 ```
@@ -139,6 +140,8 @@ no in-repo suite passes `blackbox-only: "true"` to judge the pack alone.
   and nobody touched the harness. Forging the report would require writing
   blatant `os._exit(0)` forgery into a source file, which code review catches
   loudly.
-- **Untrusted or semi-trusted authors**: treat a `PASS` as "the common cheats
-  were blocked", not "correctness proven". Require human review of the diff, and
-  track the roadmap's external judge for a hard guarantee.
+- **Untrusted or semi-trusted authors**: a same-process `PASS` means "the common
+  cheats were blocked", not "correctness proven". Require human review of the
+  diff, and use the shipped external judge (`--blackbox`, with `--isolation
+  docker` for a delivered boundary) for a report-integrity guarantee the code
+  under test cannot forge.
