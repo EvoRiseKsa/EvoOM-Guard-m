@@ -29,7 +29,7 @@ inputs:
     required: false
     default: "true"
   fail-on:
-    description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'."
+    description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'. WARNING — 'rejected-only' gates ONLY harness integrity: FAIL, TAMPERED and ERROR verdicts leave the step GREEN. It is not a correctness gate; keep the default unless you consciously want that."
     required: false
     default: "any-non-pass"
   isolation:
@@ -147,12 +147,37 @@ runs:
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -e
+        # A diagnosable, fail-fast exit for setup problems (missing base, shallow
+        # history): name the cause, write it to the step summary, and stop BEFORE
+        # the guard runs — never let a broken diff surface as a confusing
+        # "empty diff" verdict downstream.
+        fail_setup() {
+          echo "::error::EvoGuard: $1 — $2"
+          { echo "## EvoGuard — ⚠️ ERROR (${1})"; echo; echo "**$2**"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "verdict=ERROR" >> "$GITHUB_OUTPUT"
+          exit 1
+        }
         # Resolve the base to diff against: explicit input, else the PR base, else HEAD^.
         BASE="$INPUT_BASE_REF"
         if [ -z "$BASE" ]; then BASE="$PR_BASE_SHA"; fi
         if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
         echo "Diffing against base: $BASE"
-        git fetch --no-tags --depth=1 origin "$BASE" 2>/dev/null || true
+        # Best-effort deepen (the PR base SHA is usually absent from a default
+        # depth-1 checkout). Failure here is only a warning — the authoritative,
+        # fail-fast check is the rev-parse below.
+        git fetch --no-tags --depth=1 origin "$BASE" \
+          || echo "::warning::EvoGuard: could not fetch base '$BASE' from origin — trying to resolve it locally"
+        git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null \
+          || fail_setup "base_ref_unavailable" \
+               "cannot resolve the diff base '$BASE' in this checkout. Use actions/checkout with 'fetch-depth: 0', or pass a 'base-ref' that is reachable from this checkout."
+        set +e
+        git diff "$BASE...HEAD" > "$RUNNER_TEMP/guard.diff" 2> "$RUNNER_TEMP/guard-diff.err"
+        DIFF_CODE=$?
+        set -e
+        if [ "$DIFF_CODE" -ne 0 ]; then
+          fail_setup "base_diff_failed" \
+            "'git diff ${BASE}...HEAD' failed ($(head -c 300 "$RUNNER_TEMP/guard-diff.err")). A shallow checkout with no merge base is the usual cause — use actions/checkout with 'fetch-depth: 0'."
+        fi
         # The recommended path: pipe the diff; EvoGuard reverse-applies it to the head
         # checkout (this working dir) — no second checkout or worktree.
         ARGS=(guard --diff - --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
@@ -174,12 +199,16 @@ runs:
         if [ "$INPUT_DIFF_COVERAGE" = "true" ]; then ARGS+=(--diff-coverage); fi
         if [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then ARGS+=(--min-diff-coverage "$INPUT_MIN_DIFF_COVERAGE"); fi
         set +e
-        git diff "$BASE...HEAD" | evo-guard "${ARGS[@]}"
+        evo-guard "${ARGS[@]}" < "$RUNNER_TEMP/guard.diff"
         GUARD_CODE=$?
         set -e
-        VERDICT=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/guard.json'))['verdict'])")
+        # Tolerant reads: if the guard crashed before writing its JSON/report,
+        # surface ERROR + the exit code rather than a bash traceback.
+        VERDICT=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/guard.json'))['verdict'])" 2>/dev/null || echo "ERROR")
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
-        cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"
+        if [ -f "$RUNNER_TEMP/guard-report.md" ]; then
+          cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
         if [ "$INPUT_FAIL_ON" = "rejected-only" ]; then
           [ "$VERDICT" = "REJECTED" ] && exit 1 || exit 0
         fi
