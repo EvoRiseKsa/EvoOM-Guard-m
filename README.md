@@ -13,6 +13,10 @@
 
 **An AI patch verification gate: does this patch fix the code — *without gaming the tests*?**
 
+> **New here? → [`docs/START_HERE.md`](docs/START_HERE.md)** picks your path in 30
+> seconds (Basic Guard · Black-box CLI · Black-box HTTP), with a decision table and
+> a complete runnable example. Start there instead of reading this whole page.
+
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
 passing"` deselect, print a fake `9999 passed` to stdout, or drop a
@@ -260,6 +264,8 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 
 | Doc | What it covers |
 |---|---|
+| [`docs/START_HERE.md`](docs/START_HERE.md) | **Start here** — pick your path (Basic / Black-box CLI / HTTP) with a decision table |
+| [`examples/blackbox-cli/`](examples/blackbox-cli/) | A complete runnable example: honest → PASS, cheat → REJECTED, regression → FAIL |
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |

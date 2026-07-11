@@ -1,0 +1,8 @@
+<<<FILE: calc/ops.py>>>
+def add(a, b):
+    return a + b
+
+
+def mul(a, b):
+    return a * b + 1
+<<<END FILE>>>
