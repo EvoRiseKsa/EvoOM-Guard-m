@@ -26,9 +26,9 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 
 ```json
 {
-  "schema_version": "1.4",
+  "schema_version": "1.5",
   "tool": "evoguard",
-  "tool_version": "1.8.0",
+  "tool_version": "3.2.0",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -61,8 +61,8 @@ auto-exec file) drives `REJECTED`. (Before `1.1` this array was named
 |---|---|---|
 | `schema_version` | string | Contract version. Pin on this. |
 | `diff_coverage` | object \| null | Changed-line coverage evidence (`--diff-coverage`): `measured`, `percent`, `executed`, `total`, per-file `executed`/`missed` lines, `caveat` ("executed is not asserted"). `null` when not requested. |
-| `assurance` | object | How much the verdict can be trusted: `harness_integrity` (`pre_gate_enforced`), `report_integrity` (`same_process_candidate_writable` — the code under test can forge the report in-process; see docs/ASSURANCE.md), `candidate_isolation`, `verifier_pack`, `overall_profile`, `note`. |
-| `attestation` | object \| null | Context binding for the (optionally signed) verdict: `candidate_sha256`, `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, `verifier_pack_manifest` (optional `pack.json` id/version), `created_utc`, `guard_version`, `test_command`, `deleted_paths`. |
+| `assurance` | object | How much the verdict can be trusted: `harness_integrity` (`pre_gate_enforced`); `report_integrity` (`same_process_candidate_writable` for the default judge — the code under test can forge the report in-process — or `external_process_isolated` under `--blackbox`; see docs/ASSURANCE.md); `candidate_isolation` (the boundary that was **delivered**, not requested); `verifier_pack`; `repo_native_suite` (black-box only); `overall_profile`; `note`. |
+| `attestation` | object \| null | Context binding for the (optionally signed) verdict: `candidate_sha256`, `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, `verifier_pack_manifest` (optional `pack.json` id/version), `created_utc`, `guard_version`, `test_command`, `deleted_paths`, `mode` (`repo` \| `blackbox`). Black-box verdicts also carry `isolation_evidence` (requested/delivered/image_digest/network/runtime), `deleted_paths_applied`, `repo_suite_passed`, `repo_suite_junit_sha256`, and `base_sha`/`head_sha` (only when the diff carries them). |
 | `tool` | string | Always `"evoguard"`. |
 | `tool_version` | string | `evoom_guard.__version__`. |
 | `verdict` | string | `PASS` \| `REJECTED` \| `FAIL` \| `ERROR` \| `TAMPERED`. |
@@ -123,9 +123,15 @@ patch). Exit code is `0` when supported, `1` otherwise.
 
 ## 1.3 additions
 
-- New `assurance` object on every verdict. Its `report_integrity` is `same_process_candidate_writable` for all current runners — a deliberate in-process patch can forge the JUnit report and exit code together. This is documented, not a defect to hide; the fix is the external black-box judge (ROADMAP.md).
+- New `assurance` object on every verdict. Its `report_integrity` was `same_process_candidate_writable` for every runner at 1.3 — a deliberate in-process patch can forge the JUnit report and exit code together. This was documented, not a defect to hide; the fix — the external black-box judge (`external_process_isolated`) — **shipped in 1.4–1.5** (see below).
 
 ## 1.4 additions
 
 - Attestation gains `mode` (`repo` | `blackbox`); black-box verdicts now carry a full attestation (candidate/policy/pack digests).
 - New reason code `assurance_requirement_not_met`: a fail-closed `--require-report-integrity` / `--require-candidate-isolation` policy refused to ship a weaker guarantee than required.
+
+## 1.5 additions
+
+- Black-box `candidate_isolation` is now the **delivered** boundary (a real `CandidateRunner`), read from what actually ran — requesting a container that cannot be started fails closed (`ERROR`) rather than reporting an isolation it never had.
+- The black-box verdict is **composite**: the repo's own suite and the pack must both pass unless `--blackbox-only`. `assurance` gains `repo_native_suite`.
+- Attestation gains `isolation_evidence`, `deleted_paths_applied`, `repo_suite_passed`, `repo_suite_junit_sha256`, and `base_sha`/`head_sha` (additive; present on black-box verdicts).

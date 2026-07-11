@@ -68,15 +68,17 @@ imported *before* the tests run, so it can monkeypatch the runner or the
 reporting plugin. Same-process authority means same-process control. The only
 robust fix is to stop running the candidate in the judge's own process.
 
-## The fix on the roadmap: an external black-box judge
+## The fix, shipped: an external black-box judge
 
-**Shipped in v3.0 as `--blackbox`** (see [`BLACKBOX.md`](BLACKBOX.md)): the
-verdict comes from the judge's own pytest over a pack of judge-owned tests that
-never import the candidate; the candidate is exercised only across a process
+**Shipped in v3.0 as `--blackbox`, hardened in v3.2** (see [`BLACKBOX.md`](BLACKBOX.md)):
+the verdict comes from the judge's own pytest over a pack of judge-owned tests
+that never import the candidate; the candidate is exercised only across a process
 boundary. `report_integrity` becomes `external_process_isolated`, and the same
-forgery that fakes a PASS under the default judge is caught. The remaining work
-is hardening (container-per-candidate, HTTP/DB target helpers) — see
-[`ROADMAP.md`](../ROADMAP.md).
+forgery that fakes a PASS under the default judge is caught. v3.2 added a real
+`CandidateRunner` with **delivered, fail-closed isolation** (a container the
+verdict can prove it ran under, or `ERROR` — never a mislabelled `docker`) and a
+**composite** repo-suite + pack verdict. The remaining direction — binding the
+verdict to an immutable built **artifact digest** — is in [`ROADMAP.md`](../ROADMAP.md).
 
 ## `overall_profile` levels
 

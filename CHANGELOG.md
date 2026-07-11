@@ -368,7 +368,7 @@ are unchanged.
   protection** (a `.pyz` is a readable zip; access control is the private repo).
 
 ### Docs
-- Added [`docs/README.md`](docs/README.md) — a documentation index that establishes
+- Added `docs/README.md` — a documentation index that establishes
   a **single source of truth**: it separates *canonical* docs (current, v1.6.0) from
   *forward design* (not implemented) and *historical / point-in-time records* (kept
   but not maintained), and states the distribution / source-protection decision

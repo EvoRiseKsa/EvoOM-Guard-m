@@ -61,8 +61,10 @@ residual risk:
 **Therefore:** feature mode is for **trusted / semi-trusted authors** (e.g. your
 own coding agent adding features), paired with **human review of the added
 tests** — not for untrusted or public fork PRs. For untrusted code, keep strict
-mode (default) and add isolation (`--isolation docker`, or the planned VM-class
-judge). The `*.test.ts` reward-hack in `REWARD_HACKING_CATALOG.md` — weakening an
+mode (default) and add isolation (`--isolation docker`/`gvisor`, both shipping;
+a stronger microVM-class judge is on the roadmap). For untrusted *behaviour*, the
+external black-box judge (`--blackbox`) gives an unforgeable verdict with
+delivered, fail-closed isolation. The `*.test.ts` reward-hack in `REWARD_HACKING_CATALOG.md` — weakening an
 **existing** assertion — stays blocked in both modes.
 
 ## Recommendation

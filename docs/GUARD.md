@@ -131,8 +131,8 @@ gated. `--json` writes the machine-readable verdict. The report shows the `Input
 
 ## GitHub Action
 
-A composite action ships at [`.github/actions/evoguard`](../.github/actions/evoguard/action.yml).
-Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
+`EvoRiseKsa/EvoOM-Guard-m@v3.2.0`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
@@ -164,6 +164,27 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 
 `evo-guard guard` returns a non-zero exit on anything but `PASS`, so the step fails the
 check automatically.
+
+## External black-box judge & assurance policy
+
+The default judge runs the candidate in the **same process** as the report writer,
+so deliberate in-process source can forge the report (`report_integrity:
+same_process_candidate_writable`). Three flags close and enforce that:
+
+- `--verifier-pack <dir>` — org-owned tests/invariants the patch cannot modify.
+- `--blackbox` — the verdict comes from the **judge's own pytest** over the pack,
+  which never imports the candidate (`report_integrity: external_process_isolated`).
+  It is **composite** by default: the repo's own suite **and** the pack must pass.
+  `--blackbox-only` skips the repo suite for pure-CLI/service targets. With
+  `--isolation docker`, the candidate runs in a real, network-less, read-only
+  container with the pack unmounted; `candidate_isolation` reflects what was
+  **delivered** — a missing daemon/image is `ERROR`, never a mislabelled `docker`.
+- `--require-report-integrity` / `--require-candidate-isolation` — fail-closed
+  floors: a run weaker than required returns `ERROR`
+  (`assurance_requirement_not_met`), never a silently downgraded `PASS`.
+
+See [`START_HERE.md`](START_HERE.md) to pick a path, [`BLACKBOX.md`](BLACKBOX.md)
+for the judge, and [`ASSURANCE.md`](ASSURANCE.md) for what each level proves.
 
 ## Trust boundary (honest)
 
