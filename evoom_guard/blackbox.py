@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
-# Sole owner & author: Mana Alharbi (مانع الحربي).
+# Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
 """The external black-box judge — the fix for same-process report forgery.
 
@@ -19,7 +19,8 @@ The black-box judge closes it by construction:
     report.
   * The candidate is exercised **only across a process boundary** — the pack
     invokes it as a subprocess (a CLI, a server, `python -m tool`, …) through the
-    ``EVOGUARD_TARGET`` env var, and asserts on its observable outputs. Forgery
+    ``EVOGUARD_EXEC`` launcher, which runs it under the delivered isolation, and
+    asserts on its observable outputs. Forgery
     code in the candidate's source runs only inside those child processes, where
     ``os._exit(0)`` affects the child, not the judge. The pack checks *outputs*,
     not the child's exit code, so a lying child changes nothing.

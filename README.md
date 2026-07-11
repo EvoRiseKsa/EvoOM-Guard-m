@@ -14,8 +14,8 @@
 **An AI patch verification gate: does this patch fix the code — *without gaming the tests*?**
 
 > **New here? → [`docs/START_HERE.md`](docs/START_HERE.md)** picks your path in 30
-> seconds (Basic Guard · Black-box CLI · Black-box HTTP), with a decision table and
-> a complete runnable example. Start there instead of reading this whole page.
+> seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
+> table and a complete runnable example. Start there instead of reading this whole page.
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
@@ -24,12 +24,12 @@ passing"` deselect, print a fake `9999 passed` to stdout, or drop a
 
 Guard closes that hole with two mechanisms:
 
-1. **The harness is untouchable** (a robust guarantee). Any edit — or
-   **deletion** — of the tests, their configuration (`pyproject.toml`,
-   `pytest.ini`, `vitest.config.*`, `Makefile`, CI workflows, …), or an
-   auto-executed file (`sitecustomize.py`, `*.pth`) is **REJECTED before the
-   suite even runs**. This is a *static* check on the patch's file list, so
-   runtime code cannot undo it. `package.json` is dual-purpose, so instead of
+1. **Protected harness paths are rejected before execution** (a robust
+   guarantee). Any edit — or **deletion** — of the tests, their configuration
+   (`pyproject.toml`, `pytest.ini`, `vitest.config.*`, `Makefile`, CI workflows,
+   …), or an auto-executed file (`sitecustomize.py`, `*.pth`) is **REJECTED
+   before the suite even runs**. This is a *static* check on the patch's file
+   list, so runtime code cannot undo it. `package.json` is dual-purpose, so instead of
    blocking it wholesale, its test-harness fields are restored from the pristine
    original.
 2. **The result is judge-owned, not scraped from stdout.** Tests run against a
@@ -93,13 +93,14 @@ pytest, `node --test`, vitest, jest, gotestsum (Go), rspec (Ruby), mocha, and
 Maven/Surefire (Java). Any other test command is graded by exit code — still
 never by stdout.
 
-Zero dependencies — Python 3.10+ standard library only (plus `git`/`patch` on
-the host).
+The **core runtime has zero Python dependencies** — 3.10+ standard library only
+(plus `git`/`patch` on the host). Ed25519 signing and diff-coverage are optional
+extras (`cryptography`, `coverage`).
 
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.2.0"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.2.1"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -110,11 +111,11 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 
 | Verdict | Meaning | Exit |
 |---|---|---|
-| ✅ `PASS` | the repo's tests pass **and** the patch left the test harness untouched | 0 |
+| ✅ `PASS` | the repo's tests pass **and** the patch left the protected harness untouched | 0 |
 | ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — a reward-hack, rejected before the suite runs | 1 |
 | ❌ `FAIL` | the patch applied and the suite ran, but tests fail | 1 |
 | 🚨 `TAMPERED` | the process exit code and the judge-owned JUnit report disagree — a forgery signature | 1 |
-| ⚠️ `ERROR` | the patch did not apply — e.g. a stale base, or an unsafe / binary diff (refused, never applied) | 1 |
+| ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff (refused, never applied), a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
 
 Every run can also emit a machine-readable JSON record (`--json`) with a stable
 `schema_version` and a fixed `reason_code` for the verdict's cause, plus a
@@ -139,7 +140,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.0   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.1   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
@@ -223,11 +224,14 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
   stated in the output itself: *executed is not asserted* — coverage is a floor
   of scrutiny, not proof of correctness.
 - A patch overfitted to the visible tests fails the **Independent Verifier
-  Pack** — org-owned checks the patch cannot change, injected at judgment time.
-  A candidate that tries to write into the pack mount is `REJECTED`. Honest
-  scope: the pack is **tamper-proof, not secret** — the running test code can
-  read the pack files, so it is an integrity control (centralised, unmodifiable
-  invariants), not a hidden oracle. See [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
+  Pack** — org-owned checks injected at judgment time that the **patch cannot
+  include or modify** (a diff touching the pack mount is `REJECTED`). Honest
+  scope: in repo-native mode the pack is copied into the candidate tree and runs
+  in the same process and filesystem, so **runtime code is not isolated from it**
+  — it is an integrity control against *patch* overfitting, not a runtime-tamper
+  or secrecy guarantee. For runtime separation, use black-box mode with delivered
+  Docker/gVisor isolation (the pack is not mounted into the candidate at all).
+  See [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
 - Every verdict now carries an **attestation block** (candidate/policy/report
   digests, timestamp, versions) — so a signed verdict is bound to *what* was
   judged, under *which* policy, not just to its own bytes.
@@ -271,7 +275,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs: a real repo, and a hard ungameable benchmark (cheat → REJECTED; honest → PASS) |
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
-| [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, tamper-proof invariants (and their honest limits) |
+| [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, patch-immutable invariants (and their honest runtime limits) |
 | [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
 | [`docs/BLACKBOX.md`](docs/BLACKBOX.md) | The `--blackbox` external judge: closing same-process report forgery |
 | [`ROADMAP.md`](ROADMAP.md) | Where this is heading: the patch gate inside an agent-governance fabric |

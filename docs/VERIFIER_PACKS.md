@@ -23,9 +23,10 @@ attestation, so you can prove *which* invariants judged a change.
 
 **Guarantees (the real value):**
 
-- **Tamper-proof checks.** The diff cannot edit, delete, or deselect the pack's
+- **Patch-immutable checks.** The diff cannot edit, delete, or deselect the pack's
   tests — they live outside the repo and are added by the judge. This is exactly
   the property a per-repo `tests/` directory lacks once you let an agent touch it.
+  (Runtime immutability is a separate, weaker matter — see below.)
 - **Centralised, versioned invariants.** One pack of security/API/permission/
   regression checks can gate PRs across many repositories, owned by the security
   or platform team rather than copied into each project.
@@ -36,15 +37,20 @@ attestation, so you can prove *which* invariants judged a change.
 **Does NOT guarantee (state this plainly):**
 
 - **Secrecy.** The pack files sit on disk in the same tree the test process runs
-  in, so the code under test **can read them at runtime** (`open()`,
-  `glob`, …). A deliberately adversarial patch can read a pack test, extract the
-  expected value from an assertion, and return exactly that — passing without
-  being correct. A Verifier Pack is an **integrity control, not a hidden oracle**.
+  in, so the code under test **can read them at runtime** (`open()`, `glob`, …).
+  A deliberately adversarial patch can read a pack test, extract the expected
+  value from an assertion, and return exactly that — passing without being
+  correct. A Verifier Pack is an **integrity control, not a hidden oracle**.
+- **Runtime immutability.** The patch cannot *include or modify* the pack (a diff
+  touching it is `REJECTED`), but in **repo-native mode the pack is copied into
+  the candidate tree and runs in the same process and filesystem** — so runtime
+  code is not isolated from it and could rewrite a pack file mid-run. The pack is
+  **patch-immutable, not runtime-tamper-proof**, in this mode.
 
-If you need checks the running code genuinely cannot observe, that requires a
-different architecture — running the program under test as a black box in a
-separate process/host that never exposes the check code to it. That is on the
-roadmap; the current pack feature does not claim it.
+For checks the running code genuinely cannot observe or modify, use the **shipped
+external black-box judge** (`--blackbox`): the pack runs in the judge's own
+process and never imports the candidate, and with `--isolation docker` the pack
+is not mounted into the candidate at all. See [`BLACKBOX.md`](BLACKBOX.md).
 
 ## Best used for
 

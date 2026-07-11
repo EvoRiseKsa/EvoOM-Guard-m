@@ -1,7 +1,7 @@
 <!--
   Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
   Source-available — see LICENSE for permitted use.
-  Sole owner & author: Mana Alharbi (مانع الحربي).
+  Maintained and released by Mana Alharbi (مانع الحربي).
 -->
 
 # VM-class isolation for untrusted code — design (#51, Phase 2d)

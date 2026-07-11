@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
-# Sole owner & author: Mana Alharbi (مانع الحربي).
+# Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
 """The ``evo-guard`` command line — a focused front end for the patch verification gate.
 
@@ -128,11 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_p.add_argument(
         "--verifier-pack", dest="verifier_pack", default=None,
-        help="directory of judge-owned tests/invariants the PATCH CANNOT MODIFY "
-        "(org-owned checks injected at judgment time); mounted into the copy at "
-        "evoguard_verifier_pack/ and collected by the suite (pytest). Note: the "
-        "running code CAN read the pack — it is tamper-proof, not secret. "
-        "See docs/VERIFIER_PACKS.md.",
+        help="directory of judge-owned tests/invariants the PATCH CANNOT include "
+        "or modify (org-owned checks injected at judgment time); copied into the "
+        "verified copy at evoguard_verifier_pack/ and collected by the suite "
+        "(pytest). Honest scope: in repo-native mode the running code shares its "
+        "process and filesystem — it is not runtime-isolated from the pack (use "
+        "--blackbox with --isolation docker for that). See docs/VERIFIER_PACKS.md.",
     )
     g_p.add_argument(
         "--blackbox", dest="blackbox", action="store_true",

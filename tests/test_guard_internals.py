@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
-# Sole owner & author: Mana Alharbi (مانع الحربي).
+# Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
 """Unit tests for `guard.py` internals — the risk map, the diff helpers, the
 report renderer, and the JSON writer.

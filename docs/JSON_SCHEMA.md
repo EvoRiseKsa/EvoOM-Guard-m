@@ -1,7 +1,7 @@
 <!--
   Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
   Source-available — see LICENSE for permitted use.
-  Sole owner & author: Mana Alharbi (مانع الحربي).
+  Maintained and released by Mana Alharbi (مانع الحربي).
 -->
 
 # EvoGuard JSON contract
@@ -28,7 +28,7 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 {
   "schema_version": "1.5",
   "tool": "evoguard",
-  "tool_version": "3.2.0",
+  "tool_version": "3.2.1",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,

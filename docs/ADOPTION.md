@@ -1,7 +1,7 @@
 <!--
   Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
   Source-available — see LICENSE for permitted use.
-  Sole owner & author: Mana Alharbi (مانع الحربي).
+  Maintained and released by Mana Alharbi (مانع الحربي).
 -->
 
 # Adopting EvoGuard — a one-page runbook
@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.0"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.1"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -135,7 +135,7 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.2.0` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.2.1` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do
