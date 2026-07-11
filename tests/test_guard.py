@@ -205,6 +205,17 @@ class GuardDeletionTests(unittest.TestCase):
         self.assertEqual(r.verdict, REJECTED)
         self.assertIn("tests/test_m.py", r.protected_violations)
 
+    def test_deletion_only_violation_is_pre_gated_suite_never_runs(self) -> None:
+        # The docs promise every REJECTED is decided BEFORE the suite runs
+        # (`test_command_ran: false`). A candidate whose only violation is a
+        # protected *deletion* used to slip past that: its added/modified paths
+        # were clean, so the suite ran once before the verdict flipped. Pin the
+        # fixed contract on the JSON the adopters see.
+        r = guard(self.root, FIX, deleted=("tests/test_m.py",))
+        self.assertEqual(r.verdict, REJECTED)
+        self.assertIsNone(r.verdict_source)              # no suite ran
+        self.assertFalse(r.to_dict()["test_command_ran"])  # the public contract
+
     def test_deleting_config_is_rejected_even_delete_only(self) -> None:
         # A delete-only change that removes the harness config is still REJECTED
         # (not a vague ERROR).
@@ -430,9 +441,12 @@ class MemLimitOptionTests(unittest.TestCase):
 
     def test_cmd_guard_applies_effective_defaults(self) -> None:
         # With no flag and no config, cmd_guard resolves the built-in 1024 MB / 120 s
-        # and threads them to the judge. A protected-path patch makes the verifier
-        # short-circuit before running any suite, so this needs no pytest.
+        # and threads them to the judge. The spy's stubbed verify() keeps this
+        # hermetic — no suite ever runs. (A protected-path patch no longer works
+        # here: since the deletion-pre-gate fix, guard() never even CONSTRUCTS the
+        # verifier for a pre-gated rejection.)
         import evoom_guard.guard as guard_mod
+        from evoom_guard.contracts import VerdictResult
 
         seen: dict[str, int] = {}
         real = guard_mod.RepoVerifier
@@ -443,10 +457,17 @@ class MemLimitOptionTests(unittest.TestCase):
                 seen["mem_limit_mb"] = kw.get("mem_limit_mb")
                 super().__init__(*a, **kw)
 
+            def verify(self, hypothesis, problem):  # never run a real suite
+                return VerdictResult(
+                    passed=True, score=1.0, diagnostics="",
+                    artifact={"tests_passed": 1, "tests_total": 1,
+                              "verdict_source": "junit+exit"},
+                )
+
         guard_mod.RepoVerifier = _Spy  # type: ignore[misc]
         pf = os.path.join(self.root, "cand.patch")
         with open(pf, "w", encoding="utf-8") as f:
-            f.write("<<<FILE: tests/test_x.py>>>\n# protected — short-circuits\n<<<END FILE>>>")
+            f.write("<<<FILE: pkg/m.py>>>\n# a safe source edit\n<<<END FILE>>>")
         try:
             cli_main(["guard", self.root, "--patch", pf,
                       "--config", os.path.join(self.root, "no-such-config.json")])

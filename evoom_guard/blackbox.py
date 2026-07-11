@@ -57,8 +57,8 @@ from typing import Any, NamedTuple
 
 from evoom_guard.candidate_runner import CandidateRunner, IsolationUnavailable
 from evoom_guard.verifiers.repo_verifier import (
-    COPY_IGNORE,
     apply_blocks_to_copy,
+    copy_repo_tree,
     distill_diagnostics,
     is_safe_relpath,
     parse_file_blocks,
@@ -133,6 +133,7 @@ def run_blackbox(
     docker_runtime: str | None = None,
     mem_limit_mb: int = 0,
     deleted_paths: tuple[str, ...] = (),
+    file_blocks: dict[str, str] | None = None,
 ) -> BlackboxResult:
     """Judge ``candidate`` against ``repo_path`` through the black-box ``pack_dir``.
 
@@ -151,9 +152,11 @@ def run_blackbox(
     workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
     copy = os.path.join(workdir, "repo")
     try:
-        shutil.copytree(repo_path, copy, ignore=shutil.ignore_patterns(*COPY_IGNORE))
+        copy_repo_tree(repo_path, copy)
         apply_error = apply_blocks_to_copy(
-            copy, parse_file_blocks(candidate), parse_patch_blocks(candidate)
+            copy,
+            file_blocks if file_blocks else parse_file_blocks(candidate),
+            [] if file_blocks else parse_patch_blocks(candidate),
         )
         if apply_error is not None:
             return BlackboxResult(False, 0, 0, apply_error, False, "patch did not apply",

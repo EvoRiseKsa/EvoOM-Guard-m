@@ -464,6 +464,47 @@ class PackageJsonJudgeFieldsTests(unittest.TestCase):
     def test_malformed_candidate_is_left_untouched(self) -> None:
         self.assertEqual(restore_judge_package_json("{}", "not json {"), "not json {")
 
+    def test_restores_pretest_and_posttest_hooks(self) -> None:
+        # pre/post lifecycle hooks around `npm test` run INSIDE the judged test
+        # invocation — a candidate that plants `pretest: "exit 0"` (or rewrites an
+        # existing one) is editing the harness, exactly like editing scripts.test.
+        original = self._pkg(scripts={"test": "vitest run", "pretest": "tsc --noEmit"})
+        candidate = self._pkg(
+            scripts={"test": "vitest run", "pretest": "true", "posttest": "echo 9999 passed"}
+        )
+        out = json.loads(restore_judge_package_json(original, candidate))
+        self.assertEqual(out["scripts"]["pretest"], "tsc --noEmit")  # edit reverted
+        self.assertNotIn("posttest", out["scripts"])                 # plant stripped
+
+    def test_restores_test_colon_variants(self) -> None:
+        # `test:*` namespaced scripts (test:ci, test:unit, …) are judge scripts too:
+        # CI configs routinely call them, so narrowing `test:ci` deselects failing
+        # specs exactly like narrowing `test`.
+        original = self._pkg(
+            scripts={"test": "vitest run", "test:ci": "vitest run --coverage"}
+        )
+        candidate = self._pkg(
+            scripts={
+                "test": "vitest run",
+                "test:ci": "vitest run -t passing",   # narrowed — must revert
+                "test:e2e": "exit 0",                  # planted — must strip
+                "lint": "eslint .",                    # legitimate — must keep
+            }
+        )
+        out = json.loads(restore_judge_package_json(original, candidate))
+        self.assertEqual(out["scripts"]["test:ci"], "vitest run --coverage")
+        self.assertNotIn("test:e2e", out["scripts"])
+        self.assertEqual(out["scripts"]["lint"], "eslint .")
+
+    def test_restores_every_embedded_runner_key(self) -> None:
+        # All embedded runner/coverage config keys are judge fields — not just jest.
+        for key in ("vitest", "mocha", "ava", "c8", "nyc"):
+            with self.subTest(runner=key):
+                original = self._pkg(**{"scripts": {"test": "x"}, key: {"include": ["all"]}})
+                candidate = self._pkg(**{"scripts": {"test": "x"}, key: {"include": ["one"]}})
+                out = json.loads(restore_judge_package_json(original, candidate))
+                self.assertEqual(out[key], {"include": ["all"]})
+
     def test_wired_into_apply_blocks(self) -> None:
         copy = tempfile.mkdtemp(prefix="evo_pkg_")
         try:

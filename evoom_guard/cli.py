@@ -311,7 +311,7 @@ def build_parser() -> argparse.ArgumentParser:
 def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard guard`` — the AI patch verification gate."""
     from evoom_guard.guard import (
-        candidate_from_dirs,
+        blocks_from_dirs,
         guard,
         guard_from_diff,
         render_report,
@@ -403,10 +403,18 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             require_candidate_isolation=args.require_candidate_isolation,
         )
     elif args.base and args.head:
-        candidate, deleted = candidate_from_dirs(args.base, args.head)
+        # Structured candidate: never round-trip file content through the
+        # <<<FILE>>> text format (content containing a literal marker line
+        # must survive intact — see guard.blocks_from_dirs).
+        file_blocks, deleted = blocks_from_dirs(args.base, args.head)
+        candidate = "\n".join(
+            f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
+            for rel, new in file_blocks.items()
+        )
         result = guard(
             args.base, candidate,
             deleted=tuple(deleted),
+            file_blocks=file_blocks,
             test_command=test_command, setup_command=setup_command,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,

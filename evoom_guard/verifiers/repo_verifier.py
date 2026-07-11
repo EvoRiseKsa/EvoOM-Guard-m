@@ -210,6 +210,13 @@ class RepoProblem(TypedDict, total=False):
                               # whose virtual reservations exceed any sane RLIMIT_AS
     hide_tests: bool          # closed-book mode: the generator must not show the
                               # judging test files' content to the model
+    file_blocks: dict[str, str]  # STRUCTURED candidate override: {relpath: content}.
+                              # When present, the hypothesis text is NOT parsed for
+                              # <<<FILE>>> blocks — this is how the dirs/diff path
+                              # avoids the marker round-trip (a target file whose
+                              # CONTENT legitimately contains "<<<END FILE>>>" must
+                              # not terminate its own block; found by running Guard
+                              # on Guard's own source, which embeds those markers).
     # Container-judge fields — reserved for a future network-isolated judge;
     # accepted in the problem dict but unused by the subprocess RepoVerifier here:
     docker_image: str         # runtime image, e.g. "node:22-slim"
@@ -563,6 +570,47 @@ def _read_text_or_none(path: str) -> str | None:
         return None
 
 
+def copy_repo_tree(src: str, dst: str) -> None:
+    """Copy a repository into a throwaway working copy, faithfully.
+
+    ``symlinks=True`` keeps symlinks *as symlinks* (and regular files keep their
+    permission bits via ``copy2``), which matters twice:
+
+    * **No crash on dangling links.** Real repos routinely carry symlinks into
+      directories ``COPY_IGNORE`` strips (``.venv/``, ``node_modules/``) or
+      plain broken links; dereferencing (the ``symlinks=False`` default) makes
+      ``copytree`` raise on those, crashing the judge instead of judging.
+    * **No content smuggling.** Dereferencing would copy the link's *target
+      content* into the copy — for an absolute link that means host files get
+      materialized inside the tree that container isolation later mounts.
+
+    Writing *through* a symlink is prevented separately at apply time — see
+    :func:`_resolve_write_target`.
+    """
+    shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns(*COPY_IGNORE))
+
+
+def _resolve_write_target(copy: str, rel: str) -> str | None:
+    """The absolute path a candidate edit for ``rel`` may write inside ``copy``.
+
+    Returns ``None`` when the write would land **outside** the copy through a
+    symlinked directory (``lnkdir -> /outside`` + a ``lnkdir/x.py`` edit).
+    A target that is itself a symlink is replaced by a regular file — the link
+    is unlinked first, never written *through* — matching how git materializes
+    a blob over a symlink and keeping every candidate byte inside the copy.
+    """
+    target = os.path.join(copy, *rel.split("/"))
+    parent = os.path.dirname(target) or copy
+    os.makedirs(parent, exist_ok=True)
+    real_copy = os.path.realpath(copy)
+    real_parent = os.path.realpath(parent)
+    if real_parent != real_copy and not real_parent.startswith(real_copy + os.sep):
+        return None
+    if os.path.islink(target):
+        os.unlink(target)
+    return target
+
+
 def apply_blocks_to_copy(
     copy: str, file_blocks: dict[str, str], patch_blocks: list[PatchBlock]
 ) -> str | None:
@@ -577,13 +625,22 @@ def apply_blocks_to_copy(
         pkg_originals[rel] = _read_text_or_none(fp)
 
     for path, content in file_blocks.items():
-        target = os.path.join(copy, *path.split("/"))
-        os.makedirs(os.path.dirname(target) or copy, exist_ok=True)
+        target = _resolve_write_target(copy, path)
+        if target is None:
+            return (
+                f"edit target escapes the repo copy through a symlinked "
+                f"directory — refusing to write: {path}"
+            )
         with open(target, "w", encoding="utf-8") as f:
             f.write(content)
 
     for pb in patch_blocks:
-        target = os.path.join(copy, *pb.path.split("/"))
+        target = _resolve_write_target(copy, pb.path)
+        if target is None:
+            return (
+                f"edit target escapes the repo copy through a symlinked "
+                f"directory — refusing to write: {pb.path}"
+            )
         try:
             with open(target, encoding="utf-8") as f:
                 source = f.read()
@@ -894,12 +951,20 @@ class RepoVerifier:
         # reward-hack as direct as editing it).
         deleted_paths = [str(p) for p in problem.get("deleted", ()) if str(p).strip()]
 
-        file_blocks = parse_file_blocks(hypothesis)
-        patch_blocks = parse_patch_blocks(hypothesis)
-        if not file_blocks and not patch_blocks:
-            targets = [str(t) for t in problem.get("target_files", ()) if str(t).strip()]
-            default_path = targets[0] if len(targets) == 1 else None
-            file_blocks, patch_blocks = parse_blocks_lenient(hypothesis, default_path)
+        fb_override = problem.get("file_blocks")
+        if isinstance(fb_override, dict) and fb_override:
+            # Structured candidate (the dirs/diff path): trust the mapping, skip
+            # the marker parse entirely — content containing literal block markers
+            # must never terminate its own block.
+            file_blocks = {str(k): str(v) for k, v in fb_override.items()}
+            patch_blocks: list[PatchBlock] = []
+        else:
+            file_blocks = parse_file_blocks(hypothesis)
+            patch_blocks = parse_patch_blocks(hypothesis)
+            if not file_blocks and not patch_blocks:
+                targets = [str(t) for t in problem.get("target_files", ()) if str(t).strip()]
+                default_path = targets[0] if len(targets) == 1 else None
+                file_blocks, patch_blocks = parse_blocks_lenient(hypothesis, default_path)
         if not file_blocks and not patch_blocks and not deleted_paths:
             return VerdictResult(
                 passed=False,
@@ -936,9 +1001,7 @@ class RepoVerifier:
         workdir = tempfile.mkdtemp(prefix="evo_repo_")
         copy = os.path.join(workdir, "repo")
         try:
-            shutil.copytree(
-                repo_path, copy, ignore=shutil.ignore_patterns(*COPY_IGNORE)
-            )
+            copy_repo_tree(repo_path, copy)
             apply_error = apply_blocks_to_copy(copy, file_blocks, patch_blocks)
             if apply_error is not None:
                 return VerdictResult(

@@ -45,8 +45,8 @@ from typing import Any
 
 from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.verifiers.repo_verifier import (
-    COPY_IGNORE,
     apply_blocks_to_copy,
+    copy_repo_tree,
     is_safe_relpath,
     parse_file_blocks,
     parse_patch_blocks,
@@ -141,6 +141,7 @@ def collect_diff_coverage(
     deleted: tuple[str, ...] = (),
     test_command: list[str] | None = None,
     timeout: int = 240,
+    file_blocks: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Measure changed-line coverage; always returns a dict with ``measured`` set.
 
@@ -180,9 +181,11 @@ def collect_diff_coverage(
             return base
 
         copy = os.path.join(workdir, "repo")
-        shutil.copytree(repo_path, copy, ignore=shutil.ignore_patterns(*COPY_IGNORE))
+        copy_repo_tree(repo_path, copy)
         apply_error = apply_blocks_to_copy(
-            copy, parse_file_blocks(candidate), parse_patch_blocks(candidate)
+            copy,
+            file_blocks if file_blocks else parse_file_blocks(candidate),
+            [] if file_blocks else parse_patch_blocks(candidate),
         )
         if apply_error is not None:
             base["note"] = "candidate did not apply for the coverage run"

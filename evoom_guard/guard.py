@@ -53,6 +53,7 @@ from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
     _matches_globs,
+    copy_repo_tree,
     is_addable_new_test,
     is_judge_autoexec,
     is_protected,
@@ -226,25 +227,32 @@ def _diff_counts(old: str, new: str) -> tuple[int, int]:
     return added, removed
 
 
-def _risk_map(repo_path: str, candidate: str) -> dict[str, tuple[int, int]]:
+def _risk_map(
+    repo_path: str, candidate: str, file_blocks: dict[str, str] | None = None
+) -> dict[str, tuple[int, int]]:
     """Build a ``{path: (added, removed)}`` map for the risk scorer.
 
     For whole-file blocks the count is the real diff against the base file; for
     surgical PATCH blocks it is approximated by the search/replace line counts
     (we do not re-apply to count exactly — risk is a coarse, bounded signal).
+    With a structured ``file_blocks`` mapping (the dirs/diff path), the marker
+    parse is skipped entirely.
     """
     out: dict[str, tuple[int, int]] = {}
-    for path, new in parse_file_blocks(candidate).items():
+    blocks = file_blocks if file_blocks else parse_file_blocks(candidate)
+    for path, new in blocks.items():
         out[path] = _diff_counts(_read_repo_file(repo_path, path), new)
-    for pb in parse_patch_blocks(candidate):
+    for pb in ([] if file_blocks else parse_patch_blocks(candidate)):
         a, r = len(pb.replace.splitlines()), len(pb.search.splitlines())
         prev_a, prev_r = out.get(pb.path, (0, 0))
         out[pb.path] = (prev_a + a, prev_r + r)
     return out
 
 
-def changed_paths(candidate: str) -> list[str]:
+def changed_paths(candidate: str, file_blocks: dict[str, str] | None = None) -> list[str]:
     """All repo-relative paths a candidate would create or modify."""
+    if file_blocks:
+        return sorted(file_blocks)
     blocks = parse_file_blocks(candidate)
     patches = parse_patch_blocks(candidate)
     return sorted(set(blocks) | {pb.path for pb in patches})
@@ -274,8 +282,16 @@ def guard(
     require_candidate_isolation: str | None = None,
     base_sha: str | None = None,
     head_sha: str | None = None,
+    file_blocks: dict[str, str] | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
+
+    ``file_blocks`` is the STRUCTURED candidate the dirs/diff path supplies
+    (``{relpath: new_content}``): when given, the ``candidate`` text is kept only
+    for hashing/diagnostics and is never re-parsed for ``<<<FILE>>>`` markers —
+    so a target file whose content legitimately contains a literal
+    ``<<<END FILE>>>`` line cannot terminate its own block and be silently
+    truncated (a defect found by running Guard on its own repository).
 
     The repo at ``repo_path`` is never modified — the judge works on a throwaway
     copy. ``deleted`` lists repo-relative paths the change removes (from a base→head
@@ -323,7 +339,7 @@ def guard(
     (``diff_coverage_below_threshold``). Executed is not asserted — see
     :mod:`evoom_guard.evidence`.
     """
-    changed = changed_paths(candidate)
+    changed = changed_paths(candidate, file_blocks)
     # Deletions are gated too: deleting a protected harness file is as much a
     # reward-hack as editing it (removing a failing test/check), and a deleted
     # *source* file must be applied to the verified tree so the verdict matches the
@@ -371,6 +387,8 @@ def guard(
         problem["deleted"] = safe_deleted
     if verifier_pack:
         problem["verifier_pack"] = os.path.abspath(verifier_pack)
+    if file_blocks:
+        problem["file_blocks"] = dict(file_blocks)
 
     # Black-box mode: the verdict is produced by the judge's OWN pytest over the
     # judge-owned pack, which never imports the candidate — closing same-process
@@ -384,8 +402,8 @@ def guard(
                 verdict=ERROR, passed=False,
                 reason="--blackbox requires --verifier-pack (the judge-owned protocol tests)",
                 files_changed=changed, protected_violations=[],
-                risk_level=risk_score(_risk_map(repo_path, candidate)).level,
-                risk_score=risk_score(_risk_map(repo_path, candidate)).score,
+                risk_level=risk_score(_risk_map(repo_path, candidate, file_blocks)).level,
+                risk_score=risk_score(_risk_map(repo_path, candidate, file_blocks)).score,
                 reason_code=REASON_NO_VERIFIABLE_CHANGES, isolation=isolation,
                 assurance=_assurance_profile(isolation, verifier_pack, blackbox=True),
             )
@@ -393,10 +411,11 @@ def guard(
             repo_path, candidate, os.path.abspath(verifier_pack), timeout=timeout,
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             mem_limit_mb=mem_limit_mb, deleted_paths=tuple(safe_deleted),
+            file_blocks=file_blocks,
         )
         # candidate_isolation comes from what the runner DELIVERED, never the flag.
         delivered_iso = (bx.isolation or {}).get("delivered", "subprocess")
-        rmap_bx = _risk_map(repo_path, candidate)
+        rmap_bx = _risk_map(repo_path, candidate, file_blocks)
         for d in all_touched:
             if d in deleted and d not in rmap_bx:
                 rmap_bx[d] = (0, len(_read_repo_file(repo_path, d).splitlines()))
@@ -477,15 +496,28 @@ def guard(
             ),
         )
 
-    verdict = RepoVerifier(
-        timeout=timeout, mem_limit_mb=mem_limit_mb,
-        isolation=isolation, docker_image=docker_image, docker_network=docker_network,
-    ).verify(candidate, problem)
-    art = verdict.artifact or {}
+    # The pre-gate is decided BEFORE the suite runs — for every rejection shape.
+    # A candidate whose only violation is a protected *deletion* used to slip past
+    # this (its added/modified paths are clean, so the verifier ran the suite once
+    # before the mapping below flipped the verdict to REJECTED) — leaving
+    # ``test_command_ran: true`` on a verdict documented as pre-execution. Skip
+    # the run entirely whenever the outcome is already decided by the diff alone.
+    run_suite = bool(all_touched) and not unsafe and not violations
+    if run_suite:
+        verdict = RepoVerifier(
+            timeout=timeout, mem_limit_mb=mem_limit_mb,
+            isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+        ).verify(candidate, problem)
+        art = verdict.artifact or {}
+        diagnostics = verdict.diagnostics or ""
+    else:
+        verdict = None
+        art = {}
+        diagnostics = ""
     # Deletions count toward the blast radius too: a change that removes source
     # files should not read as *lower* risk than one that edits them. Each deleted
     # path contributes its base-file line count as removed lines (0 added).
-    rmap = _risk_map(repo_path, candidate)
+    rmap = _risk_map(repo_path, candidate, file_blocks)
     for d in all_touched:
         if d in deleted and d not in rmap:
             base = _read_repo_file(repo_path, d)
@@ -519,7 +551,7 @@ def guard(
             f"disagree ({art.get('tests_passed', 0)}/{art.get('tests_total', 0)} in the "
             "report) — refusing to read this as a pass"
         ), REASON_JUNIT_EXIT_MISMATCH
-    elif verdict.passed:
+    elif verdict is not None and verdict.passed:
         v, reason, code = PASS, (
             "all repo tests pass and the patch leaves the test harness untouched"
         ), REASON_TESTS_PASSED
@@ -532,8 +564,8 @@ def guard(
         # The patch applied and the session started, but timed out or its setup
         # step failed — never mislabel these as "the patch did not apply".
         v, code = _OUTCOME_REASON[art["outcome"]]
-        reason = verdict.diagnostics or f"run ended: {art['outcome']}"
-    elif verdict.score <= 0.08:
+        reason = diagnostics or f"run ended: {art['outcome']}"
+    elif verdict is not None and verdict.score <= 0.08:
         v, reason, code = ERROR, (
             "the patch did not apply cleanly (a PATCH anchor did not match)"
         ), REASON_PATCH_APPLY_FAILED
@@ -551,6 +583,7 @@ def guard(
         coverage_evidence = collect_diff_coverage(
             repo_path, candidate,
             deleted=tuple(safe_deleted), test_command=test_command, timeout=timeout,
+            file_blocks=file_blocks,
         )
         if (
             v == PASS
@@ -596,7 +629,7 @@ def guard(
         tests_passed=art.get("tests_passed"),
         tests_total=art.get("tests_total"),
         verdict_source=art.get("verdict_source"),
-        diagnostics=verdict.diagnostics or "",
+        diagnostics=diagnostics,
         reason_code=code,
         isolation=isolation,
         diff_coverage=coverage_evidence,
@@ -757,24 +790,45 @@ def _assurance_profile(
     }
 
 
-def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
-    """Diff a base and head checkout into an EvoOM ``<<<FILE>>>`` candidate.
+def blocks_from_dirs(
+    base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000
+) -> tuple[dict[str, str], list[str]]:
+    """Diff a base and head checkout into a STRUCTURED candidate.
 
-    Returns ``(candidate, deleted)`` where ``candidate`` is the block-format patch
-    of every file that was added or modified in ``head`` relative to ``base``
-    (skipping ``.git`` and the standard ignored dirs), and ``deleted`` lists files
-    present in base but absent in head (Guard cannot apply deletions via FILE
-    blocks; they are surfaced in the report). Binary/oversized files are skipped.
+    Returns ``({relpath: new_content}, deleted)`` for every file added or
+    modified in ``head`` relative to ``base`` (skipping ``.git`` and the standard
+    ignored dirs); ``deleted`` lists files present in base but absent in head.
+    Binary/oversized files are skipped. This mapping is the authoritative
+    candidate for the dirs/diff path — it never round-trips through the
+    ``<<<FILE>>>`` text format, so content containing literal block markers
+    survives intact.
     """
     base_files = _walk_text_files(base_dir, max_bytes)
     head_files = _walk_text_files(head_dir, max_bytes)
-    blocks: list[str] = []
+    blocks: dict[str, str] = {}
     for rel in sorted(head_files):
         new = head_files[rel]
         if base_files.get(rel) != new:  # added or modified
-            blocks.append(f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>")
+            blocks[rel] = new
     deleted = sorted(set(base_files) - set(head_files))
-    return "\n".join(blocks), deleted
+    return blocks, deleted
+
+
+def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
+    """Diff a base and head checkout into an EvoOM ``<<<FILE>>>`` candidate.
+
+    Returns ``(candidate, deleted)`` — the text serialization of
+    :func:`blocks_from_dirs` (kept for hashing, display and API compatibility).
+    NOTE: callers that verify the result should pass the structured mapping from
+    :func:`blocks_from_dirs` to :func:`guard` via ``file_blocks`` rather than
+    re-parsing this text — content containing a literal ``<<<END FILE>>>`` line
+    would terminate its own block in the parse.
+    """
+    blocks, deleted = blocks_from_dirs(base_dir, head_dir, max_bytes=max_bytes)
+    text = "\n".join(
+        f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>" for rel, new in blocks.items()
+    )
+    return text, deleted
 
 
 def _walk_text_files(root: str, max_bytes: int) -> dict[str, str]:
@@ -930,7 +984,9 @@ def guard_from_diff(
     base = os.path.join(workdir, "base")
     try:
         # base is a copy of head; head_dir is only ever read, never written.
-        shutil.copytree(head_dir, base, ignore=shutil.ignore_patterns(*COPY_IGNORE, ".git"))
+        # (copy_repo_tree keeps symlinks as symlinks — a dangling link, e.g. into
+        # an ignored .venv/, must not crash the judge; COPY_IGNORE covers .git.)
+        copy_repo_tree(head_dir, base)
         diff_file = os.path.join(workdir, "patch.diff")
         with open(diff_file, "w", encoding="utf-8") as f:
             f.write(diff_text if diff_text.endswith("\n") else diff_text + "\n")
@@ -940,8 +996,12 @@ def guard_from_diff(
                 "are in the head checkout and the diff is 'base...HEAD' (git/patch needed)",
                 reason_code=REASON_REVERSE_APPLY_FAILED,
             ), []
-        candidate, deleted = candidate_from_dirs(base, head_dir)
-        if not candidate.strip() and not deleted:
+        file_blocks, deleted = blocks_from_dirs(base, head_dir)
+        candidate = "\n".join(
+            f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
+            for rel, new in file_blocks.items()
+        )
+        if not file_blocks and not deleted:
             return _diff_error(
                 "the diff changed no verifiable source files",
                 reason_code=REASON_NO_VERIFIABLE_CHANGES, base_reconstruction="ok",
@@ -959,6 +1019,7 @@ def guard_from_diff(
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
             base_sha=_diff_base_sha(diff_text), head_sha=_diff_head_sha(diff_text),
+            file_blocks=file_blocks,
         )
         result.source = "diff"
         result.base_reconstruction = "ok"
