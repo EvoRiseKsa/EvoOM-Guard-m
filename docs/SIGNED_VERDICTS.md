@@ -57,9 +57,9 @@ consumer.
 
 ## Where this is heading
 
-Signed verdicts are the integration point for audit-trail systems: an
-append-only log (e.g. a Merkle tree with signed roots, as built in the author's
-**Sentinel AI** — the Agentic Trust Fabric) can ingest `verdict.json` +
+Signed verdicts are an integration point for audit-trail systems: an append-only
+log (for example a Merkle tree with signed roots) can ingest `verdict.json` +
 `verdict.json.sig` pairs and answer, cryptographically, "which patches entered
 this codebase, under which verdict, judged by whom?" — an evidence chain for
-AI-authored code from patch to merge. See [`ROADMAP.md`](../ROADMAP.md).
+AI-authored code from patch to merge. The Guard side (signing) ships today; the
+ingestion side is out of scope for this repository.

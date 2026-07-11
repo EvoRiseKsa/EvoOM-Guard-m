@@ -278,7 +278,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 | [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, patch-immutable invariants (and their honest runtime limits) |
 | [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
 | [`docs/BLACKBOX.md`](docs/BLACKBOX.md) | The `--blackbox` external judge: closing same-process report forgery |
-| [`ROADMAP.md`](ROADMAP.md) | Where this is heading: the patch gate inside an agent-governance fabric |
+| [`ROADMAP.md`](ROADMAP.md) | Shipped capabilities, current limits, and general future direction |
 | [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |
 | [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md) | The docker/gVisor isolation modes and their threat model |

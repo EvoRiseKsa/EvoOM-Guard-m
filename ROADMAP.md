@@ -3,97 +3,52 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# Roadmap — from a patch gate to an agent-governance fabric
+# Roadmap
 
-EvoOM Guard answers one question: *did this patch fix the code without gaming
-the tests?* That question is one pillar of a larger problem — **governing what
-AI agents do to production systems** — and this roadmap places Guard inside
-that larger picture. The pillars are separate products by the same author that
-compose along one principle: *no result is accepted without traceable
-evidence — never trust a model's opinion of its own output.*
+EvoOM Guard focuses on one question:
 
-## Pillar 1 — the patch gate (this repo, shipping)
+> Did a patch fix the code without manipulating the evidence used to judge it?
 
-- ✅ v2.0.0: consolidated engine — `TAMPERED` verdict, deletion gating, eight
-  structured-verdict runners, docker/gVisor isolation, JSON/SARIF contracts.
-- ✅ v2.1.0: **signed verdicts** — Ed25519 detached signatures over the JSON
-  verdict (`keygen` / `--sign-key` / `verify-verdict`), making the *record* as
-  tamper-evident as the *run*. See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
-- ✅ v2.2.0: **evidence beyond "the tests passed"** — changed-line coverage,
-  Independent Verifier Packs, per-verdict attestation.
-- ✅ v2.3.0: **assurance profile** — every verdict states its `report_integrity`
-  honestly (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)).
-- ✅ v3.0.0 / v3.1.0: **external black-box judge** (`--blackbox`), **enforceable
-  assurance policy** (`--require-*`, fail-closed), and black-box attestation.
-- ✅ v3.2.0: **real `CandidateRunner` with delivered-isolation** — a second review
-  reproduced four false-`PASS` paths in v3.1 (isolation claimed but never run,
-  deletions dropped, pack replacing the repo suite, partial attestation). All
-  four are fixed: candidate_isolation is now the boundary that was *delivered*
-  (fail-closed when a container cannot be started), the verdict is composite (repo
-  suite AND pack), deletions are applied, and the attestation is complete.
+## Shipped today
 
-### ✅ Shipped: the external black-box judge (`--blackbox`)
+- **Protected-path gating** — edits or deletions of tests, their configuration,
+  CI, or auto-executed files are rejected before the suite runs.
+- **Structured, judge-owned verdicts** across eight test runners (verdict read
+  from a JUnit report + exit code, never from stdout); a `TAMPERED` verdict when
+  they disagree.
+- **Signed records** — optional Ed25519 signatures over the JSON verdict.
+- **Assurance reporting** — every verdict states its `report_integrity` and
+  `candidate_isolation` honestly.
+- **External black-box verification** (`--blackbox`) — the verdict comes from the
+  judge's own process over judge-owned tests that never import the candidate.
+- **Delivered candidate isolation** — a real container boundary whose evidence is
+  read from what actually ran; requesting isolation that cannot be delivered
+  fails closed. Exercised against a real Docker daemon in CI.
 
-The single most valuable thing Guard has built. The default judge runs the
-candidate in the **same process** as the report writer, so a deliberate
-in-process patch can forge the report + exit code. `--blackbox` closes it: the
-verdict comes from the judge's own pytest over judge-owned protocol tests that
-never import the candidate; the candidate is exercised only across a process
-boundary (`$EVOGUARD_TARGET`). `report_integrity` becomes
-`external_process_isolated`, and the identical forgery that fakes a PASS under
-the default judge is **caught** (proven in `tests/test_blackbox.py`). See
-[`docs/BLACKBOX.md`](docs/BLACKBOX.md).
+## Current limits (stated plainly)
 
-**Landed in v3.2.0:** a real `CandidateRunner` (`evoom_guard/candidate_runner.py`)
-that runs the black-box candidate under a delivered boundary — host subprocess or
-a network-less, read-only container with the pack unmounted — and records
-`isolation_evidence` (delivered mode, `image_digest`, `network`, `runtime`) in the
-attestation. Requesting a container that cannot be delivered fails closed.
+- The default same-process judge can be forged by deliberate in-process source;
+  use `--blackbox` to close that. See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
+- The subprocess boundary is not a sandbox; container isolation is opt-in.
+- A verdict binds to the runtime image, not a separately built artifact.
+- Networked-service (HTTP) targets need a judge↔candidate channel the hardened
+  `--network none` container does not yet provide.
 
-The container path is exercised on a real Docker daemon in CI (the
-`blackbox-docker-e2e` job), where an adversarial candidate is confirmed unable to
-write the host, open the network, or reach the pack.
+## Direction
 
-**The genuine next direction** (driven by real users): build the patched
-candidate into an **immutable artifact/OCI image** and bind the verdict to the
-**artifact digest**, turning Guard from a source-patch gate into an
-artifact-behaviour judge across languages — and a documented, tested HTTP/service
-recipe (a controlled judge↔candidate channel, since the hardened container is
-`--network none`). The `CandidateRunner` boundary and `isolation_evidence` are the
-seam this builds on.
+Future development will be driven by **verified adoption, real threat cases, and
+observed user needs** — not by speculation. Areas under evaluation include
+stronger artifact identity, broader process-boundary verification, and
+organization-level policy enforcement.
 
-- Other near-term candidates (driven by [user feedback](../../issues)):
-  - a baseline scan mode (verdict for the repo as-is, no patch);
-  - `mounts_ro` wired for read-only external evidence in the container modes;
-  - `minimize_patch` surfaced as **extraneous-change detection** (which hunks
-    the evidence does *not* require) — after the judge boundary is hardened, so
-    it doesn't repeat a forgeable verdict.
-
-## Pillar 2 — the evidence chain (integration: Sentinel AI)
-
-**Sentinel AI** (the author's Agentic Trust Fabric) keeps an Ed25519-signed
-Merkle audit log for AI decisions. Signed Guard verdicts are its natural feed:
-each merge gated by Guard appends `verdict.json` + `.sig` to an append-only
-log, giving compliance an offline-verifiable answer to *"which AI patches
-entered this codebase, under which verdict, judged by whom?"* — from patch to
-merge, cryptographically.
-
-Status: the Guard side shipped in v2.1.0 (signing). The ingestion endpoint
-lives on the Sentinel side.
-
-## Pillar 3 — the capability ledger (integration: ToolLedger)
-
-Guard governs what an agent **changes**; **ToolLedger** (same author) governs
-what an agent **can reach** — which tools, which scopes, who approved them, and
-what drifted after approval. Together they close the two agent-risk surfaces:
-code that lies about being fixed, and capabilities that quietly widen.
-
-Status: product-level composition; no code coupling planned — both emit/consume
-signed, machine-readable records.
+**No future capability is considered committed until it has an implemented,
+tested, and documented security boundary.**
 
 ## Non-goals
 
-- Guard will not become a general security scanner, a linter, or a code
-  reviewer — one question, answered objectively, stays the contract.
-- The subprocess judge will never be marketed as a sandbox; isolation levels
-  stay explicit (`subprocess` < `docker` < `gvisor`).
+- EvoOM Guard is not a general security scanner, a linter, or a code reviewer —
+  one question, answered objectively, stays the contract.
+- Subprocess execution is not described as a sandbox; isolation levels stay
+  explicit (`subprocess` < `docker` < `gvisor`).
+- Isolation claims must reflect the boundary actually delivered.
+- A passing verdict does not prove complete software correctness.
