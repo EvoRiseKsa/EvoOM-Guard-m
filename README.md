@@ -17,7 +17,7 @@
 > seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
 > table and a complete runnable example. Start there instead of reading this whole page.
 >
-> **See it run on a repo it doesn't own → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
+> **See it run on an external target repo → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
 > an honest fix passes, test tampering is rejected, a fake `9999 passed` on stdout
 > still fails, and black-box report forgery is caught — all with the published release.
 
@@ -116,7 +116,7 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 | Verdict | Meaning | Exit |
 |---|---|---|
 | ✅ `PASS` | the repo's tests pass **and** the patch left the protected harness untouched | 0 |
-| ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — a reward-hack, rejected before the suite runs | 1 |
+| ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency change trips it too — review and exempt with `--allow` | 1 |
 | ❌ `FAIL` | the patch applied and the suite ran, but tests fail | 1 |
 | 🚨 `TAMPERED` | the process exit code and the judge-owned JUnit report disagree — a forgery signature | 1 |
 | ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff (refused, never applied), a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
@@ -150,8 +150,9 @@ steps:
       comment: "true"                 # upserts ONE sticky PR comment per PR
 ```
 
-The step fails on any non-`PASS` verdict (set `fail-on: rejected-only` to gate
-only on reward-hacks). The report also lands in the job summary. Further
+The step fails on any non-`PASS` verdict. (`fail-on: rejected-only` gates ONLY
+harness integrity — with it, `FAIL`/`TAMPERED`/`ERROR` leave the check **green**;
+use it only when another required check already runs the suite.) The report also lands in the job summary. Further
 inputs: `verifier-pack`, `blackbox`/`blackbox-only`, `require-report-integrity`,
 `require-candidate-isolation`, `isolation`/`docker-image`/`docker-network`,
 `sarif`, `allow`, `allow-new-tests`, `timeout`, `mem-limit` — see
@@ -274,7 +275,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 |---|---|
 | [`docs/START_HERE.md`](docs/START_HERE.md) | **Start here** — pick your path (Basic / Black-box CLI / container isolation) with a decision table |
 | [`examples/blackbox-cli/`](examples/blackbox-cli/) | A complete runnable example: honest → PASS, cheat → REJECTED, regression → FAIL |
-| [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) | An independent repo the tool doesn't own — four scenarios proven with the published release |
+| [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) | External-repository demonstration (a separate target repo under the same account — not third-party validation): four scenarios reproduced with the published release |
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |

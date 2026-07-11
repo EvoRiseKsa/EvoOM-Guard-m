@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.1"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.2"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -76,15 +76,29 @@ config, lock files, `conftest.py`, auto-exec, and CI. New test code still runs i
 the judge process, so it's for **trusted authors + review** — see
 [`FEATURE_MODE.md`](FEATURE_MODE.md).
 
-## 4. Supported test runners
+## 4. Supported test runners — the compatibility matrix
 
-| Runner | Verdict source | Notes |
-|---|---|---|
-| **pytest** | `junit+exit` (real counts + tamper check) | default |
-| **`node --test`** | `junit+exit` | Node ≥ 22; dependency-free |
-| **vitest** (`vitest run`) | `junit+exit` | needs the `vitest` CLI |
-| **jest** | `junit+exit` | needs `jest-junit` resolvable (e.g. via `setup_command`) |
-| any other / `npm test` wrapper | `exit` (exit code only) | coarse; no structured counts |
+Eight runners get the **structured** verdict (`junit+exit`: real pass/fail counts
+read from a judge-owned JUnit report, cross-checked against the exit code, with
+the `TAMPERED` mismatch check). Anything else still runs — it grades on the
+**exit code alone** (stdout forgery is still ignored, but there are no counts and
+no exit⟷report mismatch check).
+
+| Runner | Matched command | Verdict source | Extra requirement in the repo/image |
+|---|---|---|---|
+| **pytest** | `pytest` / `python -m pytest` | `junit+exit` | none (the default judge) |
+| **`node --test`** | `node --test` | `junit+exit` | Node with the `junit` test reporter (Node ≥ 21; tested on 22) |
+| **vitest** | `vitest run` (or `.bin/vitest`) | `junit+exit` | the `vitest` CLI |
+| **jest** | `jest` (or `.bin/jest`) | `junit+exit` | `jest-junit` resolvable (e.g. installed by `setup_command`) |
+| **gotestsum** (Go) | `gotestsum [--] go test …` | `junit+exit` | the `gotestsum` binary on PATH (bare `go test -json` is stdout-only → not trusted) |
+| **RSpec** (Ruby) | `rspec` / `bundle exec rspec` | `junit+exit` | `rspec_junit_formatter` in the bundle |
+| **mocha** | `mocha` (or `.bin/mocha`) | `junit+exit` | `mocha-junit-reporter` resolvable |
+| **Maven Surefire** (Java/Kotlin) | `mvn test` / `./mvnw test` | `junit+exit` | none beyond Maven (reports directory is redirected judge-side) |
+| `sh -c "setup && <runner>"` | the last segment is one of the above | `junit+exit` | same as the inner runner |
+| any other / `npm test` wrapper | — | `exit` (exit code only) | coarse: no counts, no `TAMPERED` check — prefer invoking the runner binary directly |
+
+The report's `Verdict source` row always states which path judged the run — a
+`junit+exit` verdict is strictly stronger evidence than an `exit` one.
 
 ### In a workspace / monorepo (pnpm · yarn · npm)
 
@@ -135,7 +149,7 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.2.1` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.2.2` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

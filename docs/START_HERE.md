@@ -10,11 +10,11 @@ There are three ways to run it. Pick one — you do **not** need the others to s
 
 ## Decision table
 
-| Your need | Path | Command flag |
+| Your need | Profile | Command flag |
 |---|---|---|
-| Stop an AI agent from editing/deleting your tests, and run your suite | **Basic Guard** | *(none — the default)* |
-| Also verify a **CLI's** external behaviour with a judge-owned external verdict | **Black-box CLI** | `--blackbox` + `--verifier-pack` |
-| Run the black-box candidate behind a real OS isolation boundary | **+ container** | `--isolation docker` (fail-closed) |
+| Stop an AI agent from editing/deleting your tests, and run your suite | **Basic integrity gate** (Path 1) | *(none — the default)* |
+| Also verify a **CLI's** external behaviour with a judge-owned external verdict | **External behavior gate** (Path 2) | `--blackbox` + `--verifier-pack` |
+| Run the black-box candidate behind a real OS isolation boundary | **Isolated external gate** (Path 3) | `--isolation docker` (fail-closed) |
 
 Quick tree:
 
@@ -26,7 +26,7 @@ Need a guaranteed OS isolation boundary?              → add --isolation docker
 
 ---
 
-## Path 1 — Basic Guard
+## Path 1 — Basic integrity gate ("Basic Guard")
 
 **When:** your own repo, trusted authors, you want the common reward-hacks blocked.
 
@@ -47,7 +47,7 @@ if the patch touches a test/config; `❌ FAIL` if tests fail.
 
 ---
 
-## Path 2 — Black-box CLI
+## Path 2 — External behavior gate (black-box CLI)
 
 **When:** the target has a command-line boundary (`python -m tool`, a binary) and
 you want a verdict a patch can't forge from inside its own process.
@@ -72,7 +72,7 @@ broken `mul` the pack never checks). Full walkthrough:
 
 ---
 
-## Path 3 — Add a real isolation boundary (to the black-box path)
+## Path 3 — Isolated external gate (black-box + container)
 
 **When:** you run the black-box CLI path against semi-trusted code and want the
 candidate confined at the OS level, not just judged out-of-process.

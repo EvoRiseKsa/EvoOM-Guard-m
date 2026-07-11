@@ -114,9 +114,10 @@ git diff <base>...<head> | evo-guard guard --diff - --report report.md --json ve
 # PASS -> exit 0 ; REJECTED / FAIL / TAMPERED / ERROR -> non-zero
 ```
 
-The structured (`junit+exit`) oracle covers **pytest**, **`node --test`**, and
-**vitest** today; see [`ADOPTION.md`](ADOPTION.md) for the supported runners and
-the monorepo invocation note.
+The structured (`junit+exit`) oracle covers **eight runners** today — pytest,
+`node --test`, vitest, jest, gotestsum, RSpec, mocha and Maven Surefire (this
+proof predates the last five); see [`ADOPTION.md`](ADOPTION.md) for the full
+compatibility matrix and the monorepo invocation note.
 
 ---
 
@@ -157,3 +158,44 @@ The pair is the whole point in miniature: the same gate that **rejects the
 harness edit before a single test runs** hands a **PASS** to a genuinely
 correct, genuinely efficient fix — graded by the benchmark's own
 fresh-randomized suite, with nothing to memorize and nothing to forge.
+
+
+---
+
+# Self-hosting proof — Guard judged by Guard (post-v3.2.2 hardening)
+
+The strongest fixture available without a third party: **this repository run
+through its own gate**, with the real CLI (`git diff | evo-guard guard --diff -`)
+and the real built `.pyz` artifact. Four scenarios, reproduced live:
+
+| # | Scenario | Verdict | Key evidence |
+|---|---|---|---|
+| S1 | The development diff itself (edits 4 existing test files) | ⛔ `REJECTED` | `reason_code: protected_harness_edit`, `test_command_ran: false` — pre-gated before any suite ran; a *legitimate* maintenance change trips the policy exactly as documented (REJECTED = policy trip, not proven cheating) |
+| S2 | The same diff under a reviewed baseline (`--allow 'tests/*'`) | ✅ `PASS` | the judge ran the repo's **own full suite inside its own throwaway-copy pipeline** — **378/378**, `verdict_source: junit+exit` (this includes the benchmark's 16 nested live guard runs: guard-in-guard-in-guard) |
+| S3 | A cheat patch weakening one of Guard's own tests | ⛔ `REJECTED` | instant, `test_command_ran: false` |
+| S4 | The same cheat judged by the **built `evo-guard.pyz` release artifact** | ⛔ `REJECTED` | the shipped single-file form enforces the same gate |
+
+**What this run proves:** the gate works on a real, non-toy repository (this
+one), the pre-gate fires before execution for both edits and deletions, and the
+`--allow` escape hatch composes with a full structured-verdict suite run.
+**What it does not prove:** third-party validation (same author), or coverage
+of ecosystems this repo does not use.
+
+Reproduce from the repo root:
+
+```bash
+git diff HEAD | evo-guard guard --diff -                    # S1 → REJECTED
+git diff HEAD | evo-guard guard --diff - --allow 'tests/*' \
+  --mem-limit 0 --timeout 600                               # S2 → PASS (full self-suite)
+printf '<<<FILE: tests/test_grading.py>>>\ndef test_nothing():\n    assert True\n<<<END FILE>>>\n' > /tmp/cheat.txt
+evo-guard guard . --patch /tmp/cheat.txt                    # S3 → REJECTED
+```
+
+Running S2 before the v3.2.2 hardening pass exposed a real defect the fix for
+which ships in the same change: Guard's own source embeds literal
+`<<<END FILE>>>` marker lines, and the dirs/diff path used to round-trip file
+content through the block-text format — truncating any file whose *content*
+contains a marker (a bogus FAIL on an honest change). The dirs/diff path is now
+structured end-to-end (`blocks_from_dirs` → `guard(file_blocks=…)`), pinned by
+`tests/test_marker_collision.py`. Self-hosting is exactly the fixture that
+catches this class of bug — which is why this section exists.

@@ -27,10 +27,19 @@ before the suite runs.
 | Verdict | Meaning |
 |---|---|
 | ✅ `PASS` | the repo's tests pass **and** the patch left the test harness untouched |
-| ⛔ `REJECTED` | the patch edits the tests, their configuration, or an auto-executed file (`sitecustomize.py`, `*.pth`, `Makefile`, …) — a reward-hack; rejected before the suite runs |
-| ❌ `FAIL` | the patch applied and the suite ran, but tests fail |
+| ⛔ `REJECTED` | the patch edits **or deletes** the tests, their configuration, the gate's CI, or an auto-executed file (`sitecustomize.py`, `*.pth`, `Makefile`, …) — blocked before the suite runs |
+| ❌ `FAIL` | the patch applied and the suite ran, but tests fail (also: a suite timeout, or a PASS demoted below `--min-diff-coverage`) |
 | 🚨 `TAMPERED` | the process exit code and the judge-owned JUnit report disagree — a desync/forced-exit signature; never read as a pass |
-| ⚠️ `ERROR` | the patch did not apply, or produced no parseable edits |
+| ⚠️ `ERROR` | no trustworthy verdict could be produced: the patch did not apply / no parseable edits, an unsafe path, a failed or timed-out setup command, a requested isolation that could not be delivered, or an unmet `--require-*` assurance floor |
+
+> **What `REJECTED` does — and does not — mean.** `REJECTED` is a *policy trip*:
+> the change touched a path the current harness-protection policy protects. That
+> is the right default for an AI-generated patch, but it is **not by itself proof
+> of intent to cheat** — a legitimate dependency bump that edits `pom.xml`, or a
+> real build fix in a `Makefile`, trips the same rule. When a protected edit is
+> genuinely intended, review it like any harness change and exempt it explicitly
+> with `--allow <glob>` (a deliberate, reviewed baseline — see
+> [`ADOPTION.md`](ADOPTION.md)).
 
 The verdict and its stable `reason_code` are emitted as JSON for integrations — see
 [`JSON_SCHEMA.md`](JSON_SCHEMA.md).
@@ -56,14 +65,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.1   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.2   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.1"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.2"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```
@@ -71,7 +80,7 @@ evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v3.2.1`** — a release tag. The recommended pin and the right choice for
+> - **`@v3.2.2`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -110,10 +119,13 @@ otherwise — drop it straight into any CI step.
 - **`--base/--head`** diffs two explicit trees into the block format.
 - **`--patch`** takes the EvoGuard edit-block format directly.
 
-Added/modified files are verified; deletions are surfaced in the report but not
-gated. `--json` writes the machine-readable verdict. The report shows the `Input`
-(`diff` / `base/head` / `edit blocks`) and, for `--diff`, the `Base reconstruction`
-(`ok` / `failed`).
+Added/modified files are verified, and **deletions are gated too** (since schema
+1.1): deleting a protected harness file — a test, its config, the gate's CI — is
+`REJECTED` exactly like editing it (removing a check is as much a hack as
+rewriting one), while a deleted *source* file is applied to the verified copy so
+the verdict matches the real merge. `--json` writes the machine-readable verdict.
+The report shows the `Input` (`diff` / `base/head` / `edit blocks`) and, for
+`--diff`, the `Base reconstruction` (`ok` / `failed`).
 
 ### `--diff` safety (for untrusted PRs)
 
@@ -132,17 +144,23 @@ gated. `--json` writes the machine-readable verdict. The report shows the `Input
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-`EvoRiseKsa/EvoOM-Guard-m@v3.2.1`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+`EvoRiseKsa/EvoOM-Guard-m@v3.2.2`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.1   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.2   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
-    fail-on: "any-non-pass"           # or "rejected-only" to gate only reward-hacks
+    fail-on: "any-non-pass"           # or "rejected-only" — see the warning below
 ```
+
+> ⚠️ **`fail-on: rejected-only` is a harness-integrity gate, not a correctness
+> gate.** With it, only `REJECTED` fails the step — a `FAIL` (tests genuinely
+> failing), a `TAMPERED` signature, and an `ERROR` all leave the check **green**.
+> Use it only when another required check already runs the suite and you want
+> Guard to gate *only* harness edits; otherwise keep the default `any-non-pass`.
 
 It writes the report to the **job summary**, posts it as a **PR comment**, exposes a
 `verdict` output, and fails the step per `fail-on`. To gate only machine-made PRs,
@@ -155,7 +173,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.1"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.2.2"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"

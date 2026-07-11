@@ -41,19 +41,24 @@ Two design choices do the work (see [`GUARD.md`](GUARD.md)):
 Every ⛔ in rows 3–9 is decided **before any test runs** (`test_command_ran: false`
 in the JSON), so a harness-gaming patch never even executes the suite.
 
-## Reproduce the whole catalog
+## Reproduce the catalog
+
+The rows above were verified live with an internal campaign harness (13 scripted
+scenarios, an audit manifest cross-check, and a self-check that corrupts the
+evidence to prove the verifier fails on tampered inputs). That harness lives in
+the private engine repo and is **not part of this public repository** — what IS
+reproducible here, by anyone:
 
 ```bash
 pip install -e .
-cd campaign && ./run_campaign.sh && ./verify_campaign_outputs.sh   # 13 scenarios, raw evidence + independent cross-check
-./selfcheck_verifier.sh                                            # proves the verifier itself isn't theatre
-cd .. && coverage run -m pytest tests/ -q                          # the adversarial suite is the spec
+coverage run -m pytest tests/ -q     # the adversarial suite encodes every row as a regression test
+python -m pytest tests/test_report_integrity.py tests/test_junit_hardening.py -v
 ```
 
-The campaign cross-checks each raw guard verdict against an audit manifest, and
-the self-check corrupts the evidence to prove the verifier **fails** on tampered
-inputs. Multi-runner equivalents (`node --test`, `vitest`) are in campaigns
-v3/v5; real upstream code in v4/v5.
+For an end-to-end reproduction against a real repo, use the external demo
+([`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)): honest
+fix → PASS, test tampering → REJECTED, stdout forgery → FAIL, black-box report
+forgery → FAIL.
 
 ## What this does NOT claim (honest scope)
 
@@ -66,5 +71,7 @@ v3/v5; real upstream code in v4/v5.
   `--isolation docker` (network-less, read-only container) — defence in depth, not
   a complete boundary; truly untrusted input wants VM-class isolation. See
   [`GUARD.md`](GUARD.md).
-- Runners other than pytest / `node --test` / vitest grade on the **exit code
-  alone** (no structured counts/tamper check) today.
+- Runners outside the eight structured adapters (pytest, `node --test`, vitest,
+  jest, gotestsum, RSpec, mocha, Maven Surefire — see the matrix in
+  [`ADOPTION.md`](ADOPTION.md)) grade on the **exit code alone** (no structured
+  counts/tamper check) today.
