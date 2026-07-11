@@ -1,0 +1,20 @@
+name: Windows compatibility
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - name: CLI Unicode and zipapp smoke
+        env:
+          PYTHONIOENCODING: cp1256
+        run: python -m pytest tests/test_cli.py tests/test_zipapp.py -q

@@ -9,6 +9,28 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.2.2] — 2026-07-11
+
+A supply-chain and cross-platform hardening release.
+
+### Fixed (security)
+- GitHub Action inputs are passed through environment variables instead of being
+  interpolated into Bash source. Space-separated policy inputs are parsed into
+  quoted arrays, preventing shell metacharacters from becoming commands.
+- Third-party Actions used by the Marketplace action are pinned to immutable
+  commit SHAs. Regression tests reject future direct input interpolation and
+  floating Action references.
+
+### Fixed (Windows)
+- CLI stdout/stderr are reconfigured to UTF-8 with a safe fallback, preventing
+  verdict symbols such as `✅` from crashing under legacy console code pages.
+
+### Added
+- Dependabot configuration for GitHub Actions and Python development dependencies.
+- CodeQL and OpenSSF Scorecard workflows.
+- A Windows CI smoke job and a reproducible labelled-corpus benchmark that emits
+  a confusion matrix and false-positive/false-negative rates.
+
 ## [3.2.1] — 2026-07-11
 
 A pre-launch honesty + hardening pass from a critical review. No new features;
