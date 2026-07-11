@@ -1,0 +1,8 @@
+<<<FILE: tests/test_ops.py>>>
+def test_add():
+    assert True
+
+
+def test_mul():
+    assert True
+<<<END FILE>>>
