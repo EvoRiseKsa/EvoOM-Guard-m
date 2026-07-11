@@ -102,16 +102,19 @@ runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
       with:
         python-version: "3.12"
 
     - name: Install EvoGuard
       shell: bash
+      env:
+        INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
+        INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
       run: |
         # Install the 'cov' extra only when changed-line coverage is requested,
         # so the default install stays dependency-free.
-        if [ "${{ inputs.diff-coverage }}" = "true" ] || [ -n "${{ inputs.min-diff-coverage }}" ]; then
+        if [ "$INPUT_DIFF_COVERAGE" = "true" ] || [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then
           pip install -q "${{ github.action_path }}[cov]"
         else
           pip install -q "${{ github.action_path }}"
@@ -121,34 +124,55 @@ runs:
       id: guard
       shell: bash
       working-directory: ${{ github.workspace }}
+      env:
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_TEST_COMMAND: ${{ inputs.test-command }}
+        INPUT_PROTECTED: ${{ inputs.protected }}
+        INPUT_ALLOW: ${{ inputs.allow }}
+        INPUT_ALLOW_NEW_TESTS: ${{ inputs.allow-new-tests }}
+        INPUT_ISOLATION: ${{ inputs.isolation }}
+        INPUT_DOCKER_IMAGE: ${{ inputs.docker-image }}
+        INPUT_DOCKER_NETWORK: ${{ inputs.docker-network }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_MEM_LIMIT: ${{ inputs.mem-limit }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_VERIFIER_PACK: ${{ inputs.verifier-pack }}
+        INPUT_BLACKBOX: ${{ inputs.blackbox }}
+        INPUT_BLACKBOX_ONLY: ${{ inputs.blackbox-only }}
+        INPUT_REQUIRE_REPORT_INTEGRITY: ${{ inputs.require-report-integrity }}
+        INPUT_REQUIRE_CANDIDATE_ISOLATION: ${{ inputs.require-candidate-isolation }}
+        INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
+        INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set -e
         # Resolve the base to diff against: explicit input, else the PR base, else HEAD^.
-        BASE="${{ inputs.base-ref }}"
-        if [ -z "$BASE" ]; then BASE="${{ github.event.pull_request.base.sha }}"; fi
+        BASE="$INPUT_BASE_REF"
+        if [ -z "$BASE" ]; then BASE="$PR_BASE_SHA"; fi
         if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
         echo "Diffing against base: $BASE"
         git fetch --no-tags --depth=1 origin "$BASE" 2>/dev/null || true
         # The recommended path: pipe the diff; EvoGuard reverse-applies it to the head
         # checkout (this working dir) — no second checkout or worktree.
         ARGS=(guard --diff - --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
-        if [ -n "${{ inputs.test-command }}" ]; then ARGS+=(--test-command "${{ inputs.test-command }}"); fi
-        if [ -n "${{ inputs.protected }}" ]; then ARGS+=(--protected ${{ inputs.protected }}); fi
-        if [ -n "${{ inputs.allow }}" ]; then ARGS+=(--allow ${{ inputs.allow }}); fi
-        if [ "${{ inputs.allow-new-tests }}" = "true" ]; then ARGS+=(--allow-new-tests); fi
-        if [ -n "${{ inputs.isolation }}" ]; then ARGS+=(--isolation "${{ inputs.isolation }}"); fi
-        if [ -n "${{ inputs.docker-image }}" ]; then ARGS+=(--docker-image "${{ inputs.docker-image }}"); fi
-        if [ -n "${{ inputs.docker-network }}" ]; then ARGS+=(--docker-network "${{ inputs.docker-network }}"); fi
-        if [ -n "${{ inputs.timeout }}" ]; then ARGS+=(--timeout "${{ inputs.timeout }}"); fi
-        if [ -n "${{ inputs.mem-limit }}" ]; then ARGS+=(--mem-limit "${{ inputs.mem-limit }}"); fi
-        if [ -n "${{ inputs.sarif }}" ]; then ARGS+=(--sarif "${{ inputs.sarif }}"); fi
-        if [ -n "${{ inputs.verifier-pack }}" ]; then ARGS+=(--verifier-pack "${{ inputs.verifier-pack }}"); fi
-        if [ "${{ inputs.blackbox }}" = "true" ]; then ARGS+=(--blackbox); fi
-        if [ "${{ inputs.blackbox-only }}" = "true" ]; then ARGS+=(--blackbox-only); fi
-        if [ -n "${{ inputs.require-report-integrity }}" ]; then ARGS+=(--require-report-integrity "${{ inputs.require-report-integrity }}"); fi
-        if [ -n "${{ inputs.require-candidate-isolation }}" ]; then ARGS+=(--require-candidate-isolation "${{ inputs.require-candidate-isolation }}"); fi
-        if [ "${{ inputs.diff-coverage }}" = "true" ]; then ARGS+=(--diff-coverage); fi
-        if [ -n "${{ inputs.min-diff-coverage }}" ]; then ARGS+=(--min-diff-coverage "${{ inputs.min-diff-coverage }}"); fi
+        if [ -n "$INPUT_TEST_COMMAND" ]; then ARGS+=(--test-command "$INPUT_TEST_COMMAND"); fi
+        if [ -n "$INPUT_PROTECTED" ]; then read -r -a PROTECTED <<< "$INPUT_PROTECTED"; ARGS+=(--protected "${PROTECTED[@]}"); fi
+        if [ -n "$INPUT_ALLOW" ]; then read -r -a ALLOW <<< "$INPUT_ALLOW"; ARGS+=(--allow "${ALLOW[@]}"); fi
+        if [ "$INPUT_ALLOW_NEW_TESTS" = "true" ]; then ARGS+=(--allow-new-tests); fi
+        if [ -n "$INPUT_ISOLATION" ]; then ARGS+=(--isolation "$INPUT_ISOLATION"); fi
+        if [ -n "$INPUT_DOCKER_IMAGE" ]; then ARGS+=(--docker-image "$INPUT_DOCKER_IMAGE"); fi
+        if [ -n "$INPUT_DOCKER_NETWORK" ]; then ARGS+=(--docker-network "$INPUT_DOCKER_NETWORK"); fi
+        if [ -n "$INPUT_TIMEOUT" ]; then ARGS+=(--timeout "$INPUT_TIMEOUT"); fi
+        if [ -n "$INPUT_MEM_LIMIT" ]; then ARGS+=(--mem-limit "$INPUT_MEM_LIMIT"); fi
+        if [ -n "$INPUT_SARIF" ]; then ARGS+=(--sarif "$INPUT_SARIF"); fi
+        if [ -n "$INPUT_VERIFIER_PACK" ]; then ARGS+=(--verifier-pack "$INPUT_VERIFIER_PACK"); fi
+        if [ "$INPUT_BLACKBOX" = "true" ]; then ARGS+=(--blackbox); fi
+        if [ "$INPUT_BLACKBOX_ONLY" = "true" ]; then ARGS+=(--blackbox-only); fi
+        if [ -n "$INPUT_REQUIRE_REPORT_INTEGRITY" ]; then ARGS+=(--require-report-integrity "$INPUT_REQUIRE_REPORT_INTEGRITY"); fi
+        if [ -n "$INPUT_REQUIRE_CANDIDATE_ISOLATION" ]; then ARGS+=(--require-candidate-isolation "$INPUT_REQUIRE_CANDIDATE_ISOLATION"); fi
+        if [ "$INPUT_DIFF_COVERAGE" = "true" ]; then ARGS+=(--diff-coverage); fi
+        if [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then ARGS+=(--min-diff-coverage "$INPUT_MIN_DIFF_COVERAGE"); fi
         set +e
         git diff "$BASE...HEAD" | evo-guard "${ARGS[@]}"
         GUARD_CODE=$?
@@ -156,14 +180,14 @@ runs:
         VERDICT=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/guard.json'))['verdict'])")
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
         cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"
-        if [ "${{ inputs.fail-on }}" = "rejected-only" ]; then
+        if [ "$INPUT_FAIL_ON" = "rejected-only" ]; then
           [ "$VERDICT" = "REJECTED" ] && exit 1 || exit 0
         fi
         exit $GUARD_CODE
 
     - name: Comment on the PR
       if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' }}
-      uses: actions/github-script@v7
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
       with:
         script: |
           const fs = require('fs');
