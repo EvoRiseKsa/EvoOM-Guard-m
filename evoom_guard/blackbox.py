@@ -45,18 +45,21 @@ to get the black-box guarantee. See ``docs/BLACKBOX.md``.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
+from evoom_guard.candidate_runner import CandidateRunner, IsolationUnavailable
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     apply_blocks_to_copy,
     distill_diagnostics,
+    is_safe_relpath,
     parse_file_blocks,
     parse_junit_xml,
     parse_patch_blocks,
@@ -72,6 +75,9 @@ class BlackboxResult(NamedTuple):
     error: str | None  # set when the run could not be graded (setup problem)
     pack_sha256: str | None = None       # content digest of the judge-owned pack
     pack_manifest: dict | None = None    # optional pack.json (id/version/…)
+    junit_sha256: str | None = None      # digest of the judge-owned report
+    isolation: dict[str, Any] | None = None   # IsolationEvidence.as_dict() — DELIVERED
+    deleted_applied: list[str] | None = None  # deletions actually applied to the copy
 
 
 def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:
@@ -120,14 +126,22 @@ def run_blackbox(
     pack_dir: str,
     *,
     timeout: int = 120,
+    isolation: str = "subprocess",
+    docker_image: str | None = None,
+    docker_network: str = "none",
+    docker_runtime: str | None = None,
+    mem_limit_mb: int = 0,
+    deleted_paths: tuple[str, ...] = (),
 ) -> BlackboxResult:
     """Judge ``candidate`` against ``repo_path`` through the black-box ``pack_dir``.
 
-    The patch is applied to a throwaway copy; the judge then runs ``pack_dir``'s
-    tests in its own process with ``EVOGUARD_TARGET`` pointing at that copy, so
-    the pack can invoke the candidate out-of-process and assert on its outputs.
-    The verdict is the judge's own pytest result — a process the candidate never
-    runs in.
+    The patch (including deletions) is applied to a throwaway copy; the judge then
+    runs ``pack_dir``'s tests in its own process, reaching the candidate only
+    through a :class:`CandidateRunner`-provided launcher (``EVOGUARD_EXEC``) that
+    runs it under the **delivered** isolation boundary. The verdict is the judge's
+    own pytest result — a process the candidate never runs in — and the returned
+    :class:`BlackboxResult` records the isolation that was *actually* delivered,
+    never the value that was requested.
     """
     if not pack_dir or not os.path.isdir(pack_dir):
         return BlackboxResult(False, 0, 0, "", False, f"verifier pack not found: {pack_dir!r}")
@@ -141,7 +155,43 @@ def run_blackbox(
             copy, parse_file_blocks(candidate), parse_patch_blocks(candidate)
         )
         if apply_error is not None:
-            return BlackboxResult(False, 0, 0, apply_error, False, "patch did not apply", pack_sha256, pack_manifest)
+            return BlackboxResult(False, 0, 0, apply_error, False, "patch did not apply",
+                                  pack_sha256, pack_manifest)
+
+        # Apply deletions to the copy so the judged tree matches the real merge —
+        # a change that removes a file must be judged with that file ABSENT.
+        deleted_applied: list[str] = []
+        for rel in deleted_paths:
+            if not is_safe_relpath(rel):
+                continue
+            target = os.path.join(copy, *rel.split("/"))
+            try:
+                os.remove(target)
+                deleted_applied.append(rel)
+            except IsADirectoryError:
+                shutil.rmtree(target, ignore_errors=True)
+                deleted_applied.append(rel)
+            except OSError:
+                pass  # already absent — nothing to judge against
+
+        # Deliver a REAL isolation boundary (fail-closed) and record what ran.
+        runner = CandidateRunner(
+            isolation=isolation, docker_image=docker_image,
+            docker_network=docker_network, docker_runtime=docker_runtime,
+            mem_limit_mb=mem_limit_mb, python=sys.executable,
+        )
+        try:
+            _launcher, run_env, evidence = runner.prepare(workdir, copy)
+        except IsolationUnavailable as exc:
+            # A stronger boundary was required but cannot be delivered. Refuse to
+            # run rather than silently judge under a weaker one.
+            return BlackboxResult(
+                False, 0, 0, str(exc), False, "isolation unavailable",
+                pack_sha256, pack_manifest, None,
+                {"requested": isolation, "delivered": "unavailable", "note": str(exc)},
+                deleted_applied,
+            )
+        iso = evidence.as_dict()
 
         xml_path = os.path.join(workdir, "judge-blackbox.xml")
         env = {
@@ -150,10 +200,10 @@ def run_blackbox(
             "LANG": "C.UTF-8",
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONNOUSERSITE": "1",
-            # How the pack reaches the candidate — the repo copy, and the
-            # interpreter to launch it with. The pack invokes it as a subprocess.
-            "EVOGUARD_TARGET": copy,
-            "EVOGUARD_PYTHON": sys.executable,
+            # How the pack reaches the candidate. EVOGUARD_TARGET stays for
+            # backward compatibility; EVOGUARD_EXEC is the delivered-isolation
+            # launcher the pack should prefer.
+            **run_env,
         }
         t0 = time.perf_counter()
         try:
@@ -164,14 +214,19 @@ def run_blackbox(
             )
         except subprocess.TimeoutExpired:
             return BlackboxResult(False, 0, 0, f"black-box pack timed out after {timeout}s",
-                                  False, "timeout", pack_sha256, pack_manifest)
+                                  False, "timeout", pack_sha256, pack_manifest,
+                                  None, iso, deleted_applied)
         # Read the judge-owned report immediately (all pack subprocesses have
         # exited by now). The JUDGE's exit code is authoritative regardless.
+        junit = None
+        junit_sha256 = None
         try:
             with open(xml_path, encoding="utf-8") as f:
-                junit = parse_junit_xml(f.read())
+                xml_text = f.read()
+            junit = parse_junit_xml(xml_text)
+            junit_sha256 = hashlib.sha256(xml_text.encode("utf-8")).hexdigest()
         except OSError:
-            junit = None
+            pass
         _elapsed = time.perf_counter() - t0
         diagnostics = distill_diagnostics(r.stdout + "\n" + r.stderr)
 
@@ -183,12 +238,14 @@ def run_blackbox(
         else:
             tp, tt = (0, 0)
         if r.returncode == 0:
-            return BlackboxResult(True, tp or tt, tt, diagnostics, True, None, pack_sha256, pack_manifest)
+            return BlackboxResult(True, tp or tt, tt, diagnostics, True, None, pack_sha256,
+                                  pack_manifest, junit_sha256, iso, deleted_applied)
         if r.returncode == 1:
-            return BlackboxResult(False, tp, tt, diagnostics, True, None, pack_sha256, pack_manifest)
+            return BlackboxResult(False, tp, tt, diagnostics, True, None, pack_sha256,
+                                  pack_manifest, junit_sha256, iso, deleted_applied)
         # 2+ = pytest usage/collection error in the pack itself (author's bug).
         return BlackboxResult(False, tp, tt, diagnostics, False,
                               f"black-box pack did not run cleanly (pytest exit {r.returncode})",
-                              pack_sha256, pack_manifest)
+                              pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)

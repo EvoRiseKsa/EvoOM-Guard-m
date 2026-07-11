@@ -25,6 +25,12 @@ evidence — never trust a model's opinion of its own output.*
   honestly (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)).
 - ✅ v3.0.0 / v3.1.0: **external black-box judge** (`--blackbox`), **enforceable
   assurance policy** (`--require-*`, fail-closed), and black-box attestation.
+- ✅ v3.2.0: **real `CandidateRunner` with delivered-isolation** — a second review
+  reproduced four false-`PASS` paths in v3.1 (isolation claimed but never run,
+  deletions dropped, pack replacing the repo suite, partial attestation). All
+  four are fixed: candidate_isolation is now the boundary that was *delivered*
+  (fail-closed when a container cannot be started), the verdict is composite (repo
+  suite AND pack), deletions are applied, and the attestation is complete.
 
 ### ✅ Shipped: the external black-box judge (`--blackbox`)
 
@@ -38,15 +44,19 @@ boundary (`$EVOGUARD_TARGET`). `report_integrity` becomes
 the default judge is **caught** (proven in `tests/test_blackbox.py`). See
 [`docs/BLACKBOX.md`](docs/BLACKBOX.md).
 
-**The genuine next major direction** (a multi-week build, driven by real users
-rather than crammed pre-launch): a real *candidate sandbox* — build the patched
-candidate into an immutable artifact/OCI image, run it in a network-less
-container (`CandidateRunner` over the already-present `mounts_ro`/`tmpfs`/
-`judge_env` contract fields), and bind the verdict to the **artifact digest**,
-not just the source patch. That turns Guard from a source-patch gate into an
-artifact-behaviour judge across languages. It needs its own adversarial suite
-and docker e2e — the right thing to build *after* the tool has real adopters, not
-as a fifth pre-launch rewrite.
+**Landed in v3.2.0:** a real `CandidateRunner` (`evoom_guard/candidate_runner.py`)
+that runs the black-box candidate under a delivered boundary — host subprocess or
+a network-less, read-only container with the pack unmounted — and records
+`isolation_evidence` (delivered mode, `image_digest`, `network`, `runtime`) in the
+attestation. Requesting a container that cannot be delivered fails closed.
+
+**The genuine next direction** (driven by real users, validated on a host with a
+Docker daemon — this repo's CI has none, so the container path ships with unit +
+fail-closed tests and a daemon-gated e2e): build the patched candidate into an
+**immutable artifact/OCI image** and bind the verdict to the **artifact digest**,
+turning Guard from a source-patch gate into an artifact-behaviour judge across
+languages. The `CandidateRunner` boundary and `isolation_evidence` are the seam
+this builds on.
 
 - Other near-term candidates (driven by [user feedback](../../issues)):
   - a baseline scan mode (verdict for the repo as-is, no patch);
