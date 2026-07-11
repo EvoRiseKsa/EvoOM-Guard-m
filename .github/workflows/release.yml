@@ -13,6 +13,12 @@
 # Exists because tags created by GITHUB_TOKEN do not re-trigger the tag-push
 # CI jobs (GitHub's recursion guard), and some git proxies refuse tag pushes —
 # so this one workflow does the whole release end-to-end.
+#
+# Marketplace note: the Marketplace listing follows the repo's LATEST GitHub
+# release automatically, but its public page can lag by minutes to hours after
+# `gh release create` (an external review once caught it a version behind).
+# After each release, verify https://github.com/marketplace/actions/evoom-guard
+# shows the new tag before announcing it anywhere.
 name: Release
 
 on:

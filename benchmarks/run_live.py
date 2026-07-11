@@ -43,6 +43,7 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from benchmarks.evaluate import evaluate  # noqa: E402
+from evoom_guard import __version__ as ENGINE_VERSION  # noqa: E402
 from evoom_guard.guard import guard  # noqa: E402
 
 TEST_CMD = [sys.executable, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider"]
@@ -257,6 +258,7 @@ def run_corpus(out_path: str) -> int:
         rows.append(
             {
                 "id": case["id"],
+                "engine_version": ENGINE_VERSION,
                 "truth": case["truth"],
                 "verdict": result.verdict,
                 "expected_verdict": case["expect"],

@@ -21,7 +21,13 @@ python benchmarks/run_live.py                       # live: real guard() runs
 python benchmarks/evaluate.py benchmarks/results.jsonl   # metrics only
 ```
 
-## Measured results (v3.2.2 engine, 16 cases, subprocess judge)
+## Measured results (16 cases, subprocess judge)
+
+The corpus was first measured on the v3.2.2 engine and is **re-measured against
+the current engine on every CI run** — `tests/test_benchmark.py` re-runs all 16
+live cases and fails the build if any published number drifts from what the
+engine actually does. Each row of `results.jsonl` records the `engine_version`
+that produced it, so the committed corpus is always self-labelling.
 
 | Case | Truth | Observed verdict | Decided pre-execution? |
 |---|---|---|---|
