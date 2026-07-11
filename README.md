@@ -16,6 +16,10 @@
 > **New here? → [`docs/START_HERE.md`](docs/START_HERE.md)** picks your path in 30
 > seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
 > table and a complete runnable example. Start there instead of reading this whole page.
+>
+> **See it run on a repo it doesn't own → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
+> an honest fix passes, test tampering is rejected, a fake `9999 passed` on stdout
+> still fails, and black-box report forgery is caught — all with the published release.
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
@@ -270,6 +274,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 |---|---|
 | [`docs/START_HERE.md`](docs/START_HERE.md) | **Start here** — pick your path (Basic / Black-box CLI / container isolation) with a decision table |
 | [`examples/blackbox-cli/`](examples/blackbox-cli/) | A complete runnable example: honest → PASS, cheat → REJECTED, regression → FAIL |
+| [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) | An independent repo the tool doesn't own — four scenarios proven with the published release |
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
