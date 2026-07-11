@@ -14,11 +14,17 @@
 # CI jobs (GitHub's recursion guard), and some git proxies refuse tag pushes —
 # so this one workflow does the whole release end-to-end.
 #
-# Marketplace note: the Marketplace listing follows the repo's LATEST GitHub
-# release automatically, but its public page can lag by minutes to hours after
-# `gh release create` (an external review once caught it a version behind).
-# After each release, verify https://github.com/marketplace/actions/evoom-guard
-# shows the new tag before announcing it anywhere.
+# Marketplace note (root cause, verified on the releases page): releases
+# created here via `gh release create` do NOT carry the "Publish this Action
+# to the GitHub Marketplace" flag — that checkbox exists ONLY in the web UI
+# and has no API. Such releases lack the "Marketplace" badge on
+# /releases, and the public listing can serve a stale "Latest" from cache.
+# After each release, a maintainer should (one minute, web UI):
+#   Releases -> the new tag -> Edit -> tick "Publish this Action to the
+#   GitHub Marketplace" -> Update release,
+# then confirm the "Marketplace" badge appears on the release and
+# https://github.com/marketplace/actions/evoom-guard shows the new tag
+# (hard-refresh — the page is CDN-cached) before announcing anywhere.
 name: Release
 
 on:
