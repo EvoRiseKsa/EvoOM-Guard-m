@@ -9,6 +9,53 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.2.0] — 2026-07-11
+
+A second review reproduced four false-`PASS` paths in the v3.1 black-box mode and
+was **correct**: `candidate_isolation` was written from the requested flag, not
+what ran; deletions were never applied to the judged tree; the pack replaced the
+repo's own suite instead of adding to it; and the attestation was partial. This
+release closes all four — the black-box judge now delivers a **real** isolation
+boundary and reports only what it delivered.
+
+### Fixed (security / correctness)
+- **Delivered isolation, fail-closed.** A new `CandidateRunner`
+  (`evoom_guard/candidate_runner.py`) runs the candidate under an *actual*
+  boundary and returns evidence of what ran. `candidate_isolation` is that
+  delivered value — never the requested flag. Request `--isolation docker` with
+  no daemon / a missing image and Guard returns `ERROR`
+  (`assurance_requirement_not_met`, isolation `unavailable`) instead of a `PASS`
+  mislabelled `docker`. No silent fallback to a weaker boundary.
+- **Deletions are applied in black-box mode.** A removed file is absent in the
+  judged copy (matching the real merge); the attestation records
+  `deleted_paths_applied`.
+- **Composite verdict.** `--blackbox` now requires the repo's own suite **and**
+  the external pack to pass — a green pack can no longer mask an internal
+  regression. `--blackbox-only` opts pure-CLI/service targets out of the repo
+  suite.
+- **Container pack separation.** In a container boundary the repo copy is mounted
+  read-only and the judge-owned pack is not mounted into the candidate at all, so
+  candidate code cannot reach it or write the host. The subprocess boundary
+  reports `verifier_pack.secrecy: reachable_same_host` honestly.
+
+### Added
+- **Complete black-box attestation**: `isolation_evidence` (requested/delivered/
+  image_digest/network/runtime), `deleted_paths_applied`, `repo_suite_passed`,
+  `repo_suite_junit_sha256`, `junit_sha256`, and `base_sha`/`head_sha` (extracted
+  only when the diff carries them; never fabricated).
+- **Pack protocol**: `$EVOGUARD_EXEC`, a launcher that runs the candidate under
+  the delivered isolation with the repo copy as the working root. The example
+  pack is isolation-agnostic and import-safe.
+- Adversarial tests for every fixed path (`tests/test_assurance_policy.py`):
+  fake-docker → `ERROR`; docker floor vs subprocess delivery → `ERROR`; deletion
+  actually applied; repo-suite failure blocks a passing pack.
+
+### Changed
+- `python -m pytest -q` on the whole repo is green again: `testpaths = ["tests"]`
+  scopes the repo's own suite, and the black-box example pack self-skips when not
+  run by the judge (it was crashing collection on a missing `EVOGUARD_TARGET`).
+- `schema_version` → **1.5**.
+
 ## [3.1.0] — 2026-07-10
 
 Hardening from a deep architectural review — turns two `assurance` weaknesses it

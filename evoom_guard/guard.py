@@ -89,7 +89,12 @@ _PROTECTED_GLOBS = (
 #   1.4 — attestation gains ``mode`` (repo|blackbox); a new reason code
 #         ``assurance_requirement_not_met`` (the enforceable --require-* policy,
 #         fail-closed); black-box verdicts now carry attestation too.
-SCHEMA_VERSION = "1.4"
+#   1.5 — black-box candidate_isolation is now the *delivered* boundary (a real
+#         CandidateRunner; fail-closed when a container cannot be delivered), the
+#         verdict is composite (repo suite AND pack) unless --blackbox-only, and
+#         the attestation gains isolation_evidence / deleted_paths_applied /
+#         repo_suite_* / base_sha / head_sha / junit_sha256.
+SCHEMA_VERSION = "1.5"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -264,8 +269,11 @@ def guard(
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
     blackbox: bool = False,
+    blackbox_only: bool = False,
     require_report_integrity: str | None = None,
     require_candidate_isolation: str | None = None,
+    base_sha: str | None = None,
+    head_sha: str | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -383,28 +391,56 @@ def guard(
             )
         bx = run_blackbox(
             repo_path, candidate, os.path.abspath(verifier_pack), timeout=timeout,
+            isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+            mem_limit_mb=mem_limit_mb, deleted_paths=tuple(safe_deleted),
         )
+        # candidate_isolation comes from what the runner DELIVERED, never the flag.
+        delivered_iso = (bx.isolation or {}).get("delivered", "subprocess")
         rmap_bx = _risk_map(repo_path, candidate)
         for d in all_touched:
             if d in deleted and d not in rmap_bx:
                 rmap_bx[d] = (0, len(_read_repo_file(repo_path, d).splitlines()))
         risk_bx = risk_score(rmap_bx, protected=_PROTECTED_GLOBS + tuple(protected))
+
+        # Composite verdict: the external pack ADDS a dimension, it must never
+        # REPLACE the repo's own suite. Unless --blackbox-only, run the repo-native
+        # suite too and require BOTH to pass (a green pack must not mask an internal
+        # regression). A pure-CLI target with no repo suite uses --blackbox-only.
+        repo_verdict = None
+        if not blackbox_only:
+            repo_problem = {k: v for k, v in problem.items() if k != "verifier_pack"}
+            repo_verdict = RepoVerifier(
+                timeout=timeout, mem_limit_mb=mem_limit_mb,
+                isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+            ).verify(candidate, repo_problem)
+
         if not bx.ran:
             v_bx, code_bx = ERROR, (REASON_TEST_TIMEOUT if bx.error == "timeout" else REASON_NO_TEST_VERDICT)
             reason_bx = bx.error or "the black-box pack produced no verdict"
-        elif bx.passed:
-            v_bx, code_bx, reason_bx = PASS, REASON_TESTS_PASSED, (
-                f"the black-box pack passed ({bx.tests_passed}/{bx.tests_total}) — "
-                "the candidate satisfied the judge-owned protocol tests, judged from "
-                "outside its own process"
-            )
-        else:
+        elif not bx.passed:
             v_bx, code_bx, reason_bx = FAIL, REASON_TESTS_FAILED, (
                 f"the black-box pack failed ({bx.tests_passed}/{bx.tests_total})"
             )
-        assurance_bx = _assurance_profile(isolation, verifier_pack, blackbox=True)
+        elif repo_verdict is not None and not repo_verdict.passed:
+            # Pack passed, but the repo's own suite did not — block the merge.
+            v_bx, code_bx, reason_bx = FAIL, REASON_TESTS_FAILED, (
+                "the black-box pack passed but the repo's own test suite failed "
+                f"({repo_verdict.diagnostics[:200]}) — a green pack must not mask an "
+                "internal regression; fix the repo suite or use --blackbox-only"
+            )
+        else:
+            extra = "" if repo_verdict is None else " and the repo's own suite passed"
+            v_bx, code_bx, reason_bx = PASS, REASON_TESTS_PASSED, (
+                f"the black-box pack passed ({bx.tests_passed}/{bx.tests_total}){extra} — "
+                "the candidate satisfied the judge-owned protocol tests, judged from "
+                "outside its own process"
+            )
+        assurance_bx = _assurance_profile(
+            delivered_iso, verifier_pack, blackbox=True,
+            composed_repo_suite=(repo_verdict is not None),
+        )
         # Enforceable assurance policy (fail-closed): refuse to ship a verdict whose
-        # actual assurance is below what the caller required.
+        # ACTUAL (delivered) assurance is below what the caller required.
         shortfall_bx = _assurance_shortfall(
             assurance_bx,
             require_report_integrity=require_report_integrity,
@@ -412,6 +448,7 @@ def guard(
         )
         if shortfall_bx is not None:
             v_bx, code_bx, reason_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall_bx
+        repo_art = repo_verdict.artifact if repo_verdict is not None else {}
         return GuardResult(
             verdict=v_bx, passed=(v_bx == PASS), reason=reason_bx,
             files_changed=changed, protected_violations=[],
@@ -419,13 +456,23 @@ def guard(
             tests_passed=bx.tests_passed if bx.ran else None,
             tests_total=bx.tests_total if bx.ran else None,
             verdict_source="blackbox" if bx.ran else None,
-            diagnostics=bx.diagnostics, reason_code=code_bx, isolation=isolation,
+            diagnostics=bx.diagnostics, reason_code=code_bx, isolation=delivered_iso,
             assurance=assurance_bx,
             attestation=_build_attestation(
                 candidate, safe_deleted=safe_deleted, test_command=test_command,
                 protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-                isolation=isolation,
-                art={"verifier_pack_sha256": bx.pack_sha256, "verifier_pack_manifest": bx.pack_manifest},
+                isolation=delivered_iso,
+                art={
+                    "verifier_pack_sha256": bx.pack_sha256,
+                    "verifier_pack_manifest": bx.pack_manifest,
+                    "junit_sha256": bx.junit_sha256,
+                    "isolation_evidence": bx.isolation,
+                    "deleted_paths_applied": bx.deleted_applied,
+                    "repo_suite_junit_sha256": repo_art.get("junit_sha256") if repo_art else None,
+                    "repo_suite_passed": repo_verdict.passed if repo_verdict is not None else None,
+                    "base_sha": base_sha,
+                    "head_sha": head_sha,
+                },
                 mode="blackbox",
             ),
         )
@@ -606,6 +653,16 @@ def _build_attestation(
         "junit_sha256": art.get("junit_sha256"),
         "verifier_pack_sha256": art.get("verifier_pack_sha256"),
         "verifier_pack_manifest": art.get("verifier_pack_manifest"),
+        # Black-box binding: the delivered isolation, the applied deletions, the
+        # composed repo-native suite result, and the base→head commits — so a
+        # signed black-box verdict is bound to the tree and boundary it judged,
+        # not just the candidate text.
+        "isolation_evidence": art.get("isolation_evidence"),
+        "deleted_paths_applied": art.get("deleted_paths_applied"),
+        "repo_suite_junit_sha256": art.get("repo_suite_junit_sha256"),
+        "repo_suite_passed": art.get("repo_suite_passed"),
+        "base_sha": art.get("base_sha"),
+        "head_sha": art.get("head_sha"),
     }
 
 
@@ -646,31 +703,40 @@ def _assurance_shortfall(
 
 
 def _assurance_profile(
-    isolation: str, verifier_pack: str | None, *, blackbox: bool = False
+    isolation: str, verifier_pack: str | None, *, blackbox: bool = False,
+    composed_repo_suite: bool = False,
 ) -> dict[str, Any]:
     pack = None
     if verifier_pack:
         pack = {
             "present": True,
             "integrity": "diff_excluded",       # the patch cannot modify the pack
-            "secrecy": "none",                  # the running code can read it
+            # In a container boundary the pack is not mounted into the candidate at
+            # all, so candidate code cannot reach it; in a subprocess boundary it
+            # shares the host and a determined candidate could locate and rewrite it.
+            "secrecy": "unmounted_from_candidate" if isolation in ("docker", "gvisor")
+                       else "reachable_same_host",
         }
     if blackbox:
-        # The verdict is produced by the judge's own process, which never runs
-        # the candidate's code — the same-process forgery is closed by construction.
+        # ``isolation`` here is the DELIVERED boundary (from the runner), not the
+        # requested flag — so candidate_isolation can never claim more than ran.
         return {
             "harness_integrity": "pre_gate_enforced",
             "report_integrity": "external_process_isolated",
             "candidate_isolation": isolation,
             "verifier_pack": pack,
+            "repo_native_suite": (
+                "composed_required" if composed_repo_suite else "not_run (--blackbox-only)"
+            ),
             "overall_profile": "black_box_external_judge",
             "note": (
                 "report_integrity is external_process_isolated: the verdict comes "
                 "from the judge's own pytest over judge-owned protocol tests, which "
                 "never import the candidate — so in-process report/exit forgery "
-                "cannot reach it. Holds only when the pack invokes the candidate "
-                "across a process boundary (a CLI/service via EVOGUARD_TARGET), not "
-                "by importing it. See docs/BLACKBOX.md."
+                "cannot reach it. candidate_isolation is what was DELIVERED "
+                f"('{isolation}'); a container boundary also removes the pack from "
+                "the candidate's reach. Unless --blackbox-only, the repo's own suite "
+                "was ALSO required to pass. See docs/BLACKBOX.md."
             ),
         }
     overall = "isolated_repo_native" if isolation in ("docker", "gvisor") else "repo_native_same_process"
@@ -788,6 +854,27 @@ def _diff_target_paths(diff_text: str) -> list[str]:
     return paths
 
 
+def _diff_head_sha(diff_text: str) -> str | None:
+    """Extract the head commit SHA if the diff carries one (git format-patch),
+    else ``None``. A plain ``git diff`` does not embed a commit SHA, so we never
+    invent one — the attestation records exactly what the diff proves."""
+    for line in (diff_text or "").splitlines():
+        if line.startswith("From ") and len(line) > 45:
+            tok = line[5:45]
+            if len(tok) == 40 and all(c in "0123456789abcdef" for c in tok):
+                return tok
+        if line.startswith(("--- ", "+++ ", "diff ")):
+            break
+    return None
+
+
+def _diff_base_sha(diff_text: str) -> str | None:
+    """Base commit SHA if present. A unified ``git diff`` only carries per-file
+    blob hashes (``index <base>..<head>``), which are NOT commit SHAs, so this
+    returns ``None`` rather than misrepresent a blob hash as a commit."""
+    return None
+
+
 def guard_from_diff(
     head_dir: str,
     diff_text: str,
@@ -806,6 +893,7 @@ def guard_from_diff(
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
     blackbox: bool = False,
+    blackbox_only: bool = False,
     require_report_integrity: str | None = None,
     require_candidate_isolation: str | None = None,
 ) -> tuple[GuardResult, list[str]]:
@@ -867,9 +955,10 @@ def guard_from_diff(
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             verifier_pack=verifier_pack,
             diff_coverage=diff_coverage, min_diff_coverage=min_diff_coverage,
-            blackbox=blackbox,
+            blackbox=blackbox, blackbox_only=blackbox_only,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
+            base_sha=_diff_base_sha(diff_text), head_sha=_diff_head_sha(diff_text),
         )
         result.source = "diff"
         result.base_reconstruction = "ok"

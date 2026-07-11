@@ -25,18 +25,51 @@ evo-guard guard ./repo --patch candidate.txt \
   `atexit` hook in it, cannot `os._exit` it, cannot rewrite its report. Its exit
   code is authoritative.
 - The candidate is exercised **only across a process boundary**. Guard applies
-  the patch to a throwaway copy and sets two environment variables for the pack:
+  the patch (including **deletions** — a removed file is absent in the judged
+  tree, matching the real merge) to a throwaway copy and sets these environment
+  variables for the pack:
 
   | env var | meaning |
   |---|---|
-  | `EVOGUARD_TARGET` | path to the patched repo copy |
-  | `EVOGUARD_PYTHON` | interpreter to launch the candidate with |
+  | `EVOGUARD_EXEC` | a launcher that runs its argv **under the delivered isolation** (host subprocess, or a read-only container) with the repo copy as the working root — **prefer this** |
+  | `EVOGUARD_PYTHON` | the interpreter token to launch a python candidate with |
+  | `EVOGUARD_TARGET` | path to the patched repo copy (used only in the no-launcher fallback) |
 
-  The pack invokes the candidate as a subprocess (a CLI, `python -m tool`, an
-  HTTP server it starts, …) and asserts on its **observable outputs**. Forgery
-  code in the candidate's source runs only inside those child processes, where
-  `os._exit(0)` affects the child, not the judge — and the pack checks outputs,
-  not the child's exit code, so a lying child changes nothing.
+  The pack invokes `subprocess.run([EVOGUARD_EXEC, EVOGUARD_PYTHON, "-m", "tool", …])`
+  and asserts on the candidate's **observable outputs**. Forgery code in the
+  candidate's source runs only inside those child processes, where `os._exit(0)`
+  affects the child, not the judge — and the pack checks outputs, not the child's
+  exit code, so a lying child changes nothing.
+
+## Isolation is *delivered*, never merely requested
+
+`candidate_isolation` in the verdict is the boundary the runner **actually
+delivered**, read from the run — not the flag you passed. If you ask for
+`--isolation docker` and the daemon is down, the image is missing, or the runtime
+is absent, Guard **refuses** (`ERROR` / `assurance_requirement_not_met`) rather
+than silently running on the host and *labelling* it docker. Pair it with the
+fail-closed floor and a container boundary becomes a contract:
+
+```bash
+evo-guard guard ./repo --patch p.txt --verifier-pack ./pack --blackbox \
+    --isolation docker --docker-image python:3.12-slim \
+    --require-candidate-isolation docker
+```
+
+In a container boundary the repo copy is mounted **read-only** and the
+judge-owned pack is **not mounted into the candidate at all** — so candidate code
+can neither write the host nor reach the pack to tamper with it. (In the
+`subprocess` boundary the candidate shares the host and user with the judge;
+`assurance.verifier_pack.secrecy` says so honestly — `reachable_same_host`.)
+
+## The pack ADDS a dimension — it does not replace your suite
+
+By default `--blackbox` runs a **composite** verdict: the harness-integrity check,
+**your repo's own test suite**, *and* the external pack must all pass. A green
+pack can never mask an internal regression the pack does not exercise. For a
+pure-CLI/service target that has no in-repo suite, pass `--blackbox-only` to judge
+the pack alone. The attestation records the repo suite's result
+(`repo_suite_passed`, `repo_suite_junit_sha256`) alongside the pack's.
 
 ## Writing a pack (the one rule)
 

@@ -140,7 +140,15 @@ def build_parser() -> argparse.ArgumentParser:
         "from the JUDGE's own pytest over the pack, which never imports the "
         "candidate — closing same-process report forgery (report_integrity: "
         "external_process_isolated). The pack invokes the candidate across a "
-        "process boundary via $EVOGUARD_TARGET. See docs/BLACKBOX.md.",
+        "process boundary via $EVOGUARD_EXEC (which runs it under the delivered "
+        "isolation). By default the repo's own suite is ALSO required to pass. "
+        "See docs/BLACKBOX.md.",
+    )
+    g_p.add_argument(
+        "--blackbox-only", dest="blackbox_only", action="store_true",
+        help="with --blackbox, judge ONLY the external pack and skip the repo's own "
+        "suite (for pure-CLI/service targets that have no in-repo tests). Without "
+        "this, a failing repo suite blocks the merge even if the pack passes.",
     )
     g_p.add_argument(
         "--require-report-integrity", dest="require_report_integrity", default=None,
@@ -381,7 +389,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             verifier_pack=args.verifier_pack,
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
-            blackbox=args.blackbox,
+            blackbox=args.blackbox, blackbox_only=args.blackbox_only,
             require_report_integrity=args.require_report_integrity,
             require_candidate_isolation=args.require_candidate_isolation,
         )
@@ -397,7 +405,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             verifier_pack=args.verifier_pack,
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
-            blackbox=args.blackbox,
+            blackbox=args.blackbox, blackbox_only=args.blackbox_only,
             require_report_integrity=args.require_report_integrity,
             require_candidate_isolation=args.require_candidate_isolation,
         )
@@ -412,7 +420,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             verifier_pack=args.verifier_pack,
             diff_coverage=args.diff_coverage or args.min_diff_coverage is not None,
             min_diff_coverage=args.min_diff_coverage,
-            blackbox=args.blackbox,
+            blackbox=args.blackbox, blackbox_only=args.blackbox_only,
             require_report_integrity=args.require_report_integrity,
             require_candidate_isolation=args.require_candidate_isolation,
         )

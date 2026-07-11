@@ -101,23 +101,34 @@ evo-guard guard ./repo --patch p.txt \
 ```
 
 The check is against **what actually ran**, never the requested value — so Guard
-can never claim a level it did not enforce. `--require-candidate-isolation`
-does the same for `subprocess < docker < gvisor`.
+can never claim a level it did not enforce. `--require-candidate-isolation` does
+the same for `subprocess < docker < gvisor`, and it reads the isolation the
+runner **delivered**: request `--isolation docker` with the daemon down or the
+image missing and Guard returns `ERROR` (`candidate_isolation` reported as
+`unavailable`), never a `PASS` mislabelled `docker`. The delivered boundary and
+its evidence (`image_digest`, `network`, `runtime`) are recorded in the
+attestation's `isolation_evidence`.
+
+In black-box mode the verdict is **composite** by default: your repo's own suite
+*and* the external pack must both pass (harness-integrity always applies first).
+The pack adds an unforgeable external dimension; it never replaces the internal
+suite. Pure-CLI targets with no in-repo suite opt out with `--blackbox-only`.
 
 ## Composing external + internal coverage
 
-`--blackbox` judges **external behaviour** (the pack's protocol tests). It does
-not run the repo's own unit suite, so pair the two in CI when you want both — a
-narrow protocol test must not hide an internal regression:
+`--blackbox` is **composite by default**: it runs the repo's own unit suite *and*
+the pack's external protocol tests, and both must pass. A narrow protocol test
+can therefore never hide an internal regression:
 
 ```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.1.0      # repo suite (same-process assurance)
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.1.0      # external behaviour (blackbox)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.2.0      # repo suite AND external pack (composite)
   with: { verifier-pack: ./pack, blackbox: "true",
           require-report-integrity: external_process_isolated }
 ```
 
-Both must pass to merge. Each verdict keeps its own crisp `report_integrity`.
+The attestation records both results (`repo_suite_passed`,
+`repo_suite_junit_sha256`) next to the pack's. A pure-CLI/service target that has
+no in-repo suite passes `blackbox-only: "true"` to judge the pack alone.
 
 ## How to use it
 

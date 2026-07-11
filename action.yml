@@ -69,7 +69,11 @@ inputs:
     required: false
     default: ""
   blackbox:
-    description: "'true' runs the external black-box judge (needs verifier-pack): the verdict comes from the judge's own pytest over the pack, which never imports the candidate — closing same-process report forgery. See docs/BLACKBOX.md."
+    description: "'true' runs the external black-box judge (needs verifier-pack): the verdict comes from the judge's own pytest over the pack, which never imports the candidate — closing same-process report forgery. The pack reaches the candidate via $EVOGUARD_EXEC, which runs it under the DELIVERED isolation. By default the repo's own suite is also required to pass. See docs/BLACKBOX.md."
+    required: false
+    default: "false"
+  blackbox-only:
+    description: "With blackbox, judge ONLY the external pack and skip the repo's own suite (for pure-CLI/service targets with no in-repo tests). Otherwise a failing repo suite blocks the merge even if the pack passes."
     required: false
     default: "false"
   require-report-integrity:
@@ -140,6 +144,7 @@ runs:
         if [ -n "${{ inputs.sarif }}" ]; then ARGS+=(--sarif "${{ inputs.sarif }}"); fi
         if [ -n "${{ inputs.verifier-pack }}" ]; then ARGS+=(--verifier-pack "${{ inputs.verifier-pack }}"); fi
         if [ "${{ inputs.blackbox }}" = "true" ]; then ARGS+=(--blackbox); fi
+        if [ "${{ inputs.blackbox-only }}" = "true" ]; then ARGS+=(--blackbox-only); fi
         if [ -n "${{ inputs.require-report-integrity }}" ]; then ARGS+=(--require-report-integrity "${{ inputs.require-report-integrity }}"); fi
         if [ -n "${{ inputs.require-candidate-isolation }}" ]; then ARGS+=(--require-candidate-isolation "${{ inputs.require-candidate-isolation }}"); fi
         if [ "${{ inputs.diff-coverage }}" = "true" ]; then ARGS+=(--diff-coverage); fi
