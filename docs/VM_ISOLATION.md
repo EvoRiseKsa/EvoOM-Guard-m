@@ -4,7 +4,7 @@
   Maintained and released by Mana Alharbi (مانع الحربي).
 -->
 
-# VM-class isolation for untrusted code — design (#51, Phase 2d)
+# VM-class isolation for untrusted code — design (Phase 2d)
 
 **Status: gVisor backend implemented; Firecracker design-only.** The portable
 gVisor backend ships as **`--isolation gvisor`** — the docker judge run through the
