@@ -30,6 +30,12 @@ posts a verdict comment, and **fails the check on anything but `PASS`**.
 > **No repo access / no pip?** Download the single-file `evo-guard.pyz` from the
 > release assets and run `python evo-guard.pyz …` — the core is stdlib-only, so it
 > needs no clone and no install (see the README "Install" section).
+>
+> Verify that download against the release's `SHA256SUMS`. A local rebuild is
+> deterministic when it uses the same source bytes and an equivalent
+> Python/OS/ZIP-zlib toolchain, but Windows and Linux builds are not promised to
+> be bit-identical. This does not weaken release immutability: rerunning the
+> release workflow cannot replace an existing asset with different bytes.
 
 ## 2. Read the verdict (what to do on each)
 

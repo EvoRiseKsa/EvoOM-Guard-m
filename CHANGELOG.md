@@ -85,10 +85,14 @@ the JUnit writer still share one process there, so its documented
   existing asset is downloaded and byte-compared; different bytes fail closed
   instead of being replaced with `--clobber`. The release workflow's external
   Actions are pinned to full commit SHAs.
-- **Reproducible single-file artifact.** `ops/build_pyz.py` writes entries in
-  canonical order with fixed timestamps and modes. Repeated builds from the
-  same source bytes and interpreter now produce the same `evo-guard.pyz`
-  SHA-256 instead of inheriting temporary-file timestamps.
+- **Deterministic single-file artifact within a matched build environment.**
+  `ops/build_pyz.py` writes entries in canonical order with fixed timestamps
+  and modes. Repeated builds from the same source bytes under an equivalent
+  Python/OS/ZIP-zlib toolchain produce the same `evo-guard.pyz` SHA-256 instead
+  of inheriting temporary-file timestamps. This does not promise
+  cross-platform bit identity: Windows and Linux checkouts/toolchains may
+  legitimately produce different bytes. Release rerun immutability remains
+  independent of that limitation—an existing asset is never replaced.
 
 ### Added / changed in the machine contract (schema 1.8)
 
