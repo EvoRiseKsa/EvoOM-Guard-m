@@ -9,6 +9,24 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.4.1] — 2026-07-13
+
+A focused security patch for deletion containment. It does not change the JSON
+schema or the documented assurance levels.
+
+### Security
+
+- **Fail-closed deletion containment.** A crafted deletion path whose parent in
+  the repository is a symlink could make the repo-native judge, black-box judge,
+  or diff-coverage evidence run delete a file outside the judge-owned throwaway
+  copy. All three paths now share one containment primitive: it validates the
+  normalized relative path, resolves and bounds the parent inside the workspace,
+  deletes a leaf symlink without dereferencing it, and fails closed on any
+  containment or filesystem error.
+- Added regression coverage for the three affected execution paths, ordinary
+  file/directory/missing deletion semantics, path normalization, and safe leaf
+  symlink removal.
+
 ## [3.4.0] — 2026-07-13
 
 A verifier-identity and execution-fidelity release (JSON schema 1.8). It makes

@@ -29,7 +29,7 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 {
   "schema_version": "1.8",
   "tool": "evoguard",
-  "tool_version": "3.4.0",
+  "tool_version": "3.4.1",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -231,7 +231,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

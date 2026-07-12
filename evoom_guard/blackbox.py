@@ -72,6 +72,7 @@ from evoom_guard.verifiers.repo_verifier import (
     parse_junit_xml,
     parse_patch_blocks,
 )
+from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 
 
 class BlackboxResult(NamedTuple):
@@ -176,18 +177,23 @@ def run_blackbox(
         # Apply deletions to the copy so the judged tree matches the real merge —
         # a change that removes a file must be judged with that file ABSENT.
         deleted_applied: list[str] = []
-        for rel in deleted_paths:
-            if not is_safe_relpath(rel):
-                continue
-            target = os.path.join(copy, *rel.split("/"))
-            try:
-                os.remove(target)
-                deleted_applied.append(rel)
-            except IsADirectoryError:
-                shutil.rmtree(target, ignore_errors=True)
-                deleted_applied.append(rel)
-            except OSError:
-                pass  # already absent — nothing to judge against
+        try:
+            for rel in deleted_paths:
+                if not is_safe_relpath(rel):
+                    continue
+                if delete_path_within_root(copy, rel):
+                    deleted_applied.append(rel)
+        except (OSError, UnsafeWorkspacePath) as exc:
+            return BlackboxResult(
+                False,
+                0,
+                0,
+                f"candidate deletion could not be applied safely: {exc}",
+                False,
+                "unsafe deletion path",
+                pack_sha256,
+                pack_manifest,
+            )
 
         # Deliver a REAL isolation boundary (fail-closed) and record what ran.
         runner = CandidateRunner(

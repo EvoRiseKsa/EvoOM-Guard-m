@@ -98,6 +98,7 @@ from evoom_guard.pack_manifest import (
 )
 from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.verifiers.grading import fraction_score
+from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 
 try:  # POSIX-only; absent on Windows.
     import resource
@@ -1274,16 +1275,18 @@ class RepoVerifier:
 
             # Apply deletions to the copy so the verdict reflects the real merge
             # (a removed source file should be *absent* when the suite runs).
-            for rel in deleted_paths:
-                if not is_safe_relpath(rel):
-                    continue  # never escape the copy (already gated; belt-and-braces)
-                target = os.path.join(copy, *rel.split("/"))
-                try:
-                    os.remove(target)
-                except IsADirectoryError:
-                    shutil.rmtree(target, ignore_errors=True)
-                except OSError:
-                    pass  # already absent — nothing to verify against
+            try:
+                for rel in deleted_paths:
+                    if not is_safe_relpath(rel):
+                        continue  # already gated; belt-and-braces
+                    delete_path_within_root(copy, rel)
+            except (OSError, UnsafeWorkspacePath) as exc:
+                return VerdictResult(
+                    passed=False,
+                    score=0.05,
+                    diagnostics=f"candidate deletion could not be applied safely: {exc}",
+                    artifact={"files_changed": changed, "files_deleted": []},
+                )
 
             env = judge_subprocess_env(workdir)
 

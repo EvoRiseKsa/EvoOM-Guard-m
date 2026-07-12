@@ -52,6 +52,7 @@ from evoom_guard.verifiers.repo_verifier import (
     parse_file_blocks,
     parse_patch_blocks,
 )
+from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 
 # The honesty line shipped inside every measurement (report + JSON).
 EXECUTED_IS_NOT_ASSERTED = (
@@ -185,16 +186,14 @@ def collect_diff_coverage(
         if apply_error is not None:
             base["note"] = "candidate did not apply for the coverage run"
             return base
-        for rel in deleted:
-            if not is_safe_relpath(rel):
-                continue
-            target = os.path.join(copy, *rel.split("/"))
-            try:
-                os.remove(target)
-            except IsADirectoryError:
-                shutil.rmtree(target, ignore_errors=True)
-            except OSError:
-                pass
+        try:
+            for rel in deleted:
+                if not is_safe_relpath(rel):
+                    continue
+                delete_path_within_root(copy, rel)
+        except (OSError, UnsafeWorkspacePath) as exc:
+            base["note"] = f"candidate deletion could not be applied safely: {exc}"
+            return base
 
         env = _judge_env(workdir)
         try:
