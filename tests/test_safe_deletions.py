@@ -132,12 +132,12 @@ def test_diff_coverage_refuses_child_delete_through_parent_symlink(
         return subprocess.CompletedProcess([], 1, "", "")
 
     monkeypatch.setattr(evidence_module.subprocess, "run", fake_run)
+    candidate = "<<<FILE: app.py>>>\nvalue = 2\n<<<END FILE>>>\n"
     result = collect_diff_coverage(
         str(repo),
-        "",
+        candidate,
         deleted=("escape/victim.txt",),
         test_command=[sys.executable, "-m", "pytest", "-q"],
-        file_blocks={"app.py": "value = 2\n"},
     )
 
     assert victim.read_text(encoding="utf-8") == "must survive\n"
