@@ -20,6 +20,12 @@
 > **See it run on an external target repo → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
 > an honest fix passes, test tampering is rejected, a fake `9999 passed` on stdout
 > still fails, and black-box report forgery is caught — all with the published release.
+>
+> **See it judge a real historical bug → [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md)**:
+> charset-normalizer's real `TypeError`-on-comparison bug (≤3.3.2, fixed upstream in
+> 3.4.0) — the genuine fix earns `PASS` with `repair_effect: demonstrated`, the
+> test-silencing variant is `REJECTED` before a single test runs, and the do-nothing
+> patch `FAIL`s. Reproducible from hash-pinned PyPI sdists.
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
@@ -288,6 +294,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs: a real repo, and a hard ungameable benchmark (cheat → REJECTED; honest → PASS) |
+| [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
 | [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, patch-immutable invariants (and their honest runtime limits) |
 | [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
