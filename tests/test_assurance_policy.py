@@ -270,10 +270,27 @@ class BlackboxIsolationHonestyTests(BlackboxAttestationTests):
     def test_repo_native_pack_secrecy_is_reported_honestly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, pack = self._repo_pack(tmp)
-            r = guard(repo, _block("calc/note.py", "# ok\n"),
-                      verifier_pack=pack, blackbox=True, blackbox_only=True)
+            r = guard(
+                repo,
+                _block("calc/note.py", "# ok\n"),
+                verifier_pack=pack,
+            )
             self.assertEqual(
                 r.assurance["verifier_pack"]["secrecy"], "readable_in_judge_process"
+            )
+
+    def test_blackbox_subprocess_pack_secrecy_is_reported_honestly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, pack = self._repo_pack(tmp)
+            r = guard(
+                repo,
+                _block("calc/note.py", "# ok\n"),
+                verifier_pack=pack,
+                blackbox=True,
+                blackbox_only=True,
+            )
+            self.assertEqual(
+                r.assurance["verifier_pack"]["secrecy"], "reachable_same_host"
             )
 
 
