@@ -314,6 +314,64 @@ def test_load_config_reads_setup_command(tmp_path):
     assert cfg["test_command"] == ["vitest", "run"]
 
 
+def test_load_config_reads_setup_boundary_and_output_contract(tmp_path):
+    p = tmp_path / ".evoguard.json"
+    p.write_text(
+        json.dumps(
+            {
+                "trust_setup_on_host": True,
+                "setup_output_globs": ["generated/**", "tool-cache/*"],
+                "expect_verifier_pack_sha256": "A" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+    cfg = cli._load_config(str(p), out=_QUIET)
+    assert cfg["trust_setup_on_host"] is True
+    assert cfg["setup_output_globs"] == ["generated/**", "tool-cache/*"]
+    assert cfg["expect_verifier_pack_sha256"] == "a" * 64
+
+
+def test_load_config_invalid_setup_policy_types_are_fail_closed(tmp_path):
+    for payload in (
+        {"trust_setup_on_host": "true"},
+        {"setup_output_globs": "generated/**"},
+        {"setup_output_globs": ["generated/**", 1]},
+        {"expect_verifier_pack_sha256": "not-a-digest"},
+    ):
+        p = tmp_path / ".evoguard.json"
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(cli.ConfigError):
+            cli._load_config(str(p), out=_QUIET)
+
+
+def test_cli_rejects_malformed_expected_pack_digest(tmp_path, capsys):
+    patch = tmp_path / "candidate.txt"
+    patch.write_text("<<<FILE: app.py>>>\nx = 1\n<<<END FILE>>>", encoding="utf-8")
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(patch),
+            "--expect-verifier-pack-sha256",
+            "abc",
+        ]
+    )
+    assert code == 2
+    assert "64 hex" in capsys.readouterr().out
+
+
+def test_cli_can_override_host_setup_trust_in_both_directions():
+    parser = cli.build_parser()
+    trusted = parser.parse_args(["guard", "--trust-setup-on-host"])
+    contained = parser.parse_args(["guard", "--no-trust-setup-on-host"])
+    inherited = parser.parse_args(["guard"])
+    assert trusted.trust_setup_on_host is True
+    assert contained.trust_setup_on_host is False
+    assert inherited.trust_setup_on_host is None
+
+
 def test_load_config_setup_command_as_string_is_fail_closed(tmp_path):
     # A shell-string setup_command was previously silently dropped; splitting on
     # spaces is unsafe for paths, so it is now an explicit config error.

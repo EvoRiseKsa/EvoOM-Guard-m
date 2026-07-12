@@ -106,7 +106,9 @@ jobs:
         env:
           EVOGUARD_E2E_IMAGE: python:3.12-slim
           EVOGUARD_E2E_PYTEST_IMAGE: evoguard-e2e-pytest:local
-        run: python -m pytest tests/test_blackbox_docker_e2e.py -v
+        run: >-
+          python -m pytest tests/test_blackbox_docker_e2e.py
+          tests/test_docker_isolation.py::test_docker_setup_suite_and_pack_e2e -v
 
   release-tag-guard:
     # Fail the build if evoom_guard.__version__ has no matching git tag on a

@@ -56,11 +56,18 @@ import time
 from typing import Any, NamedTuple
 
 from evoom_guard.candidate_runner import CandidateRunner, IsolationUnavailable
+from evoom_guard.pack_manifest import (
+    PackManifestError,
+    digest_and_manifest,
+    snapshot_pack,
+    verify_pack_snapshot,
+)
 from evoom_guard.verifiers.repo_verifier import (
     apply_blocks_to_copy,
     copy_repo_tree,
     distill_diagnostics,
     is_safe_relpath,
+    judge_subprocess_env,
     parse_file_blocks,
     parse_junit_xml,
     parse_patch_blocks,
@@ -81,62 +88,9 @@ class BlackboxResult(NamedTuple):
     deleted_applied: list[str] | None = None  # deletions actually applied to the copy
 
 
-class PackManifestError(ValueError):
-    """A PRESENT-but-invalid ``pack.json`` — fail-closed, never silently dropped.
-
-    The manifest is what turns a folder of tests into a *versioned behaviour
-    contract* (id / version / description / target_type). A malformed manifest
-    silently ignored would let a contract quietly lose its identity while the
-    verdict still claims to have been judged by it. ``pack.json`` stays
-    optional; only a broken one is an error. Validate ahead of a run with
-    ``evo-guard pack-doctor <dir>``.
-    """
-
-
 def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:
-    """Content digest of the pack (order-independent) + optional pack.json.
-
-    The pack is judge-owned and lives OUTSIDE the candidate copy, so there is no
-    before/after to reconcile — the digest binds the verdict to exactly which
-    protocol tests judged it, for the attestation. Raises
-    :class:`PackManifestError` when ``pack.json`` exists but is unreadable, not
-    an object, or missing its required ``id``/``version`` strings."""
-    import hashlib
-    import json as _json
-
-    digest = hashlib.sha256()
-    manifest: dict | None = None
-    for dirpath, dirnames, filenames in os.walk(pack_dir):
-        dirnames.sort()
-        for fn in sorted(filenames):
-            rel = os.path.relpath(os.path.join(dirpath, fn), pack_dir)
-            digest.update(rel.encode("utf-8"))
-            with open(os.path.join(dirpath, fn), "rb") as pf:
-                digest.update(pf.read())
-    mpath = os.path.join(pack_dir, "pack.json")
-    if os.path.isfile(mpath):
-        try:
-            with open(mpath, encoding="utf-8") as mf:
-                m = _json.load(mf)
-        except (OSError, ValueError) as exc:
-            raise PackManifestError(
-                f"pack.json in {pack_dir!r} is not readable JSON ({exc}) — fix it "
-                "or remove it (a plain folder of tests is a valid pack); check "
-                "with `evo-guard pack-doctor`"
-            ) from exc
-        if not isinstance(m, dict):
-            raise PackManifestError(
-                f"pack.json in {pack_dir!r} must be a JSON object"
-            )
-        for key in ("id", "version"):
-            if not isinstance(m.get(key), str) or not m[key].strip():
-                raise PackManifestError(
-                    f"pack.json in {pack_dir!r} is missing required string "
-                    f"field {key!r} — a manifest names a versioned behaviour "
-                    "contract; check with `evo-guard pack-doctor`"
-                )
-        manifest = {k: m[k] for k in ("id", "version", "description", "target_type") if k in m}
-    return digest.hexdigest(), manifest
+    """Compatibility wrapper around the canonical pack-contract parser."""
+    return digest_and_manifest(pack_dir)
 
 
 def _judge_command(pack_dir: str, xml_path: str) -> list[str]:
@@ -162,6 +116,7 @@ def run_blackbox(
     mem_limit_mb: int = 0,
     deleted_paths: tuple[str, ...] = (),
     file_blocks: dict[str, str] | None = None,
+    expect_verifier_pack_sha256: str | None = None,
 ) -> BlackboxResult:
     """Judge ``candidate`` against ``repo_path`` through the black-box ``pack_dir``.
 
@@ -176,15 +131,38 @@ def run_blackbox(
     if not pack_dir or not os.path.isdir(pack_dir):
         return BlackboxResult(False, 0, 0, "", False, f"verifier pack not found: {pack_dir!r}")
 
-    try:
-        pack_sha256, pack_manifest = _pack_digest_and_manifest(pack_dir)
-    except PackManifestError as exc:
-        # Fail-closed: a broken contract manifest must stop the run, never be
-        # silently dropped while the verdict claims the pack judged it.
-        return BlackboxResult(False, 0, 0, str(exc), False, "invalid pack manifest")
     workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
     copy = os.path.join(workdir, "repo")
+    pack_workdir: str | None = None
     try:
+        try:
+            # The candidate inherits HOME=workdir. Keep hidden checks outside
+            # that tree so subprocess mode does not hand it $HOME/pack.
+            pack_workdir = tempfile.mkdtemp(prefix="evo_blackbox_pack_")
+            pack_snapshot = os.path.join(pack_workdir, "pack")
+            pack_identity = snapshot_pack(pack_dir, pack_snapshot)
+            pack_sha256, pack_manifest = pack_identity
+        except PackManifestError as exc:
+            # The snapshot is the exact tree the judge executes; a broken or
+            # moving contract must stop rather than produce an unbound verdict.
+            return BlackboxResult(
+                False, 0, 0, str(exc), False, "verifier pack invalid"
+            )
+        expected_pack_sha256 = (expect_verifier_pack_sha256 or "").lower()
+        if expected_pack_sha256 and pack_sha256.lower() != expected_pack_sha256:
+            return BlackboxResult(
+                False,
+                0,
+                0,
+                (
+                    "verifier-pack identity mismatch: expected "
+                    f"{expected_pack_sha256}, observed {pack_sha256}"
+                ),
+                False,
+                "verifier pack identity mismatch",
+                pack_sha256,
+                pack_manifest,
+            )
         copy_repo_tree(repo_path, copy)
         apply_error = apply_blocks_to_copy(
             copy,
@@ -232,11 +210,7 @@ def run_blackbox(
 
         xml_path = os.path.join(workdir, "judge-blackbox.xml")
         env = {
-            "PATH": os.environ.get("PATH", "/usr/bin"),
-            "HOME": workdir,
-            "LANG": "C.UTF-8",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONNOUSERSITE": "1",
+            **judge_subprocess_env(workdir),
             # How the pack reaches the candidate. EVOGUARD_TARGET stays for
             # backward compatibility; EVOGUARD_EXEC is the delivered-isolation
             # launcher the pack should prefer.
@@ -244,15 +218,29 @@ def run_blackbox(
         }
         t0 = time.perf_counter()
         try:
+            verify_pack_snapshot(pack_snapshot, pack_identity)
             r = subprocess.run(
-                _judge_command(pack_dir, xml_path),
-                cwd=pack_dir,            # judge runs in the pack, NOT in the repo copy
+                _judge_command(pack_snapshot, xml_path),
+                cwd=pack_snapshot,       # judge runs in the snapshot, NOT in the repo copy
                 capture_output=True, text=True, timeout=timeout, env=env,
             )
         except subprocess.TimeoutExpired:
             return BlackboxResult(False, 0, 0, f"black-box pack timed out after {timeout}s",
                                   False, "timeout", pack_sha256, pack_manifest,
                                   None, iso, deleted_applied)
+        except PackManifestError as exc:
+            return BlackboxResult(
+                False, 0, 0, str(exc), False, "verifier pack snapshot changed",
+                pack_sha256, pack_manifest, None, iso, deleted_applied,
+            )
+        try:
+            verify_pack_snapshot(pack_snapshot, pack_identity)
+        except PackManifestError as exc:
+            return BlackboxResult(
+                False, 0, 0, str(exc), False,
+                "verifier pack changed while executing", pack_sha256,
+                pack_manifest, None, iso, deleted_applied,
+            )
         # Read the judge-owned report immediately (all pack subprocesses have
         # exited by now). The JUDGE's exit code is authoritative regardless.
         junit = None
@@ -270,12 +258,24 @@ def run_blackbox(
         # The judge process ran no candidate code, so its exit code is trustworthy.
         # exit 0 = pack passed; exit 1 = pack failed. Counts come from the report
         # when present (the judge wrote it), else fall back to the exit code.
-        if junit is not None and junit.total > 0:
-            tp, tt = junit.passed, junit.total
-        else:
-            tp, tt = (0, 0)
+        if junit is None or junit.total <= 0:
+            return BlackboxResult(
+                False, 0, 0, diagnostics, False,
+                "black-box pack produced no judge-owned test results",
+                pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied,
+            )
+        tp, tt = junit.passed, junit.total
+        junit_all_passed = junit.failures == 0 and junit.errors == 0 and tp == tt
+        if (r.returncode == 0 and not junit_all_passed) or (
+            r.returncode == 1 and junit_all_passed
+        ):
+            return BlackboxResult(
+                False, tp, tt, diagnostics, False,
+                "black-box JUnit/exit mismatch", pack_sha256, pack_manifest,
+                junit_sha256, iso, deleted_applied,
+            )
         if r.returncode == 0:
-            return BlackboxResult(True, tp or tt, tt, diagnostics, True, None, pack_sha256,
+            return BlackboxResult(True, tp, tt, diagnostics, True, None, pack_sha256,
                                   pack_manifest, junit_sha256, iso, deleted_applied)
         if r.returncode == 1:
             return BlackboxResult(False, tp, tt, diagnostics, True, None, pack_sha256,
@@ -286,3 +286,5 @@ def run_blackbox(
                               pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+        if pack_workdir is not None:
+            shutil.rmtree(pack_workdir, ignore_errors=True)

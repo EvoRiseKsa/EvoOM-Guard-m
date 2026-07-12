@@ -27,6 +27,11 @@ permission) when fixed.
   path without a `REJECTED`.
 - **Isolation not delivered but reported as delivered** (a run labelled
   `candidate_isolation: docker` that did not actually run in a container).
+- A configured verifier pack whose accepted `EVOGUARD_PACK_V2` identity, expected
+  digest pin, mandatory execution, or pre/post snapshot checks can be bypassed
+  while Guard still returns `PASS`.
+- A container verdict that claims setup/suite isolation inconsistent with the
+  recorded `setup_isolation`, resolved image ID, or read-only suite/pack mounts.
 - Path-escape, report-injection, or entity-bomb style attacks on the judge.
 
 ## Known and documented — NOT vulnerabilities
@@ -38,6 +43,16 @@ These are stated limits, not defects (see [`docs/ASSURANCE.md`](docs/ASSURANCE.m
   `--blackbox`; the same-process boundary is documented, not hidden.
 - The **subprocess boundary is not a sandbox**. Use `--isolation docker`/`gvisor`
   for OS-level confinement.
+- POSIX CPU/memory rlimits do not exist on native Windows (the wall timeout still
+  applies). The shell-free black-box subprocess launcher also requires a POSIX
+  host and fails closed on native Windows; use Linux/GitHub Actions or WSL.
+- Under docker/gVisor, `setup_command` runs in a writable container by default,
+  while suite and pack candidate mounts are read-only. Explicit
+  `trust_setup_on_host` is a documented compatibility downgrade and is reflected
+  as effective `subprocess` isolation.
+- `setup_output_globs` are trusted policy exclusions. If a repository owner
+  deliberately exempts a broad path, setup fidelity makes no claim about that
+  matching content; protect and review `.evoguard.json` accordingly.
 - The verdict binds to the runtime image digest, **not** a separately built
   artifact (artifact-bound verification is on the roadmap).
 

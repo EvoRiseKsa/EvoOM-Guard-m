@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.3.1"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.0"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -38,8 +38,8 @@ posts a verdict comment, and **fails the check on anything but `PASS`**.
 | ✅ `PASS` | 0 | tests pass, harness untouched | merge |
 | ❌ `FAIL` | 1 | the change's tests genuinely fail | send back to fix the **source** |
 | ⛔ `REJECTED` | 1 | the change edits tests/config/auto-exec — a reward-hack | **block**; the fix must touch the source, not the harness |
-| 🚨 `TAMPERED` | 1 | exit code ⟷ JUnit report disagree (forced exit) | **block**; never read as a pass |
-| ⚠️ `ERROR` | 1 | unparseable / unsafe path / empty / binary diff | re-submit a clean text diff |
+| 🚨 `TAMPERED` | 1 | exit/JUnit disagreement, or candidate/pack snapshot drift during judgment | **block**; never read as a pass |
+| ⚠️ `ERROR` | 1 | no trustworthy run: invalid diff/pack, setup failure, unavailable command/isolation, timeout or unmet policy | fix the reported prerequisite/policy error and rerun |
 
 Every run also emits a machine-readable JSON record (`--json`) with a stable
 `schema_version` and a fixed `reason_code` — integrations key off those. See
@@ -92,7 +92,7 @@ as a repository-contained contract no patch can weaken:
 }
 ```
 
-> **Mode-consistency (fail-closed, v3.3.1):** `min_diff_coverage` and
+> **Mode-consistency (fail-closed in v3.4.0):** `min_diff_coverage` and
 > `require_demonstrated_fix` run under the **subprocess judge only** today.
 > Adding them to a policy that also demands a container/black-box judge makes
 > every run `ERROR policy_requirement_unsupported` — deliberately: Guard
@@ -116,24 +116,77 @@ degrades to weaker defaults. CLI flags still override valid config values.
 
 ## 3¾. Hardening the setup command (the "setup mutation" surface)
 
-`setup_command` runs **inside the candidate copy** with a more permissive
-environment than the suite (package managers need their caches). That means a
-candidate's *lifecycle scripts* — an npm `postinstall`/`prepare` it added or
-edited — execute during setup. This sits inside the documented same-process
-boundary (`report_integrity: same_process_candidate_writable`), but you can
-remove the vector cheaply in JS ecosystems:
+`setup_command` runs in the throwaway copy before tests. In ordinary
+`subprocess` mode it is a host subprocess with a temporary HOME, minimal
+environment and wall timeout — **not a sandbox**. With docker/gVisor it
+runs **inside the resolved image by default**, with `/work` writable; the repo
+suite and configured verifier pack then run in separate containers with `/work`
+read-only. The default container network is `none`, so dependency acquisition
+must come from the image/cache or from a deliberately configured network.
+
+Guard snapshots the candidate tree before and after setup. New conventional
+outputs such as `node_modules`, `.venv`, `build`, `dist`, `target` and caches are
+allowed, while changes to judged source/harness fail closed. Additional outputs
+can be declared in protected `.evoguard.json`:
+
+```json
+{
+  "setup_command": ["pnpm", "install", "--frozen-lockfile"],
+  "setup_output_globs": ["generated/**"]
+}
+```
+
+`setup_output_globs` are **trusted exceptions**, not discoveries: matching paths
+are omitted from fidelity comparison. Keep patterns narrow. Setting
+`"trust_setup_on_host": true` under docker/gVisor is an explicit compatibility
+opt-in; the verdict records it and lowers effective candidate isolation to
+`subprocess`.
+
+Today `setup_command` and `--blackbox` are deliberately not composable: Guard
+returns `ERROR policy_requirement_unsupported` instead of silently preparing
+only one side of the composite run. Put black-box runtime dependencies in the
+environment/image until that boundary has an explicit implementation.
+
+### Candidate lifecycle scripts are still executable code
+
+Setup fidelity detects persistent changes to judged source/harness paths; it
+does not make an installer inert. A candidate can add or edit an npm
+`postinstall`/`prepare` entry in `package.json`, and an unqualified install
+command will execute it during setup. In JavaScript ecosystems, remove that
+surface when dependencies do not require install hooks:
 
 ```json
 { "setup_command": ["npm", "install", "--ignore-scripts", "--no-audit"] }
 ```
 
-`--ignore-scripts` (npm/pnpm/yarn) skips every lifecycle script; vitest/jest
-remain fully functional (verified live in the
-[Node-workspace fixture](https://github.com/EvoRiseKsa/evoom-guard-demo)).
-Only drop it when a dependency genuinely needs an install script — and know
-what you are re-enabling. For hard guarantees against a deliberately
-adversarial candidate, the answer remains the black-box judge, not setup
-tweaks.
+`--ignore-scripts` is available in npm/pnpm/yarn; vitest/jest remained
+functional in the tested
+[Node-workspace fixture](https://github.com/EvoRiseKsa/evoom-guard-demo).
+Only omit it for a reviewed dependency that genuinely needs an install script.
+For host isolation use the default container setup path; for report integrity
+use black-box judgment and bake its dependencies into the image/environment.
+Neither setup fidelity nor an installer flag is a security sandbox.
+
+### Independent Verifier Packs: run and pin them
+
+When `--verifier-pack` is supplied, Guard snapshots the pack outside the
+candidate tree and executes it as a **separate mandatory pytest phase** after
+the repo suite. Both phases must pass and the pack must collect at least one
+test. Validate and capture its canonical identity first:
+
+```bash
+evo-guard pack-doctor /secure/org-pack
+# Set PACK_SHA256 to the reported "pack sha256" in protected CI/policy.
+evo-guard guard . --diff patch.diff \
+  --verifier-pack /secure/org-pack \
+  --expect-verifier-pack-sha256 "$PACK_SHA256"
+```
+
+The V2 identity binds typed directory/file paths and content; symlinks and
+special files are rejected. The expected digest can also live in
+`.evoguard.json` as `expect_verifier_pack_sha256`, or in the Action input
+`expect-verifier-pack-sha256`. The attestation records the observed digest,
+manifest and pack test counts.
 
 ## 4. Supported test runners — the compatibility matrix
 
@@ -184,6 +237,11 @@ TypeScript/pnpm monorepo:
    }
    ```
 
+   Under docker/gVisor, this setup runs in the image while the later suite mount
+   is read-only. Ensure setup has completely materialized every dependency/build
+   output the suite needs; tools that insist on writing inside the repo during
+   tests need a compatible pre-build workflow, not a broad fidelity exception.
+
    `mem_limit: 0` is applied automatically when a `package.json` is present (V8
    reserves far more virtual memory than a sane `RLIMIT_AS`); set it explicitly to
    be safe. With this shape a clean source change verdicts `PASS` (`junit+exit`,
@@ -206,9 +264,14 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
   the suite runs under a separate kernel. Needs docker with the `runsc` runtime; see
   [`VM_ISOLATION.md`](VM_ISOLATION.md).
 
+Black-box subprocess mode uses a shell-free POSIX executable launcher. On native
+Windows it fails closed with guidance; run that path on Linux/GitHub Actions or
+under WSL. Repo-native Guard still runs on Windows, with a wall timeout but
+without POSIX CPU/memory rlimits.
+
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.3.1` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.4.0` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

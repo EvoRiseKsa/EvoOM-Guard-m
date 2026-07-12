@@ -65,14 +65,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.1   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.0   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.3.1"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.0"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```
@@ -80,7 +80,7 @@ evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v3.3.1`** — a release tag. The recommended pin and the right choice for
+> - **`@v3.4.0`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -169,13 +169,13 @@ only on the candidate run.
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-`EvoRiseKsa/EvoOM-Guard-m@v3.3.1`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+`EvoRiseKsa/EvoOM-Guard-m@v3.4.0`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.1   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.0   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # or "rejected-only" — see the warning below
@@ -198,7 +198,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.3.1"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.0"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
@@ -212,9 +212,16 @@ check automatically.
 
 The default judge runs the candidate in the **same process** as the report writer,
 so deliberate in-process source can forge the report (`report_integrity:
-same_process_candidate_writable`). Three flags close and enforce that:
+same_process_candidate_writable`). The following controls add independent checks
+or require a stronger boundary:
 
 - `--verifier-pack <dir>` — org-owned tests/invariants the patch cannot modify.
+  Repo-native verification runs the repo suite and then the accepted snapshot as
+  a separate mandatory pytest phase; both must pass. The pack is not copied into
+  the candidate tree, so a narrowed/custom repo command cannot silently omit it.
+- `--expect-verifier-pack-sha256 <digest>` — require the accepted
+  `EVOGUARD_PACK_V2` content/tree identity (from `pack-doctor --json`) before any
+  candidate code runs. A mismatch is `ERROR verifier_pack_identity_mismatch`.
 - `--blackbox` — the verdict comes from the **judge's own pytest** over the pack,
   which never imports the candidate (`report_integrity: external_process_isolated`).
   It is **composite** by default: the repo's own suite **and** the pack must pass.
@@ -225,6 +232,22 @@ same_process_candidate_writable`). Three flags close and enforce that:
 - `--require-report-integrity` / `--require-candidate-isolation` — fail-closed
   floors: a run weaker than required returns `ERROR`
   (`assurance_requirement_not_met`), never a silently downgraded `PASS`.
+
+The accepted pack lives in a judge-owned snapshot outside the candidate tree and
+its `HOME` and is checked immediately before and after execution. Persistent
+snapshot drift is `TAMPERED verifier_pack_snapshot_changed`; persistent candidate
+source/harness drift across the repo/pack phases is
+`TAMPERED candidate_tree_changed_during_run`. In host subprocess mode these are
+pre/post observations, **not** an OS sandbox or secrecy guarantee. Repo-native
+pack pytest may import candidate code and retains
+`report_integrity: same_process_candidate_writable`; only black-box mode moves
+the verdict producer outside the candidate process.
+
+The attestation identifies both digest algorithms. Pack content uses
+`verifier_pack_digest_format: EVOGUARD_PACK_V2`. A single JUnit document uses
+`junit_digest_format: JUNIT_XML_SHA256`; a repo-native repo+pack result uses
+`EVOGUARD_JUNIT_COMPOSITE_V1`, which frames and hashes both XML documents. Check
+the format field whenever comparing a stored digest.
 
 See [`START_HERE.md`](START_HERE.md) to pick a path, [`BLACKBOX.md`](BLACKBOX.md)
 for the judge, and [`ASSURANCE.md`](ASSURANCE.md) for what each level proves.
@@ -238,24 +261,44 @@ network access. For **untrusted** code (e.g. fork PRs), treat this like any othe
 code-execution gate: run it where the patch's code cannot reach your secrets, and
 isolate the runner. Guard never claims the subprocess is a sandbox.
 
-**Optional containerised judge** — `--isolation docker --docker-image <img>` runs the
-suite inside a short-lived container that is **network-less** (`--network none`),
-**read-only** (writes confined to a `/tmp` tmpfs), non-root-cwd, and bounded by
-`--cpus` / `--pids-limit` / `--memory`. The repo copy and the judge-owned JUnit
-report are *separate* bind mounts, so the verdict path is read back from the host,
-not from inside the candidate's tree. This is **defence in depth for semi-trusted
-code** (filesystem + network confinement, trivial cleanup) — it cuts off the
-network and the host filesystem, but a container shares the host kernel, so it is
-**not** a complete boundary for hostile code.
+**Optional containerised judge** — `--isolation docker --docker-image <img>` runs
+the suite inside a short-lived container with the configured network (default
+`none`), a read-only root filesystem, all capabilities dropped,
+`no-new-privileges`, and CPU/PID/memory/open-file limits. During suite execution
+the candidate tree is mounted `/work:ro`; `/tmp` is a writable tmpfs and `/out`
+is a separate writable judge-report mount. This protects the host/tree boundary,
+but it does **not** make the repo-native report unforgeable: candidate code,
+tests, and the JUnit writer still share a process. A Docker container also shares
+the host kernel, so it is defence in depth for semi-trusted code, not a complete
+hostile-code boundary.
 
-> **`setup_command` runs on the host, not in the container.** Under
-> `--isolation docker`/`gvisor` only the *test suite* runs inside the container; an
-> optional `setup_command` (e.g. `npm install`) still runs in a host subprocess
-> (it usually needs network, which the test container denies). So when the
-> dependency source is itself untrusted, the install step is **not** isolated —
-> treat `setup_command` input as trusted, or pre-build the image with deps baked in
-> and skip `setup_command`. For untrusted/public input use
-**`--isolation gvisor`** — the same judge through the gVisor `runsc` runtime (a
+**Setup boundary and tree fidelity (3.4).** An optional `setup_command` runs
+before the suite. Under Docker/gVisor it now runs **inside the requested boundary
+by default**, in a separate container using the same resolved image ID,
+network, runtime, and resource policy as the later suite/pack containers. Setup
+alone receives `/work:rw` and no report mount; suite and pack phases receive the
+candidate tree read-only, and the pack snapshot is `/verifier-pack:ro`.
+
+This has practical consequences:
+
+- The image must contain the setup tool and, when using a verifier pack, Python
+  and pytest. The default `--docker-network none` blocks package registries, so
+  prefer dependencies baked into the image or an offline cache.
+- Guard compares every pre-existing file/directory/symlink/special entry and
+  permission bit before and after setup. Only **new** conventional dependency/
+  build outputs are ignored by default. `setup_output_globs` in the protected
+  `.evoguard.json` adds trusted exceptions; never include source, tests, policy,
+  or harness paths, because the same exceptions apply to repo/pack continuity.
+- `--trust-setup-on-host` is an explicit compatibility escape hatch. It uses a
+  restricted host environment, records
+  `setup_isolation: subprocess_host_opt_in`, and lowers effective
+  `candidate_isolation` to
+  `subprocess`; a required Docker/gVisor assurance floor therefore refuses it.
+- `setup_command` is not supported with `--blackbox` today. The combination is
+  `ERROR policy_requirement_unsupported`, never a silently skipped setup.
+
+For untrusted/public input prefer **`--isolation gvisor`** — the same judge
+through the gVisor `runsc` runtime (a
 user-space guest kernel, no `/dev/kvm`), a separate-kernel boundary; a Firecracker
 microVM backend is designed in `docs/VM_ISOLATION.md`. The image must carry the
 repo's test runner (e.g. `node:22-slim` for `node --test`).

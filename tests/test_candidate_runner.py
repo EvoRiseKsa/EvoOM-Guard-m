@@ -24,7 +24,7 @@ import types
 import unittest
 from unittest import mock
 
-from evoom_guard.candidate_runner import CandidateRunner
+from evoom_guard.candidate_runner import CandidateRunner, IsolationUnavailable
 
 
 class LauncherIsShellFreeTests(unittest.TestCase):
@@ -38,6 +38,7 @@ class LauncherIsShellFreeTests(unittest.TestCase):
             self.assertNotIn("/bin/sh", body)
             self.assertNotIn("shell=True", body)
 
+    @unittest.skipIf(os.name == "nt", "POSIX executable launcher contract")
     def test_launcher_does_not_interpret_shell_metacharacters(self) -> None:
         # The "prefix" stands in for the docker argv; here it just echoes the argv
         # it receives. We invoke the launcher with an injection-looking argument
@@ -56,6 +57,7 @@ class LauncherIsShellFreeTests(unittest.TestCase):
             argv = open(os.path.join(tmp, "ARGV"), encoding="utf-8").read()
             self.assertIn(payload, argv)  # arrived as a single literal element
 
+    @unittest.skipIf(os.name == "nt", "POSIX executable launcher contract")
     def test_subprocess_launcher_runs_in_the_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             target = os.path.join(tmp, "t")
@@ -66,6 +68,19 @@ class LauncherIsShellFreeTests(unittest.TestCase):
                 capture_output=True, text=True, timeout=30,
             )
             self.assertEqual(os.path.realpath(r.stdout.strip()), os.path.realpath(target))
+
+    def test_windows_subprocess_launcher_fails_closed_with_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = CandidateRunner(isolation="subprocess")
+            # Simulate the Windows branch on every CI host; the native Windows
+            # job exercises the same path without relying on this patch.
+            with mock.patch("evoom_guard.candidate_runner.os.name", "nt"):
+                with self.assertRaisesRegex(
+                    IsolationUnavailable, "POSIX host.*WSL on Windows"
+                ):
+                    runner.prepare(tmp, tmp)
+            self.assertFalse(os.path.exists(os.path.join(tmp, "evoguard_exec.py")))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "evoguard_exec.py.json")))
 
 
 class ContainerPrefixTests(unittest.TestCase):
@@ -84,6 +99,10 @@ class ContainerPrefixTests(unittest.TestCase):
             launcher, _env, evidence = runner.prepare(tmp, tmp)
             cfg = json.load(open(launcher + ".json", encoding="utf-8"))
         self.assertEqual(evidence.delivered, "docker")
+        self.assertEqual(cfg["prefix"][-1], "sha256:abc")
+        self.assertNotIn("img", cfg["prefix"])
+        cap_index = cfg["prefix"].index("--cap-drop")
+        self.assertEqual(cfg["prefix"][cap_index + 1], "ALL")
         self.assertIn(evil, cfg["prefix"])                 # preserved intact…
         self.assertEqual(cfg["prefix"].count(evil), 1)     # …as exactly one element
 

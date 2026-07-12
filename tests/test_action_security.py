@@ -70,3 +70,24 @@ def test_fail_on_documents_the_rejected_only_footgun() -> None:
     desc = text[fail_on:desc_end]
     for token in ("FAIL", "TAMPERED", "ERROR", "GREEN"):
         assert token in desc, f"fail-on description must warn about {token}"
+
+
+def test_host_setup_escape_hatch_is_explicitly_forwarded_and_documented() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    assert "trust-setup-on-host:" in text
+    assert "INPUT_TRUST_SETUP_ON_HOST: ${{ inputs.trust-setup-on-host }}" in text
+    assert 'ARGS+=(--trust-setup-on-host)' in text
+    assert 'ARGS+=(--no-trust-setup-on-host)' in text
+    description = text[text.index("trust-setup-on-host:") : text.index("diff-coverage:")]
+    assert "weakens" in description
+    assert "subprocess" in description
+
+
+def test_verifier_pack_identity_pin_is_forwarded_without_shell_interpolation() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    assert "expect-verifier-pack-sha256:" in text
+    assert (
+        "INPUT_EXPECT_VERIFIER_PACK_SHA256: "
+        "${{ inputs.expect-verifier-pack-sha256 }}"
+    ) in text
+    assert 'ARGS+=(--expect-verifier-pack-sha256 "$INPUT_EXPECT_VERIFIER_PACK_SHA256")' in text

@@ -48,6 +48,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from evoom_guard import __version__
+from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.patchmin import risk_score
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
@@ -60,6 +61,7 @@ from evoom_guard.verifiers.repo_verifier import (
     is_protected_ci,
     is_protected_config,
     is_safe_relpath,
+    judge_subprocess_env,
     parse_file_blocks,
     parse_patch_blocks,
 )
@@ -112,14 +114,18 @@ _PROTECTED_GLOBS = (
 #         ``scope: repo_suite_only`` (the baseline never collects a verifier
 #         pack); evidence-only requests in unsupported modes attach an
 #         explicit unmeasured/note record instead of silently vanishing.
-SCHEMA_VERSION = "1.7"
+#   1.8 — canonical verifier-pack identity and execution fidelity: V2 pack
+#         digests, expected digest pins, mandatory separate pack execution,
+#         setup/suite isolation evidence, candidate/pack drift reason codes,
+#         and explicit JUnit digest formats for composite reports.
+SCHEMA_VERSION = "1.8"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
 REJECTED = "REJECTED"  # the patch edits the tests / their config (reward-hack)
 FAIL = "FAIL"          # the patch applied and ran, but the tests fail
 ERROR = "ERROR"        # the patch did not apply / produced no parseable edits
-TAMPERED = "TAMPERED"  # the exit code and the judge-owned JUnit report disagree
+TAMPERED = "TAMPERED"  # JUnit/exit disagreement or judged tree/pack drift
 
 # Stable machine codes for the verdict's cause (never reword without a SCHEMA_VERSION
 # bump). The human ``reason`` may change freely; adapters key off ``reason_code``.
@@ -142,6 +148,11 @@ REASON_SETUP_FAILED = "setup_failed"
 REASON_ASSURANCE_REQUIREMENT_NOT_MET = "assurance_requirement_not_met"
 REASON_FIX_NOT_DEMONSTRATED = "fix_not_demonstrated"
 REASON_POLICY_REQUIREMENT_UNSUPPORTED = "policy_requirement_unsupported"
+REASON_VERIFIER_PACK_IDENTITY_MISMATCH = "verifier_pack_identity_mismatch"
+REASON_VERIFIER_PACK_INVALID = "verifier_pack_invalid"
+REASON_VERIFIER_PACK_SNAPSHOT_CHANGED = "verifier_pack_snapshot_changed"
+REASON_CANDIDATE_TREE_CHANGED = "candidate_tree_changed_during_run"
+REASON_TEST_COMMAND_UNAVAILABLE = "test_command_unavailable"
 
 # Ordering of report-integrity levels, weakest → strongest. A caller can demand a
 # floor with require_report_integrity; if the run's actual level is below it, the
@@ -160,11 +171,25 @@ _OUTCOME_REASON = {
     "test_timeout": (FAIL, REASON_TEST_TIMEOUT),
     "setup_timeout": (ERROR, REASON_SETUP_TIMEOUT),
     "setup_failed": (ERROR, REASON_SETUP_FAILED),
+    "isolation_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
+    "pack_identity_mismatch": (ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH),
+    "pack_invalid": (ERROR, REASON_VERIFIER_PACK_INVALID),
+    "test_command_unavailable": (ERROR, REASON_TEST_COMMAND_UNAVAILABLE),
 }
 
-# The judge-owned directory an Independent Verifier Pack is mounted at inside
-# the throwaway copy. It arrives at judgment time (the candidate never saw it),
-# and a candidate that tries to pre-plant or edit it is rejected outright.
+_TAMPER_OUTCOME_REASON = {
+    "candidate_tree_changed": (
+        REASON_CANDIDATE_TREE_CHANGED,
+        "candidate source/harness changed during the repo-suite/verifier-pack run",
+    ),
+    "pack_snapshot_changed": (
+        REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
+        "the accepted verifier-pack snapshot changed before or during execution",
+    ),
+}
+
+# Reserved namespace from the pre-3.4 in-tree pack mount. A candidate still may
+# not pre-plant it; accepted packs now live in a separate judge-owned snapshot.
 VERIFIER_PACK_DIR = "evoguard_verifier_pack"
 
 
@@ -286,6 +311,8 @@ def guard(
     deleted: tuple[str, ...] = (),
     test_command: list[str] | None = None,
     setup_command: list[str] | None = None,
+    trust_setup_on_host: bool = False,
+    setup_output_globs: tuple[str, ...] = (),
     protected: tuple[str, ...] = (),
     allow: tuple[str, ...] = (),
     allow_new_tests: bool = False,
@@ -295,6 +322,7 @@ def guard(
     docker_image: str | None = None,
     docker_network: str = "none",
     verifier_pack: str | None = None,
+    expect_verifier_pack_sha256: str | None = None,
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
     blackbox: bool = False,
@@ -350,14 +378,13 @@ def guard(
     code — not a complete boundary for hostile code). Default ``"subprocess"`` is
     unchanged.
 
-    ``verifier_pack`` mounts an **Independent Verifier Pack** — a directory of
-    judge-owned tests/invariants the **patch cannot modify** (org-owned checks
-    injected at judgment time) — into the copy at ``evoguard_verifier_pack/``. The
-    suite then also collects the pack's tests, so a candidate overfitted to the
-    visible tests fails the pack's checks. A candidate that writes anywhere under
-    that directory is ``REJECTED``. **Not secret:** the running test code *can*
-    read the pack files off disk; the guarantee is tamper-resistance (the patch
-    cannot change the checks), not secrecy. See ``docs/VERIFIER_PACKS.md``.
+    ``verifier_pack`` supplies an **Independent Verifier Pack** of judge-owned
+    pytest invariants. Guard accepts a verified snapshot outside the candidate
+    tree and runs it as a separate mandatory phase after the repo suite; both
+    phases must pass. ``expect_verifier_pack_sha256`` can pin its V2 portable
+    content/tree identity before candidate code runs. Repo-native tests share the
+    judge process with candidate imports, so this provides integrity, not secrecy;
+    use black-box plus container isolation for runtime separation.
 
     ``diff_coverage=True`` adds **changed-line coverage evidence** (one extra
     suite run under ``coverage``): which changed lines the suite actually
@@ -376,15 +403,22 @@ def guard(
         _unsupported.append("require_demonstrated_fix")
     if min_diff_coverage is not None and (blackbox or isolation != "subprocess"):
         _unsupported.append("min_diff_coverage")
+    if blackbox and setup_command:
+        _unsupported.append("setup_command")
+    if expect_verifier_pack_sha256 and not verifier_pack:
+        _unsupported.append("expect_verifier_pack_sha256 (requires verifier_pack)")
     if _unsupported:
         _mode_desc = "the black-box judge" if blackbox else f"isolation {isolation!r}"
         _ep = _effective_policy(
             mode="blackbox" if blackbox else "repo", isolation=isolation,
             docker_image=docker_image, docker_network=docker_network,
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests,
             timeout=timeout, mem_limit_mb=mem_limit_mb,
             verifier_pack=verifier_pack, blackbox=blackbox, blackbox_only=blackbox_only,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
             min_diff_coverage=min_diff_coverage,
@@ -463,6 +497,8 @@ def guard(
         problem["deleted"] = safe_deleted
     if verifier_pack:
         problem["verifier_pack"] = os.path.abspath(verifier_pack)
+    if expect_verifier_pack_sha256:
+        problem["expect_verifier_pack_sha256"] = expect_verifier_pack_sha256.lower()
     if file_blocks:
         problem["file_blocks"] = dict(file_blocks)
 
@@ -488,6 +524,7 @@ def guard(
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             mem_limit_mb=mem_limit_mb, deleted_paths=tuple(safe_deleted),
             file_blocks=file_blocks,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
         )
         # candidate_isolation comes from what the runner DELIVERED, never the flag.
         delivered_iso = (bx.isolation or {}).get("delivered", "subprocess")
@@ -502,16 +539,44 @@ def guard(
         # suite too and require BOTH to pass (a green pack must not mask an internal
         # regression). A pure-CLI target with no repo suite uses --blackbox-only.
         repo_verdict = None
-        if not blackbox_only:
-            repo_problem = {k: v for k, v in problem.items() if k != "verifier_pack"}
+        if not blackbox_only and bx.ran and bx.passed:
+            repo_problem = {
+                k: v
+                for k, v in problem.items()
+                if k not in ("verifier_pack", "expect_verifier_pack_sha256")
+            }
+            repo_docker_image = (
+                (bx.isolation or {}).get("image_digest")
+                if isolation in ("docker", "gvisor")
+                else docker_image
+            )
             repo_verdict = RepoVerifier(
                 timeout=timeout, mem_limit_mb=mem_limit_mb,
-                isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+                isolation=isolation, docker_image=repo_docker_image,
+                docker_network=docker_network,
+                trust_setup_on_host=trust_setup_on_host,
+                setup_output_globs=setup_output_globs,
             ).verify(candidate, repo_problem)
 
         if not bx.ran:
-            v_bx, code_bx = ERROR, (REASON_TEST_TIMEOUT if bx.error == "timeout" else REASON_NO_TEST_VERDICT)
-            reason_bx = bx.error or "the black-box pack produced no verdict"
+            if bx.error == "timeout":
+                v_bx, code_bx = ERROR, REASON_TEST_TIMEOUT
+            elif bx.error == "verifier pack identity mismatch":
+                v_bx, code_bx = ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH
+            elif bx.error == "verifier pack invalid":
+                v_bx, code_bx = ERROR, REASON_VERIFIER_PACK_INVALID
+            elif bx.error == "isolation unavailable":
+                v_bx, code_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET
+            elif bx.error in (
+                "verifier pack snapshot changed",
+                "verifier pack changed while executing",
+            ):
+                v_bx, code_bx = TAMPERED, REASON_VERIFIER_PACK_SNAPSHOT_CHANGED
+            elif bx.error == "black-box JUnit/exit mismatch":
+                v_bx, code_bx = TAMPERED, REASON_JUNIT_EXIT_MISMATCH
+            else:
+                v_bx, code_bx = ERROR, REASON_NO_TEST_VERDICT
+            reason_bx = bx.diagnostics or bx.error or "the black-box pack produced no verdict"
         elif not bx.passed:
             v_bx, code_bx, reason_bx = FAIL, REASON_TESTS_FAILED, (
                 f"the black-box pack failed ({bx.tests_passed}/{bx.tests_total})"
@@ -533,6 +598,8 @@ def guard(
         assurance_bx = _assurance_profile(
             delivered_iso, verifier_pack, blackbox=True,
             composed_repo_suite=(repo_verdict is not None),
+            setup_isolation=(repo_verdict.artifact or {}).get("setup_isolation")
+            if repo_verdict is not None else None,
         )
         # Enforceable assurance policy (fail-closed): refuse to ship a verdict whose
         # ACTUAL (delivered) assurance is below what the caller required.
@@ -566,9 +633,12 @@ def guard(
             mode="blackbox", isolation=isolation,
             docker_image=docker_image, docker_network=docker_network,
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests,
             timeout=timeout, mem_limit_mb=mem_limit_mb,
             verifier_pack=verifier_pack, blackbox=True, blackbox_only=blackbox_only,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
             min_diff_coverage=min_diff_coverage,
@@ -593,17 +663,26 @@ def guard(
                 art={
                     "verifier_pack_sha256": bx.pack_sha256,
                     "verifier_pack_manifest": bx.pack_manifest,
+                    "verifier_pack_tests_passed": bx.tests_passed if bx.ran else None,
+                    "verifier_pack_tests_total": bx.tests_total if bx.ran else None,
                     "junit_sha256": bx.junit_sha256,
+                    "junit_digest_format": (
+                        "JUNIT_XML_SHA256" if bx.junit_sha256 else None
+                    ),
                     "isolation_evidence": bx.isolation,
                     "deleted_paths_applied": bx.deleted_applied,
                     "repo_suite_junit_sha256": repo_art.get("junit_sha256") if repo_art else None,
                     "repo_suite_passed": repo_verdict.passed if repo_verdict is not None else None,
+                    "repo_suite_image_digest": (
+                        repo_art.get("image_digest") if repo_art else None
+                    ),
                     "base_sha": base_sha,
                     "head_sha": head_sha,
                     "base_tree_sha": base_tree_sha,
                     "head_tree_sha": head_tree_sha,
                     "policy_id": policy_id,
                     "policy_version": policy_version,
+                    "setup_isolation": repo_art.get("setup_isolation"),
                 },
                 mode="blackbox",
             ),
@@ -620,6 +699,8 @@ def guard(
         verdict = RepoVerifier(
             timeout=timeout, mem_limit_mb=mem_limit_mb,
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
         ).verify(candidate, problem)
         art = verdict.artifact or {}
         diagnostics = verdict.diagnostics or ""
@@ -656,6 +737,9 @@ def guard(
             "configuration, the gate's CI/config, or an auto-executed file — fix the "
             f"source under test, not the harness ({', '.join(violations)})"
         ), REASON_PROTECTED_HARNESS_EDIT
+    elif art.get("outcome") in _TAMPER_OUTCOME_REASON:
+        code, summary = _TAMPER_OUTCOME_REASON[art["outcome"]]
+        v, reason = TAMPERED, f"{summary}: {diagnostics}"
     elif art.get("tamper"):
         # The two trustworthy signals (process exit code and the judge-owned JUnit
         # report) disagree — a forced exit / rewritten ``$?``. Never read as a pass.
@@ -743,6 +827,7 @@ def guard(
     ):
         baseline_info = _run_baseline_suite(
             repo_path, test_command=test_command, setup_command=setup_command,
+            setup_output_globs=setup_output_globs,
             timeout=timeout, mem_limit_mb=mem_limit_mb,
         )
         if baseline_info.get("verdict") == "NO_CLEAN_VERDICT":
@@ -751,8 +836,8 @@ def guard(
             baseline_info["repair_effect"] = "demonstrated"
         else:
             baseline_info["repair_effect"] = "not_demonstrated"
-        # Honest scope (1.7): the baseline collects the repo's own suite ONLY —
-        # a verifier pack mounted for the candidate run is NOT collected here,
+        # Honest scope: the baseline runs the repo's own suite ONLY —
+        # the candidate-only verifier-pack phase is NOT run here,
         # so with a pack the two runs are not judged by identical check sets.
         baseline_info["scope"] = "repo_suite_only"
         baseline_info["note"] = (
@@ -784,9 +869,12 @@ def guard(
             mode="repo", isolation=isolation,
             docker_image=docker_image, docker_network=docker_network,
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests,
             timeout=timeout, mem_limit_mb=mem_limit_mb,
             verifier_pack=verifier_pack, blackbox=False, blackbox_only=blackbox_only,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
             min_diff_coverage=min_diff_coverage,
@@ -804,7 +892,9 @@ def guard(
         }, mode="repo",
     )
 
-    assurance = _assurance_profile(isolation, verifier_pack)
+    assurance = _assurance_profile(
+        isolation, verifier_pack, setup_isolation=art.get("setup_isolation")
+    )
     # Enforceable assurance policy (fail-closed): the default judge is
     # same_process_candidate_writable, so a --require-report-integrity of
     # external_process_isolated here correctly refuses rather than overclaims.
@@ -842,6 +932,7 @@ def _run_baseline_suite(
     *,
     test_command: list[str] | None,
     setup_command: list[str] | None,
+    setup_output_globs: tuple[str, ...],
     timeout: int,
     mem_limit_mb: int,
 ) -> dict[str, Any]:
@@ -858,6 +949,9 @@ def _run_baseline_suite(
     from evoom_guard.adapters import instrument_command
     from evoom_guard.verifiers.repo_verifier import (
         RepoVerifier,
+        SetupFidelityError,
+        _setup_fidelity_changes,
+        _setup_fidelity_snapshot,
         detect_tamper,
         grade_repo_run,
         parse_junit_dir,
@@ -869,30 +963,32 @@ def _run_baseline_suite(
     copy = os.path.join(workdir, "repo")
     try:
         copy_repo_tree(repo_path, copy)
-        env = {
-            "PATH": os.environ.get("PATH", "/usr/bin"),
-            "HOME": workdir,
-            "LANG": "C.UTF-8",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            "PYTHONNOUSERSITE": "1",
-        }
+        env = judge_subprocess_env(workdir)
         if setup_command:
-            setup_env = dict(env)
-            setup_env["HOME"] = os.environ.get("HOME", workdir)
-            for _k, _v in os.environ.items():
-                if _k.startswith(("PNPM_", "NPM_", "YARN_", "NODE_", "npm_", "BUN_")):
-                    setup_env[_k] = _v
             try:
+                setup_before = _setup_fidelity_snapshot(copy, setup_output_globs)
                 r_setup = subprocess.run(
                     list(setup_command), cwd=copy, capture_output=True,
-                    text=True, timeout=timeout, env=setup_env,
+                    text=True, timeout=timeout, env=dict(env),
                 )
-            except (OSError, subprocess.TimeoutExpired):
+                setup_after = _setup_fidelity_snapshot(
+                    copy, setup_output_globs, baseline=setup_before
+                )
+            except (OSError, SetupFidelityError, subprocess.TimeoutExpired):
                 return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
-                        "tests_total": None}
+                        "tests_total": None, "setup_fidelity": "unverified"}
             if r_setup.returncode != 0:
                 return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
-                        "tests_total": None}
+                        "tests_total": None, "setup_fidelity": "setup_failed"}
+            setup_changes = _setup_fidelity_changes(setup_before, setup_after)
+            if setup_changes:
+                return {
+                    "verdict": "NO_CLEAN_VERDICT",
+                    "tests_passed": None,
+                    "tests_total": None,
+                    "setup_fidelity": "changed_judged_tree",
+                    "setup_fidelity_changes": setup_changes,
+                }
         base_cmd = rv._command({"repo_path": repo_path})
         if test_command:
             base_cmd = list(test_command)
@@ -961,8 +1057,11 @@ def _utc_now() -> str:
 def _effective_policy(
     *, mode: str, isolation: str, docker_image: str | None, docker_network: str,
     test_command: list[str] | None, setup_command: list[str] | None,
+    trust_setup_on_host: bool,
+    setup_output_globs: tuple[str, ...],
     protected: tuple[str, ...], allow: tuple[str, ...], allow_new_tests: bool,
     timeout: int, mem_limit_mb: int, verifier_pack: str | None,
+    expect_verifier_pack_sha256: str | None,
     blackbox: bool, blackbox_only: bool,
     require_report_integrity: str | None, require_candidate_isolation: str | None,
     min_diff_coverage: float | None, baseline_evidence: bool,
@@ -985,12 +1084,19 @@ def _effective_policy(
         "docker_network": docker_network,
         "test_command": list(test_command) if test_command else "default:python -m pytest",
         "setup_command": list(setup_command) if setup_command else None,
+        "trust_setup_on_host": trust_setup_on_host,
+        "setup_output_globs": sorted(setup_output_globs),
         "protected": sorted(protected),
         "allow": sorted(allow),
         "allow_new_tests": allow_new_tests,
         "timeout": timeout,
         "mem_limit_mb": mem_limit_mb,
         "verifier_pack_required": bool(verifier_pack),
+        "expect_verifier_pack_sha256": (
+            expect_verifier_pack_sha256.lower()
+            if expect_verifier_pack_sha256
+            else None
+        ),
         "blackbox": blackbox,
         "blackbox_only": blackbox_only,
         "require_report_integrity": require_report_integrity,
@@ -1024,8 +1130,13 @@ def _build_attestation(
             json.dumps(effective_policy, sort_keys=True).encode("utf-8")
         ).hexdigest(),
         "junit_sha256": art.get("junit_sha256"),
+        "junit_digest_format": art.get("junit_digest_format"),
         "verifier_pack_sha256": art.get("verifier_pack_sha256"),
         "verifier_pack_manifest": art.get("verifier_pack_manifest"),
+        "verifier_pack_tests_passed": art.get("verifier_pack_tests_passed"),
+        "verifier_pack_tests_total": art.get("verifier_pack_tests_total"),
+        "verifier_pack_digest_format": PACK_DIGEST_FORMAT
+        if art.get("verifier_pack_sha256") else None,
         # Black-box binding: the delivered isolation, the applied deletions, the
         # composed repo-native suite result, and the base→head commits — so a
         # signed black-box verdict is bound to the tree and boundary it judged,
@@ -1034,6 +1145,7 @@ def _build_attestation(
         "deleted_paths_applied": art.get("deleted_paths_applied"),
         "repo_suite_junit_sha256": art.get("repo_suite_junit_sha256"),
         "repo_suite_passed": art.get("repo_suite_passed"),
+        "repo_suite_image_digest": art.get("repo_suite_image_digest"),
         "base_sha": art.get("base_sha"),
         "head_sha": art.get("head_sha"),
         # Exact-revision binding (1.6): tree hashes pin the CONTENT judged even
@@ -1043,6 +1155,7 @@ def _build_attestation(
         # Which repo policy produced this verdict (from .evoguard.json).
         "policy_id": art.get("policy_id"),
         "policy_version": art.get("policy_version"),
+        "setup_isolation": art.get("setup_isolation"),
     }
 
 
@@ -1085,25 +1198,41 @@ def _assurance_shortfall(
 def _assurance_profile(
     isolation: str, verifier_pack: str | None, *, blackbox: bool = False,
     composed_repo_suite: bool = False,
+    setup_isolation: str | None = None,
 ) -> dict[str, Any]:
     pack = None
     if verifier_pack:
+        pack_in_container = isolation in ("docker", "gvisor")
         pack = {
             "present": True,
-            "integrity": "diff_excluded",       # the patch cannot modify the pack
-            # In a container boundary the pack is not mounted into the candidate at
-            # all, so candidate code cannot reach it; in a subprocess boundary it
-            # shares the host and a determined candidate could locate and rewrite it.
-            "secrecy": "unmounted_from_candidate" if isolation in ("docker", "gvisor")
-                       else "reachable_same_host",
+            "integrity": (
+                "verified_snapshot_read_only"
+                if pack_in_container
+                else "verified_snapshot_pre_post"
+            ),
+            # Only black-box/container mode keeps the pack outside the candidate
+            # boundary. Repo-native packs intentionally share the pytest process
+            # with candidate imports, so read-only storage is not secrecy.
+            "secrecy": (
+                "unmounted_from_candidate"
+                if blackbox and pack_in_container
+                else "reachable_same_host"
+                if blackbox
+                else "readable_in_judge_process"
+            ),
         }
+    effective_isolation = (
+        "subprocess" if setup_isolation == "subprocess_host_opt_in" else isolation
+    )
     if blackbox:
         # ``isolation`` here is the DELIVERED boundary (from the runner), not the
         # requested flag — so candidate_isolation can never claim more than ran.
         return {
             "harness_integrity": "pre_gate_enforced",
             "report_integrity": "external_process_isolated",
-            "candidate_isolation": isolation,
+            "candidate_isolation": effective_isolation,
+            "suite_isolation": isolation,
+            "setup_isolation": setup_isolation,
             "verifier_pack": pack,
             "repo_native_suite": (
                 "composed_required" if composed_repo_suite else "not_run (--blackbox-only)"
@@ -1119,11 +1248,19 @@ def _assurance_profile(
                 "was ALSO required to pass. See docs/BLACKBOX.md."
             ),
         }
-    overall = "isolated_repo_native" if isolation in ("docker", "gvisor") else "repo_native_same_process"
+    overall = (
+        "mixed_host_setup_repo_native"
+        if setup_isolation == "subprocess_host_opt_in"
+        else "isolated_repo_native"
+        if isolation in ("docker", "gvisor")
+        else "repo_native_same_process"
+    )
     return {
         "harness_integrity": "pre_gate_enforced",
         "report_integrity": "same_process_candidate_writable",
-        "candidate_isolation": isolation,
+        "candidate_isolation": effective_isolation,
+        "suite_isolation": isolation,
+        "setup_isolation": setup_isolation,
         "verifier_pack": pack,
         "overall_profile": overall,
         "note": (
@@ -1203,6 +1340,16 @@ def _reverse_apply(work_dir: str, diff_file: str) -> bool:
     falls back to ``patch -R -p1``. Used to reconstruct the BASE tree from the HEAD
     working tree given a base→head diff.
     """
+    # ``work_dir`` can itself live below another Git worktree (for example when
+    # TMPDIR points into a CI checkout).  Without a ceiling, ``git apply`` walks
+    # upward, discovers that unrelated repository, and may return success while
+    # silently ignoring paths outside its current subdirectory.  Stop discovery
+    # at the throwaway directory's parent so apply always treats ``work_dir`` as
+    # the standalone tree it is meant to reconstruct.
+    git_env = os.environ.copy()
+    git_env["GIT_CEILING_DIRECTORIES"] = os.path.dirname(
+        os.path.abspath(work_dir)
+    )
     for cmd in (
         ["git", "apply", "-R", "--whitespace=nowarn", diff_file],
         ["patch", "-R", "-p1", "--no-backup-if-mismatch", "-i", diff_file],
@@ -1210,7 +1357,14 @@ def _reverse_apply(work_dir: str, diff_file: str) -> bool:
         if shutil.which(cmd[0]) is None:
             continue
         try:
-            r = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True, timeout=60)
+            r = subprocess.run(
+                cmd,
+                cwd=work_dir,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=git_env if cmd[0] == "git" else None,
+            )
         except (OSError, subprocess.TimeoutExpired):
             continue
         if r.returncode == 0:
@@ -1282,6 +1436,8 @@ def guard_from_diff(
     *,
     test_command: list[str] | None = None,
     setup_command: list[str] | None = None,
+    trust_setup_on_host: bool = False,
+    setup_output_globs: tuple[str, ...] = (),
     protected: tuple[str, ...] = (),
     allow: tuple[str, ...] = (),
     allow_new_tests: bool = False,
@@ -1291,6 +1447,7 @@ def guard_from_diff(
     docker_image: str | None = None,
     docker_network: str = "none",
     verifier_pack: str | None = None,
+    expect_verifier_pack_sha256: str | None = None,
     diff_coverage: bool = False,
     min_diff_coverage: float | None = None,
     blackbox: bool = False,
@@ -1365,10 +1522,13 @@ def guard_from_diff(
             base, candidate,
             deleted=tuple(deleted),
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit_mb,
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             verifier_pack=verifier_pack,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             diff_coverage=diff_coverage, min_diff_coverage=min_diff_coverage,
             blackbox=blackbox, blackbox_only=blackbox_only,
             require_report_integrity=require_report_integrity,

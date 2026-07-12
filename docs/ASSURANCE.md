@@ -14,6 +14,8 @@ guarantee:
   "harness_integrity": "pre_gate_enforced",
   "report_integrity": "same_process_candidate_writable",
   "candidate_isolation": "subprocess",
+  "suite_isolation": "subprocess",
+  "setup_isolation": null,
   "verifier_pack": null,
   "overall_profile": "repo_native_same_process",
   "note": "..."
@@ -70,14 +72,16 @@ robust fix is to stop running the candidate in the judge's own process.
 
 ## The fix, shipped: an external black-box judge
 
-**Shipped in v3.0 as `--blackbox`, hardened in v3.2** (see [`BLACKBOX.md`](BLACKBOX.md)):
+**Shipped in v3.0 as `--blackbox`, hardened through v3.4** (see [`BLACKBOX.md`](BLACKBOX.md)):
 the verdict comes from the judge's own pytest over a pack of judge-owned tests
 that never import the candidate; the candidate is exercised only across a process
 boundary. `report_integrity` becomes `external_process_isolated`, and the same
 forgery that fakes a PASS under the default judge is caught. v3.2 added a real
 `CandidateRunner` with **delivered, fail-closed isolation** (a container the
 verdict can prove it ran under, or `ERROR` — never a mislabelled `docker`) and a
-**composite** repo-suite + pack verdict. The remaining direction — binding the
+**composite** repo-suite + pack verdict. v3.4 adds canonical V2 pack identity,
+optional digest pinning, verified external snapshots and mandatory separate pack
+execution. The remaining direction — binding the
 verdict to an immutable built **artifact digest** — is in [`ROADMAP.md`](../ROADMAP.md).
 
 ## `overall_profile` levels
@@ -87,6 +91,7 @@ verdict to an immutable built **artifact digest** — is in [`ROADMAP.md`](../RO
 | `static_gate` | only the harness-integrity check ran (no suite) |
 | `repo_native_same_process` | suite ran; candidate + report share one process (subprocess mode) |
 | `isolated_repo_native` | suite ran in a container (host isolated); report still same-process |
+| `mixed_host_setup_repo_native` | suite ran in docker/gVisor, but explicit `trust_setup_on_host` ran setup on the host; effective candidate isolation is therefore only `subprocess` |
 | `black_box_external_judge` | **shipped (`--blackbox`)** — verdict from the judge's own process; the candidate runs only across a process boundary. `report_integrity: external_process_isolated`. See [`BLACKBOX.md`](BLACKBOX.md). |
 
 ## Enforcing assurance (fail-closed policy)
@@ -111,11 +116,38 @@ image missing and Guard returns `ERROR` (`candidate_isolation` reported as
 its evidence (`image_digest`, `network`, `runtime`) are recorded in the
 attestation's `isolation_evidence`.
 
+`suite_isolation` and `setup_isolation` make a mixed run visible. Under
+docker/gVisor, `setup_command` runs inside the same resolved image by default,
+with the candidate workspace writable only for setup; suite and verifier-pack
+phases receive read-only candidate mounts. The compatibility opt-in
+`trust_setup_on_host` is recorded as `subprocess_host_opt_in` and lowers
+`candidate_isolation` to `subprocess`, so a required docker floor fails closed.
+`setup_output_globs` are trusted repository policy: matching paths are excluded
+from setup-fidelity comparison, so broad patterns weaken what that check proves.
+
 In black-box mode the verdict is **composite** by default: your repo's own suite
 *and* the external pack must both pass (harness-integrity always applies first).
 The pack adds an independent, judge-owned external evidence dimension; it never
 replaces the internal suite. Pure-CLI targets with no in-repo suite opt out with
 `--blackbox-only`.
+
+## Verifier-pack identity and execution
+
+A configured pack is not just copied next to the candidate. Guard creates a
+snapshot outside the candidate tree, validates the canonical manifest, rejects
+symlinks/special files, and calculates a framed `EVOGUARD_PACK_V2` SHA-256 over
+typed path/content records. `--expect-verifier-pack-sha256 <64-hex>` (or the
+equivalent protected config/Action input) pins the accepted identity before
+candidate code runs. The attestation records that digest, manifest, digest
+format and pack test counts.
+
+In repo-native mode the repo suite and pack execute as separate mandatory
+phases and both must pass; zero collected pack tests is not a verdict. The
+snapshot and candidate tree are checked around execution. In container modes,
+the candidate and pack mounts are read-only. This is an integrity boundary, not
+repo-native secrecy: imported candidate code still shares the pack's pytest
+process. Black-box + delivered container isolation is the mode in which the
+pack is not mounted into the candidate boundary at all.
 
 ## Composing external + internal coverage
 
@@ -124,7 +156,7 @@ the pack's external protocol tests, and both must pass. A narrow protocol test
 can therefore never hide an internal regression:
 
 ```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.1      # repo suite AND external pack (composite)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.0      # repo suite AND external pack (composite)
   with: { verifier-pack: ./pack, blackbox: "true",
           require-report-integrity: external_process_isolated }
 ```
@@ -145,3 +177,9 @@ no in-repo suite passes `blackbox-only: "true"` to judge the pack alone.
   diff, and use the shipped external judge (`--blackbox`, with `--isolation
   docker` for a delivered boundary) for a report-integrity guarantee the code
   under test cannot forge.
+
+The shell-free `$EVOGUARD_EXEC` used by black-box subprocess mode is a POSIX
+executable launcher. Native Windows subprocess mode fails closed rather than
+claiming a boundary it did not deliver; use Linux/GitHub Actions or WSL for that
+path. Ordinary repo-native Guard execution on Windows is separate, but POSIX
+CPU/memory rlimits are unavailable there (the wall timeout still applies).

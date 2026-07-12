@@ -6,6 +6,9 @@ build/
 dist/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.tooling/
+.tmp_*/
 .venv/
 venv/
 .coverage

@@ -17,15 +17,20 @@ the repo's **own test suite** in that copy, and reads the verdict from a **JUnit
 report the judge owns** (a path *outside* the copy) plus the **process exit code** —
 never from the candidate's stdout. Before running anything, it **rejects** any change
 that touches the tests, their config, the gate's CI, a lock file, or an auto-exec
-file. The result is one verdict (`PASS` / `REJECTED` / `FAIL` / `TAMPERED` / `ERROR`),
-an exit code, a JSON record, a Markdown report, and an optional SARIF document.
+file. If an Independent Verifier Pack is configured, Guard snapshots and identifies
+it outside the candidate tree, then requires a **separate pack phase** as well as the
+repo suite; merely copying a pack or collecting zero pack tests is never enough. The
+result is one verdict (`PASS` / `REJECTED` / `FAIL` / `TAMPERED` / `ERROR`), an exit
+code, a JSON record, a Markdown report, and an optional SARIF document.
 
 ## Module map (`evoom_guard/`)
 
 | Module | Responsibility |
 |---|---|
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
-| `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run the suite (subprocess/docker/gvisor) with rlimits + timeout, read the judge-owned JUnit, grade, and detect tamper. |
+| `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
+| `pack_manifest.py` | The canonical pack contract: strict `pack.json`, regular-file-only inventory, framed `EVOGUARD_PACK_V2` digest, verified snapshots, and pack test discovery. |
+| `candidate_runner.py` | The shell-free `$EVOGUARD_EXEC` launcher and delivered-isolation evidence for black-box candidates. |
 | `verifiers/grading.py` | The pure score gradient (`fraction_score`). |
 | `adapters.py` | Per-runner report wiring (`RunnerAdapter` + `instrument_command`). One class per runner; the engine stays runner-agnostic. |
 | `guard.py` | **Orchestration.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, the verdict mapping, and the report renderers (Markdown / JSON / SARIF). |
@@ -48,10 +53,15 @@ guard(base, candidate, deleted=…)
 RepoVerifier.verify(candidate, problem)
   │   copytree(base) → copy   (original never touched)
   │   apply FILE/PATCH blocks ; apply safe deletions ; restore package.json harness fields
-  │   (optional setup_command on host) 
+  │   snapshot + identify verifier pack outside candidate tree (when configured)
+  │   optional setup_command:
+  │     subprocess mode → host subprocess (temporary HOME/minimal env; not sandboxed)
+  │     docker/gvisor → writable setup container by default; verify setup fidelity
   │   instrument_command → splice a judge-owned JUnit reporter (per adapter)
-  │   run suite: subprocess (rlimits+timeout) | docker | gvisor(runsc)
-  │   read judge-owned judge-result.xml + exit code
+  │   run repo suite: subprocess (POSIX rlimits + timeout) | docker | gvisor(runsc)
+  │   if pack configured: run it as a separate mandatory pytest phase
+  │   container suite + pack mounts are read-only; verify candidate/pack snapshots
+  │   read judge-owned report(s) + exit code(s), compose both phases
   ▼
 grade_repo_run + detect_tamper ─► VerdictResult
   ▼
@@ -60,11 +70,13 @@ GuardResult ─► verdict + exit code + JSON + Markdown + SARIF
 
 ## The two invariants that make it reward-hack-resistant
 
-1. **Judge-owned verdict.** The structured report is written to a path *outside* the
-   repo copy and read back by the judge; the candidate (confined to relative paths
-   inside the copy) cannot pre-plant or overwrite it. The verdict comes from that
-   report + the exit code, **never** from candidate stdout — so a forged `"N passed"`
-   does nothing. An exit-code/report disagreement is surfaced as `TAMPERED`.
+1. **Judge-owned verdict path.** The structured report is written to a path *outside*
+   the repo copy, so a patch cannot pre-plant it through an edit block. The verdict
+   comes from that report + the exit code, **never** from candidate stdout — so a
+   forged `"N passed"` does nothing. An exit-code/report disagreement is surfaced as
+   `TAMPERED`. Repo-native code still shares the reporter process and therefore has
+   `report_integrity: same_process_candidate_writable`; black-box mode is the stronger
+   external-process boundary.
 2. **Harness-edit pre-gate.** Any edit *or deletion* of a test, its config, a lock
    file, the gate's CI, or an auto-exec file (`sitecustomize.py`, `*.pth`, `Makefile`,
    …) is `REJECTED` before the suite runs. See `is_protected*` / `is_judge_autoexec`
@@ -82,13 +94,21 @@ GuardResult ─► verdict + exit code + JSON + Markdown + SARIF
   in `tests/test_adapters.py`.
 - **Add an isolation backend:** extend `RepoVerifier` (`_docker_command` / `_run_docker`
   are the pattern) and keep the pre-gate running *before* any sandbox starts.
+- **Change pack behavior in one place:** extend `pack_manifest.py`; every consumer
+  must use the same manifest parser, V2 identity, snapshot verification and non-zero
+  test requirement.
 - **Never read the verdict from stdout**, and **keep the core dependency-free** —
   third-party needs live in the runner image or the adapter, not the core.
 
 ## Trust boundary (short)
 
-The default `subprocess` judge (rlimits + timeout) is for **trusted** repos, not a
-sandbox. `--isolation docker` adds network/filesystem confinement (shares the host
-kernel); `--isolation gvisor` adds a separate user-space guest kernel for untrusted
-code. A Firecracker microVM backend is designed (issue #51) but not built. See
+The default `subprocess` judge uses a wall timeout everywhere and CPU/memory rlimits
+on POSIX; it is for **trusted** repos, not a sandbox. The black-box subprocess
+launcher itself has a POSIX executable contract and fails closed on native Windows
+(use Linux/GitHub Actions or WSL). `--isolation docker` runs setup inside the
+resolved image by default, then runs suite and pack containers against read-only
+mounts; `gvisor` adds a separate user-space guest kernel. Explicit
+`setup_output_globs` are trusted policy exceptions to setup-fidelity checks, and
+`trust_setup_on_host` deliberately weakens effective isolation. A Firecracker
+microVM backend is designed (issue #51) but not built. See
 [`GUARD.md`](GUARD.md) and [`VM_ISOLATION.md`](VM_ISOLATION.md).

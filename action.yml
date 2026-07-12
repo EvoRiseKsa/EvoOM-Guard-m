@@ -65,7 +65,11 @@ inputs:
     required: false
     default: ""
   verifier-pack:
-    description: "Path to a directory of judge-owned tests/invariants the patch cannot include or modify (org-owned checks injected at judgment time), collected with the suite (pytest runners). Honest scope: in repo-native mode it is not runtime-isolated from the candidate (same process/filesystem) and is not hidden from it — use blackbox with isolation docker for runtime separation. See docs/VERIFIER_PACKS.md."
+    description: "Path to judge-owned pytest invariants. A verified snapshot runs as a separate mandatory phase after the repo suite. Repo-native mode shares the judge process and is not a secrecy boundary; use blackbox with Docker for runtime separation."
+    required: false
+    default: ""
+  expect-verifier-pack-sha256:
+    description: "Fail-closed EVOGUARD_PACK_V2 identity pin for verifier-pack (64 hex characters from pack-doctor). The accepted snapshot must match before candidate code runs."
     required: false
     default: ""
   blackbox:
@@ -82,6 +86,10 @@ inputs:
     default: ""
   require-candidate-isolation:
     description: "Fail-closed policy: require at least this candidate isolation ('subprocess'|'docker'|'gvisor') or the step ERRORs."
+    required: false
+    default: ""
+  trust-setup-on-host:
+    description: "Optional tri-state override: 'true' runs setup_command on the host (weakens effective isolation to subprocess); 'false' forces container setup; blank respects .evoguard.json."
     required: false
     default: ""
   diff-coverage:
@@ -157,10 +165,12 @@ runs:
         INPUT_MEM_LIMIT: ${{ inputs.mem-limit }}
         INPUT_SARIF: ${{ inputs.sarif }}
         INPUT_VERIFIER_PACK: ${{ inputs.verifier-pack }}
+        INPUT_EXPECT_VERIFIER_PACK_SHA256: ${{ inputs.expect-verifier-pack-sha256 }}
         INPUT_BLACKBOX: ${{ inputs.blackbox }}
         INPUT_BLACKBOX_ONLY: ${{ inputs.blackbox-only }}
         INPUT_REQUIRE_REPORT_INTEGRITY: ${{ inputs.require-report-integrity }}
         INPUT_REQUIRE_CANDIDATE_ISOLATION: ${{ inputs.require-candidate-isolation }}
+        INPUT_TRUST_SETUP_ON_HOST: ${{ inputs.trust-setup-on-host }}
         INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
         INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
         INPUT_BASELINE_EVIDENCE: ${{ inputs.baseline-evidence }}
@@ -214,10 +224,16 @@ runs:
         if [ -n "$INPUT_MEM_LIMIT" ]; then ARGS+=(--mem-limit "$INPUT_MEM_LIMIT"); fi
         if [ -n "$INPUT_SARIF" ]; then ARGS+=(--sarif "$INPUT_SARIF"); fi
         if [ -n "$INPUT_VERIFIER_PACK" ]; then ARGS+=(--verifier-pack "$INPUT_VERIFIER_PACK"); fi
+        if [ -n "$INPUT_EXPECT_VERIFIER_PACK_SHA256" ]; then ARGS+=(--expect-verifier-pack-sha256 "$INPUT_EXPECT_VERIFIER_PACK_SHA256"); fi
         if [ "$INPUT_BLACKBOX" = "true" ]; then ARGS+=(--blackbox); fi
         if [ "$INPUT_BLACKBOX_ONLY" = "true" ]; then ARGS+=(--blackbox-only); fi
         if [ -n "$INPUT_REQUIRE_REPORT_INTEGRITY" ]; then ARGS+=(--require-report-integrity "$INPUT_REQUIRE_REPORT_INTEGRITY"); fi
         if [ -n "$INPUT_REQUIRE_CANDIDATE_ISOLATION" ]; then ARGS+=(--require-candidate-isolation "$INPUT_REQUIRE_CANDIDATE_ISOLATION"); fi
+        if [ "$INPUT_TRUST_SETUP_ON_HOST" = "true" ]; then
+          ARGS+=(--trust-setup-on-host)
+        elif [ "$INPUT_TRUST_SETUP_ON_HOST" = "false" ]; then
+          ARGS+=(--no-trust-setup-on-host)
+        fi
         if [ "$INPUT_DIFF_COVERAGE" = "true" ]; then ARGS+=(--diff-coverage); fi
         if [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then ARGS+=(--min-diff-coverage "$INPUT_MIN_DIFF_COVERAGE"); fi
         if [ "$INPUT_BASELINE_EVIDENCE" = "true" ]; then ARGS+=(--baseline-evidence); fi

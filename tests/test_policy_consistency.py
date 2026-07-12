@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-"""Cross-mode policy consistency (schema 1.7) — no requested gate is ever
+"""Cross-mode policy consistency (schema 1.8) — no requested gate is ever
 silently dropped.
 
 An external review of v3.3.0 found the exact failure this file pins: the new
@@ -79,6 +79,11 @@ class UnsupportedGateFailsClosedTests(unittest.TestCase):
     def test_min_diff_coverage_with_blackbox_errors(self) -> None:
         self._expect_unsupported(min_diff_coverage=80.0, blackbox=True)
 
+    def test_blackbox_setup_is_rejected_instead_of_silently_ignored(self) -> None:
+        self._expect_unsupported(
+            blackbox=True, setup_command=[sys.executable, "-c", "pass"]
+        )
+
     @unittest.skipUnless(HAS_PYTEST, "pytest runs the suite")
     def test_supported_combination_still_passes(self) -> None:
         r = guard(self.root, SAFE, test_command=TEST_CMD, timeout=120,
@@ -118,6 +123,19 @@ class EffectivePolicyHashTests(unittest.TestCase):
     def test_policy_identity_changes_the_fingerprint(self) -> None:
         self.assertNotEqual(self._sha(), self._sha(policy_id="org/prod"))
 
+    def test_setup_boundary_changes_the_fingerprint(self) -> None:
+        self.assertNotEqual(self._sha(), self._sha(trust_setup_on_host=True))
+
+    def test_setup_output_contract_changes_the_fingerprint(self) -> None:
+        self.assertNotEqual(
+            self._sha(), self._sha(setup_output_globs=("generated/**",))
+        )
+
+    def test_expected_pack_identity_changes_the_fingerprint(self) -> None:
+        self.assertNotEqual(
+            self._sha(), self._sha(expect_verifier_pack_sha256="a" * 64)
+        )
+
     def test_effective_policy_ships_in_the_attestation(self) -> None:
         r = guard(self.root, SAFE, test_command=TEST_CMD, timeout=120,
                   min_diff_coverage=None, policy_id="org/prod", policy_version="2")
@@ -125,7 +143,9 @@ class EffectivePolicyHashTests(unittest.TestCase):
         ep = r.attestation["effective_policy"]
         for key in (
             "mode", "isolation", "protected", "allow", "allow_new_tests",
-            "test_command", "setup_command", "timeout", "mem_limit_mb",
+            "test_command", "setup_command", "trust_setup_on_host",
+            "setup_output_globs", "timeout", "mem_limit_mb",
+            "expect_verifier_pack_sha256",
             "require_report_integrity", "require_candidate_isolation",
             "min_diff_coverage", "baseline_evidence", "require_demonstrated_fix",
             "blackbox", "blackbox_only", "verifier_pack_required",
@@ -140,6 +160,7 @@ class EffectivePolicyHashTests(unittest.TestCase):
 class ExplicitEvidenceDegradationTests(unittest.TestCase):
     """Evidence-only requests in unsupported modes degrade LOUDLY, not silently."""
 
+    @unittest.skipIf(os.name == "nt", "black-box subprocess launcher requires POSIX")
     def test_blackbox_baseline_request_yields_unmeasured_record(self) -> None:
         # A real (trivial) judge-owned pack, subprocess black-box: the verdict
         # works, and the baseline request comes back as an explicit unmeasured

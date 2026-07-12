@@ -12,7 +12,7 @@ There are three ways to run it. Pick one — you do **not** need the others to s
 
 | Your need | Profile | Command flag |
 |---|---|---|
-| Stop an AI agent from editing/deleting your tests, and run your suite | **Basic integrity gate** (Path 1) | *(none — the default)* |
+| Stop an AI agent from editing/deleting your tests, and run your suite | **Basic integrity gate** (Path 1) | *(none — the default; optional `--verifier-pack` adds org checks)* |
 | Also verify a **CLI's** external behaviour with a judge-owned external verdict | **External behavior gate** (Path 2) | `--blackbox` + `--verifier-pack` |
 | Run the black-box candidate behind a real OS isolation boundary | **Isolated external gate** (Path 3) | `--isolation docker` (fail-closed) |
 
@@ -45,6 +45,11 @@ git diff main...HEAD | evo-guard guard --diff - --test-command "python -m pytest
 **Expected:** `✅ PASS` if the suite passes and the harness is untouched; `⛔ REJECTED`
 if the patch touches a test/config; `❌ FAIL` if tests fail.
 
+**Optional independent checks:** adding `--verifier-pack /secure/pack` snapshots
+that pack outside the candidate tree and runs it as a **separate mandatory
+phase**. Repo suite and pack must both pass, and zero collected pack tests cannot
+produce `PASS`. Pin its `EVOGUARD_PACK_V2` identity as shown below.
+
 ---
 
 ## Path 2 — External behavior gate (black-box CLI)
@@ -58,7 +63,9 @@ external_process_isolated`); by default it is **composite** — your repo's own 
 **and** the pack must both pass.
 
 **Does NOT guarantee (without `--isolation docker`):** OS isolation — the candidate
-runs as a host subprocess.
+runs as a host subprocess. The shell-free black-box launcher has a POSIX
+executable contract; native Windows subprocess mode fails closed, so use
+Linux/GitHub Actions or WSL for this path.
 
 **Try it (a complete, runnable example ships in the repo):**
 ```bash
@@ -98,6 +105,11 @@ evo-guard guard ./sample_repo --patch patches/honest.txt --verifier-pack ./pack 
 **Expected:** `✅ PASS` at `candidate_isolation: docker`; `⚠️ ERROR` if the daemon or
 image is missing (fail-closed).
 
+The candidate launcher uses the exact resolved image ID, not a mutable tag.
+`setup_command` is currently rejected with `--blackbox` rather than being
+silently applied to only one side of the composite; bake required runtime
+dependencies into the image/environment.
+
 > **HTTP / networked services:** a documented, tested recipe ships in
 > [`examples/blackbox-http/`](../examples/blackbox-http/) — the pack launches the
 > service via `$EVOGUARD_EXEC` and asserts on live HTTP responses (in-process
@@ -105,6 +117,28 @@ image is missing (fail-closed).
 > **subprocess** black-box boundary: the hardened `--network none` container
 > deliberately severs the judge↔candidate channel, so for container-level
 > isolation wrap the behaviour behind a CLI entry point instead.
+
+---
+
+## Pin a verifier pack (Paths 1–3)
+
+```bash
+evo-guard pack-doctor /secure/pack
+# Set PACK_SHA256 to the reported "pack sha256" in protected CI/policy.
+evo-guard guard . --diff patch.diff --verifier-pack /secure/pack \
+  --expect-verifier-pack-sha256 "$PACK_SHA256"
+```
+
+V2 binds the pack's typed directory/file paths and content; symlinks and special
+files are refused. Guard verifies the accepted snapshot before and after it runs
+and records the digest, manifest and pack test counts in the attestation.
+
+For repo-native docker/gVisor runs, `setup_command` runs inside a writable setup
+container by default, then suite and pack receive the candidate read-only. New
+conventional dependency/build outputs are permitted. Additional
+`setup_output_globs` in protected `.evoguard.json` are **trusted exceptions**;
+keep them narrow. `trust_setup_on_host` is an explicit recorded downgrade to
+effective `subprocess` isolation.
 
 ---
 

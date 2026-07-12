@@ -14,8 +14,10 @@ that yields a false `PASS` under the default judge yields the correct `FAIL`
 here.
 
 ```bash
+# Set PACK_SHA256 to the EVOGUARD_PACK_V2 value reported by pack-doctor.
 evo-guard guard ./repo --patch candidate.txt \
-    --verifier-pack examples/blackbox-pack --blackbox
+    --verifier-pack examples/blackbox-pack --blackbox \
+    --expect-verifier-pack-sha256 "$PACK_SHA256"
 ```
 
 ## How it works
@@ -24,6 +26,12 @@ evo-guard guard ./repo --patch candidate.txt \
   never imports the candidate's code, so the candidate cannot register an
   `atexit` hook in it, cannot `os._exit` it, cannot rewrite its report. Its exit
   code is authoritative.
+- Before the runner is prepared, Guard validates the canonical `pack.json`,
+  snapshots the pack outside the candidate tree and calculates its framed
+  `EVOGUARD_PACK_V2` identity. Symlinks/special files and packs with no
+  `test_*.py` are refused; zero collected results cannot pass. The snapshot is
+  verified before and after execution; the optional
+  expected SHA-256 pin must match before candidate code runs.
 - The candidate is exercised **only across a process boundary**. Guard applies
   the patch (including **deletions** — a removed file is absent in the judged
   tree, matching the real merge) to a throwaway copy and sets these environment
@@ -61,6 +69,13 @@ judge-owned pack is **not mounted into the candidate at all** — so candidate c
 can neither write the host nor reach the pack to tamper with it. (In the
 `subprocess` boundary the candidate shares the host and user with the judge;
 `assurance.verifier_pack.secrecy` says so honestly — `reachable_same_host`.)
+The launcher executes the exact resolved image ID that was probed, rather than a
+mutable tag.
+
+The shell-free `$EVOGUARD_EXEC` file has a **POSIX executable contract**. Native
+Windows black-box subprocess mode fails closed with guidance instead of claiming
+that it ran; use Linux/GitHub Actions or WSL. The ordinary repo-native Windows
+judge is a different path.
 
 ## The pack ADDS a dimension — it does not replace your suite
 
@@ -70,6 +85,12 @@ pack can never mask an internal regression the pack does not exercise. For a
 pure-CLI/service target that has no in-repo suite, pass `--blackbox-only` to judge
 the pack alone. The attestation records the repo suite's result
 (`repo_suite_passed`, `repo_suite_junit_sha256`) alongside the pack's.
+
+`setup_command` is not silently applied to only part of this composite. In 3.4,
+combining setup with `--blackbox` returns
+`ERROR policy_requirement_unsupported`; place runtime dependencies in the
+environment/container image until a single explicit setup boundary exists for
+both sides.
 
 ## Writing a pack (the one rule)
 
@@ -98,3 +119,9 @@ services, DB-backed programs, anything with a defined I/O contract. A pure
 library that the pack must `import` is back in-process and gets the
 same-process assurance instead — wrap it behind a thin CLI (a few lines) to get
 the black-box guarantee.
+
+With delivered docker/gVisor isolation the candidate network defaults to
+`none`. A pack outside that candidate container therefore cannot reach an HTTP
+server inside it without a deliberately designed judge↔candidate channel. Use a
+CLI/stdio boundary today, or a reviewed network topology that matches your
+policy; do not infer HTTP reachability merely from `target_type` in `pack.json`.

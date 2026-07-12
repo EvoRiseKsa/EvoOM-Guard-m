@@ -12,6 +12,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -26,6 +27,7 @@ from evoom_guard.verifiers.repo_verifier import (
     is_protected_ci,
     is_protected_config,
     is_safe_relpath,
+    judge_subprocess_env,
     parse_blocks_lenient,
     parse_file_blocks,
     parse_junit_dir,
@@ -36,6 +38,31 @@ from evoom_guard.verifiers.repo_verifier import (
 )
 
 HAS_PYTEST = importlib.util.find_spec("pytest") is not None
+
+
+class JudgeEnvironmentTests(unittest.TestCase):
+    def test_windows_runtime_plumbing_is_allowlisted_and_scratch_is_private(self) -> None:
+        with (
+            mock.patch("evoom_guard.verifiers.repo_verifier.os.name", "nt"),
+            mock.patch.dict(
+                os.environ,
+                {
+                    "PATH": "tools",
+                    "SYSTEMROOT": r"C:\Windows",
+                    "WINDIR": r"C:\Windows",
+                    "COMSPEC": r"C:\Windows\System32\cmd.exe",
+                    "PATHEXT": ".EXE;.CMD",
+                    "USERPROFILE": r"C:\Users\candidate",
+                },
+                clear=True,
+            ),
+        ):
+            env = judge_subprocess_env(r"C:\judge\scratch")
+
+        self.assertEqual(env["SYSTEMROOT"], r"C:\Windows")
+        self.assertEqual(env["TEMP"], r"C:\judge\scratch")
+        self.assertEqual(env["TMP"], r"C:\judge\scratch")
+        self.assertNotIn("USERPROFILE", env)
 
 BUGGY_MATHX = """\
 def average(nums):
@@ -687,6 +714,7 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
                 timeout=30,
                 setup_command=[sys.executable, "-c",
                                "open('setup_ran.marker', 'w').close()"],
+                setup_output_globs=("setup_ran.marker",),
             )
             r = v.verify(block("app.py", "x = 1\n"), {"repo_path": root})
             self.assertTrue(r.passed, f"expected PASS, got: {r.diagnostics}")

@@ -15,7 +15,8 @@ EvoOM Guard focuses on one question:
   CI, or auto-executed files are rejected before the suite runs.
 - **Structured, judge-owned verdicts** across eight test runners (verdict read
   from a JUnit report + exit code, never from stdout); a `TAMPERED` verdict when
-  they disagree.
+  they disagree or when the judged candidate/pack snapshot drifts during a
+  multi-phase run.
 - **Signed records** — optional Ed25519 signatures over the JSON verdict.
 - **Assurance reporting** — every verdict states its `report_integrity` and
   `candidate_isolation` honestly.
@@ -24,12 +25,26 @@ EvoOM Guard focuses on one question:
 - **Delivered candidate isolation** — a real container boundary whose evidence is
   read from what actually ran; requesting isolation that cannot be delivered
   fails closed. Exercised against a real Docker daemon in CI.
+- **Canonical Independent Verifier Packs** — strict manifest parsing, framed
+  `EVOGUARD_PACK_V2` identities, optional expected-digest pins, verified external
+  snapshots and a separate mandatory pack phase with non-zero test evidence.
+- **Phase-aware setup isolation** — docker/gVisor setup runs inside the exact
+  resolved image with a writable candidate mount; suite and pack phases use
+  read-only candidate mounts. Setup fidelity permits conventional new outputs;
+  additional `setup_output_globs` are explicit trusted policy.
 
 ## Current limits (stated plainly)
 
 - The default same-process judge can be forged by deliberate in-process source;
   use `--blackbox` to close that. See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 - The subprocess boundary is not a sandbox; container isolation is opt-in.
+- POSIX rlimits are unavailable on native Windows, and the black-box subprocess
+  launcher has a POSIX executable contract (use Linux/GitHub Actions or WSL).
+- Read-only container suite/pack mounts require dependencies and build products
+  to be prepared during setup or baked into the image; this is not a general
+  writable development-container workflow.
+- `setup_output_globs` are trusted exclusions, so overly broad repository policy
+  weakens setup-fidelity coverage by design.
 - A verdict binds to the runtime image, not a separately built artifact.
 - Networked-service (HTTP) targets need a judge↔candidate channel the hardened
   `--network none` container does not yet provide.

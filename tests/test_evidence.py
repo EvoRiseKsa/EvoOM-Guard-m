@@ -220,10 +220,11 @@ class VerifierPackTests(unittest.TestCase):
             r = guard(repo, _block("pkg/m.py", new), verifier_pack=self._pack(tmp))
             self.assertIsNone(r.diff_coverage)
 
-    def test_pack_is_tamper_proof_but_not_secret(self) -> None:
-        # HONESTY GUARD: an adversarial patch can read the pack off disk and echo
-        # the expected value. This test PINS that documented limitation so no doc
-        # or help text can silently reclaim "hidden / never seen".
+    def test_pack_is_not_published_at_a_predictable_repo_path(self) -> None:
+        # The accepted snapshot is outside the candidate tree and no longer exposed
+        # at the old evoguard_verifier_pack/ path. Repo-native packs still are not a
+        # secrecy boundary (candidate code shares the judge process); black-box plus
+        # container isolation is required for that stronger property.
         with tempfile.TemporaryDirectory() as tmp:
             repo = _repo(tmp)
             evil = (
@@ -237,9 +238,9 @@ class VerifierPackTests(unittest.TestCase):
                 "def covered(x):\n    return x + 1\n"
             )
             r = guard(repo, _block("pkg/m.py", evil), verifier_pack=self._pack(tmp))
-            # It PASSES the pack by reading it — proving secrecy is not provided.
-            self.assertEqual(r.verdict, PASS)
-            self.assertEqual((r.tests_passed, r.tests_total), (2, 2))
+            # The old direct lookup no longer reveals the accepted snapshot.
+            self.assertEqual(r.verdict, FAIL)
+            self.assertEqual((r.tests_passed, r.tests_total), (1, 2))
 
     def test_pack_manifest_lands_in_attestation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

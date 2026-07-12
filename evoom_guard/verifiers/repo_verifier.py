@@ -78,17 +78,24 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
 from fnmatch import fnmatch
-from typing import NamedTuple, TypedDict
+from typing import Any, NamedTuple, TypedDict, cast
 
 from evoom_guard.adapters import instrument_command
 from evoom_guard.contracts import VerdictResult
+from evoom_guard.pack_manifest import (
+    PackManifestError,
+    snapshot_pack,
+    verify_pack_snapshot,
+)
 from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.verifiers.grading import fraction_score
 
@@ -102,6 +109,32 @@ COPY_IGNORE = (
     ".git", "__pycache__", ".venv", "venv", "node_modules",
     ".evo_runs", ".pytest_cache", ".mypy_cache", "dist", "build",
 )
+
+
+def judge_subprocess_env(workdir: str) -> dict[str, str]:
+    """Minimal cross-platform environment for judge-owned subprocesses.
+
+    Windows runtimes depend on a small set of OS variables even when the judged
+    program does not.  In particular, current Node releases abort during CSPRNG
+    initialization when ``SYSTEMROOT`` is absent.  Preserve only the OS plumbing
+    needed to start tools; keep scratch paths inside the judge-owned workdir and
+    continue excluding user Python startup state.
+    """
+    env = {
+        "PATH": os.environ.get("PATH", "/usr/bin"),
+        "HOME": workdir,
+        "LANG": "C.UTF-8",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+    }
+    if os.name == "nt":
+        for key in ("SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"):
+            value = os.environ.get(key)
+            if value:
+                env[key] = value
+        env["TEMP"] = workdir
+        env["TMP"] = workdir
+    return env
 
 # Test-file basenames the candidate may not touch.
 _PROTECTED_BASENAMES = (
@@ -216,9 +249,9 @@ class RepoProblem(TypedDict, total=False):
                               # avoids the marker round-trip (a target file whose
                               # CONTENT legitimately contains "<<<END FILE>>>" must
                               # not terminate its own block; found by running Guard
-                              # on Guard's own source, which embeds those markers).
-    # Container-judge fields — reserved for a future network-isolated judge;
-    # accepted in the problem dict but unused by the subprocess RepoVerifier here:
+                               # on Guard's own source, which embeds those markers).
+    expect_verifier_pack_sha256: str  # optional V2 identity pin; mismatch fails closed
+    # Container-judge fields used by Docker/gVisor isolation:
     docker_image: str         # runtime image, e.g. "node:22-slim"
     network: str              # "none" (default) or a docker network name
     judge_env: dict[str, str]  # explicit env passed into the container
@@ -826,6 +859,102 @@ def detect_tamper(returncode: int, junit: JUnitCounts | None, *, report_expected
     return False
 
 
+_DEFAULT_SETUP_OUTPUT_DIRS = frozenset({
+    ".cache", ".evoguard-setup", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    ".tox", ".venv", "build", "dist", "node_modules", "target", "venv",
+    "vendor", "__pycache__",
+})
+
+
+class SetupFidelityError(RuntimeError):
+    """The judge could not prove what setup changed; fail closed."""
+
+
+def _docker_container_name(stage: str) -> str:
+    """Collision-resistant name for concurrent setup/suite/pack containers."""
+    safe_stage = re.sub(r"[^a-zA-Z0-9_.-]+", "-", stage).strip("-.") or "run"
+    return f"evoguard_{safe_stage[:32]}_{secrets.token_hex(8)}"
+
+
+def _is_default_setup_output(path: str) -> bool:
+    return any(part in _DEFAULT_SETUP_OUTPUT_DIRS for part in path.split("/") if part)
+
+
+def _fidelity_entry_state(path: str) -> tuple[str, int, str]:
+    try:
+        mode = os.lstat(path).st_mode
+        permissions = stat.S_IMODE(mode)
+        if stat.S_ISLNK(mode):
+            return ("link", permissions, os.readlink(path))
+        if stat.S_ISDIR(mode):
+            return ("dir", permissions, "")
+        if not stat.S_ISREG(mode):
+            return ("special", permissions, str(stat.S_IFMT(mode)))
+        digest = hashlib.sha256()
+        with open(path, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return ("file", permissions, digest.hexdigest())
+    except OSError as exc:
+        raise SetupFidelityError(f"cannot read {path!r}: {exc}") from exc
+
+
+def _setup_fidelity_snapshot(
+    root: str,
+    extra_output_globs: tuple[str, ...] = (),
+    *,
+    baseline: dict[str, tuple[str, int, str]] | None = None,
+) -> dict[str, tuple[str, int, str]]:
+    """Identity of files setup is not allowed to mutate.
+
+    Every pre-existing file, directory, symlink and permission bit is bound,
+    including content under conventional output directories. On the post-setup
+    scan, only *new* entries below those conventional directories are ignored.
+    This lets setup create ``node_modules``/``.venv``/``target`` without allowing
+    it to rewrite a checked-in ``vendor`` or ``build`` tree. Explicit adopter
+    globs are trusted exceptions and are omitted on both scans.
+    """
+    snapshot: dict[str, tuple[str, int, str]] = {}
+    baseline_keys = frozenset(baseline or {})
+
+    def walk_error(exc: OSError) -> None:
+        raise SetupFidelityError(f"cannot inspect setup output tree: {exc}") from exc
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error):
+        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        kept: list[str] = []
+        for dirname in sorted(dirnames):
+            path = os.path.join(dirpath, dirname)
+            rel = dirname if rel_dir == "." else f"{rel_dir}/{dirname}"
+            if _matches_globs(rel, extra_output_globs) or _matches_globs(
+                rel + "/", extra_output_globs
+            ):
+                continue
+            if baseline is not None and _is_default_setup_output(rel) and rel not in baseline_keys:
+                continue
+            state = _fidelity_entry_state(path)
+            snapshot[rel] = state
+            if state[0] == "dir":
+                kept.append(dirname)
+        dirnames[:] = kept
+        for filename in sorted(filenames):
+            path = os.path.join(dirpath, filename)
+            rel = filename if rel_dir == "." else f"{rel_dir}/{filename}"
+            if _matches_globs(rel, extra_output_globs):
+                continue
+            if baseline is not None and _is_default_setup_output(rel) and rel not in baseline_keys:
+                continue
+            snapshot[rel] = _fidelity_entry_state(path)
+    return snapshot
+
+
+def _setup_fidelity_changes(
+    before: dict[str, tuple[str, int, str]],
+    after: dict[str, tuple[str, int, str]],
+) -> list[str]:
+    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+
+
 class RepoVerifier:
     """Apply the hypothesis to a copy of the repo and judge it with its tests."""
 
@@ -845,6 +974,8 @@ class RepoVerifier:
         docker_image: str | None = None,
         docker_network: str = "none",
         docker_runtime: str | None = None,
+        trust_setup_on_host: bool = False,
+        setup_output_globs: tuple[str, ...] = (),
     ) -> None:
         self.timeout = timeout
         self.mem_limit_mb = mem_limit_mb
@@ -866,6 +997,11 @@ class RepoVerifier:
         self.docker_image = docker_image
         self.docker_network = docker_network
         self.docker_runtime = docker_runtime or ("runsc" if isolation == "gvisor" else None)
+        self._resolved_docker_image: str | None = None
+        # Explicit compatibility escape hatch. By default candidate-influenced
+        # setup runs inside the same requested boundary as the suite.
+        self.trust_setup_on_host = trust_setup_on_host
+        self.setup_output_globs = setup_output_globs
 
     # ------------------------------------------------------------------ #
     def _limits(self):  # pragma: no cover - exercised in the child process
@@ -874,13 +1010,14 @@ class RepoVerifier:
             return None
 
         def apply() -> None:
+            resource_api = cast(Any, resource)
             cpu = max(1, int(self.timeout) + 1)
-            resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+            resource_api.setrlimit(resource_api.RLIMIT_CPU, (cpu, cpu))
             if self.mem_limit_mb <= 0:
                 return
             mem = self.mem_limit_mb * 1024 * 1024
             try:
-                resource.setrlimit(resource.RLIMIT_AS, (mem, mem))
+                resource_api.setrlimit(resource_api.RLIMIT_AS, (mem, mem))
             except (ValueError, OSError):
                 pass
 
@@ -893,12 +1030,16 @@ class RepoVerifier:
             return cmd.split()
         if cmd:
             return list(cmd)
-        return [sys.executable, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider"]
+        python = "python" if self.isolation in ("docker", "gvisor") else sys.executable
+        return [python, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider"]
 
     # ------------------------------------------------------------------ #
     def _docker_command(
-        self, cmd: list[str], copy: str, outdir: str, name: str,
+        self, cmd: list[str], copy: str, outdir: str | None, name: str,
         report_env: dict[str, str] | None = None,
+        *,
+        work_writable: bool = False,
+        pack_dir: str | None = None,
     ) -> list[str]:
         """Wrap ``cmd`` in a short-lived, isolated ``docker run`` for the docker /
         gvisor judge (``--runtime runsc`` is added when ``docker_runtime`` is set)."""
@@ -906,10 +1047,23 @@ class RepoVerifier:
             "docker", "run", "--rm", "--name", name,
             "--network", self.docker_network,
             "--pids-limit", "256", "--cpus", "1", "--read-only",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--ulimit", "nofile=1024:1024",
             "--tmpfs", "/tmp:rw,exec",
             "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "LANG=C.UTF-8",
-            "-v", f"{copy}:/work", "-v", f"{outdir}:/out", "-w", "/work",
+            "-v", f"{copy}:/work:{'rw' if work_writable else 'ro'}",
         ]
+        if outdir is not None:
+            docker += ["-v", f"{outdir}:/out:rw"]
+        if pack_dir is not None:
+            docker += ["-v", f"{pack_dir}:/verifier-pack:ro"]
+        getuid = getattr(os, "getuid", None)
+        getgid = getattr(os, "getgid", None)
+        if callable(getuid) and callable(getgid):
+            # Match ownership of the host-created work/report directories. This
+            # lets us drop every capability without relying on root's DAC bypass.
+            docker += ["--user", f"{getuid()}:{getgid()}"]
+        docker += ["-w", "/work"]
         # A stronger OCI runtime (gVisor's `runsc`) gives the suite its own
         # user-space guest kernel without needing /dev/kvm.
         if self.docker_runtime:
@@ -919,16 +1073,55 @@ class RepoVerifier:
             docker += ["-e", f"{_k}={_v}"]
         if self.mem_limit_mb > 0:
             docker += ["--memory", f"{self.mem_limit_mb}m"]
-        return [*docker, str(self.docker_image), *cmd]
+        return [*docker, str(self._resolved_docker_image or self.docker_image), *cmd]
 
-    def _run_docker(self, base_cmd, copy, workdir):  # pragma: no cover - needs docker daemon
+    def _resolve_docker_image(self) -> str:
+        """Resolve a tag once so setup and suite use the exact same image bytes."""
+        if self._resolved_docker_image:
+            return self._resolved_docker_image
+        image = str(self.docker_image or "")
+        inspect = subprocess.run(
+            ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if inspect.returncode != 0:
+            pull = subprocess.run(
+                ["docker", "pull", image],
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            if pull.returncode != 0:
+                raise RuntimeError(
+                    f"container image {image!r} could not be resolved: "
+                    + distill_diagnostics(pull.stdout + "\n" + pull.stderr)
+                )
+            inspect = subprocess.run(
+                ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        resolved = inspect.stdout.strip()
+        if inspect.returncode != 0 or not resolved:
+            raise RuntimeError(f"container image {image!r} has no resolvable image ID")
+        self._resolved_docker_image = resolved
+        return resolved
+
+    def _run_docker(
+        self, base_cmd, copy, workdir, *, pack_dir=None
+    ):  # pragma: no cover - needs docker daemon
         """Run the suite inside the docker judge."""
         outdir = os.path.join(workdir, "out")
         os.makedirs(outdir, exist_ok=True)
         host_xml = os.path.join(outdir, "judge-result.xml")
         cmd, report_expected, report_env = instrument_command(base_cmd, "/out/judge-result.xml")
-        name = "evoguard_" + os.path.basename(workdir.rstrip("/"))
-        docker_cmd = self._docker_command(cmd, copy, outdir, name, report_env)
+        name = _docker_container_name(os.path.basename(workdir.rstrip("/")))
+        docker_cmd = self._docker_command(
+            cmd, copy, outdir, name, report_env, pack_dir=pack_dir
+        )
         try:
             r = subprocess.run(
                 docker_cmd, capture_output=True, text=True,
@@ -1000,6 +1193,8 @@ class RepoVerifier:
 
         workdir = tempfile.mkdtemp(prefix="evo_repo_")
         copy = os.path.join(workdir, "repo")
+        pack_workdir: str | None = None
+        pack_snapshot: str | None = None
         try:
             copy_repo_tree(repo_path, copy)
             apply_error = apply_blocks_to_copy(copy, file_blocks, patch_blocks)
@@ -1011,17 +1206,33 @@ class RepoVerifier:
                     artifact={"files_changed": changed},
                 )
 
-            # Mount the Independent Verifier Pack (judge-owned, hidden from the
-            # candidate: it arrives at judgment time, read from OUTSIDE the repo).
-            # Guard already rejects any candidate path under the mount point, so a
-            # pre-planted directory here is unreachable; belt-and-braces: refuse to
-            # merge into an existing one.
+            # Accept an Independent Verifier Pack into a separate judge-owned
+            # snapshot outside both the candidate tree and HOME. The legacy mount
+            # namespace remains reserved so a repo cannot pre-plant a shadow copy.
             pack_sha256 = None
             pack_manifest: dict | None = None
+            pack_identity: tuple[str, dict | None] | None = None
             pack_dir = str(problem.get("verifier_pack", "") or "")
+            expected_pack_sha256 = str(
+                problem.get("expect_verifier_pack_sha256", "") or ""
+            ).lower()
+            if expected_pack_sha256 and not pack_dir:
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        "an expected verifier-pack SHA-256 was configured but no "
+                        "verifier pack was supplied"
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "pack_identity_mismatch",
+                        "expected_verifier_pack_sha256": expected_pack_sha256,
+                    },
+                )
             if pack_dir:
-                mount = os.path.join(copy, "evoguard_verifier_pack")
-                if os.path.exists(mount):
+                reserved = os.path.join(copy, "evoguard_verifier_pack")
+                if os.path.lexists(reserved):
                     return VerdictResult(
                         passed=False, score=0.05,
                         diagnostics=(
@@ -1030,52 +1241,36 @@ class RepoVerifier:
                         ),
                         artifact={"files_changed": changed},
                     )
-                shutil.copytree(pack_dir, mount)
-                digest = hashlib.sha256()
-                for dirpath, dirnames, filenames in os.walk(mount):
-                    dirnames.sort()
-                    for fn in sorted(filenames):
-                        rel = os.path.relpath(os.path.join(dirpath, fn), mount)
-                        digest.update(rel.encode("utf-8"))
-                        with open(os.path.join(dirpath, fn), "rb") as pf:
-                            digest.update(pf.read())
-                pack_sha256 = digest.hexdigest()
-                # Optional ``pack.json`` manifest turns a folder of tests into a
-                # versioned, auditable policy pack (id / version / description).
-                # PRESENT-but-broken is fail-closed (mirrors the black-box judge):
-                # a contract that lost its identity must stop the run, not be
-                # silently judged as an anonymous folder.
-                manifest_path = os.path.join(mount, "pack.json")
-                if os.path.isfile(manifest_path):
-                    try:
-                        with open(manifest_path, encoding="utf-8") as mf:
-                            m = json.load(mf)
-                    except (OSError, ValueError) as exc:
-                        return VerdictResult(
-                            passed=False, score=0.0,
-                            diagnostics=(
-                                f"verifier pack manifest is not readable JSON ({exc}) "
-                                "— fix or remove pack.json; check with "
-                                "`evo-guard pack-doctor`"
-                            ),
-                            artifact={"files_changed": changed, "outcome": "setup_failed"},
-                        )
-                    if not isinstance(m, dict) or any(
-                        not isinstance(m.get(k), str) or not m[k].strip()
-                        for k in ("id", "version")
-                    ):
-                        return VerdictResult(
-                            passed=False, score=0.0,
-                            diagnostics=(
-                                "verifier pack manifest must be a JSON object with "
-                                "required string fields 'id' and 'version' — check "
-                                "with `evo-guard pack-doctor`"
-                            ),
-                            artifact={"files_changed": changed, "outcome": "setup_failed"},
-                        )
-                    pack_manifest = {
-                        k: m[k] for k in ("id", "version", "description") if k in m
-                    }
+                try:
+                    # Keep the accepted snapshot outside both the candidate tree
+                    # and its HOME. The repo suite never receives this path.
+                    pack_workdir = tempfile.mkdtemp(prefix="evo_pack_snapshot_")
+                    pack_snapshot = os.path.join(pack_workdir, "pack")
+                    pack_identity = snapshot_pack(pack_dir, pack_snapshot)
+                    pack_sha256, pack_manifest = pack_identity
+                except PackManifestError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=str(exc),
+                        artifact={"files_changed": changed, "outcome": "pack_invalid"},
+                    )
+                if expected_pack_sha256 and pack_sha256.lower() != expected_pack_sha256:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            "verifier-pack identity mismatch: expected "
+                            f"{expected_pack_sha256}, observed {pack_sha256}"
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "pack_identity_mismatch",
+                            "expected_verifier_pack_sha256": expected_pack_sha256,
+                            "verifier_pack_sha256": pack_sha256,
+                            "verifier_pack_manifest": pack_manifest,
+                        },
+                    )
 
             # Apply deletions to the copy so the verdict reflects the real merge
             # (a removed source file should be *absent* when the suite runs).
@@ -1090,55 +1285,225 @@ class RepoVerifier:
                 except OSError:
                     pass  # already absent — nothing to verify against
 
-            env = {
-                "PATH": os.environ.get("PATH", "/usr/bin"),
-                "HOME": workdir,
-                "LANG": "C.UTF-8",
-                "PYTHONDONTWRITEBYTECODE": "1",
-                # Don't let a user-site ``usercustomize`` load into the judge process
-                # (defence-in-depth alongside the path-gate's auto-exec rejection).
-                "PYTHONNOUSERSITE": "1",
-            }
+            env = judge_subprocess_env(workdir)
 
-            # Run optional setup_command before the test suite.
-            # Uses a more permissive env so package managers can reach their global
-            # cache (e.g. pnpm store at the real HOME/.local/share/pnpm).
-            # The test suite itself still runs in the restricted ``env`` above, and
+            container_mode = self.isolation in ("docker", "gvisor")
+            if container_mode and not self.docker_image:
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=f"{self.isolation} isolation requires a docker image (--docker-image)",
+                    artifact={"files_changed": changed, "outcome": "isolation_unavailable"},
+                )
+            resolved_image: str | None = None
+            if container_mode:
+                try:
+                    resolved_image = self._resolve_docker_image()
+                    # Tests may stub the resolver; pin its returned ID explicitly
+                    # so setup, suite and pack all use the same image reference.
+                    self._resolved_docker_image = resolved_image
+                except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"{self.isolation} isolation unavailable: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "isolation_unavailable",
+                        },
+                    )
+
+            # Run optional setup_command before the suite under the requested
+            # container boundary by default (or a restricted host environment by
+            # explicit compatibility opt-in). The suite stays restricted, and
             # the verdict is read only from the judge-owned JUnit report + the test
             # command's exit code — so setup's stdout can never inflate the verdict.
             setup_cmd_raw = self.setup_command or problem.get("setup_command")
+            setup_isolation: str | None = None
+            post_setup_fidelity: dict[str, tuple[str, int, str]] | None = None
             if setup_cmd_raw:
                 if isinstance(setup_cmd_raw, str):
                     setup_cmd_raw = setup_cmd_raw.split()
-                setup_env = dict(env)
-                setup_env["HOME"] = os.environ.get("HOME", workdir)
-                for _k, _v in os.environ.items():
-                    if _k.startswith(("PNPM_", "NPM_", "YARN_", "NODE_", "npm_", "BUN_")):
-                        setup_env[_k] = _v
+                setup_tokens = [str(token) for token in setup_cmd_raw]
+                setup_in_container = container_mode and not self.trust_setup_on_host
+                setup_name: str | None = None
+                if setup_in_container:
+                    setup_isolation = self.isolation
+                    setup_name = _docker_container_name("setup")
+                    setup_run_cmd = self._docker_command(
+                        setup_tokens,
+                        copy,
+                        None,
+                        setup_name,
+                        work_writable=True,
+                    )
+                    setup_cwd = None
+                    setup_env = os.environ.copy()
+                else:
+                    setup_isolation = (
+                        "subprocess_host_opt_in" if container_mode else "subprocess"
+                    )
+                    setup_run_cmd = setup_tokens
+                    setup_cwd = copy
+                    setup_env = dict(env)
+                try:
+                    setup_before = _setup_fidelity_snapshot(
+                        copy, self.setup_output_globs
+                    )
+                except SetupFidelityError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"setup fidelity snapshot failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "setup_failed",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
                 try:
                     r_setup = subprocess.run(
-                        list(setup_cmd_raw),
-                        cwd=copy,
+                        setup_run_cmd,
+                        cwd=setup_cwd,
                         capture_output=True,
                         text=True,
                         timeout=self.timeout,
                         env=setup_env,
                     )
                 except subprocess.TimeoutExpired:
+                    if setup_name is not None:
+                        subprocess.run(
+                            ["docker", "rm", "-f", setup_name],
+                            capture_output=True,
+                            timeout=30,
+                        )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
                         diagnostics=f"setup command timed out after {self.timeout}s",
-                        artifact={"elapsed": self.timeout, "files_changed": changed, "outcome": "setup_timeout"},
+                        artifact={
+                            "elapsed": self.timeout,
+                            "files_changed": changed,
+                            "outcome": "setup_timeout",
+                            "setup_isolation": setup_isolation,
+                        },
                     )
-                if r_setup.returncode != 0:
+                except FileNotFoundError:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            f"{self.isolation} isolation requested but the docker CLI "
+                            "was not found while starting setup_command"
+                            if setup_in_container
+                            else f"setup command not found: {setup_tokens[0]!r}"
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "setup_failed",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                if setup_in_container and r_setup.returncode == 125:
                     diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"setup command failed (exit {r_setup.returncode}): {diag}",
-                        artifact={"files_changed": changed, "outcome": "setup_failed"},
+                        diagnostics=(
+                            f"the {self.isolation} setup container could not be "
+                            f"started (docker exit 125): {diag}"
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "isolation_unavailable",
+                            "setup_isolation": "unavailable",
+                        },
                     )
+                if r_setup.returncode != 0:
+                    diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
+                    hint = (
+                        " (setup ran inside the container: the image must contain "
+                        "the setup tool, and --docker-network none blocks registries)"
+                        if setup_in_container
+                        else ""
+                    )
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            f"setup command failed (exit {r_setup.returncode}){hint}: {diag}"
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "setup_failed",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                try:
+                    setup_after = _setup_fidelity_snapshot(
+                        copy,
+                        self.setup_output_globs,
+                        baseline=setup_before,
+                    )
+                except SetupFidelityError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"setup fidelity verification failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "setup_failed",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                setup_changes = _setup_fidelity_changes(setup_before, setup_after)
+                if setup_changes:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            "setup_command modified the judged source/harness outside "
+                            "declared setup outputs — refusing to run a suite against "
+                            "a tree different from the candidate: "
+                            + ", ".join(setup_changes[:20])
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "setup_failed",
+                            "setup_isolation": setup_isolation,
+                            "setup_fidelity_changes": setup_changes,
+                        },
+                    )
+                post_setup_fidelity = setup_after
+
+            # A mandatory pack must judge the same candidate tree the repo suite
+            # received. In subprocess mode the suite can write to its working copy;
+            # bind the post-setup tree so it cannot rewrite source into a
+            # pack-passing implementation between the two phases. Conventional
+            # caches/new dependency outputs remain allowed by the same contract.
+            candidate_runtime_baseline: dict[str, tuple[str, int, str]] | None = None
+            if pack_dir:
+                if post_setup_fidelity is not None:
+                    # Reuse the filtered post-setup identity. New conventional
+                    # dependency/build outputs were deliberately omitted, while
+                    # every pre-existing entry remains bound.
+                    candidate_runtime_baseline = post_setup_fidelity
+                else:
+                    try:
+                        candidate_runtime_baseline = _setup_fidelity_snapshot(
+                            copy, self.setup_output_globs
+                        )
+                    except SetupFidelityError as exc:
+                        return VerdictResult(
+                            passed=False,
+                            score=0.0,
+                            diagnostics=f"candidate fidelity snapshot failed: {exc}",
+                            artifact={
+                                "files_changed": changed,
+                                "outcome": "setup_failed",
+                                "setup_isolation": setup_isolation,
+                            },
+                        )
 
             # The machine-readable verdict is written to a JUnit report the JUDGE
             # owns — a path *outside* the repo copy, so the candidate (restricted to
@@ -1146,12 +1511,6 @@ class RepoVerifier:
             # edit. The score is read from this report and the exit code, never from
             # the candidate-influenced stdout.
             base_cmd = self._command(problem)
-            if self.isolation in ("docker", "gvisor") and not self.docker_image:
-                return VerdictResult(
-                    passed=False, score=0.0,
-                    diagnostics=f"{self.isolation} isolation requires a docker image (--docker-image)",
-                    artifact={"files_changed": changed},
-                )
             t0 = time.perf_counter()
             try:
                 if self.isolation in ("docker", "gvisor"):
@@ -1178,10 +1537,79 @@ class RepoVerifier:
             except FileNotFoundError:
                 return VerdictResult(
                     passed=False, score=0.0,
-                    diagnostics=f"{self.isolation} isolation requested but the docker CLI was not found",
-                    artifact={"files_changed": changed},
+                    diagnostics=(
+                        f"{self.isolation} isolation requested but the docker CLI was not found"
+                        if container_mode
+                        else f"test command not found: {base_cmd[0]!r}"
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": (
+                            "isolation_unavailable"
+                            if container_mode
+                            else "test_command_unavailable"
+                        ),
+                        "setup_isolation": setup_isolation,
+                    },
                 )
             elapsed = time.perf_counter() - t0
+
+            if container_mode and r.returncode == 125:
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        f"the {self.isolation} suite container could not be started "
+                        "(docker exit 125): "
+                        + distill_diagnostics(r.stdout + "\n" + r.stderr)
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "isolation_unavailable",
+                        "setup_isolation": setup_isolation,
+                    },
+                )
+
+            if candidate_runtime_baseline is not None:
+                try:
+                    candidate_after_suite = _setup_fidelity_snapshot(
+                        copy,
+                        self.setup_output_globs,
+                        baseline=candidate_runtime_baseline,
+                    )
+                except SetupFidelityError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"candidate fidelity verification failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "candidate_tree_changed",
+                            "tamper": True,
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                candidate_changes = _setup_fidelity_changes(
+                    candidate_runtime_baseline, candidate_after_suite
+                )
+                if candidate_changes:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            "repo suite modified the candidate tree before verifier-pack "
+                            "execution: " + ", ".join(candidate_changes[:20])
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "candidate_tree_changed",
+                            "tamper": True,
+                            "candidate_fidelity_changes": candidate_changes,
+                            "verifier_pack_sha256": pack_sha256,
+                            "verifier_pack_manifest": pack_manifest,
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
 
             xml_text = _read_text_or_none(host_xml) or ""
             junit = parse_junit_xml(xml_text)
@@ -1194,6 +1622,177 @@ class RepoVerifier:
             )
             tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
             output = r.stdout + "\n" + r.stderr
+            combined_junit = xml_text
+            verdict_source = "junit+exit" if junit is not None else "exit"
+            pack_tests_passed: int | None = None
+            pack_tests_total: int | None = None
+
+            # A copied pack is not evidence that its checks ran. Execute it as a
+            # separate mandatory phase, explicitly addressed by path, then
+            # compose both outcomes. This works even when the repo command is
+            # narrowed (for example ``pytest tests/``) or is a custom command.
+            if pack_dir:
+                assert pack_snapshot is not None and pack_identity is not None
+                try:
+                    verify_pack_snapshot(pack_snapshot, pack_identity)
+                except PackManifestError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"verifier pack was changed before execution: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "pack_snapshot_changed",
+                            "tamper": True,
+                            "verifier_pack_sha256": pack_sha256,
+                            "verifier_pack_manifest": pack_manifest,
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                pack_phase = os.path.join(workdir, "pack-phase")
+                os.makedirs(pack_phase, exist_ok=True)
+                pack_cmd = [
+                    "python" if container_mode else sys.executable,
+                    "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider",
+                    "/verifier-pack" if container_mode else pack_snapshot,
+                ]
+                try:
+                    if container_mode:
+                        pack_xml, pack_run, pack_report_expected = self._run_docker(
+                            pack_cmd, copy, pack_phase, pack_dir=pack_snapshot
+                        )
+                    else:
+                        pack_xml = os.path.join(pack_phase, "judge-result.xml")
+                        instrumented, pack_report_expected, pack_report_env = (
+                            instrument_command(pack_cmd, pack_xml)
+                        )
+                        pack_run = subprocess.run(
+                            instrumented,
+                            cwd=copy,
+                            capture_output=True,
+                            text=True,
+                            timeout=self.timeout,
+                            env={**env, **pack_report_env},
+                            preexec_fn=self._limits() if os.name == "posix" else None,
+                        )
+                except subprocess.TimeoutExpired:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"verifier pack timed out after {self.timeout}s",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "test_timeout",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                except FileNotFoundError:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics="verifier pack needs pytest/python in the judge environment",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "test_command_unavailable",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                if container_mode and pack_run.returncode == 125:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            f"the {self.isolation} verifier-pack container could not "
+                            "be started (docker exit 125): "
+                            + distill_diagnostics(pack_run.stdout + "\n" + pack_run.stderr)
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "isolation_unavailable",
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                try:
+                    verify_pack_snapshot(pack_snapshot, pack_identity)
+                except PackManifestError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"verifier pack changed while executing: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "pack_snapshot_changed",
+                            "tamper": True,
+                            "verifier_pack_sha256": pack_sha256,
+                            "verifier_pack_manifest": pack_manifest,
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                assert candidate_runtime_baseline is not None
+                try:
+                    candidate_after_pack = _setup_fidelity_snapshot(
+                        copy,
+                        self.setup_output_globs,
+                        baseline=candidate_runtime_baseline,
+                    )
+                except SetupFidelityError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"candidate fidelity verification failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "candidate_tree_changed",
+                            "tamper": True,
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                candidate_changes = _setup_fidelity_changes(
+                    candidate_runtime_baseline, candidate_after_pack
+                )
+                if candidate_changes:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            "verifier-pack execution modified the candidate tree: "
+                            + ", ".join(candidate_changes[:20])
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "candidate_tree_changed",
+                            "tamper": True,
+                            "candidate_fidelity_changes": candidate_changes,
+                            "verifier_pack_sha256": pack_sha256,
+                            "verifier_pack_manifest": pack_manifest,
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                pack_xml_text = _read_text_or_none(pack_xml) or ""
+                pack_junit = parse_junit_xml(pack_xml_text)
+                pack_passed, pack_score, pack_tests_passed, pack_tests_total = grade_repo_run(
+                    pack_run.returncode,
+                    pack_junit,
+                    report_expected=pack_report_expected,
+                )
+                if not pack_tests_total:
+                    pack_passed = False
+                    pack_score = 0.0
+                    output += "\nverifier pack collected zero tests"
+                passed = passed and pack_passed
+                score = min(score, pack_score)
+                tampered = tampered or detect_tamper(
+                    pack_run.returncode,
+                    pack_junit,
+                    report_expected=pack_report_expected,
+                )
+                tests_passed += pack_tests_passed or 0
+                tests_total += pack_tests_total or 0
+                output += "\n" + pack_run.stdout + "\n" + pack_run.stderr
+                combined_junit = (
+                    "repo\0" + xml_text + "\0verifier-pack\0" + pack_xml_text
+                )
+                verdict_source = "composite:repo+verifier-pack"
 
             return VerdictResult(
                 passed=passed,
@@ -1206,12 +1805,35 @@ class RepoVerifier:
                     "tests_total": tests_total,
                     "files_changed": changed,
                     "files_deleted": deleted_paths,
-                    "verdict_source": "junit+exit" if junit is not None else "exit",
+                    "verdict_source": verdict_source,
                     "tamper": tampered,
-                    "junit_sha256": hashlib.sha256(xml_text.encode("utf-8")).hexdigest() if xml_text else None,
+                    "junit_sha256": hashlib.sha256(
+                        combined_junit.encode("utf-8")
+                    ).hexdigest() if combined_junit else None,
+                    "junit_digest_format": (
+                        "EVOGUARD_JUNIT_COMPOSITE_V1"
+                        if pack_dir
+                        else "JUNIT_XML_SHA256"
+                    ) if combined_junit else None,
                     "verifier_pack_sha256": pack_sha256,
+                    "expected_verifier_pack_sha256": expected_pack_sha256 or None,
                     "verifier_pack_manifest": pack_manifest,
+                    "verifier_pack_tests_passed": pack_tests_passed,
+                    "verifier_pack_tests_total": pack_tests_total,
+                    "setup_isolation": setup_isolation,
+                    "setup_fidelity": "verified" if setup_cmd_raw else "not_applicable",
+                    "candidate_fidelity": "verified" if pack_dir else "not_applicable",
+                    "image_digest": resolved_image,
+                    "isolation_evidence": {
+                        "requested": self.isolation,
+                        "delivered": self.isolation,
+                        "image_digest": resolved_image,
+                        "network": self.docker_network if container_mode else None,
+                        "runtime": self.docker_runtime if container_mode else None,
+                    } if container_mode else None,
                 },
             )
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
+            if pack_workdir is not None:
+                shutil.rmtree(pack_workdir, ignore_errors=True)

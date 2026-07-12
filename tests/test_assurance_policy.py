@@ -25,8 +25,24 @@ from evoom_guard.guard import (
     FAIL,
     PASS,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+    _assurance_profile,
+    _assurance_shortfall,
     guard,
 )
+
+
+def test_host_setup_opt_in_degrades_overall_candidate_isolation() -> None:
+    assurance = _assurance_profile(
+        "docker", None, setup_isolation="subprocess_host_opt_in"
+    )
+    assert assurance["suite_isolation"] == "docker"
+    assert assurance["setup_isolation"] == "subprocess_host_opt_in"
+    assert assurance["candidate_isolation"] == "subprocess"
+    assert _assurance_shortfall(
+        assurance,
+        require_report_integrity=None,
+        require_candidate_isolation="docker",
+    ) is not None
 
 
 def _write(root: str, rel: str, content: str) -> None:
@@ -251,13 +267,13 @@ class BlackboxIsolationHonestyTests(BlackboxAttestationTests):
             self.assertEqual(r.attestation["repo_suite_passed"], True)
 
     # ---- honesty: subprocess boundary does not claim to protect the pack ----- #
-    def test_subprocess_pack_secrecy_is_reported_honestly(self) -> None:
+    def test_repo_native_pack_secrecy_is_reported_honestly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo, pack = self._repo_pack(tmp)
             r = guard(repo, _block("calc/note.py", "# ok\n"),
                       verifier_pack=pack, blackbox=True, blackbox_only=True)
             self.assertEqual(
-                r.assurance["verifier_pack"]["secrecy"], "reachable_same_host"
+                r.assurance["verifier_pack"]["secrecy"], "readable_in_judge_process"
             )
 
 

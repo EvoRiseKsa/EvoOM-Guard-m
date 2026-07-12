@@ -129,6 +129,52 @@ class AssuranceProfileTests(unittest.TestCase):
             from evoom_guard.guard import SCHEMA_VERSION
             self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
 
+    def test_repo_junit_digest_has_an_explicit_unambiguous_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(tmp)
+            r = guard(repo, _block("pkg/m.py", "def f():\n    return 1\n"))
+            self.assertEqual(r.verdict, PASS)
+            attestation = r.attestation
+            assert attestation is not None
+            digest = attestation["junit_sha256"]
+            self.assertIsInstance(digest, str)
+            self.assertEqual(len(digest), 64)
+            int(digest, 16)  # exact lowercase/uppercase is not part of the contract
+            self.assertEqual(
+                attestation["junit_digest_format"], "JUNIT_XML_SHA256"
+            )
+
+    def test_composite_junit_digest_is_not_mislabeled_as_plain_xml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = _repo(tmp)
+            pack = os.path.join(tmp, "pack")
+            _write(
+                pack,
+                "test_contract.py",
+                "from pkg.m import f\n\n"
+                "def test_contract():\n"
+                "    assert f() == 1\n",
+            )
+            r = guard(
+                repo,
+                _block("pkg/m.py", "def f():\n    return 1\n"),
+                verifier_pack=pack,
+            )
+            self.assertEqual(r.verdict, PASS, r.reason)
+            attestation = r.attestation
+            assert attestation is not None
+            digest = attestation["junit_sha256"]
+            self.assertIsInstance(digest, str)
+            self.assertEqual(len(digest), 64)
+            int(digest, 16)
+            self.assertEqual(
+                attestation["junit_digest_format"],
+                "EVOGUARD_JUNIT_COMPOSITE_V1",
+            )
+            self.assertNotEqual(
+                attestation["junit_digest_format"], "JUNIT_XML_SHA256"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

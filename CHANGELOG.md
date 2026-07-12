@@ -9,6 +9,116 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.4.0] — 2026-07-12
+
+A verifier-identity and execution-fidelity release (JSON schema 1.8). It makes
+the accepted verifier-pack content explicit, prevents a narrowed repo command
+from skipping the pack, and records the real setup/suite boundary. It does
+**not** turn the repo-native judge into a black-box judge: candidate imports and
+the JUnit writer still share one process there, so its documented
+`same_process_candidate_writable` report-integrity limit is unchanged.
+
+### Security
+
+- **One canonical verifier-pack contract.** `pack-doctor`, the repo-native
+  judge, and the black-box judge now share the same manifest/parser/digest code.
+  A present `pack.json` requires non-empty string `id` and `version`; optional
+  `description`, `target_type`, and `protocol` must be strings. Duplicate or
+  unknown keys, malformed JSON, unreadable trees, symlinks, special files, and
+  packs with no `test_*.py` files fail closed.
+- **Unambiguous pack identity (`EVOGUARD_PACK_V2`).** The portable SHA-256
+  identity covers typed directory/file records, normalized relative paths,
+  lengths, and file bytes (including empty directories). It deliberately does
+  not claim to bind timestamps or filesystem permission metadata.
+- **Fail-closed verifier identity pin.** `--expect-verifier-pack-sha256`, the
+  Action input `expect-verifier-pack-sha256`, and the protected config key
+  `expect_verifier_pack_sha256` require the accepted V2 snapshot to match a
+  64-hex digest **before candidate code runs**. A mismatch is
+  `ERROR verifier_pack_identity_mismatch` and the expected value is included in
+  the canonical effective policy / `policy_sha256`.
+- **Separated, verified snapshot.** Both judges copy the pack to a judge-owned
+  temporary directory outside the candidate tree and its `HOME`, execute that
+  snapshot by its explicit path, and re-hash it immediately before and after
+  execution. Observed drift is `TAMPERED verifier_pack_snapshot_changed`.
+- **Mandatory independent pack phase.** Repo-native verification runs the repo
+  suite and then an explicit `python -m pytest <snapshot>` phase; both must
+  pass. A custom or narrowed repo `test_command` cannot omit the pack, and a
+  pack that collects zero tests cannot pass. The attestation records separate
+  pack counts and `verdict_source: composite:repo+verifier-pack`.
+- **Candidate-tree fidelity across phases.** When a pack is present, Guard binds
+  the post-setup candidate tree before and after the repo suite and pack phase.
+  Persistent source/harness drift is
+  `TAMPERED candidate_tree_changed_during_run`; unreadable or special entries
+  fail closed rather than being skipped.
+- **Setup follows the requested isolation by default.** Under Docker/gVisor,
+  setup runs in a separate container using the same resolved image ID,
+  network, runtime, and resource policy as the suite. Setup alone receives
+  `/work:rw`; the suite receives `/work:ro`, and the pack phase additionally
+  receives `/verifier-pack:ro`. Container execution drops all capabilities,
+  enables `no-new-privileges`, limits open files, and uses collision-resistant
+  names.
+- **Setup fidelity.** Every pre-existing file, directory, symlink, special
+  entry, and permission bit is compared before/after setup. Only newly created
+  conventional dependency/build outputs and explicit `setup_output_globs` are
+  exempt. A changed judged path is `ERROR setup_failed`; the same check also
+  protects subprocess baseline evidence.
+
+### Added / changed in the machine contract (schema 1.8)
+
+- New stable reason codes: `verifier_pack_identity_mismatch`,
+  `verifier_pack_invalid`, `verifier_pack_snapshot_changed`,
+  `candidate_tree_changed_during_run`, and `test_command_unavailable`.
+- Attestation gains `verifier_pack_digest_format`,
+  `verifier_pack_tests_passed`, `verifier_pack_tests_total`,
+  `junit_digest_format`, and `setup_isolation`; container runs expose delivered
+  `isolation_evidence` in repo-native mode too.
+- `EVOGUARD_JUNIT_COMPOSITE_V1` names the digest framing used when
+  `junit_sha256` commits to both repo and pack JUnit XML. A single-report digest
+  is labelled `JUNIT_XML_SHA256`.
+- Assurance gains `suite_isolation`, `setup_isolation`, the
+  `mixed_host_setup_repo_native` profile, and explicit pack-integrity values
+  (`verified_snapshot_read_only` / `verified_snapshot_pre_post`).
+- The complete effective policy now includes `expect_verifier_pack_sha256`,
+  `trust_setup_on_host`, and `setup_output_globs`, so each changes
+  `policy_sha256`.
+
+### Fixed
+
+- Docker exit 125, image-resolution failure, and a missing test/pack interpreter
+  now produce named fail-closed outcomes instead of ambiguous test failures.
+- Changed-line coverage normalizes absolute and Windows-style paths before
+  matching them to repo-relative changed paths.
+- The restricted Windows judge environment preserves only required OS runtime
+  plumbing (`SYSTEMROOT`, `WINDIR`, `COMSPEC`, `PATHEXT`) and redirects
+  `TEMP`/`TMP` to judge-owned scratch. This prevents Node from aborting during
+  CSPRNG initialization without exposing the user's full environment.
+- Diff base reconstruction now prevents `git apply` from discovering an
+  unrelated enclosing repository. A temporary directory located inside another
+  worktree can no longer yield a successful no-op and a false
+  `no_verifiable_changes` result.
+
+### Migration from 3.3.x
+
+- Recompute any stored pack digest with
+  `evo-guard pack-doctor <pack> --json`; pre-3.4 concatenation digests are not
+  V2 identities. File bytes are exact, so calculate the protected pin from the
+  canonical CI artifact/checkout; Git LF/CRLF conversion changes the digest.
+- A pack is no longer injected at `evoguard_verifier_pack/`. Resolve pack-local
+  data relative to `__file__`, and ensure Python + pytest exist in the host or
+  container image even when the repo suite uses another runner.
+- Container setup now uses the configured container network (default `none`)
+  and requires its setup tool in the image. Prefer a prebuilt image or offline
+  dependency cache. `--trust-setup-on-host` is a compatibility escape hatch;
+  it is recorded and deliberately lowers effective candidate isolation to
+  `subprocess`, so a Docker/gVisor assurance floor will refuse it.
+- `setup_output_globs` are trusted fidelity exceptions used across setup and
+  the repo/pack transition. Never include source, tests, policy, or harness
+  paths. Pre-existing content in conventional output directories remains bound;
+  only new output entries are ignored by default.
+- `setup_command` remains unsupported with `--blackbox`; the combination fails
+  closed with `policy_requirement_unsupported` rather than silently omitting
+  setup.
+
 ## [3.3.1] — 2026-07-12
 
 A policy-consistency hardening pass (schema 1.7) — an external review of v3.3.0

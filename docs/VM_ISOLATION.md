@@ -11,7 +11,9 @@ gVisor backend ships as **`--isolation gvisor`** — the docker judge run throug
 `runsc` OCI runtime (a user-space guest kernel, no `/dev/kvm` needed). The stronger
 **Firecracker** microVM backend remains a design (it needs `/dev/kvm` / nested
 virtualization, which not every host exposes). The default **subprocess** and
-**`--isolation docker`** judges are unchanged. This document is the full VM-class
+**`--isolation docker`** judges remain the lower isolation levels. In 3.4 their
+phase contract is explicit: container setup is writable and isolated; suite and
+verifier-pack candidate mounts are read-only. This document is the full VM-class
 design, threat model, and validation plan; §4a/§5/§8 mark what is built.
 
 ## 1. Why
@@ -20,8 +22,8 @@ EvoGuard's two existing judges both **share the host kernel**:
 
 | Judge | Confines | Gap |
 |---|---|---|
-| subprocess + `rlimits` + timeout (default) | CPU/mem/time | not a sandbox — full host FS/network |
-| `--isolation docker` (Phase 2a) | network-less, read-only, CPU/PID/mem caps, judge-owned report mount | shares the host kernel → a kernel exploit escapes |
+| subprocess + timeout and POSIX `rlimits` (default) | CPU/mem/time where the OS exposes them | not a sandbox — full host FS/network; Windows has the timeout but not POSIX rlimits |
+| `--isolation docker` (Phase 2a) | setup in a writable container; suite/pack candidate mounts read-only; network/capability/PID/CPU/mem controls | shares the host kernel → a kernel exploit escapes |
 
 For **untrusted / public fork-PR code**, neither is a complete boundary. VM-class
 isolation gives each judged run **its own guest kernel**, so a kernel-level escape
@@ -39,8 +41,9 @@ lands in a throwaway VM, not on the host.
 
 **Non-goals**
 - No change to the verdict contract (`schema_version`, verdict names, `reason_code`).
-- Not a performance feature; not Windows; not a defense against hardware
-  side-channels or hypervisor 0-days (see §6).
+- Not a performance feature. The Firecracker backend is not a native-Windows
+  target, and gVisor requires a Docker host exposing `runsc`. This is not a
+  defense against hardware side-channels or hypervisor 0-days (see §6).
 
 ## 3. Threat model
 
@@ -59,10 +62,11 @@ whose test/collection-time code executes inside the judge.
 hypervisor/VMM 0-days (mitigated by a minimal device model + seccomp, not
 eliminated), and the supply chain of the guest base image.
 
-**Trust boundary:** the host and the judge-owned report path are trusted;
-**everything inside the guest is untrusted.** The repo copy is assembled on the host
-(so `COPY_IGNORE` + patch application happen in trusted space), then handed to the
-guest read-mostly.
+**Trust boundary:** the host, policy and judge-owned report/pack snapshot paths are
+trusted; **everything inside the guest is untrusted.** `COPY_IGNORE` + patch
+application happen on the host. Under docker/gVisor, `setup_command` then runs in
+the resolved image against a writable candidate mount; after fidelity verification,
+the suite and configured pack phases receive read-only candidate mounts.
 
 ## 4. Design — one mode, two backends
 
@@ -87,8 +91,18 @@ a separate host-readable drive (or over `vsock`). Requires `/dev/kvm` on the run
 - **Pre-gate first.** The reward-hack path-gate (`reject_unsafe_or_protected`, incl.
   the feature-mode rules) runs on the host; a patch that edits tests/config/CI/
   auto-exec is `REJECTED` with **no candidate code executed**.
-- **Host-assembled copy.** The repo copy (`COPY_IGNORE` + `setup_command` install)
-  is prepared on the host, then mounted/transferred read-mostly into the guest.
+- **Host-assembled candidate, guest setup.** The host copies and applies the patch.
+  By default `setup_command` runs inside the container/guest boundary, not on the
+  host, and the same resolved image ID is reused for setup, suite and pack. The
+  explicit `trust_setup_on_host` compatibility option is recorded and lowers the
+  effective isolation claim to `subprocess`.
+- **Phase-specific writes.** Setup receives a writable candidate mount. Repo-suite
+  and verifier-pack phases receive the candidate read-only; a configured pack is a
+  separate read-only mount and a separate mandatory phase. Its accepted
+  `EVOGUARD_PACK_V2` SHA-256 can be pinned before candidate code runs.
+- **Setup fidelity.** The judged tree is compared before/after setup. Conventional
+  new dependency/build outputs are allowed. Extra `setup_output_globs` are trusted
+  policy exclusions — keep them narrow because matching paths are not compared.
 - **Judge-owned report.** `instrument_command` injects the JUnit reporter exactly as
   today; the report is written to a path the **host** reads back. The reporter env
   (jest's `JEST_JUNIT_OUTPUT_FILE`) is passed into the guest the same way docker does.
@@ -100,7 +114,8 @@ a separate host-readable drive (or over `vsock`). Requires `/dev/kvm` on the run
 `docker_runtime="runsc"` and **reuses `_run_docker`** unchanged — `_docker_command`
 simply adds `--runtime runsc`. Everything else is shared verbatim with the docker
 judge: `--network none`, `--read-only`, the CPU/PID/mem caps, the judge-owned report
-mount, and `instrument_command` → `parse_junit_xml` → `grade_repo_run` →
+mount, read-only candidate/pack phase mounts, and `instrument_command` →
+`parse_junit_xml` → `grade_repo_run` →
 `detect_tamper`. The misconfig guard (a container mode without `--docker-image`)
 covers it too. `--isolation gvisor` is wired through `guard()` / `guard_from_diff()`
 and the CLI.
@@ -119,7 +134,7 @@ branch) — the report-and-exit-code oracle is backend-agnostic.
 | test opens a socket | network blocked → fails/times out, verdict still read |
 | fork-bomb / mem hog | killed by caps; clear timeout/limit verdict; **host unaffected** |
 | forced `exit 0` vs failing report | `TAMPERED` |
-| default subprocess + docker paths | **byte-identical** (no regression) |
+| compatible subprocess + docker runs | same semantic verdict; evidence names the different delivered boundary |
 
 Plus a reproducible campaign target (mirroring campaign v5) proving `junit+exit` on
 **real upstream code** inside the VM, with an independent verifier + negative
@@ -133,6 +148,12 @@ self-check.
 - This is the **prerequisite for accepting public / untrusted PRs**. Trusted-repo
   gating stays on the default subprocess judge; semi-trusted code can use
   `--isolation docker` today.
+- A read-only suite/pack candidate mount means build products and dependencies must
+  be fully prepared during setup or baked into the image. This is an intentional
+  phase contract, not a general writable development container.
+- Black-box subprocess launching uses a POSIX executable launcher. Native Windows
+  fails closed for that path; use Linux/GitHub Actions or WSL. This is distinct from
+  repo-native subprocess execution on Windows.
 
 ## 8. Phasing
 

@@ -110,7 +110,7 @@ extras (`cryptography`, `coverage`).
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.3.1"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.0"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -124,7 +124,7 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 | ✅ `PASS` | the repo's tests pass **and** the patch left the protected harness untouched | 0 |
 | ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency change trips it too — review and exempt with `--allow` | 1 |
 | ❌ `FAIL` | the patch applied and the suite ran, but tests fail | 1 |
-| 🚨 `TAMPERED` | the process exit code and the judge-owned JUnit report disagree — a forgery signature | 1 |
+| 🚨 `TAMPERED` | the exit code and JUnit disagree, or the judged candidate/pack snapshot changed during execution | 1 |
 | ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff (refused, never applied), a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
 
 Every run can also emit a machine-readable JSON record (`--json`) with a stable
@@ -150,7 +150,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.1   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.0   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
@@ -159,8 +159,10 @@ steps:
 The step fails on any non-`PASS` verdict. (`fail-on: rejected-only` gates ONLY
 harness integrity — with it, `FAIL`/`TAMPERED`/`ERROR` leave the check **green**;
 use it only when another required check already runs the suite.) The report also lands in the job summary. Further
-inputs: `verifier-pack`, `blackbox`/`blackbox-only`, `require-report-integrity`,
+inputs: `verifier-pack`, `expect-verifier-pack-sha256`,
+`blackbox`/`blackbox-only`, `require-report-integrity`,
 `require-candidate-isolation`, `isolation`/`docker-image`/`docker-network`,
+`trust-setup-on-host`,
 `sarif`, `allow`, `allow-new-tests`, `timeout`, `mem-limit` — see
 [`action.yml`](action.yml) and [`docs/ADOPTION.md`](docs/ADOPTION.md).
 
@@ -182,6 +184,7 @@ evo-guard guard ./repo --patch candidate.txt
 #   --isolation docker|gvisor     run the suite in a network-less, read-only
 #                                 container (needs --docker-image + a daemon)
 #   --verifier-pack /secure/pack  org-owned tests the patch cannot modify
+#   --expect-verifier-pack-sha256 <64-hex>  require its EVOGUARD_PACK_V2 identity
 #   --blackbox                    external isolated judge (needs --verifier-pack):
 #                                 verdict from the judge's own process; composite
 #                                 with the repo suite. --blackbox-only skips it.
@@ -199,6 +202,25 @@ evo-guard version
 Project defaults can live in a `.evoguard.json` at the repo root (itself a
 protected file — a patch cannot edit its own gate). Python API:
 `from evoom_guard.guard import guard, guard_from_diff, render_report`.
+
+### Setup and container phases in 3.4
+
+`setup_command` prepares the throwaway candidate tree before judgment. With
+`--isolation docker` or `gvisor`, setup runs **inside the resolved container
+image by default**, with the workspace writable; the repo suite and a configured
+verifier-pack phase then run in separate containers with the candidate tree
+**read-only**. The same resolved image ID is used for all phases. The default
+network is `none`, so bake dependencies into the image, use an available cache,
+or deliberately configure a network.
+
+Setup is checked before and after: changing judged source or harness files is an
+error. Conventional new dependency/build outputs are allowed, and repositories
+can declare additional exceptions with `setup_output_globs` in
+`.evoguard.json`. Those globs are **trusted policy**: a broad pattern excludes
+matching paths from the fidelity check, so keep them narrow and review the
+protected config. `trust_setup_on_host: true` is a compatibility escape hatch
+for container modes; it is recorded and reduces effective candidate isolation
+to `subprocess`.
 
 ## Signed verdicts (optional)
 
@@ -233,8 +255,11 @@ independent pieces of evidence to every verdict:
 evo-guard guard . --diff - --diff-coverage --min-diff-coverage 80
 
 # Judge-owned tests the PATCH CANNOT MODIFY (org invariants, integration
-# checks) — injected at judgment time, collected with the suite:
-evo-guard guard . --diff - --verifier-pack /secure/org-pack
+# checks) — injected at judgment time and run as a separate mandatory phase:
+evo-guard pack-doctor /secure/org-pack
+# Copy the reported "pack sha256" into this protected policy/CI value:
+evo-guard guard . --diff - --verifier-pack /secure/org-pack \
+  --expect-verifier-pack-sha256 "$PACK_SHA256"
 ```
 
 - A `PASS` whose changed lines were never executed is a **hollow pass** — the
@@ -244,11 +269,14 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
   of scrutiny, not proof of correctness.
 - A patch overfitted to the visible tests fails the **Independent Verifier
   Pack** — org-owned checks injected at judgment time that the **patch cannot
-  include or modify** (a diff touching the pack mount is `REJECTED`). Honest
-  scope: in repo-native mode the pack is copied into the candidate tree and runs
-  in the same process and filesystem, so **runtime code is not isolated from it**
-  — it is an integrity control against *patch* overfitting, not a runtime-tamper
-  or secrecy guarantee. For runtime separation, use black-box mode with delivered
+  include or modify**. In 3.4, Guard snapshots the pack outside the candidate
+  tree, verifies its framed `EVOGUARD_PACK_V2` digest, then runs it as a
+  **separate mandatory phase**: repo suite and pack must both pass, and a pack
+  that collects zero tests cannot produce `PASS`. `--expect-verifier-pack-sha256`
+  pins the exact accepted identity and the attestation records the digest,
+  manifest and pack test counts. Honest scope: a repo-native pack still shares
+  the judge process with imported candidate code, so it is not a secrecy
+  boundary. For runtime separation, use black-box mode with delivered
   Docker/gVisor isolation (the pack is not mounted into the candidate at all).
   See [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
 - Every verdict now carries an **attestation block** (candidate/policy/report
@@ -258,8 +286,8 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
 ## What Guard honestly is (and is not)
 
 - The verdict comes from **running your repo's own test suite** in a subprocess
-  with CPU/memory rlimits and a timeout, against a throwaway copy. Your working
-  tree is never modified.
+  with a wall-clock timeout and, on POSIX, CPU/memory rlimits, against a
+  throwaway copy. Your working tree is never modified.
 - The default subprocess judge is **not a security sandbox**. Guard is built to
   gate patches to **trusted repositories** (your own code). For semi-trusted
   code, use `--isolation docker` or `gvisor` (network-less, read-only
@@ -275,6 +303,10 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack
   judge (`--blackbox`) closes this — its verdict comes from a process the
   candidate never runs in. Read the `assurance` profile's `report_integrity`
   field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
+- The shell-free `$EVOGUARD_EXEC` launcher used by black-box subprocess mode has
+  a **POSIX executable contract**. Native Windows subprocess mode fails closed
+  with guidance; run that path under Linux/GitHub Actions or WSL. This is
+  separate from ordinary repo-native Guard execution on Windows.
 - Custom (non-adapter) test commands are graded by exit code only — still not
   stdout-forgeable, but with a coarser gradient (and, like every runner today,
   in-process-forgeable).

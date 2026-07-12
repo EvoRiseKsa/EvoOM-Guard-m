@@ -89,6 +89,31 @@ class BaselineEvidenceTests(unittest.TestCase):
                         timeout=120, baseline_evidence=True)
         self.assertEqual(plain.verdict, with_ev.verdict)
 
+    def test_setup_cannot_rewrite_the_baseline_into_a_false_green(self) -> None:
+        _make_repo(self.root, buggy=True)
+        setup = [
+            sys.executable,
+            "-c",
+            (
+                "from pathlib import Path; p=Path('pkg/m.py'); s=p.read_text(); "
+                f"p.write_text({FIXED!r}) if 'x + x + 1' in s else None"
+            ),
+        ]
+        r = guard(
+            self.root,
+            FIX_BLOCK,
+            test_command=TEST_CMD,
+            setup_command=setup,
+            timeout=120,
+            baseline_evidence=True,
+        )
+        self.assertEqual(r.verdict, PASS, r.reason)
+        assert r.baseline is not None
+        self.assertEqual(r.baseline["verdict"], "NO_CLEAN_VERDICT")
+        self.assertEqual(r.baseline["repair_effect"], "unmeasured")
+        self.assertEqual(r.baseline["setup_fidelity"], "changed_judged_tree")
+        self.assertEqual(r.baseline["setup_fidelity_changes"], ["pkg/m.py"])
+
     def test_require_demonstrated_fix_demotes_undemonstrated_pass(self) -> None:
         # The opt-in gate: green base + green candidate → FAIL fix_not_demonstrated.
         _make_repo(self.root, buggy=False)

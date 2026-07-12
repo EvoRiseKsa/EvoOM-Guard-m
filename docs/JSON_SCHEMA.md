@@ -6,29 +6,30 @@
 
 # EvoGuard JSON contract
 
-`evo-guard guard --json <path>` writes a single JSON object describing the verdict.
-This is the **stable machine surface** that every integration (an IDE extension, a
-Claude Code hook, the GitHub Action) is expected to read — instead of parsing the
-human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_code`.
+`evo-guard guard --json <path>` writes one JSON object describing the verdict.
+Integrations should read this surface instead of parsing the human Markdown
+report. Pin `schema_version`, then key decisions off `verdict` and
+`reason_code`.
 
 ## Stability rules
 
-* `schema_version` is bumped on any **breaking** change to this shape, the verdict
-  names, or the `reason_code` vocabulary.
-* Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are **frozen**.
-* A `reason_code` value, once shipped, is **never renamed or repurposed**. New
-  codes may be **added** without a `schema_version` bump (treat an unknown code as
-  the generic verdict).
-* The human `reason` / `diagnostics` strings may change at any time — **do not**
-  parse them.
+- `schema_version` is bumped when a shape, enumerated value, or existing field's
+  security meaning changes incompatibly. Schema 1.8 marks the new pack digest
+  algorithm, composed JUnit identity, and execution-fidelity semantics.
+- Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are frozen.
+- A shipped `reason_code` is never renamed or repurposed. Consumers must still
+  handle a future unknown code as the generic enclosing verdict.
+- Human `reason` and `diagnostics` text may change. Do **not** parse them.
+- Additive nullable fields may appear within a schema version; ignore fields an
+  older consumer does not understand.
 
 ## Example (`PASS`)
 
 ```json
 {
-  "schema_version": "1.7",
+  "schema_version": "1.8",
   "tool": "evoguard",
-  "tool_version": "3.3.1",
+  "tool_version": "3.4.0",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -48,111 +49,189 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 }
 ```
 
-When the change deletes files (from a base→head diff), an extra `deleted` array
-lists them. Deletions are **gated** as of `schema_version` `1.1`: a deleted
-*source* file is applied to the verified tree (so the verdict matches the merge),
-while deleting a protected harness file (a test, its config, the gate's CI, or an
-auto-exec file) drives `REJECTED`. (Before `1.1` this array was named
-`deleted_not_gated`, when deletions were ungated.)
+When a base-to-head change deletes files, `deleted` lists them. Deletions are
+gated since schema 1.1: deleting source changes the verified tree, while
+deleting a protected test/config/CI/auto-exec path is `REJECTED`.
 
-## Fields
+## Top-level fields
 
 | Field | Type | Notes |
 |---|---|---|
-| `schema_version` | string | Contract version. Pin on this. |
-| `diff_coverage` | object \| null | Changed-line coverage evidence (`--diff-coverage`): `measured`, `percent`, `executed`, `total`, per-file `executed`/`missed` lines, `caveat` ("executed is not asserted"). `null` when not requested. |
-| `assurance` | object | How much the verdict can be trusted: `harness_integrity` (`pre_gate_enforced`); `report_integrity` (`same_process_candidate_writable` for the default judge — the code under test can forge the report in-process — or `external_process_isolated` under `--blackbox`; see docs/ASSURANCE.md); `candidate_isolation` (the boundary that was **delivered**, not requested); `verifier_pack`; `repo_native_suite` (black-box only); `overall_profile`; `note`. |
-| `attestation` | object \| null | Context binding for the (optionally signed) verdict: `candidate_sha256`, `policy_sha256`, `junit_sha256`, `verifier_pack_sha256`, `verifier_pack_manifest` (optional `pack.json` id/version), `created_utc`, `guard_version`, `test_command`, `deleted_paths`, `mode` (`repo` \| `blackbox`). Black-box verdicts also carry `isolation_evidence` (requested/delivered/image_digest/network/runtime), `deleted_paths_applied`, `repo_suite_passed`, `repo_suite_junit_sha256`, and `base_sha`/`head_sha` (only when the diff carries them). |
+| `schema_version` | string | Contract version; pin this in strict integrations. |
 | `tool` | string | Always `"evoguard"`. |
 | `tool_version` | string | `evoom_guard.__version__`. |
 | `verdict` | string | `PASS` \| `REJECTED` \| `FAIL` \| `ERROR` \| `TAMPERED`. |
 | `passed` | bool | `true` only for `PASS`. |
-| `exit_code` | int | `0` for `PASS`, `1` for every other verdict. (Invalid CLI usage exits `2` and writes no JSON.) |
-| `reason_code` | string | Stable cause code — see below. |
-| `reason` | string | Human explanation. **Do not parse.** |
-| `files_changed` | string[] | Repo-relative paths the candidate adds/modifies. |
-| `protected_violations` | string[] | Harness paths the patch tried to edit (drives `REJECTED`). |
-| `risk_level` | string | `low` \| `medium` \| `high` blast radius. |
-| `risk_score` | float | `0..1` blast-radius score. |
-| `tests_passed` / `tests_total` | int \| null | Judge-owned JUnit counts; `null` when no suite ran. |
-| `test_command_ran` | bool | Whether the test command actually executed (false for pre-gate `REJECTED` / unsafe / unparseable). |
-| `verdict_source` | string \| null | `junit+exit` (hardened — pytest, `node --test`, vitest, jest, `gotestsum` (Go), `rspec` (Ruby), mocha, or Maven) \| `exit` (custom runner) \| `null`. |
-| `source` | string \| null | How the candidate was supplied: `diff` \| `base/head` \| `edit blocks`. |
-| `base_reconstruction` | string \| null | `ok` \| `failed` (only for `--diff`). |
-| `diagnostics` | string | Truncated failure essence (≤ 2000 chars). |
+| `exit_code` | int | `0` for `PASS`, `1` for every other verdict. Invalid CLI usage exits `2` and may write no verdict. |
+| `reason_code` | string | Stable machine cause; see the table below. |
+| `reason` | string | Human explanation; do not parse. |
+| `files_changed` | string[] | Repo-relative paths added or modified by the candidate. |
+| `deleted` | string[] | Repo-relative deleted paths when supplied by a diff/base-head run. |
+| `protected_violations` | string[] | Protected harness paths the patch tried to change. |
+| `risk_level` | string | `low` \| `medium` \| `high`. |
+| `risk_score` | number | Blast-radius score in `0..1`. |
+| `tests_passed` / `tests_total` | int \| null | Judge-owned counts; with a repo-native pack these are the composed repo + pack totals. |
+| `test_command_ran` | bool | Whether a test command actually executed; false for a pre-gate refusal. |
+| `verdict_source` | string \| null | `junit+exit`, `exit`, `blackbox`, `composite:repo+verifier-pack`, or `null`. |
+| `source` | string \| null | `diff` \| `base/head` \| `edit blocks`. |
+| `base_reconstruction` | string \| null | `ok` \| `failed` for `--diff`. |
+| `diagnostics` | string | Truncated failure essence (at most 2000 characters). |
+| `diff_coverage` | object \| null | Changed-line evidence; `executed` is explicitly not the same as asserted. |
+| `baseline` | object \| null | Optional pristine-base suite result and `repair_effect`; see below. |
+| `assurance` | object | What boundary/integrity levels were actually delivered. |
+| `attestation` | object \| null | Digests, policy, revision, runtime, and pack context bound to this verdict. |
 
-## Verdict ⟷ reason_code
+Structured `junit+exit` adapters cover pytest, `node --test`, vitest, jest,
+gotestsum, RSpec, mocha, and Maven/Surefire. `exit` is a coarser custom-command
+verdict. `composite:repo+verifier-pack` means the repo command and a separate
+mandatory pytest pack phase were both composed.
 
-| `verdict` | `reason_code` | When |
+## Assurance object (schema 1.8)
+
+Important fields are:
+
+- `harness_integrity`: currently `pre_gate_enforced`.
+- `report_integrity`: `same_process_candidate_writable` for repo-native runs or
+  `external_process_isolated` for the black-box judge.
+- `candidate_isolation`: the effective delivered boundary. If container setup
+  is explicitly moved to the host, this becomes `subprocess` even when the suite
+  itself ran in Docker/gVisor.
+- `suite_isolation`: the boundary used for the suite.
+- `setup_isolation`: `null`, `subprocess`, `docker`, `gvisor`,
+  `subprocess_host_opt_in`, or `unavailable` as applicable.
+- `verifier_pack.integrity`: `verified_snapshot_read_only` for a container pack
+  mount or `verified_snapshot_pre_post` for a host snapshot checked before and
+  after execution.
+- `verifier_pack.secrecy`: records whether black-box/container execution kept
+  the pack unmounted from the candidate. Repo-native pack code remains readable
+  in the shared judge process.
+- `overall_profile`: includes `static_gate`, `repo_native_same_process`,
+  `isolated_repo_native`, `mixed_host_setup_repo_native`, and
+  `black_box_external_judge`.
+
+These axes are independent. A read-only Docker candidate tree protects host
+state but does not fix the repo-native same-process report-forgery boundary.
+
+## Attestation object (schema 1.8)
+
+Core context binding includes:
+
+- `created_utc`, `guard_version`, `mode`, `candidate_sha256`, `deleted_paths`,
+  and `test_command`.
+- `effective_policy` and `policy_sha256`. The policy includes every material
+  knob, including `expect_verifier_pack_sha256`, `trust_setup_on_host`, and
+  `setup_output_globs`.
+- `base_sha`, `head_sha`, `base_tree_sha`, `head_tree_sha`, `policy_id`, and
+  `policy_version` when supplied.
+- `isolation_evidence` (`requested`, `delivered`, `image_digest`, `network`,
+  `runtime`) for delivered container runs, including repo-native Docker/gVisor.
+- Black-box composition fields `deleted_paths_applied`, `repo_suite_passed`, and
+  `repo_suite_junit_sha256`.
+
+### JUnit identity
+
+- `junit_sha256` is the report/content digest.
+- `junit_digest_format: JUNIT_XML_SHA256` means SHA-256 over one JUnit XML text.
+- `junit_digest_format: EVOGUARD_JUNIT_COMPOSITE_V1` means SHA-256 over the
+  unambiguous UTF-8 framing
+  `repo\0<repo XML>\0verifier-pack\0<pack XML>`.
+
+Do not compare `junit_sha256` values without also checking
+`junit_digest_format`.
+
+### Verifier-pack identity
+
+- `verifier_pack_sha256` is the **observed accepted snapshot** identity.
+- `verifier_pack_digest_format` is `EVOGUARD_PACK_V2`.
+- `verifier_pack_manifest` is the canonical optional `pack.json` record.
+- `verifier_pack_tests_passed` / `verifier_pack_tests_total` are counts from the
+  mandatory pack phase, separate from the composed top-level totals.
+- The expected pin is not a duplicate attestation field; it is recorded in
+  `effective_policy.expect_verifier_pack_sha256` and therefore in
+  `policy_sha256`.
+
+V2 is a portable content/tree identity over typed directory/file paths,
+lengths, and bytes. It rejects symlinks and special files. It does not bind
+timestamps or filesystem permission metadata. Pre-3.4 pack digests use a
+different algorithm and must be recomputed with `pack-doctor`.
+
+## Baseline object
+
+When requested, `baseline` records `verdict` (`PASS`, `FAIL`, or
+`NO_CLEAN_VERDICT`), counts, `repair_effect` (`demonstrated`,
+`not_demonstrated`, or `unmeasured`), `scope`, and a human `note`. If setup
+cannot be proven faithful it may also contain `setup_fidelity` and
+`setup_fidelity_changes`; this makes the baseline unclean rather than silently
+comparing a different tree. Its scope remains `repo_suite_only`: a pack is
+candidate-only and is not run on the pristine baseline.
+
+## Verdict and `reason_code`
+
+| Verdict | `reason_code` | Meaning |
 |---|---|---|
-| `PASS` | `tests_passed` | Suite passed; harness untouched. |
-| `REJECTED` | `protected_harness_edit` | Patch edits a test / config / auto-exec file. |
-| `FAIL` | `tests_failed` | Suite ran and genuinely failed. |
-| `FAIL` | `no_test_verdict` | Suite produced no clean verdict (collection/usage error). |
-| `TAMPERED` | `junit_exit_mismatch` | Exit code and JUnit report disagree (a desync/forced-exit signature). |
-| `ERROR` | `no_parseable_edits` | No `<<<FILE>>>` / `<<<PATCH>>>` blocks. |
-| `ERROR` | `unsafe_path` | Absolute / `..` / repo-escape path (edit-block or diff). |
-| `ERROR` | `patch_apply_failed` | A `<<<PATCH>>>` anchor did not match. |
-| `ERROR` | `empty_diff` | `--diff` input was empty/whitespace. |
-| `ERROR` | `binary_patch` | `--diff` contained a binary change. |
-| `ERROR` | `reverse_apply_failed` | `--diff` did not reverse-apply (stale base). |
-| `ERROR` | `no_verifiable_changes` | `--diff` reconstructed but changed no verifiable source. |
+| `PASS` | `tests_passed` | Required repo/pack phases passed and the harness gate passed. |
+| `REJECTED` | `protected_harness_edit` | Patch edits/deletes a protected test, config, CI, or auto-exec path. |
+| `FAIL` | `tests_failed` | A required test phase genuinely failed. |
+| `FAIL` / `ERROR` | `no_test_verdict` | No clean test verdict was available (collection/usage/judge error). |
+| `TAMPERED` | `junit_exit_mismatch` | Process exit and judge-owned JUnit disagree. |
+| `TAMPERED` | `verifier_pack_snapshot_changed` | Accepted pack snapshot changed before or during execution. |
+| `TAMPERED` | `candidate_tree_changed_during_run` | Candidate source/harness changed across the repo-suite/pack transition. |
+| `ERROR` | `verifier_pack_identity_mismatch` | Expected V2 digest differs from the accepted snapshot; checked before candidate execution. |
+| `ERROR` | `verifier_pack_invalid` | Pack contract/tree is malformed, empty, unreadable, symlinked, special, or unstable. |
+| `ERROR` | `test_command_unavailable` | Required test/pack interpreter or executable is unavailable. |
+| `ERROR` | `policy_requirement_unsupported` | Selected judge cannot enforce a requested gate; it is not silently dropped. |
+| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor or unavailable. |
+| `ERROR` | `setup_timeout` | Setup timed out. |
+| `ERROR` | `setup_failed` | Setup failed or changed judged paths outside trusted output exceptions. |
+| `FAIL` / `ERROR` | `test_timeout` | A required test phase timed out; exact verdict reflects the judge path. |
+| `FAIL` | `diff_coverage_below_threshold` | Measured changed-line coverage is below the requested gate. |
+| `FAIL` | `fix_not_demonstrated` | Required before/after repair effect was not demonstrated. |
+| `ERROR` | `no_parseable_edits` | No edit blocks could be parsed. |
+| `ERROR` | `unsafe_path` | Absolute, `..`, or repo-escape path. |
+| `ERROR` | `patch_apply_failed` | A patch anchor did not match. |
+| `ERROR` | `empty_diff` | `--diff` input was empty. |
+| `ERROR` | `binary_patch` | Binary diff refused. |
+| `ERROR` | `reverse_apply_failed` | Diff did not reverse-apply to reconstruct the base. |
+| `ERROR` | `no_verifiable_changes` | Input reconstructed but contained no verifiable source change. |
 
-### Added in 1.5 → 1.6 (additive)
+## Added in 1.7 → 1.8
 
-- **`baseline`** (object | null) — opt-in before/after differential evidence
-  (`--baseline-evidence`): the suite is ALSO run on the **pristine base** (no
-  candidate applied), graded from the same judge-owned JUnit + exit-code
-  channel. Fields: `verdict` (`PASS` | `FAIL` | `NO_CLEAN_VERDICT`),
-  `tests_passed`, `tests_total`, `repair_effect`
-  (`demonstrated` — base failed AND candidate passed under the same
-  judge/policy/env; `not_demonstrated`; `unmeasured`), `note`.
-- **`fix_not_demonstrated`** — new `reason_code`: the opt-in
-  `--require-demonstrated-fix` gate demoted a PASS whose repair effect was not
-  demonstrated (the base already passed, or no clean baseline verdict).
-- **Attestation gains** `base_tree_sha` / `head_tree_sha` (exact-content
-  binding even where no commit SHA exists) and `policy_id` / `policy_version`
-  (which `.evoguard.json` policy produced the verdict) — and `base_sha` /
-  `head_sha` are now bound in **every** mode (repo-native too; previously only
-  the black-box path carried them).
-- `.evoguard.json` is now **fail-closed**: a present-but-broken config (bad
-  JSON, unknown key, wrong-typed value) stops the run with exit 2 instead of
-  silently degrading to weaker defaults, and may carry the protected policy
-  contract: `require_report_integrity`, `require_candidate_isolation`,
-  `min_diff_coverage`, `policy_id`, `policy_version`.
-- `evo-guard verify-verdict` gains context checks: `--expect-head-sha`,
-  `--expect-base-sha`, `--expect-policy-sha`, `--expect-policy-id` — a valid
-  signature over the WRONG commit or policy now fails the check (chain of
-  custody, not just file integrity).
+- Canonical V2 pack identity and fail-closed expected digest pin.
+- Separate mandatory repo + pack verdict source and pack-specific counts.
+- Pre/post accepted-pack and candidate-tree fidelity outcomes with distinct
+  tamper reason codes; pack validation and missing-command failures also receive
+  distinct reason codes.
+- Explicit JUnit digest formats, including composite framing.
+- Setup/suite isolation split, host-setup downgrade, pack integrity labels, and
+  repo-native container isolation evidence.
+- Effective policy binds the expected pack identity and trusted setup-output
+  contract.
 
-### Added in 1.6 → 1.7 (policy consistency, fail-closed)
+## Earlier contract milestones
 
-- **`policy_requirement_unsupported`** — new `reason_code`: a requested GATE the
-  selected judge cannot enforce (`require_demonstrated_fix` or
-  `min_diff_coverage` outside the subprocess judge) is an **ERROR** before
-  anything runs — a requirement is never silently dropped.
-- **`attestation.effective_policy`** — the COMPLETE canonical policy that shaped
-  the judgment (mode, isolation, docker image/network, test/setup commands,
-  protected/allow, floors, gates, timeouts, pack requirement, policy identity).
-  **`policy_sha256` is now computed over this object** — previously it covered
-  only five fields, so two materially different policies could share a
-  fingerprint and `--expect-policy-sha` proved less than it appeared to.
-- **`baseline.scope`** — `repo_suite_only` on a measured baseline (a verifier
-  pack, if any, is exercised only on the candidate run), or `unsupported_mode`
-  on the explicit unmeasured record attached when baseline evidence is
-  requested under a judge that cannot measure it. Evidence-only requests never
-  vanish silently: unsupported modes attach `{measured: false, note}` /
-  `{repair_effect: "unmeasured", note}` records.
+- **1.7:** complete `effective_policy` became the input to `policy_sha256`;
+  unsupported gates fail closed; baseline scope became explicit.
+- **1.6:** baseline differential evidence, `fix_not_demonstrated`, exact
+  commit/tree binding, protected policy identity, and context-aware
+  `verify-verdict` checks.
+- **1.5:** delivered black-box candidate isolation and composite repo + external
+  black-box verdict evidence.
+- **1.4:** attestation mode and fail-closed assurance floors.
+- **1.3:** assurance object and the explicit
+  `same_process_candidate_writable` limit.
+- **1.2:** diff coverage, attestation, and named test/setup timeout/failure
+  causes.
+- **1.1:** deletion-aware verified trees and protected-deletion gating.
 
 ## `evo-guard doctor`
 
-`evo-guard doctor --json` reports the environment EvoGuard needs (it does **not** read a
-patch). Exit code is `0` when supported, `1` otherwise.
+`evo-guard doctor --json` reports environment support and does not read a patch.
+It exits `0` when supported and `1` otherwise.
 
 ```json
 {
   "tool": "evoguard",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,
@@ -160,24 +239,3 @@ patch). Exit code is `0` when supported, `1` otherwise.
   "supported": true
 }
 ```
-
-
-## 1.2 additions
-
-- New reason codes: `test_timeout`, `setup_timeout`, `setup_failed` (a run that timed out or whose setup failed is no longer mislabelled `patch_apply_failed`), and `diff_coverage_below_threshold` — a PASS-quality run gated to `FAIL` because the measured changed-line coverage fell below `--min-diff-coverage`.
-- New top-level fields `diff_coverage` and `attestation` (additive; `null` when absent).
-
-## 1.3 additions
-
-- New `assurance` object on every verdict. Its `report_integrity` was `same_process_candidate_writable` for every runner at 1.3 — a deliberate in-process patch can forge the JUnit report and exit code together. This was documented, not a defect to hide; the fix — the external black-box judge (`external_process_isolated`) — **shipped in 1.4–1.5** (see below).
-
-## 1.4 additions
-
-- Attestation gains `mode` (`repo` | `blackbox`); black-box verdicts now carry a full attestation (candidate/policy/pack digests).
-- New reason code `assurance_requirement_not_met`: a fail-closed `--require-report-integrity` / `--require-candidate-isolation` policy refused to ship a weaker guarantee than required.
-
-## 1.5 additions
-
-- Black-box `candidate_isolation` is now the **delivered** boundary (a real `CandidateRunner`), read from what actually ran — requesting a container that cannot be started fails closed (`ERROR`) rather than reporting an isolation it never had.
-- The black-box verdict is **composite**: the repo's own suite and the pack must both pass unless `--blackbox-only`. `assurance` gains `repo_native_suite`.
-- Attestation gains `isolation_evidence`, `deleted_paths_applied`, `repo_suite_passed`, `repo_suite_junit_sha256`, and `base_sha`/`head_sha` (additive; present on black-box verdicts).

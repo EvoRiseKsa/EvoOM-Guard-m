@@ -105,6 +105,12 @@ class MarkerCollisionTests(unittest.TestCase):
         # on a repo whose source embeds the markers.
         env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        # Force Guard's throwaway tree below this checkout.  ``git apply`` must
+        # not discover the enclosing repository and silently no-op because the
+        # patch paths are outside its current subdirectory.
+        nested_tmp = tempfile.mkdtemp(prefix=".evo_nested_tmp_", dir=os.getcwd())
+        old_tempdir = tempfile.tempdir
+        tempfile.tempdir = nested_tmp
         repo = tempfile.mkdtemp(prefix="evo_marker_git_")
         try:
             _make_repo(repo)  # base content
@@ -124,7 +130,9 @@ class MarkerCollisionTests(unittest.TestCase):
             self.assertEqual(r.verdict, PASS, r.reason + " | " + r.diagnostics[:400])
             self.assertEqual(deleted, [])
         finally:
+            tempfile.tempdir = old_tempdir
             shutil.rmtree(repo, ignore_errors=True)
+            shutil.rmtree(nested_tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

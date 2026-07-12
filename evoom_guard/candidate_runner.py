@@ -111,6 +111,11 @@ class CandidateRunner:
     def _prepare_subprocess(
         self, workdir: str, target: str
     ) -> tuple[str, dict[str, str], IsolationEvidence]:
+        if os.name == "nt":
+            raise IsolationUnavailable(
+                "black-box subprocess launching currently requires a POSIX host; "
+                "use GitHub Actions/Linux or WSL on Windows"
+            )
         launcher = self._write_launcher(workdir, {"mode": "subprocess", "target": target})
         evidence = IsolationEvidence(
             requested=self.isolation,
@@ -154,7 +159,7 @@ class CandidateRunner:
         image_digest = self._ensure_image(self.docker_image)
         # Prove the boundary really executes (image + runtime actually run a
         # container) before we let any verdict claim it.
-        self._delivery_probe(self.docker_image, runtime)
+        self._delivery_probe(image_digest, runtime)
 
         # A fully-resolved argv PREFIX (no shell, no env expansion). The launcher
         # appends the pack's argv and execs it directly, so image/network/runtime/
@@ -163,14 +168,21 @@ class CandidateRunner:
             "docker", "run", "--rm", "--network", self.docker_network,
             "--read-only", "--tmpfs", "/tmp:rw,exec",
             "--pids-limit", "256", "--cpus", "1",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+            "--ulimit", "nofile=1024:1024",
             "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "LANG=C.UTF-8",
             "-v", f"{target}:/candidate:ro", "-w", "/candidate",
         ]
+        getuid = getattr(os, "getuid", None)
+        getgid = getattr(os, "getgid", None)
+        if callable(getuid) and callable(getgid):
+            prefix += ["--user", f"{getuid()}:{getgid()}"]
         if runtime:
             prefix += ["--runtime", runtime]
         if self.mem_limit_mb > 0:
             prefix += ["--memory", f"{self.mem_limit_mb}m"]
-        prefix.append(self.docker_image)
+        # Execute the exact image bytes we inspected, never the mutable tag.
+        prefix.append(image_digest)
         launcher = self._write_launcher(workdir, {"mode": "docker", "prefix": prefix})
 
         evidence = IsolationEvidence(
@@ -196,7 +208,7 @@ class CandidateRunner:
         return launcher, env, evidence
 
     # ---- helpers ----------------------------------------------------------- #
-    def _ensure_image(self, image: str) -> str | None:
+    def _ensure_image(self, image: str) -> str:
         """Return the image's content digest, pulling it once if absent."""
         digest = self._image_digest(image)
         if digest is not None:
@@ -209,7 +221,12 @@ class CandidateRunner:
                 f"container image {image!r} is not available and could not be pulled: "
                 f"{(pull.stderr or pull.stdout).strip()[:200]}"
             )
-        return self._image_digest(image)
+        digest = self._image_digest(image)
+        if digest is None:
+            raise IsolationUnavailable(
+                f"container image {image!r} was pulled but has no resolvable image ID"
+            )
+        return digest
 
     @staticmethod
     def _image_digest(image: str) -> str | None:

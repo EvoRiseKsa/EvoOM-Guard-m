@@ -48,6 +48,7 @@ from evoom_guard.verifiers.repo_verifier import (
     apply_blocks_to_copy,
     copy_repo_tree,
     is_safe_relpath,
+    judge_subprocess_env,
     parse_file_blocks,
     parse_patch_blocks,
 )
@@ -125,13 +126,7 @@ def _coverage_wrap(cmd: list[str], data_file: str) -> list[str] | None:
 
 def _judge_env(workdir: str) -> dict[str, str]:
     # Mirrors the verifier's restricted env (see RepoVerifier.verify).
-    return {
-        "PATH": os.environ.get("PATH", "/usr/bin"),
-        "HOME": workdir,
-        "LANG": "C.UTF-8",
-        "PYTHONDONTWRITEBYTECODE": "1",
-        "PYTHONNOUSERSITE": "1",
-    }
+    return judge_subprocess_env(workdir)
 
 
 def collect_diff_coverage(
@@ -221,7 +216,16 @@ def collect_diff_coverage(
             base["note"] = "coverage produced no report (suite may not have started)"
             return base
         with open(cov_json, encoding="utf-8") as f:
-            files = json.load(f).get("files", {})
+            raw_files = json.load(f).get("files", {})
+            # coverage.py emits platform-native path separators (and may emit
+            # absolute paths depending on its config). The candidate contract is
+            # always repo-relative POSIX-style paths, so normalize before lookup.
+            files = {}
+            for measured_path, entry in raw_files.items():
+                normalized = str(measured_path)
+                if os.path.isabs(normalized):
+                    normalized = os.path.relpath(normalized, copy)
+                files[normalized.replace("\\", "/")] = entry
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

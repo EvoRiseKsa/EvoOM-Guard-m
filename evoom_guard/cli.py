@@ -18,11 +18,19 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import sys
 from collections.abc import Callable
 
 from evoom_guard import __version__
+from evoom_guard.pack_manifest import (
+    PACK_DIGEST_FORMAT,
+    PackManifestError,
+    load_pack_manifest,
+    pack_digest,
+    pack_test_files,
+)
 
 
 def _configure_stdio() -> None:
@@ -58,7 +66,9 @@ class ConfigError(ValueError):
 # misspelled policy key must never be silently ignored.
 _CONFIG_KEYS = frozenset({
     "test_command", "setup_command", "protected", "allow",
-    "timeout", "mem_limit", "allow_new_tests",
+    "timeout", "mem_limit", "allow_new_tests", "trust_setup_on_host",
+    "setup_output_globs",
+    "expect_verifier_pack_sha256",
     # Protected policy contract (enforced fail-closed by the engine):
     "require_report_integrity", "require_candidate_isolation",
     "min_diff_coverage",
@@ -120,7 +130,7 @@ def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, 
             raise _bad("setup_command", "expected a list of strings (never a "
                        "shell string — splitting on spaces is unsafe for paths)")
         cfg["setup_command"] = sc
-    for key in ("protected", "allow"):
+    for key in ("protected", "allow", "setup_output_globs"):
         if key in data:
             v = data[key]
             if not isinstance(v, list) or not all(isinstance(g, str) for g in v):
@@ -137,6 +147,19 @@ def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, 
         if not isinstance(v, bool):
             raise _bad("allow_new_tests", "expected true or false")
         cfg["allow_new_tests"] = v
+    if "trust_setup_on_host" in data:
+        v = data["trust_setup_on_host"]
+        if not isinstance(v, bool):
+            raise _bad("trust_setup_on_host", "expected true or false")
+        cfg["trust_setup_on_host"] = v
+    if "expect_verifier_pack_sha256" in data:
+        v = data["expect_verifier_pack_sha256"]
+        if not isinstance(v, str) or re.fullmatch(r"[0-9a-fA-F]{64}", v) is None:
+            raise _bad(
+                "expect_verifier_pack_sha256",
+                "expected exactly 64 hexadecimal SHA-256 characters",
+            )
+        cfg["expect_verifier_pack_sha256"] = v.lower()
     if "require_report_integrity" in data:
         v = data["require_report_integrity"]
         if v not in _REPORT_INTEGRITY_VALUES:
@@ -213,10 +236,9 @@ def build_parser() -> argparse.ArgumentParser:
     g_p.add_argument(
         "--verifier-pack", dest="verifier_pack", default=None,
         help="directory of judge-owned tests/invariants the PATCH CANNOT include "
-        "or modify (org-owned checks injected at judgment time); copied into the "
-        "verified copy at evoguard_verifier_pack/ and collected by the suite "
-        "(pytest). Honest scope: in repo-native mode the running code shares its "
-        "process and filesystem — it is not runtime-isolated from the pack (use "
+        "or modify. A verified snapshot runs as a separate mandatory pytest phase, "
+        "so a narrowed repo command cannot skip it. Repo-native candidate imports "
+        "share the judge process — the pack is not secret (use "
         "--blackbox with --isolation docker for that). See docs/VERIFIER_PACKS.md.",
     )
     g_p.add_argument(
@@ -246,6 +268,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-candidate-isolation", dest="require_candidate_isolation", default=None,
         choices=("subprocess", "docker", "gvisor"),
         help="fail-closed policy: require at least this candidate isolation, or ERROR.",
+    )
+    g_p.add_argument(
+        "--expect-verifier-pack-sha256",
+        dest="expect_verifier_pack_sha256",
+        default=None,
+        help="fail-closed identity pin for --verifier-pack (64 hex characters, "
+        "EVOGUARD_PACK_V2 digest from pack-doctor). The accepted snapshot must "
+        "match before any candidate code runs.",
+    )
+    g_p.add_argument(
+        "--trust-setup-on-host", dest="trust_setup_on_host", action="store_const",
+        const=True, default=None,
+        help="explicit compatibility opt-in: with docker/gvisor, run setup_command "
+        "on the host. This weakens the delivered candidate isolation to subprocess "
+        "and is recorded in the assurance/attestation.",
+    )
+    g_p.add_argument(
+        "--no-trust-setup-on-host", dest="trust_setup_on_host", action="store_const",
+        const=False, default=None,
+        help="explicitly override trust_setup_on_host=true from .evoguard.json and "
+        "keep docker/gvisor setup inside the requested container boundary.",
     )
     g_p.add_argument(
         "--baseline-evidence", dest="baseline_evidence", action="store_true",
@@ -483,6 +526,27 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
 
     cfg_sc = cfg.get("setup_command")
     setup_command: list[str] | None = [str(t) for t in cfg_sc] if isinstance(cfg_sc, list) else None
+    cfg_tsoh = cfg.get("trust_setup_on_host")
+    trust_setup_on_host = (
+        args.trust_setup_on_host
+        if args.trust_setup_on_host is not None
+        else (cfg_tsoh if isinstance(cfg_tsoh, bool) else False)
+    )
+    cfg_sog = cfg.get("setup_output_globs")
+    setup_output_globs = (
+        tuple(str(glob) for glob in cfg_sog) if isinstance(cfg_sog, list) else ()
+    )
+    cfg_pack_sha = cfg.get("expect_verifier_pack_sha256")
+    expect_verifier_pack_sha256 = (
+        args.expect_verifier_pack_sha256
+        if args.expect_verifier_pack_sha256 is not None
+        else (cfg_pack_sha if isinstance(cfg_pack_sha, str) else None)
+    )
+    if expect_verifier_pack_sha256 is not None:
+        if re.fullmatch(r"[0-9a-fA-F]{64}", expect_verifier_pack_sha256) is None:
+            out("usage: --expect-verifier-pack-sha256 must be exactly 64 hex characters")
+            return 2
+        expect_verifier_pack_sha256 = expect_verifier_pack_sha256.lower()
 
     if args.protected is not None:
         protected: tuple[str, ...] = tuple(args.protected)
@@ -560,10 +624,13 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         result, deleted = guard_from_diff(
             head, _read_text(args.diff),
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
             verifier_pack=args.verifier_pack,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             diff_coverage=args.diff_coverage or min_diff_coverage is not None,
             min_diff_coverage=min_diff_coverage,
             blackbox=args.blackbox, blackbox_only=args.blackbox_only,
@@ -589,10 +656,13 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             deleted=tuple(deleted),
             file_blocks=file_blocks,
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
             verifier_pack=args.verifier_pack,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             diff_coverage=args.diff_coverage or min_diff_coverage is not None,
             min_diff_coverage=min_diff_coverage,
             blackbox=args.blackbox, blackbox_only=args.blackbox_only,
@@ -609,10 +679,13 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         result = guard(
             args.repo, _read_text(args.patch),
             test_command=test_command, setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
             verifier_pack=args.verifier_pack,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             diff_coverage=args.diff_coverage or min_diff_coverage is not None,
             min_diff_coverage=min_diff_coverage,
             blackbox=args.blackbox, blackbox_only=args.blackbox_only,
@@ -884,65 +957,29 @@ def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] =
     return 0
 
 
-# pack.json manifest contract: optional file, but if PRESENT it must be valid —
-# a broken manifest silently ignored would let a "versioned behavior contract"
-# quietly lose its identity.
-_PACK_REQUIRED = ("id", "version")
-_PACK_OPTIONAL = ("description", "target_type", "protocol")
-
-
 def validate_pack(pack_dir: str) -> dict[str, object]:
     """Validate a verifier-pack directory; returns a report dict (see pack-doctor)."""
-    import hashlib as _hashlib
-
     report: dict[str, object] = {"pack": pack_dir, "ok": False, "problems": []}
     problems: list[str] = report["problems"]  # type: ignore[assignment]
     if not os.path.isdir(pack_dir):
         problems.append("not a directory")
         return report
-    test_files = []
-    for dirpath, _dirs, files in os.walk(pack_dir):
-        for fn in files:
-            if fn.startswith("test_") and fn.endswith(".py"):
-                test_files.append(os.path.relpath(os.path.join(dirpath, fn), pack_dir))
-    report["test_files"] = sorted(test_files)
-    if not test_files:
-        problems.append("no pytest test files (test_*.py) — the judge would have nothing to run")
-    manifest_path = os.path.join(pack_dir, "pack.json")
-    if os.path.isfile(manifest_path):
-        try:
-            with open(manifest_path, encoding="utf-8") as f:
-                m = json.load(f)
-        except (OSError, ValueError) as exc:
-            problems.append(f"pack.json is not readable JSON ({exc})")
-            m = None
-        if m is not None:
-            if not isinstance(m, dict):
-                problems.append("pack.json must be a JSON object")
-            else:
-                for key in _PACK_REQUIRED:
-                    if not isinstance(m.get(key), str) or not str(m.get(key)).strip():
-                        problems.append(f"pack.json missing required string field {key!r}")
-                unknown = sorted(set(m) - set(_PACK_REQUIRED) - set(_PACK_OPTIONAL))
-                if unknown:
-                    problems.append(
-                        "pack.json has unknown field(s): " + ", ".join(unknown)
-                        + f" (accepted: {', '.join(_PACK_REQUIRED + _PACK_OPTIONAL)})"
-                    )
-                report["manifest"] = {
-                    k: m[k] for k in (*_PACK_REQUIRED, *_PACK_OPTIONAL) if k in m
-                }
-    else:
-        report["manifest"] = None  # optional — a folder of tests is a valid pack
-    digest = _hashlib.sha256()
-    for dirpath, dirnames, filenames in os.walk(pack_dir):
-        dirnames.sort()
-        for fn in sorted(filenames):
-            rel = os.path.relpath(os.path.join(dirpath, fn), pack_dir)
-            digest.update(rel.encode("utf-8"))
-            with open(os.path.join(dirpath, fn), "rb") as pf:
-                digest.update(pf.read())
-    report["pack_sha256"] = digest.hexdigest()
+    try:
+        test_files = pack_test_files(pack_dir)
+        report["test_files"] = sorted(test_files)
+        if not test_files:
+            problems.append(
+                "no pytest test files (test_*.py) — the judge would have nothing to run"
+            )
+        report["manifest"] = load_pack_manifest(pack_dir)
+        report["pack_sha256"] = pack_digest(pack_dir)
+        report["pack_digest_format"] = PACK_DIGEST_FORMAT
+    except PackManifestError as exc:
+        problems.append(str(exc))
+        report["test_files"] = []
+        report["manifest"] = None
+        report["pack_sha256"] = ""
+        report["pack_digest_format"] = PACK_DIGEST_FORMAT
     report["ok"] = not problems
     return report
 

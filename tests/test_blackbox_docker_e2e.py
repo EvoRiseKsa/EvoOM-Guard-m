@@ -275,6 +275,10 @@ class BlackboxDockerE2E(unittest.TestCase):
             )
             self.assertEqual(r.verdict, FAIL)
             self.assertIn("repo's own test suite", r.reason)
+            self.assertEqual(
+                r.attestation["repo_suite_image_digest"],
+                r.attestation["isolation_evidence"]["image_digest"],
+            )
 
 
 if __name__ == "__main__":
