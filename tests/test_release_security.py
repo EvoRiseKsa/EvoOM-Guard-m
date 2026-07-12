@@ -18,6 +18,13 @@ def test_release_assets_are_immutable_and_bound_to_the_tag_commit() -> None:
         assert "cmp -s" in text
 
 
+def test_absent_release_tag_does_not_capture_api_error_json_as_a_sha() -> None:
+    text = RELEASE.read_text(encoding="utf-8")
+    assert 'git/ref/tags/$TAG' in text
+    assert '--jq .sha 2>/dev/null || true' not in text
+    assert 'TAG_SHA=""' in text
+
+
 def test_release_workflow_actions_are_pinned_to_commit_shas() -> None:
     text = RELEASE.read_text(encoding="utf-8")
     uses = re.findall(r"^\s*-\s+uses:\s*([^\s#]+)", text, flags=re.MULTILINE)
