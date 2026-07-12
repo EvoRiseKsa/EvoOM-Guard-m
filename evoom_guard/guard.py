@@ -101,7 +101,18 @@ _PROTECTED_GLOBS = (
 #         base_tree_sha / head_tree_sha / policy_id / policy_version, and
 #         base_sha / head_sha are now bound in EVERY mode (repo-native too,
 #         not only black-box).
-SCHEMA_VERSION = "1.6"
+#   1.7 — policy consistency (fail-closed): one new reason code
+#         ``policy_requirement_unsupported`` — a requested gate the selected
+#         judge cannot enforce (require_demonstrated_fix / min_diff_coverage
+#         outside the subprocess judge) is an ERROR, never silently dropped.
+#         The attestation gains ``effective_policy`` (the COMPLETE canonical
+#         policy that shaped the judgment) and ``policy_sha256`` is now
+#         computed over it (previously only 5 fields — two materially
+#         different policies could hash identically). ``baseline`` gains
+#         ``scope: repo_suite_only`` (the baseline never collects a verifier
+#         pack); evidence-only requests in unsupported modes attach an
+#         explicit unmeasured/note record instead of silently vanishing.
+SCHEMA_VERSION = "1.7"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -130,6 +141,7 @@ REASON_SETUP_TIMEOUT = "setup_timeout"
 REASON_SETUP_FAILED = "setup_failed"
 REASON_ASSURANCE_REQUIREMENT_NOT_MET = "assurance_requirement_not_met"
 REASON_FIX_NOT_DEMONSTRATED = "fix_not_demonstrated"
+REASON_POLICY_REQUIREMENT_UNSUPPORTED = "policy_requirement_unsupported"
 
 # Ordering of report-integrity levels, weakest → strongest. A caller can demand a
 # floor with require_report_integrity; if the run's actual level is below it, the
@@ -354,6 +366,55 @@ def guard(
     (``diff_coverage_below_threshold``). Executed is not asserted — see
     :mod:`evoom_guard.evidence`.
     """
+    # Fail-closed policy consistency (1.7): a GATE the selected judge cannot
+    # enforce must stop the run — "require X" answered with a PASS that never
+    # checked X is exactly the silent-degradation failure the policy contract
+    # exists to prevent. (Evidence-only requests degrade EXPLICITLY instead:
+    # see the unmeasured/note records attached further down.)
+    _unsupported: list[str] = []
+    if require_demonstrated_fix and (blackbox or isolation != "subprocess"):
+        _unsupported.append("require_demonstrated_fix")
+    if min_diff_coverage is not None and (blackbox or isolation != "subprocess"):
+        _unsupported.append("min_diff_coverage")
+    if _unsupported:
+        _mode_desc = "the black-box judge" if blackbox else f"isolation {isolation!r}"
+        _ep = _effective_policy(
+            mode="blackbox" if blackbox else "repo", isolation=isolation,
+            docker_image=docker_image, docker_network=docker_network,
+            test_command=test_command, setup_command=setup_command,
+            protected=protected, allow=allow, allow_new_tests=allow_new_tests,
+            timeout=timeout, mem_limit_mb=mem_limit_mb,
+            verifier_pack=verifier_pack, blackbox=blackbox, blackbox_only=blackbox_only,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            min_diff_coverage=min_diff_coverage,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
+            policy_id=policy_id, policy_version=policy_version,
+        )
+        return GuardResult(
+            verdict=ERROR, passed=False,
+            reason=(
+                f"policy requirement(s) {', '.join(_unsupported)} cannot be "
+                f"enforced under {_mode_desc} — these gates run under the "
+                "subprocess judge only today. Refusing to return a verdict that "
+                "silently drops a requested requirement: use the subprocess "
+                "judge, or remove the requirement."
+            ),
+            files_changed=changed_paths(candidate, file_blocks),
+            protected_violations=[], risk_level="low", risk_score=0.0,
+            reason_code=REASON_POLICY_REQUIREMENT_UNSUPPORTED, isolation=isolation,
+            assurance=_assurance_profile(isolation, verifier_pack, blackbox=blackbox),
+            attestation=_build_attestation(
+                candidate, safe_deleted=[], test_command=test_command,
+                effective_policy=_ep, art={
+                    "base_sha": base_sha, "head_sha": head_sha,
+                    "base_tree_sha": base_tree_sha, "head_tree_sha": head_tree_sha,
+                    "policy_id": policy_id, "policy_version": policy_version,
+                }, mode="blackbox" if blackbox else "repo",
+            ),
+        )
+
     changed = changed_paths(candidate, file_blocks)
     # Deletions are gated too: deleting a protected harness file is as much a
     # reward-hack as editing it (removing a failing test/check), and a deleted
@@ -483,6 +544,38 @@ def guard(
         if shortfall_bx is not None:
             v_bx, code_bx, reason_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall_bx
         repo_art = repo_verdict.artifact if repo_verdict is not None else {}
+        # Evidence-only requests the black-box judge cannot fulfil degrade
+        # EXPLICITLY (an unmeasured record with a note), never silently (1.7).
+        baseline_bx = None
+        if baseline_evidence:
+            baseline_bx = {
+                "verdict": None, "tests_passed": None, "tests_total": None,
+                "repair_effect": "unmeasured", "scope": "unsupported_mode",
+                "note": "baseline differential evidence runs under the "
+                        "subprocess repo judge only; the black-box judge did "
+                        "not measure it",
+            }
+        coverage_bx = None
+        if diff_coverage:
+            coverage_bx = {
+                "measured": False,
+                "note": "changed-line coverage runs under the subprocess repo "
+                        "judge only; the black-box judge did not measure it",
+            }
+        ep_bx = _effective_policy(
+            mode="blackbox", isolation=isolation,
+            docker_image=docker_image, docker_network=docker_network,
+            test_command=test_command, setup_command=setup_command,
+            protected=protected, allow=allow, allow_new_tests=allow_new_tests,
+            timeout=timeout, mem_limit_mb=mem_limit_mb,
+            verifier_pack=verifier_pack, blackbox=True, blackbox_only=blackbox_only,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            min_diff_coverage=min_diff_coverage,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
+            policy_id=policy_id, policy_version=policy_version,
+        )
         return GuardResult(
             verdict=v_bx, passed=(v_bx == PASS), reason=reason_bx,
             files_changed=changed, protected_violations=[],
@@ -492,10 +585,11 @@ def guard(
             verdict_source="blackbox" if bx.ran else None,
             diagnostics=bx.diagnostics, reason_code=code_bx, isolation=delivered_iso,
             assurance=assurance_bx,
+            baseline=baseline_bx,
+            diff_coverage=coverage_bx,
             attestation=_build_attestation(
                 candidate, safe_deleted=safe_deleted, test_command=test_command,
-                protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-                isolation=delivered_iso,
+                effective_policy=ep_bx,
                 art={
                     "verifier_pack_sha256": bx.pack_sha256,
                     "verifier_pack_manifest": bx.pack_manifest,
@@ -594,8 +688,15 @@ def guard(
         ), REASON_NO_TEST_VERDICT
 
     # Changed-line coverage evidence (opt-in; one extra suite run). Only when the
-    # suite actually ran — a REJECTED/ERROR verdict has nothing to measure.
+    # suite actually ran — a REJECTED/ERROR verdict has nothing to measure. A
+    # request the container judges cannot fulfil degrades EXPLICITLY (1.7).
     coverage_evidence: dict[str, Any] | None = None
+    if diff_coverage and isolation != "subprocess":
+        coverage_evidence = {
+            "measured": False,
+            "note": f"changed-line coverage runs under the subprocess judge "
+                    f"only; isolation {isolation!r} did not measure it",
+        }
     if diff_coverage and v in (PASS, FAIL) and isolation == "subprocess":
         from evoom_guard.evidence import collect_diff_coverage
 
@@ -628,6 +729,13 @@ def guard(
     # when the baseline produced no clean verdict). Evidence only, unless
     # require_demonstrated_fix demotes an undemonstrated PASS to FAIL.
     baseline_info: dict[str, Any] | None = None
+    if baseline_evidence and isolation != "subprocess":
+        baseline_info = {
+            "verdict": None, "tests_passed": None, "tests_total": None,
+            "repair_effect": "unmeasured", "scope": "unsupported_mode",
+            "note": f"baseline differential evidence runs under the subprocess "
+                    f"judge only; isolation {isolation!r} did not measure it",
+        }
     if (
         (baseline_evidence or require_demonstrated_fix)
         and v in (PASS, FAIL)
@@ -643,11 +751,16 @@ def guard(
             baseline_info["repair_effect"] = "demonstrated"
         else:
             baseline_info["repair_effect"] = "not_demonstrated"
+        # Honest scope (1.7): the baseline collects the repo's own suite ONLY —
+        # a verifier pack mounted for the candidate run is NOT collected here,
+        # so with a pack the two runs are not judged by identical check sets.
+        baseline_info["scope"] = "repo_suite_only"
         baseline_info["note"] = (
-            "counterfactual test evidence, not a causal proof: the same judge, "
-            "policy and environment ran the suite on the pristine base and on "
-            "the candidate; 'demonstrated' means the base failed and the "
-            "candidate passed"
+            "counterfactual suite-transition evidence, not a causal proof: the "
+            "same judge and environment ran the REPO suite on the pristine base "
+            "and on the candidate; 'demonstrated' means the base failed and the "
+            "candidate passed. A verifier pack (if any) is exercised only on "
+            "the candidate run — see scope."
         )
         if (
             require_demonstrated_fix
@@ -667,8 +780,20 @@ def guard(
 
     attestation = _build_attestation(
         candidate, safe_deleted=safe_deleted, test_command=test_command,
-        protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-        isolation=isolation, art={
+        effective_policy=_effective_policy(
+            mode="repo", isolation=isolation,
+            docker_image=docker_image, docker_network=docker_network,
+            test_command=test_command, setup_command=setup_command,
+            protected=protected, allow=allow, allow_new_tests=allow_new_tests,
+            timeout=timeout, mem_limit_mb=mem_limit_mb,
+            verifier_pack=verifier_pack, blackbox=False, blackbox_only=blackbox_only,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            min_diff_coverage=min_diff_coverage,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
+            policy_id=policy_id, policy_version=policy_version,
+        ), art={
             **art,
             # Repo-native verdicts are revision-bound too (1.6): black-box was
             # the only mode carrying base/head before, which left the common
@@ -833,13 +958,60 @@ def _utc_now() -> str:
 # deleting tests, deselecting in config, forging stdout — all caught) but does
 # NOT stop a patch that writes deliberate process-level forgery code into
 # source. Read report_integrity before trusting a PASS on untrusted authors.
+def _effective_policy(
+    *, mode: str, isolation: str, docker_image: str | None, docker_network: str,
+    test_command: list[str] | None, setup_command: list[str] | None,
+    protected: tuple[str, ...], allow: tuple[str, ...], allow_new_tests: bool,
+    timeout: int, mem_limit_mb: int, verifier_pack: str | None,
+    blackbox: bool, blackbox_only: bool,
+    require_report_integrity: str | None, require_candidate_isolation: str | None,
+    min_diff_coverage: float | None, baseline_evidence: bool,
+    require_demonstrated_fix: bool, policy_id: str | None, policy_version: str | None,
+) -> dict[str, Any]:
+    """The COMPLETE canonical policy that shaped this judgment (1.7).
+
+    ``policy_sha256`` is computed over this object. Before 1.7 the hash covered
+    only five fields (protected/allow/allow_new_tests/isolation/mode), so two
+    materially different policies — e.g. one demanding
+    ``external_process_isolated`` + 90% diff coverage and one demanding
+    neither — could produce the SAME fingerprint, and
+    ``verify-verdict --expect-policy-sha`` proved less than it appeared to.
+    Every knob that changes what a verdict means belongs here.
+    """
+    return {
+        "mode": mode,
+        "isolation": isolation,
+        "docker_image": docker_image,
+        "docker_network": docker_network,
+        "test_command": list(test_command) if test_command else "default:python -m pytest",
+        "setup_command": list(setup_command) if setup_command else None,
+        "protected": sorted(protected),
+        "allow": sorted(allow),
+        "allow_new_tests": allow_new_tests,
+        "timeout": timeout,
+        "mem_limit_mb": mem_limit_mb,
+        "verifier_pack_required": bool(verifier_pack),
+        "blackbox": blackbox,
+        "blackbox_only": blackbox_only,
+        "require_report_integrity": require_report_integrity,
+        "require_candidate_isolation": require_candidate_isolation,
+        "min_diff_coverage": min_diff_coverage,
+        "baseline_evidence": baseline_evidence,
+        "require_demonstrated_fix": require_demonstrated_fix,
+        "policy_id": policy_id,
+        "policy_version": policy_version,
+    }
+
+
 def _build_attestation(
     candidate: str, *, safe_deleted: list[str], test_command: list[str] | None,
-    protected: tuple[str, ...], allow: tuple[str, ...], allow_new_tests: bool,
-    isolation: str, art: dict[str, Any], mode: str,
+    effective_policy: dict[str, Any], art: dict[str, Any], mode: str,
 ) -> dict[str, Any]:
     """Context binding for the (optionally signed) verdict. Shared by the default
-    and black-box paths so a black-box verdict is bound to what was judged too."""
+    and black-box paths so a black-box verdict is bound to what was judged too.
+    ``policy_sha256`` covers the COMPLETE effective policy (see
+    :func:`_effective_policy`), and the policy itself ships in the attestation
+    so a consumer can audit exactly what the fingerprint commits to."""
     return {
         "created_utc": _utc_now(),
         "guard_version": __version__,
@@ -847,10 +1019,10 @@ def _build_attestation(
         "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
         "deleted_paths": list(safe_deleted),
         "test_command": list(test_command) if test_command else "default:python -m pytest",
-        "policy_sha256": hashlib.sha256(json.dumps({
-            "protected": sorted(protected), "allow": sorted(allow),
-            "allow_new_tests": allow_new_tests, "isolation": isolation, "mode": mode,
-        }, sort_keys=True).encode("utf-8")).hexdigest(),
+        "effective_policy": effective_policy,
+        "policy_sha256": hashlib.sha256(
+            json.dumps(effective_policy, sort_keys=True).encode("utf-8")
+        ).hexdigest(),
         "junit_sha256": art.get("junit_sha256"),
         "verifier_pack_sha256": art.get("verifier_pack_sha256"),
         "verifier_pack_manifest": art.get("verifier_pack_manifest"),
@@ -1263,7 +1435,8 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
             f" ({b['tests_passed']}/{b['tests_total']})"
             if b.get("tests_total") is not None else ""
         )
-        lines.append(f"| Baseline (pristine base) | {b.get('verdict')}{btests} |")
+        bverdict = b.get("verdict") or "not measured"
+        lines.append(f"| Baseline (pristine base) | {bverdict}{btests} |")
         lines.append(f"| Repair effect | **{b.get('repair_effect')}** |")
     if r.attestation and r.attestation.get("policy_id"):
         pv = r.attestation.get("policy_version")

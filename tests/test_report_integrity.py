@@ -126,7 +126,8 @@ class AssuranceProfileTests(unittest.TestCase):
             r = guard(repo, _block("pkg/m.py", "def f():\n    return 1\n"))
             payload = r.to_dict()
             self.assertIn("assurance", payload)
-            self.assertEqual(payload["schema_version"], "1.6")
+            from evoom_guard.guard import SCHEMA_VERSION
+            self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
 
 
 if __name__ == "__main__":

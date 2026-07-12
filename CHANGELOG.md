@@ -9,6 +9,44 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.3.1] — 2026-07-12
+
+A policy-consistency hardening pass (schema 1.7) — an external review of v3.3.0
+found that the new gates could be REQUESTED and then silently skipped in modes
+that do not implement them. The project's own rule now binds Guard itself: a
+policy it cannot enforce is refused, never dropped.
+
+### Fixed (security — fail-open interactions in v3.3.0)
+- **`require_demonstrated_fix` / `min_diff_coverage` were silently ignored**
+  under `--blackbox` and `--isolation docker|gvisor` (the gates run under the
+  subprocess judge only). Requesting an unenforceable GATE is now
+  `ERROR policy_requirement_unsupported` before anything runs; evidence-only
+  requests (`--baseline-evidence`, `--diff-coverage`) attach an explicit
+  unmeasured record with a note instead of vanishing. Pinned by
+  `tests/test_policy_consistency.py`.
+- **`policy_sha256` covered only five fields** — two materially different
+  policies (e.g. one demanding `external_process_isolated` + 90% coverage, one
+  demanding neither) could share a fingerprint, so
+  `verify-verdict --expect-policy-sha` proved less than it appeared to. The
+  attestation now ships a complete canonical `effective_policy` object and the
+  hash is computed over it.
+- **Baseline scope is now explicit** (`scope: repo_suite_only`): the baseline
+  collects the repo's own suite only — a verifier pack is exercised only on the
+  candidate run, so the before/after pair is not judged by identical check sets
+  when a pack is present. The note says so instead of implying "same policy".
+
+### Fixed (hygiene / docs)
+- A committed `.coverage` binary removed from the repo; `.coverage` added to
+  `.gitignore`.
+- `docs/JSON_SCHEMA.md` example showed `schema_version: 1.5` while explaining
+  1.6; README's Evidence section now presents baseline differential evidence
+  (v3.3's strongest addition was absent from the front page); ADOPTION's policy
+  example no longer combines `min_diff_coverage` with a container floor (that
+  combination is now, correctly, an error).
+- Action gains outputs: `json-path`, `report-path`, `head-sha`, `policy-sha` —
+  the revision-bound attestation was previously produced but unreachable for a
+  Marketplace user without custom steps.
+
 ## [3.3.0] — 2026-07-11
 
 Three capability upgrades from an external architecture review, each turning an

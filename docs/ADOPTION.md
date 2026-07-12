@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.3.0"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.3.1"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -88,10 +88,24 @@ as a repository-contained contract no patch can weaken:
   "policy_version": "1",
   "test_command": ["python", "-m", "pytest", "-q"],
   "require_report_integrity": "external_process_isolated",
-  "require_candidate_isolation": "docker",
-  "min_diff_coverage": 80
+  "require_candidate_isolation": "docker"
 }
 ```
+
+> **Mode-consistency (fail-closed, v3.3.1):** `min_diff_coverage` and
+> `require_demonstrated_fix` run under the **subprocess judge only** today.
+> Adding them to a policy that also demands a container/black-box judge makes
+> every run `ERROR policy_requirement_unsupported` — deliberately: Guard
+> refuses to return a verdict that silently drops a requirement it could not
+> enforce. Keep coverage/baseline gates in a subprocess-judge policy:
+>
+> ```json
+> {
+>   "policy_id": "org/agent-fix-gate",
+>   "policy_version": "1",
+>   "min_diff_coverage": 80
+> }
+> ```
 
 The `policy_id`/`policy_version` land in the verdict's attestation, so a
 consumer knows exactly which policy produced a PASS (and
@@ -173,7 +187,7 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.3.0` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.3.1` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do
