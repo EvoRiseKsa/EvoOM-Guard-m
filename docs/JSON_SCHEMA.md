@@ -26,9 +26,9 @@ human Markdown report. Pin on `schema_version`; key off `verdict` and `reason_co
 
 ```json
 {
-  "schema_version": "1.5",
+  "schema_version": "1.7",
   "tool": "evoguard",
-  "tool_version": "3.3.0",
+  "tool_version": "3.3.1",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -125,6 +125,25 @@ auto-exec file) drives `REJECTED`. (Before `1.1` this array was named
   signature over the WRONG commit or policy now fails the check (chain of
   custody, not just file integrity).
 
+### Added in 1.6 → 1.7 (policy consistency, fail-closed)
+
+- **`policy_requirement_unsupported`** — new `reason_code`: a requested GATE the
+  selected judge cannot enforce (`require_demonstrated_fix` or
+  `min_diff_coverage` outside the subprocess judge) is an **ERROR** before
+  anything runs — a requirement is never silently dropped.
+- **`attestation.effective_policy`** — the COMPLETE canonical policy that shaped
+  the judgment (mode, isolation, docker image/network, test/setup commands,
+  protected/allow, floors, gates, timeouts, pack requirement, policy identity).
+  **`policy_sha256` is now computed over this object** — previously it covered
+  only five fields, so two materially different policies could share a
+  fingerprint and `--expect-policy-sha` proved less than it appeared to.
+- **`baseline.scope`** — `repo_suite_only` on a measured baseline (a verifier
+  pack, if any, is exercised only on the candidate run), or `unsupported_mode`
+  on the explicit unmeasured record attached when baseline evidence is
+  requested under a judge that cannot measure it. Evidence-only requests never
+  vanish silently: unsupported modes attach `{measured: false, note}` /
+  `{repair_effect: "unmeasured", note}` records.
+
 ## `evo-guard doctor`
 
 `evo-guard doctor --json` reports the environment EvoGuard needs (it does **not** read a
@@ -133,7 +152,7 @@ patch). Exit code is `0` when supported, `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

@@ -104,7 +104,7 @@ extras (`cryptography`, `coverage`).
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.3.0"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.3.1"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -144,7 +144,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.0   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.3.1   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
@@ -209,6 +209,14 @@ evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1
 See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
 
 ## Evidence beyond "the tests passed"
+
+**Baseline differential evidence** (`--baseline-evidence`, v3.3): the suite also
+runs on the **pristine base** — `repair_effect: demonstrated` only when the base
+*fails* and the candidate *passes* under the same judge. "All tests pass on
+head" alone never showed the change fixed anything. `--require-demonstrated-fix`
+turns it into a gate for agent "fix" PRs (an undemonstrated PASS becomes FAIL,
+`fix_not_demonstrated`); a gate the selected judge cannot enforce is an ERROR
+(`policy_requirement_unsupported`), never silently dropped.
 
 A green suite is one signal, not a proof. Guard can now attach two more
 independent pieces of evidence to every verdict:

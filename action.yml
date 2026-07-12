@@ -105,6 +105,18 @@ outputs:
   verdict:
     description: "PASS | REJECTED | FAIL | TAMPERED | ERROR"
     value: ${{ steps.guard.outputs.verdict }}
+  json-path:
+    description: "Path (on the runner) of the machine-readable verdict JSON — carries the full attestation (effective_policy, policy_sha256, base/head commit+tree SHAs). Upload or sign it in a follow-up step."
+    value: ${{ steps.guard.outputs.json-path }}
+  report-path:
+    description: "Path (on the runner) of the Markdown report."
+    value: ${{ steps.guard.outputs.report-path }}
+  head-sha:
+    description: "The head commit SHA the verdict was bound to."
+    value: ${{ steps.guard.outputs.head-sha }}
+  policy-sha:
+    description: "sha256 of the COMPLETE effective policy that shaped the judgment (attestation.policy_sha256) — pass to `evo-guard verify-verdict --expect-policy-sha`."
+    value: ${{ steps.guard.outputs.policy-sha }}
 
 runs:
   using: "composite"
@@ -227,6 +239,13 @@ runs:
         # surface ERROR + the exit code rather than a bash traceback.
         VERDICT=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/guard.json'))['verdict'])" 2>/dev/null || echo "ERROR")
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+        # Surface the evidence (1.7): the attestation is the point of the newer
+        # releases — make it reachable without custom steps.
+        echo "json-path=$RUNNER_TEMP/guard.json" >> "$GITHUB_OUTPUT"
+        echo "report-path=$RUNNER_TEMP/guard-report.md" >> "$GITHUB_OUTPUT"
+        POLICY_SHA=$(python -c "import json;print((json.load(open('$RUNNER_TEMP/guard.json')).get('attestation') or {}).get('policy_sha256') or '')" 2>/dev/null || echo "")
+        echo "policy-sha=$POLICY_SHA" >> "$GITHUB_OUTPUT"
+        echo "head-sha=$HEAD_COMMIT" >> "$GITHUB_OUTPUT"
         if [ -f "$RUNNER_TEMP/guard-report.md" ]; then
           cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"
         fi
