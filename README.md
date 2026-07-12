@@ -107,6 +107,15 @@ The **core runtime has zero Python dependencies** — 3.10+ standard library onl
 (plus `git`/`patch` on the host). Ed25519 signing and diff-coverage are optional
 extras (`cryptography`, `coverage`).
 
+**Release-artifact scope.** The zipapp builder fixes archive entry order,
+timestamps, and modes, so repeated builds are deterministic when the source
+bytes and Python/OS/ZIP-zlib toolchain are equivalent. This is **not** a claim
+that independent Windows and Linux builds are bit-identical; checkout line
+endings and platform/toolchain details can legitimately change the SHA-256.
+Release reruns have a separate, stronger immutability rule: an asset already
+attached to a tag is byte-compared and is never replaced—different bytes make
+the workflow fail closed.
+
 ## Try it in two minutes
 
 ```bash

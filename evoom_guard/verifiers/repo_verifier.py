@@ -75,19 +75,15 @@ trust boundary in ``docs/GUARD.md``).
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import secrets
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
 import time
-import xml.etree.ElementTree as ET
-from fnmatch import fnmatch
-from typing import Any, NamedTuple, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from evoom_guard.adapters import instrument_command
 from evoom_guard.contracts import VerdictResult
@@ -97,7 +93,118 @@ from evoom_guard.pack_manifest import (
     verify_pack_snapshot,
 )
 from evoom_guard.patch_applier import PatchError, apply_patch
-from evoom_guard.verifiers.grading import fraction_score
+from evoom_guard.verifiers.candidate_edits import (
+    _BLOCK_RE as _BLOCK_RE,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    _LENIENT_FILE_RE as _LENIENT_FILE_RE,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    _LENIENT_PATCH_RE as _LENIENT_PATCH_RE,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    _PATCH_BLOCK_RE as _PATCH_BLOCK_RE,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    PatchBlock as PatchBlock,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    parse_blocks_lenient as parse_blocks_lenient,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    parse_file_blocks as parse_file_blocks,
+)
+from evoom_guard.verifiers.candidate_edits import (
+    parse_patch_blocks as parse_patch_blocks,
+)
+from evoom_guard.verifiers.diagnostics import distill_diagnostics
+from evoom_guard.verifiers.fidelity import (
+    _DEFAULT_SETUP_OUTPUT_DIRS as _DEFAULT_SETUP_OUTPUT_DIRS,
+)
+from evoom_guard.verifiers.fidelity import (
+    SetupFidelityError as SetupFidelityError,
+)
+from evoom_guard.verifiers.fidelity import (
+    _fidelity_entry_state as _fidelity_entry_state,
+)
+from evoom_guard.verifiers.fidelity import (
+    _is_default_setup_output as _is_default_setup_output,
+)
+from evoom_guard.verifiers.fidelity import (
+    _setup_fidelity_changes as _setup_fidelity_changes,
+)
+from evoom_guard.verifiers.fidelity import (
+    _setup_fidelity_snapshot as _setup_fidelity_snapshot,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _AUTOEXEC_TESTLIKE as _AUTOEXEC_TESTLIKE,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _PKG_RUNNER_KEYS as _PKG_RUNNER_KEYS,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _PROTECTED_AUTOEXEC as _PROTECTED_AUTOEXEC,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _PROTECTED_BASENAMES as _PROTECTED_BASENAMES,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _PROTECTED_CI_PREFIXES as _PROTECTED_CI_PREFIXES,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _PROTECTED_CONFIG as _PROTECTED_CONFIG,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _is_judge_script as _is_judge_script,
+)
+from evoom_guard.verifiers.harness_policy import (
+    _matches_globs as _matches_globs,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_addable_new_test as is_addable_new_test,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_judge_autoexec as is_judge_autoexec,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_protected as is_protected,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_protected_ci as is_protected_ci,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_protected_config as is_protected_config,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_safe_relpath as is_safe_relpath,
+)
+from evoom_guard.verifiers.harness_policy import (
+    reject_unsafe_or_protected as reject_unsafe_or_protected,
+)
+from evoom_guard.verifiers.harness_policy import (
+    restore_judge_package_json as restore_judge_package_json,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    JUnitCounts as JUnitCounts,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    _count_testcases as _count_testcases,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    detect_tamper as detect_tamper,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    grade_repo_run as grade_repo_run,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    parse_junit_dir as parse_junit_dir,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    parse_junit_xml as parse_junit_xml,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    parse_pytest_counts as parse_pytest_counts,
+)
 from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 
 try:  # POSIX-only; absent on Windows.
@@ -136,88 +243,6 @@ def judge_subprocess_env(workdir: str) -> dict[str, str]:
         env["TEMP"] = workdir
         env["TMP"] = workdir
     return env
-
-# Test-file basenames the candidate may not touch.
-_PROTECTED_BASENAMES = (
-    # Python
-    "test_*.py", "*_test.py", "conftest.py",
-    # JavaScript / TypeScript colocated test files (vitest / jest pattern).
-    # These sit beside the source file rather than in a tests/ directory, so the
-    # directory-segment rule alone misses them — an agent can otherwise freely
-    # edit e.g. src/finance/rounding.test.ts without triggering REJECTED.
-    "*.test.ts", "*.test.tsx", "*.test.js", "*.test.jsx",
-    "*.spec.ts", "*.spec.tsx", "*.spec.js", "*.spec.jsx",
-    "*.snap",
-)
-
-# Test-runner / build-configuration basenames the candidate may not touch. Editing
-# the *harness configuration* (rather than the source under test) is a reward-hack:
-# the candidate can make a failing suite report success WITHOUT fixing the code —
-# e.g. a pytest ``[tool.pytest.ini_options] addopts = "-k <passing test>"`` that
-# deselects the failing tests, an ``--ignore`` / ``--deselect`` of the failing
-# module, or a JS runner's ``include`` narrowed to the passing specs. The
-# candidate's job is to fix the SOURCE, never the harness that judges it. Matched
-# on the basename anywhere in the tree, case-insensitively. (``conftest.py`` is
-# already covered by ``_PROTECTED_BASENAMES`` above.)
-_PROTECTED_CONFIG = (
-    # EvoGuard's own per-repo config — editing it lets a candidate rewrite the
-    # ``test_command`` / ``setup_command`` / ``protected`` globs to trivially pass
-    # the gate without fixing anything. The gate's config is part of the harness.
-    ".evoguard.json",
-    # pytest / Python test configuration
-    "pytest.ini", ".pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml",
-    # JS/TS test-runner configuration (``package.json`` is dual-purpose — see
-    # ``is_protected_config`` for why it is deliberately not rejected wholesale).
-    "vitest.config.*", "vite.config.*", "jest.config.*", "jest.setup.*",
-    ".mocharc.*", "karma.conf.*", "cypress.config.*", "playwright.config.*",
-    "ava.config.*", ".nycrc", ".nycrc.*",
-    # Ruby / RSpec configuration — ``.rspec`` can carry ``--tag`` / ``--exclude-pattern``
-    # that deselects failing specs, exactly like pytest's ``addopts``.
-    ".rspec",
-    # Java/Maven — a Surefire ``<excludes>`` in ``pom.xml`` can deselect the failing
-    # tests (a reward-hack), so it is treated as harness config. ``pom.xml`` also
-    # carries dependencies, so an adopter who needs to edit deps in the same change
-    # can exempt it with ``--allow pom.xml`` (a deliberate, reviewed baseline).
-    "pom.xml",
-    # Solidity / fuzzing toolchains
-    "foundry.toml", "echidna.yaml", "slither.config.json",
-    # Build/test *runners* that redefine how the suite is invoked when the
-    # ``test_command`` shells out to them (``make test`` / ``nox`` / ``invoke`` /
-    # ``rake test``). Editing one is the reward-hack equivalent of editing
-    # ``addopts``: it lets a candidate point the judge at a passing target without
-    # fixing the source.
-    "Makefile", "GNUmakefile", "noxfile.py", "Justfile", "Rakefile", "rakefile",
-    # Dependency lock files — swapping these substitutes the *actual library code*
-    # that runs under the suite without touching a single source file.  A candidate
-    # that replaces e.g. pnpm-lock.yaml with a version pinning a patched library
-    # can make tests pass without fixing the real bug; this is a reward-hack as
-    # potent as editing the test configuration. (``go.sum`` pins the cryptographic
-    # hashes of Go module dependencies — rewriting it lets a candidate swap in a
-    # patched dependency without touching a source file.)
-    "pnpm-lock.yaml", "package-lock.json", "yarn.lock",
-    "Cargo.lock", "Gemfile.lock", "poetry.lock", "go.sum",
-)
-
-# Files Python executes *inside the judge process itself* with no test ever naming
-# them — so a candidate that writes one runs code in the judge, not in the program
-# under test, and can subvert the verdict (force ``sys.exit(0)``, monkey-patch the
-# runner, rewrite the report) without touching a single protected test/config file.
-#   * ``sitecustomize.py`` / ``usercustomize.py`` are imported automatically during
-#     interpreter start-up whenever they are importable on ``sys.path``;
-#   * a ``*.pth`` file on the path may carry an executable ``import …`` line that
-#     runs at start-up.
-# These are rejected outright (the judge owns its own process), matched on the
-# basename case-insensitively. See :func:`is_judge_autoexec`.
-_PROTECTED_AUTOEXEC = ("sitecustomize.py", "usercustomize.py", "*.pth")
-
-# CI definition paths the candidate may not modify: the workflow that *runs* the
-# gate and any local composite action it calls. Editing these is a reward-hack as
-# direct as deleting the tests — a candidate could disable the gate, swap the test
-# command for a trivial one, or force a passing status without fixing the source.
-# Matched on the repo-relative path prefix, case-insensitively. See
-# :func:`is_protected_ci`.
-_PROTECTED_CI_PREFIXES = (".github/workflows/", ".github/actions/")
-
 
 class RepoProblem(TypedDict, total=False):
     """A repo-level problem definition."""
@@ -258,341 +283,6 @@ class RepoProblem(TypedDict, total=False):
     judge_env: dict[str, str]  # explicit env passed into the container
     mounts_ro: list[str]      # "host:container" read-only binds
     tmpfs: list[str]          # container paths granted scratch (tmpfs) writes
-
-
-_BLOCK_RE = re.compile(
-    r"<<<FILE:\s*(?P<path>[^>\n]+?)\s*>>>\r?\n(?P<body>.*?)\r?\n?<<<END\s*FILE>>>",
-    re.DOTALL,
-)
-
-# A surgical-edit block: one search/replace hunk for one file,
-# applied with a unique anchor (issue #15). Multiple blocks apply in order.
-_PATCH_BLOCK_RE = re.compile(
-    r"<<<PATCH:\s*(?P<path>[^>\n]+?)\s*>>>\r?\n"
-    r"<<<SEARCH>>>\r?\n(?P<search>.*?)\r?\n"
-    r"<<<REPLACE>>>\r?\n(?P<replace>.*?)\r?\n?"
-    r"<<<END\s*PATCH>>>",
-    re.DOTALL,
-)
-
-# Lenient fallbacks — used ONLY when the strict parsers above find nothing.
-_LENIENT_FILE_RE = re.compile(
-    r"<+\s*FILE\s*:\s*(?P<path>[^>\n]+?)\s*>+\r?\n?"
-    r"(?P<body>.*?)\r?\n?"
-    r"<+\s*/?\s*(?:END\s*)?FILE\s*>+",
-    re.DOTALL | re.IGNORECASE,
-)
-_LENIENT_PATCH_RE = re.compile(
-    r"<+\s*PATCH\s*(?::\s*(?P<path>[^>\n]*?))?\s*>+\s*"
-    r"<+\s*SEARCH\s*>+\r?\n?(?P<search>.*?)\s*(?:<+\s*/\s*SEARCH\s*>+\s*)?"
-    r"<+\s*REPLACE\s*>+\r?\n?(?P<replace>.*?)\s*(?:<+\s*/\s*REPLACE\s*>+\s*)?"
-    r"<+\s*/?\s*(?:END\s*)?PATCH\s*>+",
-    re.DOTALL | re.IGNORECASE,
-)
-
-# pytest's summary line, e.g. "2 failed, 3 passed in 0.12s" / "1 error in 0.05s".
-_PASSED_RE = re.compile(r"(\d+) passed")
-_FAILED_RE = re.compile(r"(\d+) failed")
-_ERROR_RE = re.compile(r"(\d+) errors?")
-
-# Lines that carry the *essence* of a failure for the generator.
-_DIAG_LINE_RE = re.compile(
-    r"FAIL|×|✗|Expected|Received|expected|received|Counterexample|"
-    r"AssertionError|Error:|assert|Tests\s|Test Files|=== |--- |E\s{3}"
-)
-_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def distill_diagnostics(output: str, *, max_chars: int = 1600) -> str:
-    """Distill a test run's output to what the generator can act on."""
-    clean = _ANSI_RE.sub("", output or "")
-    picked = [ln.strip() for ln in clean.splitlines() if _DIAG_LINE_RE.search(ln)]
-    picked = [ln for ln in picked if not ln.lstrip().startswith(("❯", "at "))]
-    if not picked:
-        return clean[-800:]
-    text = "\n".join(picked)
-    return text[-max_chars:]
-
-
-def parse_file_blocks(hypothesis: str) -> dict[str, str]:
-    """Extract ``{relative_path: content}`` from the hypothesis."""
-    blocks: dict[str, str] = {}
-    for m in _BLOCK_RE.finditer(hypothesis or ""):
-        blocks[m.group("path").strip()] = m.group("body")
-    return blocks
-
-
-class PatchBlock(NamedTuple):
-    """One unique-anchor search/replace edit for one file."""
-
-    path: str
-    search: str
-    replace: str
-
-
-def parse_patch_blocks(hypothesis: str) -> list[PatchBlock]:
-    """Extract ordered ``<<<PATCH>>>`` edits from the hypothesis."""
-    return [
-        PatchBlock(m.group("path").strip(), m.group("search"), m.group("replace"))
-        for m in _PATCH_BLOCK_RE.finditer(hypothesis or "")
-    ]
-
-
-def parse_blocks_lenient(
-    hypothesis: str, default_path: str | None = None
-) -> tuple[dict[str, str], list[PatchBlock]]:
-    """Best-effort recovery of near-miss block formats."""
-    files: dict[str, str] = {}
-    for m in _LENIENT_FILE_RE.finditer(hypothesis or ""):
-        files[m.group("path").strip()] = m.group("body")
-    patches: list[PatchBlock] = []
-    for m in _LENIENT_PATCH_RE.finditer(hypothesis or ""):
-        path = (m.group("path") or "").strip() or (default_path or "")
-        if path:
-            patches.append(PatchBlock(path, m.group("search"), m.group("replace")))
-    return files, patches
-
-
-def is_safe_relpath(path: str) -> bool:
-    """Is the path safe? Relative, normalized, and unable to escape the repo root."""
-    if not path or os.path.isabs(path) or "\\" in path:
-        return False
-    parts = path.split("/")
-    return all(p not in ("", ".", "..") for p in parts)
-
-
-def is_protected(path: str, extra_globs: tuple[str, ...] = ()) -> bool:
-    """Is this one of the files that judge the candidate?
-
-    Protects anything in a ``tests``/``test`` directory segment, standard Python
-    test-file names, JavaScript/TypeScript colocated test files (``*.test.ts``,
-    ``*.spec.ts``, etc.), and caller-supplied globs — all matched
-    **case-insensitively**, while still comparing whole segments/patterns so
-    look-alikes (``latest/``, ``testing/``, ``contest.py``) are not over-matched.
-    """
-    parts = path.split("/")
-    if any(p.lower() in ("tests", "test") for p in parts[:-1]):
-        return True
-    base = parts[-1]
-    if any(fnmatch(base.lower(), pat.lower()) for pat in _PROTECTED_BASENAMES):
-        return True
-    return any(fnmatch(path.lower(), g.lower()) for g in extra_globs)
-
-
-def is_protected_config(path: str) -> bool:
-    """Is this a test-runner / build-config file the candidate may not modify?
-
-    Editing the harness *configuration* (instead of the source under test) lets a
-    candidate game the judge without fixing anything. Also covers dependency lock
-    files, which substitute the actual library code that runs under the suite, and
-    EvoGuard's own ``.evoguard.json``. Matched on the basename anywhere in the
-    tree, case-insensitively.
-
-    ``package.json`` is intentionally NOT rejected wholesale: it defines the whole
-    JS project, so blocking every edit would reject legitimate source/dependency
-    fixes. Its test-script / embedded-runner-config vector is handled via
-    :func:`restore_judge_package_json`.
-    """
-    base = path.split("/")[-1].lower()
-    return any(fnmatch(base, pat.lower()) for pat in _PROTECTED_CONFIG)
-
-
-def is_judge_autoexec(path: str) -> bool:
-    """Is this a file Python auto-executes inside the judge process?"""
-    base = path.split("/")[-1].lower()
-    return any(fnmatch(base, pat.lower()) for pat in _PROTECTED_AUTOEXEC)
-
-
-def is_protected_ci(path: str) -> bool:
-    """Is this a CI workflow / local action file that defines how the gate runs?
-
-    Editing the workflow that *runs* EvoGuard (or a local composite action it
-    calls) is a reward-hack as direct as deleting the tests: a candidate could
-    disable the gate, swap the test command for a trivial one, or force a passing
-    status without fixing the source. Matched on the repo-relative path prefix,
-    case-insensitively.
-    """
-    p = path.lower()
-    return any(p.startswith(prefix) for prefix in _PROTECTED_CI_PREFIXES)
-
-
-def _matches_globs(path: str, globs: tuple[str, ...]) -> bool:
-    """Does ``path`` match any of ``globs`` (case-insensitive)?"""
-    return any(fnmatch(path.lower(), g.lower()) for g in globs)
-
-
-# Test-like basenames that, although matched as "tests", are **auto-applied to the
-# whole suite** rather than being a plain test module — pytest imports
-# ``conftest.py`` as a plugin (fixtures/hooks/collection), so a net-new one runs
-# code against *every* test. Never addable under feature mode (treated like an
-# auto-exec judge file, not a plain new test).
-_AUTOEXEC_TESTLIKE = ("conftest.py",)
-
-
-def is_addable_new_test(path: str, extra: tuple[str, ...], *, is_new: bool) -> bool:
-    """Feature mode (opt-in): may this changed path be allowed as a *net-new* test?
-
-    ``True`` only when the path is **new** to the repo, is protected *solely*
-    because it is a plain test file (a ``tests``/``test`` segment or a test-file
-    name), and is **not** also an auto-applied ``conftest.py``, a caller-protected
-    glob, a test/build config or lock file, an auto-executed judge file
-    (``sitecustomize.py`` / ``*.pth`` / ``Makefile`` …), or a CI/gate file. Editing
-    an *existing* test, or any of those harness files, stays rejected.
-
-    This narrowly lets a feature PR ship its own brand-new tests. It does **not**
-    make EvoGuard safe for untrusted code: a new test file's module/collection-time
-    code still runs in the judge process, so feature mode is opt-in (default off)
-    and for trusted authors — see ``docs/FEATURE_MODE.md`` for the threat analysis.
-    """
-    return (
-        is_new
-        and is_protected(path, ())
-        and path.split("/")[-1].lower() not in _AUTOEXEC_TESTLIKE
-        and not _matches_globs(path, extra)
-        and not is_protected_config(path)
-        and not is_judge_autoexec(path)
-        and not is_protected_ci(path)
-    )
-
-
-# ``package.json`` keys/scripts that configure the JS test harness.
-_PKG_RUNNER_KEYS = ("jest", "vitest", "mocha", "ava", "c8", "nyc")
-
-
-def _is_judge_script(name: str) -> bool:
-    """A ``scripts`` entry that runs/!wraps the test suite (so it judges)."""
-    return name == "test" or name.startswith("test:") or name in ("pretest", "posttest")
-
-
-def restore_judge_package_json(original_text: str | None, candidate_text: str) -> str:
-    """Return the candidate ``package.json`` with the test-harness fields restored."""
-    try:
-        candidate = json.loads(candidate_text)
-    except (ValueError, TypeError):
-        return candidate_text
-    if not isinstance(candidate, dict):
-        return candidate_text
-    try:
-        original = json.loads(original_text) if original_text else {}
-    except (ValueError, TypeError):
-        original = {}
-    if not isinstance(original, dict):
-        original = {}
-
-    changed = False
-
-    for key in _PKG_RUNNER_KEYS:
-        if key in original:
-            if candidate.get(key) != original[key]:
-                candidate[key] = original[key]
-                changed = True
-        elif key in candidate:
-            del candidate[key]
-            changed = True
-
-    orig_scripts = original.get("scripts")
-    orig_scripts = orig_scripts if isinstance(orig_scripts, dict) else {}
-    cand_scripts_raw = candidate.get("scripts")
-    cand_scripts = dict(cand_scripts_raw) if isinstance(cand_scripts_raw, dict) else {}
-    scripts_changed = False
-    for name in {n for n in (set(cand_scripts) | set(orig_scripts)) if _is_judge_script(n)}:
-        if name in orig_scripts:
-            if cand_scripts.get(name) != orig_scripts[name]:
-                cand_scripts[name] = orig_scripts[name]
-                scripts_changed = True
-        elif name in cand_scripts:
-            del cand_scripts[name]
-            scripts_changed = True
-    if scripts_changed:
-        changed = True
-        candidate["scripts"] = cand_scripts
-
-    if not changed:
-        return candidate_text
-    return json.dumps(candidate, indent=2, ensure_ascii=False) + "\n"
-
-
-def reject_unsafe_or_protected(
-    paths: list[str],
-    extra: tuple[str, ...],
-    *,
-    allow_new_tests: bool = False,
-    new_paths: frozenset[str] = frozenset(),
-    allow: tuple[str, ...] = (),
-) -> VerdictResult | None:
-    """Reject the first unsafe or judge path.
-
-    With ``allow_new_tests`` (opt-in feature mode), a path protected *only* because
-    it is a test file is allowed when it is net-new (in ``new_paths``) — see
-    :func:`is_addable_new_test`. Editing an *existing* test, and every
-    config / auto-exec / CI / lock-file path, stays rejected regardless.
-
-    ``allow`` is an adopter-curated allowlist of globs (a *baseline*): a matching
-    path is **exempt from the test / config / CI rejection** — for a file a built-in
-    pattern misclassifies (e.g. a ``Makefile`` that runs no tests) or a known
-    pre-existing hit. It does **not** exempt auto-exec judge files
-    (``sitecustomize.py`` / ``*.pth``) or unsafe paths — those are never legitimate.
-    """
-    for path in paths:
-        if not is_safe_relpath(path):
-            return VerdictResult(
-                passed=False,
-                score=0.05,
-                diagnostics=f"unsafe path rejected: {path}",
-                artifact={"files_changed": []},
-            )
-        allowed = _matches_globs(path, allow)
-        if is_protected(path, extra):
-            if allow_new_tests and is_addable_new_test(path, extra, is_new=path in new_paths):
-                continue  # net-new pure test file — allowed under feature mode
-            if allowed:
-                continue  # adopter-allowlisted (baseline) — a misclassified test path
-            return VerdictResult(
-                passed=False,
-                score=0.05,
-                diagnostics=(
-                    f"modifying the judging tests is "
-                    f"forbidden: {path}"
-                ),
-                artifact={"files_changed": []},
-            )
-        if is_protected_config(path):
-            if allowed:
-                continue  # adopter-allowlisted (baseline)
-            return VerdictResult(
-                passed=False,
-                score=0.05,
-                diagnostics=(
-                    f"modifying the test/build configuration is forbidden: {path} — "
-                    "fix the source under test, not the harness that judges it"
-                ),
-                artifact={"files_changed": []},
-            )
-        if is_protected_ci(path):
-            if allowed:
-                continue  # adopter-allowlisted (baseline)
-            return VerdictResult(
-                passed=False,
-                score=0.05,
-                diagnostics=(
-                    f"modifying the CI workflow / local action that runs the gate is "
-                    f"forbidden: {path} — fix the source under test, not the gate "
-                    "that judges it"
-                ),
-                artifact={"files_changed": []},
-            )
-        if is_judge_autoexec(path):
-            return VerdictResult(
-                passed=False,
-                score=0.05,
-                diagnostics=(
-                    f"writing an auto-executed judge file is forbidden: {path} — it "
-                    "would run code inside the judge process itself (not the program "
-                    "under test); fix the source instead"
-                ),
-                artifact={"files_changed": []},
-            )
-    return None
 
 
 def _read_text_or_none(path: str) -> str | None:
@@ -708,253 +398,10 @@ def apply_blocks_to_copy(
     return None
 
 
-def parse_pytest_counts(output: str) -> tuple[int, int]:
-    """Read ``(passed, total)`` from a pytest/vitest run's *human* output.
-
-    NOTE — this scrapes the runner's stdout/stderr and is therefore **forgeable**.
-    Retained only to enrich diagnostic text; never used for the verdict.
-    """
-    lines = [ln for ln in (output or "").splitlines() if "Test Files" not in ln]
-    text = "\n".join(lines)
-    passed = sum(int(n) for n in _PASSED_RE.findall(text))
-    failed = sum(int(n) for n in _FAILED_RE.findall(text))
-    errors = sum(int(n) for n in _ERROR_RE.findall(text))
-    return passed, passed + failed + errors
-
-
-class JUnitCounts(NamedTuple):
-    """Authoritative test counts read from a pytest JUnit-XML report."""
-
-    passed: int
-    total: int
-    failures: int
-    errors: int
-
-
-def _count_testcases(root: ET.Element) -> JUnitCounts | None:
-    """Count ``<testcase>`` elements directly — the unit every JUnit dialect emits."""
-    cases = list(root.iter("testcase"))
-    if not cases:
-        return None
-    failures = errors = skipped = 0
-    for tc in cases:
-        if tc.find("skipped") is not None:
-            skipped += 1
-        elif tc.find("error") is not None:
-            errors += 1
-        elif tc.find("failure") is not None:
-            failures += 1
-    total = len(cases)
-    effective_total = max(0, total - skipped)
-    passed = max(0, effective_total - failures - errors)
-    return JUnitCounts(passed=passed, total=effective_total, failures=failures, errors=errors)
-
-
-# A JUnit report is small (a few KB even for thousands of cases); anything much
-# larger is pathological. Cap the input so a runaway/hostile report cannot exhaust
-# memory or parse time.
-_MAX_REPORT_CHARS = 8 * 1024 * 1024
-
-
-def parse_junit_xml(xml_text: str) -> JUnitCounts | None:
-    """Read authoritative test counts from a JUnit-XML report.
-
-    **Hardened** against a hostile report — the candidate's *test process* can write
-    to the report path, so this input is only semi-trusted. The input is
-    **size-capped**, and any **DTD / ``DOCTYPE`` / ``ENTITY`` is refused**, which
-    eliminates entity-expansion ("billion laughs") and external-entity vectors
-    regardless of the host's ``expat`` version. A rejected report yields no counts —
-    the run then grades as "no clean verdict" (``FAIL``) — never a parser hang.
-    """
-    if not xml_text or not xml_text.strip():
-        return None
-    if len(xml_text) > _MAX_REPORT_CHARS:
-        return None
-    # A JUnit report never legitimately needs a DTD; refuse it before expat parses.
-    if "<!DOCTYPE" in xml_text or "<!ENTITY" in xml_text:
-        return None
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        return None
-    by_case = _count_testcases(root)
-    if by_case is not None:
-        return by_case
-    total = failures = errors = skipped = 0
-    seen = False
-    for suite in root.iter("testsuite"):
-        seen = True
-        try:
-            total += int(suite.get("tests", 0))
-            failures += int(suite.get("failures", 0))
-            errors += int(suite.get("errors", 0))
-            skipped += int(suite.get("skipped", 0))
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            return None
-    if not seen:
-        return None
-    effective_total = max(0, total - skipped)
-    passed = max(0, effective_total - failures - errors)
-    return JUnitCounts(passed=passed, total=effective_total, failures=failures, errors=errors)
-
-
-def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
-    """Merge every ``*.xml`` JUnit report in a directory into one count.
-
-    For runners (Maven Surefire, …) that emit **one report file per test class**
-    into a judge-owned *directory* rather than a single file. Each file is read
-    through the hardened :func:`parse_junit_xml` (size-cap + DTD/``ENTITY`` refusal),
-    and the per-file counts are summed. Returns ``None`` if the directory is absent
-    or holds no parseable report — so the run then grades as "no clean verdict",
-    never a crash on a stray non-report file.
-    """
-    if not dirpath or not os.path.isdir(dirpath):
-        return None
-    passed = total = failures = errors = 0
-    seen = False
-    for fn in sorted(os.listdir(dirpath)):
-        if not fn.lower().endswith(".xml"):
-            continue
-        counts = parse_junit_xml(_read_text_or_none(os.path.join(dirpath, fn)) or "")
-        if counts is None:
-            continue
-        seen = True
-        passed += counts.passed
-        total += counts.total
-        failures += counts.failures
-        errors += counts.errors
-    if not seen:
-        return None
-    return JUnitCounts(passed=passed, total=total, failures=failures, errors=errors)
-
-
-def grade_repo_run(
-    returncode: int, junit: JUnitCounts | None, *, report_expected: bool
-) -> tuple[bool, float, int, int]:
-    """Turn a finished suite run into ``(passed, score, tests_passed, tests_total)``."""
-    if junit is not None:
-        if returncode == 0 and junit.total > 0 and junit.failures == 0 and junit.errors == 0:
-            return True, 1.0, junit.passed, junit.total
-        if returncode == 1 and junit.total > 0 and (junit.failures > 0 or junit.errors > 0):
-            return False, fraction_score(junit.passed, junit.total), junit.passed, junit.total
-        return False, 0.10, junit.passed, junit.total
-    if report_expected:
-        return False, 0.10, 0, 0
-    if returncode == 0:
-        return True, 1.0, 0, 0
-    if returncode == 1:
-        return False, 0.25, 0, 0
-    return False, 0.10, 0, 0
-
-
-def detect_tamper(returncode: int, junit: JUnitCounts | None, *, report_expected: bool) -> bool:
-    """Is the suite's exit code *inconsistent* with its judge-owned JUnit report?"""
-    if junit is None:
-        return False
-    all_pass = junit.total > 0 and junit.failures == 0 and junit.errors == 0
-    has_failures = junit.failures > 0 or junit.errors > 0
-    if all_pass and returncode != 0:
-        return True
-    if has_failures and returncode == 0:
-        return True
-    return False
-
-
-_DEFAULT_SETUP_OUTPUT_DIRS = frozenset({
-    ".cache", ".evoguard-setup", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-    ".tox", ".venv", "build", "dist", "node_modules", "target", "venv",
-    "vendor", "__pycache__",
-})
-
-
-class SetupFidelityError(RuntimeError):
-    """The judge could not prove what setup changed; fail closed."""
-
-
 def _docker_container_name(stage: str) -> str:
     """Collision-resistant name for concurrent setup/suite/pack containers."""
     safe_stage = re.sub(r"[^a-zA-Z0-9_.-]+", "-", stage).strip("-.") or "run"
     return f"evoguard_{safe_stage[:32]}_{secrets.token_hex(8)}"
-
-
-def _is_default_setup_output(path: str) -> bool:
-    return any(part in _DEFAULT_SETUP_OUTPUT_DIRS for part in path.split("/") if part)
-
-
-def _fidelity_entry_state(path: str) -> tuple[str, int, str]:
-    try:
-        mode = os.lstat(path).st_mode
-        permissions = stat.S_IMODE(mode)
-        if stat.S_ISLNK(mode):
-            return ("link", permissions, os.readlink(path))
-        if stat.S_ISDIR(mode):
-            return ("dir", permissions, "")
-        if not stat.S_ISREG(mode):
-            return ("special", permissions, str(stat.S_IFMT(mode)))
-        digest = hashlib.sha256()
-        with open(path, "rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return ("file", permissions, digest.hexdigest())
-    except OSError as exc:
-        raise SetupFidelityError(f"cannot read {path!r}: {exc}") from exc
-
-
-def _setup_fidelity_snapshot(
-    root: str,
-    extra_output_globs: tuple[str, ...] = (),
-    *,
-    baseline: dict[str, tuple[str, int, str]] | None = None,
-) -> dict[str, tuple[str, int, str]]:
-    """Identity of files setup is not allowed to mutate.
-
-    Every pre-existing file, directory, symlink and permission bit is bound,
-    including content under conventional output directories. On the post-setup
-    scan, only *new* entries below those conventional directories are ignored.
-    This lets setup create ``node_modules``/``.venv``/``target`` without allowing
-    it to rewrite a checked-in ``vendor`` or ``build`` tree. Explicit adopter
-    globs are trusted exceptions and are omitted on both scans.
-    """
-    snapshot: dict[str, tuple[str, int, str]] = {}
-    baseline_keys = frozenset(baseline or {})
-
-    def walk_error(exc: OSError) -> None:
-        raise SetupFidelityError(f"cannot inspect setup output tree: {exc}") from exc
-
-    for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error):
-        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
-        kept: list[str] = []
-        for dirname in sorted(dirnames):
-            path = os.path.join(dirpath, dirname)
-            rel = dirname if rel_dir == "." else f"{rel_dir}/{dirname}"
-            if _matches_globs(rel, extra_output_globs) or _matches_globs(
-                rel + "/", extra_output_globs
-            ):
-                continue
-            if baseline is not None and _is_default_setup_output(rel) and rel not in baseline_keys:
-                continue
-            state = _fidelity_entry_state(path)
-            snapshot[rel] = state
-            if state[0] == "dir":
-                kept.append(dirname)
-        dirnames[:] = kept
-        for filename in sorted(filenames):
-            path = os.path.join(dirpath, filename)
-            rel = filename if rel_dir == "." else f"{rel_dir}/{filename}"
-            if _matches_globs(rel, extra_output_globs):
-                continue
-            if baseline is not None and _is_default_setup_output(rel) and rel not in baseline_keys:
-                continue
-            snapshot[rel] = _fidelity_entry_state(path)
-    return snapshot
-
-
-def _setup_fidelity_changes(
-    before: dict[str, tuple[str, int, str]],
-    after: dict[str, tuple[str, int, str]],
-) -> list[str]:
-    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
-
 
 class RepoVerifier:
     """Apply the hypothesis to a copy of the repo and judge it with its tests."""

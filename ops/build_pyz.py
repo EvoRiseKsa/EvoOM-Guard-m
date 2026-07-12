@@ -32,13 +32,16 @@ _MAIN = b"import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n"
 
 
 def _write_reproducible_archive(stage: str, out_path: str, interpreter: str) -> None:
-    """Write a byte-reproducible zipapp from *stage*.
+    """Write a deterministic-within-environment zipapp from *stage*.
 
     ``zipapp.create_archive`` inherits source mtimes (including the freshly
     generated ``__main__.py``) and filesystem iteration order.  That makes two
     builds from identical source bytes produce different release checksums.
-    Canonical entry order, timestamps, modes, and storage make the artifact
-    reproducible while retaining the standard self-executing zip format.
+    Canonical entry order, timestamps, modes, and storage remove those sources
+    of variance. Repeated builds are byte-identical when source bytes and the
+    Python/OS/ZIP-zlib toolchain are equivalent; this is not a cross-platform
+    bit-reproducibility guarantee. Release publication separately refuses to
+    replace an existing tag asset with different bytes.
     """
     if "\n" in interpreter or "\r" in interpreter:
         raise ValueError("interpreter must be a single line")
