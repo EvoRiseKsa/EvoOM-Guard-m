@@ -24,9 +24,46 @@ import argparse
 import os
 import shutil
 import tempfile
-import zipapp
+import zipfile
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+_MAIN = b"import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n"
+
+
+def _write_reproducible_archive(stage: str, out_path: str, interpreter: str) -> None:
+    """Write a byte-reproducible zipapp from *stage*.
+
+    ``zipapp.create_archive`` inherits source mtimes (including the freshly
+    generated ``__main__.py``) and filesystem iteration order.  That makes two
+    builds from identical source bytes produce different release checksums.
+    Canonical entry order, timestamps, modes, and storage make the artifact
+    reproducible while retaining the standard self-executing zip format.
+    """
+    if "\n" in interpreter or "\r" in interpreter:
+        raise ValueError("interpreter must be a single line")
+
+    entries: list[tuple[str, str]] = []
+    for directory, dirnames, filenames in os.walk(stage):
+        dirnames.sort()
+        filenames.sort()
+        for filename in filenames:
+            source = os.path.join(directory, filename)
+            archive_name = os.path.relpath(source, stage).replace(os.sep, "/")
+            entries.append((archive_name, source))
+    entries.sort(key=lambda item: item[0])
+
+    with open(out_path, "wb") as raw:
+        if interpreter:
+            raw.write(b"#!" + interpreter.encode("utf-8") + b"\n")
+        with zipfile.ZipFile(raw, "w", compression=zipfile.ZIP_STORED) as archive:
+            for archive_name, source in entries:
+                info = zipfile.ZipInfo(archive_name, date_time=_ZIP_TIMESTAMP)
+                info.create_system = 3  # Unix; keep archive metadata cross-platform.
+                info.external_attr = 0o100644 << 16
+                info.compress_type = zipfile.ZIP_STORED
+                with open(source, "rb") as file_handle:
+                    archive.writestr(info, file_handle.read())
 
 
 def build(
@@ -53,9 +90,9 @@ def build(
         # Hand-write __main__ so the CLI's return value becomes the process exit
         # code. zipapp's ``-m pkg:func`` entry only *calls* main() and discards its
         # return — which would make every verdict exit 0 (the gate would not block).
-        with open(os.path.join(stage, "__main__.py"), "w", encoding="utf-8") as f:
-            f.write("import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n")
-        zipapp.create_archive(stage, target=out_path, interpreter=interpreter)
+        with open(os.path.join(stage, "__main__.py"), "wb") as f:
+            f.write(_MAIN)
+        _write_reproducible_archive(stage, out_path, interpreter)
     os.chmod(out_path, 0o755)
     return out_path
 

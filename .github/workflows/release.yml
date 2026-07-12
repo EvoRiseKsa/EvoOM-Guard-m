@@ -43,7 +43,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Resolve the tag (input, or the release/* branch name)
         run: |
@@ -52,7 +52,7 @@ jobs:
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "releasing $TAG from $GITHUB_SHA"
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
 
@@ -77,16 +77,45 @@ jobs:
       - name: Checksums (release integrity)
         run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
 
-      - name: Create the tag + release with assets
+      - name: Create an immutable tag + release with assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
+          # A rerun must never retarget an existing tag or replace its assets
+          # with bytes built from another commit.
+          TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha 2>/dev/null || true)"
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::release_tag_target_mismatch: $TAG points to $TAG_SHA, expected $GITHUB_SHA"
+            exit 1
+          fi
+
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" \
                  --target "$GITHUB_SHA" \
                  --title "$TAG" \
                  --generate-notes
-          gh release upload "$TAG" dist/evo-guard.pyz dist/SHA256SUMS --clobber
+
+          RESOLVED_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          test "$RESOLVED_SHA" = "$GITHUB_SHA"
+
+          mkdir -p existing-release-assets
+          for asset in evo-guard.pyz SHA256SUMS; do
+            if gh release view "$TAG" --json assets \
+                 --jq ".assets[] | select(.name == \"$asset\") | .name" \
+                 | grep -Fxq "$asset"; then
+              gh release download "$TAG" --pattern "$asset" \
+                --dir existing-release-assets
+              if ! cmp -s "dist/$asset" "existing-release-assets/$asset"; then
+                echo "::error::release_asset_immutable: existing $asset differs"
+                exit 1
+              fi
+              echo "$asset already exists with identical bytes"
+            else
+              gh release upload "$TAG" "dist/$asset"
+            fi
+          done
 
       - name: Delete the release/* trigger branch (cleanup)
         if: ${{ github.event_name == 'push' }}

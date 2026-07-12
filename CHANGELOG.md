@@ -9,7 +9,7 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
-## [3.4.0] — 2026-07-12
+## [3.4.0] — 2026-07-13
 
 A verifier-identity and execution-fidelity release (JSON schema 1.8). It makes
 the accepted verifier-pack content explicit, prevents a narrowed repo command
@@ -62,6 +62,15 @@ the JUnit writer still share one process there, so its documented
   conventional dependency/build outputs and explicit `setup_output_globs` are
   exempt. A changed judged path is `ERROR setup_failed`; the same check also
   protects subprocess baseline evidence.
+- **Immutable, commit-bound release publication.** Release workflows resolve an
+  existing tag to its commit and refuse a mismatch with the workflow SHA. An
+  existing asset is downloaded and byte-compared; different bytes fail closed
+  instead of being replaced with `--clobber`. The release workflow's external
+  Actions are pinned to full commit SHAs.
+- **Reproducible single-file artifact.** `ops/build_pyz.py` writes entries in
+  canonical order with fixed timestamps and modes. Repeated builds from the
+  same source bytes and interpreter now produce the same `evo-guard.pyz`
+  SHA-256 instead of inheriting temporary-file timestamps.
 
 ### Added / changed in the machine contract (schema 1.8)
 

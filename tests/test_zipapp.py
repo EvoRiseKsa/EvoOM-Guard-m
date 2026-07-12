@@ -15,6 +15,7 @@ on every verdict). Build is stdlib-only, so the suite stays green without extras
 import os
 import subprocess
 import sys
+import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -36,6 +37,21 @@ def test_pyz_builds_and_reports_version(tmp_path):
     r = subprocess.run([sys.executable, out, "version"], capture_output=True, text=True, timeout=90)
     assert r.returncode == 0
     assert __version__ in r.stdout
+
+
+def test_pyz_build_is_byte_reproducible(tmp_path):
+    first = _build(tmp_path / "first")
+    second = _build(tmp_path / "second")
+
+    with open(first, "rb") as first_file, open(second, "rb") as second_file:
+        assert first_file.read() == second_file.read()
+
+    with zipfile.ZipFile(first) as archive:
+        entries = archive.infolist()
+        assert [entry.filename for entry in entries] == sorted(
+            entry.filename for entry in entries
+        )
+        assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
 
 
 def test_pyz_exit_codes_propagate(tmp_path):

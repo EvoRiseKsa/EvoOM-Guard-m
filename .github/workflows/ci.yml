@@ -155,7 +155,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          TAG_SHA="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)"
+          if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::release_tag_target_mismatch: $GITHUB_REF_NAME points to $TAG_SHA, expected $GITHUB_SHA"
+            exit 1
+          fi
+
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
+            || gh release create "$GITHUB_REF_NAME" \
+                 --target "$GITHUB_SHA" \
+                 --title "$GITHUB_REF_NAME" \
                  --notes "Automated release assets."
-          gh release upload "$GITHUB_REF_NAME" dist/evo-guard.pyz dist/SHA256SUMS --clobber
+
+          mkdir -p existing-release-assets
+          for asset in evo-guard.pyz SHA256SUMS; do
+            if gh release view "$GITHUB_REF_NAME" --json assets \
+                 --jq ".assets[] | select(.name == \"$asset\") | .name" \
+                 | grep -Fxq "$asset"; then
+              gh release download "$GITHUB_REF_NAME" --pattern "$asset" \
+                --dir existing-release-assets
+              if ! cmp -s "dist/$asset" "existing-release-assets/$asset"; then
+                echo "::error::release_asset_immutable: existing $asset differs"
+                exit 1
+              fi
+              echo "$asset already exists with identical bytes"
+            else
+              gh release upload "$GITHUB_REF_NAME" "dist/$asset"
+            fi
+          done
