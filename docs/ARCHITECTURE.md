@@ -110,5 +110,5 @@ resolved image by default, then runs suite and pack containers against read-only
 mounts; `gvisor` adds a separate user-space guest kernel. Explicit
 `setup_output_globs` are trusted policy exceptions to setup-fidelity checks, and
 `trust_setup_on_host` deliberately weakens effective isolation. A Firecracker
-microVM backend is designed (issue #51) but not built. See
+microVM backend is documented as a future design but is not built. See
 [`GUARD.md`](GUARD.md) and [`VM_ISOLATION.md`](VM_ISOLATION.md).

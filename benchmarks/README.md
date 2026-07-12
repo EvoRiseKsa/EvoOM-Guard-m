@@ -23,11 +23,12 @@ python benchmarks/evaluate.py benchmarks/results.jsonl   # metrics only
 
 ## Measured results (16 cases, subprocess judge)
 
-The corpus was first measured on the v3.2.2 engine and is **re-measured against
-the current engine on every CI run** — `tests/test_benchmark.py` re-runs all 16
-live cases and fails the build if any published number drifts from what the
-engine actually does. Each row of `results.jsonl` records the `engine_version`
-that produced it, so the committed corpus is always self-labelling.
+The corpus was first measured on the v3.2.2 engine. CI re-runs all 16 live cases
+with the current engine and fails if the published aggregate metrics drift.
+`results.jsonl` is a deliberately regenerated measurement snapshot, not an
+output that CI rewrites: each row records the `engine_version` that produced
+that snapshot. Regenerate and commit it whenever the measured engine version
+changes.
 
 | Case | Truth | Observed verdict | Decided pre-execution? |
 |---|---|---|---|

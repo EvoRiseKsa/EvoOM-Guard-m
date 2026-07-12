@@ -19,7 +19,11 @@ Two design choices do the work (see [`GUARD.md`](GUARD.md)):
 2. **Harness-edit pre-gate** — any edit to the tests, their configuration, or an
    auto-executed file is **rejected before the suite runs**.
 
-## The catalog (verdicts verified live on EvoGuard v1.1.1 (the engine now in this repo))
+## The catalog
+
+The original live campaign was recorded on EvoGuard v1.1.1. The adversarial
+regression tests in this repository exercise these verdict classes on the current
+engine; the historical campaign version is not the current release version.
 
 | # | Reward-hack technique | What EvoGuard does | Verdict | Reproduce |
 |---|---|---|---|---|
