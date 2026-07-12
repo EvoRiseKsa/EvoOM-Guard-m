@@ -114,6 +114,27 @@ present-but-broken config — unreadable JSON, an unknown key (a misspelled
 floor!), a wrong-typed value — stops the run with exit 2; it never silently
 degrades to weaker defaults. CLI flags still override valid config values.
 
+## 3¾. Hardening the setup command (the "setup mutation" surface)
+
+`setup_command` runs **inside the candidate copy** with a more permissive
+environment than the suite (package managers need their caches). That means a
+candidate's *lifecycle scripts* — an npm `postinstall`/`prepare` it added or
+edited — execute during setup. This sits inside the documented same-process
+boundary (`report_integrity: same_process_candidate_writable`), but you can
+remove the vector cheaply in JS ecosystems:
+
+```json
+{ "setup_command": ["npm", "install", "--ignore-scripts", "--no-audit"] }
+```
+
+`--ignore-scripts` (npm/pnpm/yarn) skips every lifecycle script; vitest/jest
+remain fully functional (verified live in the
+[Node-workspace fixture](https://github.com/EvoRiseKsa/evoom-guard-demo)).
+Only drop it when a dependency genuinely needs an install script — and know
+what you are re-enabling. For hard guarantees against a deliberately
+adversarial candidate, the answer remains the black-box judge, not setup
+tweaks.
+
 ## 4. Supported test runners — the compatibility matrix
 
 Eight runners get the **structured** verdict (`junit+exit`: real pass/fail counts
