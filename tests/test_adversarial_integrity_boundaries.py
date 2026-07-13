@@ -180,9 +180,12 @@ def test_docker_timeout_forcibly_removes_the_exact_named_container(
             str(tmp_path / "judge"),
         )
 
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert calls[0][:3] == ["docker", "run", "--rm"]
-    assert calls[1] == ["docker", "rm", "-f", fixed_name]
+    assert calls[1] == [
+        "docker", "inspect", "--format", "{{.State.StartedAt}}", fixed_name
+    ]
+    assert calls[2] == ["docker", "rm", "-f", fixed_name]
 
 
 def test_limit_hook_sets_cpu_and_address_space_caps(monkeypatch: pytest.MonkeyPatch) -> None:

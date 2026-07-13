@@ -13,13 +13,14 @@ judge; a container does not. The earlier design let the caller *ask* for
 verdict **without ever starting a container** — a verdict that lied about its own
 guarantee. This module removes that gap.
 
-A :class:`CandidateRunner` delivers a real boundary and returns
-:class:`IsolationEvidence` describing **what actually ran**, never what was
-requested. If a stronger boundary was asked for and cannot be delivered — the
-Docker daemon is down, the image does not exist, the runtime is missing — the
-runner **raises** :class:`IsolationUnavailable` (fail-closed). There is no silent
-fallback to a weaker boundary, because a fallback is exactly how a verdict comes
-to claim isolation it never had.
+A :class:`CandidateRunner` prepares a real boundary and returns
+:class:`IsolationEvidence` describing **what is available to its launcher**,
+never merely what was requested. Actual use is a separate fact: the black-box
+judge records a launcher receipt, plus a runtime-written CID for container
+modes. If a stronger boundary was asked for and cannot be prepared — the Docker
+daemon is down, the image does not exist, the runtime is missing — the runner
+**raises** :class:`IsolationUnavailable` (fail-closed). There is no silent
+fallback to a weaker boundary.
 
 The launcher is a Python file with a POSIX shebang and is executed directly to
 preserve its shell-free argv contract. Native Windows cannot execute that file
@@ -45,6 +46,11 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
+# Docker writes candidate container IDs here.  The directory is owned by the
+# judge and deliberately lives beside (not inside) the disposable repo copy, so
+# candidate code cannot forge cleanup targets through its mounted source tree.
+CANDIDATE_CID_DIRNAME = "candidate-container-cids"
+
 
 class IsolationUnavailable(RuntimeError):
     """The requested candidate boundary could not be delivered honestly.
@@ -56,11 +62,11 @@ class IsolationUnavailable(RuntimeError):
 
 @dataclass
 class IsolationEvidence:
-    """What the candidate *actually* ran under — recorded from delivery, not request.
+    """What boundary the launcher prepared — actual invocation is recorded elsewhere.
 
-    ``delivered`` is the ground truth the assurance profile and the enforceable
-    policy must read; ``requested`` is kept only so a verdict can show the gap
-    was honored rather than papered over.
+    ``delivered`` is a capability fact, not proof that the pack invoked the
+    launcher. Assurance policy must combine it with the black-box invocation
+    receipt; ``requested`` is kept so a verdict can show the gap was honored.
     """
 
     requested: str
@@ -89,7 +95,8 @@ class CandidateRunner:
 
     Construct with the *requested* isolation; call :meth:`prepare` to (a) verify
     the boundary can really be delivered and (b) materialize the launcher. The
-    returned :class:`IsolationEvidence` reflects delivery.
+    returned :class:`IsolationEvidence` reflects preparation. The caller must
+    separately observe a launcher invocation before claiming candidate isolation.
     """
 
     isolation: str = "subprocess"
@@ -98,6 +105,13 @@ class CandidateRunner:
     docker_runtime: str | None = None
     mem_limit_mb: int = 0
     python: str = ""  # interpreter token the pack uses for python targets
+    # Optional judge-owned receipt channel.  These values are written only to
+    # the launcher sidecar (outside the candidate tree), never exported to the
+    # candidate environment.  The launcher sends the unguessable token before
+    # it starts the candidate, giving the judge evidence that EVOGUARD_EXEC was
+    # actually invoked rather than merely prepared.
+    invocation_socket: str | None = None
+    invocation_token: str | None = None
     _launcher: str = field(default="", init=False)
 
     # ---- public API -------------------------------------------------------- #
@@ -114,22 +128,41 @@ class CandidateRunner:
                 "black-box candidate launching currently requires a POSIX host; "
                 "use GitHub Actions/Linux or WSL on Windows"
             )
-        if self.isolation in ("docker", "gvisor"):
-            return self._prepare_container(workdir, target)
-        return self._prepare_subprocess(workdir, target)
+        return self._prepare_supported_host(workdir, target)
+
+    def _prepare_supported_host(
+        self, workdir: str, target: str
+    ) -> tuple[str, dict[str, str], IsolationEvidence]:
+        """Prepare after the public POSIX platform gate has succeeded."""
+        try:
+            if self.isolation in ("docker", "gvisor"):
+                return self._prepare_container(workdir, target)
+            return self._prepare_subprocess(workdir, target)
+        except IsolationUnavailable:
+            raise
+        except (OSError, subprocess.SubprocessError) as exc:
+            # Docker CLI discovery/version/inspect/pull and launcher writes are
+            # environmental delivery failures, not guard crashes. Preserve
+            # KeyboardInterrupt/SystemExit (BaseException) for the operator.
+            raise IsolationUnavailable(
+                f"{self.isolation} isolation preflight failed: {exc}"
+            ) from exc
 
     # ---- subprocess boundary ---------------------------------------------- #
     def _prepare_subprocess(
         self, workdir: str, target: str
     ) -> tuple[str, dict[str, str], IsolationEvidence]:
-        launcher = self._write_launcher(workdir, {"mode": "subprocess", "target": target})
+        launcher = self._write_launcher(
+            workdir,
+            self._launcher_config({"mode": "subprocess", "target": target}),
+        )
         evidence = IsolationEvidence(
             requested=self.isolation,
             delivered="subprocess",
             note=(
-                "candidate ran as a host subprocess: same machine, filesystem and "
-                "user as the judge (the judge process still never imports it). "
-                "Use --isolation docker for a container boundary."
+                "candidate launcher prepared for a host subprocess: same machine, "
+                "filesystem and user as the judge. A launcher receipt is required "
+                "before assurance can claim this boundary was invoked."
             ),
         )
         env = {
@@ -163,9 +196,6 @@ class CandidateRunner:
             )
         runtime = self.docker_runtime or ("runsc" if self.isolation == "gvisor" else None)
         image_digest = self._ensure_image(self.docker_image)
-        # Prove the boundary really executes (image + runtime actually run a
-        # container) before we let any verdict claim it.
-        self._delivery_probe(image_digest, runtime)
 
         # A fully-resolved argv PREFIX (no shell, no env expansion). The launcher
         # appends the pack's argv and execs it directly, so image/network/runtime/
@@ -189,7 +219,21 @@ class CandidateRunner:
             prefix += ["--memory", f"{self.mem_limit_mb}m"]
         # Execute the exact image bytes we inspected, never the mutable tag.
         prefix.append(image_digest)
-        launcher = self._write_launcher(workdir, {"mode": "docker", "prefix": prefix})
+        # The launcher runs with the pack snapshot as cwd, so Docker needs an
+        # absolute host path for --cidfile even if an embedding caller supplied
+        # a relative workdir.
+        cidfile_dir = os.path.join(os.path.abspath(workdir), CANDIDATE_CID_DIRNAME)
+        os.makedirs(cidfile_dir, mode=0o700, exist_ok=True)
+        launcher = self._write_launcher(
+            workdir,
+            self._launcher_config(
+                {
+                    "mode": "docker",
+                    "prefix": prefix,
+                    "cidfile_dir": cidfile_dir,
+                }
+            ),
+        )
 
         evidence = IsolationEvidence(
             requested=self.isolation,
@@ -199,10 +243,10 @@ class CandidateRunner:
             network=self.docker_network,
             runtime=runtime,
             note=(
-                "candidate ran inside a network-less, read-only container; the repo "
-                "copy was mounted read-only and the judge-owned pack was not mounted "
-                "at all, so candidate code could neither write the host nor reach the "
-                "pack. Verdict still came from the judge's own out-of-container pytest."
+                "candidate launcher prepared a network-less, read-only container; "
+                "the repo copy is mounted read-only and the judge-owned pack is not "
+                "mounted. A launcher receipt plus runtime-written CID is required "
+                "before assurance can claim the container boundary was invoked."
             ),
         )
         env = {
@@ -214,6 +258,21 @@ class CandidateRunner:
         return launcher, env, evidence
 
     # ---- helpers ----------------------------------------------------------- #
+    def _launcher_config(self, cfg: dict[str, Any]) -> dict[str, Any]:
+        """Attach an invocation receipt only when the channel is complete.
+
+        A socket without its token (or vice versa) cannot produce trustworthy
+        evidence, so an embedding caller that cannot create the POSIX receipt
+        channel gets a conservative launcher with no receipt claim.
+        """
+        if self.invocation_socket and self.invocation_token:
+            return {
+                **cfg,
+                "invocation_socket": self.invocation_socket,
+                "invocation_token": self.invocation_token,
+            }
+        return cfg
+
     def _ensure_image(self, image: str) -> str:
         """Return the image's content digest, pulling it once if absent."""
         digest = self._image_digest(image)
@@ -244,19 +303,6 @@ class CandidateRunner:
             return None
         return r.stdout.strip() or None
 
-    def _delivery_probe(self, image: str, runtime: str | None) -> None:
-        cmd = ["docker", "run", "--rm", "--network", "none"]
-        if runtime:
-            cmd += ["--runtime", runtime]
-        cmd += [image, "true"]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if r.returncode != 0:
-            raise IsolationUnavailable(
-                f"container boundary could not be started for {image!r}"
-                + (f" with runtime {runtime!r}" if runtime else "")
-                + f": {(r.stderr or r.stdout).strip()[:200]}"
-            )
-
     @staticmethod
     def _write_launcher(workdir: str, cfg: dict[str, Any]) -> str:
         """Write a SHELL-FREE launcher (+ its JSON config) and return its path.
@@ -272,20 +318,43 @@ class CandidateRunner:
         path = os.path.join(workdir, "evoguard_exec.py")
         with open(path + ".json", "w", encoding="utf-8") as f:
             _json.dump(cfg, f)
+        # The sidecar may contain the judge's invocation token. Keep it
+        # owner-only even if an embedding caller supplied a permissive umask.
+        os.chmod(path + ".json", stat.S_IRUSR | stat.S_IWUSR)
         with open(path, "w", encoding="utf-8") as f:
             f.write(
                 "#!/usr/bin/env python3\n"
-                "import json, os, sys\n"
+                "import json, os, secrets, socket, sys\n"
                 "with open(__file__ + '.json', encoding='utf-8') as _f:\n"
                 "    CFG = json.load(_f)\n"
                 "argv = sys.argv[1:]\n"
                 "if not argv:\n"
                 "    sys.exit('evoguard launcher: no command given')\n"
+                "receipt_path = CFG.get('invocation_socket')\n"
+                "receipt_token = CFG.get('invocation_token')\n"
+                "if receipt_path and receipt_token:\n"
+                "    # Fail closed: a candidate must not run if the judge cannot\n"
+                "    # first record that this launcher invocation happened.\n"
+                "    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as _s:\n"
+                "        _s.sendto(receipt_token.encode('ascii'), receipt_path)\n"
                 "if CFG['mode'] == 'subprocess':\n"
                 "    os.chdir(CFG['target'])\n"
                 "    os.execvp(argv[0], argv)\n"
                 "else:\n"
-                "    cmd = CFG['prefix'] + argv\n"
+                "    prefix = CFG['prefix']\n"
+                "    cidfile_dir = CFG.get('cidfile_dir')\n"
+                "    if cidfile_dir:\n"
+                "        # One launcher can be invoked concurrently by many pack tests.\n"
+                "        # Docker requires each --cidfile path not to exist yet.\n"
+                "        cidfile = os.path.join(\n"
+                "            cidfile_dir,\n"
+                "            f'{os.getpid()}-{secrets.token_hex(16)}.cid',\n"
+                "        )\n"
+                "        # The pinned image is the final prefix item; --cidfile is a\n"
+                "        # docker-run option and therefore must precede that image.\n"
+                "        cmd = prefix[:-1] + ['--cidfile', cidfile, prefix[-1]] + argv\n"
+                "    else:\n"
+                "        cmd = prefix + argv\n"
                 "    os.execvp(cmd[0], cmd)\n"
             )
         os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC | stat.S_IRUSR)

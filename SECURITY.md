@@ -12,8 +12,7 @@ it makes about itself — are especially welcome.
 **Please report privately, not in a public issue.**
 
 - Preferred: GitHub **private vulnerability reporting** — the **Security** tab →
-  **Report a vulnerability**. (Repo owner: enable it under Settings → Advanced
-  Security if it is not already on.)
+  **Report a vulnerability**. This repository has that private channel enabled.
 - Include: the version (`evo-guard version`), a minimal repro, and the impact.
 
 This is a solo, best-effort project: there is no bug-bounty and no guaranteed
@@ -34,6 +33,9 @@ permission) when fixed.
   while Guard still returns `PASS`.
 - A container verdict that claims setup/suite isolation inconsistent with the
   recorded `setup_isolation`, resolved image ID, or read-only suite/pack mounts.
+- A `PASS` after the judge process group or an observed candidate container
+  could not be proven absent; that condition must fail closed as
+  `runtime_cleanup_failed`.
 - A POSIX workspace operation that escapes the descriptor-relative/no-follow
   root while Guard still reports a clean result, or runtime-continuity evidence
   inconsistent with the tree/boundary that actually ran.
@@ -47,8 +49,11 @@ permission) when fixed.
 These are stated limits, not defects (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)):
 
 - The **default (same-process) judge** can be forged by deliberate in-process
-  source (`report_integrity: same_process_candidate_writable`). The fix is
-  `--blackbox`; the same-process boundary is documented, not hidden.
+  source (`report_integrity: same_process_candidate_writable`). `--blackbox`
+  adds an external judge but is composite by default, so its overall assurance
+  still includes the weaker required repo-native channel. For process-boundary
+  targets, `--blackbox-only` is the fully external report profile; the
+  same-process boundary is documented, not hidden.
 - The **subprocess boundary is not a sandbox**. Use `--isolation docker`/`gvisor`
   for OS-level confinement.
 - POSIX CPU/memory rlimits do not exist on native Windows (the wall timeout still

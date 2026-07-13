@@ -91,6 +91,8 @@ A pure-CLI target with no in-repo suite would pass `--blackbox-only` here.
 - **Does NOT guarantee (as run above):** OS-level isolation of the candidate. The
   candidate ran as a host subprocess (`candidate_isolation: subprocess`). For a
   real boundary add `--isolation docker --docker-image python:3.12-slim
-  --require-candidate-isolation docker` — then the candidate runs read-only,
-  network-less, with the pack unmounted, and a missing daemon/image fails closed
-  (`ERROR`, never a mislabelled `PASS`). See [`../../docs/ASSURANCE.md`](../../docs/ASSURANCE.md).
+  --require-candidate-isolation docker` — then the observed launcher boundary is
+  a read-only, network-less container with the pack unmounted; the trusted pack
+  remains responsible for asserting candidate semantics. A missing daemon/image
+  fails closed (`ERROR`, never a mislabelled `PASS`). See
+  [`../../docs/ASSURANCE.md`](../../docs/ASSURANCE.md).

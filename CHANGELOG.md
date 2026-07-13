@@ -9,6 +9,78 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.4.4] — 2026-07-13
+
+An execution-evidence and process-lifecycle correctness release (JSON schema
+1.11). This release removes policy-as-evidence shortcuts: a requested boundary,
+prepared launcher, configured pack, or started Docker client is not reported as
+an invoked/delivered boundary unless the corresponding runtime evidence was
+observed.
+
+### Security
+
+- Black-box packs must invoke the configured boundary through `$EVOGUARD_EXEC`.
+  A constant pack or direct legacy target shortcut is now
+  `ERROR candidate_not_exercised`, not a vacuous `PASS`.
+- Black-box boundary evidence requires a judge-owned launcher receipt;
+  Docker/gVisor additionally require a valid runtime-written CID. This proves
+  launcher/runtime invocation; the trusted pack remains responsible for command
+  semantics and output checks. Preparation alone reports `not_run`.
+- The black-box judge runs in a separate POSIX session. Timeout, interruption,
+  and normal completion reap its process group (bounded TERM/KILL escalation),
+  while CID-based cleanup removes surviving candidate containers. Cleanup never
+  replaces the primary exception; inability to prove cleanup after normal
+  completion is `ERROR runtime_cleanup_failed`, never a pending `PASS`.
+- Docker timeouts claim setup/suite/pack start only after an independent
+  `docker inspect` observes a non-zero `StartedAt`. Phase-specific isolation
+  evidence prevents a later failure from erasing or upgrading an earlier phase.
+- Every third-party action in CI, Windows, CodeQL, Scorecard, and release
+  workflows is pinned to a full commit SHA; a regression test rejects mutable
+  workflow action references.
+- GitHub private vulnerability reporting is enabled, matching the confidential
+  reporting path documented in `SECURITY.md`.
+
+### Fixed
+
+- Every verdict exposes `execution_state` (`static_gate`, `not_started`,
+  `started_incomplete`, or `completed`), `execution_phase`, and top-level JSON
+  `isolation`; the same facts are bound into the attestation.
+- `test_command_ran` now means process start. It remains true on timeout without
+  inventing a clean `verdict_source`; setup-only/preflight failure remains false.
+- Black-box composite results now use summed counts, a stable
+  `composite:blackbox+repo` source, the decisive/furthest phase, and explicit
+  repo-suite lifecycle fields. Partial/incomplete composites do not present
+  partial counts as complete evidence.
+- A default black-box composite reports the weakest required report channel
+  (`same_process_candidate_writable`). Only `--blackbox-only` can satisfy an
+  end-to-end `external_process_isolated` floor.
+- Verifier-pack assurance separates configuration, presence, accepted identity,
+  execution, secrecy, and pre/post integrity. A black-box pack executed by the
+  host judge is correctly labelled `verified_snapshot_pre_post`, not falsely a
+  read-only container mount.
+- Missing/invalid packs, setup failures, Docker-unavailable phases, timeouts,
+  zero-test packs, and ungradeable exit/report pairs retain their real reason and
+  a null clean source instead of collapsing to `patch_apply_failed` or a generic
+  assurance error.
+- Assurance floors are applied only to a completed result that would otherwise
+  be `PASS`; they no longer overwrite static, preflight, incomplete, tamper, pack,
+  or isolation causes.
+
+### Verification
+
+- Added adversarial regressions for vacuous packs, invocation/CID evidence,
+  process-group/container cleanup, Docker `StartedAt` proof, composite lifecycle
+  and weakest-channel semantics, zero-result sources, public JSON, Markdown,
+  SARIF, and attestation parity.
+- Full pytest, Ruff, Mypy, live labelled-corpus benchmark, artifact smoke test,
+  and checksum verification are required before the immutable tag is created.
+- GitHub Immutable Releases is enabled for this repository. The release workflow
+  now prepares a commit-pinned draft and uploads the checked `evo-guard.pyz` and
+  `SHA256SUMS` assets without publishing; a maintainer must select **Publish this
+  Action to the GitHub Marketplace** and publish the draft in GitHub's web UI.
+  Publication then locks the tag and assets and creates GitHub's release
+  attestation.
+
 ## [3.4.3] — 2026-07-13
 
 An assurance-contract correctness release (JSON schema 1.10). Static diff-gate

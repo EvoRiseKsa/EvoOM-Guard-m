@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-"""Cross-mode policy consistency (schema 1.10) — no requested gate is ever
+"""Cross-mode policy consistency (schema 1.11) — no requested gate is ever
 silently dropped.
 
 An external review of v3.3.0 found the exact failure this file pins: the new
@@ -84,6 +84,9 @@ class UnsupportedGateFailsClosedTests(unittest.TestCase):
             blackbox=True, setup_command=[sys.executable, "-c", "pass"]
         )
 
+    def test_blackbox_only_without_blackbox_is_rejected(self) -> None:
+        self._expect_unsupported(blackbox_only=True)
+
     @unittest.skipUnless(HAS_PYTEST, "pytest runs the suite")
     def test_supported_combination_still_passes(self) -> None:
         r = guard(self.root, SAFE, test_command=TEST_CMD, timeout=120,
@@ -162,15 +165,26 @@ class ExplicitEvidenceDegradationTests(unittest.TestCase):
 
     @unittest.skipIf(os.name == "nt", "black-box subprocess launcher requires POSIX")
     def test_blackbox_baseline_request_yields_unmeasured_record(self) -> None:
-        # A real (trivial) judge-owned pack, subprocess black-box: the verdict
-        # works, and the baseline request comes back as an explicit unmeasured
-        # record instead of disappearing.
+        # A real judge-owned pack exercises the candidate through EVOGUARD_EXEC;
+        # the baseline request comes back as an explicit unmeasured record
+        # instead of disappearing.
         root = tempfile.mkdtemp(prefix="evo_polbx_")
         pack = tempfile.mkdtemp(prefix="evo_polbx_pack_")
         try:
             _make_repo(root)
             with open(os.path.join(pack, "test_protocol.py"), "w", encoding="utf-8") as f:
-                f.write("def test_trivial():\n    assert True\n")
+                f.write(
+                    "import os\n"
+                    "import subprocess\n"
+                    "import sys\n\n"
+                    "def test_protocol():\n"
+                    "    result = subprocess.run(\n"
+                    "        [os.environ['EVOGUARD_EXEC'], sys.executable, '-c', "
+                    "'import app; print(app.x)'],\n"
+                    "        capture_output=True, text=True, check=True,\n"
+                    "    )\n"
+                    "    assert result.stdout.strip() == '1'\n"
+                )
             r = guard(
                 root, SAFE, test_command=TEST_CMD, timeout=120,
                 blackbox=True, blackbox_only=True, verifier_pack=pack,

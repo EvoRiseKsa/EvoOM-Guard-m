@@ -8,10 +8,11 @@
 The default judge runs your tests **in the same process** as the code under
 test, so a patch that writes deliberate forgery into source — an `atexit` hook
 that overwrites the JUnit report and calls `os._exit(0)` — can fake a `PASS`
-(see [`docs/ASSURANCE.md`](ASSURANCE.md)). The black-box judge closes that hole
-by construction, and ships with a before/after proof: the *identical* forgery
+(see [`docs/ASSURANCE.md`](ASSURANCE.md)). The black-box phase closes that
+channel-local hole by construction, and ships with a before/after proof: the *identical* forgery
 that yields a false `PASS` under the default judge yields the correct `FAIL`
-here.
+here. The default policy is composite and still contains the weaker repo-native
+report channel; use `--blackbox-only` for end-to-end external report integrity.
 
 ```bash
 # Set PACK_SHA256 to the EVOGUARD_PACK_V2 value reported by pack-doctor.
@@ -41,7 +42,7 @@ evo-guard guard ./repo --patch candidate.txt \
   |---|---|
   | `EVOGUARD_EXEC` | a launcher that runs its argv **under the delivered isolation** (host subprocess, or a read-only container) with the repo copy as the working root — **prefer this** |
   | `EVOGUARD_PYTHON` | the interpreter token to launch a python candidate with |
-  | `EVOGUARD_TARGET` | path to the patched repo copy (used only in the no-launcher fallback) |
+  | `EVOGUARD_TARGET` | legacy host path to the patched repo; direct use bypasses the launcher and cannot prove a requested candidate-isolation floor |
 
   The pack invokes `subprocess.run([EVOGUARD_EXEC, EVOGUARD_PYTHON, "-m", "tool", …])`
   and asserts on the candidate's **observable outputs**. Forgery code in the
@@ -49,11 +50,18 @@ evo-guard guard ./repo --patch candidate.txt \
   affects the child, not the judge — and the pack checks outputs, not the child's
   exit code, so a lying child changes nothing.
 
-## Isolation is *delivered*, never merely requested
+## Boundary evidence is observed, never inferred from policy
 
-When the black-box judge starts, `candidate_isolation` in the verdict is the
-boundary the runner **actually delivered**, read from the run — not the flag you
-passed. If the diff pre-gate rejects the patch first, the judge, candidate, pack,
+`candidate_isolation` names the boundary selected for an **observed trusted-pack
+call to `$EVOGUARD_EXEC`**, not the flag you passed and not a successfully
+prepared launcher. The launcher sends a judge-owned invocation receipt;
+Docker/gVisor additionally requires a valid runtime-written container CID. This
+proves launcher/runtime invocation, not by itself the argv meaning or successful
+execution of candidate logic; the trusted pack must assert the intended outputs.
+A pack that returns a constant PASS without
+invoking `$EVOGUARD_EXEC` is refused as `ERROR candidate_not_exercised`, even
+without an isolation floor. If the diff pre-gate rejects first, the
+judge, candidate, pack,
 and container do not start: assurance reports `static_gate`, runtime isolation
 reports `not_run`, and `attestation.mode=blackbox` plus the effective policy
 record only what was requested. If you ask for
@@ -68,6 +76,24 @@ evo-guard guard ./repo --patch p.txt --verifier-pack ./pack --blackbox \
     --require-candidate-isolation docker
 ```
 
+Schema 1.11 makes process progress explicit. `execution_state` is
+`not_started` for black-box preflight failures such as a missing/invalid pack,
+an expected-digest mismatch, patch preparation failure, or unavailable runner;
+`candidate_isolation` remains `not_run`. A judge timeout is
+different: its state is `started_incomplete`, phase is `blackbox_pack`, and
+`test_command_ran` is `true` because pytest actually started, even though
+`verdict_source` remains `null` because no clean black-box verdict completed.
+That flag proves the judge started; the separate receipt proves whether the
+trusted pack invoked the configured launcher boundary.
+Normal return plus post-execution checks gives `completed`; that state still may
+produce `FAIL`, `ERROR`, or `TAMPERED` rather than `PASS`.
+
+Requested black-box/isolation settings live only in
+`attestation.effective_policy`. Runtime assurance reports delivered facts. The
+assurance floors are evaluated only when completed execution would otherwise be
+`PASS`; they do not replace a static, preflight, timeout/incomplete, pack, or
+isolation cause with a generic floor failure.
+
 In a container boundary the repo copy is mounted **read-only** and the
 judge-owned pack is **not mounted into the candidate at all** — so candidate code
 can neither write the host nor reach the pack to tamper with it. (In the
@@ -75,6 +101,13 @@ can neither write the host nor reach the pack to tamper with it. (In the
 `assurance.verifier_pack.secrecy` says so honestly — `reachable_same_host`.)
 The launcher executes the exact resolved image ID that was probed, rather than a
 mutable tag.
+
+Pack evidence is equally phase-aware. `assurance.verifier_pack` independently
+records `configured`, observed `present`, `integrity`, `identity_verified`, pack
+`execution_state`, delivered `secrecy`, and observed `snapshot_sha256`. Missing,
+invalid, expected-identity mismatch, accepted-before-execution,
+verified-pre/post (or read-only), and changed-snapshot states remain distinct;
+configuration alone never claims that a pack exists or was verified.
 
 The shell-free `$EVOGUARD_EXEC` file has a **POSIX executable contract in every
 black-box isolation mode**. Native Windows therefore fails closed before
@@ -91,6 +124,10 @@ pack can never mask an internal regression the pack does not exercise. For a
 pure-CLI/service target that has no in-repo suite, pass `--blackbox-only` to judge
 the pack alone. The attestation records the repo suite's result
 (`repo_suite_passed`, `repo_suite_junit_sha256`) alongside the pack's.
+The completed composite's overall `report_integrity` is
+`same_process_candidate_writable`, because assurance is the minimum of its
+required external and repo-native channels. Use `--blackbox-only` when policy
+requires the end-to-end `external_process_isolated` level.
 
 `setup_command` is not silently applied to only part of this composite. In 3.4,
 combining setup with `--blackbox` returns
@@ -100,7 +137,8 @@ both sides.
 
 ## Writing a pack (the one rule)
 
-**Invoke the candidate across a process boundary — never `import` it.** If a pack
+**Invoke the candidate through `$EVOGUARD_EXEC` — never import it or run directly
+from `$EVOGUARD_TARGET`.** If a pack
 test does `import calc` and calls it in-process, the candidate's code runs in the
 judge's process again and the guarantee is gone. Use `subprocess` (CLI/`-m`),
 `requests`/`httpx` against a server the pack starts, a DB client, etc. See
@@ -108,17 +146,20 @@ judge's process again and the guarantee is gone. Use `subprocess` (CLI/`-m`),
 
 ## What it guarantees — and the one edge
 
-- When the judge actually runs, `report_integrity` becomes
-  **`external_process_isolated`**: the demonstrated
+- The completed black-box phase has
+  **`external_process_isolated`** report integrity: the demonstrated
   same-process report/exit forgery is defeated (proven in
-  `tests/test_blackbox.py`). A static refusal instead records
+  `tests/test_blackbox.py`). That is also the overall level for
+  `--blackbox-only`; the default composite reports the weaker required
+  repo-native channel. A static refusal instead records
   `not_applicable_static_gate`; it does not claim an external judge result.
-- **Edge, stated plainly:** a candidate child could spawn a *detached* grandchild
-  that sleeps and races the judge's read of its report. The judge reads its own
-  report the instant pytest returns (all pack subprocesses have exited by then)
-  and grades primarily by its **own exit code**, so the race is already
-  impractical. Run with `--isolation docker` to remove it entirely — the
-  container is torn down after the run, reaping any lingering process.
+- **Edge, stated plainly:** on POSIX the judge terminates and verifies its whole
+  process group after normal completion and on abort, but a hostile host-mode
+  child can deliberately create a new session and escape that group. The judge
+  reads its own report immediately and grades primarily by its **own exit code**;
+  use delivered Docker/gVisor isolation to contain that escape. Candidate
+  containers are removed by CID, and inability to prove their absence is
+  `ERROR runtime_cleanup_failed`, never `PASS`.
 
 ## Scope
 

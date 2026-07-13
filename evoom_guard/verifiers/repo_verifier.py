@@ -408,6 +408,91 @@ def _docker_container_name(stage: str) -> str:
     safe_stage = re.sub(r"[^a-zA-Z0-9_.-]+", "-", stage).strip("-.") or "run"
     return f"evoguard_{safe_stage[:32]}_{secrets.token_hex(8)}"
 
+
+def _execution_trace() -> dict[str, Any]:
+    """Return the fail-closed execution trace attached to every repo verdict."""
+    return {
+        "execution_state": "not_started",
+        "execution_phase": "preflight",
+        "test_command_started": False,
+        "test_command_completed": False,
+        "verifier_pack_started": False,
+        "verifier_pack_completed": False,
+        "delivered_isolation": "not_run",
+        "setup_isolation_evidence": None,
+        "repo_suite_isolation_evidence": None,
+        "verifier_pack_isolation_evidence": None,
+    }
+
+
+def _clean_verdict_source(
+    returncode: int,
+    junit: JUnitCounts | None,
+    *,
+    report_expected: bool,
+) -> str | None:
+    """Name a source only for a cleanly gradeable pass/fail evidence pair."""
+    if junit is not None:
+        return "junit+exit" if junit.total > 0 and returncode in (0, 1) else None
+    if not report_expected and returncode in (0, 1):
+        return "exit"
+    return None
+
+
+class _DockerRunTimeout(subprocess.TimeoutExpired):
+    """A docker CLI timeout with independently observed container-start evidence."""
+
+    def __init__(
+        self,
+        timeout: subprocess.TimeoutExpired,
+        *,
+        container_started: bool,
+    ) -> None:
+        super().__init__(
+            timeout.cmd,
+            timeout.timeout,
+            output=timeout.output,
+            stderr=timeout.stderr,
+        )
+        self.container_started = container_started
+
+
+def _docker_container_started(name: str) -> bool:
+    """Return true only when Docker proves that the named container started.
+
+    A timeout of the ``docker run`` client is not itself evidence that the
+    daemon created or started the container.  Inspect is deliberately
+    fail-closed: any missing/empty/zero ``StartedAt`` value means not proven.
+    """
+    try:  # pragma: no cover - the real command requires a docker daemon
+        inspected = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.StartedAt}}", name],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except BaseException:
+        return False
+    started_at = inspected.stdout.strip()
+    return bool(
+        inspected.returncode == 0
+        and started_at
+        and started_at not in {"<no value>", "0001-01-01T00:00:00Z"}
+    )
+
+
+def _cleanup_docker_container(name: str) -> None:
+    """Best-effort cleanup that never masks the exception being propagated."""
+    try:  # pragma: no cover - requires a docker daemon
+        subprocess.run(
+            ["docker", "rm", "-f", name], capture_output=True, timeout=30
+        )
+    except BaseException:
+        # Cleanup is deliberately subordinate to the original BaseException
+        # (including KeyboardInterrupt/SystemExit), which must be re-raised.
+        pass
+
+
 class RepoVerifier:
     """Apply the hypothesis to a copy of the repo and judge it with its tests."""
 
@@ -580,13 +665,66 @@ class RepoVerifier:
                 docker_cmd, capture_output=True, text=True,
                 timeout=self.timeout, env=os.environ.copy(),
             )
-        except subprocess.TimeoutExpired:
-            subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired as exc:
+            # The docker client can time out before the daemon has even created
+            # the container.  Inspect *before* cleanup and propagate the proof
+            # bit so callers do not turn a CLI timeout into a false runtime claim.
+            container_started = _docker_container_started(name)
+            _cleanup_docker_container(name)
+            raise _DockerRunTimeout(
+                exc, container_started=container_started
+            ) from exc
+        except BaseException:
+            _cleanup_docker_container(name)
             raise
         return host_xml, r, report_expected
 
+    def _phase_isolation_evidence(
+        self,
+        delivered: str,
+        image_digest: str | None,
+        *,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Build one phase's isolation evidence without implying execution."""
+        evidence: dict[str, Any] = {
+            "requested": self.isolation,
+            "delivered": delivered,
+            "image_digest": image_digest,
+            "network": (
+                self.docker_network
+                if self.isolation in ("docker", "gvisor")
+                else None
+            ),
+            "runtime": (
+                self.docker_runtime
+                if self.isolation in ("docker", "gvisor")
+                else None
+            ),
+        }
+        if note:
+            evidence["note"] = note
+        return evidence
+
     # ------------------------------------------------------------------ #
     def verify(self, hypothesis: str, problem: RepoProblem | dict) -> VerdictResult:
+        """Verify a candidate and attach truthful phase/execution evidence."""
+        trace = _execution_trace()
+        pack_dir = str(problem.get("verifier_pack", "") or "")
+        # Presence is not validity: an existing file/symlink is present but the
+        # pack contract will reject it as an invalid root.
+        pack_present = bool(pack_dir and os.path.lexists(pack_dir))
+        result = self._verify(hypothesis, problem, trace)
+        result.artifact.update(trace)
+        result.artifact.setdefault("verifier_pack_present", pack_present)
+        return result
+
+    def _verify(
+        self,
+        hypothesis: str,
+        problem: RepoProblem | dict,
+        trace: dict[str, Any],
+    ) -> VerdictResult:
         repo_path = str(problem.get("repo_path", ""))
         if not repo_path or not os.path.isdir(repo_path):
             raise ValueError(f"problem['repo_path'] is not a directory: {repo_path!r}")
@@ -701,6 +839,13 @@ class RepoVerifier:
                     pack_snapshot = os.path.join(pack_workdir, "pack")
                     pack_identity = snapshot_pack(pack_dir, pack_snapshot)
                     pack_sha256, pack_manifest = pack_identity
+                    # Once accepted, bind every later early-return artifact to
+                    # the exact judge-owned snapshot.  Individual return sites
+                    # must not accidentally erase this delivered evidence.
+                    trace.update(
+                        verifier_pack_sha256=pack_sha256,
+                        verifier_pack_manifest=pack_manifest,
+                    )
                 except PackManifestError as exc:
                     return VerdictResult(
                         passed=False,
@@ -748,7 +893,17 @@ class RepoVerifier:
                     passed=False,
                     score=0.0,
                     diagnostics=f"{self.isolation} isolation requires a docker image (--docker-image)",
-                    artifact={"files_changed": changed, "outcome": "isolation_unavailable"},
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "isolation_unavailable",
+                        "isolation_evidence": {
+                            "requested": self.isolation,
+                            "delivered": "unavailable",
+                            "image_digest": None,
+                            "network": self.docker_network,
+                            "runtime": self.docker_runtime,
+                        },
+                    },
                 )
             resolved_image: str | None = None
             if container_mode:
@@ -765,6 +920,14 @@ class RepoVerifier:
                         artifact={
                             "files_changed": changed,
                             "outcome": "isolation_unavailable",
+                            "isolation_evidence": {
+                                "requested": self.isolation,
+                                "delivered": "unavailable",
+                                "image_digest": None,
+                                "network": self.docker_network,
+                                "runtime": self.docker_runtime,
+                                "note": str(exc),
+                            },
                         },
                     )
 
@@ -776,6 +939,7 @@ class RepoVerifier:
             setup_cmd_raw = self.setup_command or problem.get("setup_command")
             setup_isolation: str | None = None
             if setup_cmd_raw:
+                trace["execution_phase"] = "setup"
                 if isinstance(setup_cmd_raw, str):
                     setup_cmd_raw = setup_cmd_raw.split()
                 setup_tokens = [str(token) for token in setup_cmd_raw]
@@ -812,25 +976,65 @@ class RepoVerifier:
                         artifact={
                             "files_changed": changed,
                             "outcome": "setup_failed",
-                            "setup_isolation": setup_isolation,
+                            "setup_isolation": None,
                         },
                     )
                 try:
-                    r_setup = subprocess.run(
-                        setup_run_cmd,
-                        cwd=setup_cwd,
-                        capture_output=True,
-                        text=True,
-                        timeout=self.timeout,
-                        env=setup_env,
+                    try:
+                        r_setup = subprocess.run(
+                            setup_run_cmd,
+                            cwd=setup_cwd,
+                            capture_output=True,
+                            text=True,
+                            timeout=self.timeout,
+                            env=setup_env,
+                        )
+                    except subprocess.TimeoutExpired as exc:
+                        if setup_name is not None:
+                            container_started = _docker_container_started(setup_name)
+                            _cleanup_docker_container(setup_name)
+                            raise _DockerRunTimeout(
+                                exc, container_started=container_started
+                            ) from exc
+                        raise
+                    except BaseException:
+                        if setup_name is not None:
+                            _cleanup_docker_container(setup_name)
+                        raise
+                except _DockerRunTimeout as exc:
+                    delivered = self.isolation if exc.container_started else "not_run"
+                    trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                        delivered,
+                        resolved_image,
+                        note=(
+                            None
+                            if exc.container_started
+                            else "docker client timed out before container start was proven"
+                        ),
+                    )
+                    if exc.container_started:
+                        trace["execution_state"] = "started_incomplete"
+                        setup_isolation = self.isolation
+                    else:
+                        setup_isolation = None
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"setup command timed out after {self.timeout}s",
+                        artifact={
+                            "elapsed": self.timeout,
+                            "files_changed": changed,
+                            "outcome": "setup_timeout",
+                            "setup_isolation": setup_isolation,
+                        },
                     )
                 except subprocess.TimeoutExpired:
-                    if setup_name is not None:
-                        subprocess.run(
-                            ["docker", "rm", "-f", setup_name],
-                            capture_output=True,
-                            timeout=30,
-                        )
+                    trace.update(
+                        execution_state="started_incomplete",
+                    )
+                    trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                        setup_isolation or "subprocess", resolved_image
+                    )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
@@ -843,6 +1047,10 @@ class RepoVerifier:
                         },
                     )
                 except FileNotFoundError:
+                    trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                        "unavailable" if setup_in_container else "not_run",
+                        resolved_image,
+                    )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
@@ -855,11 +1063,14 @@ class RepoVerifier:
                         artifact={
                             "files_changed": changed,
                             "outcome": "setup_failed",
-                            "setup_isolation": setup_isolation,
+                            "setup_isolation": None,
                         },
                     )
                 if setup_in_container and r_setup.returncode == 125:
                     diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
+                    trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                        "unavailable", resolved_image
+                    )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
@@ -871,8 +1082,21 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "isolation_unavailable",
                             "setup_isolation": "unavailable",
+                            "isolation_evidence": {
+                                "requested": self.isolation,
+                                "delivered": "unavailable",
+                                "image_digest": resolved_image,
+                                "network": self.docker_network,
+                                "runtime": self.docker_runtime,
+                            },
                         },
                     )
+                trace.update(
+                    execution_state="started_incomplete",
+                )
+                trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                    setup_isolation or self.isolation, resolved_image
+                )
                 if r_setup.returncode != 0:
                     diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
                     hint = (
@@ -952,6 +1176,7 @@ class RepoVerifier:
                 }
 
             if pack_dir:
+                trace["execution_phase"] = "runtime_verification"
                 runtime_delivery = (
                     "read_only_enforced"
                     if container_mode
@@ -981,6 +1206,7 @@ class RepoVerifier:
             # relative paths inside the copy) cannot pre-plant or overwrite it via an
             # edit. The score is read from this report and the exit code, never from
             # the candidate-influenced stdout.
+            trace["execution_phase"] = "repo_suite"
             base_cmd = self._command(problem)
             t0 = time.perf_counter()
             try:
@@ -998,7 +1224,45 @@ class RepoVerifier:
                         env={**env, **report_env},
                         preexec_fn=self._limits() if os.name == "posix" else None,
                     )
+            except _DockerRunTimeout as exc:
+                delivered = self.isolation if exc.container_started else "not_run"
+                suite_isolation_evidence = self._phase_isolation_evidence(
+                    delivered,
+                    resolved_image,
+                    note=(
+                        None
+                        if exc.container_started
+                        else "docker client timed out before container start was proven"
+                    ),
+                )
+                trace["repo_suite_isolation_evidence"] = suite_isolation_evidence
+                if exc.container_started:
+                    trace.update(
+                        execution_state="started_incomplete",
+                        test_command_started=True,
+                        delivered_isolation=self.isolation,
+                    )
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=f"test suite timed out after {self.timeout}s",
+                    artifact={
+                        "elapsed": self.timeout,
+                        "files_changed": changed,
+                        "outcome": "test_timeout",
+                        "isolation_evidence": suite_isolation_evidence,
+                        **runtime_evidence(),
+                    },
+                )
             except subprocess.TimeoutExpired:
+                trace.update(
+                    execution_state="started_incomplete",
+                    test_command_started=True,
+                    delivered_isolation="subprocess",
+                )
+                trace["repo_suite_isolation_evidence"] = self._phase_isolation_evidence(
+                    "subprocess", resolved_image
+                )
                 return VerdictResult(
                     passed=False,
                     score=0.0,
@@ -1011,6 +1275,11 @@ class RepoVerifier:
                     },
                 )
             except FileNotFoundError:
+                unavailable_evidence = self._phase_isolation_evidence(
+                    "unavailable" if container_mode else "not_run",
+                    resolved_image,
+                )
+                trace["repo_suite_isolation_evidence"] = unavailable_evidence
                 return VerdictResult(
                     passed=False, score=0.0,
                     diagnostics=(
@@ -1026,12 +1295,19 @@ class RepoVerifier:
                             else "test_command_unavailable"
                         ),
                         "setup_isolation": setup_isolation,
+                        "isolation_evidence": (
+                            unavailable_evidence if container_mode else None
+                        ),
                         **runtime_evidence(),
                     },
                 )
             elapsed = time.perf_counter() - t0
 
             if container_mode and r.returncode == 125:
+                unavailable_evidence = self._phase_isolation_evidence(
+                    "unavailable", resolved_image
+                )
+                trace["repo_suite_isolation_evidence"] = unavailable_evidence
                 return VerdictResult(
                     passed=False,
                     score=0.0,
@@ -1044,11 +1320,32 @@ class RepoVerifier:
                         "files_changed": changed,
                         "outcome": "isolation_unavailable",
                         "setup_isolation": setup_isolation,
+                        "isolation_evidence": unavailable_evidence,
                         **runtime_evidence(),
                     },
                 )
 
+            suite_isolation_evidence = self._phase_isolation_evidence(
+                self.isolation if container_mode else "subprocess",
+                resolved_image,
+            )
+            trace["repo_suite_isolation_evidence"] = suite_isolation_evidence
+            if container_mode:
+                # ``isolation_evidence`` is the top-level repo-suite boundary.
+                # Later verifier-pack failures must not overwrite this proven
+                # delivery with the pack phase's independent availability.
+                trace["isolation_evidence"] = suite_isolation_evidence
+            trace.update(
+                execution_state=("started_incomplete" if pack_dir else "completed"),
+                test_command_started=True,
+                test_command_completed=True,
+                delivered_isolation=(
+                    self.isolation if container_mode else "subprocess"
+                ),
+            )
+
             if candidate_runtime_baseline is not None:
+                trace["execution_phase"] = "runtime_verification"
                 try:
                     candidate_after_suite, candidate_changes = verify_runtime_identity(
                         copy, candidate_runtime_baseline
@@ -1099,15 +1396,21 @@ class RepoVerifier:
             tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
             output = r.stdout + "\n" + r.stderr
             combined_junit = xml_text
-            verdict_source = "junit+exit" if junit is not None else "exit"
+            verdict_source = _clean_verdict_source(
+                r.returncode, junit, report_expected=report_expected
+            )
             pack_tests_passed: int | None = None
             pack_tests_total: int | None = None
+            outcome: str | None = (
+                None if verdict_source is not None else "no_test_verdict"
+            )
 
             # A copied pack is not evidence that its checks ran. Execute it as a
             # separate mandatory phase, explicitly addressed by path, then
             # compose both outcomes. This works even when the repo command is
             # narrowed (for example ``pytest tests/``) or is a custom command.
             if pack_dir:
+                trace["execution_phase"] = "verifier_pack"
                 assert pack_snapshot is not None and pack_identity is not None
                 try:
                     verify_pack_snapshot(pack_snapshot, pack_identity)
@@ -1152,7 +1455,27 @@ class RepoVerifier:
                             env={**env, **pack_report_env},
                             preexec_fn=self._limits() if os.name == "posix" else None,
                         )
-                except subprocess.TimeoutExpired:
+                except _DockerRunTimeout as exc:
+                    delivered = self.isolation if exc.container_started else "not_run"
+                    trace["verifier_pack_isolation_evidence"] = (
+                        self._phase_isolation_evidence(
+                            delivered,
+                            resolved_image,
+                            note=(
+                                None
+                                if exc.container_started
+                                else (
+                                    "docker client timed out before container start "
+                                    "was proven"
+                                )
+                            ),
+                        )
+                    )
+                    if exc.container_started:
+                        trace.update(
+                            execution_state="started_incomplete",
+                            verifier_pack_started=True,
+                        )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
@@ -1161,10 +1484,39 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "test_timeout",
                             "setup_isolation": setup_isolation,
+                            "isolation_evidence": suite_isolation_evidence,
+                            **runtime_evidence(),
+                        },
+                    )
+                except subprocess.TimeoutExpired:
+                    trace.update(
+                        execution_state="started_incomplete",
+                        verifier_pack_started=True,
+                    )
+                    trace["verifier_pack_isolation_evidence"] = (
+                        self._phase_isolation_evidence("subprocess", resolved_image)
+                    )
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"verifier pack timed out after {self.timeout}s",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "test_timeout",
+                            "setup_isolation": setup_isolation,
+                            "isolation_evidence": (
+                                suite_isolation_evidence if container_mode else None
+                            ),
                             **runtime_evidence(),
                         },
                     )
                 except FileNotFoundError:
+                    trace["verifier_pack_isolation_evidence"] = (
+                        self._phase_isolation_evidence(
+                            "unavailable" if container_mode else "not_run",
+                            resolved_image,
+                        )
+                    )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
@@ -1173,10 +1525,19 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "test_command_unavailable",
                             "setup_isolation": setup_isolation,
+                            "isolation_evidence": (
+                                suite_isolation_evidence if container_mode else None
+                            ),
                             **runtime_evidence(),
                         },
                     )
                 if container_mode and pack_run.returncode == 125:
+                    pack_unavailable_evidence = self._phase_isolation_evidence(
+                        "unavailable", resolved_image
+                    )
+                    trace["verifier_pack_isolation_evidence"] = (
+                        pack_unavailable_evidence
+                    )
                     return VerdictResult(
                         passed=False,
                         score=0.0,
@@ -1189,9 +1550,22 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "isolation_unavailable",
                             "setup_isolation": setup_isolation,
+                            "isolation_evidence": suite_isolation_evidence,
                             **runtime_evidence(),
                         },
                     )
+                trace["verifier_pack_isolation_evidence"] = (
+                    self._phase_isolation_evidence(
+                        self.isolation if container_mode else "subprocess",
+                        resolved_image,
+                    )
+                )
+                trace.update(
+                    execution_state="completed",
+                    verifier_pack_started=True,
+                    verifier_pack_completed=True,
+                )
+                trace["execution_phase"] = "runtime_verification"
                 try:
                     verify_pack_snapshot(pack_snapshot, pack_identity)
                 except PackManifestError as exc:
@@ -1255,10 +1629,25 @@ class RepoVerifier:
                     pack_junit,
                     report_expected=pack_report_expected,
                 )
+                pack_verdict_source = _clean_verdict_source(
+                    pack_run.returncode,
+                    pack_junit,
+                    report_expected=pack_report_expected,
+                )
                 if not pack_tests_total:
                     pack_passed = False
                     pack_score = 0.0
-                    output += "\nverifier pack collected zero tests"
+                    if pack_junit is not None:
+                        outcome = "pack_no_tests"
+                        output += "\nverifier pack collected zero tests"
+                    else:
+                        outcome = "pack_no_verdict"
+                        output += "\nverifier pack produced no valid JUnit verdict"
+                elif pack_verdict_source is None:
+                    pack_passed = False
+                    pack_score = 0.0
+                    outcome = "pack_no_verdict"
+                    output += "\nverifier pack produced no clean pass/fail verdict"
                 passed = passed and pack_passed
                 score = min(score, pack_score)
                 tampered = tampered or detect_tamper(
@@ -1272,7 +1661,15 @@ class RepoVerifier:
                 combined_junit = (
                     "repo\0" + xml_text + "\0verifier-pack\0" + pack_xml_text
                 )
-                verdict_source = "composite:repo+verifier-pack"
+                verdict_source = (
+                    "composite:repo+verifier-pack"
+                    if verdict_source is not None and pack_verdict_source is not None
+                    else None
+                )
+                trace["execution_phase"] = "verifier_pack"
+
+            if not pack_dir:
+                trace["execution_phase"] = "repo_suite"
 
             return VerdictResult(
                 passed=passed,
@@ -1286,6 +1683,7 @@ class RepoVerifier:
                     "files_changed": changed,
                     "files_deleted": deleted_paths,
                     "verdict_source": verdict_source,
+                    "outcome": outcome,
                     "tamper": tampered,
                     "junit_sha256": hashlib.sha256(
                         combined_junit.encode("utf-8")
@@ -1305,13 +1703,9 @@ class RepoVerifier:
                     "candidate_fidelity": "verified" if pack_dir else "not_applicable",
                     **runtime_evidence(),
                     "image_digest": resolved_image,
-                    "isolation_evidence": {
-                        "requested": self.isolation,
-                        "delivered": self.isolation,
-                        "image_digest": resolved_image,
-                        "network": self.docker_network if container_mode else None,
-                        "runtime": self.docker_runtime if container_mode else None,
-                    } if container_mode else None,
+                    "isolation_evidence": (
+                        suite_isolation_evidence if container_mode else None
+                    ),
                 },
             )
         finally:

@@ -18,10 +18,10 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -63,11 +63,11 @@ jobs:
     # gVisor needs the runsc runtime and is validated out-of-band (docs/PROOFS.md).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "22"
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Install the vitest CLI
@@ -86,8 +86,8 @@ jobs:
     # tests/test_blackbox_docker_e2e.py.
     runs-on: ubuntu-latest  # GitHub-hosted runners ship a working Docker daemon
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Install (dev extras)
@@ -117,8 +117,8 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Version matches tag
@@ -130,28 +130,30 @@ jobs:
           test "$V" = "$TAG"
 
   publish-pyz:
-    # On a version tag, build the zero-dependency single-file `evo-guard.pyz`
-    # and attach it to the GitHub Release, so adopters can run the gate without
-    # pip. Gated behind the version⟷tag check + tests.
+    # Publishing the immutable draft creates the version tag only after the
+    # assets are locked in place. Rebuild deterministically, then verify the
+    # published bytes; this tag-triggered job is intentionally read-only.
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, release-tag-guard]
     permissions:
-      contents: write
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Build evo-guard.pyz
-        run: python ops/build_pyz.py -o dist/evo-guard.pyz
+        run: python -I ops/build_pyz.py -o dist/evo-guard.pyz
       - name: Smoke-test the artifact
         run: |
-          test "$(python dist/evo-guard.pyz version)" = "evo-guard ${GITHUB_REF_NAME#v}"
-          python dist/evo-guard.pyz doctor
+          test "$(python -I dist/evo-guard.pyz version)" = "evo-guard ${GITHUB_REF_NAME#v}"
+          python -I dist/evo-guard.pyz doctor
       - name: Checksums (release integrity)
         run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
-      - name: Attach to the release
+      - name: Verify the published immutable release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -162,17 +164,36 @@ jobs:
             exit 1
           fi
 
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" \
-                 --target "$GITHUB_SHA" \
-                 --title "$GITHUB_REF_NAME" \
-                 --notes "Automated release assets."
+          if ! RELEASE_JSON="$(gh release view "$GITHUB_REF_NAME" \
+               --json assets,isDraft,isImmutable,tagName,targetCommitish)"; then
+            echo "::error::release_asset_immutable: immutable release is missing for $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+          RELEASE_TAG="$(jq -r .tagName <<<"$RELEASE_JSON")"
+          RELEASE_TARGET="$(jq -r .targetCommitish <<<"$RELEASE_JSON")"
+          RELEASE_IS_DRAFT="$(jq -r .isDraft <<<"$RELEASE_JSON")"
+          RELEASE_IS_IMMUTABLE="$(jq -r .isImmutable <<<"$RELEASE_JSON")"
+          if [ "$RELEASE_TAG" != "$GITHUB_REF_NAME" ] || [ "$RELEASE_TARGET" != "$GITHUB_SHA" ]; then
+            echo "::error::release_target_commit_mismatch: release metadata does not bind $GITHUB_REF_NAME to $GITHUB_SHA"
+            exit 1
+          fi
+          if [ "$RELEASE_IS_DRAFT" != "false" ] || [ "$RELEASE_IS_IMMUTABLE" != "true" ]; then
+            echo "::error::release_not_immutable: $GITHUB_REF_NAME must be published and immutable"
+            exit 1
+          fi
+
+          EXPECTED_ASSETS="$(printf '%s\n' SHA256SUMS evo-guard.pyz | LC_ALL=C sort)"
+          RELEASE_ASSETS="$(jq -r '.assets[].name' <<<"$RELEASE_JSON" | LC_ALL=C sort)"
+          if [ "$RELEASE_ASSETS" != "$EXPECTED_ASSETS" ]; then
+            echo "::error::release_asset_set_mismatch: published release asset set is not exact"
+            printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ASSETS" "$RELEASE_ASSETS"
+            exit 1
+          fi
 
           mkdir -p existing-release-assets
           for asset in evo-guard.pyz SHA256SUMS; do
-            if gh release view "$GITHUB_REF_NAME" --json assets \
-                 --jq ".assets[] | select(.name == \"$asset\") | .name" \
-                 | grep -Fxq "$asset"; then
+            if printf '%s\n' "$RELEASE_ASSETS" | grep -Fxq "$asset"; then
               gh release download "$GITHUB_REF_NAME" --pattern "$asset" \
                 --dir existing-release-assets
               if ! cmp -s "dist/$asset" "existing-release-assets/$asset"; then
@@ -181,6 +202,7 @@ jobs:
               fi
               echo "$asset already exists with identical bytes"
             else
-              gh release upload "$GITHUB_REF_NAME" "dist/$asset"
+              echo "::error::release_asset_immutable: published release is missing $asset"
+              exit 1
             fi
           done

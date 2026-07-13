@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.3"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.4"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -93,10 +93,15 @@ as a repository-contained contract no patch can weaken:
   "policy_id": "org/production-strong",
   "policy_version": "1",
   "test_command": ["python", "-m", "pytest", "-q"],
-  "require_report_integrity": "external_process_isolated",
+  "require_report_integrity": "same_process_candidate_writable",
   "require_candidate_isolation": "docker"
 }
 ```
+
+For the stronger end-to-end `external_process_isolated` floor, invoke the gate
+with `--blackbox --blackbox-only --verifier-pack ...` (or the equivalent Action
+inputs). The default black-box composite intentionally cannot satisfy that
+floor because it also requires the weaker repo-native report channel.
 
 > **Mode-consistency (fail-closed in v3.4.0):** `min_diff_coverage` and
 > `require_demonstrated_fix` run under the **subprocess judge only** today.
@@ -278,7 +283,7 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.4.3` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.4.4` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

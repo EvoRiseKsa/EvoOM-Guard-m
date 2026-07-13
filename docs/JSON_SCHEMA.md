@@ -14,10 +14,9 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 ## Stability rules
 
 - `schema_version` is bumped when a shape, enumerated value, or existing field's
-  security meaning changes incompatibly. Schema 1.10 makes static pre-gate
-  outcomes distinguish requested runtime policy from assurance actually
-  delivered: no-run axes are explicit and an unevaluated pack is not described
-  as verified or present.
+  security meaning changes incompatibly. Schema 1.11 (EvoGuard v3.4.4) adds an
+  explicit execution state machine and derives runtime assurance from observed
+  execution, pack, and isolation evidence rather than requested policy.
 - Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are frozen.
 - A shipped `reason_code` is never renamed or repurposed. Consumers must still
   handle a future unknown code as the generic enclosing verdict.
@@ -27,11 +26,13 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 
 ## Example (`PASS`)
 
+Schema 1.11 ships with EvoGuard v3.4.4.
+
 ```json
 {
-  "schema_version": "1.10",
+  "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.4.3",
+  "tool_version": "3.4.4",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -44,7 +45,10 @@ report. Pin `schema_version`, then key decisions off `verdict` and
   "tests_passed": 2,
   "tests_total": 2,
   "test_command_ran": true,
+  "execution_state": "completed",
+  "execution_phase": "repo_suite",
   "verdict_source": "junit+exit",
+  "isolation": "subprocess",
   "source": "diff",
   "base_reconstruction": "ok",
   "diagnostics": ""
@@ -72,9 +76,12 @@ deleting a protected test/config/CI/auto-exec path is `REJECTED`.
 | `protected_violations` | string[] | Protected harness paths the patch tried to change. |
 | `risk_level` | string | `low` \| `medium` \| `high`. |
 | `risk_score` | number | Blast-radius score in `0..1`. |
-| `tests_passed` / `tests_total` | int \| null | Judge-owned counts; with a repo-native pack these are the composed repo + pack totals. |
-| `test_command_ran` | bool | Whether a test command actually executed; false for a pre-gate refusal. |
-| `verdict_source` | string \| null | `junit+exit`, `exit`, `blackbox`, `composite:repo+verifier-pack`, or `null`. |
+| `tests_passed` / `tests_total` | int \| null | Judge-owned counts; completed composite repo+pack or black-box+repo verdicts contain summed phase totals. Incomplete composites use `null` rather than presenting a partial total as complete. |
+| `test_command_ran` | bool | Whether a test/judge process actually started. It remains `true` when that process times out or otherwise ends without a clean verdict. |
+| `execution_state` | string | `static_gate` \| `not_started` \| `started_incomplete` \| `completed`; see below. |
+| `execution_phase` | string | Furthest or decisive phase, such as `pre_gate`, `preflight`, `setup`, `runtime_verification`, `repo_suite`, `verifier_pack`, or `blackbox_pack`. Treat future values as additive detail. |
+| `verdict_source` | string \| null | `junit+exit`, `exit`, `blackbox`, `composite:repo+verifier-pack`, `composite:blackbox+repo`, or `null`. |
+| `isolation` | string | Effective boundary for an observed trusted-verifier launcher/runtime invocation (`subprocess`, `docker`, or `gvisor`), or `not_run` when that invocation was not observed. It is not standalone proof of argv semantics or successful candidate logic; requested/prepared isolation is policy/context only. |
 | `source` | string \| null | `diff` \| `base/head` \| `edit blocks`. |
 | `base_reconstruction` | string \| null | `ok` \| `failed` for `--diff`. |
 | `diagnostics` | string | Truncated failure essence (at most 2000 characters). |
@@ -86,19 +93,52 @@ deleting a protected test/config/CI/auto-exec path is `REJECTED`.
 Structured `junit+exit` adapters cover pytest, `node --test`, vitest, jest,
 gotestsum, RSpec, mocha, and Maven/Surefire. `exit` is a coarser custom-command
 verdict. `composite:repo+verifier-pack` means the repo command and a separate
-mandatory pytest pack phase were both composed.
+mandatory pytest pack phase were both composed; `composite:blackbox+repo`
+means the observed external candidate protocol phase and repo-native suite were
+both required and completed.
 
-## Assurance object (schema 1.10)
+## Execution state (schema 1.11)
+
+`execution_state` is independent of the verdict. It answers how far execution
+actually progressed:
+
+| State | Meaning |
+|---|---|
+| `static_gate` | The diff/static gate decided the result before runtime evaluation. |
+| `not_started` | Runtime evaluation was requested but stopped during preflight before a test/judge process started. |
+| `started_incomplete` | A setup, test, or judge process started, but the required execution sequence did not complete (for example a timeout). |
+| `completed` | The required process returned and the relevant post-execution checks ran. This does not imply `PASS`; a completed run can still be `FAIL`, `ERROR`, or `TAMPERED`. |
+
+`test_command_ran` is the narrower process-start fact. Thus a suite timeout has
+`test_command_ran: true`, `execution_state: started_incomplete`, and may have
+`verdict_source: null`: process start is not the same as clean verdict evidence.
+`execution_phase` records the furthest/decisive phase so preflight, setup,
+repo-suite, pack, and black-box failures remain distinguishable.
+
+Requested mode and isolation are policy context and remain in
+`attestation.effective_policy`. Top-level `isolation` and assurance isolation
+axes describe delivered execution only; when no suite/test process started they
+are `not_run`.
+
+## Assurance object (schema 1.11)
 
 Important fields are:
 
 - `harness_integrity`: currently `pre_gate_enforced`.
-- `report_integrity`: `same_process_candidate_writable` for repo-native runs,
-  `external_process_isolated` when the black-box judge runs, or
-  `not_applicable_static_gate` when the diff pre-gate decides the result before
-  any report channel exists.
-- `candidate_isolation`: the effective delivered boundary, or `not_run` for a
-  static pre-gate result. If container setup
+- `execution_state` and `execution_phase`: mirror the top-level state and phase.
+- `report_integrity`: `same_process_candidate_writable` for a started
+  repo-native run (including the overall default black-box composite),
+  `external_process_isolated` when the only executed report channel so far is
+  the black-box judge (completed black-box-only, or a non-PASS/short-circuit
+  before the repo channel starts),
+  `not_applicable_static_gate` when the diff gate decides the result, or
+  `not_applicable_not_run` when runtime preflight stops before tests start.
+- `candidate_isolation`: the effective boundary associated with observed
+  verifier/launcher evidence, or `not_run` when none was observed. Black-box
+  evidence requires a judge-owned
+  `$EVOGUARD_EXEC` receipt and, for Docker/gVisor, a runtime-written valid CID;
+  this proves the launcher/runtime path, while the trusted pack supplies argv
+  semantics and output assertions. Preparation alone is insufficient. If container setup
   is explicitly moved to the host, this becomes `subprocess` even when the suite
   itself ran in Docker/gVisor.
 - `suite_isolation`: the boundary used for the suite, or `not_run` when the diff
@@ -115,32 +155,90 @@ Important fields are:
   accepted runtime tree read-only. The stronger value is not claimed when a
   configured setup command actually ran through `trust_setup_on_host`, because
   that host process may outlive setup.
-- On a static gate only, `verifier_pack.configured` is true when policy supplied
-  a pack path and `verifier_pack.present` is `null` because that path was not
-  opened. Runtime profiles retain the pre-1.10 pack fields; observed pack
-  identity belongs in the attestation.
-- `verifier_pack.integrity`: `verified_snapshot_read_only` for a container pack
-  mount or `verified_snapshot_pre_post` for a host snapshot checked before and
-  after execution; `not_evaluated_static_gate` when execution was pre-gated.
-- `verifier_pack.secrecy`: records whether black-box/container execution kept
-  the pack unmounted from the candidate. Repo-native pack code remains readable
-  in the shared judge process; `not_evaluated_static_gate` makes no secrecy
-  claim.
-- `overall_profile`: includes `static_gate`, `repo_native_same_process`,
-  `isolated_repo_native`, `mixed_host_setup_repo_native`, and
-  `black_box_external_judge`.
+- `verifier_pack` separates policy and evidence with the fields documented
+  below. A configured path alone never proves presence, identity, execution, or
+  secrecy.
+- `overall_profile`: includes `static_gate`, `preflight`,
+  `execution_incomplete_before_tests`, `execution_incomplete`,
+  `repo_native_same_process`, `isolated_repo_native`,
+  `mixed_host_setup_repo_native`, `black_box_external_judge`, and
+  `composite_blackbox_repo_native`. `blackbox_composite_short_circuit` means a
+  required phase stopped the pipeline before the repo-native report channel
+  started; `repo_native_suite` states that lifecycle explicitly.
 
 These axes are independent. A read-only Docker candidate tree protects host
 state but does not fix the repo-native same-process report-forgery boundary.
 For `static_gate`, the requested mode and isolation remain solely in
 `attestation.effective_policy`; they are policy context, not delivered evidence.
 
-## Attestation object (schema 1.10)
+For `not_started`, the profile is `preflight`, isolation axes are `not_run`, and
+report integrity is `not_applicable_not_run`. A started-but-incomplete setup
+before tests uses `execution_incomplete_before_tests`; a started suite/judge
+that does not finish uses `execution_incomplete`. None of these profiles implies
+a clean verdict source.
+
+### Verifier-pack assurance fields
+
+When a pack is configured, `assurance.verifier_pack` contains:
+
+| Field | Meaning |
+|---|---|
+| `configured` | Policy supplied a pack path. This is not evidence that the path exists. |
+| `present` | `true`/`false` when checked, or `null` when the static gate did not inspect it. |
+| `integrity` | Observed snapshot state; see the state list below. |
+| `identity_verified` | `true` only when the accepted snapshot identity is established, `false` for an identity mismatch/change, otherwise `null`. |
+| `execution_state` | Pack-specific `static_gate`, `not_started`, `started_incomplete`, or `completed`. |
+| `secrecy` | Delivered reachability, or an explicit not-evaluated state when pack execution did not start. |
+| `snapshot_sha256` | Accepted observed `EVOGUARD_PACK_V2` digest, or `null` if no snapshot was accepted. |
+
+The `integrity` values preserve the exact lifecycle boundary:
+
+- `not_evaluated_static_gate`: static policy stopped before the pack path was
+  opened.
+- `not_evaluated_missing`: the configured path was checked and missing.
+- `invalid`: the path existed but the pack contract/tree was invalid.
+- `snapshot_identity_mismatch`: a valid observed snapshot did not match the
+  required digest.
+- `verified_snapshot_pre_execution`: an accepted snapshot exists, but pack
+  execution or the post-execution check did not complete.
+- `verified_snapshot_pre_post`: host/subprocess snapshot checks completed before
+  and after execution. Black-box packs use this mechanism even when the
+  candidate is containerized, because the judge executes its private snapshot
+  on the host.
+- `verified_snapshot_read_only`: container execution completed with the
+  accepted repo-native pack snapshot mounted read-only.
+- `snapshot_changed`: the accepted snapshot changed before/during the required
+  execution sequence.
+- `not_evaluated`: no snapshot evidence was established for another preflight
+  path.
+
+Corresponding secrecy values include `not_evaluated_static_gate`,
+`not_evaluated_no_execution`, `readable_in_judge_process`,
+`not_evaluated_no_candidate_execution`, `reachable_same_host`, and
+`unmounted_from_candidate`. A pre-execution snapshot does not by itself
+establish secrecy.
+
+## Attestation object (schema 1.11)
 
 Core context binding includes:
 
 - `created_utc`, `guard_version`, `mode`, `candidate_sha256`, `deleted_paths`,
   and `test_command`.
+- `execution_state`, `execution_phase`, and `test_command_started` bind progress
+  to the verdict. `delivered_isolation` is the primary suite/runner phase;
+  `effective_candidate_isolation` is the end-to-end boundary after any host
+  setup downgrade and matches top-level/assurance `candidate_isolation`. For black-box
+  runs, `candidate_invocations` and
+  `candidate_launcher_invocation_observed` bind the judge-owned launcher/CID
+  receipts; they prove the boundary invocation, while the trusted pack defines
+  and checks the candidate command's semantics. Only zero/non-zero and the
+  boolean are security-relevant; `candidate_invocations` is diagnostic and may
+  be inflated after the first subprocess receipt by code under the same user.
+  Always combine report integrity with `verdict`, `execution_state`, and
+  `repo_suite_state`; an incomplete/short-circuited profile is not a completed
+  end-to-end PASS guarantee. Pack phase
+  facts are also bound as `verifier_pack_present`, `verifier_pack_started`, and
+  `verifier_pack_completed`.
 - A black-box request stopped by the diff pre-gate keeps `mode: blackbox` and
   `effective_policy.mode/blackbox` unchanged. This records the requested policy;
   the `static_gate` assurance object still states that no black-box judge ran.
@@ -150,10 +248,18 @@ Core context binding includes:
   they do not exclude it from post-setup runtime continuity.
 - `base_sha`, `head_sha`, `base_tree_sha`, `head_tree_sha`, `policy_id`, and
   `policy_version` when supplied.
-- `isolation_evidence` (`requested`, `delivered`, `image_digest`, `network`,
-  `runtime`) for delivered container runs, including repo-native Docker/gVisor.
-- Black-box composition fields `deleted_paths_applied`, `repo_suite_passed`, and
-  `repo_suite_junit_sha256`.
+- `isolation_evidence` records requested, prepared, and observed delivery facts.
+  The phase-specific `setup_isolation_evidence`,
+  `repo_suite_isolation_evidence`, `verifier_pack_isolation_evidence`, and
+  `blackbox_pack_isolation_evidence` prevent a later phase failure from erasing
+  or overstating an earlier phase. A Docker client timeout claims start only
+  when `docker inspect` independently returns a non-zero `StartedAt`.
+- Black-box composition fields `deleted_paths_applied`,
+  `repo_suite_started`, `repo_suite_completed`, `repo_suite_state`,
+  `repo_suite_passed`, and `repo_suite_junit_sha256`. Lifecycle states include
+  `not_required_blackbox_only`, `required_not_run_short_circuit`,
+  `required_not_started`, `required_started_incomplete`, and
+  `composed_completed`; `repo_suite_passed` is `null` without a clean source.
 - For repo-native pack composition, `runtime_tree_sha256`,
   `runtime_tree_digest_format: EVOGUARD_RUNTIME_TREE_V1`,
   `runtime_tree_entries`, `runtime_tree_bytes`,
@@ -228,6 +334,10 @@ candidate-only and is not run on the pristine baseline.
 | `TAMPERED` | `candidate_tree_changed_during_run` | The prepared candidate runtime tree changed across the repo-suite/pack transition. |
 | `ERROR` | `verifier_pack_identity_mismatch` | Expected V2 digest differs from the accepted snapshot; checked before candidate execution. |
 | `ERROR` | `verifier_pack_invalid` | Pack contract/tree is malformed, empty, unreadable, symlinked, special, or unstable. |
+| `ERROR` | `verifier_pack_required` | Black-box mode was requested without configuring a verifier pack. |
+| `ERROR` | `verifier_pack_not_found` | The configured verifier-pack path was checked and does not exist. |
+| `ERROR` | `candidate_not_exercised` | A black-box pack completed without an observed `$EVOGUARD_EXEC` candidate invocation; constant tests/direct legacy target access are not a gradeable black-box verdict. |
+| `ERROR` | `runtime_cleanup_failed` | The judge process group or a candidate container could not be proven absent after execution; a pending PASS/FAIL is invalidated fail-closed. |
 | `ERROR` | `test_command_unavailable` | Required test/pack interpreter or executable is unavailable. |
 | `ERROR` | `policy_requirement_unsupported` | Selected judge cannot enforce a requested gate; it is not silently dropped. |
 | `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor or unavailable. |
@@ -243,6 +353,23 @@ candidate-only and is not run on the pristine baseline.
 | `ERROR` | `binary_patch` | Binary diff refused. |
 | `ERROR` | `reverse_apply_failed` | Diff did not reverse-apply to reconstruct the base. |
 | `ERROR` | `no_verifiable_changes` | Input reconstructed but contained no verifiable source change. |
+
+## Added in 1.10 → 1.11 (v3.4.4)
+
+- Top-level `execution_state` and `execution_phase` distinguish static gates,
+  preflight stops, incomplete runs, and completed execution.
+- `test_command_ran` now means process start, not availability of a clean
+  `verdict_source`; it remains true on timeout.
+- Preflight/no-run assurance uses `overall_profile: preflight`, isolation
+  `not_run`, and `report_integrity: not_applicable_not_run` instead of projecting
+  requested policy into delivered evidence.
+- Verifier-pack assurance now separates configuration, observed presence,
+  accepted identity, execution progress, secrecy, and pre/post snapshot state.
+- Assurance floors are evaluated against delivered evidence only for a completed
+  `PASS`. They do not replace a static, preflight, timeout/incomplete, pack, or
+  isolation failure with a less specific cause.
+- `runtime_cleanup_failed` identifies a completed judge whose pending verdict was
+  invalidated because process/container absence could not be proven.
 
 ## Added in 1.9 → 1.10
 
@@ -302,7 +429,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.4.3",
+  "version": "3.4.4",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,
