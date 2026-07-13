@@ -7,8 +7,8 @@
 # EvoGuard — architecture
 
 A map of the codebase for anyone reading or extending it. The core is **stdlib-only**;
-the whole gate is a thin, model-free composition of a reward-hack-resistant judge and
-a blast-radius scorer.
+the whole gate is a thin, model-free composition of a policy-bound judge and a
+blast-radius scorer.
 
 ## One-paragraph mental model
 
@@ -21,7 +21,9 @@ file. If an Independent Verifier Pack is configured, Guard snapshots and identif
 it outside the candidate tree, then requires a **separate pack phase** as well as the
 repo suite; merely copying a pack or collecting zero pack tests is never enough. The
 result is one verdict (`PASS` / `REJECTED` / `FAIL` / `TAMPERED` / `ERROR`), an exit
-code, a JSON record, a Markdown report, and an optional SARIF document.
+code, a JSON record, a Markdown report, and an optional SARIF document. Separate
+offline consumers can validate the record's internal semantics or authenticate a
+canonical evidence envelope against external key and run-context inputs.
 
 ## Module map (`evoom_guard/`)
 
@@ -40,7 +42,12 @@ code, a JSON record, a Markdown report, and an optional SARIF document.
 | `guard.py` | **Orchestration.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, the verdict mapping, and the report renderers (Markdown / JSON / SARIF). |
 | `patch_applier.py` | `apply_patch` — unique-anchor search/replace for `<<<PATCH>>>` blocks. |
 | `patchmin.py` | Pure, model-free helpers: delta-debugging (`minimize_patch`) + blast-radius `risk_score`. |
-| `cli.py` | The `evo-guard` command: `guard` / `doctor` / `init` / `version`, `.evoguard.json` loading, flag↔config precedence. |
+| `record_verifier.py` | Bounded, strict schema-1.11 structural and cross-field validation. It checks consistency of recorded claims; it does not rerun the judged change. |
+| `strict_json.py` | Shared fail-closed JSON decoding limits for offline record and bundle consumers (duplicates, numbers, nesting, and Unicode). |
+| `evidence_bundle.py` | Canonical, bounded evidence envelopes: exact verdict/material bytes, manifest digests, Ed25519 authentication, and exact external context binding. Structural inspection does not imply authentication. |
+| `schemas/` | Packaged JSON Schema 2020-12 contracts for verdict records, evidence contexts, and evidence manifests; shipped in both wheel and zipapp artifacts. |
+| `signing.py` | Optional Ed25519 byte/file signatures and stable DER-SPKI key identities. `cryptography` remains a lazy `sign` extra, not a core dependency. |
+| `cli.py` | The `evo-guard` command: execution (`guard`), offline verification (`verify-verdict`, `verify-record`, `verify-bundle`), bundle creation, pack/environment diagnostics, initialization, and version reporting. It also owns `.evoguard.json` loading and flag↔config precedence. |
 
 ## Data flow (a `--diff` run)
 
@@ -73,6 +80,10 @@ RepoVerifier.verify(candidate, problem)
 grade_repo_run + detect_tamper ─► VerdictResult
   ▼
 GuardResult ─► verdict + exit code + JSON + Markdown + SARIF
+
+exact verdict bytes ─► verify-record ─► structural/cross-field report
+exact verdict + trusted context/key ─► bundle-evidence ─► canonical .evb
+.evb + external public key/context ─► verify-bundle ─► authenticated semantic result
 ```
 
 ## The two invariants that make it reward-hack-resistant

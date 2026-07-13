@@ -9,6 +9,70 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.5.0] — 2026-07-13
+
+An offline-verification and evidence-portability release. The guard's produced
+verdict contract remains schema 1.11; this release adds independent consumers
+that can validate and carry that contract without trusting the producing
+process or a bundled key.
+
+### Added
+
+- `evo-guard verify-record` validates a verdict as strict JSON and checks its
+  schema shape plus cross-field semantics. It binds reason, verdict, execution
+  lifecycle, mode/source composition, counts, policy digest, isolation,
+  assurance, and verifier-pack claims instead of treating a parseable record as
+  a trustworthy result.
+- `evo-guard bundle-evidence` creates a deterministic, Ed25519-authenticated
+  evidence envelope containing the exact verdict bytes and explicitly declared
+  support materials. `evo-guard verify-bundle` checks canonical container bytes,
+  an externally trusted key, exact externally supplied run/revision context,
+  and the bundled record's semantics in one operation.
+- Bundle verification emits the authenticated verdict/reason/exit decision.
+  `--require-pass` makes it a merge/deploy gate without conflating a valid
+  authenticated `FAIL`/`REJECTED` record with a `PASS`.
+- Published machine-readable schemas describe the schema-1.11 verdict record,
+  evidence context, and evidence manifest. New guides document the distinction
+  between structural inspection, authentication, semantic validation, and what
+  support-material roles do not prove by themselves.
+- The signing API now supports raw byte payloads and stable public-key IDs based
+  on SHA-256 of DER SubjectPublicKeyInfo, while retaining detached file signing.
+
+### Security
+
+- Offline JSON parsing rejects duplicate keys, non-finite/overflow numbers,
+  excessive nesting, invalid UTF-8, and oversized inputs. Record verification is
+  a total function: malformed field types produce a failed check report instead
+  of an exception.
+- Evidence bundles use stored ZIP members in a fixed order with fixed metadata,
+  strict member names, bounded entry/directory/payload sizes, exact manifest
+  digests, and byte-for-byte canonical reconstruction. Verification never
+  extracts archive members.
+- Bundle authenticity requires an external public key and an exact external
+  context binding for repository, run ID and attempt, base/head revisions and
+  trees, candidate, policy, pack, and guard-artifact digests. A key or context
+  found inside the bundle is never accepted as its own trust root.
+- File inputs are read through descriptor-bound regular-file snapshots; bundle
+  publication is atomic and refuses to clobber an existing path unless explicit
+  replacement is requested.
+
+### Changed
+
+- Project wording now describes the mechanism rather than attributing trust to
+  the author: EvoOM Guard verifies untrusted software changes, with AI-generated
+  patches remaining the primary use case. The scope remains deliberately narrow:
+  whether the selected judge was satisfied without manipulating its evidence.
+
+### Verification
+
+- Added mutation tests for every schema-1.11 reason/lifecycle family, policy and
+  assurance shape, pack identity and execution semantics, composite counts and
+  sources, strict JSON parsing, canonical archives, replay context, signatures,
+  input races, archive limits, and atomic publication.
+- The release gate runs the full pytest suite, Ruff, Mypy, deterministic zipapp
+  build/smoke tests, schema parsing, and the labelled real-record corpus before
+  any tag or release asset is created.
+
 ## [3.4.4] — 2026-07-13
 
 An execution-evidence and process-lifecycle correctness release (JSON schema

@@ -13,6 +13,7 @@ on every verdict). Build is stdlib-only, so the suite stays green without extras
 """
 
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -42,6 +43,26 @@ def test_pyz_builds_and_reports_version(tmp_path):
     assert __version__ in r.stdout
 
 
+def test_pyz_contains_the_offline_record_verifier(tmp_path):
+    out = _build(tmp_path)
+    record = tmp_path / "invalid-record.json"
+    record.write_text("{}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, out, "verify-record", str(record)],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    report = json.loads(result.stdout)
+    assert report["record_verifier"] == "evoguard"
+    assert report["record_verifier_version"] == "1.0"
+    assert report["ok"] is False
+    assert report["input_sha256"] == hashlib.sha256(record.read_bytes()).hexdigest()
+
+
 def test_pyz_build_is_byte_reproducible(tmp_path):
     first = _build(tmp_path / "first")
     second = _build(tmp_path / "second")
@@ -51,10 +72,16 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
 
     with zipfile.ZipFile(first) as archive:
         entries = archive.infolist()
+        names = {entry.filename for entry in entries}
         assert [entry.filename for entry in entries] == sorted(
             entry.filename for entry in entries
         )
         assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
+        assert {
+            "evoom_guard/schemas/evidence-context-1.schema.json",
+            "evoom_guard/schemas/evidence-manifest-1.schema.json",
+            "evoom_guard/schemas/verdict-record-1.11.schema.json",
+        } <= names
 
 
 def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
@@ -66,6 +93,7 @@ def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
             b'    return 0 if message else 1\n'
         ),
         "nested/module.py": b'VALUE = "same"\n',
+        "schemas/example.schema.json": b'{\n  "type": "object"\n}\n',
     }
     non_python_payload = b"binary-like\r\npayload\rwith-newlines\n"
 

@@ -12,9 +12,13 @@ Skipped as a module when the optional ``cryptography`` extra is absent.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import io
 import json
 import os
 import unittest
+from contextlib import redirect_stdout
 
 try:
     import cryptography  # noqa: F401
@@ -52,12 +56,115 @@ class SigningRoundtripTests(unittest.TestCase):
         self.assertEqual(cli.main(["keygen", "--key", self.key, "--pub", self.pub]), 2)
 
     def test_sign_and_verify_roundtrip(self) -> None:
-        from evoom_guard.signing import sign_file
+        from evoom_guard.signing import sign_bytes, sign_file, verify_bytes
 
         p = self._verdict({"verdict": "PASS", "reason_code": "tests_passed"})
         sig = sign_file(p, self.key)
         self.assertEqual(sig, p + ".sig")
-        self.assertEqual(cli.main(["verify-verdict", p, "--pub", self.pub]), 0)
+        with open(p, "rb") as f:
+            payload = f.read()
+        raw = sign_bytes(payload, self.key)
+        self.assertEqual(len(raw), 64)
+        self.assertTrue(verify_bytes(payload, raw, self.pub))
+        with open(sig, "rb") as f:
+            sidecar_raw = base64.b64decode(f.read().strip(), validate=True)
+        self.assertTrue(verify_bytes(payload, sidecar_raw, self.pub))
+        captured = io.StringIO()
+        with redirect_stdout(captured):
+            self.assertEqual(cli.main(["verify-verdict", p, "--pub", self.pub]), 0)
+        self.assertIn(hashlib.sha256(payload).hexdigest(), captured.getvalue())
+
+    def test_bytes_api_rejects_tampering_and_wrong_length(self) -> None:
+        from evoom_guard.signing import sign_bytes, verify_bytes
+
+        payload = b"exact evidence bytes\x00\xff"
+        signature = sign_bytes(payload, self.key)
+        corrupted = bytearray(signature)
+        corrupted[-1] ^= 0x01
+        self.assertFalse(verify_bytes(payload + b"!", signature, self.pub))
+        self.assertFalse(verify_bytes(payload, bytes(corrupted), self.pub))
+        self.assertFalse(verify_bytes(payload, signature[:-1], self.pub))
+
+    def test_bytes_api_requires_bytes_without_implicit_coercion(self) -> None:
+        from evoom_guard.signing import sign_bytes, verify_bytes
+
+        with self.assertRaisesRegex(TypeError, "payload must be bytes"):
+            sign_bytes("text", self.key)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(TypeError, "payload must be bytes"):
+            verify_bytes("text", b"x" * 64, self.pub)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(TypeError, "signature must be bytes"):
+            verify_bytes(b"payload", bytearray(64), self.pub)  # type: ignore[arg-type]
+
+    def test_key_ids_are_sha256_of_der_spki_and_match_private_key(self) -> None:
+        from cryptography.hazmat.primitives import serialization
+
+        from evoom_guard.signing import private_key_public_id, public_key_id
+
+        with open(self.pub, "rb") as f:
+            public_key = serialization.load_pem_public_key(f.read())
+        der = public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        expected = "sha256:" + hashlib.sha256(der).hexdigest()
+        self.assertEqual(public_key_id(self.pub), expected)
+        self.assertEqual(private_key_public_id(self.key), expected)
+
+    def test_combined_bytes_apis_bind_key_id_and_operation_to_one_load(self) -> None:
+        from evoom_guard.signing import (
+            sign_bytes_with_key_id,
+            verify_bytes_with_key_id,
+        )
+
+        payload = b"one key snapshot"
+        signature, signing_key_id = sign_bytes_with_key_id(payload, self.key)
+        verified, verification_key_id = verify_bytes_with_key_id(
+            payload, signature, self.pub
+        )
+        self.assertTrue(verified)
+        self.assertEqual(signing_key_id, verification_key_id)
+
+    def test_malformed_or_non_ed25519_keys_raise_clear_errors(self) -> None:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        from evoom_guard.signing import (
+            private_key_public_id,
+            public_key_id,
+            sign_bytes,
+            verify_bytes,
+        )
+
+        malformed = os.path.join(self.tmp.name, "malformed.pem")
+        with open(malformed, "wb") as f:
+            f.write(b"not a PEM key")
+        with self.assertRaisesRegex(ValueError, "unable to load.*PEM private key"):
+            sign_bytes(b"payload", malformed)
+        with self.assertRaisesRegex(ValueError, "unable to load a PEM public key"):
+            verify_bytes(b"payload", b"x" * 64, malformed)
+
+        rsa_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        rsa_private = os.path.join(self.tmp.name, "rsa-private.pem")
+        rsa_public = os.path.join(self.tmp.name, "rsa-public.pem")
+        with open(rsa_private, "wb") as f:
+            f.write(
+                rsa_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption(),
+                )
+            )
+        with open(rsa_public, "wb") as f:
+            f.write(
+                rsa_key.public_key().public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "not an Ed25519 private key"):
+            private_key_public_id(rsa_private)
+        with self.assertRaisesRegex(ValueError, "not an Ed25519 public key"):
+            public_key_id(rsa_public)
 
     def test_tampered_verdict_is_invalid(self) -> None:
         from evoom_guard.signing import sign_file

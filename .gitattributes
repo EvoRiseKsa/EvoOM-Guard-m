@@ -1,0 +1,4 @@
+# Release artifacts and verifier-pack identities are byte-sensitive. Keep every
+# detected text file LF-stable across Windows and POSIX checkouts; binary files
+# remain binary under Git's text=auto detection.
+* text=auto eol=lf

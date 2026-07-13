@@ -34,16 +34,17 @@ _MAIN = b"import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n"
 def _archive_bytes(archive_name: str, source: str) -> bytes:
     """Return canonical bytes for one archive entry.
 
-    Git may materialize the same Python source with LF or CRLF depending on the
-    checkout platform and ``core.autocrlf``.  Python itself normalizes source
-    line endings before tokenizing, so preserving that checkout detail in the
-    release archive adds no program meaning but breaks byte reproducibility.
-    Canonicalize Python source newlines only; any future non-Python package data
-    remains byte-for-byte input.
+    Git may materialize text with LF or CRLF depending on the checkout platform
+    and ``core.autocrlf``. Python source semantics and JSON Schema semantics do
+    not depend on that representation, so preserving it would break release
+    reproducibility without adding meaning. Other package data remains exact.
     """
     with open(source, "rb") as file_handle:
         data = file_handle.read()
-    if archive_name.endswith(".py"):
+    if archive_name.endswith(".py") or (
+        archive_name.startswith("evoom_guard/schemas/")
+        and archive_name.endswith(".json")
+    ):
         return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     return data
 
@@ -94,8 +95,8 @@ def build(
 ) -> str:
     """Build ``evo-guard.pyz`` at ``out_path`` from the ``evoom_guard`` package under ``root``.
 
-    Only the package's Python sources are archived (no ``__pycache__``); the entry
-    point is ``evoom_guard.cli:main``. Returns the absolute output path.
+    The package's sources and declared data are archived (no ``__pycache__``);
+    the entry point is ``evoom_guard.cli:main``. Returns the absolute output path.
     """
     pkg = os.path.join(root, "evoom_guard")
     if not os.path.isdir(pkg):

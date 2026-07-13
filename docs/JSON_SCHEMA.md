@@ -26,13 +26,23 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 
 ## Example (`PASS`)
 
-Schema 1.11 ships with EvoGuard v3.4.4.
+Schema 1.11 was introduced in EvoGuard v3.4.4 and remains the current verdict
+contract in v3.5.0.
+
+A machine-readable structural schema is available at
+[`evoom_guard/schemas/verdict-record-1.11.schema.json`](../evoom_guard/schemas/verdict-record-1.11.schema.json).
+It defines the complete 24-field `effective_policy`, SHA/timestamp shapes,
+assurance and verifier-pack enums, and nested required fields. Use
+`evo-guard verify-record verdict.json` for reason-to-verdict/lifecycle mappings,
+source/channel binding, policy digest recomputation, and other cross-field
+semantic checks that JSON Schema cannot express; see
+[RECORD_VERIFICATION.md](RECORD_VERIFICATION.md).
 
 ```json
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.4.4",
+  "tool_version": "3.5.0",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -311,6 +321,17 @@ lengths, and bytes. It rejects symlinks and special files. It does not bind
 timestamps or filesystem permission metadata. Pre-3.4 pack digests use a
 different algorithm and must be recomputed with `pack-doctor`.
 
+## Diff-coverage object
+
+Measured evidence contains `measured: true`, `percent`, aggregate `executed`
+and `total` counts, per-Python-file `executed`/`missed` line arrays,
+`unmeasured_files`, and the non-assertion `caveat`. Unmeasured evidence contains
+`measured: false` and a non-empty `note`; the subprocess collector also retains
+`unmeasured_files` and `caveat`, while unsupported execution modes emit the
+minimal two-field form. `verify-record` reconciles per-file totals and the
+producer percentage and enforces `min_diff_coverage` against a `PASS` or
+`diff_coverage_below_threshold` reason.
+
 ## Baseline object
 
 When requested, `baseline` records `verdict` (`PASS`, `FAIL`, or
@@ -320,6 +341,9 @@ cannot be proven faithful it may also contain `setup_fidelity` and
 `setup_fidelity_changes`; this makes the baseline unclean rather than silently
 comparing a different tree. Its scope remains `repo_suite_only`: a pack is
 candidate-only and is not run on the pristine baseline.
+`verify-record` additionally binds `require_demonstrated_fix` and a `PASS` to
+the recorded repair effect; changing only the human-facing effect label cannot
+make a failed fix gate internally consistent.
 
 ## Verdict and `reason_code`
 
@@ -429,7 +453,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.4.4",
+  "version": "3.5.0",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

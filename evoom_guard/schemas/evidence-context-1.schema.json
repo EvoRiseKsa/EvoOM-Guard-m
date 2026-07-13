@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/evoom_guard/schemas/evidence-context-1.schema.json",
+  "title": "EvoGuard externally expected evidence context v1",
+  "description": "Replay-resistant context supplied by a trusted finalizer and independently by a verifier.",
+  "type": "object",
+  "required": [
+    "repository",
+    "repository_id",
+    "run_id",
+    "run_attempt",
+    "base_sha",
+    "head_sha",
+    "base_tree_sha",
+    "head_tree_sha",
+    "candidate_sha256",
+    "policy_sha256",
+    "verifier_pack_sha256",
+    "guard_artifact_sha256"
+  ],
+  "properties": {
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]*$"
+    },
+    "repository_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]*$"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]*$"
+    },
+    "run_attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "base_sha": { "$ref": "#/$defs/nullableGitDigest" },
+    "head_sha": { "$ref": "#/$defs/nullableGitDigest" },
+    "base_tree_sha": { "$ref": "#/$defs/nullableGitDigest" },
+    "head_tree_sha": { "$ref": "#/$defs/nullableGitDigest" },
+    "candidate_sha256": { "$ref": "#/$defs/sha256" },
+    "policy_sha256": { "$ref": "#/$defs/sha256" },
+    "verifier_pack_sha256": { "$ref": "#/$defs/nullableSha256" },
+    "guard_artifact_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "gitDigest": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "nullableGitDigest": {
+      "anyOf": [
+        { "$ref": "#/$defs/gitDigest" },
+        { "type": "null" }
+      ]
+    }
+  }
+}

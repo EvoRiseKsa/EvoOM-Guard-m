@@ -3,12 +3,12 @@
 # Source-available — see LICENSE for permitted use.
 # Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
-"""EvoOM Guard — an AI patch verification gate.
+"""EvoOM Guard — evidence-bound verification for untrusted code changes.
 
-Guard answers one question objectively, for a code change produced by anyone (a
+Guard evaluates one explicit policy question, for a code change produced by anyone (a
 human or — the motivating case — an AI agent):
 
-    *Does this patch fix the code, **without gaming the tests**?*
+    *Does this change satisfy the selected judge, **without gaming its evidence**?*
 
 It is a thin, model-free composition of assets that already exist in EvoOM:
 

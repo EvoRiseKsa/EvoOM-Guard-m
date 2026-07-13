@@ -1,0 +1,637 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/evoom_guard/schemas/verdict-record-1.11.schema.json",
+  "title": "EvoGuard verdict record schema 1.11",
+  "description": "Machine-readable structural contract for EvoGuard verdict records.",
+  "$comment": "JSON Schema validates shape. Run `evo-guard verify-record` for cross-field lifecycle, policy digest, receipt, isolation, pack, and composite-count invariants.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "tool_version",
+    "verdict",
+    "passed",
+    "exit_code",
+    "reason_code",
+    "reason",
+    "files_changed",
+    "protected_violations",
+    "risk_level",
+    "risk_score",
+    "tests_passed",
+    "tests_total",
+    "test_command_ran",
+    "execution_state",
+    "execution_phase",
+    "verdict_source",
+    "isolation",
+    "source",
+    "base_reconstruction",
+    "assurance",
+    "diff_coverage",
+    "baseline",
+    "attestation",
+    "diagnostics"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.11" },
+    "tool": { "const": "evoguard" },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "verdict": {
+      "enum": ["PASS", "REJECTED", "FAIL", "ERROR", "TAMPERED"]
+    },
+    "passed": { "type": "boolean" },
+    "exit_code": { "type": "integer", "enum": [0, 1] },
+    "reason_code": {
+      "enum": [
+        "tests_passed",
+        "protected_harness_edit",
+        "tests_failed",
+        "no_parseable_edits",
+        "unsafe_path",
+        "patch_apply_failed",
+        "no_test_verdict",
+        "junit_exit_mismatch",
+        "empty_diff",
+        "binary_patch",
+        "reverse_apply_failed",
+        "no_verifiable_changes",
+        "diff_coverage_below_threshold",
+        "test_timeout",
+        "setup_timeout",
+        "setup_failed",
+        "assurance_requirement_not_met",
+        "fix_not_demonstrated",
+        "policy_requirement_unsupported",
+        "verifier_pack_identity_mismatch",
+        "verifier_pack_invalid",
+        "verifier_pack_required",
+        "verifier_pack_not_found",
+        "verifier_pack_snapshot_changed",
+        "candidate_not_exercised",
+        "candidate_tree_changed_during_run",
+        "test_command_unavailable",
+        "runtime_cleanup_failed"
+      ]
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "files_changed": { "$ref": "#/$defs/stringArray" },
+    "protected_violations": { "$ref": "#/$defs/stringArray" },
+    "risk_level": { "enum": ["low", "medium", "high"] },
+    "risk_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "tests_passed": { "$ref": "#/$defs/nullableCount" },
+    "tests_total": { "$ref": "#/$defs/nullableCount" },
+    "test_command_ran": { "type": "boolean" },
+    "execution_state": { "$ref": "#/$defs/executionState" },
+    "execution_phase": { "type": "string", "minLength": 1 },
+    "verdict_source": {
+      "type": ["string", "null"],
+      "enum": [
+        "junit+exit",
+        "exit",
+        "blackbox",
+        "composite:repo+verifier-pack",
+        "composite:blackbox+repo",
+        null
+      ]
+    },
+    "isolation": { "$ref": "#/$defs/isolation" },
+    "source": { "type": ["string", "null"] },
+    "base_reconstruction": { "enum": ["ok", "failed", null] },
+    "assurance": { "$ref": "#/$defs/assurance" },
+    "diff_coverage": {
+      "oneOf": [
+        { "$ref": "#/$defs/diffCoverage" },
+        { "type": "null" }
+      ]
+    },
+    "baseline": {
+      "oneOf": [
+        { "$ref": "#/$defs/baseline" },
+        { "type": "null" }
+      ]
+    },
+    "attestation": {
+      "anyOf": [
+        { "$ref": "#/$defs/attestation" },
+        { "type": "null" }
+      ]
+    },
+    "diagnostics": { "type": "string", "maxLength": 2000 }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "verdict": { "const": "REJECTED" } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": { "protected_violations": { "minItems": 1 } }
+      },
+      "else": {
+        "properties": { "protected_violations": { "maxItems": 0 } }
+      }
+    }
+  ],
+  "$defs": {
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nullableCount": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "nullableBoolean": {
+      "type": ["boolean", "null"]
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "command": {
+      "oneOf": [
+        { "const": "default:python -m pytest" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        }
+      ]
+    },
+    "nullableCommand": {
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        { "type": "null" }
+      ]
+    },
+    "requestedIsolation": {
+      "enum": ["subprocess", "docker", "gvisor"]
+    },
+    "positiveLineArray": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1 },
+      "uniqueItems": true
+    },
+    "coverageFile": {
+      "type": "object",
+      "required": ["executed", "missed"],
+      "properties": {
+        "executed": { "$ref": "#/$defs/positiveLineArray" },
+        "missed": { "$ref": "#/$defs/positiveLineArray" },
+        "note": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "measuredDiffCoverage": {
+      "type": "object",
+      "required": [
+        "measured",
+        "percent",
+        "executed",
+        "total",
+        "files",
+        "unmeasured_files",
+        "caveat"
+      ],
+      "properties": {
+        "measured": { "const": true },
+        "percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "executed": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 },
+        "files": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+\\.py$" },
+          "additionalProperties": { "$ref": "#/$defs/coverageFile" }
+        },
+        "unmeasured_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "caveat": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "unmeasuredDiffCoverage": {
+      "type": "object",
+      "required": ["measured", "note"],
+      "properties": {
+        "measured": { "const": false },
+        "note": { "type": "string", "minLength": 1 },
+        "unmeasured_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "caveat": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "required": ["unmeasured_files"] },
+          "then": { "required": ["caveat"] },
+          "else": {
+            "not": { "anyOf": [{ "required": ["caveat"] }] }
+          }
+        }
+      ]
+    },
+    "diffCoverage": {
+      "oneOf": [
+        { "$ref": "#/$defs/measuredDiffCoverage" },
+        { "$ref": "#/$defs/unmeasuredDiffCoverage" }
+      ]
+    },
+    "baseline": {
+      "oneOf": [
+        { "$ref": "#/$defs/repoBaseline" },
+        { "$ref": "#/$defs/unsupportedBaseline" }
+      ]
+    },
+    "unsupportedBaseline": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "tests_passed",
+        "tests_total",
+        "repair_effect",
+        "scope",
+        "note"
+      ],
+      "properties": {
+        "verdict": { "type": "null" },
+        "tests_passed": { "type": "null" },
+        "tests_total": { "type": "null" },
+        "repair_effect": { "const": "unmeasured" },
+        "scope": { "const": "unsupported_mode" },
+        "note": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "repoBaseline": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "tests_passed",
+        "tests_total",
+        "repair_effect",
+        "scope",
+        "note"
+      ],
+      "properties": {
+        "verdict": { "enum": ["PASS", "FAIL", "NO_CLEAN_VERDICT"] },
+        "tests_passed": { "$ref": "#/$defs/nullableCount" },
+        "tests_total": { "$ref": "#/$defs/nullableCount" },
+        "repair_effect": {
+          "enum": ["demonstrated", "not_demonstrated", "unmeasured"]
+        },
+        "scope": { "const": "repo_suite_only" },
+        "note": { "type": "string", "minLength": 1 },
+        "setup_fidelity": {
+          "enum": ["unverified", "setup_failed", "changed_judged_tree"]
+        },
+        "setup_fidelity_changes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "verdict": { "const": "NO_CLEAN_VERDICT" } },
+            "required": ["verdict"]
+          },
+          "then": { "properties": { "repair_effect": { "const": "unmeasured" } } },
+          "else": {
+            "required": ["tests_passed", "tests_total"],
+            "properties": {
+              "tests_passed": { "type": "integer" },
+              "tests_total": { "type": "integer" },
+              "repair_effect": {
+                "enum": ["demonstrated", "not_demonstrated"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "setup_fidelity": { "const": "changed_judged_tree" }
+            },
+            "required": ["setup_fidelity"]
+          },
+          "then": { "required": ["setup_fidelity_changes"] },
+          "else": { "not": { "required": ["setup_fidelity_changes"] } }
+        }
+      ]
+    },
+    "effectivePolicy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "isolation",
+        "docker_image",
+        "docker_network",
+        "test_command",
+        "setup_command",
+        "trust_setup_on_host",
+        "setup_output_globs",
+        "protected",
+        "allow",
+        "allow_new_tests",
+        "timeout",
+        "mem_limit_mb",
+        "verifier_pack_required",
+        "expect_verifier_pack_sha256",
+        "blackbox",
+        "blackbox_only",
+        "require_report_integrity",
+        "require_candidate_isolation",
+        "min_diff_coverage",
+        "baseline_evidence",
+        "require_demonstrated_fix",
+        "policy_id",
+        "policy_version"
+      ],
+      "properties": {
+        "mode": { "enum": ["repo", "blackbox"] },
+        "isolation": { "$ref": "#/$defs/requestedIsolation" },
+        "docker_image": { "$ref": "#/$defs/nullableString" },
+        "docker_network": { "type": "string" },
+        "test_command": { "$ref": "#/$defs/command" },
+        "setup_command": { "$ref": "#/$defs/nullableCommand" },
+        "trust_setup_on_host": { "type": "boolean" },
+        "setup_output_globs": { "$ref": "#/$defs/stringArray" },
+        "protected": { "$ref": "#/$defs/stringArray" },
+        "allow": { "$ref": "#/$defs/stringArray" },
+        "allow_new_tests": { "type": "boolean" },
+        "timeout": { "type": "integer", "minimum": 1 },
+        "mem_limit_mb": { "type": "integer", "minimum": 0 },
+        "verifier_pack_required": { "type": "boolean" },
+        "expect_verifier_pack_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "blackbox": { "type": "boolean" },
+        "blackbox_only": { "type": "boolean" },
+        "require_report_integrity": {
+          "enum": [
+            "same_process_candidate_writable",
+            "external_process_isolated",
+            null
+          ]
+        },
+        "require_candidate_isolation": {
+          "oneOf": [
+            { "$ref": "#/$defs/requestedIsolation" },
+            { "type": "null" }
+          ]
+        },
+        "min_diff_coverage": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "baseline_evidence": { "type": "boolean" },
+        "require_demonstrated_fix": { "type": "boolean" },
+        "policy_id": { "$ref": "#/$defs/nullableString" },
+        "policy_version": { "$ref": "#/$defs/nullableString" }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "repo" } } },
+          "then": { "properties": { "blackbox": { "const": false } } },
+          "else": { "properties": { "blackbox": { "const": true } } }
+        },
+        {
+          "if": { "properties": { "blackbox_only": { "const": true } } },
+          "then": { "properties": { "blackbox": { "const": true } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "expect_verifier_pack_sha256": { "type": "string" }
+            }
+          },
+          "then": {
+            "properties": { "verifier_pack_required": { "const": true } }
+          }
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "executionState": {
+      "enum": ["static_gate", "not_started", "started_incomplete", "completed"]
+    },
+    "isolation": {
+      "enum": ["not_run", "subprocess", "docker", "gvisor"]
+    },
+    "packAssurance": {
+      "type": "object",
+      "required": [
+        "configured",
+        "present",
+        "integrity",
+        "identity_verified",
+        "execution_state",
+        "secrecy",
+        "snapshot_sha256"
+      ],
+      "properties": {
+        "configured": { "const": true },
+        "present": { "$ref": "#/$defs/nullableBoolean" },
+        "integrity": {
+          "enum": [
+            "not_evaluated_static_gate",
+            "not_evaluated_missing",
+            "invalid",
+            "snapshot_identity_mismatch",
+            "verified_snapshot_pre_execution",
+            "verified_snapshot_pre_post",
+            "verified_snapshot_read_only",
+            "snapshot_changed",
+            "not_evaluated"
+          ]
+        },
+        "identity_verified": { "$ref": "#/$defs/nullableBoolean" },
+        "execution_state": { "$ref": "#/$defs/executionState" },
+        "secrecy": {
+          "enum": [
+            "not_evaluated_static_gate",
+            "not_evaluated_no_execution",
+            "readable_in_judge_process",
+            "not_evaluated_no_candidate_execution",
+            "reachable_same_host",
+            "unmounted_from_candidate"
+          ]
+        },
+        "snapshot_sha256": { "$ref": "#/$defs/nullableSha256" }
+      },
+      "additionalProperties": true
+    },
+    "assurance": {
+      "type": "object",
+      "required": [
+        "execution_state",
+        "execution_phase",
+        "harness_integrity",
+        "report_integrity",
+        "candidate_isolation",
+        "suite_isolation",
+        "setup_isolation",
+        "runtime_continuity",
+        "verifier_pack",
+        "overall_profile"
+      ],
+      "properties": {
+        "execution_state": { "$ref": "#/$defs/executionState" },
+        "execution_phase": { "type": "string", "minLength": 1 },
+        "harness_integrity": { "const": "pre_gate_enforced" },
+        "report_integrity": {
+          "enum": [
+            "same_process_candidate_writable",
+            "external_process_isolated",
+            "not_applicable_static_gate",
+            "not_applicable_not_run"
+          ]
+        },
+        "candidate_isolation": { "$ref": "#/$defs/isolation" },
+        "suite_isolation": { "$ref": "#/$defs/isolation" },
+        "setup_isolation": {
+          "enum": [
+            "subprocess",
+            "docker",
+            "gvisor",
+            "subprocess_host_opt_in",
+            "unavailable",
+            null
+          ]
+        },
+        "runtime_continuity": { "type": "string" },
+        "verifier_pack": {
+          "anyOf": [
+            { "$ref": "#/$defs/packAssurance" },
+            { "type": "null" }
+          ]
+        },
+        "overall_profile": {
+          "enum": [
+            "static_gate",
+            "preflight",
+            "execution_incomplete_before_tests",
+            "execution_incomplete",
+            "repo_native_same_process",
+            "isolated_repo_native",
+            "mixed_host_setup_repo_native",
+            "black_box_external_judge",
+            "composite_blackbox_repo_native",
+            "blackbox_composite_short_circuit"
+          ]
+        },
+        "repo_native_suite": {
+          "enum": [
+            "not_required_blackbox_only",
+            "required_not_run_short_circuit",
+            "required_not_started",
+            "required_started_incomplete",
+            "composed_completed"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "attestation": {
+      "type": "object",
+      "required": [
+        "created_utc",
+        "guard_version",
+        "mode",
+        "candidate_sha256",
+        "effective_policy",
+        "policy_sha256",
+        "execution_state",
+        "execution_phase",
+        "test_command_started",
+        "delivered_isolation",
+        "effective_candidate_isolation",
+        "candidate_invocations",
+        "candidate_launcher_invocation_observed",
+        "verifier_pack_sha256",
+        "verifier_pack_digest_format",
+        "verifier_pack_tests_passed",
+        "verifier_pack_tests_total",
+        "verifier_pack_present",
+        "verifier_pack_started",
+        "verifier_pack_completed"
+      ],
+      "properties": {
+        "created_utc": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+        },
+        "guard_version": { "type": "string", "minLength": 1 },
+        "mode": { "enum": ["repo", "blackbox"] },
+        "candidate_sha256": { "$ref": "#/$defs/sha256" },
+        "effective_policy": { "$ref": "#/$defs/effectivePolicy" },
+        "policy_sha256": { "$ref": "#/$defs/sha256" },
+        "execution_state": { "$ref": "#/$defs/executionState" },
+        "execution_phase": { "type": "string", "minLength": 1 },
+        "test_command_started": { "type": "boolean" },
+        "delivered_isolation": { "$ref": "#/$defs/isolation" },
+        "effective_candidate_isolation": {
+          "anyOf": [
+            { "$ref": "#/$defs/isolation" },
+            { "type": "null" }
+          ]
+        },
+        "candidate_invocations": { "$ref": "#/$defs/nullableCount" },
+        "candidate_launcher_invocation_observed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "verifier_pack_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "verifier_pack_digest_format": { "$ref": "#/$defs/nullableString" },
+        "verifier_pack_tests_passed": { "$ref": "#/$defs/nullableCount" },
+        "verifier_pack_tests_total": { "$ref": "#/$defs/nullableCount" },
+        "verifier_pack_present": { "$ref": "#/$defs/nullableBoolean" },
+        "verifier_pack_started": { "$ref": "#/$defs/nullableBoolean" },
+        "verifier_pack_completed": { "$ref": "#/$defs/nullableBoolean" }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "execution_state": { "const": "not_started" } },
+            "required": ["execution_state"]
+          },
+          "then": {
+            "properties": {
+              "effective_candidate_isolation": {
+                "enum": ["not_run", null]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "effective_candidate_isolation": { "$ref": "#/$defs/isolation" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -5,14 +5,17 @@
 
 # Start here — pick your path in 30 seconds
 
-EvoOM Guard has one job: *did this patch fix the code without gaming the tests?*
-There are three ways to run it. Pick one — you do **not** need the others to start.
+EvoOM Guard has one job: *did this software change satisfy the selected judge
+without gaming the evidence?* AI-generated patches are the primary use case, but
+the mechanism does not depend on whether an AI, a human, or a bot authored the
+change. There are three ways to run it. Pick one — you do **not** need the others
+to start.
 
 ## Decision table
 
 | Your need | Profile | Command flag |
 |---|---|---|
-| Stop an AI agent from editing/deleting your tests, and run your suite | **Basic integrity gate** (Path 1) | *(none — the default; optional `--verifier-pack` adds org checks)* |
+| Stop an untrusted change (including an AI patch) from editing/deleting tests, and run your suite | **Basic integrity gate** (Path 1) | *(none — the default; optional `--verifier-pack` adds org checks)* |
 | Also verify a **CLI's** external behaviour with a judge-owned external verdict | **External behavior gate** (Path 2) | `--blackbox` + `--verifier-pack` |
 | Run the black-box candidate behind a real OS isolation boundary | **Isolated external gate** (Path 3) | `--isolation docker` (fail-closed) |
 
@@ -23,6 +26,12 @@ Just want to block test-harness tampering?           → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a guaranteed OS isolation boundary?              → add --isolation docker (fail-closed)
 ```
+
+Already have a verdict and need an offline admission/audit result? Use
+`evo-guard verify-record` for internal consistency, or the authenticated
+`bundle-evidence`/`verify-bundle` path when external key and replay-resistant
+context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
+[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md).
 
 ---
 

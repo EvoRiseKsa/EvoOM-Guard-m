@@ -5,9 +5,12 @@
 
 # Roadmap
 
-EvoOM Guard focuses on one question:
+AI-generated patches remain EvoOM Guard's primary use case, but the technical
+threat model is broader: any untrusted software change that can influence the
+evidence used to judge it. Guard still focuses on one narrow question:
 
-> Did a patch fix the code without manipulating the evidence used to judge it?
+> Did the change satisfy the selected judge without manipulating the evidence
+> used to judge it?
 
 ## Shipped today
 
@@ -17,7 +20,12 @@ EvoOM Guard focuses on one question:
   from a JUnit report + exit code, never from stdout); a `TAMPERED` verdict when
   they disagree or when the judged candidate/pack snapshot drifts during a
   multi-phase run.
-- **Signed records** — optional Ed25519 signatures over the JSON verdict.
+- **Independent record verification** — a bounded, strict schema-1.11 consumer
+  checks lifecycle, policy, receipt, isolation, pack, and verdict-source
+  invariants without executing candidate code.
+- **Authenticated evidence envelopes** — deterministic bundles bind the exact
+  record and optional materials to external repository/run/revision context and
+  an Ed25519 key; verification requires the key and expected context out of band.
 - **Assurance reporting** — every verdict states its `report_integrity` and
   `candidate_isolation` honestly.
 - **External black-box verification** (`--blackbox`) — the verdict comes from the
@@ -62,7 +70,7 @@ tested, and documented security boundary.**
 ## Non-goals
 
 - EvoOM Guard is not a general security scanner, a linter, or a code reviewer —
-  one question, answered objectively, stays the contract.
+  one explicit, policy-bound question stays the contract.
 - Subprocess execution is not described as a sandbox; isolation levels stay
   explicit (`subprocess` < `docker` < `gvisor`).
 - Isolation claims must reflect the boundary actually delivered.

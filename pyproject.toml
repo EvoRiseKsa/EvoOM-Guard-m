@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "evoom-guard"
-description = "EvoOM Guard (EvoGuard) — AI patch verification gate: verifies a patch against the repo's own tests and rejects any edit to the tests or their configuration. The verdict is read from a judge-owned report, never from stdout."
+description = "Independent, evidence-bound verification for untrusted software changes, with AI-generated patches as the primary use case."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Mana Alharbi (مانع الحربي)" }]
@@ -38,14 +38,24 @@ Issues = "https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues"
 evo-guard = "evoom_guard.cli:main"
 
 [project.optional-dependencies]
-# Ed25519 verdict signing (evo-guard keygen / --sign-key / verify-verdict).
+# Ed25519 verdict/evidence signing (keygen, --sign-key, verify-verdict/bundle).
 sign = ["cryptography>=41"]
 # Changed-line coverage evidence (evo-guard guard --diff-coverage).
 cov = ["coverage>=7"]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "coverage>=7", "cryptography>=41"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "coverage>=7",
+    "cryptography>=41",
+    "jsonschema>=4.23",
+]
 
 [tool.setuptools]
 license-files = ["LICENSE"]
+
+[tool.setuptools.package-data]
+evoom_guard = ["schemas/*.json"]
 
 [tool.setuptools.packages.find]
 include = ["evoom_guard*"]

@@ -5,8 +5,8 @@
 name: "EvoOM Guard"
 # Marketplace requires < 125 characters; the full story lives in the README.
 description: >-
-  Catches AI agents gaming tests: REJECTS any edit to the test harness;
-  judge-owned verdicts, optional black-box.
+  Evidence-bound change verification: rejects test-harness edits;
+  judge-owned verdicts and optional black-box checks.
 branding:
   icon: "shield"
   color: "red"

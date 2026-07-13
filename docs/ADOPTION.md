@@ -6,9 +6,10 @@
 
 # Adopting EvoGuard — a one-page runbook
 
-EvoGuard is a CI gate that decides, objectively, whether a code change (typically
-an **AI-agent PR**) fixed the repo **without gaming the tests**. It is a single
-verdict + exit code; drop it into any pipeline.
+EvoGuard is a CI gate that evaluates whether an untrusted code change
+(with **AI-agent PRs** as the primary use case) satisfied the selected judge
+without gaming its evidence. It is a single verdict + exit code; drop it into any
+pipeline.
 
 ## 1. Turn it on (one command)
 
@@ -16,7 +17,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.4"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.0"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -283,7 +284,7 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.4.4` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.5.0` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

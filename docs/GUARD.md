@@ -4,20 +4,20 @@
   Maintained and released by Mana Alharbi (مانع الحربي).
 -->
 
-# EvoGuard — an AI patch verification gate
+# EvoGuard — evidence-bound change verification
 
-> A CI gate that answers one objective question about a code change — produced by
-> a human or, the motivating case, an **AI agent**: **does this patch fix the code
-> *without gaming the tests*?** It is a thin, model-free composition of the project's
-> reward-hack-resistant judge and its patch risk scorer.
+> A CI gate that evaluates one explicit policy question about an untrusted code change —
+> produced by a human, bot, supplier, or the motivating case, an **AI agent**:
+> **did the change satisfy the selected judge without manipulating its evidence?**
+> It is model-free; authorship is not an input to the decision.
 
 ## Why
 
 Frontier agents have been observed **editing or skipping their own tests** to make
 a suite pass, and self-modifying coding agents have **faked test logs** (documented
-in the public literature). A patch-review gate the patch itself **can't game by
-hacking the harness** is therefore a real need as agent-authored PRs become common. EvoGuard provides
-it: the candidate is judged by the **repository's own tests**, the verdict is read
+in the public literature). A patch-review gate designed to block the documented
+harness-editing paths is therefore a real need as agent-authored PRs become common.
+EvoGuard addresses those paths: the candidate is judged by the **repository's own tests**, the verdict is read
 from a **judge-owned JUnit report + the process exit code** (never scraped from the
 patch's stdout), and **any edit to the tests or their configuration is rejected**
 before the suite runs.
@@ -65,14 +65,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.4   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.0   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.4"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.0"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```
@@ -80,7 +80,7 @@ evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v3.4.4`** — a release tag. The recommended pin and the right choice for
+> - **`@v3.5.0`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -169,13 +169,13 @@ only on the candidate run.
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-`EvoRiseKsa/EvoOM-Guard-m@v3.4.4`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+`EvoRiseKsa/EvoOM-Guard-m@v3.5.0`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.4   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.0   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # or "rejected-only" — see the warning below
@@ -198,7 +198,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.4"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.0"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
@@ -383,6 +383,7 @@ repo's test runner (e.g. `node:22-slim` for `node --test`).
 
 ## What it is and is not
 
-- **It is** an objective, reward-hack-resistant **verification gate**.
+- **It is** a policy-bound **verification gate** with regression-tested controls
+  for the documented reward-hacking paths.
 - **It is not** a generator, a fixer, or an agent. It does not write the patch; it
   judges one.

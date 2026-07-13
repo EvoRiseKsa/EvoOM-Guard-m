@@ -3,11 +3,12 @@
 # Source-available — see LICENSE for permitted use.
 # Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
-"""EvoOM Guard (EvoGuard) — the merge gate an AI agent can't game the test harness.
+"""Evidence-bound verification for untrusted software changes.
 
-A reward-hack-resistant patch verification gate. Given a base repo and a candidate
-change (an edit-block patch, a base/head pair, or a unified diff), it decides
-whether the change fixes the repo **without gaming the tests**:
+AI-generated patches are the primary use case, but the mechanism does not depend
+on authorship. Given a base repo and a candidate change (an edit-block patch, a
+base/head pair, or a unified diff), it decides whether the change satisfies the
+selected judge **without gaming the evidence**:
 
   * the verdict is read from a *judge-owned* JUnit report plus the process exit
     code — never from stdout — so a forged ``"N passed"`` cannot fool it;
@@ -22,4 +23,4 @@ from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
 __all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__version__ = "3.4.4"
+__version__ = "3.5.0"

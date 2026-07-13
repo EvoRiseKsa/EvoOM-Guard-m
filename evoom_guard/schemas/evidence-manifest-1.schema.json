@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/evoom_guard/schemas/evidence-manifest-1.schema.json",
+  "title": "EvoGuard evidence bundle manifest v1",
+  "description": "The signed canonical bundle.json member of EVOGUARD_EVIDENCE_BUNDLE_V1.",
+  "type": "object",
+  "required": ["format", "context", "authentication", "record", "materials"],
+  "properties": {
+    "format": { "const": "EVOGUARD_EVIDENCE_BUNDLE_V1" },
+    "context": { "$ref": "evidence-context-1.schema.json" },
+    "authentication": {
+      "type": "object",
+      "required": ["algorithm", "key_id", "purpose", "signature_path"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "purpose": { "const": "evoguard-evidence-envelope" },
+        "signature_path": { "const": "bundle.sig" }
+      },
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "required": ["path", "sha256", "size", "schema_version", "tool", "tool_version"],
+      "properties": {
+        "path": { "const": "record/verdict.json" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+        "schema_version": { "type": "string", "minLength": 1 },
+        "tool": { "type": "string", "minLength": 1 },
+        "tool_version": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "materials": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "required": ["role", "path", "sha256", "size"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]{0,63}$"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^materials/[0-9]{3}-[a-z][a-z0-9_.-]{0,63}$"
+          },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "size": { "type": "integer", "minimum": 0, "maximum": 33554432 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

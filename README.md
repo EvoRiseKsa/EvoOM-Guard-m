@@ -11,7 +11,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: Source-available](https://img.shields.io/badge/license-source--available-lightgrey)](LICENSE)
 
-**An AI patch verification gate: does this patch fix the code — *without gaming the tests*?**
+**Independent, evidence-bound verification for untrusted software changes — with
+AI-generated patches as the primary use case.**
+
+Guard asks one deliberately narrow question: did this change satisfy the selected
+judge without manipulating the evidence used to decide? It does not infer who
+wrote the change, and a `PASS` is never a claim of complete software correctness.
 
 > **New here? → [`docs/START_HERE.md`](docs/START_HERE.md)** picks your path in 30
 > seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
@@ -145,7 +150,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.4"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.5.0"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -191,7 +196,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.4   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.0   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
@@ -267,11 +272,11 @@ post-setup runtime identity still includes those paths.
 for container modes; it is recorded and reduces effective candidate isolation
 to `subprocess`.
 
-## Signed verdicts (optional)
+## Signed verdicts and portable evidence
 
 With the `sign` extra, the judge can sign every JSON verdict with an Ed25519
-key, making the *record* as tamper-evident as the *run* — a `FAIL` cannot be
-quietly edited into a `PASS` in some artifact bucket:
+key, making post-run record modification detectable — a `FAIL` cannot be quietly
+edited into a `PASS` without invalidating the signature:
 
 ```bash
 evo-guard keygen                                   # once: the judge's identity
@@ -280,6 +285,26 @@ evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1
 ```
 
 See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
+
+For one machine-consumable result that combines canonical bytes, an external
+trust key, replay-resistant repository/run/revision context, and schema-1.11
+semantic verification, create an authenticated evidence bundle in a trusted
+post-run finalizer:
+
+```bash
+evo-guard verify-record v.json
+evo-guard bundle-evidence v.json --out evidence.evb \
+  --context context.json --sign-key evoguard-signing.pem
+evo-guard verify-bundle evidence.evb \
+  --trusted-pub evoguard-signing.pub --expect-context expected-context.json
+```
+
+`VERIFIED` authenticates the enclosed record and its exact context; it does not
+mean the enclosed verdict is `PASS` or that all software behavior is correct.
+Add `--require-pass` when this command is the merge/deploy gate.
+The private key must never be available to the candidate job. See
+[`docs/EVIDENCE_BUNDLES.md`](docs/EVIDENCE_BUNDLES.md) and
+[`docs/RECORD_VERIFICATION.md`](docs/RECORD_VERIFICATION.md).
 
 ## Evidence beyond "the tests passed"
 
@@ -372,7 +397,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack \
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
-| [`docs/PROOFS.md`](docs/PROOFS.md) | Live proof runs: a real repo, and a hard ungameable benchmark (cheat → REJECTED; honest → PASS) |
+| [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
 | [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, patch-immutable invariants (and their honest runtime limits) |
