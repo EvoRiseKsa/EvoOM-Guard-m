@@ -33,6 +33,7 @@ from evoom_guard.guard import (
     PASS,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_BINARY_PATCH,
+    REASON_CANDIDATE_NOT_EXERCISED,
     REASON_CANDIDATE_TREE_CHANGED,
     REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
     REASON_EMPTY_DIFF,
@@ -45,6 +46,7 @@ from evoom_guard.guard import (
     REASON_POLICY_REQUIREMENT_UNSUPPORTED,
     REASON_PROTECTED_HARNESS_EDIT,
     REASON_REVERSE_APPLY_FAILED,
+    REASON_RUNTIME_CLEANUP_FAILED,
     REASON_SETUP_FAILED,
     REASON_SETUP_TIMEOUT,
     REASON_TEST_COMMAND_UNAVAILABLE,
@@ -54,6 +56,8 @@ from evoom_guard.guard import (
     REASON_UNSAFE_PATH,
     REASON_VERIFIER_PACK_IDENTITY_MISMATCH,
     REASON_VERIFIER_PACK_INVALID,
+    REASON_VERIFIER_PACK_NOT_FOUND,
+    REASON_VERIFIER_PACK_REQUIRED,
     REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
     REJECTED,
     SCHEMA_VERSION,
@@ -77,8 +81,11 @@ KNOWN_REASON_CODES = {
     REASON_TEST_TIMEOUT, REASON_SETUP_TIMEOUT, REASON_SETUP_FAILED,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET, REASON_FIX_NOT_DEMONSTRATED,
     REASON_POLICY_REQUIREMENT_UNSUPPORTED, REASON_VERIFIER_PACK_IDENTITY_MISMATCH,
-    REASON_VERIFIER_PACK_INVALID, REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
-    REASON_CANDIDATE_TREE_CHANGED, REASON_TEST_COMMAND_UNAVAILABLE,
+    REASON_VERIFIER_PACK_INVALID, REASON_VERIFIER_PACK_NOT_FOUND,
+    REASON_VERIFIER_PACK_REQUIRED, REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
+    REASON_CANDIDATE_TREE_CHANGED, REASON_CANDIDATE_NOT_EXERCISED,
+    REASON_TEST_COMMAND_UNAVAILABLE,
+    REASON_RUNTIME_CLEANUP_FAILED,
 }
 KNOWN_VERDICTS = {PASS, REJECTED, FAIL, ERROR, TAMPERED}
 
@@ -86,6 +93,7 @@ REQUIRED_KEYS = {
     "schema_version", "tool", "tool_version", "verdict", "passed", "exit_code",
     "reason_code", "reason", "files_changed", "protected_violations", "risk_level",
     "risk_score", "tests_passed", "tests_total", "test_command_ran",
+    "execution_state", "execution_phase", "isolation",
     "verdict_source", "source", "base_reconstruction", "diagnostics",
 }
 
@@ -317,7 +325,11 @@ class JsonContractTests(unittest.TestCase):
             result.reason_code, REASON_ASSURANCE_REQUIREMENT_NOT_MET
         )
         self.assertIn("WSL on Windows", result.reason)
-        self.assertEqual(result.isolation, "unavailable")
+        self.assertEqual(result.isolation, "not_run")
+        assert result.attestation is not None
+        self.assertEqual(
+            result.attestation["isolation_evidence"]["delivered"], "unavailable"
+        )
         self.assertFalse(result.to_dict()["test_command_ran"])
 
 

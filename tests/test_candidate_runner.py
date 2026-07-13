@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -103,8 +104,75 @@ class LauncherIsShellFreeTests(unittest.TestCase):
                     os.path.exists(os.path.join(tmp, "evoguard_exec.py.json"))
                 )
 
+    def test_invocation_token_is_owner_only_and_never_exported_to_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "repo")
+            os.makedirs(target)
+            token = "judge-secret-receipt-token"
+            runner = CandidateRunner(
+                isolation="subprocess",
+                invocation_socket=os.path.join(tmp, "receipt.sock"),
+                invocation_token=token,
+            )
+            # This test materializes but does not execute the POSIX launcher, so
+            # it can validate the layout on native Windows too.
+            with mock.patch("evoom_guard.candidate_runner.os.name", "posix"):
+                launcher, env, _evidence = runner.prepare(tmp, target)
+
+            config_path = launcher + ".json"
+            cfg = json.load(open(config_path, encoding="utf-8"))
+            self.assertEqual(cfg["invocation_token"], token)
+            self.assertEqual(os.path.dirname(config_path), tmp)
+            self.assertFalse(config_path.startswith(target + os.sep))
+            self.assertNotIn(token, env)
+            self.assertNotIn(token, env.values())
+            if os.name != "nt":
+                self.assertEqual(stat.S_IMODE(os.stat(config_path).st_mode), 0o600)
+
 
 class ContainerPrefixTests(unittest.TestCase):
+    def test_docker_cli_timeout_becomes_isolation_unavailable(self) -> None:
+        runner = CandidateRunner(isolation="docker", docker_image="img")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("evoom_guard.candidate_runner.os.name", "posix"), \
+                mock.patch("evoom_guard.candidate_runner.shutil.which", return_value="docker"), \
+                mock.patch(
+                    "evoom_guard.candidate_runner.subprocess.run",
+                    side_effect=subprocess.TimeoutExpired(["docker", "version"], 30),
+                ):
+            with self.assertRaisesRegex(
+                IsolationUnavailable, "docker isolation preflight failed"
+            ):
+                runner.prepare(tmp, tmp)
+
+    def test_docker_cli_oserror_becomes_isolation_unavailable(self) -> None:
+        runner = CandidateRunner(isolation="docker", docker_image="img")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("evoom_guard.candidate_runner.os.name", "posix"), \
+                mock.patch("evoom_guard.candidate_runner.shutil.which", return_value="docker"), \
+                mock.patch(
+                    "evoom_guard.candidate_runner.subprocess.run",
+                    side_effect=OSError("docker executable vanished"),
+                ):
+            with self.assertRaisesRegex(
+                IsolationUnavailable, "docker isolation preflight failed"
+            ):
+                runner.prepare(tmp, tmp)
+
+    def test_operator_baseexceptions_are_not_relabelled(self) -> None:
+        runner = CandidateRunner(isolation="docker", docker_image="img")
+        for primary in (KeyboardInterrupt("stop"), SystemExit("exit")):
+            with self.subTest(primary=type(primary).__name__), \
+                    tempfile.TemporaryDirectory() as tmp, \
+                    mock.patch("evoom_guard.candidate_runner.os.name", "posix"), \
+                    mock.patch("evoom_guard.candidate_runner.shutil.which", return_value="docker"), \
+                    mock.patch(
+                        "evoom_guard.candidate_runner.subprocess.run",
+                        side_effect=primary,
+                    ):
+                with self.assertRaises(type(primary)):
+                    runner.prepare(tmp, tmp)
+
     def test_malicious_docker_network_stays_one_literal_argv_element(self) -> None:
         # Even a hostile --network value is a single argv element in the prefix, so
         # execvp hands it to docker verbatim (docker rejects it as an invalid
@@ -116,8 +184,7 @@ class ContainerPrefixTests(unittest.TestCase):
                 mock.patch("evoom_guard.candidate_runner.shutil.which", return_value="/usr/bin/docker"), \
                 mock.patch("evoom_guard.candidate_runner.subprocess.run",
                            return_value=types.SimpleNamespace(returncode=0, stdout="28", stderr="")), \
-                mock.patch.object(CandidateRunner, "_ensure_image", return_value="sha256:abc"), \
-                mock.patch.object(CandidateRunner, "_delivery_probe", return_value=None):
+                mock.patch.object(CandidateRunner, "_ensure_image", return_value="sha256:abc"):
             launcher, _env, evidence = runner.prepare(tmp, tmp)
             cfg = json.load(open(launcher + ".json", encoding="utf-8"))
         self.assertEqual(evidence.delivered, "docker")

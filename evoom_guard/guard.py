@@ -125,7 +125,16 @@ _PROTECTED_GLOBS = (
 #          runtime-dependent assurance axis as not run/not applicable, preserve
 #          the requested repo/black-box policy in the attestation, and do not
 #          let runtime assurance floors overwrite an already-final static gate.
-SCHEMA_VERSION = "1.10"
+#   1.11 — explicit execution/phase state; observed black-box launcher/CID
+#          evidence; phase-specific Docker start/isolation evidence; honest
+#          composite source/count/report-integrity semantics; additive
+#          candidate_not_exercised reason; top-level JSON isolation.
+SCHEMA_VERSION = "1.11"
+
+EXECUTION_STATIC_GATE = "static_gate"
+EXECUTION_NOT_STARTED = "not_started"
+EXECUTION_STARTED_INCOMPLETE = "started_incomplete"
+EXECUTION_COMPLETED = "completed"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -157,9 +166,13 @@ REASON_FIX_NOT_DEMONSTRATED = "fix_not_demonstrated"
 REASON_POLICY_REQUIREMENT_UNSUPPORTED = "policy_requirement_unsupported"
 REASON_VERIFIER_PACK_IDENTITY_MISMATCH = "verifier_pack_identity_mismatch"
 REASON_VERIFIER_PACK_INVALID = "verifier_pack_invalid"
+REASON_VERIFIER_PACK_REQUIRED = "verifier_pack_required"
+REASON_VERIFIER_PACK_NOT_FOUND = "verifier_pack_not_found"
 REASON_VERIFIER_PACK_SNAPSHOT_CHANGED = "verifier_pack_snapshot_changed"
+REASON_CANDIDATE_NOT_EXERCISED = "candidate_not_exercised"
 REASON_CANDIDATE_TREE_CHANGED = "candidate_tree_changed_during_run"
 REASON_TEST_COMMAND_UNAVAILABLE = "test_command_unavailable"
+REASON_RUNTIME_CLEANUP_FAILED = "runtime_cleanup_failed"
 
 # Ordering of report-integrity levels, weakest → strongest. A caller can demand a
 # floor with require_report_integrity; if the run's actual level is below it, the
@@ -183,6 +196,9 @@ _OUTCOME_REASON = {
     "pack_identity_mismatch": (ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH),
     "pack_invalid": (ERROR, REASON_VERIFIER_PACK_INVALID),
     "test_command_unavailable": (ERROR, REASON_TEST_COMMAND_UNAVAILABLE),
+    "pack_no_tests": (ERROR, REASON_NO_TEST_VERDICT),
+    "pack_no_verdict": (ERROR, REASON_NO_TEST_VERDICT),
+    "no_test_verdict": (ERROR, REASON_NO_TEST_VERDICT),
 }
 
 _TAMPER_OUTCOME_REASON = {
@@ -224,6 +240,40 @@ class GuardResult:
     baseline: dict[str, Any] | None = None        # before/after differential evidence (opt-in)
     attestation: dict[str, Any] | None = None     # context binding for the signed verdict
     assurance: dict[str, Any] | None = None       # how much the verdict can be trusted
+    # Additive 1.11 fields stay at the end to preserve GuardResult's positional
+    # constructor order for integrations that predate the state-machine contract.
+    test_command_ran: bool | None = None
+    execution_state: str = ""
+    execution_phase: str = ""
+
+    def __post_init__(self) -> None:
+        """Fill additive 1.11 fields for legacy manual constructors only.
+
+        Production Guard paths pass explicit runner evidence.  The fallback
+        preserves the pre-1.11 ``GuardResult(...)`` API used by report adapters;
+        it must never replace explicit timeout/preflight facts.
+        """
+        if self.test_command_ran is None:
+            self.test_command_ran = bool(
+                self.verdict_source is not None
+                or self.verdict in (PASS, FAIL, TAMPERED)
+            )
+        if not self.execution_state:
+            self.execution_state = (
+                EXECUTION_COMPLETED
+                if self.test_command_ran
+                else EXECUTION_STATIC_GATE
+                if self.verdict == REJECTED
+                else EXECUTION_NOT_STARTED
+            )
+        if not self.execution_phase:
+            self.execution_phase = (
+                "complete"
+                if self.execution_state == EXECUTION_COMPLETED
+                else "pre_gate"
+                if self.execution_state == EXECUTION_STATIC_GATE
+                else "preflight"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -241,8 +291,11 @@ class GuardResult:
             "risk_score": round(self.risk_score, 3),
             "tests_passed": self.tests_passed,
             "tests_total": self.tests_total,
-            "test_command_ran": self.verdict_source is not None,
+            "test_command_ran": bool(self.test_command_ran),
+            "execution_state": self.execution_state,
+            "execution_phase": self.execution_phase,
             "verdict_source": self.verdict_source,
+            "isolation": self.isolation,
             "source": self.source,
             "base_reconstruction": self.base_reconstruction,
             "assurance": self.assurance,
@@ -388,8 +441,10 @@ def guard(
 
     ``verifier_pack`` supplies an **Independent Verifier Pack** of judge-owned
     pytest invariants. Guard accepts a verified snapshot outside the candidate
-    tree and runs it as a separate mandatory phase after the repo suite; both
-    phases must pass. ``expect_verifier_pack_sha256`` can pin its V2 portable
+    tree. Repo-native mode runs it as a separate mandatory phase after the repo
+    suite; black-box mode runs the external phase first and may short-circuit
+    before the repo phase. Every policy-required phase must pass.
+    ``expect_verifier_pack_sha256`` can pin its V2 portable
     content/tree identity before candidate code runs. Repo-native tests share the
     judge process with candidate imports, so this provides integrity, not secrecy;
     use black-box plus container isolation for runtime separation.
@@ -407,6 +462,8 @@ def guard(
     # exists to prevent. (Evidence-only requests degrade EXPLICITLY instead:
     # see the unmeasured/note records attached further down.)
     _unsupported: list[str] = []
+    if blackbox_only and not blackbox:
+        _unsupported.append("blackbox_only (requires blackbox)")
     if require_demonstrated_fix and (blackbox or isolation != "subprocess"):
         _unsupported.append("require_demonstrated_fix")
     if min_diff_coverage is not None and (blackbox or isolation != "subprocess"):
@@ -438,21 +495,27 @@ def guard(
             verdict=ERROR, passed=False,
             reason=(
                 f"policy requirement(s) {', '.join(_unsupported)} cannot be "
-                f"enforced under {_mode_desc} — these gates run under the "
-                "subprocess judge only today. Refusing to return a verdict that "
-                "silently drops a requested requirement: use the subprocess "
-                "judge, or remove the requirement."
+                f"enforced under {_mode_desc}. Refusing to return a verdict that "
+                "silently drops or ignores a requested option; select a compatible "
+                "mode/policy or remove the requirement."
             ),
             files_changed=changed_paths(candidate, file_blocks),
             protected_violations=[], risk_level="low", risk_score=0.0,
-            reason_code=REASON_POLICY_REQUIREMENT_UNSUPPORTED, isolation=isolation,
-            assurance=_assurance_profile(isolation, verifier_pack, blackbox=blackbox),
+            reason_code=REASON_POLICY_REQUIREMENT_UNSUPPORTED,
+            isolation="not_run",
+            execution_state=EXECUTION_NOT_STARTED,
+            execution_phase="preflight",
+            assurance=_preflight_assurance_profile(verifier_pack),
             attestation=_build_attestation(
                 candidate, safe_deleted=[], test_command=test_command,
                 effective_policy=_ep, art={
                     "base_sha": base_sha, "head_sha": head_sha,
                     "base_tree_sha": base_tree_sha, "head_tree_sha": head_tree_sha,
                     "policy_id": policy_id, "policy_version": policy_version,
+                    "execution_state": EXECUTION_NOT_STARTED,
+                    "execution_phase": "preflight",
+                    "test_command_started": False,
+                    "delivered_isolation": "not_run",
                 }, mode="blackbox" if blackbox else "repo",
             ),
         )
@@ -518,14 +581,54 @@ def guard(
         from evoom_guard.blackbox import run_blackbox
 
         if not verifier_pack:
+            ep_missing_pack = _effective_policy(
+                mode="blackbox", isolation=isolation,
+                docker_image=docker_image, docker_network=docker_network,
+                test_command=test_command, setup_command=setup_command,
+                trust_setup_on_host=trust_setup_on_host,
+                setup_output_globs=setup_output_globs,
+                protected=protected, allow=allow,
+                allow_new_tests=allow_new_tests, timeout=timeout,
+                mem_limit_mb=mem_limit_mb, verifier_pack=None,
+                blackbox=True, blackbox_only=blackbox_only,
+                expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+                require_report_integrity=require_report_integrity,
+                require_candidate_isolation=require_candidate_isolation,
+                min_diff_coverage=min_diff_coverage,
+                baseline_evidence=baseline_evidence,
+                require_demonstrated_fix=require_demonstrated_fix,
+                policy_id=policy_id, policy_version=policy_version,
+            )
             return GuardResult(
                 verdict=ERROR, passed=False,
                 reason="--blackbox requires --verifier-pack (the judge-owned protocol tests)",
                 files_changed=changed, protected_violations=[],
                 risk_level=risk_score(_risk_map(repo_path, candidate, file_blocks)).level,
                 risk_score=risk_score(_risk_map(repo_path, candidate, file_blocks)).score,
-                reason_code=REASON_NO_VERIFIABLE_CHANGES, isolation=isolation,
-                assurance=_assurance_profile(isolation, verifier_pack, blackbox=True),
+                reason_code=REASON_VERIFIER_PACK_REQUIRED,
+                isolation="not_run",
+                execution_state=EXECUTION_NOT_STARTED,
+                execution_phase="preflight",
+                assurance=_preflight_assurance_profile(None),
+                attestation=_build_attestation(
+                    candidate,
+                    safe_deleted=safe_deleted,
+                    test_command=test_command,
+                    effective_policy=ep_missing_pack,
+                    art={
+                        "base_sha": base_sha,
+                        "head_sha": head_sha,
+                        "base_tree_sha": base_tree_sha,
+                        "head_tree_sha": head_tree_sha,
+                        "policy_id": policy_id,
+                        "policy_version": policy_version,
+                        "execution_state": EXECUTION_NOT_STARTED,
+                        "execution_phase": "preflight",
+                        "test_command_started": False,
+                        "delivered_isolation": "not_run",
+                    },
+                    mode="blackbox",
+                ),
             )
         bx = run_blackbox(
             repo_path, candidate, os.path.abspath(verifier_pack), timeout=timeout,
@@ -534,8 +637,72 @@ def guard(
             file_blocks=file_blocks,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
         )
-        # candidate_isolation comes from what the runner DELIVERED, never the flag.
-        delivered_iso = (bx.isolation or {}).get("delivered", "subprocess")
+        # ``ran`` means a gradeable verdict; it is deliberately not used as a
+        # proxy for process start (timeouts and contradictory reports did run).
+        bx_started = bool(getattr(bx, "started", bx.ran))
+        bx_completed = bool(getattr(bx, "completed", bx.ran))
+        bx_state = str(
+            getattr(
+                bx,
+                "execution_state",
+                EXECUTION_COMPLETED if bx.ran else EXECUTION_NOT_STARTED,
+            )
+        )
+        bx_phase = str(getattr(bx, "execution_phase", "blackbox_pack"))
+        # Preparing a launcher proves only availability. Candidate isolation is
+        # claimed only after the black-box judge observes a launcher receipt
+        # (and, for container modes, a runtime-written CID).
+        delivered_iso = (
+            (bx.isolation or {}).get("delivered", "subprocess")
+            if bx_started
+            else "not_run"
+        )
+        candidate_launcher_invocation_observed = bool(
+            getattr(bx, "candidate_launcher_invocation_observed", False)
+        )
+        candidate_invocations = int(getattr(bx, "candidate_invocations", 0))
+        candidate_iso_bx = (
+            str(delivered_iso)
+            if candidate_launcher_invocation_observed
+            else "not_run"
+        )
+        bx_gradeable = bool(bx.ran and candidate_launcher_invocation_observed)
+        isolation_evidence_bx = bx.isolation
+        if (
+            not bx_started
+            and isolation_evidence_bx
+            and isolation_evidence_bx.get("delivered") != "unavailable"
+        ):
+            prepared = isolation_evidence_bx.get(
+                "prepared", isolation_evidence_bx.get("delivered")
+            )
+            isolation_evidence_bx = {
+                **isolation_evidence_bx,
+                "delivered": "not_run",
+                "prepared": prepared,
+                "note": (
+                    "the launcher/boundary was prepared but the black-box judge "
+                    "did not start, so candidate isolation was not exercised"
+                ),
+            }
+        elif (
+            bx_started
+            and not candidate_launcher_invocation_observed
+            and isolation_evidence_bx
+            and isolation_evidence_bx.get("delivered") != "unavailable"
+        ):
+            prepared = isolation_evidence_bx.get(
+                "prepared", isolation_evidence_bx.get("delivered")
+            )
+            isolation_evidence_bx = {
+                **isolation_evidence_bx,
+                "delivered": "not_run",
+                "prepared": prepared,
+                "note": (
+                    "the judge ran, but no candidate launcher invocation was "
+                    "observed; the prepared boundary is not delivery evidence"
+                ),
+            }
         rmap_bx = _risk_map(repo_path, candidate, file_blocks)
         for d in all_touched:
             if d in deleted and d not in rmap_bx:
@@ -547,7 +714,7 @@ def guard(
         # suite too and require BOTH to pass (a green pack must not mask an internal
         # regression). A pure-CLI target with no repo suite uses --blackbox-only.
         repo_verdict = None
-        if not blackbox_only and bx.ran and bx.passed:
+        if not blackbox_only and bx_gradeable and bx.passed:
             repo_problem = {
                 k: v
                 for k, v in problem.items()
@@ -566,13 +733,45 @@ def guard(
                 setup_output_globs=setup_output_globs,
             ).verify(candidate, repo_problem)
 
-        if not bx.ran:
+        repo_art = repo_verdict.artifact if repo_verdict is not None else {}
+        repo_started = bool(repo_art.get("test_command_started"))
+        repo_completed = bool(
+            repo_started
+            and repo_art.get("execution_state") == EXECUTION_COMPLETED
+        )
+        repo_clean_source = bool(repo_art.get("verdict_source"))
+        repo_suite_state = (
+            "not_required_blackbox_only"
+            if blackbox_only
+            else "required_not_run_short_circuit"
+            if repo_verdict is None
+            else "required_not_started"
+            if not repo_started
+            else "required_started_incomplete"
+            if not repo_completed
+            else "composed_completed"
+        )
+        if bx.ran and not candidate_launcher_invocation_observed:
+            v_bx, code_bx = ERROR, REASON_CANDIDATE_NOT_EXERCISED
+            reason_bx = (
+                "the black-box pack completed without an observed "
+                "$EVOGUARD_EXEC invocation, so it did not prove that it exercised "
+                "the candidate; direct EVOGUARD_TARGET access and constant tests "
+                "cannot produce a gradeable black-box verdict"
+            )
+        elif not bx.ran:
             if bx.error == "timeout":
                 v_bx, code_bx = ERROR, REASON_TEST_TIMEOUT
             elif bx.error == "verifier pack identity mismatch":
                 v_bx, code_bx = ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH
             elif bx.error == "verifier pack invalid":
                 v_bx, code_bx = ERROR, REASON_VERIFIER_PACK_INVALID
+            elif (bx.error or "").startswith("verifier pack not found:"):
+                v_bx, code_bx = ERROR, REASON_VERIFIER_PACK_NOT_FOUND
+            elif bx.error == "patch did not apply":
+                v_bx, code_bx = ERROR, REASON_PATCH_APPLY_FAILED
+            elif bx.error == "unsafe deletion path":
+                v_bx, code_bx = ERROR, REASON_UNSAFE_PATH
             elif bx.error == "isolation unavailable":
                 v_bx, code_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET
             elif bx.error in (
@@ -582,6 +781,11 @@ def guard(
                 v_bx, code_bx = TAMPERED, REASON_VERIFIER_PACK_SNAPSHOT_CHANGED
             elif bx.error == "black-box JUnit/exit mismatch":
                 v_bx, code_bx = TAMPERED, REASON_JUNIT_EXIT_MISMATCH
+            elif bx.error in (
+                "candidate container cleanup failed",
+                "judge process cleanup failed",
+            ):
+                v_bx, code_bx = ERROR, REASON_RUNTIME_CLEANUP_FAILED
             else:
                 v_bx, code_bx = ERROR, REASON_NO_TEST_VERDICT
             reason_bx = bx.diagnostics or bx.error or "the black-box pack produced no verdict"
@@ -590,11 +794,36 @@ def guard(
                 f"the black-box pack failed ({bx.tests_passed}/{bx.tests_total})"
             )
         elif repo_verdict is not None and not repo_verdict.passed:
-            # Pack passed, but the repo's own suite did not — block the merge.
-            v_bx, code_bx, reason_bx = FAIL, REASON_TESTS_FAILED, (
-                "the black-box pack passed but the repo's own test suite failed "
-                f"({repo_verdict.diagnostics[:200]}) — a green pack must not mask an "
-                "internal regression; fix the repo suite or use --blackbox-only"
+            # Preserve the repo phase's actual failure class. A timeout,
+            # unavailable boundary, or tamper signature is not a test failure
+            # merely because the black-box pack completed first.
+            repo_outcome = repo_art.get("outcome")
+            if repo_outcome in _TAMPER_OUTCOME_REASON:
+                code_bx, summary = _TAMPER_OUTCOME_REASON[repo_outcome]
+                v_bx, repo_cause = TAMPERED, summary
+            elif repo_art.get("tamper"):
+                v_bx, code_bx = TAMPERED, REASON_JUNIT_EXIT_MISMATCH
+                repo_cause = "the repo suite's exit code and JUnit report disagree"
+            elif repo_outcome in _OUTCOME_REASON:
+                v_bx, code_bx = _OUTCOME_REASON[repo_outcome]
+                repo_cause = repo_verdict.diagnostics or str(repo_outcome)
+            elif repo_art.get("tests_total") is not None:
+                v_bx, code_bx = FAIL, REASON_TESTS_FAILED
+                repo_cause = (
+                    "the repo suite failed "
+                    f"({repo_art.get('tests_passed', 0)}/"
+                    f"{repo_art.get('tests_total')} passed)"
+                )
+            elif repo_verdict.score <= 0.08:
+                v_bx, code_bx = ERROR, REASON_PATCH_APPLY_FAILED
+                repo_cause = repo_verdict.diagnostics or "the patch did not apply"
+            else:
+                v_bx, code_bx = FAIL, REASON_NO_TEST_VERDICT
+                repo_cause = repo_verdict.diagnostics or "no clean repo-suite verdict"
+            reason_bx = (
+                "the black-box pack passed, but the repo's own test suite "
+                "(the required repo-native phase) "
+                f"did not: {repo_cause} — a green pack must not mask a repo failure"
             )
         else:
             extra = "" if repo_verdict is None else " and the repo's own suite passed"
@@ -603,11 +832,86 @@ def guard(
                 "the candidate satisfied the judge-owned protocol tests, judged from "
                 "outside its own process"
             )
+        repo_state = repo_art.get("execution_state") if repo_art else None
+        execution_state_bx = (
+            EXECUTION_COMPLETED
+            if repo_verdict is not None
+            and repo_state == EXECUTION_COMPLETED
+            and bx_state == EXECUTION_COMPLETED
+            else EXECUTION_STARTED_INCOMPLETE
+            if repo_verdict is not None
+            else bx_state
+        )
+        execution_phase_bx = (
+            str(repo_art.get("execution_phase", "repo_suite"))
+            if repo_verdict is not None
+            else bx_phase
+        )
+        test_started_bx = bx_started or bool(repo_art.get("test_command_started"))
+        verdict_source_bx = (
+            "composite:blackbox+repo"
+            if repo_verdict is not None and repo_art.get("verdict_source") and bx_gradeable
+            else None
+            if repo_verdict is not None
+            else "blackbox"
+            if bx_gradeable
+            else None
+        )
+        tests_passed_bx: int | None
+        tests_total_bx: int | None
+        if repo_verdict is not None:
+            if execution_state_bx == EXECUTION_COMPLETED:
+                repo_passed_count = repo_art.get("tests_passed")
+                repo_total_count = repo_art.get("tests_total")
+                if repo_passed_count is not None and repo_total_count is not None:
+                    tests_passed_bx = bx.tests_passed + int(repo_passed_count)
+                    tests_total_bx = bx.tests_total + int(repo_total_count)
+                else:
+                    tests_passed_bx = tests_total_bx = None
+            else:
+                # A required composite is one evidence unit. Never expose only
+                # the already-finished black-box counts as if they described the
+                # incomplete whole; phase-level counts remain in attestation.
+                tests_passed_bx = tests_total_bx = None
+        else:
+            tests_passed_bx = bx.tests_passed if bx_completed else None
+            tests_total_bx = bx.tests_total if bx_completed else None
+        pack_outcome_bx = None
+        if bx.error == "verifier pack invalid":
+            pack_outcome_bx = "pack_invalid"
+        elif bx.error == "verifier pack identity mismatch":
+            pack_outcome_bx = "pack_identity_mismatch"
+        elif bx.error in (
+            "verifier pack snapshot changed",
+            "verifier pack changed while executing",
+        ):
+            pack_outcome_bx = "pack_snapshot_changed"
+        pack_evidence_bx = {
+            "present": getattr(
+                bx,
+                "pack_present",
+                True if bx.pack_sha256 else False if "not found" in (bx.error or "") else None,
+            ),
+            "snapshot_sha256": bx.pack_sha256,
+            "started": bx_started,
+            "completed": bx_completed,
+            "outcome": pack_outcome_bx,
+            "candidate_launcher_invocation_observed": (
+                candidate_launcher_invocation_observed
+            ),
+        }
         assurance_bx = _assurance_profile(
-            delivered_iso, verifier_pack, blackbox=True,
-            composed_repo_suite=(repo_verdict is not None),
-            setup_isolation=(repo_verdict.artifact or {}).get("setup_isolation")
-            if repo_verdict is not None else None,
+            candidate_iso_bx, verifier_pack, blackbox=True,
+            composed_repo_suite=repo_started,
+            repo_suite_required=not blackbox_only,
+            repo_suite_state=repo_suite_state,
+            candidate_isolation=candidate_iso_bx,
+            setup_isolation=repo_art.get("setup_isolation") if repo_art else None,
+            runtime_continuity=repo_art.get("runtime_continuity") if repo_art else None,
+            execution_state=execution_state_bx,
+            execution_phase=execution_phase_bx,
+            test_command_started=test_started_bx,
+            pack_evidence=pack_evidence_bx,
         )
         # Enforceable assurance policy (fail-closed): refuse to ship a verdict whose
         # ACTUAL (delivered) assurance is below what the caller required.
@@ -616,9 +920,12 @@ def guard(
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
         )
-        if shortfall_bx is not None:
+        if (
+            shortfall_bx is not None
+            and execution_state_bx == EXECUTION_COMPLETED
+            and v_bx == PASS
+        ):
             v_bx, code_bx, reason_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall_bx
-        repo_art = repo_verdict.artifact if repo_verdict is not None else {}
         # Evidence-only requests the black-box judge cannot fulfil degrade
         # EXPLICITLY (an unmeasured record with a note), never silently (1.7).
         baseline_bx = None
@@ -658,10 +965,14 @@ def guard(
             verdict=v_bx, passed=(v_bx == PASS), reason=reason_bx,
             files_changed=changed, protected_violations=[],
             risk_level=risk_bx.level, risk_score=risk_bx.score,
-            tests_passed=bx.tests_passed if bx.ran else None,
-            tests_total=bx.tests_total if bx.ran else None,
-            verdict_source="blackbox" if bx.ran else None,
-            diagnostics=bx.diagnostics, reason_code=code_bx, isolation=delivered_iso,
+            tests_passed=tests_passed_bx,
+            tests_total=tests_total_bx,
+            test_command_ran=test_started_bx,
+            execution_state=execution_state_bx,
+            execution_phase=execution_phase_bx,
+            verdict_source=verdict_source_bx,
+            diagnostics=bx.diagnostics, reason_code=code_bx,
+            isolation=candidate_iso_bx,
             assurance=assurance_bx,
             baseline=baseline_bx,
             diff_coverage=coverage_bx,
@@ -671,16 +982,36 @@ def guard(
                 art={
                     "verifier_pack_sha256": bx.pack_sha256,
                     "verifier_pack_manifest": bx.pack_manifest,
-                    "verifier_pack_tests_passed": bx.tests_passed if bx.ran else None,
-                    "verifier_pack_tests_total": bx.tests_total if bx.ran else None,
+                    "verifier_pack_present": pack_evidence_bx["present"],
+                    "verifier_pack_started": bx_started,
+                    "verifier_pack_completed": bx_completed,
+                    "verifier_pack_tests_passed": bx.tests_passed if bx_completed else None,
+                    "verifier_pack_tests_total": bx.tests_total if bx_completed else None,
                     "junit_sha256": bx.junit_sha256,
                     "junit_digest_format": (
                         "JUNIT_XML_SHA256" if bx.junit_sha256 else None
                     ),
-                    "isolation_evidence": bx.isolation,
+                    "isolation_evidence": isolation_evidence_bx,
+                    "blackbox_pack_isolation_evidence": isolation_evidence_bx,
+                    "setup_isolation_evidence": repo_art.get(
+                        "setup_isolation_evidence"
+                    ),
+                    "repo_suite_isolation_evidence": repo_art.get(
+                        "repo_suite_isolation_evidence"
+                    ),
+                    "verifier_pack_isolation_evidence": repo_art.get(
+                        "verifier_pack_isolation_evidence"
+                    ),
                     "deleted_paths_applied": bx.deleted_applied,
                     "repo_suite_junit_sha256": repo_art.get("junit_sha256") if repo_art else None,
-                    "repo_suite_passed": repo_verdict.passed if repo_verdict is not None else None,
+                    "repo_suite_passed": (
+                        repo_verdict.passed
+                        if repo_verdict is not None and repo_clean_source
+                        else None
+                    ),
+                    "repo_suite_started": repo_started,
+                    "repo_suite_completed": repo_completed,
+                    "repo_suite_state": repo_suite_state,
                     "repo_suite_image_digest": (
                         repo_art.get("image_digest") if repo_art else None
                     ),
@@ -691,6 +1022,15 @@ def guard(
                     "policy_id": policy_id,
                     "policy_version": policy_version,
                     "setup_isolation": repo_art.get("setup_isolation"),
+                    "execution_state": execution_state_bx,
+                    "execution_phase": execution_phase_bx,
+                    "test_command_started": test_started_bx,
+                    "candidate_invocations": candidate_invocations,
+                    "candidate_launcher_invocation_observed": (
+                        candidate_launcher_invocation_observed
+                    ),
+                    "delivered_isolation": candidate_iso_bx,
+                    "effective_candidate_isolation": candidate_iso_bx,
                 },
                 mode="blackbox",
             ),
@@ -756,6 +1096,21 @@ def guard(
             f"disagree ({art.get('tests_passed', 0)}/{art.get('tests_total', 0)} in the "
             "report) — refusing to read this as a pass"
         ), REASON_JUNIT_EXIT_MISMATCH
+    elif (
+        art.get("outcome") == "pack_invalid"
+        and art.get("verifier_pack_present") is False
+    ):
+        v, code = ERROR, REASON_VERIFIER_PACK_NOT_FOUND
+        reason = diagnostics or "the configured verifier-pack path does not exist"
+    elif (
+        art.get("outcome") in _OUTCOME_REASON
+        and art.get("outcome") != "no_test_verdict"
+    ):
+        # The patch applied and the session started, but timed out or its setup
+        # step/mandatory pack failed — never mislabel these as "the patch did
+        # not apply" or let already-positive repo counts mask a pack failure.
+        v, code = _OUTCOME_REASON[art["outcome"]]
+        reason = diagnostics or f"run ended: {art['outcome']}"
     elif verdict is not None and verdict.passed:
         v, reason, code = PASS, (
             "all repo tests pass and the patch leaves the test harness untouched"
@@ -766,8 +1121,10 @@ def guard(
             f"({art.get('tests_passed', 0)}/{art.get('tests_total')} passed)"
         ), REASON_TESTS_FAILED
     elif art.get("outcome") in _OUTCOME_REASON:
-        # The patch applied and the session started, but timed out or its setup
-        # step failed — never mislabel these as "the patch did not apply".
+        # Preserve the historical treatment of a positive JUnit error count as
+        # a test failure. ``no_test_verdict`` reaches this branch only when no
+        # test count exists; pack-specific no-verdict outcomes were handled
+        # above because a passing repo count must never mask them.
         v, code = _OUTCOME_REASON[art["outcome"]]
         reason = diagnostics or f"run ended: {art['outcome']}"
     elif verdict is not None and verdict.score <= 0.08:
@@ -871,6 +1228,55 @@ def guard(
                 "candidate PASS under an unchanged harness"
             )
 
+    if run_suite:
+        execution_state = str(
+            art.get(
+                "execution_state",
+                EXECUTION_COMPLETED
+                if art.get("verdict_source")
+                else EXECUTION_STARTED_INCOMPLETE
+                if art.get("outcome") == "test_timeout"
+                else EXECUTION_NOT_STARTED,
+            )
+        )
+        execution_phase = str(art.get("execution_phase", "repo_suite"))
+        test_command_started = bool(
+            art.get("test_command_started", art.get("verdict_source") is not None)
+        )
+        recorded_isolation = str(
+            art.get(
+                "delivered_isolation",
+                isolation if test_command_started else "not_run",
+            )
+        )
+        delivered_isolation = recorded_isolation if test_command_started else "not_run"
+    else:
+        execution_state = EXECUTION_STATIC_GATE
+        execution_phase = "pre_gate"
+        test_command_started = False
+        delivered_isolation = "not_run"
+
+    effective_candidate_isolation = (
+        "subprocess"
+        if art.get("setup_isolation") == "subprocess_host_opt_in"
+        else delivered_isolation
+    )
+
+    pack_evidence = None
+    if verifier_pack:
+        present = art.get("verifier_pack_present")
+        if present is None and art.get("verifier_pack_sha256"):
+            present = True
+        if present is None and art.get("outcome") == "pack_invalid":
+            present = os.path.isdir(verifier_pack)
+        pack_evidence = {
+            "present": present,
+            "snapshot_sha256": art.get("verifier_pack_sha256"),
+            "started": bool(art.get("verifier_pack_started")),
+            "completed": bool(art.get("verifier_pack_completed")),
+            "outcome": art.get("outcome"),
+        }
+
     judgment_mode = "blackbox" if blackbox else "repo"
     attestation = _build_attestation(
         candidate, safe_deleted=safe_deleted, test_command=test_command,
@@ -892,6 +1298,11 @@ def guard(
             policy_id=policy_id, policy_version=policy_version,
         ), art={
             **art,
+            "execution_state": execution_state,
+            "execution_phase": execution_phase,
+            "test_command_started": test_command_started,
+            "delivered_isolation": delivered_isolation,
+            "effective_candidate_isolation": effective_candidate_isolation,
             # Repo-native verdicts are revision-bound too (1.6): black-box was
             # the only mode carrying base/head before, which left the common
             # Action path's signed verdicts unbound from the commit they judged.
@@ -903,10 +1314,14 @@ def guard(
 
     assurance = (
         _assurance_profile(
-            isolation,
+            delivered_isolation,
             verifier_pack,
             setup_isolation=art.get("setup_isolation"),
             runtime_continuity=art.get("runtime_continuity"),
+            execution_state=execution_state,
+            execution_phase=execution_phase,
+            test_command_started=test_command_started,
+            pack_evidence=pack_evidence,
         )
         if run_suite
         else _static_assurance_profile(verifier_pack)
@@ -915,7 +1330,7 @@ def guard(
     # same_process_candidate_writable, so a --require-report-integrity of
     # external_process_isolated here correctly refuses rather than overclaims.
     shortfall = None
-    if run_suite:
+    if run_suite and execution_state == EXECUTION_COMPLETED and v == PASS:
         shortfall = _assurance_shortfall(
             assurance,
             require_report_integrity=require_report_integrity,
@@ -934,10 +1349,13 @@ def guard(
         risk_score=risk.score,
         tests_passed=art.get("tests_passed"),
         tests_total=art.get("tests_total"),
+        test_command_ran=test_command_started,
+        execution_state=execution_state,
+        execution_phase=execution_phase,
         verdict_source=art.get("verdict_source"),
         diagnostics=diagnostics,
         reason_code=code,
-        isolation=isolation if run_suite else "not_run",
+        isolation=effective_candidate_isolation,
         diff_coverage=coverage_evidence,
         baseline=baseline_info,
         attestation=attestation,
@@ -1160,9 +1578,22 @@ def _build_attestation(
         # signed black-box verdict is bound to the tree and boundary it judged,
         # not just the candidate text.
         "isolation_evidence": art.get("isolation_evidence"),
+        "setup_isolation_evidence": art.get("setup_isolation_evidence"),
+        "repo_suite_isolation_evidence": art.get(
+            "repo_suite_isolation_evidence"
+        ),
+        "verifier_pack_isolation_evidence": art.get(
+            "verifier_pack_isolation_evidence"
+        ),
+        "blackbox_pack_isolation_evidence": art.get(
+            "blackbox_pack_isolation_evidence"
+        ),
         "deleted_paths_applied": art.get("deleted_paths_applied"),
         "repo_suite_junit_sha256": art.get("repo_suite_junit_sha256"),
         "repo_suite_passed": art.get("repo_suite_passed"),
+        "repo_suite_started": art.get("repo_suite_started"),
+        "repo_suite_completed": art.get("repo_suite_completed"),
+        "repo_suite_state": art.get("repo_suite_state"),
         "repo_suite_image_digest": art.get("repo_suite_image_digest"),
         "base_sha": art.get("base_sha"),
         "head_sha": art.get("head_sha"),
@@ -1173,6 +1604,20 @@ def _build_attestation(
         # Which repo policy produced this verdict (from .evoguard.json).
         "policy_id": art.get("policy_id"),
         "policy_version": art.get("policy_version"),
+        "execution_state": art.get("execution_state"),
+        "execution_phase": art.get("execution_phase"),
+        "test_command_started": art.get("test_command_started"),
+        "delivered_isolation": art.get("delivered_isolation"),
+        "effective_candidate_isolation": art.get(
+            "effective_candidate_isolation"
+        ),
+        "candidate_invocations": art.get("candidate_invocations"),
+        "candidate_launcher_invocation_observed": art.get(
+            "candidate_launcher_invocation_observed"
+        ),
+        "verifier_pack_present": art.get("verifier_pack_present"),
+        "verifier_pack_started": art.get("verifier_pack_started"),
+        "verifier_pack_completed": art.get("verifier_pack_completed"),
         "setup_isolation": art.get("setup_isolation"),
         "runtime_tree_sha256": art.get("runtime_tree_sha256"),
         "runtime_tree_digest_format": art.get("runtime_tree_digest_format"),
@@ -1234,9 +1679,14 @@ def _static_assurance_profile(verifier_pack: str | None) -> dict[str, Any]:
             "configured": True,
             "present": None,
             "integrity": "not_evaluated_static_gate",
+            "identity_verified": None,
+            "execution_state": EXECUTION_STATIC_GATE,
             "secrecy": "not_evaluated_static_gate",
+            "snapshot_sha256": None,
         }
     return {
+        "execution_state": EXECUTION_STATIC_GATE,
+        "execution_phase": "pre_gate",
         "harness_integrity": "pre_gate_enforced",
         "report_integrity": "not_applicable_static_gate",
         "candidate_isolation": "not_run",
@@ -1254,59 +1704,236 @@ def _static_assurance_profile(verifier_pack: str | None) -> dict[str, Any]:
     }
 
 
+def _pack_assurance(
+    verifier_pack: str | None,
+    *,
+    isolation: str = "not_run",
+    blackbox: bool = False,
+    evidence: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Describe verifier-pack facts without turning configuration into evidence.
+
+    A path in policy proves only that a pack was configured.  Presence, snapshot
+    acceptance, execution, and the post-execution integrity check are separate
+    facts supplied by the runner in ``evidence``.
+    """
+    if not verifier_pack:
+        return None
+    ev = evidence or {}
+    present = ev.get("present")
+    snapshot_sha256 = ev.get("snapshot_sha256")
+    snapshot_accepted = bool(ev.get("snapshot_accepted") or snapshot_sha256)
+    started = bool(ev.get("started"))
+    completed = bool(ev.get("completed"))
+    outcome = ev.get("outcome")
+
+    if present is False:
+        integrity = "not_evaluated_missing"
+        identity_verified: bool | None = None
+    elif outcome == "pack_invalid":
+        integrity = "invalid"
+        identity_verified = None
+    elif outcome == "pack_identity_mismatch":
+        integrity = "snapshot_identity_mismatch"
+        identity_verified = False
+    elif outcome == "pack_snapshot_changed":
+        integrity = "snapshot_changed"
+        identity_verified = False
+    elif snapshot_accepted and completed:
+        # Repo-native container packs are mounted read-only.  The black-box
+        # judge executes its private snapshot on the host, so its integrity
+        # mechanism is the completed pre/post snapshot check.  Being unmounted
+        # from a candidate container is a secrecy property, not a read-only
+        # mount property.
+        integrity = (
+            "verified_snapshot_read_only"
+            if not blackbox and isolation in ("docker", "gvisor")
+            else "verified_snapshot_pre_post"
+        )
+        identity_verified = True
+    elif snapshot_accepted:
+        integrity = "verified_snapshot_pre_execution"
+        identity_verified = True
+    else:
+        integrity = "not_evaluated"
+        identity_verified = None
+
+    if completed:
+        pack_execution = EXECUTION_COMPLETED
+    elif started:
+        pack_execution = EXECUTION_STARTED_INCOMPLETE
+    else:
+        pack_execution = EXECUTION_NOT_STARTED
+
+    if not started:
+        secrecy = "not_evaluated_no_execution"
+    elif blackbox and ev.get("candidate_launcher_invocation_observed") is False:
+        secrecy = "not_evaluated_no_candidate_execution"
+    elif blackbox and isolation in ("docker", "gvisor"):
+        secrecy = "unmounted_from_candidate"
+    elif blackbox:
+        secrecy = "reachable_same_host"
+    else:
+        secrecy = "readable_in_judge_process"
+
+    return {
+        "configured": True,
+        "present": present,
+        "integrity": integrity,
+        "identity_verified": identity_verified,
+        "execution_state": pack_execution,
+        "secrecy": secrecy,
+        "snapshot_sha256": snapshot_sha256,
+    }
+
+
+def _preflight_assurance_profile(
+    verifier_pack: str | None,
+    *,
+    execution_state: str = EXECUTION_NOT_STARTED,
+    execution_phase: str = "preflight",
+    setup_isolation: str | None = None,
+    runtime_continuity: str | None = None,
+    pack_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Assurance for a requested runtime evaluation that never started tests."""
+    return {
+        "execution_state": execution_state,
+        "execution_phase": execution_phase,
+        "harness_integrity": "pre_gate_enforced",
+        "report_integrity": "not_applicable_not_run",
+        "candidate_isolation": "not_run",
+        "suite_isolation": "not_run",
+        "setup_isolation": setup_isolation,
+        "runtime_continuity": runtime_continuity or "not_applicable",
+        "verifier_pack": _pack_assurance(
+            verifier_pack, evidence=pack_evidence, isolation="not_run"
+        ),
+        "overall_profile": (
+            "execution_incomplete_before_tests"
+            if execution_state == EXECUTION_STARTED_INCOMPLETE
+            else "preflight"
+        ),
+        "note": (
+            "runtime verification did not start a test command (furthest phase: "
+            f"{execution_phase}); no candidate isolation or report-integrity "
+            "boundary is claimed. Requested policy remains in "
+            "attestation.effective_policy."
+        ),
+    }
+
+
 def _assurance_profile(
     isolation: str, verifier_pack: str | None, *, blackbox: bool = False,
     composed_repo_suite: bool = False,
+    repo_suite_required: bool = False,
+    repo_suite_state: str | None = None,
+    candidate_isolation: str | None = None,
     setup_isolation: str | None = None,
     runtime_continuity: str | None = None,
+    execution_state: str = EXECUTION_COMPLETED,
+    execution_phase: str = "complete",
+    test_command_started: bool = True,
+    pack_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    pack = None
-    if verifier_pack:
-        pack_in_container = isolation in ("docker", "gvisor")
-        pack = {
+    if execution_state == EXECUTION_NOT_STARTED or not test_command_started:
+        return _preflight_assurance_profile(
+            verifier_pack,
+            execution_state=execution_state,
+            execution_phase=execution_phase,
+            setup_isolation=setup_isolation,
+            runtime_continuity=runtime_continuity,
+            pack_evidence=pack_evidence,
+        )
+
+    if pack_evidence is None and verifier_pack:
+        # Backward-compatible helper calls model a completed execution. Guard
+        # itself always passes explicit runner evidence.
+        pack_evidence = {
             "present": True,
-            "integrity": (
-                "verified_snapshot_read_only"
-                if pack_in_container
-                else "verified_snapshot_pre_post"
-            ),
-            # Only black-box/container mode keeps the pack outside the candidate
-            # boundary. Repo-native packs intentionally share the pytest process
-            # with candidate imports, so read-only storage is not secrecy.
-            "secrecy": (
-                "unmounted_from_candidate"
-                if blackbox and pack_in_container
-                else "reachable_same_host"
-                if blackbox
-                else "readable_in_judge_process"
-            ),
+            "snapshot_accepted": True,
+            "started": True,
+            "completed": execution_state == EXECUTION_COMPLETED,
         }
     effective_isolation = (
         "subprocess" if setup_isolation == "subprocess_host_opt_in" else isolation
     )
+    effective_candidate_isolation = (
+        candidate_isolation if candidate_isolation is not None else effective_isolation
+    )
+    pack = _pack_assurance(
+        verifier_pack,
+        isolation=(effective_candidate_isolation if blackbox else isolation),
+        blackbox=blackbox,
+        evidence=pack_evidence,
+    )
     if blackbox:
         # ``isolation`` here is the DELIVERED boundary (from the runner), not the
         # requested flag — so candidate_isolation can never claim more than ran.
+        report_integrity = (
+            "same_process_candidate_writable"
+            if composed_repo_suite
+            else "external_process_isolated"
+        )
         return {
+            "execution_state": execution_state,
+            "execution_phase": execution_phase,
             "harness_integrity": "pre_gate_enforced",
-            "report_integrity": "external_process_isolated",
-            "candidate_isolation": effective_isolation,
+            # A composite verdict is only as strong as its weakest required
+            # report channel.  The external pack cannot strengthen the
+            # repo-native suite's candidate-writable JUnit+exit channel.
+            "report_integrity": report_integrity,
+            "candidate_isolation": effective_candidate_isolation,
             "suite_isolation": isolation,
             "setup_isolation": setup_isolation,
             "runtime_continuity": runtime_continuity or "not_applicable",
             "verifier_pack": pack,
-            "repo_native_suite": (
-                "composed_required" if composed_repo_suite else "not_run (--blackbox-only)"
+            "repo_native_suite": repo_suite_state
+            or (
+                "composed_completed"
+                if composed_repo_suite
+                else "required_not_run_short_circuit"
+                if repo_suite_required
+                else "not_required_blackbox_only"
             ),
-            "overall_profile": "black_box_external_judge",
+            "overall_profile": (
+                (
+                    "composite_blackbox_repo_native"
+                    if composed_repo_suite
+                    else "blackbox_composite_short_circuit"
+                    if repo_suite_required
+                    else "black_box_external_judge"
+                )
+                if execution_state == EXECUTION_COMPLETED
+                else "execution_incomplete"
+            ),
             "note": (
-                "report_integrity is external_process_isolated: the verdict comes "
-                "from the judge's own pytest over judge-owned protocol tests, which "
-                "never import the candidate — so in-process report/exit forgery "
-                "cannot reach it. candidate_isolation is what was DELIVERED "
-                f"('{isolation}'); a container boundary also removes the pack from "
-                "the candidate's reach. Unless --blackbox-only, the repo's own suite "
-                "was ALSO required to pass. See docs/BLACKBOX.md."
+                "The black-box phase has external_process_isolated report integrity: "
+                "its judge-owned pytest does not import the candidate, so candidate "
+                "report/exit forgery cannot reach that phase. "
+                + (
+                    "The required repo-native phase has "
+                    "same_process_candidate_writable report integrity, so the "
+                    "composite reports that weaker level; use --blackbox-only when "
+                    "an external_process_isolated floor is required. "
+                    if composed_repo_suite
+                    else "The repo-native phase remained required by policy but "
+                    "did not become an executed report channel; the required "
+                    f"pipeline stopped in state '{repo_suite_state}'. "
+                    if repo_suite_required
+                    else "The black-box phase is the only required report channel. "
+                )
+                + "candidate_isolation is what was OBSERVED during a launcher "
+                f"invocation ('{effective_candidate_isolation}'); preparing "
+                f"'{isolation}' alone is not evidence. A container boundary also "
+                "removes the pack from "
+                "the candidate's reach. "
+                + (
+                    "Execution did not complete, so no clean verdict source is claimed. "
+                    if execution_state != EXECUTION_COMPLETED
+                    else ""
+                )
+                + "See docs/BLACKBOX.md."
             ),
         }
     overall = (
@@ -1317,6 +1944,8 @@ def _assurance_profile(
         else "repo_native_same_process"
     )
     return {
+        "execution_state": execution_state,
+        "execution_phase": execution_phase,
         "harness_integrity": "pre_gate_enforced",
         "report_integrity": "same_process_candidate_writable",
         "candidate_isolation": effective_isolation,
@@ -1324,14 +1953,24 @@ def _assurance_profile(
         "setup_isolation": setup_isolation,
         "runtime_continuity": runtime_continuity or "not_applicable",
         "verifier_pack": pack,
-        "overall_profile": overall,
+        "overall_profile": (
+            overall
+            if execution_state == EXECUTION_COMPLETED
+            else "execution_incomplete"
+        ),
         "note": (
             "report_integrity is same_process_candidate_writable: a determined "
             "in-process patch can forge the JUnit report and exit code together. "
             "Guard blocks the harness edits/deletions and stdout forgery agents do "
             "in practice; it does not stop deliberate process-level forgery in "
             "source. The container modes isolate the host, not the report. Use "
-            "--blackbox for external_process_isolated. See docs/ASSURANCE.md."
+            "--blackbox for external_process_isolated. "
+            + (
+                "Execution did not complete, so no clean verdict source is claimed. "
+                if execution_state != EXECUTION_COMPLETED
+                else ""
+            )
+            + "See docs/ASSURANCE.md."
         ),
     }
 
@@ -1442,7 +2081,10 @@ def _diff_error(
         files_changed=[], protected_violations=[],
         risk_level="low", risk_score=0.0, diagnostics="",
         source="diff", base_reconstruction=base_reconstruction,
-        reason_code=reason_code,
+        reason_code=reason_code, isolation="not_run",
+        execution_state=EXECUTION_NOT_STARTED,
+        execution_phase="preflight",
+        assurance=_preflight_assurance_profile(None),
     )
 
 
@@ -1636,6 +2278,8 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
         f"| Tests passed | {tests} |",
         f"| Files changed | {len(r.files_changed)} |",
         f"| Blast radius | **{r.risk_level}** ({r.risk_score:.2f}) |",
+        f"| Execution | `{r.execution_state}` · phase `{r.execution_phase}` |",
+        f"| Test command started | {'yes' if r.test_command_ran else 'no'} |",
         f"| Verdict source | {r.verdict_source or '—'} |",
     ]
     if r.source:
@@ -1745,11 +2389,23 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
         "in a subprocess with rlimits + a timeout — fine for trusted repos, not a "
         "sandbox for untrusted code; isolate it further (--isolation docker|gvisor) for that",
     )
-    if r.isolation == "not_run":
+    if r.execution_state == EXECUTION_STATIC_GATE:
         _execution_note = (
             "EvoGuard decided this result from the pre-execution diff gate; the "
             "suite was not started, so no test command, JUnit report, or runtime "
             "isolation was delivered."
+        )
+    elif r.execution_state == EXECUTION_NOT_STARTED:
+        _execution_note = (
+            "Runtime verification stopped before any test command started "
+            f"(furthest phase: {r.execution_phase}); no suite/report isolation "
+            "is claimed."
+        )
+    elif r.execution_state == EXECUTION_STARTED_INCOMPLETE:
+        _execution_note = (
+            "A verification command started but the required execution sequence "
+            f"did not complete (furthest phase: {r.execution_phase}); therefore "
+            "there is no clean verdict source."
         )
     else:
         _execution_note = (
@@ -1802,6 +2458,9 @@ def to_sarif(result: GuardResult) -> dict[str, Any]:
                 "risk_level": result.risk_level,
                 "verdict_source": result.verdict_source,
                 "isolation": result.isolation,
+                "test_command_ran": result.test_command_ran,
+                "execution_state": result.execution_state,
+                "execution_phase": result.execution_phase,
             },
         }
         if locations:

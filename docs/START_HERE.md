@@ -57,10 +57,13 @@ produce `PASS`. Pin its `EVOGUARD_PACK_V2` identity as shown below.
 **When:** the target has a command-line boundary (`python -m tool`, a binary) and
 you want a verdict a patch can't forge from inside its own process.
 
-**Guarantees:** the verdict comes from the **judge's own pytest** over a judge-owned
-protocol pack that never imports your code (`report_integrity:
-external_process_isolated`); by default it is **composite** — your repo's own suite
-**and** the pack must both pass.
+**Guarantees:** the external phase comes from the **judge's own pytest** over a
+judge-owned protocol pack that never imports your code. Use `--blackbox-only`
+for an end-to-end `report_integrity: external_process_isolated` verdict. By
+default it is **composite** — your repo's own suite **and** the pack must both
+pass — so the overall profile honestly reports the weaker repo-native channel.
+The pack must call `$EVOGUARD_EXEC`; a constant pack/direct target shortcut is
+`ERROR candidate_not_exercised`.
 
 **Does NOT guarantee (without `--isolation docker`):** OS isolation — the candidate
 runs as a host subprocess. The shell-free black-box launcher has a POSIX
@@ -85,11 +88,14 @@ broken `mul` the pack never checks). Full walkthrough:
 **When:** you run the black-box CLI path against semi-trusted code and want the
 candidate confined at the OS level, not just judged out-of-process.
 
-**Guarantees:** the candidate runs in a network-less, read-only container — the
-repo copy is mounted read-only and the pack is **not mounted into the candidate at
-all**. Isolation is **delivered, not requested**: a missing daemon or image is
-`ERROR`, never a mislabelled `PASS`. Proven against a real daemon in CI, where a
-malicious candidate cannot write the host or reach the pack
+**Guarantees:** on a completed `PASS`, a judge-owned receipt and runtime CID
+establish that the trusted pack invoked the candidate launcher through a
+network-less, read-only container; the pack's assertions establish the intended
+candidate behaviour. The repo copy is mounted read-only and the pack is **not
+mounted into the candidate at all**. Isolation is **observed, not requested**: a
+missing daemon/image, absent launcher call, or failed cleanup is `ERROR`, never a
+mislabelled `PASS`. Proven against a real daemon in CI, where a malicious
+candidate cannot write the host or reach the pack
 (`tests/test_blackbox_docker_e2e.py`).
 
 **Does NOT guarantee:** that the exact built artifact you deploy is the one judged
@@ -148,7 +154,7 @@ effective `subprocess` isolation.
 Make the assurance a contract — Guard refuses rather than ship a weaker guarantee:
 
 ```bash
---require-report-integrity external_process_isolated   # must be black-box
+--require-report-integrity external_process_isolated   # must be --blackbox-only
 --require-candidate-isolation docker                   # must be a container
 ```
 

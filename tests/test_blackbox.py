@@ -45,10 +45,10 @@ CALC_MAIN = (
 # The judge-owned pack: invokes the candidate CLI out-of-process and checks output.
 PACK_TEST = (
     "import os, subprocess, sys\n"
-    "TARGET = os.environ['EVOGUARD_TARGET']\n"
+    "EXEC = os.environ['EVOGUARD_EXEC']\n"
     "PY = os.environ.get('EVOGUARD_PYTHON', sys.executable)\n"
     "def _run(*args):\n"
-    "    return subprocess.run([PY, '-m', 'calc', *args], cwd=TARGET,\n"
+    "    return subprocess.run([EXEC, PY, '-m', 'calc', *args],\n"
     "        capture_output=True, text=True).stdout.strip()\n"
     "def test_add():\n"
     "    assert _run('add', '2', '3') == '5'\n"
@@ -82,7 +82,10 @@ class BlackboxJudgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, pack = _repo(tmp), _pack(tmp)
             # No-op source touch; the CLI already returns correct sums.
-            r = guard(repo, _block("calc/note.py", "# ok\n"), verifier_pack=pack, blackbox=True)
+            r = guard(
+                repo, _block("calc/note.py", "# ok\n"),
+                verifier_pack=pack, blackbox=True, blackbox_only=True,
+            )
             self.assertEqual(r.verdict, PASS)
             self.assertEqual((r.tests_passed, r.tests_total), (2, 2))
             self.assertEqual(r.verdict_source, "blackbox")
@@ -94,7 +97,10 @@ class BlackboxJudgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo, pack = _repo(tmp), _pack(tmp)
             broken = CALC_MAIN.replace("return a + b", "return a + b + 1")
-            r = guard(repo, _block("calc/__main__.py", broken), verifier_pack=pack, blackbox=True)
+            r = guard(
+                repo, _block("calc/__main__.py", broken),
+                verifier_pack=pack, blackbox=True, blackbox_only=True,
+            )
             self.assertEqual(r.verdict, FAIL)
 
     def test_the_same_process_forgery_is_DEFEATED_under_blackbox(self) -> None:
@@ -123,7 +129,10 @@ class BlackboxJudgeTests(unittest.TestCase):
                 "    _, op, a, b = sys.argv\n"
                 "    print(add(int(a), int(b)))\n"
             )
-            r = guard(repo, _block("calc/__main__.py", evil), verifier_pack=pack, blackbox=True)
+            r = guard(
+                repo, _block("calc/__main__.py", evil),
+                verifier_pack=pack, blackbox=True, blackbox_only=True,
+            )
             # Wrong answer (add returns a+b+1) → the pack's assertion fails, and the
             # forgery in the CLI subprocess cannot reach the judge's report.
             self.assertEqual(r.verdict, FAIL)

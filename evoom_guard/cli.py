@@ -236,8 +236,9 @@ def build_parser() -> argparse.ArgumentParser:
     g_p.add_argument(
         "--verifier-pack", dest="verifier_pack", default=None,
         help="directory of judge-owned tests/invariants the PATCH CANNOT include "
-        "or modify. A verified snapshot runs as a separate mandatory pytest phase, "
-        "so a narrowed repo command cannot skip it. Repo-native candidate imports "
+        "or modify. Repo-native mode runs the verified snapshot after the repo "
+        "suite; black-box mode runs it first and may short-circuit before the repo "
+        "phase. A narrowed repo command cannot skip it. Repo-native candidate imports "
         "share the judge process — the pack is not secret (use "
         "--blackbox with --isolation docker for that). See docs/VERIFIER_PACKS.md.",
     )
@@ -245,10 +246,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--blackbox", dest="blackbox", action="store_true",
         help="external black-box judge (needs --verifier-pack): the verdict comes "
         "from the JUDGE's own pytest over the pack, which never imports the "
-        "candidate — closing same-process report forgery (report_integrity: "
-        "external_process_isolated). The pack invokes the candidate across a "
-        "process boundary via $EVOGUARD_EXEC (which runs it under the delivered "
-        "isolation). By default the repo's own suite is ALSO required to pass. "
+        "candidate — closing same-process report forgery for that phase. The "
+        "pack must invoke the candidate via $EVOGUARD_EXEC; isolation is proven "
+        "only by an observed launcher invocation (plus a CID for containers). "
+        "By default the repo's own suite is ALSO required, so the completed "
+        "composite has the weaker repo-native report-integrity level. "
         "See docs/BLACKBOX.md.",
     )
     g_p.add_argument(
@@ -260,17 +262,18 @@ def build_parser() -> argparse.ArgumentParser:
     g_p.add_argument(
         "--require-report-integrity", dest="require_report_integrity", default=None,
         choices=("same_process_candidate_writable", "external_process_isolated"),
-        help="for execution verdicts, fail closed unless this report_integrity "
-        "level is delivered. A static pre-gate refusal keeps its original verdict "
-        "and reports not_applicable_static_gate. 'external_process_isolated' "
-        "needs --blackbox.",
+        help="for a completed PASS, fail closed unless this end-to-end "
+        "report_integrity level is delivered. Static/preflight/incomplete causes "
+        "remain unchanged. 'external_process_isolated' needs --blackbox-only; "
+        "default --blackbox is composite with the weaker repo-native channel.",
     )
     g_p.add_argument(
         "--require-candidate-isolation", dest="require_candidate_isolation", default=None,
         choices=("subprocess", "docker", "gvisor"),
-        help="for execution verdicts, fail closed unless this candidate isolation "
-        "is delivered. A static pre-gate refusal keeps its original verdict and "
-        "reports not_run.",
+        help="for a completed PASS, fail closed unless this candidate isolation "
+        "was observed. In black-box mode preparation is insufficient: a launcher "
+        "receipt (and container CID for docker/gvisor) is required. "
+        "Static/preflight/incomplete causes remain unchanged.",
     )
     g_p.add_argument(
         "--expect-verifier-pack-sha256",
@@ -508,6 +511,10 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         cfg = _load_config(args.config, out=out)
     except ConfigError as exc:
         out(f"config error (fail-closed): {exc}")
+        return 2
+
+    if args.blackbox_only and not args.blackbox:
+        out("usage: --blackbox-only requires --blackbox")
         return 2
 
     cfg_tc = args.test_command if args.test_command is not None else cfg.get("test_command")

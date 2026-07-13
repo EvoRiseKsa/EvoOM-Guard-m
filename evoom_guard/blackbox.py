@@ -3,20 +3,24 @@
 # Source-available — see LICENSE for permitted use.
 # Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
-"""The external black-box judge — the fix for same-process report forgery.
+"""The external black-box judge — an isolated report channel.
 
 The default judge runs the candidate's code in the **same process** as pytest
 and the report writer, so a patch that writes ``atexit`` + ``os._exit(0)`` +
 a forged ``--junitxml`` can fake a ``PASS`` (see ``docs/ASSURANCE.md``). No
 in-process change can close that: same-process authority is same-process control.
 
-The black-box judge closes it by construction:
+The black-box phase closes that channel-local hole by construction. The default
+Guard policy is composite and also requires the weaker repo-native channel;
+``--blackbox-only`` is required for end-to-end external report integrity.
 
   * The **verdict-producing process is the judge's own** — it runs a pack of
     **judge-owned tests** (the "protocol pack") and NEVER imports the candidate's
     code. Its exit code is therefore authoritative: the candidate cannot register
-    an ``atexit`` hook in it, cannot call ``os._exit`` on it, cannot rewrite its
-    report.
+    an ``atexit`` hook in it or call ``os._exit`` on it. In host-subprocess mode
+    the same OS user may still reach the XML path, but rewriting XML cannot forge
+    a clean PASS consistent with the judge's own exit; Docker also removes that
+    file reachability.
   * The candidate is exercised **only across a process boundary** — the pack
     invokes it as a subprocess (a CLI, a server, `python -m tool`, …) through the
     ``EVOGUARD_EXEC`` launcher, which runs it under the delivered isolation, and
@@ -27,16 +31,16 @@ The black-box judge closes it by construction:
 
 Guarantee and its edge (stated plainly):
 
-  * report_integrity becomes **external_process_isolated**: the demonstrated
+  * This phase's report_integrity is **external_process_isolated**: the demonstrated
     same-process forgery is defeated — proven by an adversarial test that plants
     the exact ``atexit``/``os._exit`` forgery in the candidate and still gets the
     correct ``FAIL``.
-  * The one residual is a *detached* grandchild the candidate spawns that sleeps
-    and races the judge's read of its report. The judge reads its report into
-    memory the instant pytest returns (all pack subprocesses have exited by then)
-    and grades primarily by its **own exit code**, so this race is already
-    impractical; run with ``--isolation docker`` to remove it entirely (the
-    container is torn down, reaping any lingering process). Documented, not hidden.
+  * POSIX cleanup reaps the judge's process group on normal completion and abort,
+    but a hostile host-mode child can deliberately create a new session and
+    escape that group. The judge reads its report immediately and grades primarily
+    by its **own exit code**; delivered Docker/gVisor isolation contains that
+    escape. CID cleanup is fail-closed: inability to prove a candidate container
+    absent invalidates a pending verdict. Documented, not hidden.
 
 Scope: this fits targets with a **process/protocol boundary** — CLIs, HTTP
 services, DB-backed programs. A pure library that the pack must ``import`` is
@@ -48,14 +52,23 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
+import secrets
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
-from evoom_guard.candidate_runner import CandidateRunner, IsolationUnavailable
+from evoom_guard.candidate_runner import (
+    CANDIDATE_CID_DIRNAME,
+    CandidateRunner,
+    IsolationUnavailable,
+)
 from evoom_guard.pack_manifest import (
     PackManifestError,
     digest_and_manifest,
@@ -87,6 +100,355 @@ class BlackboxResult(NamedTuple):
     junit_sha256: str | None = None      # digest of the judge-owned report
     isolation: dict[str, Any] | None = None   # IsolationEvidence.as_dict() — DELIVERED
     deleted_applied: list[str] | None = None  # deletions actually applied to the copy
+    # Execution facts are separate from ``ran``. ``ran`` deliberately keeps its
+    # historical meaning: a clean, gradeable black-box verdict was produced.
+    # A timed-out judge did start but did not complete; a returned pytest process
+    # completed even when its report/exit pair cannot be graded.
+    started: bool = False
+    completed: bool = False
+    execution_state: Literal["not_started", "started_incomplete", "completed"] = (
+        "not_started"
+    )
+    execution_phase: Literal["preflight", "blackbox_pack"] = "preflight"
+    pack_present: bool | None = None
+    # Candidate isolation is claimed only when the judge observes an invocation
+    # receipt from EVOGUARD_EXEC. Container modes additionally require a valid
+    # Docker-written CID, so preparing/probing a runner can never by itself
+    # satisfy an isolation policy floor. The precise fact is *launcher invoked*:
+    # pack semantics decide whether its argv meaningfully exercised candidate
+    # code, which is why the boolean deliberately avoids the stronger word
+    # ``execution``.
+    candidate_invocations: int = 0
+    candidate_launcher_invocation_observed: bool = False
+
+
+_DOCKER_CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
+
+
+class _InvocationRecorder:
+    """Judge-owned, one-way receipts proving that EVOGUARD_EXEC was invoked.
+
+    The random token lives in the launcher sidecar outside the candidate tree
+    and is not exported through the candidate environment.  The launcher sends
+    it over a POSIX datagram socket *before* exec.  Once queued in the judge's
+    socket buffer, candidate code cannot erase that first receipt.  A candidate
+    may discover the token after it has started, but by then the fact we need to
+    prove -- at least one real launcher invocation -- has already occurred.
+    """
+
+    def __init__(self, path: str, token: str, receiver: socket.socket) -> None:
+        self.path = path
+        self.token = token
+        self._token_bytes = token.encode("ascii")
+        self._receiver = receiver
+        self._count = 0
+        self._receiver_lock = threading.Lock()
+        self._count_lock = threading.Lock()
+        self._stop = threading.Event()
+        # Drain continuously: Linux's AF_UNIX datagram queue is deliberately
+        # small on many hosts. Waiting until pytest exits could block the 11th
+        # or later concurrent launcher and deadlock an otherwise valid pack.
+        self._reader = threading.Thread(
+            target=self._read_loop,
+            name="evoguard-invocation-recorder",
+            daemon=True,
+        )
+        self._reader.start()
+
+    @classmethod
+    def create(cls, workdir: str) -> _InvocationRecorder | None:
+        # Native Windows black-box execution already fails closed, and not all
+        # Python/socket builds expose AF_UNIX.  In either case, no receipt is
+        # strictly safer than asserting evidence that was not observed.
+        if os.name == "nt" or not hasattr(socket, "AF_UNIX"):
+            return None
+        path = os.path.join(workdir, ".evoguard-invocation.sock")
+        receiver: socket.socket | None = None
+        try:
+            receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            receiver.bind(path)
+            os.chmod(path, 0o600)
+            receiver.setblocking(False)
+        except OSError:
+            if receiver is not None:
+                receiver.close()
+            return None
+        try:
+            return cls(path, secrets.token_hex(32), receiver)
+        except (OSError, RuntimeError):
+            receiver.close()
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            return None
+
+    def drain(self) -> int:
+        """Drain queued datagrams and return the cumulative valid receipt count."""
+        self._drain_available()
+        with self._count_lock:
+            return self._count
+
+    def _read_loop(self) -> None:
+        while not self._stop.is_set():
+            self._drain_available()
+            self._stop.wait(0.01)
+
+    def _drain_available(self) -> None:
+        valid = 0
+        with self._receiver_lock:
+            while True:
+                try:
+                    payload = self._receiver.recv(4096)
+                except (BlockingIOError, InterruptedError):
+                    break
+                except OSError:
+                    break
+                if payload == self._token_bytes:
+                    valid += 1
+            # Publish the count before releasing the receive lock. Otherwise a
+            # result-building thread could drain an empty queue and read the old
+            # count in the tiny gap after the reader consumed the datagram.
+            if valid:
+                with self._count_lock:
+                    self._count += valid
+
+    def close(self) -> None:
+        self._stop.set()
+        self._reader.join(timeout=1.0)
+        # One final synchronous drain closes the small race between the last
+        # sender and the reader observing the stop event.
+        self._drain_available()
+        try:
+            self._receiver.close()
+        finally:
+            try:
+                os.unlink(self.path)
+            except OSError:
+                pass
+
+def _candidate_container_ids(
+    cidfile_dir: str, *, strict: bool = False
+) -> list[str]:
+    """Read only genuine Docker IDs from regular judge-owned cidfiles.
+
+    Treating cidfile contents as untrusted keeps cleanup shell-free and prevents
+    a malformed file from becoming a Docker option or an unrelated container
+    name. Docker emits a 64-character lowercase hexadecimal container ID.
+    """
+    try:
+        entries = sorted(os.scandir(cidfile_dir), key=lambda entry: entry.name)
+    except OSError as exc:
+        if strict:
+            raise CandidateContainerCleanupError(
+                f"could not scan candidate cidfile directory {cidfile_dir}: {exc}"
+            ) from exc
+        return []
+
+    container_ids: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if not entry.name.endswith(".cid"):
+            continue
+        try:
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            with open(entry.path, encoding="ascii") as cidfile:
+                raw = cidfile.read(129)
+        except (OSError, UnicodeError) as exc:
+            if strict:
+                raise CandidateContainerCleanupError(
+                    f"could not read candidate cidfile {entry.path}: {exc}"
+                ) from exc
+            continue
+        if len(raw) > 128:
+            continue
+        container_id = raw.strip()
+        if not _DOCKER_CONTAINER_ID.fullmatch(container_id):
+            continue
+        if container_id not in seen:
+            seen.add(container_id)
+            container_ids.append(container_id)
+    return container_ids
+
+
+def _attach_candidate_execution_evidence(
+    result: BlackboxResult,
+    *,
+    recorder: _InvocationRecorder | None,
+    cidfile_dir: str,
+    wait_for_late_container_evidence: bool = False,
+    observed_container_ids: set[str] | None = None,
+) -> BlackboxResult:
+    """Attach conservative proof that a candidate boundary actually started.
+
+    For host subprocess mode, a valid launcher receipt is sufficient.  Docker
+    and gVisor additionally require a genuine Docker CID written to a judge-owned
+    cidfile; a receipt alone proves only that the Docker launcher was attempted.
+    The reported invocation count is therefore the conjunction (minimum) of the
+    two independent observations for container modes.
+    """
+    isolation = dict(result.isolation or {})
+    delivered = str(isolation.get("delivered") or "")
+    attempts = (
+        10
+        if wait_for_late_container_evidence and delivered in {"docker", "gvisor"}
+        else 1
+    )
+    launcher_events = 0
+    container_ids: list[str] = []
+    for attempt in range(attempts):
+        launcher_events = recorder.drain() if recorder is not None else 0
+        container_ids = _candidate_container_ids(cidfile_dir)
+        if observed_container_ids is not None:
+            # Evidence is monotonic. Once a genuine runtime-written CID has
+            # been observed, a later transient/empty directory scan cannot
+            # erase the fact that this container existed and still requires
+            # an absence proof during strict cleanup.
+            observed_container_ids.update(container_ids)
+            container_ids = sorted(observed_container_ids)
+        if delivered == "subprocess":
+            candidate_invocations = launcher_events
+        elif delivered in {"docker", "gvisor"}:
+            candidate_invocations = min(launcher_events, len(container_ids))
+        else:
+            candidate_invocations = 0
+        if candidate_invocations > 0 or attempt + 1 == attempts:
+            break
+        time.sleep(0.05)
+
+    candidate_launcher_invocation_observed = candidate_invocations > 0
+    if (
+        not candidate_launcher_invocation_observed
+        and delivered not in {"", "not_run", "unavailable"}
+    ):
+        preparation_note = isolation.get("note")
+        isolation["prepared"] = delivered
+        isolation["delivered"] = "not_run"
+        if preparation_note:
+            isolation["preparation_note"] = preparation_note
+        isolation["note"] = (
+            "the boundary was prepared, but the required launcher/runtime "
+            "invocation evidence was not observed; no candidate isolation is "
+            "claimed"
+        )
+    isolation.update(
+        {
+            "candidate_launcher_events": launcher_events,
+            "candidate_container_ids_observed": len(container_ids),
+            "candidate_invocations": candidate_invocations,
+            "candidate_launcher_invocation_observed": (
+                candidate_launcher_invocation_observed
+            ),
+            "candidate_invocation_evidence_note": (
+                "proves the trusted pack invoked EVOGUARD_EXEC; it does not by "
+                "itself prove that the pack-supplied argv exercised candidate code. "
+                "Only the zero/nonzero fact is security-relevant; same-host code "
+                "could discover the sidecar after its first invocation, so the raw "
+                "receipt count is not an audited exact call count"
+            ),
+        }
+    )
+    return result._replace(
+        isolation=isolation,
+        candidate_invocations=candidate_invocations,
+        candidate_launcher_invocation_observed=(
+            candidate_launcher_invocation_observed
+        ),
+    )
+
+
+def _cleanup_candidate_containers(
+    cidfile_dir: str,
+    *,
+    wait_for_late_cidfiles: bool = False,
+    strict: bool = False,
+    known_container_ids: set[str] | None = None,
+) -> None:
+    """Force-remove every candidate container named by a valid cidfile.
+
+    ``docker run --rm`` remains the normal lifecycle. This is the failure-path
+    backstop for a judge timeout or ``KeyboardInterrupt``, where killing pytest
+    does not necessarily reap its descendant Docker client/container. A short,
+    bounded rescan catches a cidfile that Docker finishes writing concurrently.
+    Cleanup continues through every ID so one daemon error cannot skip later
+    containers. In ``strict`` mode any container whose absence cannot be proven
+    becomes an explicit infrastructure failure rather than allowing PASS.
+    """
+    known = set(known_container_ids or ())
+    if not os.path.lexists(cidfile_dir) and not known:
+        return
+
+    attempts = 10 if wait_for_late_cidfiles else 1
+    attempted: set[str] = set()
+    failures: list[str] = []
+
+    def container_present(container_id: str) -> bool:
+        probe = subprocess.run(
+            [
+                "docker",
+                "ps",
+                "-aq",
+                "--no-trunc",
+                "--filter",
+                f"id={container_id}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if probe.returncode != 0:
+            detail = (probe.stderr or probe.stdout).strip()[:200]
+            raise CandidateContainerCleanupError(
+                f"could not inspect candidate container {container_id}: {detail or 'docker ps failed'}"
+            )
+        return container_id in {line.strip() for line in probe.stdout.splitlines()}
+
+    for attempt in range(attempts):
+        try:
+            scanned = _candidate_container_ids(cidfile_dir, strict=strict)
+        except CandidateContainerCleanupError as exc:
+            # Still attempt every previously observed CID. The scan failure is
+            # independently fatal in strict mode because it could conceal a
+            # newly created candidate container.
+            failures.append(f"cidfile scan: {exc}")
+            scanned = []
+        for container_id in sorted(known | set(scanned)):
+            if container_id in attempted:
+                continue
+            attempted.add(container_id)
+            try:
+                # --rm often removed a normally completed container already.
+                # Probe first so "already absent" is success without relying on
+                # locale-specific Docker stderr text.
+                if not container_present(container_id):
+                    continue
+                removal = subprocess.run(
+                    ["docker", "rm", "-f", container_id],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                if removal.returncode != 0:
+                    detail = (removal.stderr or removal.stdout).strip()[:200]
+                    raise CandidateContainerCleanupError(
+                        f"docker rm -f failed for candidate container {container_id}: "
+                        f"{detail or f'exit {removal.returncode}'}"
+                    )
+                if container_present(container_id):
+                    raise CandidateContainerCleanupError(
+                        f"candidate container {container_id} remained after docker rm -f"
+                    )
+            except (OSError, subprocess.SubprocessError, CandidateContainerCleanupError) as exc:
+                failures.append(f"{container_id}: {exc}")
+        if attempt + 1 < attempts:
+            time.sleep(0.05)
+    if strict and failures:
+        raise CandidateContainerCleanupError(
+            "candidate container cleanup could not prove absence: " + "; ".join(failures)
+        )
 
 
 def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:
@@ -104,7 +466,188 @@ def _judge_command(pack_dir: str, xml_path: str) -> list[str]:
     ]
 
 
-def run_blackbox(
+_JUDGE_TERMINATION_GRACE_SECONDS = 2.0
+_JUDGE_GROUP_POLL_SECONDS = 0.02
+_SIGKILL = int(getattr(signal, "SIGKILL", 9))
+
+
+class JudgeProcessCleanupError(RuntimeError):
+    """The judge session could not be proven free of surviving descendants."""
+
+
+class CandidateContainerCleanupError(RuntimeError):
+    """A candidate container could not be proven absent after execution."""
+
+
+class _BlackboxCleanupFailure(RuntimeError):
+    """Internal control flow carrying a reportable cleanup result."""
+
+    def __init__(self, result: BlackboxResult) -> None:
+        super().__init__(result.diagnostics)
+        self.result = result
+
+
+def _signal_judge_process_group(
+    process: subprocess.Popen[str], sig: int
+) -> None:
+    """Signal only the isolated judge session created by ``Popen`` below."""
+    killpg = getattr(os, "killpg", None)
+    if os.name == "posix" and callable(killpg):
+        killpg(process.pid, sig)
+    elif sig == int(signal.SIGTERM):
+        process.terminate()
+    else:
+        process.kill()
+
+
+def _process_group_exists(process_group: int) -> bool:
+    """Return whether a POSIX process group still has any member."""
+    killpg = getattr(os, "killpg", None)
+    if not callable(killpg):
+        raise JudgeProcessCleanupError("POSIX killpg is unavailable")
+    try:
+        killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError as exc:
+        raise JudgeProcessCleanupError(
+            f"cannot inspect judge process group {process_group}: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise JudgeProcessCleanupError(
+            f"judge process-group inspection failed for {process_group}: {exc}"
+        ) from exc
+    return True
+
+
+def _wait_for_process_group_exit(
+    process: subprocess.Popen[str], process_group: int, timeout: float
+) -> bool:
+    deadline = time.monotonic() + max(timeout, 0.0)
+    while True:
+        # poll() also reaps the direct leader when it has exited. Do this on
+        # every iteration so a zombie leader cannot make killpg(..., 0) look
+        # like a live descendant forever.
+        process.poll()
+        if not _process_group_exists(process_group):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(min(_JUDGE_GROUP_POLL_SECONDS, max(deadline - time.monotonic(), 0.0)))
+
+
+def _reap_judge_leader(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        process.wait(timeout=_JUDGE_TERMINATION_GRACE_SECONDS)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise JudgeProcessCleanupError(
+            f"judge leader {process.pid} could not be reaped after group cleanup"
+        ) from exc
+
+
+def _terminate_judge_process_group(process: subprocess.Popen[str]) -> None:
+    """Boundedly reap pytest and every non-detached process-group descendant.
+
+    The leader may already be reaped while a background child still owns the
+    PGID. Therefore neither ``poll()`` nor ``wait()`` is a group-cleanup proof;
+    POSIX cleanup always probes/signals the PGID itself.
+    """
+    if os.name != "posix" or not hasattr(os, "killpg"):
+        # Production black-box execution fails before this point on Windows.
+        # Keep the fallback bounded for embedding tests, but make no group claim.
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=_JUDGE_TERMINATION_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                _reap_judge_leader(process)
+        return
+
+    process_group = process.pid  # start_new_session=True makes PGID == leader PID
+    if _process_group_exists(process_group):
+        try:
+            _signal_judge_process_group(process, int(signal.SIGTERM))
+        except ProcessLookupError:
+            pass
+        except OSError as exc:
+            raise JudgeProcessCleanupError(
+                f"could not terminate judge process group {process_group}: {exc}"
+            ) from exc
+        if not _wait_for_process_group_exit(
+            process, process_group, _JUDGE_TERMINATION_GRACE_SECONDS
+        ):
+            try:
+                _signal_judge_process_group(process, _SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError as exc:
+                raise JudgeProcessCleanupError(
+                    f"could not kill judge process group {process_group}: {exc}"
+                ) from exc
+            if not _wait_for_process_group_exit(
+                process, process_group, _JUDGE_TERMINATION_GRACE_SECONDS
+            ):
+                raise JudgeProcessCleanupError(
+                    f"judge process group {process_group} survived SIGKILL"
+                )
+    _reap_judge_leader(process)
+
+
+def _run_judge_process(
+    command: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    timeout: int,
+) -> subprocess.CompletedProcess[str]:
+    """Run pytest in its own POSIX session and kill the whole group on abort.
+
+    ``subprocess.run`` kills only the direct pytest process on timeout. A pack's
+    EVOGUARD_EXEC launcher and candidate can then survive as orphans. Starting a
+    fresh session makes its process group an unambiguous cleanup target. The
+    original TimeoutExpired/KeyboardInterrupt/BaseException is always preserved.
+    """
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except BaseException:
+        try:
+            _terminate_judge_process_group(process)
+        except BaseException:
+            # An active primary exception must not be replaced by cleanup.
+            pass
+        raise
+    # A clean pytest exit is not sufficient: a pack/candidate may have spawned
+    # a background descendant that closed inherited stdio. Remove and verify the
+    # whole PGID before any PASS can be returned.
+    try:
+        _terminate_judge_process_group(process)
+    except JudgeProcessCleanupError:
+        raise
+    except Exception as exc:
+        raise JudgeProcessCleanupError(
+            f"unexpected judge process-group cleanup failure: {exc}"
+        ) from exc
+    return subprocess.CompletedProcess(
+        command,
+        int(process.returncode or 0),
+        stdout,
+        stderr,
+    )
+
+
+def _run_blackbox_impl(
     repo_path: str,
     candidate: str,
     pack_dir: str,
@@ -129,12 +672,24 @@ def run_blackbox(
     :class:`BlackboxResult` records the isolation that was *actually* delivered,
     never the value that was requested.
     """
-    if not pack_dir or not os.path.isdir(pack_dir):
-        return BlackboxResult(False, 0, 0, "", False, f"verifier pack not found: {pack_dir!r}")
+    if not pack_dir or not os.path.lexists(pack_dir):
+        return BlackboxResult(
+            False, 0, 0, "", False,
+            f"verifier pack not found: {pack_dir!r}",
+            pack_present=False,
+        )
 
     workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
     copy = os.path.join(workdir, "repo")
     pack_workdir: str | None = None
+    judge_process_active = False
+    judge_process_started = False
+    invocation_recorder: _InvocationRecorder | None = None
+    pack_sha256: str | None = None
+    pack_manifest: dict | None = None
+    deleted_applied: list[str] = []
+    iso: dict[str, Any] | None = None
+    observed_candidate_container_ids: set[str] = set()
     try:
         try:
             # The candidate inherits HOME=workdir. Keep hidden checks outside
@@ -147,7 +702,8 @@ def run_blackbox(
             # The snapshot is the exact tree the judge executes; a broken or
             # moving contract must stop rather than produce an unbound verdict.
             return BlackboxResult(
-                False, 0, 0, str(exc), False, "verifier pack invalid"
+                False, 0, 0, str(exc), False, "verifier pack invalid",
+                pack_present=True,
             )
         expected_pack_sha256 = (expect_verifier_pack_sha256 or "").lower()
         if expected_pack_sha256 and pack_sha256.lower() != expected_pack_sha256:
@@ -163,6 +719,7 @@ def run_blackbox(
                 "verifier pack identity mismatch",
                 pack_sha256,
                 pack_manifest,
+                pack_present=True,
             )
         copy_repo_tree(repo_path, copy)
         apply_error = apply_blocks_to_copy(
@@ -171,12 +728,14 @@ def run_blackbox(
             [] if file_blocks else parse_patch_blocks(candidate),
         )
         if apply_error is not None:
-            return BlackboxResult(False, 0, 0, apply_error, False, "patch did not apply",
-                                  pack_sha256, pack_manifest)
+            return BlackboxResult(
+                False, 0, 0, apply_error, False, "patch did not apply",
+                pack_sha256, pack_manifest, pack_present=True,
+            )
 
         # Apply deletions to the copy so the judged tree matches the real merge —
         # a change that removes a file must be judged with that file ABSENT.
-        deleted_applied: list[str] = []
+        deleted_applied = []
         try:
             for rel in deleted_paths:
                 if not is_safe_relpath(rel):
@@ -193,13 +752,21 @@ def run_blackbox(
                 "unsafe deletion path",
                 pack_sha256,
                 pack_manifest,
+                pack_present=True,
             )
 
         # Deliver a REAL isolation boundary (fail-closed) and record what ran.
+        invocation_recorder = _InvocationRecorder.create(workdir)
         runner = CandidateRunner(
             isolation=isolation, docker_image=docker_image,
             docker_network=docker_network, docker_runtime=docker_runtime,
             mem_limit_mb=mem_limit_mb, python=sys.executable,
+            invocation_socket=(
+                invocation_recorder.path if invocation_recorder is not None else None
+            ),
+            invocation_token=(
+                invocation_recorder.token if invocation_recorder is not None else None
+            ),
         )
         try:
             _launcher, run_env, evidence = runner.prepare(workdir, copy)
@@ -211,8 +778,21 @@ def run_blackbox(
                 pack_sha256, pack_manifest, None,
                 {"requested": isolation, "delivered": "unavailable", "note": str(exc)},
                 deleted_applied,
+                pack_present=True,
             )
         iso = evidence.as_dict()
+        cidfile_dir = os.path.join(workdir, CANDIDATE_CID_DIRNAME)
+
+        def with_candidate_evidence(
+            result: BlackboxResult, *, wait_for_late_container_evidence: bool = False
+        ) -> BlackboxResult:
+            return _attach_candidate_execution_evidence(
+                result,
+                recorder=invocation_recorder,
+                cidfile_dir=cidfile_dir,
+                wait_for_late_container_evidence=wait_for_late_container_evidence,
+                observed_container_ids=observed_candidate_container_ids,
+            )
 
         xml_path = os.path.join(workdir, "judge-blackbox.xml")
         env = {
@@ -225,27 +805,75 @@ def run_blackbox(
         t0 = time.perf_counter()
         try:
             verify_pack_snapshot(pack_snapshot, pack_identity)
-            r = subprocess.run(
+            judge_process_active = True
+            judge_process_started = True
+            r = _run_judge_process(
                 _judge_command(pack_snapshot, xml_path),
                 cwd=pack_snapshot,       # judge runs in the snapshot, NOT in the repo copy
-                capture_output=True, text=True, timeout=timeout, env=env,
+                timeout=timeout,
+                env=env,
             )
+            judge_process_active = False
         except subprocess.TimeoutExpired:
-            return BlackboxResult(False, 0, 0, f"black-box pack timed out after {timeout}s",
-                                  False, "timeout", pack_sha256, pack_manifest,
-                                  None, iso, deleted_applied)
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False, 0, 0, f"black-box pack timed out after {timeout}s",
+                    False, "timeout", pack_sha256, pack_manifest,
+                    None, iso, deleted_applied,
+                    started=True,
+                    completed=False,
+                    execution_state="started_incomplete",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                ),
+                wait_for_late_container_evidence=True,
+            )
+        except JudgeProcessCleanupError as exc:
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False,
+                    0,
+                    0,
+                    str(exc),
+                    False,
+                    "judge process cleanup failed",
+                    pack_sha256,
+                    pack_manifest,
+                    None,
+                    iso,
+                    deleted_applied,
+                    started=True,
+                    completed=False,
+                    execution_state="started_incomplete",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                ),
+                wait_for_late_container_evidence=True,
+            )
         except PackManifestError as exc:
+            # The runner may be prepared, but pytest was never started and no
+            # candidate receipt was observed.  Keep the trailing execution
+            # fields at their conservative 0/False defaults; callers must not
+            # interpret the prepared ``iso`` dictionary as candidate execution.
             return BlackboxResult(
                 False, 0, 0, str(exc), False, "verifier pack snapshot changed",
                 pack_sha256, pack_manifest, None, iso, deleted_applied,
+                pack_present=True,
             )
         try:
             verify_pack_snapshot(pack_snapshot, pack_identity)
         except PackManifestError as exc:
-            return BlackboxResult(
-                False, 0, 0, str(exc), False,
-                "verifier pack changed while executing", pack_sha256,
-                pack_manifest, None, iso, deleted_applied,
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False, 0, 0, str(exc), False,
+                    "verifier pack changed while executing", pack_sha256,
+                    pack_manifest, None, iso, deleted_applied,
+                    started=True,
+                    completed=True,
+                    execution_state="completed",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                )
             )
         # Read the judge-owned report immediately (all pack subprocesses have
         # exited by now). The JUDGE's exit code is authoritative regardless.
@@ -265,32 +893,171 @@ def run_blackbox(
         # exit 0 = pack passed; exit 1 = pack failed. Counts come from the report
         # when present (the judge wrote it), else fall back to the exit code.
         if junit is None or junit.total <= 0:
-            return BlackboxResult(
-                False, 0, 0, diagnostics, False,
-                "black-box pack produced no judge-owned test results",
-                pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied,
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False, 0, 0, diagnostics, False,
+                    "black-box pack produced no judge-owned test results",
+                    pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied,
+                    started=True,
+                    completed=True,
+                    execution_state="completed",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                )
             )
         tp, tt = junit.passed, junit.total
         junit_all_passed = junit.failures == 0 and junit.errors == 0 and tp == tt
         if (r.returncode == 0 and not junit_all_passed) or (
             r.returncode == 1 and junit_all_passed
         ):
-            return BlackboxResult(
-                False, tp, tt, diagnostics, False,
-                "black-box JUnit/exit mismatch", pack_sha256, pack_manifest,
-                junit_sha256, iso, deleted_applied,
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False, tp, tt, diagnostics, False,
+                    "black-box JUnit/exit mismatch", pack_sha256, pack_manifest,
+                    junit_sha256, iso, deleted_applied,
+                    started=True,
+                    completed=True,
+                    execution_state="completed",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                )
             )
         if r.returncode == 0:
-            return BlackboxResult(True, tp, tt, diagnostics, True, None, pack_sha256,
-                                  pack_manifest, junit_sha256, iso, deleted_applied)
+            return with_candidate_evidence(
+                BlackboxResult(
+                    True, tp, tt, diagnostics, True, None, pack_sha256,
+                    pack_manifest, junit_sha256, iso, deleted_applied,
+                    started=True,
+                    completed=True,
+                    execution_state="completed",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                )
+            )
         if r.returncode == 1:
-            return BlackboxResult(False, tp, tt, diagnostics, True, None, pack_sha256,
-                                  pack_manifest, junit_sha256, iso, deleted_applied)
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False, tp, tt, diagnostics, True, None, pack_sha256,
+                    pack_manifest, junit_sha256, iso, deleted_applied,
+                    started=True,
+                    completed=True,
+                    execution_state="completed",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                )
+            )
         # 2+ = pytest usage/collection error in the pack itself (author's bug).
-        return BlackboxResult(False, tp, tt, diagnostics, False,
-                              f"black-box pack did not run cleanly (pytest exit {r.returncode})",
-                              pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied)
+        return with_candidate_evidence(
+            BlackboxResult(False, tp, tt, diagnostics, False,
+                           f"black-box pack did not run cleanly (pytest exit {r.returncode})",
+                           pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied,
+                           started=True, completed=True,
+                           execution_state="completed",
+                           execution_phase="blackbox_pack", pack_present=True)
+        )
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
-        if pack_workdir is not None:
-            shutil.rmtree(pack_workdir, ignore_errors=True)
+        # A timed-out/interrupted pytest can leave its Docker descendant alive.
+        # Clean it before deleting the cidfiles. Expected operational cleanup
+        # failures are handled inside the helper. A KeyboardInterrupt/SystemExit
+        # raised by cleanup itself must remain visible after a normal run; only
+        # suppress it while an earlier unhandled exception is already unwinding.
+        primary_exception_active = sys.exc_info()[0] is not None
+        cidfile_dir = os.path.join(workdir, CANDIDATE_CID_DIRNAME)
+        try:
+            try:
+                _cleanup_candidate_containers(
+                    cidfile_dir,
+                    wait_for_late_cidfiles=judge_process_active,
+                    # A caught timeout/incomplete result or an unhandled
+                    # operator exception remains primary. A normally completed
+                    # judge must prove every candidate container absent before
+                    # its pending PASS/FAIL can be returned.
+                    strict=not judge_process_active,
+                    known_container_ids=observed_candidate_container_ids,
+                )
+            except CandidateContainerCleanupError as exc:
+                if primary_exception_active or judge_process_active:
+                    pass
+                else:
+                    cleanup_result = BlackboxResult(
+                        False,
+                        0,
+                        0,
+                        str(exc),
+                        False,
+                        "candidate container cleanup failed",
+                        pack_sha256,
+                        pack_manifest,
+                        None,
+                        iso,
+                        deleted_applied,
+                        started=judge_process_started,
+                        completed=False,
+                        execution_state=(
+                            "started_incomplete"
+                            if judge_process_started
+                            else "not_started"
+                        ),
+                        execution_phase=(
+                            "blackbox_pack" if judge_process_started else "preflight"
+                        ),
+                        pack_present=True if pack_sha256 else None,
+                    )
+                    if judge_process_started:
+                        cleanup_result = _attach_candidate_execution_evidence(
+                            cleanup_result,
+                            recorder=invocation_recorder,
+                            cidfile_dir=cidfile_dir,
+                            observed_container_ids=observed_candidate_container_ids,
+                        )
+                    raise _BlackboxCleanupFailure(cleanup_result) from exc
+            except BaseException:
+                if not primary_exception_active:
+                    raise
+        finally:
+            try:
+                if invocation_recorder is not None:
+                    try:
+                        invocation_recorder.close()
+                    except BaseException:
+                        if not primary_exception_active:
+                            raise
+            finally:
+                shutil.rmtree(workdir, ignore_errors=True)
+                if pack_workdir is not None:
+                    shutil.rmtree(pack_workdir, ignore_errors=True)
+
+
+def run_blackbox(
+    repo_path: str,
+    candidate: str,
+    pack_dir: str,
+    *,
+    timeout: int = 120,
+    isolation: str = "subprocess",
+    docker_image: str | None = None,
+    docker_network: str = "none",
+    docker_runtime: str | None = None,
+    mem_limit_mb: int = 0,
+    deleted_paths: tuple[str, ...] = (),
+    file_blocks: dict[str, str] | None = None,
+    expect_verifier_pack_sha256: str | None = None,
+) -> BlackboxResult:
+    """Run the black-box judge and report strict post-run cleanup failures."""
+    try:
+        return _run_blackbox_impl(
+            repo_path,
+            candidate,
+            pack_dir,
+            timeout=timeout,
+            isolation=isolation,
+            docker_image=docker_image,
+            docker_network=docker_network,
+            docker_runtime=docker_runtime,
+            mem_limit_mb=mem_limit_mb,
+            deleted_paths=deleted_paths,
+            file_blocks=file_blocks,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+        )
+    except _BlackboxCleanupFailure as exc:
+        return exc.result

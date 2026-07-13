@@ -65,7 +65,7 @@ inputs:
     required: false
     default: ""
   verifier-pack:
-    description: "Path to judge-owned pytest invariants. A verified snapshot runs as a separate mandatory phase after the repo suite. Repo-native mode shares the judge process and is not a secrecy boundary; use blackbox with Docker for runtime separation."
+    description: "Path to judge-owned pytest invariants. Repo-native mode runs a verified snapshot after the repo suite; blackbox runs the external pack first and may short-circuit before the repo phase. Repo-native imports are not a secrecy boundary; use blackbox with Docker for runtime separation."
     required: false
     default: ""
   expect-verifier-pack-sha256:
@@ -73,7 +73,7 @@ inputs:
     required: false
     default: ""
   blackbox:
-    description: "'true' runs the external black-box judge (needs verifier-pack): the verdict comes from the judge's own pytest over the pack, which never imports the candidate — closing same-process report forgery. The pack reaches the candidate via $EVOGUARD_EXEC, which runs it under the DELIVERED isolation. By default the repo's own suite is also required to pass. See docs/BLACKBOX.md."
+    description: "'true' runs the external black-box judge (needs verifier-pack). The pack must reach the candidate through $EVOGUARD_EXEC; candidate isolation is claimed only after an observed launcher invocation (and container CID). By default the repo's own suite is also required, so overall report integrity is the weaker repo-native channel. See docs/BLACKBOX.md."
     required: false
     default: "false"
   blackbox-only:
@@ -81,11 +81,11 @@ inputs:
     required: false
     default: "false"
   require-report-integrity:
-    description: "For execution verdicts, fail closed unless this report_integrity level is delivered ('same_process_candidate_writable' or 'external_process_isolated'). A static pre-gate refusal keeps its original verdict and reports not_applicable_static_gate. 'external_process_isolated' needs blackbox."
+    description: "For completed PASS verdicts, fail closed unless this end-to-end report_integrity level is delivered ('same_process_candidate_writable' or 'external_process_isolated'). Static/preflight/incomplete causes remain unchanged. 'external_process_isolated' requires blackbox-only; default blackbox is composite with the weaker repo-native channel."
     required: false
     default: ""
   require-candidate-isolation:
-    description: "For execution verdicts, fail closed unless this candidate isolation is delivered ('subprocess'|'docker'|'gvisor'). A static pre-gate refusal keeps its original verdict and reports not_run."
+    description: "For completed PASS verdicts, fail closed unless this candidate isolation is observed ('subprocess'|'docker'|'gvisor'). Preparing a runner is insufficient: blackbox requires an EVOGUARD_EXEC receipt, plus a runtime CID for docker/gvisor. Static/preflight/incomplete causes remain unchanged."
     required: false
     default: ""
   trust-setup-on-host:

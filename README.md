@@ -58,16 +58,18 @@ Guard closes that hole with two mechanisms:
 > `PASS`. Guard ships an adversarial test that proves this, and every verdict
 > carries an **`assurance` profile** naming its `report_integrity` as
 > `same_process_candidate_writable`. The container isolation modes protect the
-> host, **not** the report. **The fix ships as `--blackbox`** (below): the
-> verdict then comes from the judge's own process and the same forgery is caught.
+> host, **not** the report. `--blackbox` adds a judge-owned external channel in
+> which the same forgery is caught; use `--blackbox-only` when every required
+> report channel must be external. The default composite still includes the
+> weaker repo-native channel.
 > See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 
-### Close the forgery hole: `--blackbox` (external isolated judge)
+### Add an external report channel: `--blackbox`
 
 For targets with a process/protocol boundary (a CLI, an HTTP service, a
-DB-backed program), the black-box judge produces the verdict from **its own
-pytest over judge-owned tests that never import your code** — so a patch cannot
-forge the report from inside the run:
+DB-backed program), the black-box phase is produced by **its own pytest over
+judge-owned tests that never import your code** — so candidate code cannot
+forge that phase's report from inside the run:
 
 ```bash
 evo-guard guard ./repo --patch candidate.txt \
@@ -76,20 +78,31 @@ evo-guard guard ./repo --patch candidate.txt \
 
 The pack invokes the candidate across a process boundary (via `$EVOGUARD_EXEC`,
 which runs it under the delivered isolation) and asserts on its outputs.
-When that judge actually runs, `report_integrity` becomes
-`external_process_isolated`, and the *identical* `atexit`+`os._exit` forgery that
+For `--blackbox-only`, that completed judge yields
+`report_integrity: external_process_isolated`; in the default composite mode the
+overall profile honestly reports the weaker repo-native report channel. The
+*identical* `atexit`+`os._exit` forgery that
 fakes a `PASS` under the default judge yields the correct `FAIL` (proven in
 `tests/test_blackbox.py`). A protected-harness refusal is decided earlier: it
 reports `static_gate`, `candidate_isolation: not_run`, and
 `report_integrity: not_applicable_static_gate` instead of claiming that the
-requested judge or container ran. Three properties make an execution verdict a
+requested judge or container ran. Runtime preflight failures are separately
+`not_started` with `report_integrity: not_applicable_not_run`; a suite/judge
+timeout is `started_incomplete`, has `test_command_ran: true`, and may still have
+`verdict_source: null`. Three properties make a completed execution verdict a
 real guarantee, not a label:
 
-- **Isolation is *delivered*, not requested.** After execution starts,
-  `candidate_isolation` reports what
-  actually ran. Ask for `--isolation docker` with no daemon or a missing image
-  and Guard returns `ERROR` (`assurance_requirement_not_met`) — never a `PASS`
-  mislabelled `docker`. In a container the repo copy is mounted **read-only** and
+- **Boundary evidence is observed, not requested.** `candidate_isolation`
+  changes from `not_run` only after the judge observes a trusted-pack call to
+  `$EVOGUARD_EXEC` (and, for containers, a runtime-written CID). This proves the
+  launcher/runtime path was invoked; the trusted pack remains responsible for
+  checking the command's semantics and outputs. A missing daemon/image fails
+  before execution; a pack that never invokes the launcher is refused as
+  `candidate_not_exercised` even without a floor — never a vacuous `PASS` or a
+  result mislabelled `docker`. A pending verdict is also refused as
+  `runtime_cleanup_failed` if the judge process group or a candidate container
+  cannot be proven absent after execution. In a container the repo copy is mounted
+  **read-only** and
   the pack is **not mounted into the candidate at all** (proven against a real
   daemon in CI, where a malicious candidate fails to write the host, open the
   network, or reach the pack).
@@ -98,8 +111,16 @@ real guarantee, not a label:
   regression. Pure-CLI/service targets with no in-repo suite pass
   `--blackbox-only`.
 - **Fail-closed policy.** `--require-report-integrity` / `--require-candidate-isolation`
-  turn the `assurance` profile into a contract: a run weaker than you required is
-  refused, never silently downgraded.
+  turn the `assurance` profile into a contract: a completed `PASS` weaker than
+  required is refused, never silently downgraded. The floor does not erase a
+  more specific static, preflight, timeout/incomplete, pack, tamper, or isolation
+  cause.
+
+Pack assurance is evidence-based too: `configured`, observed `present`,
+`integrity`, `identity_verified`, pack `execution_state`, delivered `secrecy`,
+and observed `snapshot_sha256` distinguish missing, invalid, mismatched,
+accepted-before-execution, verified pre/post or read-only, and changed snapshots.
+A configured path alone is not reported as a verified pack.
 
 See [`docs/BLACKBOX.md`](docs/BLACKBOX.md) and [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 
@@ -124,7 +145,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.3"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.4"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -142,7 +163,13 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 | ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff (refused, never applied), a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
 
 Every run can also emit a machine-readable JSON record (`--json`) with a stable
-`schema_version` and a fixed `reason_code` for the verdict's cause, plus a
+`schema_version` and a fixed `reason_code` for the verdict's cause, plus an
+explicit `execution_state` (`static_gate`, `not_started`,
+`started_incomplete`, or `completed`) and `execution_phase`. In schema 1.11,
+`test_command_ran` means the test/judge process started, so it remains true on a
+test/judge timeout even when no clean `verdict_source` exists. Requested policy
+remains in the attestation; no-run isolation is reported as `not_run`. It can
+also emit a
 SARIF 2.1.0 report (`--sarif`) for GitHub code scanning — see
 [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md).
 
@@ -164,7 +191,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.3   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.4   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
@@ -202,7 +229,9 @@ evo-guard guard ./repo --patch candidate.txt
 #   --blackbox                    external isolated judge (needs --verifier-pack):
 #                                 verdict from the judge's own process; composite
 #                                 with the repo suite. --blackbox-only skips it.
-#   --require-report-integrity external_process_isolated   fail-closed floor
+#   --require-report-integrity external_process_isolated   fail-closed floor;
+#                                 requires --blackbox-only because the default
+#                                 composite includes the weaker repo-native channel
 #   --require-candidate-isolation docker                   fail-closed floor
 #   --timeout 300                 per-run suite timeout (seconds)
 #   --json out.json --report out.md --sarif out.sarif
@@ -315,9 +344,10 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack \
   claimed as absolute immunity.
 - **The default judge's result is forgeable by deliberate in-process code** (the
   honest boundary above): it is trustworthy against the common cheats, not
-  against a patch that writes report-forgery into source. The external isolated
-  judge (`--blackbox`) closes this — its verdict comes from a process the
-  candidate never runs in. Read the `assurance` profile's `report_integrity`
+  against a patch that writes report-forgery into source. The black-box phase
+  comes from a process the candidate never runs in and closes that channel;
+  `--blackbox-only` is required to remove the weaker repo-native channel from
+  the end-to-end verdict. Read the `assurance` profile's `report_integrity`
   field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 - The shell-free `$EVOGUARD_EXEC` launcher used by every black-box isolation
   mode has a **POSIX executable contract**. Native Windows therefore fails

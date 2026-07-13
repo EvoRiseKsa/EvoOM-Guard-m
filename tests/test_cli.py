@@ -95,6 +95,11 @@ def test_guard_docker_isolation_requires_image(capsys):
     assert "docker-image" in capsys.readouterr().out
 
 
+def test_blackbox_only_requires_blackbox(capsys):
+    assert cli.main(["guard", ".", "--patch", "-", "--blackbox-only"]) == 2
+    assert "--blackbox-only requires --blackbox" in capsys.readouterr().out
+
+
 # ───────────────────────────── guard input modes ────────────────────────────
 @needs_pytest
 def test_guard_patch_via_stdin(tmp_path, monkeypatch, capsys):
