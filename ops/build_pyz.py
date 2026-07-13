@@ -31,17 +31,35 @@ _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 _MAIN = b"import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n"
 
 
+def _archive_bytes(archive_name: str, source: str) -> bytes:
+    """Return canonical bytes for one archive entry.
+
+    Git may materialize the same Python source with LF or CRLF depending on the
+    checkout platform and ``core.autocrlf``.  Python itself normalizes source
+    line endings before tokenizing, so preserving that checkout detail in the
+    release archive adds no program meaning but breaks byte reproducibility.
+    Canonicalize Python source newlines only; any future non-Python package data
+    remains byte-for-byte input.
+    """
+    with open(source, "rb") as file_handle:
+        data = file_handle.read()
+    if archive_name.endswith(".py"):
+        return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return data
+
+
 def _write_reproducible_archive(stage: str, out_path: str, interpreter: str) -> None:
-    """Write a deterministic-within-environment zipapp from *stage*.
+    """Write a reproducible zipapp from *stage*.
 
     ``zipapp.create_archive`` inherits source mtimes (including the freshly
     generated ``__main__.py``) and filesystem iteration order.  That makes two
     builds from identical source bytes produce different release checksums.
-    Canonical entry order, timestamps, modes, and storage remove those sources
-    of variance. Repeated builds are byte-identical when source bytes and the
-    Python/OS/ZIP-zlib toolchain are equivalent; this is not a cross-platform
-    bit-reproducibility guarantee. Release publication separately refuses to
-    replace an existing tag asset with different bytes.
+    Canonical entry order, timestamps, modes, storage, and Python-source LF
+    newlines remove those sources of variance. Repeated builds are
+    byte-identical across LF and CRLF checkouts when canonical source contents,
+    the interpreter line, and the Python ZIP implementation are equivalent.
+    Release publication separately refuses to replace an existing tag asset
+    with different bytes.
     """
     if "\n" in interpreter or "\r" in interpreter:
         raise ValueError("interpreter must be a single line")
@@ -65,8 +83,7 @@ def _write_reproducible_archive(stage: str, out_path: str, interpreter: str) -> 
                 info.create_system = 3  # Unix; keep archive metadata cross-platform.
                 info.external_attr = 0o100644 << 16
                 info.compress_type = zipfile.ZIP_STORED
-                with open(source, "rb") as file_handle:
-                    archive.writestr(info, file_handle.read())
+                archive.writestr(info, _archive_bytes(archive_name, source))
 
 
 def build(

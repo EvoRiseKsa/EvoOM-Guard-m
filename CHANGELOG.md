@@ -65,6 +65,9 @@ observed.
 - Assurance floors are applied only to a completed result that would otherwise
   be `PASS`; they no longer overwrite static, preflight, incomplete, tamper, pack,
   or isolation causes.
+- Reproducible `.pyz` builds no longer inherit Git checkout line endings:
+  Python sources are canonicalized to LF inside the archive, while any
+  non-Python package data remains byte-for-byte input.
 
 ### Verification
 
