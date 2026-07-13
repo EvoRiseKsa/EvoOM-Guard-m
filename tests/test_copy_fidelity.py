@@ -127,10 +127,9 @@ class SymlinkFidelityTests(unittest.TestCase):
                 copy_repo_tree(root, dst)
                 copied = os.path.join(dst, "link_to_host")
                 self.assertTrue(os.path.islink(copied))
-                self.assertEqual(
-                    os.path.normcase(os.path.realpath(os.readlink(copied))),
-                    os.path.normcase(os.path.realpath(secret)),
-                )
+                # Windows may expose the same absolute target with a ``\\?\``
+                # prefix. Object identity is the contract; spelling is not.
+                self.assertTrue(os.path.samefile(copied, secret))
             finally:
                 shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
         finally:
