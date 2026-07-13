@@ -36,11 +36,14 @@ def _docker_ok() -> bool:
         return False
 
 
-needs_docker = pytest.mark.skipif(not _docker_ok(), reason="needs a reachable docker daemon")
+needs_docker = pytest.mark.skipif(
+    os.name != "posix" or not _docker_ok(),
+    reason="needs a POSIX host with a reachable Linux-container Docker daemon",
+)
 
 
 def _gvisor_ok() -> bool:
-    if not _docker_ok():
+    if os.name != "posix" or not _docker_ok():
         return False
     try:
         r = subprocess.run(

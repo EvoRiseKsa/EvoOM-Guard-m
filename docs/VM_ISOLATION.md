@@ -155,6 +155,10 @@ self-check.
   Windows fails closed before subprocess, Docker, or gVisor delivery; use
   Linux/GitHub Actions or WSL. This is distinct from repo-native subprocess
   execution on Windows.
+- Repo-native Docker/gVisor end-to-end guarantees are exercised on POSIX hosts
+  with Linux containers. Native-Windows container delivery is runtime-dependent
+  and must fail closed when the requested image/mount boundary is unavailable;
+  the Windows CI suite does not label such an environment as delivered Docker.
 
 ## 8. Phasing
 

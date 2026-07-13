@@ -99,6 +99,10 @@ def test_fidelity_lstat_to_open_race_fails_closed(
     assert outside.read_bytes() == outside_bytes
 
 
+@pytest.mark.skipif(
+    not workspace._HAS_DESCRIPTOR_RELATIVE,
+    reason="descriptor-relative traversal is POSIX-only",
+)
 def test_descriptor_relative_write_rejects_parent_swap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -137,6 +141,10 @@ def test_descriptor_relative_write_rejects_parent_swap(
     assert not escaped.exists()
 
 
+@pytest.mark.skipif(
+    not workspace._HAS_DESCRIPTOR_RELATIVE,
+    reason="descriptor-relative traversal is POSIX-only",
+)
 def test_descriptor_relative_delete_rejects_parent_swap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -346,7 +354,9 @@ def test_best_effort_target_rejects_reparse_workspace_root(
     def root_is_junction(path) -> bool:
         return os.path.abspath(os.fspath(path)) == os.path.abspath(root)
 
-    monkeypatch.setattr(workspace.os.path, "isjunction", root_is_junction)
+    monkeypatch.setattr(
+        workspace.os.path, "isjunction", root_is_junction, raising=False
+    )
     with pytest.raises(workspace.UnsafeWorkspacePath, match="root"):
         workspace._best_effort_target(str(root), "file.txt", create=False)
 
