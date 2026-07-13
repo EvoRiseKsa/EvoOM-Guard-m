@@ -65,14 +65,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.1   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.1"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.2"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```
@@ -80,7 +80,7 @@ evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v3.4.1`** — a release tag. The recommended pin and the right choice for
+> - **`@v3.4.2`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -169,13 +169,13 @@ only on the candidate run.
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-`EvoRiseKsa/EvoOM-Guard-m@v3.4.1`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+`EvoRiseKsa/EvoOM-Guard-m@v3.4.2`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.1   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # or "rejected-only" — see the warning below
@@ -198,7 +198,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.1"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.2"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
@@ -235,8 +235,8 @@ or require a stronger boundary:
 
 The accepted pack lives in a judge-owned snapshot outside the candidate tree and
 its `HOME` and is checked immediately before and after execution. Persistent
-snapshot drift is `TAMPERED verifier_pack_snapshot_changed`; persistent candidate
-source/harness drift across the repo/pack phases is
+snapshot drift is `TAMPERED verifier_pack_snapshot_changed`; persistent prepared
+candidate-runtime drift across the repo/pack phases is
 `TAMPERED candidate_tree_changed_during_run`. In host subprocess mode these are
 pre/post observations, **not** an OS sandbox or secrecy guarantee. Repo-native
 pack pytest may import candidate code and retains
@@ -288,7 +288,8 @@ This has practical consequences:
   permission bit before and after setup. Only **new** conventional dependency/
   build outputs are ignored by default. `setup_output_globs` in the protected
   `.evoguard.json` adds trusted exceptions; never include source, tests, policy,
-  or harness paths, because the same exceptions apply to repo/pack continuity.
+  or harness paths. These exceptions apply to setup validation only: after
+  setup, matching paths are included in repo/pack runtime continuity.
 - `--trust-setup-on-host` is an explicit compatibility escape hatch. It uses a
   restricted host environment, records
   `setup_isolation: subprocess_host_opt_in`, and lowers effective
@@ -296,6 +297,40 @@ This has practical consequences:
   `subprocess`; a required Docker/gVisor assurance floor therefore refuses it.
 - `setup_command` is not supported with `--blackbox` today. The combination is
   `ERROR policy_requirement_unsupported`, never a silently skipped setup.
+
+**Filesystem containment.** On POSIX, Guard's protected workspace reads,
+writes, and deletions are relative to held directory descriptors and refuse
+symlink traversal (`O_NOFOLLOW`). The operation stays bound even if a path name
+is swapped concurrently. On Windows, stdlib provides no atomic descriptor-
+relative equivalent; Guard rejects symlink/junction parents and checks parent/
+file identity before and after each operation. Treat the Windows boundary as
+best effort rather than an atomic containment guarantee.
+
+**Runtime continuity for repo-native packs.** After setup, Guard identifies the
+runtime tree as `EVOGUARD_RUNTIME_TREE_V1`, including setup-created dependencies
+and build outputs. Relative symlinks are accepted only when their resolved
+targets remain inside that tree; absolute, escaping, or dangling symlinks fail
+closed (`python -m venv --copies` avoids absolute interpreter links). The scan
+is bounded to 500,000 entries, 128 MiB of canonical path bytes, 32 GiB of
+logical bytes, and 8 GiB per regular file. Its 120-second deadline is checked
+between filesystem calls and cannot preempt a hung kernel call; use an outer
+job timeout for untrusted/network filesystems. Subprocess execution reports
+`snapshot_boundary_checked`:
+phase-boundary drift is detected, but a lingering process can theoretically
+mutate and restore bytes between observations. Docker/gVisor reports
+`read_only_enforced` only when setup remained inside the requested container;
+if a configured setup command ran through `--trust-setup-on-host`, Guard does
+not make that stronger claim because the host process could survive into later
+phases. `setup_output_globs` never remove content from this runtime-continuity
+identity. Failure states remain explicit: `unavailable` means no initial
+identity was accepted, `incomplete` means execution stopped before every
+boundary was checked, and `verification_failed` means a later identity could
+not be reproduced or differed.
+
+**Directory JUnit is all-or-nothing.** Maven/Surefire-style report directories
+are rejected as a whole if any `*.xml` entry is symlinked, special, unreadable,
+malformed, oversized, or contains a DTD/ENTITY. A clean sibling cannot mask a
+missing or hostile piece of the report set.
 
 For untrusted/public input prefer **`--isolation gvisor`** — the same judge
 through the gVisor `runsc` runtime (a

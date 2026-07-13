@@ -93,6 +93,12 @@ from evoom_guard.pack_manifest import (
     verify_pack_snapshot,
 )
 from evoom_guard.patch_applier import PatchError, apply_patch
+from evoom_guard.runtime_identity import (
+    RuntimeIdentity,
+    RuntimeIdentityError,
+    capture_runtime_identity,
+    verify_runtime_identity,
+)
 from evoom_guard.verifiers.candidate_edits import (
     _BLOCK_RE as _BLOCK_RE,
 )
@@ -205,7 +211,12 @@ from evoom_guard.verifiers.junit_oracle import (
 from evoom_guard.verifiers.junit_oracle import (
     parse_pytest_counts as parse_pytest_counts,
 )
-from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
+from evoom_guard.workspace import (
+    UnsafeWorkspacePath,
+    delete_path_within_root,
+    read_text_within_root,
+    write_text_within_root,
+)
 
 try:  # POSIX-only; absent on Windows.
     import resource
@@ -308,67 +319,58 @@ def copy_repo_tree(src: str, dst: str) -> None:
       content* into the copy — for an absolute link that means host files get
       materialized inside the tree that container isolation later mounts.
 
-    Writing *through* a symlink is prevented separately at apply time — see
-    :func:`_resolve_write_target`.
+    Writing *through* a symlink is prevented separately by the descriptor-bound
+    workspace helpers used in :func:`apply_blocks_to_copy`.
     """
     shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns(*COPY_IGNORE))
-
-
-def _resolve_write_target(copy: str, rel: str) -> str | None:
-    """The absolute path a candidate edit for ``rel`` may write inside ``copy``.
-
-    Returns ``None`` when the write would land **outside** the copy through a
-    symlinked directory (``lnkdir -> /outside`` + a ``lnkdir/x.py`` edit).
-    A target that is itself a symlink is replaced by a regular file — the link
-    is unlinked first, never written *through* — matching how git materializes
-    a blob over a symlink and keeping every candidate byte inside the copy.
-    """
-    target = os.path.join(copy, *rel.split("/"))
-    parent = os.path.dirname(target) or copy
-    os.makedirs(parent, exist_ok=True)
-    real_copy = os.path.realpath(copy)
-    real_parent = os.path.realpath(parent)
-    if real_parent != real_copy and not real_parent.startswith(real_copy + os.sep):
-        return None
-    if os.path.islink(target):
-        os.unlink(target)
-    return target
 
 
 def apply_blocks_to_copy(
     copy: str, file_blocks: dict[str, str], patch_blocks: list[PatchBlock]
 ) -> str | None:
     """Materialize file blocks then patches into ``copy``."""
+    def safe_read(relative_path: str) -> tuple[str | None, str | None]:
+        try:
+            return read_text_within_root(copy, relative_path), None
+        except FileNotFoundError:
+            return None, None
+        except (UnicodeError, UnsafeWorkspacePath, OSError) as exc:
+            return None, (
+                "edit source could not be read safely — refusing to treat it "
+                f"as absent: {relative_path} ({exc})"
+            )
+
+    def safe_write(relative_path: str, content: str) -> str | None:
+        try:
+            write_text_within_root(copy, relative_path, content)
+        except (OSError, UnsafeWorkspacePath) as exc:
+            return (
+                "edit target escapes the repo copy or changed inside it — "
+                f"refusing to write: {relative_path} ({exc})"
+            )
+        return None
+
     pkg_paths = sorted(
         {p for p in file_blocks if p.split("/")[-1] == "package.json"}
         | {pb.path for pb in patch_blocks if pb.path.split("/")[-1] == "package.json"}
     )
     pkg_originals: dict[str, str | None] = {}
     for rel in pkg_paths:
-        fp = os.path.join(copy, *rel.split("/"))
-        pkg_originals[rel] = _read_text_or_none(fp)
+        original, read_error = safe_read(rel)
+        if read_error is not None:
+            return read_error
+        pkg_originals[rel] = original
 
     for path, content in file_blocks.items():
-        target = _resolve_write_target(copy, path)
-        if target is None:
-            return (
-                f"edit target escapes the repo copy through a symlinked "
-                f"directory — refusing to write: {path}"
-            )
-        with open(target, "w", encoding="utf-8") as f:
-            f.write(content)
+        write_error = safe_write(path, content)
+        if write_error is not None:
+            return write_error
 
     for pb in patch_blocks:
-        target = _resolve_write_target(copy, pb.path)
-        if target is None:
-            return (
-                f"edit target escapes the repo copy through a symlinked "
-                f"directory — refusing to write: {pb.path}"
-            )
-        try:
-            with open(target, encoding="utf-8") as f:
-                source = f.read()
-        except OSError:
+        source, read_error = safe_read(pb.path)
+        if read_error is not None:
+            return read_error
+        if source is None:
             return (
                 f"PATCH target not found: {pb.path} — "
                 "use a <<<FILE>>> block "
@@ -383,18 +385,21 @@ def apply_blocks_to_copy(
                 ""
                 "copy a unique anchor verbatim from the shown file"
             )
-        with open(target, "w", encoding="utf-8") as f:
-            f.write(patched)
+        write_error = safe_write(pb.path, patched)
+        if write_error is not None:
+            return write_error
 
     for rel in pkg_paths:
-        fp = os.path.join(copy, *rel.split("/"))
-        candidate_pkg = _read_text_or_none(fp)
+        candidate_pkg, read_error = safe_read(rel)
+        if read_error is not None:
+            return read_error
         if candidate_pkg is None:
-            continue
+            return f"edited package manifest disappeared before verification: {rel}"
         restored = restore_judge_package_json(pkg_originals.get(rel), candidate_pkg)
         if restored != candidate_pkg:
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write(restored)
+            write_error = safe_write(rel, restored)
+            if write_error is not None:
+                return write_error
     return None
 
 
@@ -770,7 +775,6 @@ class RepoVerifier:
             # command's exit code — so setup's stdout can never inflate the verdict.
             setup_cmd_raw = self.setup_command or problem.get("setup_command")
             setup_isolation: str | None = None
-            post_setup_fidelity: dict[str, tuple[str, int, str]] | None = None
             if setup_cmd_raw:
                 if isinstance(setup_cmd_raw, str):
                     setup_cmd_raw = setup_cmd_raw.split()
@@ -924,36 +928,53 @@ class RepoVerifier:
                             "setup_fidelity_changes": setup_changes,
                         },
                     )
-                post_setup_fidelity = setup_after
+            # A mandatory repo-native pack must judge the exact fully prepared
+            # runtime tree the repo suite received. Setup fidelity deliberately
+            # permits new dependency/build outputs; this second identity includes
+            # all of them and never applies setup_output_globs.
+            candidate_runtime_baseline: RuntimeIdentity | None = None
+            runtime_identity_elapsed_ms = 0.0
+            runtime_continuity = "not_applicable"
+            runtime_delivery = "not_applicable"
 
-            # A mandatory pack must judge the same candidate tree the repo suite
-            # received. In subprocess mode the suite can write to its working copy;
-            # bind the post-setup tree so it cannot rewrite source into a
-            # pack-passing implementation between the two phases. Conventional
-            # caches/new dependency outputs remain allowed by the same contract.
-            candidate_runtime_baseline: dict[str, tuple[str, int, str]] | None = None
+            def runtime_evidence(*, status: str | None = None) -> dict[str, Any]:
+                """Describe runtime evidence truthfully on every exit path."""
+                baseline = candidate_runtime_baseline
+                return {
+                    "runtime_tree_sha256": baseline.sha256 if baseline else None,
+                    "runtime_tree_digest_format": (
+                        baseline.digest_format if baseline else None
+                    ),
+                    "runtime_tree_entries": baseline.entries if baseline else None,
+                    "runtime_tree_bytes": baseline.regular_bytes if baseline else None,
+                    "runtime_identity_elapsed_ms": runtime_identity_elapsed_ms,
+                    "runtime_continuity": status or runtime_continuity,
+                }
+
             if pack_dir:
-                if post_setup_fidelity is not None:
-                    # Reuse the filtered post-setup identity. New conventional
-                    # dependency/build outputs were deliberately omitted, while
-                    # every pre-existing entry remains bound.
-                    candidate_runtime_baseline = post_setup_fidelity
-                else:
-                    try:
-                        candidate_runtime_baseline = _setup_fidelity_snapshot(
-                            copy, self.setup_output_globs
-                        )
-                    except SetupFidelityError as exc:
-                        return VerdictResult(
-                            passed=False,
-                            score=0.0,
-                            diagnostics=f"candidate fidelity snapshot failed: {exc}",
-                            artifact={
-                                "files_changed": changed,
-                                "outcome": "setup_failed",
-                                "setup_isolation": setup_isolation,
-                            },
-                        )
+                runtime_delivery = (
+                    "read_only_enforced"
+                    if container_mode
+                    and not (bool(setup_cmd_raw) and self.trust_setup_on_host)
+                    else "snapshot_boundary_checked"
+                )
+                runtime_continuity = "unavailable"
+                try:
+                    candidate_runtime_baseline = capture_runtime_identity(copy)
+                    runtime_identity_elapsed_ms += candidate_runtime_baseline.elapsed_ms
+                except RuntimeIdentityError as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"candidate runtime identity failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "runtime_identity_unavailable",
+                            "setup_isolation": setup_isolation,
+                            **runtime_evidence(status="unavailable"),
+                        },
+                    )
+                runtime_continuity = "incomplete"
 
             # The machine-readable verdict is written to a JUnit report the JUDGE
             # owns — a path *outside* the repo copy, so the candidate (restricted to
@@ -982,7 +1003,12 @@ class RepoVerifier:
                     passed=False,
                     score=0.0,
                     diagnostics=f"test suite timed out after {self.timeout}s",
-                    artifact={"elapsed": self.timeout, "files_changed": changed, "outcome": "test_timeout"},
+                    artifact={
+                        "elapsed": self.timeout,
+                        "files_changed": changed,
+                        "outcome": "test_timeout",
+                        **runtime_evidence(),
+                    },
                 )
             except FileNotFoundError:
                 return VerdictResult(
@@ -1000,6 +1026,7 @@ class RepoVerifier:
                             else "test_command_unavailable"
                         ),
                         "setup_isolation": setup_isolation,
+                        **runtime_evidence(),
                     },
                 )
             elapsed = time.perf_counter() - t0
@@ -1017,31 +1044,29 @@ class RepoVerifier:
                         "files_changed": changed,
                         "outcome": "isolation_unavailable",
                         "setup_isolation": setup_isolation,
+                        **runtime_evidence(),
                     },
                 )
 
             if candidate_runtime_baseline is not None:
                 try:
-                    candidate_after_suite = _setup_fidelity_snapshot(
-                        copy,
-                        self.setup_output_globs,
-                        baseline=candidate_runtime_baseline,
+                    candidate_after_suite, candidate_changes = verify_runtime_identity(
+                        copy, candidate_runtime_baseline
                     )
-                except SetupFidelityError as exc:
+                    runtime_identity_elapsed_ms += candidate_after_suite.elapsed_ms
+                except RuntimeIdentityError as exc:
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"candidate fidelity verification failed: {exc}",
+                        diagnostics=f"candidate runtime identity verification failed: {exc}",
                         artifact={
                             "files_changed": changed,
                             "outcome": "candidate_tree_changed",
                             "tamper": True,
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(status="verification_failed"),
                         },
                     )
-                candidate_changes = _setup_fidelity_changes(
-                    candidate_runtime_baseline, candidate_after_suite
-                )
                 if candidate_changes:
                     return VerdictResult(
                         passed=False,
@@ -1058,6 +1083,7 @@ class RepoVerifier:
                             "verifier_pack_sha256": pack_sha256,
                             "verifier_pack_manifest": pack_manifest,
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(status="verification_failed"),
                         },
                     )
 
@@ -1097,6 +1123,7 @@ class RepoVerifier:
                             "verifier_pack_sha256": pack_sha256,
                             "verifier_pack_manifest": pack_manifest,
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(),
                         },
                     )
                 pack_phase = os.path.join(workdir, "pack-phase")
@@ -1134,6 +1161,7 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "test_timeout",
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(),
                         },
                     )
                 except FileNotFoundError:
@@ -1145,6 +1173,7 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "test_command_unavailable",
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(),
                         },
                     )
                 if container_mode and pack_run.returncode == 125:
@@ -1160,6 +1189,7 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "isolation_unavailable",
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(),
                         },
                     )
                 try:
@@ -1176,30 +1206,28 @@ class RepoVerifier:
                             "verifier_pack_sha256": pack_sha256,
                             "verifier_pack_manifest": pack_manifest,
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(),
                         },
                     )
                 assert candidate_runtime_baseline is not None
                 try:
-                    candidate_after_pack = _setup_fidelity_snapshot(
-                        copy,
-                        self.setup_output_globs,
-                        baseline=candidate_runtime_baseline,
+                    candidate_after_pack, candidate_changes = verify_runtime_identity(
+                        copy, candidate_runtime_baseline
                     )
-                except SetupFidelityError as exc:
+                    runtime_identity_elapsed_ms += candidate_after_pack.elapsed_ms
+                except RuntimeIdentityError as exc:
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"candidate fidelity verification failed: {exc}",
+                        diagnostics=f"candidate runtime identity verification failed: {exc}",
                         artifact={
                             "files_changed": changed,
                             "outcome": "candidate_tree_changed",
                             "tamper": True,
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(status="verification_failed"),
                         },
                     )
-                candidate_changes = _setup_fidelity_changes(
-                    candidate_runtime_baseline, candidate_after_pack
-                )
                 if candidate_changes:
                     return VerdictResult(
                         passed=False,
@@ -1216,8 +1244,10 @@ class RepoVerifier:
                             "verifier_pack_sha256": pack_sha256,
                             "verifier_pack_manifest": pack_manifest,
                             "setup_isolation": setup_isolation,
+                            **runtime_evidence(status="verification_failed"),
                         },
                     )
+                runtime_continuity = runtime_delivery
                 pack_xml_text = _read_text_or_none(pack_xml) or ""
                 pack_junit = parse_junit_xml(pack_xml_text)
                 pack_passed, pack_score, pack_tests_passed, pack_tests_total = grade_repo_run(
@@ -1273,6 +1303,7 @@ class RepoVerifier:
                     "setup_isolation": setup_isolation,
                     "setup_fidelity": "verified" if setup_cmd_raw else "not_applicable",
                     "candidate_fidelity": "verified" if pack_dir else "not_applicable",
+                    **runtime_evidence(),
                     "image_digest": resolved_image,
                     "isolation_evidence": {
                         "requested": self.isolation,

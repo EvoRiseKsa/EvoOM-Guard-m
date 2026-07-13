@@ -72,10 +72,11 @@ can neither write the host nor reach the pack to tamper with it. (In the
 The launcher executes the exact resolved image ID that was probed, rather than a
 mutable tag.
 
-The shell-free `$EVOGUARD_EXEC` file has a **POSIX executable contract**. Native
-Windows black-box subprocess mode fails closed with guidance instead of claiming
-that it ran; use Linux/GitHub Actions or WSL. The ordinary repo-native Windows
-judge is a different path.
+The shell-free `$EVOGUARD_EXEC` file has a **POSIX executable contract in every
+black-box isolation mode**. Native Windows therefore fails closed before
+subprocess, Docker, or gVisor delivery instead of reaching `WinError 193` or
+claiming a boundary that did not run; use Linux/GitHub Actions or WSL. The
+ordinary repo-native Windows judge is a different path.
 
 ## The pack ADDS a dimension — it does not replace your suite
 

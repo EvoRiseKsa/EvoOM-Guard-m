@@ -782,18 +782,15 @@ class JUnitDirOracleTests(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
-    def test_hostile_dtd_file_is_skipped_not_counted(self) -> None:
-        # The per-file hardening (DTD/ENTITY refusal) still applies in the dir merge.
+    def test_hostile_dtd_file_invalidates_the_whole_report_set(self) -> None:
+        # A valid sibling must not mask an invalid report and create a partial pass.
         d = self._dir()
         try:
             with open(os.path.join(d, "TEST-evil.xml"), "w", encoding="utf-8") as f:
                 f.write('<!DOCTYPE x [<!ENTITY a "boom">]>\n<testsuite tests="9"/>')
             with open(os.path.join(d, "TEST-ok.xml"), "w", encoding="utf-8") as f:
                 f.write('<testsuite tests="2" failures="0" errors="0" skipped="0"/>')
-            j = parse_junit_dir(d)
-            assert j is not None
-            # only the clean file is counted; the DTD file is refused
-            self.assertEqual((j.passed, j.total), (2, 2))
+            self.assertIsNone(parse_junit_dir(d))
         finally:
             shutil.rmtree(d, ignore_errors=True)
 

@@ -16,7 +16,7 @@ From the repo you want to protect (needs repo access — EvoGuard is private; pi
 release tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.1"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.2"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -270,14 +270,15 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
   the suite runs under a separate kernel. Needs docker with the `runsc` runtime; see
   [`VM_ISOLATION.md`](VM_ISOLATION.md).
 
-Black-box subprocess mode uses a shell-free POSIX executable launcher. On native
-Windows it fails closed with guidance; run that path on Linux/GitHub Actions or
-under WSL. Repo-native Guard still runs on Windows, with a wall timeout but
-without POSIX CPU/memory rlimits.
+Every black-box isolation mode uses the same shell-free POSIX executable
+launcher. On native Windows it fails closed before subprocess, Docker, or gVisor
+delivery; run black-box mode on Linux/GitHub Actions or under WSL. Repo-native
+Guard still runs on Windows, with a wall timeout but without POSIX CPU/memory
+rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.4.1` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.4.2` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

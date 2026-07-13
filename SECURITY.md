@@ -32,7 +32,13 @@ permission) when fixed.
   while Guard still returns `PASS`.
 - A container verdict that claims setup/suite isolation inconsistent with the
   recorded `setup_isolation`, resolved image ID, or read-only suite/pack mounts.
-- Path-escape, report-injection, or entity-bomb style attacks on the judge.
+- A POSIX workspace operation that escapes the descriptor-relative/no-follow
+  root while Guard still reports a clean result, or runtime-continuity evidence
+  inconsistent with the tree/boundary that actually ran.
+- Path-escape, report-injection, entity-bomb, or partial-JUnit-set attacks on the
+  judge. A Maven/Surefire-style report directory containing any symlinked,
+  special, unreadable, malformed, oversized, DTD, or entity-bearing `*.xml`
+  entry must fail closed; a valid sibling cannot mask it.
 
 ## Known and documented — NOT vulnerabilities
 
@@ -46,13 +52,27 @@ These are stated limits, not defects (see [`docs/ASSURANCE.md`](docs/ASSURANCE.m
 - POSIX CPU/memory rlimits do not exist on native Windows (the wall timeout still
   applies). The shell-free black-box subprocess launcher also requires a POSIX
   host and fails closed on native Windows; use Linux/GitHub Actions or WSL.
+- Workspace containment has a platform-specific strength. On POSIX, supported
+  operations traverse from held directory descriptors and use no-follow,
+  descriptor-relative reads/writes/deletes; missing primitives fail closed. On
+  Windows, Python's standard library has no `openat`/`unlinkat` equivalent:
+  Guard rejects reparse parents and checks parent/file identity before and after
+  each protected operation, but this remains a **best-effort, non-atomic** check.
 - Under docker/gVisor, `setup_command` runs in a writable container by default,
   while suite and pack candidate mounts are read-only. Explicit
   `trust_setup_on_host` is a documented compatibility downgrade and is reflected
   as effective `subprocess` isolation.
 - `setup_output_globs` are trusted policy exclusions. If a repository owner
   deliberately exempts a broad path, setup fidelity makes no claim about that
-  matching content; protect and review `.evoguard.json` accordingly.
+  matching content while setup runs; protect and review `.evoguard.json`
+  accordingly. They do **not** exclude the post-setup runtime tree from
+  repo-suite/verifier-pack continuity checks.
+- For a repo-native verifier pack, `EVOGUARD_RUNTIME_TREE_V1` binds the accepted
+  post-setup runtime tree, including outputs setup created. In subprocess mode,
+  `snapshot_boundary_checked` detects differences at phase boundaries; it does
+  not prevent a lingering process from mutating and restoring bytes between
+  observations. `read_only_enforced` is reserved for Docker/gVisor suite/pack
+  mounts when setup was not moved to the host with `trust_setup_on_host`.
 - The verdict binds to the runtime image digest, **not** a separately built
   artifact (artifact-bound verification is on the roadmap).
 

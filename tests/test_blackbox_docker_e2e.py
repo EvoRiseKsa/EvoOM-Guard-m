@@ -8,8 +8,9 @@ The unit tests prove the *fail-closed* half — a container that cannot be
 delivered never yields a PASS. They cannot prove the other half: that when Docker
 IS available, the candidate is really confined and cannot reach the host, the
 judge-owned pack, or the judge's report. That is an operating-system property of
-a live container, so it is proven here against a real daemon (skipped when none
-is reachable — e.g. this repo's sandbox; run in CI, which has Docker).
+a live container, so it is proven here against a real daemon on a POSIX host
+(skipped on native Windows or when no daemon is reachable; run in Linux CI,
+which has Docker).
 
 The design makes the isolation proof self-certifying: a **malicious probe
 candidate** actively tries every escape (write the read-only repo mount, write
@@ -147,7 +148,10 @@ ADD_PACK = (
 OPS = "def add(a, b):\n    return a + b\n\ndef mul(a, b):\n    return a * b\n"
 
 
-@unittest.skipUnless(_docker_daemon_ok(), "needs a reachable Docker daemon (run in CI)")
+@unittest.skipUnless(
+    os.name == "posix" and _docker_daemon_ok(),
+    "needs a POSIX host with a reachable Docker daemon (run in CI)",
+)
 class BlackboxDockerE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

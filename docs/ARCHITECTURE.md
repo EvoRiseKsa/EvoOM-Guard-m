@@ -29,6 +29,10 @@ code, a JSON record, a Markdown report, and an optional SARIF document.
 |---|---|
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
+| `workspace.py` | Contained workspace I/O: atomic descriptor-relative/no-follow operations on POSIX; reparse rejection plus pre/post parent/object identity checks as a non-atomic Windows fallback. |
+| `runtime_identity.py` | Canonical post-setup runtime-tree identity (`EVOGUARD_RUNTIME_TREE_V1`), including setup-created outputs. |
+| `verifiers/fidelity.py` | Setup-fidelity snapshots and drift details; setup output exceptions are scoped to this validation step. |
+| `verifiers/junit_oracle.py` | Hardened JUnit parsing/grading. Directory report sets fail closed if any XML sibling is untrusted or invalid. |
 | `pack_manifest.py` | The canonical pack contract: strict `pack.json`, regular-file-only inventory, framed `EVOGUARD_PACK_V2` digest, verified snapshots, and pack test discovery. |
 | `candidate_runner.py` | The shell-free `$EVOGUARD_EXEC` launcher and delivered-isolation evidence for black-box candidates. |
 | `verifiers/grading.py` | The pure score gradient (`fraction_score`). |
@@ -57,11 +61,14 @@ RepoVerifier.verify(candidate, problem)
   │   optional setup_command:
   │     subprocess mode → host subprocess (temporary HOME/minimal env; not sandboxed)
   │     docker/gvisor → writable setup container by default; verify setup fidelity
+  │   if a repo-native pack is configured: identify the complete post-setup
+  │     runtime tree (including setup-created outputs) as EVOGUARD_RUNTIME_TREE_V1
   │   instrument_command → splice a judge-owned JUnit reporter (per adapter)
   │   run repo suite: subprocess (POSIX rlimits + timeout) | docker | gvisor(runsc)
   │   if pack configured: run it as a separate mandatory pytest phase
   │   container suite + pack mounts are read-only; verify candidate/pack snapshots
   │   read judge-owned report(s) + exit code(s), compose both phases
+  │     directory JUnit: any invalid/symlink/special XML invalidates the whole set
   ▼
 grade_repo_run + detect_tamper ─► VerdictResult
   ▼
@@ -90,8 +97,10 @@ GuardResult ─► verdict + exit code + JSON + Markdown + SARIF
   A runner whose only machine-readable output is stdout does **not** qualify (stdout
   is forgeable) — leave it on exit-code grading. A runner that emits **one file per
   test class** (Maven Surefire) points its reports directory at `<report_path>.d`;
-  the verifier falls back to `parse_junit_dir` to merge them. Add adapter unit tests
-  in `tests/test_adapters.py`.
+  the verifier falls back to `parse_junit_dir` to merge them. The directory is one
+  evidence set: an unreadable, malformed, oversized, DTD/entity-bearing,
+  symlinked, or special XML sibling invalidates the whole set. Add adapter unit
+  tests in `tests/test_adapters.py`.
 - **Add an isolation backend:** extend `RepoVerifier` (`_docker_command` / `_run_docker`
   are the pattern) and keep the pre-gate running *before* any sandbox starts.
 - **Change pack behavior in one place:** extend `pack_manifest.py`; every consumer
@@ -103,12 +112,18 @@ GuardResult ─► verdict + exit code + JSON + Markdown + SARIF
 ## Trust boundary (short)
 
 The default `subprocess` judge uses a wall timeout everywhere and CPU/memory rlimits
-on POSIX; it is for **trusted** repos, not a sandbox. The black-box subprocess
-launcher itself has a POSIX executable contract and fails closed on native Windows
-(use Linux/GitHub Actions or WSL). `--isolation docker` runs setup inside the
+on POSIX; it is for **trusted** repos, not a sandbox. Every black-box isolation
+mode uses the same POSIX executable launcher and fails closed on native Windows
+before subprocess, Docker, or gVisor delivery (use Linux/GitHub Actions or WSL).
+`--isolation docker` runs setup inside the
 resolved image by default, then runs suite and pack containers against read-only
 mounts; `gvisor` adds a separate user-space guest kernel. Explicit
-`setup_output_globs` are trusted policy exceptions to setup-fidelity checks, and
-`trust_setup_on_host` deliberately weakens effective isolation. A Firecracker
+`setup_output_globs` are trusted policy exceptions to setup-fidelity checks, not
+to the post-setup runtime identity. Subprocess continuity is a boundary snapshot
+check, while Docker/gVisor can claim read-only enforcement only without host
+setup opt-in. POSIX workspace operations are descriptor-relative/no-follow;
+Windows performs best-effort pre/post identity checks because stdlib lacks an
+atomic equivalent. `trust_setup_on_host` deliberately weakens effective
+isolation. A Firecracker
 microVM backend is documented as a future design but is not built. See
 [`GUARD.md`](GUARD.md) and [`VM_ISOLATION.md`](VM_ISOLATION.md).

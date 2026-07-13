@@ -118,7 +118,10 @@ _PROTECTED_GLOBS = (
 #         digests, expected digest pins, mandatory separate pack execution,
 #         setup/suite isolation evidence, candidate/pack drift reason codes,
 #         and explicit JUnit digest formats for composite reports.
-SCHEMA_VERSION = "1.8"
+#   1.9 — adversarial boundary hardening: descriptor-bound POSIX workspace
+#         operations, all-or-nothing JUnit directory parsing, and a canonical
+#         full post-setup runtime-tree identity across repo-suite/pack phases.
+SCHEMA_VERSION = "1.9"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -172,6 +175,7 @@ _OUTCOME_REASON = {
     "setup_timeout": (ERROR, REASON_SETUP_TIMEOUT),
     "setup_failed": (ERROR, REASON_SETUP_FAILED),
     "isolation_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
+    "runtime_identity_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
     "pack_identity_mismatch": (ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH),
     "pack_invalid": (ERROR, REASON_VERIFIER_PACK_INVALID),
     "test_command_unavailable": (ERROR, REASON_TEST_COMMAND_UNAVAILABLE),
@@ -180,7 +184,7 @@ _OUTCOME_REASON = {
 _TAMPER_OUTCOME_REASON = {
     "candidate_tree_changed": (
         REASON_CANDIDATE_TREE_CHANGED,
-        "candidate source/harness changed during the repo-suite/verifier-pack run",
+        "prepared candidate runtime tree changed during the repo-suite/verifier-pack run",
     ),
     "pack_snapshot_changed": (
         REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
@@ -893,7 +897,10 @@ def guard(
     )
 
     assurance = _assurance_profile(
-        isolation, verifier_pack, setup_isolation=art.get("setup_isolation")
+        isolation,
+        verifier_pack,
+        setup_isolation=art.get("setup_isolation"),
+        runtime_continuity=art.get("runtime_continuity"),
     )
     # Enforceable assurance policy (fail-closed): the default judge is
     # same_process_candidate_writable, so a --require-report-integrity of
@@ -1156,6 +1163,12 @@ def _build_attestation(
         "policy_id": art.get("policy_id"),
         "policy_version": art.get("policy_version"),
         "setup_isolation": art.get("setup_isolation"),
+        "runtime_tree_sha256": art.get("runtime_tree_sha256"),
+        "runtime_tree_digest_format": art.get("runtime_tree_digest_format"),
+        "runtime_tree_entries": art.get("runtime_tree_entries"),
+        "runtime_tree_bytes": art.get("runtime_tree_bytes"),
+        "runtime_identity_elapsed_ms": art.get("runtime_identity_elapsed_ms"),
+        "runtime_continuity": art.get("runtime_continuity"),
     }
 
 
@@ -1199,6 +1212,7 @@ def _assurance_profile(
     isolation: str, verifier_pack: str | None, *, blackbox: bool = False,
     composed_repo_suite: bool = False,
     setup_isolation: str | None = None,
+    runtime_continuity: str | None = None,
 ) -> dict[str, Any]:
     pack = None
     if verifier_pack:
@@ -1233,6 +1247,7 @@ def _assurance_profile(
             "candidate_isolation": effective_isolation,
             "suite_isolation": isolation,
             "setup_isolation": setup_isolation,
+            "runtime_continuity": runtime_continuity or "not_applicable",
             "verifier_pack": pack,
             "repo_native_suite": (
                 "composed_required" if composed_repo_suite else "not_run (--blackbox-only)"
@@ -1261,6 +1276,7 @@ def _assurance_profile(
         "candidate_isolation": effective_isolation,
         "suite_isolation": isolation,
         "setup_isolation": setup_isolation,
+        "runtime_continuity": runtime_continuity or "not_applicable",
         "verifier_pack": pack,
         "overall_profile": overall,
         "note": (

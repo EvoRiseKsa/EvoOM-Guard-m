@@ -21,6 +21,12 @@ runner **raises** :class:`IsolationUnavailable` (fail-closed). There is no silen
 fallback to a weaker boundary, because a fallback is exactly how a verdict comes
 to claim isolation it never had.
 
+The launcher is a Python file with a POSIX shebang and is executed directly to
+preserve its shell-free argv contract. Native Windows cannot execute that file
+through ``CreateProcess``; every black-box isolation mode therefore fails closed
+before probing subprocess, Docker, or gVisor. Repo-native verification remains a
+separate Windows-capable path.
+
 The candidate is launched through a small **launcher script** the runner writes
 outside both the candidate copy and the judge-owned pack. The pack stays
 isolation-agnostic: it invokes ``$EVOGUARD_EXEC <argv…>`` and the launcher runs
@@ -41,7 +47,7 @@ from typing import Any
 
 
 class IsolationUnavailable(RuntimeError):
-    """A stronger isolation boundary was required but could not be delivered.
+    """The requested candidate boundary could not be delivered honestly.
 
     Raised instead of falling back to a weaker boundary, so a verdict never
     claims isolation it did not actually run under.
@@ -100,9 +106,14 @@ class CandidateRunner:
 
         ``env_extra`` is merged into the judge's environment; the pack reads
         ``EVOGUARD_EXEC`` (the launcher) and ``EVOGUARD_PYTHON`` (interpreter
-        token). Raises :class:`IsolationUnavailable` when a container boundary
-        was required but cannot be delivered.
+        token). Raises :class:`IsolationUnavailable` when the requested
+        black-box launcher or isolation boundary cannot be delivered.
         """
+        if os.name == "nt":
+            raise IsolationUnavailable(
+                "black-box candidate launching currently requires a POSIX host; "
+                "use GitHub Actions/Linux or WSL on Windows"
+            )
         if self.isolation in ("docker", "gvisor"):
             return self._prepare_container(workdir, target)
         return self._prepare_subprocess(workdir, target)
@@ -111,11 +122,6 @@ class CandidateRunner:
     def _prepare_subprocess(
         self, workdir: str, target: str
     ) -> tuple[str, dict[str, str], IsolationEvidence]:
-        if os.name == "nt":
-            raise IsolationUnavailable(
-                "black-box subprocess launching currently requires a POSIX host; "
-                "use GitHub Actions/Linux or WSL on Windows"
-            )
         launcher = self._write_launcher(workdir, {"mode": "subprocess", "target": target})
         evidence = IsolationEvidence(
             requested=self.isolation,

@@ -85,9 +85,10 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
 - **Mandatory execution.** The repo suite and explicit pack phase are composed;
   both must pass. The attestation records separate pack counts, and
   `verdict_source` becomes `composite:repo+verifier-pack`.
-- **Candidate-tree continuity.** With a pack, Guard compares the post-setup
-  candidate tree before and after the repo and pack phases. Persistent source or
-  harness drift is `TAMPERED` / `candidate_tree_changed_during_run`.
+- **Candidate-tree continuity.** With a pack, Guard compares the complete
+  post-setup runtime tree before and after the repo and pack phases. Persistent
+  drift anywhere in that prepared tree is `TAMPERED` /
+  `candidate_tree_changed_during_run`.
 - **Centralised, versioned invariants.** One pack of security/API/permission/
   regression checks can gate many repositories and remain owned by a security
   or platform team.
@@ -108,9 +109,13 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
   judge share the OS account. Pre/post checks are evidence of observed durable
   state, not an OS confinement boundary, and transient changes restored between
   observations are not claimed as impossible.
-- **Safety of trusted output exceptions.** `setup_output_globs` and newly
-  generated conventional dependency/build outputs are excluded from continuity
-  checks. Never allowlist source, tests, policy, or harness paths there.
+- **Scope of trusted setup exceptions.** `setup_output_globs` and newly
+  generated conventional dependency/build outputs are excluded only from the
+  setup-fidelity comparison. After setup, `EVOGUARD_RUNTIME_TREE_V1` binds the
+  complete prepared tree, including those paths, before the repository suite
+  and checks it again before and after verifier-pack execution. Never allowlist
+  source, tests, policy, or harness paths: the exception still permits setup to
+  replace those bytes before the runtime identity is captured.
 
 For checks the running code genuinely cannot observe or modify, use the shipped
 external black-box judge (`--blackbox`): the pack runs in the judge's own

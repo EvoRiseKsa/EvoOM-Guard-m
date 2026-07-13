@@ -69,7 +69,7 @@ class LauncherIsShellFreeTests(unittest.TestCase):
             )
             self.assertEqual(os.path.realpath(r.stdout.strip()), os.path.realpath(target))
 
-    def test_windows_subprocess_launcher_fails_closed_with_guidance(self) -> None:
+    def test_windows_blackbox_launcher_fails_closed_with_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runner = CandidateRunner(isolation="subprocess")
             # Simulate the Windows branch on every CI host; the native Windows
@@ -82,6 +82,27 @@ class LauncherIsShellFreeTests(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(tmp, "evoguard_exec.py")))
             self.assertFalse(os.path.exists(os.path.join(tmp, "evoguard_exec.py.json")))
 
+    def test_windows_container_launchers_fail_before_any_docker_call(self) -> None:
+        for isolation in ("docker", "gvisor"):
+            with self.subTest(isolation=isolation), tempfile.TemporaryDirectory() as tmp:
+                runner = CandidateRunner(
+                    isolation=isolation,
+                    docker_image="python:3.12-slim",
+                )
+                with mock.patch("evoom_guard.candidate_runner.os.name", "nt"), \
+                        mock.patch("evoom_guard.candidate_runner.shutil.which") as which, \
+                        mock.patch("evoom_guard.candidate_runner.subprocess.run") as run:
+                    with self.assertRaisesRegex(
+                        IsolationUnavailable, "POSIX host.*WSL on Windows"
+                    ):
+                        runner.prepare(tmp, tmp)
+                which.assert_not_called()
+                run.assert_not_called()
+                self.assertFalse(os.path.exists(os.path.join(tmp, "evoguard_exec.py")))
+                self.assertFalse(
+                    os.path.exists(os.path.join(tmp, "evoguard_exec.py.json"))
+                )
+
 
 class ContainerPrefixTests(unittest.TestCase):
     def test_malicious_docker_network_stays_one_literal_argv_element(self) -> None:
@@ -91,6 +112,7 @@ class ContainerPrefixTests(unittest.TestCase):
         evil = "none; touch PWNED"
         runner = CandidateRunner(isolation="docker", docker_image="img", docker_network=evil)
         with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("evoom_guard.candidate_runner.os.name", "posix"), \
                 mock.patch("evoom_guard.candidate_runner.shutil.which", return_value="/usr/bin/docker"), \
                 mock.patch("evoom_guard.candidate_runner.subprocess.run",
                            return_value=types.SimpleNamespace(returncode=0, stdout="28", stderr="")), \

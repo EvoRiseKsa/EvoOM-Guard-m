@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import xml.etree.ElementTree as ET
 from typing import NamedTuple
 
@@ -135,20 +136,36 @@ def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
     For runners (Maven Surefire, …) that emit **one report file per test class**
     into a judge-owned *directory* rather than a single file. Each file is read
     through the hardened :func:`parse_junit_xml` (size-cap + DTD/``ENTITY`` refusal),
-    and the per-file counts are summed. Returns ``None`` if the directory is absent
-    or holds no parseable report — so the run then grades as "no clean verdict",
-    never a crash on a stray non-report file.
+    and the per-file counts are summed. The directory is one report set: if any
+    ``*.xml`` entry is a symlink/special file, unreadable, or invalid, the entire
+    set is rejected instead of silently dropping evidence. Returns ``None`` when
+    the directory is absent, has no XML reports, or is invalid, so the run grades
+    as "no clean verdict" rather than a partial false pass.
     """
     if not dirpath or not os.path.isdir(dirpath):
         return None
     passed = total = failures = errors = 0
     seen = False
-    for fn in sorted(os.listdir(dirpath)):
+    try:
+        entries = sorted(os.listdir(dirpath))
+    except OSError:
+        return None
+    for fn in entries:
         if not fn.lower().endswith(".xml"):
             continue
-        counts = parse_junit_xml(_read_text_or_none(os.path.join(dirpath, fn)) or "")
+        path = os.path.join(dirpath, fn)
+        try:
+            mode = os.lstat(path).st_mode
+        except OSError:
+            return None
+        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+            return None
+        text = _read_text_or_none(path)
+        if text is None:
+            return None
+        counts = parse_junit_xml(text)
         if counts is None:
-            continue
+            return None
         seen = True
         passed += counts.passed
         total += counts.total

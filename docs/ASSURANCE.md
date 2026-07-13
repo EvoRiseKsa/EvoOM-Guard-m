@@ -124,6 +124,59 @@ phases receive read-only candidate mounts. The compatibility opt-in
 `candidate_isolation` to `subprocess`, so a required docker floor fails closed.
 `setup_output_globs` are trusted repository policy: matching paths are excluded
 from setup-fidelity comparison, so broad patterns weaken what that check proves.
+They apply only to **setup validation**. Once setup finishes, they do not exempt
+matching content from repo-suite/verifier-pack runtime-continuity identity.
+
+### Filesystem and runtime-continuity boundary
+
+Workspace operations have deliberately different platform claims:
+
+- On POSIX, Guard opens the workspace root and every parent with
+  descriptor-relative, no-follow operations. Reads bind the opened object;
+  writes use a temporary file plus descriptor-relative replacement; deletion
+  uses the held parent descriptor. A parent swap cannot redirect the operation,
+  and a POSIX runtime missing the required primitives fails closed.
+- On Windows, Python's standard library exposes no atomic equivalent of
+  `openat`/`unlinkat`. Guard rejects symlink/junction parents and compares parent
+  and file identity before and after the protected operation. This narrows the
+  race window but is explicitly **best effort, not an atomic guarantee**.
+
+For a repo-native verifier pack, the accepted post-setup runtime tree has the
+content identity format `EVOGUARD_RUNTIME_TREE_V1`. It includes dependency/build
+outputs created by setup, including paths allowed during setup validation. The
+identity accepts relative symlinks only when their resolved referent remains
+inside the runtime root; absolute, escaping, and dangling links fail closed.
+For Python environments that would create an absolute interpreter link, use
+`python -m venv --copies`. Scans also fail closed above 500,000 entries, 128 MiB
+of canonical path bytes, 32 GiB of logical regular-file bytes, or 8 GiB in one
+file. The 120-second scan deadline is cooperative between filesystem calls; it
+cannot interrupt a kernel/filesystem call that itself hangs, so untrusted or
+network filesystems still require an outer process/job timeout. The
+continuity evidence states what was actually enforced:
+
+- `unavailable` means the initial runtime identity could not be captured;
+  `incomplete` means execution stopped before every required boundary was
+  checked; and `verification_failed` means a later identity could not be
+  reproduced or differed. These are failure states, not delivered-continuity
+  claims.
+- `snapshot_boundary_checked` in subprocess mode means the runtime identity was
+  compared at suite/pack phase boundaries. It detects persistent drift but does
+  not stop a lingering process from mutating and restoring bytes between those
+  observations.
+- `read_only_enforced` means Docker/gVisor suite and pack phases received the
+  accepted runtime tree read-only. It is used only when setup stayed inside the
+  requested container boundary (or no setup command ran). If a configured setup
+  command ran on the host through `trust_setup_on_host`, that process could
+  outlive setup, so the stronger label is not claimed even though later
+  container mounts themselves are read-only.
+
+Runtime continuity is separate from `report_integrity`: a read-only candidate
+tree does not make a repo-native same-process JUnit writer unforgeable.
+
+For directory-report runners such as Maven/Surefire, the whole directory is one
+evidence set. Any `*.xml` sibling that is symlinked, special, unreadable,
+malformed, oversized, or contains DTD/ENTITY declarations invalidates the set;
+Guard never computes a pass from only the remaining files.
 
 In black-box mode the verdict is **composite** by default: your repo's own suite
 *and* the external pack must both pass (harness-integrity always applies first).
@@ -156,7 +209,7 @@ the pack's external protocol tests, and both must pass. A narrow protocol test
 can therefore never hide an internal regression:
 
 ```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.1      # repo suite AND external pack (composite)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2      # repo suite AND external pack (composite)
   with: { verifier-pack: ./pack, blackbox: "true",
           require-report-integrity: external_process_isolated }
 ```
@@ -178,8 +231,9 @@ no in-repo suite passes `blackbox-only: "true"` to judge the pack alone.
   docker` for a delivered boundary) for a report-integrity guarantee the code
   under test cannot forge.
 
-The shell-free `$EVOGUARD_EXEC` used by black-box subprocess mode is a POSIX
-executable launcher. Native Windows subprocess mode fails closed rather than
-claiming a boundary it did not deliver; use Linux/GitHub Actions or WSL for that
-path. Ordinary repo-native Guard execution on Windows is separate, but POSIX
-CPU/memory rlimits are unavailable there (the wall timeout still applies).
+The shell-free `$EVOGUARD_EXEC` used by every black-box isolation mode is a
+POSIX executable launcher. Native Windows fails closed before subprocess,
+Docker, or gVisor delivery rather than claiming a boundary it did not deliver;
+use Linux/GitHub Actions or WSL for that path. Ordinary repo-native Guard
+execution on Windows is separate, but POSIX CPU/memory rlimits are unavailable
+there (the wall timeout still applies).

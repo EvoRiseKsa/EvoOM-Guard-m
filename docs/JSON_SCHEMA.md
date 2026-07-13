@@ -14,8 +14,8 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 ## Stability rules
 
 - `schema_version` is bumped when a shape, enumerated value, or existing field's
-  security meaning changes incompatibly. Schema 1.8 marks the new pack digest
-  algorithm, composed JUnit identity, and execution-fidelity semantics.
+  security meaning changes incompatibly. Schema 1.9 adds the canonical runtime
+  tree identity and delivered runtime-continuity semantics.
 - Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are frozen.
 - A shipped `reason_code` is never renamed or repurposed. Consumers must still
   handle a future unknown code as the generic enclosing verdict.
@@ -27,9 +27,9 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 
 ```json
 {
-  "schema_version": "1.8",
+  "schema_version": "1.9",
   "tool": "evoguard",
-  "tool_version": "3.4.1",
+  "tool_version": "3.4.2",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -86,7 +86,7 @@ gotestsum, RSpec, mocha, and Maven/Surefire. `exit` is a coarser custom-command
 verdict. `composite:repo+verifier-pack` means the repo command and a separate
 mandatory pytest pack phase were both composed.
 
-## Assurance object (schema 1.8)
+## Assurance object (schema 1.9)
 
 Important fields are:
 
@@ -99,6 +99,15 @@ Important fields are:
 - `suite_isolation`: the boundary used for the suite.
 - `setup_isolation`: `null`, `subprocess`, `docker`, `gvisor`,
   `subprocess_host_opt_in`, or `unavailable` as applicable.
+- `runtime_continuity`: `not_applicable` without a repo-native pack;
+  `unavailable` if the initial identity could not be captured; `incomplete` if
+  execution stopped before all required boundary checks; `verification_failed`
+  if a later identity could not be reproduced or differed; otherwise
+  `snapshot_boundary_checked` for subprocess comparisons, or
+  `read_only_enforced` when Docker/gVisor suite and pack mounts enforced the
+  accepted runtime tree read-only. The stronger value is not claimed when a
+  configured setup command actually ran through `trust_setup_on_host`, because
+  that host process may outlive setup.
 - `verifier_pack.integrity`: `verified_snapshot_read_only` for a container pack
   mount or `verified_snapshot_pre_post` for a host snapshot checked before and
   after execution.
@@ -112,7 +121,7 @@ Important fields are:
 These axes are independent. A read-only Docker candidate tree protects host
 state but does not fix the repo-native same-process report-forgery boundary.
 
-## Attestation object (schema 1.8)
+## Attestation object (schema 1.9)
 
 Core context binding includes:
 
@@ -120,13 +129,20 @@ Core context binding includes:
   and `test_command`.
 - `effective_policy` and `policy_sha256`. The policy includes every material
   knob, including `expect_verifier_pack_sha256`, `trust_setup_on_host`, and
-  `setup_output_globs`.
+  `setup_output_globs`. Those globs exclude content from setup validation only;
+  they do not exclude it from post-setup runtime continuity.
 - `base_sha`, `head_sha`, `base_tree_sha`, `head_tree_sha`, `policy_id`, and
   `policy_version` when supplied.
 - `isolation_evidence` (`requested`, `delivered`, `image_digest`, `network`,
   `runtime`) for delivered container runs, including repo-native Docker/gVisor.
 - Black-box composition fields `deleted_paths_applied`, `repo_suite_passed`, and
   `repo_suite_junit_sha256`.
+- For repo-native pack composition, `runtime_tree_sha256`,
+  `runtime_tree_digest_format: EVOGUARD_RUNTIME_TREE_V1`,
+  `runtime_tree_entries`, `runtime_tree_bytes`,
+  `runtime_identity_elapsed_ms`, and `runtime_continuity` describe the complete
+  accepted post-setup runtime tree and the strength of continuity actually
+  enforced.
 
 ### JUnit identity
 
@@ -138,6 +154,23 @@ Core context binding includes:
 
 Do not compare `junit_sha256` values without also checking
 `junit_digest_format`.
+
+For a directory-producing adapter such as Maven/Surefire, `parse_junit_dir`
+accepts the set only when every `*.xml` entry is a readable regular file and
+parses under the same size/DTD/entity rules as a single report. Any symlink,
+special, unreadable, malformed, oversized, or DTD/entity-bearing sibling makes
+the directory yield no clean JUnit verdict; valid siblings are not counted
+partially.
+
+### Runtime-tree identity
+
+`EVOGUARD_RUNTIME_TREE_V1` is distinct from both `EVOGUARD_PACK_V2` and the
+candidate source digest. It binds the post-setup tree that repo-suite and pack
+phases consume, including outputs created by setup. Its assurance meaning is
+carried by `runtime_continuity`: subprocess boundary snapshots detect persistent
+drift but cannot exclude a mutate/restore action between observations;
+`read_only_enforced` describes delivered Docker/gVisor read-only mounts and is
+not emitted for host-setup opt-in.
 
 ### Verifier-pack identity
 
@@ -175,7 +208,7 @@ candidate-only and is not run on the pristine baseline.
 | `FAIL` / `ERROR` | `no_test_verdict` | No clean test verdict was available (collection/usage/judge error). |
 | `TAMPERED` | `junit_exit_mismatch` | Process exit and judge-owned JUnit disagree. |
 | `TAMPERED` | `verifier_pack_snapshot_changed` | Accepted pack snapshot changed before or during execution. |
-| `TAMPERED` | `candidate_tree_changed_during_run` | Candidate source/harness changed across the repo-suite/pack transition. |
+| `TAMPERED` | `candidate_tree_changed_during_run` | The prepared candidate runtime tree changed across the repo-suite/pack transition. |
 | `ERROR` | `verifier_pack_identity_mismatch` | Expected V2 digest differs from the accepted snapshot; checked before candidate execution. |
 | `ERROR` | `verifier_pack_invalid` | Pack contract/tree is malformed, empty, unreadable, symlinked, special, or unstable. |
 | `ERROR` | `test_command_unavailable` | Required test/pack interpreter or executable is unavailable. |
@@ -193,6 +226,14 @@ candidate-only and is not run on the pristine baseline.
 | `ERROR` | `binary_patch` | Binary diff refused. |
 | `ERROR` | `reverse_apply_failed` | Diff did not reverse-apply to reconstruct the base. |
 | `ERROR` | `no_verifiable_changes` | Input reconstructed but contained no verifiable source change. |
+
+## Added in 1.8 → 1.9
+
+- Descriptor-bound POSIX workspace operations and explicit non-atomic Windows
+  fallback semantics.
+- All-or-nothing directory JUnit validation.
+- `EVOGUARD_RUNTIME_TREE_V1`, its attestation metrics, and delivered
+  `runtime_continuity` assurance.
 
 ## Added in 1.7 → 1.8
 
@@ -231,7 +272,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.4.1",
+  "version": "3.4.2",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

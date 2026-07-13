@@ -64,8 +64,9 @@ external_process_isolated`); by default it is **composite** — your repo's own 
 
 **Does NOT guarantee (without `--isolation docker`):** OS isolation — the candidate
 runs as a host subprocess. The shell-free black-box launcher has a POSIX
-executable contract; native Windows subprocess mode fails closed, so use
-Linux/GitHub Actions or WSL for this path.
+executable contract in every isolation mode; native Windows fails closed before
+subprocess, Docker, or gVisor delivery, so use Linux/GitHub Actions or WSL for
+this path.
 
 **Try it (a complete, runnable example ships in the repo):**
 ```bash

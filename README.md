@@ -119,7 +119,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.1"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.2"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -159,7 +159,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.1   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR
@@ -227,7 +227,9 @@ error. Conventional new dependency/build outputs are allowed, and repositories
 can declare additional exceptions with `setup_output_globs` in
 `.evoguard.json`. Those globs are **trusted policy**: a broad pattern excludes
 matching paths from the fidelity check, so keep them narrow and review the
-protected config. `trust_setup_on_host: true` is a compatibility escape hatch
+protected config. They affect setup validation only; a repo-native pack's
+post-setup runtime identity still includes those paths.
+`trust_setup_on_host: true` is a compatibility escape hatch
 for container modes; it is recorded and reduces effective candidate isolation
 to `subprocess`.
 
@@ -312,10 +314,11 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack \
   judge (`--blackbox`) closes this — its verdict comes from a process the
   candidate never runs in. Read the `assurance` profile's `report_integrity`
   field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
-- The shell-free `$EVOGUARD_EXEC` launcher used by black-box subprocess mode has
-  a **POSIX executable contract**. Native Windows subprocess mode fails closed
-  with guidance; run that path under Linux/GitHub Actions or WSL. This is
-  separate from ordinary repo-native Guard execution on Windows.
+- The shell-free `$EVOGUARD_EXEC` launcher used by every black-box isolation
+  mode has a **POSIX executable contract**. Native Windows therefore fails
+  closed before subprocess, Docker, or gVisor delivery; run black-box mode
+  under Linux/GitHub Actions or WSL. This is separate from ordinary repo-native
+  Guard execution on Windows.
 - Custom (non-adapter) test commands are graded by exit code only — still not
   stdout-forgeable, but with a coarser gradient (and, like every runner today,
   in-process-forgeable).
@@ -345,6 +348,7 @@ evo-guard guard . --diff - --verifier-pack /secure/org-pack \
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |
 | [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md) | The docker/gVisor isolation modes and their threat model |
 | [`docs/FEATURE_MODE.md`](docs/FEATURE_MODE.md) | `--allow-new-tests`: gating feature work that adds tests |
+| [`adversarial/README.md`](adversarial/README.md) | Executable adversarial corpus: enforced controls, known gaps, documented exceptions, and the environment-labelled security baseline |
 
 ## Where this comes from
 

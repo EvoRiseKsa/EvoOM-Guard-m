@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-"""Cross-mode policy consistency (schema 1.8) — no requested gate is ever
+"""Cross-mode policy consistency (schema 1.9) — no requested gate is ever
 silently dropped.
 
 An external review of v3.3.0 found the exact failure this file pins: the new

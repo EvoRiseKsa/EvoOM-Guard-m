@@ -151,9 +151,10 @@ self-check.
 - A read-only suite/pack candidate mount means build products and dependencies must
   be fully prepared during setup or baked into the image. This is an intentional
   phase contract, not a general writable development container.
-- Black-box subprocess launching uses a POSIX executable launcher. Native Windows
-  fails closed for that path; use Linux/GitHub Actions or WSL. This is distinct from
-  repo-native subprocess execution on Windows.
+- Every black-box isolation mode uses the same POSIX executable launcher. Native
+  Windows fails closed before subprocess, Docker, or gVisor delivery; use
+  Linux/GitHub Actions or WSL. This is distinct from repo-native subprocess
+  execution on Windows.
 
 ## 8. Phasing
 

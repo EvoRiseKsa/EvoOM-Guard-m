@@ -9,6 +9,61 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.4.2] — 2026-07-13
+
+An adversarial-boundary security release (JSON schema 1.9). The changes close
+filesystem check/use races on POSIX, reject partial JUnit directory evidence,
+and bind the complete post-setup runtime tree presented to a repo-native
+verifier pack. The documented repo-native same-process report-forgery boundary
+is unchanged; use black-box isolation when that stronger property is required.
+
+### Security
+
+- **Descriptor-bound POSIX workspace operations.** Candidate reads, atomic
+  writes, and recursive deletions traverse from held directory descriptors with
+  no-follow semantics. Root/parent replacement and partial-delete races fail
+  closed. Native Windows rejects reparse roots/parents and checks object
+  identity before and after each operation, but remains explicitly best-effort
+  because Python's standard library has no `openat`/`unlinkat` equivalent.
+- **Race-bound setup fidelity.** Regular-file hashing binds `lstat`, the opened
+  descriptor, and the final path identity; hardlink aliases are refused in the
+  source/setup fidelity contract. Directory namespaces are checked before and
+  after traversal so an unstable tree cannot yield an accepted snapshot.
+- **All-or-nothing JUnit directories.** A Maven/Surefire-style report directory
+  is rejected as a whole if any XML entry is symlinked, special, unreadable,
+  malformed, oversized, or contains DTD/entity declarations. A valid sibling
+  can no longer mask missing or invalid evidence.
+- **Full runtime continuity (`EVOGUARD_RUNTIME_TREE_V1`).** With a repo-native
+  verifier pack, Guard captures the complete prepared tree after setup,
+  including `node_modules`, `.venv`, build outputs, and paths exempted only from
+  setup validation. Persistent suite drift blocks the pack before it runs;
+  pack drift is rejected after execution. Subprocess mode reports
+  `snapshot_boundary_checked`; Docker/gVisor reports `read_only_enforced` only
+  when host setup opt-in did not weaken the boundary.
+- **Bounded, link-contained runtime scans.** Runtime identity rejects absolute,
+  escaping, and dangling symlinks, uses non-blocking no-follow file opens on
+  POSIX, traverses iteratively, and enforces entry, path-byte, logical-byte and
+  per-file budgets plus a cooperative deadline between filesystem calls.
+  Failure/incomplete states are recorded without claiming a delivered
+  continuity level; a blocked kernel call still requires an outer job timeout.
+- **Honest native-Windows black-box refusal.** The shell-free black-box launcher
+  has a POSIX executable contract in every isolation mode. Native Windows now
+  fails closed before subprocess, Docker, or gVisor probing instead of reaching
+  `WinError 193`; use Linux, GitHub Actions, or WSL for black-box execution.
+
+### Evidence and verification
+
+- Added an executable, machine-registered adversarial corpus covering 14
+  filesystem, setup, JUnit, verifier-pack, container, and resource boundaries.
+- Windows CI now runs the complete unit/security suite, not only CLI/zipapp
+  smoke tests, so best-effort reparse and metadata behavior remains exercised.
+- Added an environment-labelled synthetic snapshot microbenchmark; its timings
+  are comparable only under equivalent Python/OS/filesystem environments.
+- Attestation gains `runtime_tree_sha256`,
+  `runtime_tree_digest_format`, `runtime_tree_entries`, `runtime_tree_bytes`,
+  `runtime_identity_elapsed_ms`, and delivered `runtime_continuity`. Assurance
+  exposes the same continuity level.
+
 ## [3.4.1] — 2026-07-13
 
 A focused security patch for deletion containment. It does not change the JSON

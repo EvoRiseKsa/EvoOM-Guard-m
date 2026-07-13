@@ -284,6 +284,7 @@ def test_setup_suite_and_pack_share_one_resolved_image_id(tmp_path, monkeypatch)
     assert all("sha256:fixed-image" in command for command in docker_commands)
     assert all("python:mutable" not in command for command in docker_commands)
     assert result.artifact["image_digest"] == "sha256:fixed-image"
+    assert result.artifact["runtime_continuity"] == "read_only_enforced"
 
 
 def test_setup_cannot_mutate_source_after_pre_gate(tmp_path):
