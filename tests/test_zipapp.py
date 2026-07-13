@@ -12,23 +12,26 @@ process **exit code** (a zipapp ``-m`` entry would drop it, making the gate exit
 on every verdict). Build is stdlib-only, so the suite stays green without extras.
 """
 
+import hashlib
 import os
 import subprocess
 import sys
 import zipfile
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard import __version__
 
 
-def _build(tmp_path) -> str:
+def _build(tmp_path, *, root=None) -> str:
     # ops/ is not part of the installed package — add it on demand to import the
     # build helper (keeps the module-level import block clean).
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ops"))
     import build_pyz
 
-    return build_pyz.build(str(tmp_path / "evo-guard.pyz"))
+    kwargs = {} if root is None else {"root": str(root)}
+    return build_pyz.build(str(tmp_path / "evo-guard.pyz"), **kwargs)
 
 
 def test_pyz_builds_and_reports_version(tmp_path):
@@ -52,6 +55,43 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             entry.filename for entry in entries
         )
         assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
+
+
+def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
+    sources = {
+        "__init__.py": b'__version__ = "test"\n',
+        "cli.py": (
+            b'def main():\n'
+            b'    message = "logical source is unchanged"\n'
+            b'    return 0 if message else 1\n'
+        ),
+        "nested/module.py": b'VALUE = "same"\n',
+    }
+    non_python_payload = b"binary-like\r\npayload\rwith-newlines\n"
+
+    roots = {}
+    for checkout, newline in (("lf", b"\n"), ("crlf", b"\r\n")):
+        root = tmp_path / checkout
+        package = root / "evoom_guard"
+        for relative, source in sources.items():
+            path = package / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(source.replace(b"\n", newline))
+        (package / "payload.bin").write_bytes(non_python_payload)
+        roots[checkout] = root
+
+    lf_build = _build(tmp_path / "lf-build", root=roots["lf"])
+    crlf_build = _build(tmp_path / "crlf-build", root=roots["crlf"])
+    lf_bytes = Path(lf_build).read_bytes()
+    crlf_bytes = Path(crlf_build).read_bytes()
+
+    assert lf_bytes == crlf_bytes
+    assert hashlib.sha256(lf_bytes).digest() == hashlib.sha256(crlf_bytes).digest()
+    with zipfile.ZipFile(crlf_build) as archive:
+        for name in sources:
+            archived = archive.read(f"evoom_guard/{name}")
+            assert b"\r" not in archived
+        assert archive.read("evoom_guard/payload.bin") == non_python_payload
 
 
 def test_pyz_exit_codes_propagate(tmp_path):
