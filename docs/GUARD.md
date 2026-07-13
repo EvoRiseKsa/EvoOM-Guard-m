@@ -65,14 +65,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.3   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.2"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.3"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```
@@ -80,7 +80,7 @@ evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v3.4.2`** — a release tag. The recommended pin and the right choice for
+> - **`@v3.4.3`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -169,13 +169,13 @@ only on the candidate run.
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-`EvoRiseKsa/EvoOM-Guard-m@v3.4.2`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+`EvoRiseKsa/EvoOM-Guard-m@v3.4.3`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.3   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # or "rejected-only" — see the warning below
@@ -198,7 +198,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.2"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.4.3"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="origin/${{ github.event.pull_request.base.ref }}"
     git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
@@ -222,7 +222,8 @@ or require a stronger boundary:
 - `--expect-verifier-pack-sha256 <digest>` — require the accepted
   `EVOGUARD_PACK_V2` content/tree identity (from `pack-doctor --json`) before any
   candidate code runs. A mismatch is `ERROR verifier_pack_identity_mismatch`.
-- `--blackbox` — the verdict comes from the **judge's own pytest** over the pack,
+- `--blackbox` — after the static harness gate passes, the verdict comes from
+  the **judge's own pytest** over the pack,
   which never imports the candidate (`report_integrity: external_process_isolated`).
   It is **composite** by default: the repo's own suite **and** the pack must pass.
   `--blackbox-only` skips the repo suite for pure-CLI/service targets. With
@@ -232,6 +233,13 @@ or require a stronger boundary:
 - `--require-report-integrity` / `--require-candidate-isolation` — fail-closed
   floors: a run weaker than required returns `ERROR`
   (`assurance_requirement_not_met`), never a silently downgraded `PASS`.
+
+A diff pre-gate refusal is earlier than every runtime claim. It reports
+`overall_profile: static_gate`, `candidate_isolation/suite_isolation: not_run`,
+and `report_integrity: not_applicable_static_gate`; a configured pack is marked
+unevaluated. Requested Docker/gVisor/black-box settings remain in the effective
+policy only. Runtime assurance floors do not overwrite the original static
+`REJECTED`/`ERROR` reason because no runtime verdict exists to rank.
 
 The accepted pack lives in a judge-owned snapshot outside the candidate tree and
 its `HOME` and is checked immediately before and after execution. Persistent

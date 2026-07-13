@@ -117,15 +117,26 @@ class GuardGateTests(unittest.TestCase):
         self.assertIn("Reward-hack", report)
         self.assertIn("tests/test_m.py", report)
 
-    def test_report_footer_describes_judge_honestly(self) -> None:
-        # The footer must describe the judge-owned verdict path + subprocess
-        # limits, and must NOT promise a "container judge" that this build does
-        # not ship (regression guard for the wording softened per issue #8).
+    def test_static_report_footer_does_not_claim_a_judge_ran(self) -> None:
+        # A protected edit is rejected before execution.  The report must not
+        # turn the requested/default policy into a claim that a subprocess or
+        # container boundary was delivered (regression guard for issue #8 and
+        # the static-assurance contract).
         cheat = _block("tests/test_m.py", "def test_dbl():\n    assert True\n")
         report = render_report(guard(self.root, cheat))
-        self.assertIn("judge-owned JUnit report", report)
-        self.assertIn("subprocess", report)
+        self.assertIn("suite was not started", report)
+        self.assertIn("no test command, JUnit report, or runtime isolation was delivered", report)
+        self.assertIn("isolation `not_run`", report)
+        self.assertNotIn("runs in a subprocess", report)
         self.assertNotIn("container judge", report)
+
+    @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
+    def test_executed_pass_report_still_describes_the_real_judge(self) -> None:
+        report = render_report(guard(self.root, FIX))
+        self.assertIn("judge-owned JUnit report", report)
+        self.assertIn("judge runs the suite in a subprocess", report)
+        self.assertNotIn("suite was not started", report)
+        self.assertNotIn("isolation `not_run`", report)
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_correct_source_fix_passes(self) -> None:

@@ -260,14 +260,17 @@ def build_parser() -> argparse.ArgumentParser:
     g_p.add_argument(
         "--require-report-integrity", dest="require_report_integrity", default=None,
         choices=("same_process_candidate_writable", "external_process_isolated"),
-        help="fail-closed policy: require at least this report_integrity level, or "
-        "the run returns ERROR (assurance_requirement_not_met) instead of shipping "
-        "a weaker guarantee. 'external_process_isolated' needs --blackbox.",
+        help="for execution verdicts, fail closed unless this report_integrity "
+        "level is delivered. A static pre-gate refusal keeps its original verdict "
+        "and reports not_applicable_static_gate. 'external_process_isolated' "
+        "needs --blackbox.",
     )
     g_p.add_argument(
         "--require-candidate-isolation", dest="require_candidate_isolation", default=None,
         choices=("subprocess", "docker", "gvisor"),
-        help="fail-closed policy: require at least this candidate isolation, or ERROR.",
+        help="for execution verdicts, fail closed unless this candidate isolation "
+        "is delivered. A static pre-gate refusal keeps its original verdict and "
+        "reports not_run.",
     )
     g_p.add_argument(
         "--expect-verifier-pack-sha256",

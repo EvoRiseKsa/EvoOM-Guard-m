@@ -22,6 +22,32 @@ guarantee:
 }
 ```
 
+For a protected-harness edit or another result decided by the diff pre-gate,
+the runtime axes are explicitly not delivered:
+
+```json
+"assurance": {
+  "harness_integrity": "pre_gate_enforced",
+  "report_integrity": "not_applicable_static_gate",
+  "candidate_isolation": "not_run",
+  "suite_isolation": "not_run",
+  "setup_isolation": null,
+  "runtime_continuity": "not_applicable",
+  "verifier_pack": {
+    "configured": true,
+    "present": null,
+    "integrity": "not_evaluated_static_gate",
+    "secrecy": "not_evaluated_static_gate"
+  },
+  "overall_profile": "static_gate"
+}
+```
+
+Here `configured: true` records policy input only. `present: null` means Guard
+did not open or validate the path before the static decision. The requested
+isolation remains in `attestation.effective_policy`; it is not delivered
+evidence.
+
 ## The two integrity properties
 
 ### `harness_integrity` — can the patch change the *checks*?
@@ -88,7 +114,7 @@ verdict to an immutable built **artifact digest** — is in [`ROADMAP.md`](../RO
 
 | Level | Meaning |
 |---|---|
-| `static_gate` | only the harness-integrity check ran (no suite) |
+| `static_gate` | the diff pre-gate alone decided the result; candidate, suite, setup, report channel, and verifier pack did not run (`not_run` / `not_applicable_static_gate`) |
 | `repo_native_same_process` | suite ran; candidate + report share one process (subprocess mode) |
 | `isolated_repo_native` | suite ran in a container (host isolated); report still same-process |
 | `mixed_host_setup_repo_native` | suite ran in docker/gVisor, but explicit `trust_setup_on_host` ran setup on the host; effective candidate isolation is therefore only `subprocess` |
@@ -107,8 +133,12 @@ evo-guard guard ./repo --patch p.txt \
     --require-report-integrity external_process_isolated
 ```
 
-The check is against **what actually ran**, never the requested value — so Guard
-can never claim a level it did not enforce. `--require-candidate-isolation` does
+For execution verdicts, the check is against **what actually ran**, never the
+requested value — so Guard can never claim a level it did not enforce. A final
+static pre-gate refusal takes precedence over runtime floors: for example, a
+protected-test edit remains `REJECTED protected_harness_edit` even if Docker was
+required, and its runtime axes say `not_run`; the floor does not rewrite it as a
+synthetic runtime `ERROR`. `--require-candidate-isolation` does
 the same for `subprocess < docker < gvisor`, and it reads the isolation the
 runner **delivered**: request `--isolation docker` with the daemon down or the
 image missing and Guard returns `ERROR` (`candidate_isolation` reported as
@@ -209,7 +239,7 @@ the pack's external protocol tests, and both must pass. A narrow protocol test
 can therefore never hide an internal regression:
 
 ```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2      # repo suite AND external pack (composite)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.3      # repo suite AND external pack (composite)
   with: { verifier-pack: ./pack, blackbox: "true",
           require-report-integrity: external_process_isolated }
 ```

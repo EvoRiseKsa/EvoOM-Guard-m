@@ -25,8 +25,10 @@ permission) when fixed.
 - A patch that obtains a **false `PASS`** within a guarantee Guard claims — e.g.
   forging the verdict under `--blackbox`, or editing/deleting a protected harness
   path without a `REJECTED`.
-- **Isolation not delivered but reported as delivered** (a run labelled
-  `candidate_isolation: docker` that did not actually run in a container).
+- **Isolation or runtime assurance not delivered but reported as delivered**
+  (for example, a run labelled `candidate_isolation: docker` that did not run in
+  a container, or a static pre-gate result claiming report/pack assurance even
+  though no suite or pack started).
 - A configured verifier pack whose accepted `EVOGUARD_PACK_V2` identity, expected
   digest pin, mandatory execution, or pre/post snapshot checks can be bypassed
   while Guard still returns `PASS`.

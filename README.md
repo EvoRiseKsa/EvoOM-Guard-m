@@ -76,12 +76,17 @@ evo-guard guard ./repo --patch candidate.txt \
 
 The pack invokes the candidate across a process boundary (via `$EVOGUARD_EXEC`,
 which runs it under the delivered isolation) and asserts on its outputs.
-`report_integrity` becomes `external_process_isolated`, and the *identical*
-`atexit`+`os._exit` forgery that fakes a `PASS` under the default judge yields
-the correct `FAIL` (proven in `tests/test_blackbox.py`). Three properties make
-this a real guarantee, not a label:
+When that judge actually runs, `report_integrity` becomes
+`external_process_isolated`, and the *identical* `atexit`+`os._exit` forgery that
+fakes a `PASS` under the default judge yields the correct `FAIL` (proven in
+`tests/test_blackbox.py`). A protected-harness refusal is decided earlier: it
+reports `static_gate`, `candidate_isolation: not_run`, and
+`report_integrity: not_applicable_static_gate` instead of claiming that the
+requested judge or container ran. Three properties make an execution verdict a
+real guarantee, not a label:
 
-- **Isolation is *delivered*, not requested.** `candidate_isolation` reports what
+- **Isolation is *delivered*, not requested.** After execution starts,
+  `candidate_isolation` reports what
   actually ran. Ask for `--isolation docker` with no daemon or a missing image
   and Guard returns `ERROR` (`assurance_requirement_not_met`) — never a `PASS`
   mislabelled `docker`. In a container the repo copy is mounted **read-only** and
@@ -119,7 +124,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.2"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.4.3"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -159,7 +164,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.2   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.4.3   # a release tag (pin a SHA for strictest CI)
     with:
       test-command: "python -m pytest -q"
       comment: "true"                 # upserts ONE sticky PR comment per PR

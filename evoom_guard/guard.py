@@ -121,7 +121,11 @@ _PROTECTED_GLOBS = (
 #   1.9 — adversarial boundary hardening: descriptor-bound POSIX workspace
 #         operations, all-or-nothing JUnit directory parsing, and a canonical
 #         full post-setup runtime-tree identity across repo-suite/pack phases.
-SCHEMA_VERSION = "1.9"
+#   1.10 — pre-execution assurance honesty: static refusals report every
+#          runtime-dependent assurance axis as not run/not applicable, preserve
+#          the requested repo/black-box policy in the attestation, and do not
+#          let runtime assurance floors overwrite an already-final static gate.
+SCHEMA_VERSION = "1.10"
 
 # Verdicts.
 PASS = "PASS"          # tests pass and the harness was untouched
@@ -215,7 +219,7 @@ class GuardResult:
     source: str | None = None              # how the candidate was supplied (e.g. "diff")
     base_reconstruction: str | None = None  # "ok" | "failed" (only for --diff)
     reason_code: str = ""                  # stable machine code for the cause (see REASON_*)
-    isolation: str = "subprocess"          # how the suite ran: subprocess / docker / gvisor
+    isolation: str = "subprocess"          # suite boundary label; "not_run" when no suite starts
     diff_coverage: dict[str, Any] | None = None   # changed-line coverage evidence (opt-in)
     baseline: dict[str, Any] | None = None        # before/after differential evidence (opt-in)
     attestation: dict[str, Any] | None = None     # context binding for the signed verdict
@@ -867,17 +871,18 @@ def guard(
                 "candidate PASS under an unchanged harness"
             )
 
+    judgment_mode = "blackbox" if blackbox else "repo"
     attestation = _build_attestation(
         candidate, safe_deleted=safe_deleted, test_command=test_command,
         effective_policy=_effective_policy(
-            mode="repo", isolation=isolation,
+            mode=judgment_mode, isolation=isolation,
             docker_image=docker_image, docker_network=docker_network,
             test_command=test_command, setup_command=setup_command,
             trust_setup_on_host=trust_setup_on_host,
             setup_output_globs=setup_output_globs,
             protected=protected, allow=allow, allow_new_tests=allow_new_tests,
             timeout=timeout, mem_limit_mb=mem_limit_mb,
-            verifier_pack=verifier_pack, blackbox=False, blackbox_only=blackbox_only,
+            verifier_pack=verifier_pack, blackbox=blackbox, blackbox_only=blackbox_only,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
@@ -893,23 +898,29 @@ def guard(
             "base_sha": base_sha, "head_sha": head_sha,
             "base_tree_sha": base_tree_sha, "head_tree_sha": head_tree_sha,
             "policy_id": policy_id, "policy_version": policy_version,
-        }, mode="repo",
+        }, mode=judgment_mode,
     )
 
-    assurance = _assurance_profile(
-        isolation,
-        verifier_pack,
-        setup_isolation=art.get("setup_isolation"),
-        runtime_continuity=art.get("runtime_continuity"),
+    assurance = (
+        _assurance_profile(
+            isolation,
+            verifier_pack,
+            setup_isolation=art.get("setup_isolation"),
+            runtime_continuity=art.get("runtime_continuity"),
+        )
+        if run_suite
+        else _static_assurance_profile(verifier_pack)
     )
     # Enforceable assurance policy (fail-closed): the default judge is
     # same_process_candidate_writable, so a --require-report-integrity of
     # external_process_isolated here correctly refuses rather than overclaims.
-    shortfall = _assurance_shortfall(
-        assurance,
-        require_report_integrity=require_report_integrity,
-        require_candidate_isolation=require_candidate_isolation,
-    )
+    shortfall = None
+    if run_suite:
+        shortfall = _assurance_shortfall(
+            assurance,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+        )
     if shortfall is not None:
         v, code, reason = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall
 
@@ -926,7 +937,7 @@ def guard(
         verdict_source=art.get("verdict_source"),
         diagnostics=diagnostics,
         reason_code=code,
-        isolation=isolation,
+        isolation=isolation if run_suite else "not_run",
         diff_coverage=coverage_evidence,
         baseline=baseline_info,
         attestation=attestation,
@@ -1206,6 +1217,41 @@ def _assurance_shortfall(
                 f"run used '{assurance.get('candidate_isolation')}'"
             )
     return None
+
+
+def _static_assurance_profile(verifier_pack: str | None) -> dict[str, Any]:
+    """Assurance delivered by a decision made before candidate execution.
+
+    Requested runtime policy remains visible in ``attestation.effective_policy``.
+    This object records only what actually happened: the diff pre-gate ran, while
+    no candidate, suite, report channel, setup, or verifier pack was exercised.
+    Runtime assurance floors therefore have nothing to rank on this path and must
+    not replace an already-final static rejection with a synthetic runtime error.
+    """
+    pack = None
+    if verifier_pack:
+        pack = {
+            "configured": True,
+            "present": None,
+            "integrity": "not_evaluated_static_gate",
+            "secrecy": "not_evaluated_static_gate",
+        }
+    return {
+        "harness_integrity": "pre_gate_enforced",
+        "report_integrity": "not_applicable_static_gate",
+        "candidate_isolation": "not_run",
+        "suite_isolation": "not_run",
+        "setup_isolation": None,
+        "runtime_continuity": "not_applicable",
+        "verifier_pack": pack,
+        "overall_profile": "static_gate",
+        "note": (
+            "the diff pre-gate decided this result before candidate execution; "
+            "no test command, runtime boundary, report channel, setup, or verifier "
+            "pack was exercised. Requested runtime policy is recorded only in "
+            "attestation.effective_policy."
+        ),
+    }
 
 
 def _assurance_profile(
@@ -1699,11 +1745,21 @@ def render_report(result: GuardResult, *, deleted: list[str] | None = None, titl
         "in a subprocess with rlimits + a timeout — fine for trusted repos, not a "
         "sandbox for untrusted code; isolate it further (--isolation docker|gvisor) for that",
     )
+    if r.isolation == "not_run":
+        _execution_note = (
+            "EvoGuard decided this result from the pre-execution diff gate; the "
+            "suite was not started, so no test command, JUnit report, or runtime "
+            "isolation was delivered."
+        )
+    else:
+        _execution_note = (
+            "EvoGuard reads the verdict from a judge-owned JUnit report + the "
+            "process exit code (not stdout), and rejects any edit to the tests or "
+            f"their config. The judge runs the suite {_judge}."
+        )
     lines += [
         "",
-        "<sub>EvoGuard reads the verdict from a judge-owned JUnit report + the "
-        "process exit code (not stdout), and rejects any edit to the tests or their "
-        f"config. The judge runs the suite {_judge}. See docs/GUARD.md.</sub>",
+        f"<sub>{_execution_note} See docs/GUARD.md.</sub>",
     ]
     return "\n".join(lines)
 

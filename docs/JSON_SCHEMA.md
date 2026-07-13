@@ -14,8 +14,10 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 ## Stability rules
 
 - `schema_version` is bumped when a shape, enumerated value, or existing field's
-  security meaning changes incompatibly. Schema 1.9 adds the canonical runtime
-  tree identity and delivered runtime-continuity semantics.
+  security meaning changes incompatibly. Schema 1.10 makes static pre-gate
+  outcomes distinguish requested runtime policy from assurance actually
+  delivered: no-run axes are explicit and an unevaluated pack is not described
+  as verified or present.
 - Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are frozen.
 - A shipped `reason_code` is never renamed or repurposed. Consumers must still
   handle a future unknown code as the generic enclosing verdict.
@@ -27,9 +29,9 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 
 ```json
 {
-  "schema_version": "1.9",
+  "schema_version": "1.10",
   "tool": "evoguard",
-  "tool_version": "3.4.2",
+  "tool_version": "3.4.3",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -86,20 +88,25 @@ gotestsum, RSpec, mocha, and Maven/Surefire. `exit` is a coarser custom-command
 verdict. `composite:repo+verifier-pack` means the repo command and a separate
 mandatory pytest pack phase were both composed.
 
-## Assurance object (schema 1.9)
+## Assurance object (schema 1.10)
 
 Important fields are:
 
 - `harness_integrity`: currently `pre_gate_enforced`.
-- `report_integrity`: `same_process_candidate_writable` for repo-native runs or
-  `external_process_isolated` for the black-box judge.
-- `candidate_isolation`: the effective delivered boundary. If container setup
+- `report_integrity`: `same_process_candidate_writable` for repo-native runs,
+  `external_process_isolated` when the black-box judge runs, or
+  `not_applicable_static_gate` when the diff pre-gate decides the result before
+  any report channel exists.
+- `candidate_isolation`: the effective delivered boundary, or `not_run` for a
+  static pre-gate result. If container setup
   is explicitly moved to the host, this becomes `subprocess` even when the suite
   itself ran in Docker/gVisor.
-- `suite_isolation`: the boundary used for the suite.
+- `suite_isolation`: the boundary used for the suite, or `not_run` when the diff
+  static gate stopped the run before any suite started.
 - `setup_isolation`: `null`, `subprocess`, `docker`, `gvisor`,
   `subprocess_host_opt_in`, or `unavailable` as applicable.
-- `runtime_continuity`: `not_applicable` without a repo-native pack;
+- `runtime_continuity`: `not_applicable` when no repo-native pack execution
+  occurred (including a static gate);
   `unavailable` if the initial identity could not be captured; `incomplete` if
   execution stopped before all required boundary checks; `verification_failed`
   if a later identity could not be reproduced or differed; otherwise
@@ -108,25 +115,35 @@ Important fields are:
   accepted runtime tree read-only. The stronger value is not claimed when a
   configured setup command actually ran through `trust_setup_on_host`, because
   that host process may outlive setup.
+- On a static gate only, `verifier_pack.configured` is true when policy supplied
+  a pack path and `verifier_pack.present` is `null` because that path was not
+  opened. Runtime profiles retain the pre-1.10 pack fields; observed pack
+  identity belongs in the attestation.
 - `verifier_pack.integrity`: `verified_snapshot_read_only` for a container pack
   mount or `verified_snapshot_pre_post` for a host snapshot checked before and
-  after execution.
+  after execution; `not_evaluated_static_gate` when execution was pre-gated.
 - `verifier_pack.secrecy`: records whether black-box/container execution kept
   the pack unmounted from the candidate. Repo-native pack code remains readable
-  in the shared judge process.
+  in the shared judge process; `not_evaluated_static_gate` makes no secrecy
+  claim.
 - `overall_profile`: includes `static_gate`, `repo_native_same_process`,
   `isolated_repo_native`, `mixed_host_setup_repo_native`, and
   `black_box_external_judge`.
 
 These axes are independent. A read-only Docker candidate tree protects host
 state but does not fix the repo-native same-process report-forgery boundary.
+For `static_gate`, the requested mode and isolation remain solely in
+`attestation.effective_policy`; they are policy context, not delivered evidence.
 
-## Attestation object (schema 1.9)
+## Attestation object (schema 1.10)
 
 Core context binding includes:
 
 - `created_utc`, `guard_version`, `mode`, `candidate_sha256`, `deleted_paths`,
   and `test_command`.
+- A black-box request stopped by the diff pre-gate keeps `mode: blackbox` and
+  `effective_policy.mode/blackbox` unchanged. This records the requested policy;
+  the `static_gate` assurance object still states that no black-box judge ran.
 - `effective_policy` and `policy_sha256`. The policy includes every material
   knob, including `expect_verifier_pack_sha256`, `trust_setup_on_host`, and
   `setup_output_globs`. Those globs exclude content from setup validation only;
@@ -227,6 +244,19 @@ candidate-only and is not run on the pristine baseline.
 | `ERROR` | `reverse_apply_failed` | Diff did not reverse-apply to reconstruct the base. |
 | `ERROR` | `no_verifiable_changes` | Input reconstructed but contained no verifiable source change. |
 
+## Added in 1.9 → 1.10
+
+- Static diff-gate outcomes now report `overall_profile: static_gate`,
+  `candidate_isolation/suite_isolation: not_run`, and
+  `report_integrity: not_applicable_static_gate`.
+- Configured verifier packs stopped before evaluation use
+  `configured: true`, `present: null`, and explicit
+  `not_evaluated_static_gate` integrity/secrecy values.
+- Static black-box refusals preserve the requested attestation mode and complete
+  effective policy without claiming that the judge, pack, or container ran.
+- Runtime assurance floors no longer overwrite an already-final static
+  pre-gate verdict.
+
 ## Added in 1.8 → 1.9
 
 - Descriptor-bound POSIX workspace operations and explicit non-atomic Windows
@@ -272,7 +302,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

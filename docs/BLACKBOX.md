@@ -51,8 +51,12 @@ evo-guard guard ./repo --patch candidate.txt \
 
 ## Isolation is *delivered*, never merely requested
 
-`candidate_isolation` in the verdict is the boundary the runner **actually
-delivered**, read from the run — not the flag you passed. If you ask for
+When the black-box judge starts, `candidate_isolation` in the verdict is the
+boundary the runner **actually delivered**, read from the run — not the flag you
+passed. If the diff pre-gate rejects the patch first, the judge, candidate, pack,
+and container do not start: assurance reports `static_gate`, runtime isolation
+reports `not_run`, and `attestation.mode=blackbox` plus the effective policy
+record only what was requested. If you ask for
 `--isolation docker` and the daemon is down, the image is missing, or the runtime
 is absent, Guard **refuses** (`ERROR` / `assurance_requirement_not_met`) rather
 than silently running on the host and *labelling* it docker. Pair it with the
@@ -80,7 +84,8 @@ ordinary repo-native Windows judge is a different path.
 
 ## The pack ADDS a dimension — it does not replace your suite
 
-By default `--blackbox` runs a **composite** verdict: the harness-integrity check,
+After the static harness gate passes, `--blackbox` runs a **composite** verdict:
+the harness-integrity check,
 **your repo's own test suite**, *and* the external pack must all pass. A green
 pack can never mask an internal regression the pack does not exercise. For a
 pure-CLI/service target that has no in-repo suite, pass `--blackbox-only` to judge
@@ -103,9 +108,11 @@ judge's process again and the guarantee is gone. Use `subprocess` (CLI/`-m`),
 
 ## What it guarantees — and the one edge
 
-- `report_integrity` becomes **`external_process_isolated`**: the demonstrated
+- When the judge actually runs, `report_integrity` becomes
+  **`external_process_isolated`**: the demonstrated
   same-process report/exit forgery is defeated (proven in
-  `tests/test_blackbox.py`).
+  `tests/test_blackbox.py`). A static refusal instead records
+  `not_applicable_static_gate`; it does not claim an external judge result.
 - **Edge, stated plainly:** a candidate child could spawn a *detached* grandchild
   that sleeps and races the judge's read of its report. The judge reads its own
   report the instant pytest returns (all pack subprocesses have exited by then)

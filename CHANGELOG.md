@@ -9,6 +9,39 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.4.3] — 2026-07-13
+
+An assurance-contract correctness release (JSON schema 1.10). Static diff-gate
+verdicts were functionally correct and did not execute candidate code, but their
+metadata was built from the requested runtime flags. A protected-harness
+rejection requested with Docker could therefore say `candidate_isolation:
+docker` / `isolated_repo_native`, and a black-box request could claim pack/report
+properties even though no container, suite, pack, or report channel started.
+
+### Fixed
+
+- Static pre-gate outcomes now report `overall_profile: static_gate`,
+  `candidate_isolation: not_run`, `suite_isolation: not_run`, and
+  `report_integrity: not_applicable_static_gate`.
+- A configured verifier-pack path that was not evaluated is recorded as
+  `configured: true`, `present: null`, with
+  `not_evaluated_static_gate` integrity and secrecy. It is no longer described
+  as a verified read-only snapshot.
+- Static black-box refusals preserve `attestation.mode: blackbox` and the full
+  requested effective policy without turning policy input into delivered
+  evidence.
+- Runtime assurance floors no longer replace a final static refusal with an
+  unrelated `assurance_requirement_not_met` error.
+- Markdown and SARIF views now say that execution was not run instead of
+  describing the requested/default subprocess or container as if it ran.
+
+### Verification
+
+- Regression coverage spans protected edits and deletions, unsafe/no-edit
+  inputs, repo and black-box policy, subprocess/Docker/gVisor requests,
+  assurance floors, Markdown, and SARIF. A positive execution control keeps the
+  real JUnit/subprocess report path covered.
+
 ## [3.4.2] — 2026-07-13
 
 An adversarial-boundary security release (JSON schema 1.9). The changes close

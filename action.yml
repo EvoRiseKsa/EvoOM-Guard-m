@@ -81,11 +81,11 @@ inputs:
     required: false
     default: "false"
   require-report-integrity:
-    description: "Fail-closed policy: require at least this report_integrity level ('same_process_candidate_writable' or 'external_process_isolated') or the step ERRORs (assurance_requirement_not_met). 'external_process_isolated' needs blackbox."
+    description: "For execution verdicts, fail closed unless this report_integrity level is delivered ('same_process_candidate_writable' or 'external_process_isolated'). A static pre-gate refusal keeps its original verdict and reports not_applicable_static_gate. 'external_process_isolated' needs blackbox."
     required: false
     default: ""
   require-candidate-isolation:
-    description: "Fail-closed policy: require at least this candidate isolation ('subprocess'|'docker'|'gvisor') or the step ERRORs."
+    description: "For execution verdicts, fail closed unless this candidate isolation is delivered ('subprocess'|'docker'|'gvisor'). A static pre-gate refusal keeps its original verdict and reports not_run."
     required: false
     default: ""
   trust-setup-on-host:

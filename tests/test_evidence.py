@@ -200,6 +200,15 @@ class VerifierPackTests(unittest.TestCase):
             self.assertEqual((r.tests_passed, r.tests_total), (2, 2))
             assert r.attestation is not None
             self.assertTrue(r.attestation["verifier_pack_sha256"])
+            self.assertTrue(r.to_dict()["test_command_ran"])
+            assert r.assurance is not None
+            self.assertNotEqual(r.assurance["overall_profile"], "static_gate")
+            pack_assurance = r.assurance["verifier_pack"]
+            assert pack_assurance is not None
+            self.assertTrue(pack_assurance["present"])
+            self.assertEqual(
+                pack_assurance["integrity"], "verified_snapshot_pre_post"
+            )
 
     def test_candidate_writing_into_the_mount_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
