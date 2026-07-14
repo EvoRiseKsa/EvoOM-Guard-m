@@ -135,8 +135,12 @@ def test_entry_state_binds_a_symlink_without_following(tmp_path) -> None:
     except (OSError, NotImplementedError, AttributeError):
         pytest.skip("symlink creation not permitted on this host")
     kind, _mode, payload = _fidelity_entry_state(str(link))
+    # Bound as a link, not followed to the file. The stored target is whatever
+    # os.readlink returns verbatim; on Windows that carries a `\\?\`
+    # extended-length prefix, so compare by resolved identity, not raw string.
     assert kind == "link"
-    assert payload == str(target)
+    assert os.path.basename(payload.rstrip("/\\")) == "real.txt"
+    assert os.path.realpath(payload) == os.path.realpath(str(target))
 
 
 # --------------------------------------------------------------------------- #
