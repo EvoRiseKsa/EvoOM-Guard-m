@@ -198,7 +198,7 @@ def collect_diff_coverage(
         env = _judge_env(workdir)
         try:
             subprocess.run(
-                wrapped, cwd=copy, capture_output=True, text=True,
+                wrapped, cwd=copy, capture_output=True, encoding="utf-8", errors="replace",
                 timeout=timeout, env=env,
             )
         except (OSError, subprocess.TimeoutExpired):
@@ -209,7 +209,7 @@ def collect_diff_coverage(
         r = subprocess.run(
             [sys.executable, "-m", "coverage", "json",
              f"--data-file={data_file}", "-o", cov_json, "-q"],
-            cwd=copy, capture_output=True, text=True, timeout=60, env=env,
+            cwd=copy, capture_output=True, encoding="utf-8", errors="replace", timeout=60, env=env,
         )
         if r.returncode != 0 or not os.path.exists(cov_json):
             base["note"] = "coverage produced no report (suite may not have started)"

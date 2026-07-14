@@ -405,7 +405,8 @@ def test_cleanup_parses_only_valid_cids_and_continues_after_error(
     for _command, kwargs in calls:
         assert kwargs == {
             "capture_output": True,
-            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
             "timeout": 30,
             "check": False,
         }

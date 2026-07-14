@@ -21,6 +21,10 @@ A compatibility-preserving stabilization release. The verdict schema remains
   absolute `PATH` entries only, preventing an implicit candidate-working-directory
   shadow. This covers repository setup, baseline/candidate suites, and host
   verifier packs, and is exercised by a real Vitest baseline/candidate test.
+- Runner pipes are decoded as UTF-8 with replacement instead of the Windows
+  locale code page. Node-based runners such as Vitest write raw UTF-8 banners
+  (`❯`) that are undecodable under `cp1252`, which previously killed the judge's
+  reader thread mid-run instead of failing the candidate's tests.
 - `guard()` and the CLI reject timeout and memory-limit values that could produce
   records invalid under schema 1.11.
 - Pull-request comments are attempted only for same-repository, non-Dependabot

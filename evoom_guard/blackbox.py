@@ -394,7 +394,7 @@ def _cleanup_candidate_containers(
                 f"id={container_id}",
             ],
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             timeout=30,
             check=False,
         )
@@ -427,7 +427,7 @@ def _cleanup_candidate_containers(
                 removal = subprocess.run(
                     ["docker", "rm", "-f", container_id],
                     capture_output=True,
-                    text=True,
+                    encoding="utf-8", errors="replace",
                     timeout=30,
                     check=False,
                 )
@@ -615,7 +615,7 @@ def _run_judge_process(
         cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        encoding="utf-8", errors="replace",
         env=env,
         start_new_session=True,
     )

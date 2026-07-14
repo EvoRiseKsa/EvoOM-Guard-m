@@ -1419,7 +1419,7 @@ def _run_baseline_suite(
                 )
                 r_setup = subprocess.run(
                     setup_cmd, cwd=copy, capture_output=True,
-                    text=True, timeout=timeout, env=setup_env,
+                    encoding="utf-8", errors="replace", timeout=timeout, env=setup_env,
                 )
                 setup_after = _setup_fidelity_snapshot(
                     copy, setup_output_globs, baseline=setup_before
@@ -1448,7 +1448,7 @@ def _run_baseline_suite(
         cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
         try:
             r = subprocess.run(
-                cmd, cwd=copy, capture_output=True, text=True, timeout=timeout,
+                cmd, cwd=copy, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
                 env=run_env,
                 preexec_fn=rv._limits() if os.name == "posix" else None,
             )
@@ -2078,7 +2078,7 @@ def _reverse_apply(work_dir: str, diff_file: str) -> bool:
                 cmd,
                 cwd=work_dir,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 timeout=60,
                 env=git_env if cmd[0] == "git" else None,
             )

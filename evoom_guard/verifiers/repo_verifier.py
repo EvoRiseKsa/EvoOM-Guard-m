@@ -531,7 +531,7 @@ def _docker_container_started(name: str) -> bool:
         inspected = subprocess.run(
             ["docker", "inspect", "--format", "{{.State.StartedAt}}", name],
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             timeout=30,
         )
     except BaseException:
@@ -684,14 +684,14 @@ class RepoVerifier:
         inspect = subprocess.run(
             ["docker", "image", "inspect", "--format", "{{.Id}}", image],
             capture_output=True,
-            text=True,
+            encoding="utf-8", errors="replace",
             timeout=60,
         )
         if inspect.returncode != 0:
             pull = subprocess.run(
                 ["docker", "pull", image],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 timeout=600,
             )
             if pull.returncode != 0:
@@ -702,7 +702,7 @@ class RepoVerifier:
             inspect = subprocess.run(
                 ["docker", "image", "inspect", "--format", "{{.Id}}", image],
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 timeout=60,
             )
         resolved = inspect.stdout.strip()
@@ -725,7 +725,7 @@ class RepoVerifier:
         )
         try:
             r = subprocess.run(
-                docker_cmd, capture_output=True, text=True,
+                docker_cmd, capture_output=True, encoding="utf-8", errors="replace",
                 timeout=self.timeout, env=os.environ.copy(),
             )
         except subprocess.TimeoutExpired as exc:
@@ -1051,7 +1051,7 @@ class RepoVerifier:
                             setup_run_cmd,
                             cwd=setup_cwd,
                             capture_output=True,
-                            text=True,
+                            encoding="utf-8", errors="replace",
                             timeout=self.timeout,
                             env=setup_env,
                         )
@@ -1287,7 +1287,7 @@ class RepoVerifier:
                         cmd,
                         cwd=copy,
                         capture_output=True,
-                        text=True,
+                        encoding="utf-8", errors="replace",
                         timeout=self.timeout,
                         env=run_env,
                         preexec_fn=self._limits() if os.name == "posix" else None,
@@ -1522,7 +1522,7 @@ class RepoVerifier:
                             instrumented,
                             cwd=copy,
                             capture_output=True,
-                            text=True,
+                            encoding="utf-8", errors="replace",
                             timeout=self.timeout,
                             env=pack_env,
                             preexec_fn=self._limits() if os.name == "posix" else None,

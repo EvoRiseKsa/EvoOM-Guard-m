@@ -187,7 +187,7 @@ class CandidateRunner:
         # Fail-closed daemon probe: no daemon → no container → no docker verdict.
         probe = subprocess.run(
             ["docker", "version", "--format", "{{.Server.Version}}"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, encoding="utf-8", errors="replace", timeout=30,
         )
         if probe.returncode != 0:
             raise IsolationUnavailable(
@@ -279,7 +279,7 @@ class CandidateRunner:
         if digest is not None:
             return digest
         pull = subprocess.run(
-            ["docker", "pull", image], capture_output=True, text=True, timeout=600
+            ["docker", "pull", image], capture_output=True, encoding="utf-8", errors="replace", timeout=600
         )
         if pull.returncode != 0:
             raise IsolationUnavailable(
@@ -297,7 +297,7 @@ class CandidateRunner:
     def _image_digest(image: str) -> str | None:
         r = subprocess.run(
             ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, encoding="utf-8", errors="replace", timeout=60,
         )
         if r.returncode != 0:
             return None

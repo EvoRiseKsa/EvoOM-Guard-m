@@ -169,6 +169,24 @@ class GuardGateTests(unittest.TestCase):
         self.assertEqual(r.verdict, FAIL)
         self.assertFalse(r.passed)
 
+    def test_runner_output_outside_the_locale_codec_still_yields_a_verdict(self) -> None:
+        # Node-based runners (Vitest banners include "❯") write raw UTF-8 to
+        # their pipes regardless of the Windows code page. The judge must read
+        # runner pipes as UTF-8: under cp1252 the banner bytes are undecodable
+        # (the run died in the reader thread instead of failing the tests) and
+        # under other locale codecs they decode as mojibake.
+        runner = (
+            b"import os, sys\n"
+            b"os.write(1, b'\\xe2\\x9d\\xaf 1 test failed\\n')\n"  # "❯" raw UTF-8
+            b"sys.exit(1)\n"
+        )
+        with open(os.path.join(self.root, "run_tests.py"), "wb") as f:
+            f.write(runner)
+        r = guard(self.root, WRONG, test_command=[sys.executable, "run_tests.py"])
+        self.assertEqual(r.verdict, FAIL)
+        self.assertFalse(r.passed)
+        self.assertIn("❯", r.diagnostics)
+
 
 class GuardDiffTests(unittest.TestCase):
     def test_candidate_from_dirs_picks_added_and_modified(self) -> None:
