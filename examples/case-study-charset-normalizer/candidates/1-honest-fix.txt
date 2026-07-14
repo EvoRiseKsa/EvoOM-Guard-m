@@ -1,0 +1,18 @@
+<<<PATCH: charset_normalizer/models.py>>>
+<<<SEARCH>>>
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, CharsetMatch):
+            raise TypeError(
+                "__eq__ cannot be invoked on {} and {}.".format(
+                    str(other.__class__), str(self.__class__)
+                )
+            )
+        return self.encoding == other.encoding and self.fingerprint == other.fingerprint
+<<<REPLACE>>>
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, CharsetMatch):
+            if isinstance(other, str):
+                return iana_name(other) == self.encoding
+            return False
+        return self.encoding == other.encoding and self.fingerprint == other.fingerprint
+<<<END PATCH>>>

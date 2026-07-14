@@ -1,0 +1,4 @@
+<<<FILE: tests/test_eq_regression.py>>>
+def test_direct_cmp_charset_match():
+    pass
+<<<END FILE>>>
