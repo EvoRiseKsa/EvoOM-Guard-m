@@ -647,6 +647,9 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         if re.fullmatch(r"[0-9a-fA-F]{64}", expect_verifier_pack_sha256) is None:
             out("usage: --expect-verifier-pack-sha256 must be exactly 64 hex characters")
             return 2
+        if not args.verifier_pack:
+            out("usage: --expect-verifier-pack-sha256 requires --verifier-pack")
+            return 2
         expect_verifier_pack_sha256 = expect_verifier_pack_sha256.lower()
 
     if args.protected is not None:

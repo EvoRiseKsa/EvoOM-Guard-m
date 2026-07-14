@@ -465,6 +465,16 @@ def guard(
         raise ValueError("timeout must be a positive integer")
     if type(mem_limit_mb) is not int or mem_limit_mb < 0:
         raise ValueError("mem_limit_mb must be a non-negative integer")
+    # The frozen 1.11 policy contract names these two combinations
+    # contradictory ("blackbox_only requires blackbox"; "an expected pack
+    # digest requires verifier_pack_required"), so any attestation echoing
+    # them is unverifiable by design: verify_record must reject the very
+    # record this call would produce. Refuse the input instead — the CLI
+    # already refuses the first form at the usage boundary.
+    if blackbox_only and not blackbox:
+        raise ValueError("blackbox_only requires blackbox")
+    if expect_verifier_pack_sha256 and not verifier_pack:
+        raise ValueError("expect_verifier_pack_sha256 requires verifier_pack")
 
     # Fail-closed policy consistency (1.7): a GATE the selected judge cannot
     # enforce must stop the run — "require X" answered with a PASS that never
@@ -472,16 +482,12 @@ def guard(
     # exists to prevent. (Evidence-only requests degrade EXPLICITLY instead:
     # see the unmeasured/note records attached further down.)
     _unsupported: list[str] = []
-    if blackbox_only and not blackbox:
-        _unsupported.append("blackbox_only (requires blackbox)")
     if require_demonstrated_fix and (blackbox or isolation != "subprocess"):
         _unsupported.append("require_demonstrated_fix")
     if min_diff_coverage is not None and (blackbox or isolation != "subprocess"):
         _unsupported.append("min_diff_coverage")
     if blackbox and setup_command:
         _unsupported.append("setup_command")
-    if expect_verifier_pack_sha256 and not verifier_pack:
-        _unsupported.append("expect_verifier_pack_sha256 (requires verifier_pack)")
     if _unsupported:
         _mode_desc = "the black-box judge" if blackbox else f"isolation {isolation!r}"
         _ep = _effective_policy(

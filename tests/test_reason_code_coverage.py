@@ -98,21 +98,20 @@ def test_golden_record_obeys_the_frozen_reason_contract(
     assert row["record"]["execution_state"] in execution_states
 
 
-def test_known_gap_contradictory_policy_records_fail_verification(
+def test_contradictory_policy_requests_are_refused_before_attestation(
     tmp_path: Path,
 ) -> None:
-    """KNOWN GAP: two producer inputs yield records verify_record rejects.
+    """Universality invariant: guard() never attests an unverifiable policy.
 
-    ``guard()`` answers a self-contradictory policy request (``blackbox_only``
-    without ``blackbox``; an expected pack digest without a pack) with an
-    ``ERROR``/``policy_requirement_unsupported`` record whose attestation
-    faithfully echoes the contradictory request — and ``verify_record``
-    rejects exactly that echo (``policy.contract``).  Producer records are
-    therefore not universally verifiable today.  In the adversarial-corpus
-    convention, this test must stay green only while the limitation
-    reproduces: whichever side is fixed (the producer refusing to attest a
-    contradictory policy, or the verifier accepting it under this reason
-    code) must invert these assertions instead of deleting them.
+    This inverts the KNOWN GAP the reason corpus surfaced when it was first
+    generated: ``guard()`` used to answer a self-contradictory policy request
+    (``blackbox_only`` without ``blackbox``; an expected pack digest without a
+    pack) with an ``ERROR``/``policy_requirement_unsupported`` record whose
+    attestation echoed the contradiction — and ``verify_record`` rejected
+    exactly that echo (``policy.contract``).  The frozen 1.11 policy contract
+    names both combinations contradictory, so no record carrying them can be
+    valid; the producer now refuses the input before any attestation exists,
+    keeping every record it does emit independently verifiable.
     """
     (tmp_path / "app.py").write_text("value = 1\n", encoding="utf-8")
     candidate = "<<<FILE: app.py>>>\nvalue = 2\n<<<END FILE>>>"
@@ -120,17 +119,11 @@ def test_known_gap_contradictory_policy_records_fail_verification(
         {"blackbox_only": True},
         {"expect_verifier_pack_sha256": "0" * 64},
     ):
-        record = guard_module.guard(
-            str(tmp_path),
-            candidate,
-            test_command=[sys.executable, "-c", "raise SystemExit(0)"],
-            mem_limit_mb=0,
-            **kwargs,
-        ).to_dict()
-        assert record["reason_code"] == "policy_requirement_unsupported"
-        report = record_verifier.verify_record(record)
-        assert report["ok"] is False, kwargs
-        failed = {
-            check["id"] for check in report["checks"] if check["status"] == "fail"
-        }
-        assert failed == {"policy.contract"}, failed
+        with pytest.raises(ValueError):
+            guard_module.guard(
+                str(tmp_path),
+                candidate,
+                test_command=[sys.executable, "-c", "raise SystemExit(0)"],
+                mem_limit_mb=0,
+                **kwargs,
+            )

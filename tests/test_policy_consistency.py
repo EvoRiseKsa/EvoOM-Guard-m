@@ -84,8 +84,19 @@ class UnsupportedGateFailsClosedTests(unittest.TestCase):
             blackbox=True, setup_command=[sys.executable, "-c", "pass"]
         )
 
-    def test_blackbox_only_without_blackbox_is_rejected(self) -> None:
-        self._expect_unsupported(blackbox_only=True)
+    def test_blackbox_only_without_blackbox_is_refused_as_input_error(self) -> None:
+        # The frozen 1.11 policy contract names this combination contradictory,
+        # so a record echoing it could never pass verify_record. guard()
+        # refuses the input instead of attesting an unverifiable policy.
+        with self.assertRaises(ValueError):
+            guard(self.root, SAFE, test_command=TEST_CMD, timeout=60, blackbox_only=True)
+
+    def test_expected_pack_digest_without_pack_is_refused_as_input_error(self) -> None:
+        with self.assertRaises(ValueError):
+            guard(
+                self.root, SAFE, test_command=TEST_CMD, timeout=60,
+                expect_verifier_pack_sha256="0" * 64,
+            )
 
     @unittest.skipUnless(HAS_PYTEST, "pytest runs the suite")
     def test_supported_combination_still_passes(self) -> None:
@@ -135,8 +146,16 @@ class EffectivePolicyHashTests(unittest.TestCase):
         )
 
     def test_expected_pack_identity_changes_the_fingerprint(self) -> None:
+        # An expected digest is only attestable alongside a pack (the frozen
+        # contract pairs it with verifier_pack_required), so both fingerprints
+        # carry the same pack and differ only in the pinned identity.
+        pack = os.path.join(self.root, "pack")
+        os.makedirs(pack)
+        with open(os.path.join(pack, "test_protocol.py"), "w", encoding="utf-8") as f:
+            f.write("def test_trivial():\n    assert True\n")
         self.assertNotEqual(
-            self._sha(), self._sha(expect_verifier_pack_sha256="a" * 64)
+            self._sha(verifier_pack=pack),
+            self._sha(verifier_pack=pack, expect_verifier_pack_sha256="a" * 64),
         )
 
     def test_effective_policy_ships_in_the_attestation(self) -> None:
