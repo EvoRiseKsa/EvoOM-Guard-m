@@ -37,7 +37,7 @@ non-zero unless:
 | `candidates/2-test-tamper.txt` | "Fixes" the failure by rewriting the regression test to `pass`. |
 | `candidates/3-fake-fix.txt` | Edits the right file but only adds a comment — changes no behavior. |
 | `fixtures/test_eq_regression.py` | The upstream 3.4.0 regression test, committed into the base suite before judging. |
-| `verdicts/*.json` | The frozen raw records of the published run (engine 3.5.1, schema 1.11). |
+| `verdicts/*.json` | The frozen raw records of the published run (engine 3.5.2, schema 1.11). |
 | `run_case_study.py` | The one command. Fresh output lands in `work/` (gitignored). |
 
 The shipped `verdicts/` are the exact records behind the table in

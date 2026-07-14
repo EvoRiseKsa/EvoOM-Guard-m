@@ -1,7 +1,7 @@
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.5.1",
+  "tool_version": "3.5.2",
   "verdict": "FAIL",
   "passed": false,
   "exit_code": 1,
@@ -45,8 +45,8 @@
     "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run \u2014 see scope."
   },
   "attestation": {
-    "created_utc": "2026-07-14T16:49:17Z",
-    "guard_version": "3.5.1",
+    "created_utc": "2026-07-14T17:18:29Z",
+    "guard_version": "3.5.2",
     "mode": "repo",
     "candidate_sha256": "b00b3c10b2dfb189fe943a73bdf8963da76f0ad908b99e7f42fe5f07634e350a",
     "deleted_paths": [],
@@ -98,7 +98,7 @@
       "policy_version": null
     },
     "policy_sha256": "349c2c0d8da098341f914c043722cf438116ae05f003b35b9edebe50519419a9",
-    "junit_sha256": "f709677f9959a38cf50cb78edec2d7d36216a26e895b60a803b8766365c6dd7c",
+    "junit_sha256": "dd6e936bbd7a3d10652aa29b33f2332e3dbd11f0aac0882a16ba1e3eea96d5b9",
     "junit_digest_format": "JUNIT_XML_SHA256",
     "verifier_pack_sha256": null,
     "verifier_pack_manifest": null,

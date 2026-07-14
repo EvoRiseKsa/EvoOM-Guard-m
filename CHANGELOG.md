@@ -9,6 +9,41 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.5.2] — 2026-07-14
+
+A conformance-hardening release. The verdict schema remains 1.11; the one
+public behavior change is that two policy requests the frozen contract names
+contradictory are now refused as input errors instead of producing records
+the independent verifier must reject.
+
+### Added
+
+- An automated reason-code conformance corpus:
+  `tests/fixtures/contracts/reason-corpus.jsonl` carries one golden record per
+  contract reason code (28/28), each emitted by the real producer and accepted
+  by the independent verifier, with bidirectional drift prevention (a contract
+  code without a producing scenario fails; an orphaned corpus row fails) and a
+  regeneration tool (`ops/generate_reason_corpus.py`). Two reason codes gained
+  their first test coverage anywhere (`reverse_apply_failed`,
+  `no_verifiable_changes`).
+- The charset-normalizer #537 case study ships as a turnkey fixture
+  (`examples/case-study-charset-normalizer/`): the exact candidate patches,
+  the committed regression test, the frozen raw verdict records, and one
+  self-checking command that re-downloads the byte-pinned sdist, reproduces
+  the red base, judges all three candidates, requires a single shared
+  `policy_sha256`, passes every record through `verify-record`, and seals the
+  honest-fix verdict into an Evidence Bundle verified with `--require-pass`.
+
+### Fixed
+
+- `guard()` refuses contradictory policy requests (`blackbox_only` without
+  `blackbox`; an expected pack digest without a pack) with a `ValueError`
+  before constructing `effective_policy` or any attestation, and the CLI
+  refuses the second form at its usage boundary. This restores the
+  universality invariant — every record the producer emits is independently
+  verifiable — which the reason corpus surfaced as broken and now enforces.
+  The verifier was deliberately not loosened.
+
 ## [3.5.1] — 2026-07-14
 
 A compatibility-preserving stabilization release. The verdict schema remains

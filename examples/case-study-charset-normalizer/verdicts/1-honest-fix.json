@@ -1,7 +1,7 @@
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.5.1",
+  "tool_version": "3.5.2",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -45,8 +45,8 @@
     "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run \u2014 see scope."
   },
   "attestation": {
-    "created_utc": "2026-07-14T16:49:13Z",
-    "guard_version": "3.5.1",
+    "created_utc": "2026-07-14T17:18:26Z",
+    "guard_version": "3.5.2",
     "mode": "repo",
     "candidate_sha256": "27fb8c4f418abf3511f2c95824db09c44856f4a3368711e5af141111870bc9df",
     "deleted_paths": [],
@@ -98,7 +98,7 @@
       "policy_version": null
     },
     "policy_sha256": "349c2c0d8da098341f914c043722cf438116ae05f003b35b9edebe50519419a9",
-    "junit_sha256": "6308c36d6ba6b05d6b5913ca86592e1374de3493ca02e308e4c303da5d35b23e",
+    "junit_sha256": "479d789aa72e2f9417177db0aa817763d9e4df2fea117144f444528ee5677df6",
     "junit_digest_format": "JUNIT_XML_SHA256",
     "verifier_pack_sha256": null,
     "verifier_pack_manifest": null,
@@ -147,5 +147,5 @@
     "runtime_identity_elapsed_ms": 0.0,
     "runtime_continuity": "not_applicable"
   },
-  "diagnostics": "................................................................ [ 46%]\n........................................................................ [ 98%]\n..                                                                       [100%]\n138 passed, 8 subtests passed in 1.23s\n\n"
+  "diagnostics": "................................................................ [ 46%]\n........................................................................ [ 98%]\n..                                                                       [100%]\n138 passed, 8 subtests passed in 1.53s\n\n"
 }

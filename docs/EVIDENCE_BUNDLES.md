@@ -11,7 +11,7 @@ mean that the enclosed verdict is `PASS`.
 Install the signing extra and generate an Ed25519 key once:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.1"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.2"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
 

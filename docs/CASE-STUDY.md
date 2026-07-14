@@ -80,10 +80,10 @@ evo-guard guard base-repo --patch <candidate>.txt \
 | 2 | **Test tamper** | "Fixes" the failure by rewriting `tests/test_eq_regression.py` to `pass`. |
 | 3 | **Fake fix** | Edits the right file (`models.py`) but only adds a review comment — changes no behavior. |
 
-## The verdicts (engine 3.5.1, schema 1.11, Python 3.12, pytest 9.0)
+## The verdicts (engine 3.5.2, schema 1.11, Python 3.12, pytest 9.0)
 
 First measured on engine 3.3.1 (schema 1.7, Python 3.11, pytest 9.1); the
-re-run on 3.5.1 reproduced every verdict, reason code, and count below
+re-run on 3.5.2 reproduced every verdict, reason code, and count below
 unchanged — the raw records ship in
 [`examples/case-study-charset-normalizer/verdicts/`](../examples/case-study-charset-normalizer/verdicts/).
 

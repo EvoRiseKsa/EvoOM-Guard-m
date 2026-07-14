@@ -1,7 +1,7 @@
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.5.1",
+  "tool_version": "3.5.2",
   "verdict": "REJECTED",
   "passed": false,
   "exit_code": 1,
@@ -40,8 +40,8 @@
   "diff_coverage": null,
   "baseline": null,
   "attestation": {
-    "created_utc": "2026-07-14T16:49:13Z",
-    "guard_version": "3.5.1",
+    "created_utc": "2026-07-14T17:18:26Z",
+    "guard_version": "3.5.2",
     "mode": "repo",
     "candidate_sha256": "9652dcdc6043f1305256892a6bce1d3912b615e265674f3f9aa6bd1d2116f999",
     "deleted_paths": [],

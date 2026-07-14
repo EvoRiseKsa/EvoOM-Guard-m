@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.5.1/evoom_guard/schemas/evidence-context-1.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.5.2/evoom_guard/schemas/evidence-context-1.schema.json",
   "title": "EvoGuard externally expected evidence context v1",
   "description": "Replay-resistant context supplied by a trusted finalizer and independently by a verifier.",
   "type": "object",

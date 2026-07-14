@@ -712,7 +712,7 @@ def test_published_evidence_schemas_are_valid_json_and_match_v1_constants() -> N
     Draft202012Validator.check_schema(manifest_schema)
     raw_base = (
         "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/"
-        "v3.5.1/evoom_guard/schemas/"
+        "v3.5.2/evoom_guard/schemas/"
     )
     assert context_schema["$id"] == raw_base + "evidence-context-1.schema.json"
     assert manifest_schema["$id"] == raw_base + "evidence-manifest-1.schema.json"
