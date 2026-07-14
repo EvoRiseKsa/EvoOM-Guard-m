@@ -9,6 +9,56 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.5.1] — 2026-07-14
+
+A compatibility-preserving stabilization release. The verdict schema remains
+1.11 and existing public Python imports and CLI behavior remain supported.
+
+### Fixed
+
+- Host commands discovered through Windows `PATHEXT` are executed through their
+  resolved `.CMD`/`.EXE` path without enabling a shell. Bare commands search
+  absolute `PATH` entries only, preventing an implicit candidate-working-directory
+  shadow. This covers repository setup, baseline/candidate suites, and host
+  verifier packs, and is exercised by a real Vitest baseline/candidate test.
+- `guard()` and the CLI reject timeout and memory-limit values that could produce
+  records invalid under schema 1.11.
+- Pull-request comments are attempted only for same-repository, non-Dependabot
+  pull requests. Forks retain the job-summary result and a comment failure no
+  longer discards the verification outcome.
+- Generated private-repository workflows use the same comment boundary and pin
+  `actions/github-script` to an immutable commit.
+
+### Security
+
+- User-facing workflow examples pin GitHub-owned actions to immutable commit
+  SHAs, and release workflows now require full Linux and Windows end-to-end jobs
+  before constructing artifacts.
+- The deterministic zipapp includes the exact project `LICENSE`; builds fail if
+  it is missing.
+- Published JSON Schema identifiers are pinned to the `v3.5.1` source paths.
+
+### Changed
+
+- The schema-1.11 vocabulary is centralized as an immutable, stdlib-only
+  contract. Verdict production and semantic verification still implement their
+  decision logic independently so a shared algorithm cannot validate its own
+  mistake.
+- The record verifier starts a behavior-preserving decomposition into internal
+  report and isolation claim-family modules. Frozen external fixtures and
+  ordered check-result goldens guard the public contract.
+- Documentation now distinguishes requested isolation from observed execution,
+  clarifies artifact-digest semantics, removes unsupported performance claims,
+  and documents the fork-comment boundary.
+
+### Verification
+
+- Added producer-to-schema-to-verifier compatibility tests for every execution
+  lifecycle, a frozen schema-1.11 fixture, reason-code truth-table checks, and a
+  differential malformed-record corpus.
+- Added release-gate coverage for real Vitest execution on Windows and real
+  Vitest plus Docker black-box execution on Linux.
+
 ## [3.5.0] — 2026-07-13
 
 An offline-verification and evidence-portability release. The guard's produced

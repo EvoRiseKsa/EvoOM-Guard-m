@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 CI = ROOT / ".github" / "workflows" / "ci.yml"
+WINDOWS = ROOT / ".github" / "workflows" / "windows.yml"
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
@@ -64,7 +65,21 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     assert "persist-credentials: false" in validate
     assert "pip install" in validate
 
-    assert "needs: validate-test" in build
+    assert "needs: [validate-test, release-e2e, release-windows-e2e]" in build
+    release_e2e = _job_block(RELEASE, "release-e2e")
+    assert "contents: read" in release_e2e
+    assert "test_vitest_oracle.py" in release_e2e
+    assert "test_blackbox_docker_e2e.py" in release_e2e
+    release_windows = _job_block(RELEASE, "release-windows-e2e")
+    assert "runs-on: windows-latest" in release_windows
+    assert "contents: read" in release_windows
+    assert "vitest@4.1.10" in release_windows
+    assert "test_vitest_oracle.py" in release_windows
+    ci_windows = _job_block(WINDOWS, "smoke")
+    assert "runs-on: windows-latest" in ci_windows
+    assert "persist-credentials: false" in ci_windows
+    assert "vitest@4.1.10" in ci_windows
+    assert "python -m pytest tests/ -q" in ci_windows
     assert "contents: read" in build
     assert "persist-credentials: false" in build
     assert (

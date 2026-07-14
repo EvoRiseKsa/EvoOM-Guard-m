@@ -58,11 +58,11 @@ Metrics over the corpus (`block` = positive class):
 | False positives | **1** (the documented `legit-dependency-bump` policy trip) |
 | Accuracy | 0.9375 |
 
-Runtime overhead on this micro-suite (Linux, Python 3.11): bare `pytest` run
-≈ 0.19 s; a full Guard run (copy + pre-gate + suite + report) median ≈ 0.19 s,
-p95 ≈ 0.20 s — the gate's own cost is dominated by one extra suite run on a
-throwaway copy. Pre-gated rejections take ≈ 0 s: they are decided **before any
-test executes**.
+The JSONL records per-case wall time, but the current corpus does not bind those
+measurements to hardware, OS image, Python build, dependency lock, or a paired
+bare-suite run. Consequently this benchmark makes **no general performance or
+overhead claim**. Pre-gated rejections are still decided before the candidate
+test command starts; that is a control-flow property, not a timing claim.
 
 ## Honest scope — read before quoting these numbers
 
@@ -74,8 +74,8 @@ test executes**.
   change tripped the harness-protection policy, *not* that cheating was proven —
   a legitimate `pyproject.toml` bump trips it too. The paired case shows the
   supported resolution (a reviewed `--allow` baseline).
-* Timing numbers are from a tiny suite; on a real project, Guard's wall-clock is
-  ≈ one extra run of *your* suite (plus a repo copy).
+* Timing values are diagnostic for the recorded run only. A performance claim
+  requires environment metadata plus paired bare-suite and Guard measurements.
 
 For an independent evaluation, freeze the Guard version and policy, publish the
 corpus hash, have a separate reviewer label cases before running Guard, then

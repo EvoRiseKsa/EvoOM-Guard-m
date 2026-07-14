@@ -75,6 +75,7 @@ trust boundary in ``docs/GUARD.md``).
 from __future__ import annotations
 
 import hashlib
+import ntpath
 import os
 import re
 import secrets
@@ -254,6 +255,68 @@ def judge_subprocess_env(workdir: str) -> dict[str, str]:
         env["TEMP"] = workdir
         env["TMP"] = workdir
     return env
+
+
+def _resolve_host_command(
+    command: list[str],
+    *,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    platform: str | None = None,
+) -> list[str]:
+    """Resolve Windows ``.cmd``/``.bat`` shims before ``subprocess.run``.
+
+    Windows command prompts consult ``PATHEXT`` for a bare command such as
+    ``vitest`` or ``npm``; ``CreateProcess`` (used by ``subprocess`` without a
+    shell) does not. Resolve the concrete shim without enabling ``shell=True``.
+
+    The search is intentionally implemented here instead of with
+    :func:`shutil.which`: recent Python versions may implicitly prepend the
+    process working directory on Windows. A candidate-controlled checkout must
+    not shadow a judge command unless the adopter explicitly supplied a relative
+    command path or put that directory in ``PATH``. Bare commands therefore use
+    absolute ``PATH`` entries only. POSIX behavior is unchanged.
+
+    ``platform`` is an internal test seam; production callers use ``os.name``.
+    """
+    if (os.name if platform is None else platform) != "nt" or not command:
+        return list(command)
+
+    executable = command[0]
+    search_env = os.environ if env is None else env
+    raw_extensions = search_env.get("PATHEXT", ".COM;.EXE;.BAT;.CMD")
+    extensions = tuple(
+        ext if ext.startswith(".") else f".{ext}"
+        for item in raw_extensions.split(";")
+        if (ext := item.strip())
+    )
+
+    def existing_candidate(base: str) -> str | None:
+        direct = (
+            (base,)
+            if any(base.lower().endswith(ext.lower()) for ext in extensions)
+            else ()
+        )
+        for candidate in (*direct, *(f"{base}{ext}" for ext in extensions)):
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    if "/" in executable or "\\" in executable:
+        explicit = executable
+        if cwd and not ntpath.isabs(explicit):
+            explicit = ntpath.join(cwd, explicit)
+        resolved = existing_candidate(explicit)
+        return [resolved, *command[1:]] if resolved else list(command)
+
+    for item in search_env.get("PATH", "").split(";"):
+        directory = os.path.expandvars(item.strip().strip('"'))
+        if not directory or not ntpath.isabs(directory):
+            continue
+        resolved = existing_candidate(ntpath.join(directory, executable))
+        if resolved:
+            return [resolved, *command[1:]]
+    return list(command)
 
 class RepoProblem(TypedDict, total=False):
     """A repo-level problem definition."""
@@ -964,6 +1027,9 @@ class RepoVerifier:
                     setup_run_cmd = setup_tokens
                     setup_cwd = copy
                     setup_env = dict(env)
+                    setup_run_cmd = _resolve_host_command(
+                        setup_run_cmd, cwd=setup_cwd, env=setup_env
+                    )
                 try:
                     setup_before = _setup_fidelity_snapshot(
                         copy, self.setup_output_globs
@@ -1215,13 +1281,15 @@ class RepoVerifier:
                 else:
                     host_xml = os.path.join(workdir, "judge-result.xml")
                     cmd, report_expected, report_env = instrument_command(base_cmd, host_xml)
+                    run_env = {**env, **report_env}
+                    cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
                     r = subprocess.run(
                         cmd,
                         cwd=copy,
                         capture_output=True,
                         text=True,
                         timeout=self.timeout,
-                        env={**env, **report_env},
+                        env=run_env,
                         preexec_fn=self._limits() if os.name == "posix" else None,
                     )
             except _DockerRunTimeout as exc:
@@ -1446,13 +1514,17 @@ class RepoVerifier:
                         instrumented, pack_report_expected, pack_report_env = (
                             instrument_command(pack_cmd, pack_xml)
                         )
+                        pack_env = {**env, **pack_report_env}
+                        instrumented = _resolve_host_command(
+                            instrumented, cwd=copy, env=pack_env
+                        )
                         pack_run = subprocess.run(
                             instrumented,
                             cwd=copy,
                             capture_output=True,
                             text=True,
                             timeout=self.timeout,
-                            env={**env, **pack_report_env},
+                            env=pack_env,
                             preexec_fn=self._limits() if os.name == "posix" else None,
                         )
                 except _DockerRunTimeout as exc:

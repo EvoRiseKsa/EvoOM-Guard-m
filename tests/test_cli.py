@@ -201,6 +201,16 @@ def test_init_private_evoguard_generates_pip_workflow(tmp_path, capsys):
     assert "EVOGUARD_TOKEN" in body
     assert "v1.3.0" in body
     assert "EvoOM-Guard-m@" not in body  # action-based ref NOT present in private mode
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository" in body
+    )
+    assert "github.event.pull_request.user.login != 'dependabot[bot]'" in body
+    assert "continue-on-error: true" in body
+    assert (
+        "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
+        in body
+    )
+    assert "actions/github-script@v" not in body
 
 
 def test_init_private_custom_secret_name(tmp_path):
@@ -267,6 +277,31 @@ def test_load_config_wrong_typed_keys_are_fail_closed(tmp_path):
         p.write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(cli.ConfigError):
             cli._load_config(str(p), out=_QUIET)
+
+
+def test_load_config_invalid_runtime_ranges_are_fail_closed(tmp_path):
+    for payload in ({"timeout": 0}, {"timeout": -1}, {"mem_limit": -1}):
+        p = tmp_path / ".evoguard.json"
+        p.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(cli.ConfigError):
+            cli._load_config(str(p), out=_QUIET)
+
+
+@pytest.mark.parametrize(
+    "flag,value,message",
+    [
+        ("--timeout", "0", "positive integer"),
+        ("--timeout", "-1", "positive integer"),
+        ("--mem-limit", "-1", "non-negative integer"),
+    ],
+)
+def test_cmd_guard_rejects_invalid_runtime_ranges(
+    tmp_path, capsys, flag, value, message
+):
+    patch = tmp_path / "candidate.patch"
+    patch.write_text("<<<FILE: app.py>>>\nx = 1\n<<<END FILE>>>", encoding="utf-8")
+    assert cli.main(["guard", str(tmp_path), "--patch", str(patch), flag, value]) == 2
+    assert message in capsys.readouterr().out
 
 
 def test_load_config_reads_policy_contract_keys(tmp_path):

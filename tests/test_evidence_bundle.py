@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
+from referencing.exceptions import NoSuchResource
 from referencing.jsonschema import DRAFT202012
 
 from evoom_guard import evidence_bundle as bundle
@@ -709,6 +710,24 @@ def test_published_evidence_schemas_are_valid_json_and_match_v1_constants() -> N
     )
     Draft202012Validator.check_schema(context_schema)
     Draft202012Validator.check_schema(manifest_schema)
+    raw_base = (
+        "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/"
+        "v3.5.1/evoom_guard/schemas/"
+    )
+    assert context_schema["$id"] == raw_base + "evidence-context-1.schema.json"
+    assert manifest_schema["$id"] == raw_base + "evidence-manifest-1.schema.json"
+    verdict_schema = json.loads(
+        (root / "evoom_guard" / "schemas" / "verdict-record-1.11.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert verdict_schema["$id"] == raw_base + "verdict-record-1.11.schema.json"
+    assert manifest_schema["properties"]["context"] == {
+        "$ref": "evidence-context-1.schema.json"
+    }
+    assert manifest_schema["$id"].rsplit("/", 1)[0] == context_schema["$id"].rsplit(
+        "/", 1
+    )[0]
     assert context_schema["additionalProperties"] is False
     assert manifest_schema["properties"]["format"]["const"] == bundle.BUNDLE_FORMAT
     assert (
@@ -793,11 +812,19 @@ def test_real_bundle_manifest_and_context_validate_against_published_schemas(
     manifest_schema = json.loads(
         (schema_dir / "evidence-manifest-1.schema.json").read_text(encoding="utf-8")
     )
-    registry = Registry().with_resource(
-        context_schema["$id"],
-        Resource.from_contents(context_schema, default_specification=DRAFT202012),
-    )
+    resources = {
+        context_schema["$id"]: Resource.from_contents(
+            context_schema, default_specification=DRAFT202012
+        )
+    }
 
+    def retrieve(uri: str) -> Resource:
+        try:
+            return resources[uri]
+        except KeyError as exc:
+            raise NoSuchResource(ref=uri) from exc
+
+    registry = Registry(retrieve=retrieve)
     verdict = tmp_path / "verdict.json"
     archive = tmp_path / "evidence.evb"
     _verdict(verdict)
@@ -806,6 +833,9 @@ def test_real_bundle_manifest_and_context_validate_against_published_schemas(
     manifest = bundle.inspect_evidence_bundle(str(archive)).manifest
 
     Draft202012Validator(context_schema).validate(manifest["context"])
+    # Exercise normal URI resolution from the manifest's raw, release-pinned
+    # base URL. The consumer supplies retrieval; it does not need a non-standard
+    # alias for a broken github.com URL.
     Draft202012Validator(manifest_schema, registry=registry).validate(manifest)
 
 

@@ -13,11 +13,11 @@ pipeline.
 
 ## 1. Turn it on (one command)
 
-From the repo you want to protect (needs repo access — EvoGuard is private; pin a
-release tag):
+From the repo you want to protect (EvoGuard is public; pin an immutable release
+tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.0"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.1"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -267,6 +267,9 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 - Run on `pull_request` (not `pull_request_target`) so untrusted code never sees
   your secrets.
+- EvoGuard writes every report to the job summary. Its optional sticky PR comment
+  is skipped for fork and Dependabot PRs because their `GITHUB_TOKEN` is read-only;
+  a missing comment therefore cannot replace the Guard verdict with an HTTP 403.
 - Add `--isolation docker --docker-image <img>` for a **network-less, read-only**
   container judge (defence in depth; not a complete boundary — see
   [`GUARD.md`](GUARD.md)). The image must carry your test runner (e.g.
@@ -284,7 +287,7 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.5.0` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.5.1` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

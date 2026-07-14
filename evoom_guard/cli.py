@@ -166,6 +166,10 @@ def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, 
             v = data[key]
             if not isinstance(v, int) or isinstance(v, bool):
                 raise _bad(key, "expected an integer")
+            if key == "timeout" and v < 1:
+                raise _bad(key, "expected a positive integer")
+            if key == "mem_limit" and v < 0:
+                raise _bad(key, "expected a non-negative integer")
             cfg[key] = v
     if "allow_new_tests" in data:
         v = data["allow_new_tests"]
@@ -661,6 +665,12 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
     timeout = args.timeout if args.timeout is not None else (cfg_to if isinstance(cfg_to, int) else 120)
     cfg_ml = cfg.get("mem_limit")
     mem_limit = args.mem_limit if args.mem_limit is not None else (cfg_ml if isinstance(cfg_ml, int) else 1024)
+    if timeout < 1:
+        out("usage: --timeout must be a positive integer")
+        return 2
+    if mem_limit < 0:
+        out("usage: --mem-limit must be a non-negative integer")
+        return 2
 
     cfg_ant = cfg.get("allow_new_tests")
     allow_new_tests = (
@@ -881,14 +891,14 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0            # Guard needs the base commit to diff against
 
       - uses: EvoRiseKsa/EvoOM-Guard-m@{ref}
         with:
           test-command: "{test_command}"
-          comment: "true"           # post the verdict as a PR comment
+          comment: "true"           # same-repo PR comment; forks keep the job summary
           fail-on: "any-non-pass"   # or "rejected-only" to gate only reward-hacks
 """
 
@@ -919,7 +929,7 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0            # Guard needs the base commit to diff against
 
@@ -936,8 +946,9 @@ jobs:
           cat evoguard.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post verdict as PR comment
-        if: always()
-        uses: actions/github-script@v7
+        if: ${{{{ always() && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}}}
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');

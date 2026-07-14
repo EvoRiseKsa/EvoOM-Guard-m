@@ -16,18 +16,29 @@ import re
 from datetime import datetime
 from typing import Any, TypeGuard, cast
 
+from evoom_guard import verdict_contract_v1_11 as _contract
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
+from evoom_guard.record_verification.isolation import (
+    check_isolation as _check_isolation,
+)
+from evoom_guard.record_verification.report import (
+    RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
+)
+from evoom_guard.record_verification.report import (
+    SUPPORTED_SCHEMA_VERSIONS as SUPPORTED_SCHEMA_VERSIONS,
+)
+from evoom_guard.record_verification.report import _Checks as _Checks
 from evoom_guard.strict_json import strict_json_loads as strict_json_loads
 
-RECORD_VERIFIER_VERSION = "1.0"
-# Pin this verifier to the contract it implements.  Importing the producer's
-# current constant would silently claim support after a future schema bump.
-SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.11"})
+_VERDICTS = _contract.VERDICTS
+_EXECUTION_STATES = _contract.EXECUTION_STATES
+_REASON_CODES = _contract.REASON_CODES
+_REASON_CONTRACT = _contract.REASON_CONTRACT
+_POLICY_KEYS = _contract.POLICY_KEYS
+_REQUIRED_TOP_LEVEL = _contract.REQUIRED_TOP_LEVEL
+_REQUIRED_ASSURANCE = _contract.REQUIRED_ASSURANCE
+_REQUIRED_ATTESTATION = _contract.REQUIRED_ATTESTATION
 
-_VERDICTS = frozenset({"PASS", "REJECTED", "FAIL", "ERROR", "TAMPERED"})
-_EXECUTION_STATES = frozenset(
-    {"static_gate", "not_started", "started_incomplete", "completed"}
-)
 _VERDICT_SOURCES = frozenset(
     {
         "junit+exit",
@@ -102,132 +113,6 @@ _PACK_SECRECY = frozenset(
         "unmounted_from_candidate",
     }
 )
-_REASON_CODES = frozenset(
-    {
-        "tests_passed",
-        "protected_harness_edit",
-        "tests_failed",
-        "no_parseable_edits",
-        "unsafe_path",
-        "patch_apply_failed",
-        "no_test_verdict",
-        "junit_exit_mismatch",
-        "empty_diff",
-        "binary_patch",
-        "reverse_apply_failed",
-        "no_verifiable_changes",
-        "diff_coverage_below_threshold",
-        "test_timeout",
-        "setup_timeout",
-        "setup_failed",
-        "assurance_requirement_not_met",
-        "fix_not_demonstrated",
-        "policy_requirement_unsupported",
-        "verifier_pack_identity_mismatch",
-        "verifier_pack_invalid",
-        "verifier_pack_required",
-        "verifier_pack_not_found",
-        "verifier_pack_snapshot_changed",
-        "candidate_not_exercised",
-        "candidate_tree_changed_during_run",
-        "test_command_unavailable",
-        "runtime_cleanup_failed",
-    }
-)
-
-# Schema-1.11 result contract, derived from guard.py's explicit outcome maps
-# and result-construction branches.  Some reasons legitimately have two
-# verdicts (for example repo timeout FAIL vs black-box timeout ERROR).
-_REASON_CONTRACT: dict[str, tuple[frozenset[str], frozenset[str]]] = {
-    "tests_passed": (frozenset({"PASS"}), frozenset({"completed"})),
-    "protected_harness_edit": (frozenset({"REJECTED"}), frozenset({"static_gate"})),
-    "tests_failed": (frozenset({"FAIL"}), frozenset({"completed"})),
-    "no_parseable_edits": (frozenset({"ERROR"}), frozenset({"static_gate"})),
-    "unsafe_path": (frozenset({"ERROR"}), frozenset({"static_gate", "not_started"})),
-    "patch_apply_failed": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "no_test_verdict": (frozenset({"ERROR", "FAIL"}), frozenset({"completed"})),
-    "junit_exit_mismatch": (frozenset({"TAMPERED"}), frozenset({"completed"})),
-    "empty_diff": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "binary_patch": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "reverse_apply_failed": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "no_verifiable_changes": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "diff_coverage_below_threshold": (
-        frozenset({"FAIL"}),
-        frozenset({"completed"}),
-    ),
-    "test_timeout": (
-        frozenset({"FAIL", "ERROR"}),
-        frozenset({"started_incomplete"}),
-    ),
-    "setup_timeout": (frozenset({"ERROR"}), frozenset({"started_incomplete"})),
-    "setup_failed": (
-        frozenset({"ERROR"}),
-        frozenset({"not_started", "started_incomplete"}),
-    ),
-    "assurance_requirement_not_met": (
-        frozenset({"ERROR"}),
-        frozenset({"not_started", "started_incomplete", "completed"}),
-    ),
-    "fix_not_demonstrated": (frozenset({"FAIL"}), frozenset({"completed"})),
-    "policy_requirement_unsupported": (
-        frozenset({"ERROR"}),
-        frozenset({"not_started"}),
-    ),
-    "verifier_pack_identity_mismatch": (
-        frozenset({"ERROR"}),
-        frozenset({"not_started"}),
-    ),
-    "verifier_pack_invalid": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "verifier_pack_required": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "verifier_pack_not_found": (frozenset({"ERROR"}), frozenset({"not_started"})),
-    "verifier_pack_snapshot_changed": (
-        frozenset({"TAMPERED"}),
-        frozenset({"not_started", "started_incomplete", "completed"}),
-    ),
-    "candidate_not_exercised": (frozenset({"ERROR"}), frozenset({"completed"})),
-    "candidate_tree_changed_during_run": (
-        frozenset({"TAMPERED"}),
-        frozenset({"started_incomplete", "completed"}),
-    ),
-    "test_command_unavailable": (
-        frozenset({"ERROR"}),
-        frozenset({"not_started", "started_incomplete"}),
-    ),
-    "runtime_cleanup_failed": (
-        frozenset({"ERROR"}),
-        frozenset({"started_incomplete"}),
-    ),
-}
-
-_POLICY_KEYS = frozenset(
-    {
-        "mode",
-        "isolation",
-        "docker_image",
-        "docker_network",
-        "test_command",
-        "setup_command",
-        "trust_setup_on_host",
-        "setup_output_globs",
-        "protected",
-        "allow",
-        "allow_new_tests",
-        "timeout",
-        "mem_limit_mb",
-        "verifier_pack_required",
-        "expect_verifier_pack_sha256",
-        "blackbox",
-        "blackbox_only",
-        "require_report_integrity",
-        "require_candidate_isolation",
-        "min_diff_coverage",
-        "baseline_evidence",
-        "require_demonstrated_fix",
-        "policy_id",
-        "policy_version",
-    }
-)
-
 _PACK_ASSURANCE_KEYS = frozenset(
     {
         "configured",
@@ -266,77 +151,6 @@ _BASELINE_KEYS = frozenset(
     }
 )
 _BASELINE_SETUP_KEYS = frozenset({"setup_fidelity", "setup_fidelity_changes"})
-
-_REQUIRED_TOP_LEVEL = frozenset(
-    {
-        "schema_version",
-        "tool",
-        "tool_version",
-        "verdict",
-        "passed",
-        "exit_code",
-        "reason_code",
-        "reason",
-        "files_changed",
-        "protected_violations",
-        "risk_level",
-        "risk_score",
-        "tests_passed",
-        "tests_total",
-        "test_command_ran",
-        "execution_state",
-        "execution_phase",
-        "verdict_source",
-        "isolation",
-        "source",
-        "base_reconstruction",
-        "assurance",
-        "diff_coverage",
-        "baseline",
-        "attestation",
-        "diagnostics",
-    }
-)
-
-_REQUIRED_ASSURANCE = frozenset(
-    {
-        "execution_state",
-        "execution_phase",
-        "harness_integrity",
-        "report_integrity",
-        "candidate_isolation",
-        "suite_isolation",
-        "setup_isolation",
-        "runtime_continuity",
-        "verifier_pack",
-        "overall_profile",
-    }
-)
-
-_REQUIRED_ATTESTATION = frozenset(
-    {
-        "created_utc",
-        "guard_version",
-        "mode",
-        "candidate_sha256",
-        "effective_policy",
-        "policy_sha256",
-        "execution_state",
-        "execution_phase",
-        "test_command_started",
-        "delivered_isolation",
-        "effective_candidate_isolation",
-        "candidate_invocations",
-        "candidate_launcher_invocation_observed",
-        "verifier_pack_sha256",
-        "verifier_pack_digest_format",
-        "verifier_pack_tests_passed",
-        "verifier_pack_tests_total",
-        "verifier_pack_present",
-        "verifier_pack_started",
-        "verifier_pack_completed",
-    }
-)
 
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _UTC_SECONDS = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
@@ -681,50 +495,6 @@ def _baseline_type_errors(baseline: dict[str, Any]) -> list[str]:
     elif "setup_fidelity_changes" in baseline:
         errors.append("setup_fidelity_changes requires changed_judged_tree")
     return errors
-
-
-class _Checks:
-    def __init__(self) -> None:
-        self.items: list[dict[str, str]] = []
-
-    def pass_(self, check_id: str, message: str) -> None:
-        self.items.append({"id": check_id, "status": "pass", "message": message})
-
-    def fail(self, check_id: str, message: str) -> None:
-        self.items.append({"id": check_id, "status": "fail", "message": message})
-
-    def skip(self, check_id: str, message: str) -> None:
-        self.items.append({"id": check_id, "status": "skip", "message": message})
-
-    def expect(self, check_id: str, condition: bool, ok: str, failed: str) -> None:
-        if condition:
-            self.pass_(check_id, ok)
-        else:
-            self.fail(check_id, failed)
-
-    def report(self, record_schema_version: object = None) -> dict[str, Any]:
-        counts = {
-            status: sum(item["status"] == status for item in self.items)
-            for status in ("pass", "fail", "skip")
-        }
-        return {
-            "record_verifier": "evoguard",
-            "record_verifier_version": RECORD_VERIFIER_VERSION,
-            "scope": "semantic_consistency_only",
-            "signature_checked": False,
-            "supported_schema_versions": sorted(SUPPORTED_SCHEMA_VERSIONS),
-            "record_schema_version": (
-                record_schema_version if isinstance(record_schema_version, str) else None
-            ),
-            "ok": counts["fail"] == 0,
-            "summary": {
-                "passed": counts["pass"],
-                "failed": counts["fail"],
-                "skipped": counts["skip"],
-                "total": len(self.items),
-            },
-            "checks": self.items,
-        }
 
 
 def _policy_sha256(policy: dict[str, Any]) -> str:
@@ -1533,48 +1303,6 @@ def _check_receipts(
         isolation_valid,
         "receipt presence agrees with delivered candidate isolation and verdict semantics",
         "candidate receipt contradicts isolation, candidate_not_exercised, or PASS semantics",
-    )
-
-
-def _check_isolation(
-    checks: _Checks,
-    record: dict[str, Any],
-    assurance: dict[str, Any] | None,
-    attestation: dict[str, Any] | None,
-) -> None:
-    if assurance is None:
-        checks.skip("isolation.assurance_parity", "assurance is unavailable")
-    else:
-        checks.expect(
-            "isolation.assurance_parity",
-            assurance.get("candidate_isolation") == record.get("isolation"),
-            "top-level isolation matches assurance.candidate_isolation",
-            "top-level isolation contradicts assurance.candidate_isolation",
-        )
-    if attestation is None:
-        checks.skip("isolation.attestation_parity", "attestation is unavailable")
-        return
-    effective = attestation.get("effective_candidate_isolation")
-    valid = effective == record.get("isolation")
-    if (
-        record.get("execution_state") == "not_started"
-        and record.get("test_command_ran") is False
-        and record.get("isolation") == "not_run"
-        and effective is None
-    ):
-        # Schema 1.11 producer records from preflight refusals distinguish an
-        # unavailable candidate boundary (null) from the public delivered view
-        # (not_run).  No execution claim is made by either representation.
-        valid = True
-    if assurance is not None:
-        valid = valid and (
-            attestation.get("delivered_isolation") == assurance.get("suite_isolation")
-        )
-    checks.expect(
-        "isolation.attestation_parity",
-        valid,
-        "effective/suite isolation views agree across the record",
-        "attestation isolation contradicts top-level or assurance isolation",
     )
 
 

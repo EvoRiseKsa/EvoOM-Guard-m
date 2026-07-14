@@ -494,6 +494,21 @@ class MemLimitOptionTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_parser().parse_args(["guard", ".", "--mem-limit", "notanumber"])
 
+    def test_guard_api_rejects_values_that_cannot_form_a_valid_policy(self) -> None:
+        import evoom_guard.guard as guard_mod
+
+        candidate = "<<<FILE: pkg/m.py>>>\n\n<<<END FILE>>>"
+        for timeout in (0, -1, True, 1.0):
+            with self.subTest(timeout=timeout), self.assertRaisesRegex(
+                ValueError, "timeout must be a positive integer"
+            ):
+                guard_mod.guard(self.root, candidate, timeout=timeout)  # type: ignore[arg-type]
+        for mem_limit in (-1, True, 1.0):
+            with self.subTest(mem_limit=mem_limit), self.assertRaisesRegex(
+                ValueError, "mem_limit_mb must be a non-negative integer"
+            ):
+                guard_mod.guard(self.root, candidate, mem_limit_mb=mem_limit)  # type: ignore[arg-type]
+
     def test_guard_threads_mem_limit_to_verifier(self) -> None:
         import evoom_guard.guard as guard_mod
 

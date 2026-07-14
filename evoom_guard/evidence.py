@@ -163,7 +163,7 @@ def collect_diff_coverage(
     except ImportError:
         base["note"] = (
             "the 'coverage' package is not installed in the judge environment — "
-            "install the extra: pip install \"evoom-guard[cov]\""
+            "install it with: python -m pip install \"coverage>=7\""
         )
         return base
 

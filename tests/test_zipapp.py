@@ -20,6 +20,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard import __version__
@@ -78,10 +80,16 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
         )
         assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
         assert {
+            "LICENSE",
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",
             "evoom_guard/schemas/verdict-record-1.11.schema.json",
         } <= names
+        assert archive.read("LICENSE") == (
+            Path(__file__).parents[1].joinpath("LICENSE").read_bytes()
+            .replace(b"\r\n", b"\n")
+            .replace(b"\r", b"\n")
+        )
 
 
 def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
@@ -105,6 +113,7 @@ def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
             path = package / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(source.replace(b"\n", newline))
+        (root / "LICENSE").write_bytes(b"test license\n".replace(b"\n", newline))
         (package / "payload.bin").write_bytes(non_python_payload)
         roots[checkout] = root
 
@@ -120,6 +129,17 @@ def test_pyz_build_is_identical_from_lf_and_crlf_source_trees(tmp_path):
             archived = archive.read(f"evoom_guard/{name}")
             assert b"\r" not in archived
         assert archive.read("evoom_guard/payload.bin") == non_python_payload
+        assert archive.read("LICENSE") == b"test license\n"
+
+
+def test_pyz_build_refuses_to_omit_the_license(tmp_path):
+    root = tmp_path / "unlicensed"
+    package = root / "evoom_guard"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text('__version__ = "test"\n', encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="LICENSE not found"):
+        _build(tmp_path / "build", root=root)
 
 
 def test_pyz_exit_codes_propagate(tmp_path):

@@ -31,6 +31,11 @@ def test_action_inputs_are_not_interpolated_into_shell_scripts() -> None:
         assert "${{ inputs." not in block
 
 
+def test_action_never_uses_pull_request_target() -> None:
+    """The composite action must not recommend a privileged untrusted-code event."""
+    assert "pull_request_target" not in ACTION.read_text(encoding="utf-8")
+
+
 def test_third_party_actions_are_pinned_to_full_commit_shas() -> None:
     text = ACTION.read_text(encoding="utf-8")
     uses = re.findall(r"^\s*uses:\s*([^\s#]+)", text, flags=re.MULTILINE)

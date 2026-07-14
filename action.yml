@@ -25,7 +25,7 @@ inputs:
     required: false
     default: ""
   comment:
-    description: "Post the report as a PR comment (needs pull-requests: write)."
+    description: "Post the report on same-repository PRs (needs pull-requests: write). Fork/Dependabot PRs keep the job summary and skip the API comment."
     required: false
     default: "true"
   fail-on:
@@ -271,7 +271,11 @@ runs:
         exit $GUARD_CODE
 
     - name: Comment on the PR
-      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      # Fork and Dependabot PRs receive a read-only GITHUB_TOKEN. The report is
+      # already in GITHUB_STEP_SUMMARY, so skip the optional API write there and
+      # never let a comment-permission failure replace the Guard verdict.
+      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
+      continue-on-error: true
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       with:
         script: |

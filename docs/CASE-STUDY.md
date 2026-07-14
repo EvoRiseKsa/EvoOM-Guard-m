@@ -1,8 +1,9 @@
 # Case study: guarding a real upstream bug fix (charset-normalizer #537)
 
-This is a fully reproducible run of EvoOM Guard against a **real, historical
-bug in a widely used library** — not a synthetic fixture. Every command,
-input hash, and verdict below can be re-executed from public artifacts.
+This is a reconstructable run of EvoOM Guard against a **real, historical bug
+in a widely used library** — not a synthetic fixture. The upstream inputs and
+commands are public, but this repository does not yet ship a turnkey fixture
+bundle containing the exact patches and raw verdicts.
 
 ## The bug
 
@@ -122,8 +123,9 @@ itself, run `--baseline-evidence` without the hard gate and read
 
 ## Reproduce it yourself
 
-The exact patches and commands are small enough to reconstruct from this
-page: the honest candidate is upstream 3.4.0's `__eq__` change (diff the two
+The patches and commands can be reconstructed from this page, but that is not
+the same as a one-command, byte-for-byte reproduction. The honest candidate is
+upstream 3.4.0's `__eq__` change (diff the two
 sdists pinned by the hashes above), the regression test is quoted verbatim,
 and the guard command line is given once and reused for all three runs.
 `examples/` in this repository contains equivalent self-contained fixtures

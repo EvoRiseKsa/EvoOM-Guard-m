@@ -281,7 +281,7 @@ def test_missing_setup_command_does_not_claim_a_started_suite(repo: Path) -> Non
         ([sys.executable, "-c", "raise SystemExit(7)"], 5, REASON_SETUP_FAILED),
         (
             [sys.executable, "-c", "import time; time.sleep(5)"],
-            0.05,
+            1,
             REASON_SETUP_TIMEOUT,
         ),
     ],
@@ -290,7 +290,7 @@ def test_missing_setup_command_does_not_claim_a_started_suite(repo: Path) -> Non
 def test_started_but_unsuccessful_setup_is_not_a_started_test_command(
     repo: Path,
     setup_command: list[str],
-    timeout: float,
+    timeout: int,
     reason_code: str,
 ) -> None:
     result = guard(
@@ -328,7 +328,7 @@ def test_repo_suite_timeout_records_started_incomplete_without_source(
         str(repo),
         _candidate(),
         test_command=[sys.executable, "-c", "import time; time.sleep(5)"],
-        timeout=0.05,
+        timeout=1,
     )
 
     assert result.verdict != PASS
