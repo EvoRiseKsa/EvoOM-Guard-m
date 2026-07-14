@@ -81,3 +81,25 @@ def test_vitest_broken_fix_is_fail_with_real_counts(tmp_path):
     assert res.verdict == FAIL
     assert res.verdict_source == "junit+exit"
     assert (res.tests_passed, res.tests_total) == (0, 2)
+
+
+@needs_vitest
+def test_vitest_baseline_and_candidate_resolve_the_same_runner(tmp_path):
+    """Exercise the separate baseline subprocess, including Windows .CMD shims."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _vitest_repo(repo)
+    cand = "<<<FILE: impl.mjs>>>\nexport const dbl = (x) => x + x;\n<<<END FILE>>>"
+
+    res = guard(
+        str(repo),
+        cand,
+        test_command=["vitest", "run"],
+        baseline_evidence=True,
+        mem_limit_mb=0,
+    )
+
+    assert res.verdict == PASS
+    assert res.baseline is not None
+    assert res.baseline["verdict"] == "FAIL"
+    assert res.baseline["repair_effect"] == "demonstrated"

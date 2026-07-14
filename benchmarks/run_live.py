@@ -271,7 +271,8 @@ def run_corpus(out_path: str) -> int:
         print(f"  {case['id']:<36} {result.verdict:<9} ({elapsed:.2f}s)"
               + ("" if ok else f"  << EXPECTED {case['expect']}"))
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    # Keep the checked-in corpus byte-stable across POSIX and Windows hosts.
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         for row in rows:
             f.write(json.dumps(row, sort_keys=True) + "\n")
 

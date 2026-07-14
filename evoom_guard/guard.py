@@ -50,10 +50,51 @@ from typing import Any
 from evoom_guard import __version__
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.patchmin import risk_score
+from evoom_guard.verdict_contract_v1_11 import (
+    ERROR,
+    EXECUTION_COMPLETED,
+    EXECUTION_NOT_STARTED,
+    EXECUTION_STARTED_INCOMPLETE,
+    EXECUTION_STATIC_GATE,
+    FAIL,
+    PASS,
+    REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+    REASON_BINARY_PATCH,
+    REASON_CANDIDATE_NOT_EXERCISED,
+    REASON_CANDIDATE_TREE_CHANGED,
+    REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
+    REASON_EMPTY_DIFF,
+    REASON_FIX_NOT_DEMONSTRATED,
+    REASON_JUNIT_EXIT_MISMATCH,
+    REASON_NO_PARSEABLE_EDITS,
+    REASON_NO_TEST_VERDICT,
+    REASON_NO_VERIFIABLE_CHANGES,
+    REASON_PATCH_APPLY_FAILED,
+    REASON_POLICY_REQUIREMENT_UNSUPPORTED,
+    REASON_PROTECTED_HARNESS_EDIT,
+    REASON_REVERSE_APPLY_FAILED,
+    REASON_RUNTIME_CLEANUP_FAILED,
+    REASON_SETUP_FAILED,
+    REASON_SETUP_TIMEOUT,
+    REASON_TEST_COMMAND_UNAVAILABLE,
+    REASON_TEST_TIMEOUT,
+    REASON_TESTS_FAILED,
+    REASON_TESTS_PASSED,
+    REASON_UNSAFE_PATH,
+    REASON_VERIFIER_PACK_IDENTITY_MISMATCH,
+    REASON_VERIFIER_PACK_INVALID,
+    REASON_VERIFIER_PACK_NOT_FOUND,
+    REASON_VERIFIER_PACK_REQUIRED,
+    REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
+    REJECTED,
+    SCHEMA_VERSION,
+    TAMPERED,
+)
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
     _matches_globs,
+    _resolve_host_command,
     copy_repo_tree,
     is_addable_new_test,
     is_judge_autoexec,
@@ -129,50 +170,10 @@ _PROTECTED_GLOBS = (
 #          evidence; phase-specific Docker start/isolation evidence; honest
 #          composite source/count/report-integrity semantics; additive
 #          candidate_not_exercised reason; top-level JSON isolation.
-SCHEMA_VERSION = "1.11"
-
-EXECUTION_STATIC_GATE = "static_gate"
-EXECUTION_NOT_STARTED = "not_started"
-EXECUTION_STARTED_INCOMPLETE = "started_incomplete"
-EXECUTION_COMPLETED = "completed"
-
-# Verdicts.
-PASS = "PASS"          # tests pass and the harness was untouched
-REJECTED = "REJECTED"  # the patch edits the tests / their config (reward-hack)
-FAIL = "FAIL"          # the patch applied and ran, but the tests fail
-ERROR = "ERROR"        # the patch did not apply / produced no parseable edits
-TAMPERED = "TAMPERED"  # JUnit/exit disagreement or judged tree/pack drift
-
-# Stable machine codes for the verdict's cause (never reword without a SCHEMA_VERSION
-# bump). The human ``reason`` may change freely; adapters key off ``reason_code``.
-REASON_TESTS_PASSED = "tests_passed"
-REASON_PROTECTED_HARNESS_EDIT = "protected_harness_edit"
-REASON_TESTS_FAILED = "tests_failed"
-REASON_NO_PARSEABLE_EDITS = "no_parseable_edits"
-REASON_UNSAFE_PATH = "unsafe_path"
-REASON_PATCH_APPLY_FAILED = "patch_apply_failed"
-REASON_NO_TEST_VERDICT = "no_test_verdict"
-REASON_JUNIT_EXIT_MISMATCH = "junit_exit_mismatch"
-REASON_EMPTY_DIFF = "empty_diff"
-REASON_BINARY_PATCH = "binary_patch"
-REASON_REVERSE_APPLY_FAILED = "reverse_apply_failed"
-REASON_NO_VERIFIABLE_CHANGES = "no_verifiable_changes"
-REASON_DIFF_COVERAGE_BELOW_THRESHOLD = "diff_coverage_below_threshold"
-REASON_TEST_TIMEOUT = "test_timeout"
-REASON_SETUP_TIMEOUT = "setup_timeout"
-REASON_SETUP_FAILED = "setup_failed"
-REASON_ASSURANCE_REQUIREMENT_NOT_MET = "assurance_requirement_not_met"
-REASON_FIX_NOT_DEMONSTRATED = "fix_not_demonstrated"
-REASON_POLICY_REQUIREMENT_UNSUPPORTED = "policy_requirement_unsupported"
-REASON_VERIFIER_PACK_IDENTITY_MISMATCH = "verifier_pack_identity_mismatch"
-REASON_VERIFIER_PACK_INVALID = "verifier_pack_invalid"
-REASON_VERIFIER_PACK_REQUIRED = "verifier_pack_required"
-REASON_VERIFIER_PACK_NOT_FOUND = "verifier_pack_not_found"
-REASON_VERIFIER_PACK_SNAPSHOT_CHANGED = "verifier_pack_snapshot_changed"
-REASON_CANDIDATE_NOT_EXERCISED = "candidate_not_exercised"
-REASON_CANDIDATE_TREE_CHANGED = "candidate_tree_changed_during_run"
-REASON_TEST_COMMAND_UNAVAILABLE = "test_command_unavailable"
-REASON_RUNTIME_CLEANUP_FAILED = "runtime_cleanup_failed"
+# The frozen schema-1.11 vocabulary is imported above and deliberately
+# re-exported from this established module. Producer behavior remains local:
+# outcome selection, policy construction, assurance, and attestation are not
+# shared with the independent record verifier.
 
 # Ordering of report-integrity levels, weakest → strongest. A caller can demand a
 # floor with require_report_integrity; if the run's actual level is below it, the
@@ -456,6 +457,15 @@ def guard(
     (``diff_coverage_below_threshold``). Executed is not asserted — see
     :mod:`evoom_guard.evidence`.
     """
+    # Public API inputs must be able to produce a schema-valid record. Python's
+    # type hints do not reject bool/float at runtime, and subprocess accepts
+    # non-positive/float timeouts in inconsistent ways. Refuse those values
+    # before constructing effective_policy or any attestation.
+    if type(timeout) is not int or timeout < 1:
+        raise ValueError("timeout must be a positive integer")
+    if type(mem_limit_mb) is not int or mem_limit_mb < 0:
+        raise ValueError("mem_limit_mb must be a non-negative integer")
+
     # Fail-closed policy consistency (1.7): a GATE the selected judge cannot
     # enforce must stop the run — "require X" answered with a PASS that never
     # checked X is exactly the silent-degradation failure the policy contract
@@ -1403,9 +1413,13 @@ def _run_baseline_suite(
         if setup_command:
             try:
                 setup_before = _setup_fidelity_snapshot(copy, setup_output_globs)
+                setup_env = dict(env)
+                setup_cmd = _resolve_host_command(
+                    list(setup_command), cwd=copy, env=setup_env
+                )
                 r_setup = subprocess.run(
-                    list(setup_command), cwd=copy, capture_output=True,
-                    text=True, timeout=timeout, env=dict(env),
+                    setup_cmd, cwd=copy, capture_output=True,
+                    encoding="utf-8", errors="replace", timeout=timeout, env=setup_env,
                 )
                 setup_after = _setup_fidelity_snapshot(
                     copy, setup_output_globs, baseline=setup_before
@@ -1430,10 +1444,12 @@ def _run_baseline_suite(
             base_cmd = list(test_command)
         host_xml = os.path.join(workdir, "judge-result.xml")
         cmd, report_expected, report_env = instrument_command(base_cmd, host_xml)
+        run_env = {**env, **report_env}
+        cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
         try:
             r = subprocess.run(
-                cmd, cwd=copy, capture_output=True, text=True, timeout=timeout,
-                env={**env, **report_env},
+                cmd, cwd=copy, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+                env=run_env,
                 preexec_fn=rv._limits() if os.name == "posix" else None,
             )
         except (OSError, subprocess.TimeoutExpired):
@@ -2062,7 +2078,7 @@ def _reverse_apply(work_dir: str, diff_file: str) -> bool:
                 cmd,
                 cwd=work_dir,
                 capture_output=True,
-                text=True,
+                encoding="utf-8", errors="replace",
                 timeout=60,
                 env=git_env if cmd[0] == "git" else None,
             )

@@ -39,15 +39,49 @@ canonical evidence envelope against external key and run-context inputs.
 | `candidate_runner.py` | The shell-free `$EVOGUARD_EXEC` launcher and delivered-isolation evidence for black-box candidates. |
 | `verifiers/grading.py` | The pure score gradient (`fraction_score`). |
 | `adapters.py` | Per-runner report wiring (`RunnerAdapter` + `instrument_command`). One class per runner; the engine stays runner-agnostic. |
-| `guard.py` | **Orchestration.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, the verdict mapping, and the report renderers (Markdown / JSON / SARIF). |
+| `verdict_contract_v1_11.py` | Frozen, stdlib-only schema-1.11 vocabulary: verdicts, lifecycle states, reason compatibility, policy keys, and required record sections. It contains no producer or verifier algorithm. |
+| `guard.py` | **Producer orchestration.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, independent outcome selection, assurance/attestation construction, and report renderers (Markdown / JSON / SARIF). It re-exports the established schema-1.11 constants for compatibility. |
 | `patch_applier.py` | `apply_patch` — unique-anchor search/replace for `<<<PATCH>>>` blocks. |
 | `patchmin.py` | Pure, model-free helpers: delta-debugging (`minimize_patch`) + blast-radius `risk_score`. |
-| `record_verifier.py` | Bounded, strict schema-1.11 structural and cross-field validation. It checks consistency of recorded claims; it does not rerun the judged change. |
+| `record_verifier.py` | Public bounded schema-1.11 semantic-verification API and ordered claim-family orchestration. It checks consistency of recorded claims; it does not rerun the judged change. |
+| `record_verification/` | Internal verifier components extracted incrementally behind the public API. `report.py` owns the stable report envelope and independent schema-support pin; `isolation.py` owns isolation-parity checks. |
 | `strict_json.py` | Shared fail-closed JSON decoding limits for offline record and bundle consumers (duplicates, numbers, nesting, and Unicode). |
 | `evidence_bundle.py` | Canonical, bounded evidence envelopes: exact verdict/material bytes, manifest digests, Ed25519 authentication, and exact external context binding. Structural inspection does not imply authentication. |
 | `schemas/` | Packaged JSON Schema 2020-12 contracts for verdict records, evidence contexts, and evidence manifests; shipped in both wheel and zipapp artifacts. |
 | `signing.py` | Optional Ed25519 byte/file signatures and stable DER-SPKI key identities. `cryptography` remains a lazy `sign` extra, not a core dependency. |
 | `cli.py` | The `evo-guard` command: execution (`guard`), offline verification (`verify-verdict`, `verify-record`, `verify-bundle`), bundle creation, pack/environment diagnostics, initialization, and version reporting. It also owns `.evoguard.json` loading and flag↔config precedence. |
+
+## Contract ownership and independence
+
+The shared contract is deliberately **data, not a shared decision engine**. The
+producer and semantic verifier may use the same immutable names and compatibility
+table, but they must not call the same lifecycle, policy-digest, assurance, or
+admission implementation. Otherwise one defect could make both sides agree on a
+false claim. Compatibility is guarded by an external frozen fixture that is not
+generated from the contract module.
+
+```text
+frozen vocabulary ─┬─► producer logic ─► verdict record
+                   └─► independent semantic checks ─► verification report
+
+external golden fixture ─► compares vocabulary + schema + producer API + verifier output
+```
+
+The record's major claim families have intentionally bounded meanings:
+
+| Claim family | Producer evidence | What offline verification establishes | What it does not establish |
+|---|---|---|---|
+| Subject identity | Candidate/tree/revision digests observed by the judge | Field shape, parity, and documented digest relationships inside the record/bundle | That an external repository currently has those bytes unless supplied and re-hashed |
+| Policy binding | Complete `effective_policy` plus canonical `policy_sha256` | Recomputed policy digest and policy↔runtime consistency | That the policy was organizationally approved |
+| Execution lifecycle | Phase/state receipts repeated across result, assurance, and attestation | Cross-field consistency for `static_gate`, `not_started`, `started_incomplete`, or `completed` | That execution occurred merely because JSON says it did; authentication/runtime evidence remain separate |
+| Isolation delivery | Observed launcher/container receipts and effective boundary | Consistency of top-level, assurance, attestation, and invocation semantics | Independent remote attestation of the host, kernel, or container runtime |
+| Report integrity | Judge-owned report channel, exit code, and report digests | Verdict/count/source consistency and impossible-combination rejection | Quality or completeness of the tests themselves |
+| Verifier-pack identity | Manifest, snapshot digest, phase receipts, and counts | Pack identity/count/lifecycle consistency; bundle verification can re-hash enclosed material | Secrecy of a same-host pack or correctness of its assertions |
+| Admission | Verdict, reason code, counts, source, and assurance | The frozen reason/verdict/lifecycle truth table and related cross-field rules | Complete software correctness, absence of vulnerabilities, or author intent |
+
+JSON Schema remains an independent structural publication; semantic verification
+remains code; signature/context verification remains a third boundary. None is a
+substitute for the others.
 
 ## Data flow (a `--diff` run)
 

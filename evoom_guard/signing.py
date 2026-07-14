@@ -25,8 +25,9 @@ canonicalization step to get subtly wrong), and is written as base64 to a
 This module is the integration point for signed-evidence pipelines (e.g.
 feeding verdicts into an audit trail such as Sentinel AI's Merkle log — see
 ``docs/SIGNED_VERDICTS.md``). The core gate stays stdlib-only: ``cryptography``
-is imported lazily and only needed if you actually sign or verify — install it
-with the extra: ``pip install "evoom-guard[sign]"``.
+is imported lazily and only needed if you actually sign or verify. Because
+EvoGuard is not published on PyPI, add the extra to a source install or install
+the dependency directly with ``python -m pip install "cryptography>=41"``.
 """
 
 from __future__ import annotations
@@ -59,7 +60,7 @@ def _crypto():
     except ImportError as exc:  # pragma: no cover - exercised via the CLI tests
         raise SigningUnavailableError(
             "verdict signing needs the 'cryptography' package — "
-            "install the extra: pip install \"evoom-guard[sign]\""
+            "install it with: python -m pip install \"cryptography>=41\""
         ) from exc
     return ed25519, serialization
 

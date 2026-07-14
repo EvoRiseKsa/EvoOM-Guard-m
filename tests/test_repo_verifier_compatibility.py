@@ -15,6 +15,7 @@ from __future__ import annotations
 import inspect
 import subprocess
 import sys
+from unittest.mock import Mock
 
 import evoom_guard.verifiers as verifiers
 import evoom_guard.verifiers.candidate_edits as candidate_edits
@@ -32,6 +33,7 @@ IMPORTED_SURFACE = {
     "RepoVerifier",
     "SetupFidelityError",
     "_matches_globs",
+    "_resolve_host_command",
     "_setup_fidelity_changes",
     "_setup_fidelity_snapshot",
     "apply_blocks_to_copy",
@@ -157,6 +159,56 @@ def test_important_call_shapes_remain_compatible() -> None:
 
     for name, (args, kwargs) in calls.items():
         inspect.signature(getattr(repo_verifier, name)).bind(*args, **kwargs)
+
+
+def test_windows_host_command_resolves_pathex_shim(monkeypatch) -> None:
+    concrete = r"C:\tools\node_modules\.bin\vitest.CMD"
+    isfile = Mock(side_effect=lambda path: path == concrete)
+    monkeypatch.setattr(repo_verifier.os.path, "isfile", isfile)
+
+    resolved = repo_verifier._resolve_host_command(
+        ["vitest", "run"],
+        cwd=r"C:\candidate",
+        env={"PATH": r"C:\tools\node_modules\.bin", "PATHEXT": ".CMD;.EXE"},
+        platform="nt",
+    )
+
+    assert resolved == [concrete, "run"]
+    assert concrete in {call.args[0] for call in isfile.call_args_list}
+
+
+def test_windows_host_command_does_not_search_relative_path_entries(monkeypatch) -> None:
+    checked: list[str] = []
+
+    def record_candidate(path: str) -> bool:
+        checked.append(path)
+        return False
+
+    monkeypatch.setattr(repo_verifier.os.path, "isfile", record_candidate)
+
+    resolved = repo_verifier._resolve_host_command(
+        ["python", "-m", "pytest"],
+        cwd=r"C:\candidate",
+        env={
+            "PATH": r".;candidate-tools;C:\trusted-tools",
+            "PATHEXT": ".CMD;.EXE",
+        },
+        platform="nt",
+    )
+
+    assert resolved == ["python", "-m", "pytest"]
+    assert checked
+    assert all(path.startswith("C:\\trusted-tools\\") for path in checked)
+
+
+def test_non_windows_host_command_keeps_token_and_skips_resolution(monkeypatch) -> None:
+    isfile = Mock(side_effect=AssertionError("POSIX commands must not be rewritten"))
+    monkeypatch.setattr(repo_verifier.os.path, "isfile", isfile)
+
+    assert repo_verifier._resolve_host_command(
+        ["vitest", "run"], platform="posix"
+    ) == ["vitest", "run"]
+    isfile.assert_not_called()
 
 
 def test_lightweight_parsers_and_graders_keep_their_behavior() -> None:

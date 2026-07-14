@@ -11,7 +11,7 @@ mean that the enclosed verdict is `PASS`.
 Install the signing extra and generate an Ed25519 key once:
 
 ```bash
-pip install "evoom-guard[sign]"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.1"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
 
@@ -34,6 +34,14 @@ alone:
   "guard_artifact_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 }
 ```
+
+`guard_artifact_sha256` must not be a placeholder. In evidence-context v1 its
+portable meaning is the SHA-256 of the exact executable distribution bytes that
+produced the verdict. For the standalone release, use the `evo-guard.pyz` digest
+from `SHA256SUMS` after verifying the download. A source checkout or composite
+Action install does not yet have a canonical cross-platform distribution digest;
+do not claim that binding by inventing a value. Use the released zipapp for this
+workflow until a future digest format and Action output are specified.
 
 `run_attempt` is mandatory because GitHub keeps the same run ID when a workflow
 is re-run. Together the two fields identify one execution attempt rather than

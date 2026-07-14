@@ -1,0 +1,470 @@
+{
+  "schema_version": "1.11",
+  "verdicts": ["ERROR", "FAIL", "PASS", "REJECTED", "TAMPERED"],
+  "execution_states": [
+    "completed",
+    "not_started",
+    "started_incomplete",
+    "static_gate"
+  ],
+  "reason_contract": {
+    "assurance_requirement_not_met": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["completed", "not_started", "started_incomplete"]
+    },
+    "binary_patch": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "candidate_not_exercised": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["completed"]
+    },
+    "candidate_tree_changed_during_run": {
+      "verdicts": ["TAMPERED"],
+      "execution_states": ["completed", "started_incomplete"]
+    },
+    "diff_coverage_below_threshold": {
+      "verdicts": ["FAIL"],
+      "execution_states": ["completed"]
+    },
+    "empty_diff": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "fix_not_demonstrated": {
+      "verdicts": ["FAIL"],
+      "execution_states": ["completed"]
+    },
+    "junit_exit_mismatch": {
+      "verdicts": ["TAMPERED"],
+      "execution_states": ["completed"]
+    },
+    "no_parseable_edits": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["static_gate"]
+    },
+    "no_test_verdict": {
+      "verdicts": ["ERROR", "FAIL"],
+      "execution_states": ["completed"]
+    },
+    "no_verifiable_changes": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "patch_apply_failed": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "policy_requirement_unsupported": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "protected_harness_edit": {
+      "verdicts": ["REJECTED"],
+      "execution_states": ["static_gate"]
+    },
+    "reverse_apply_failed": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "runtime_cleanup_failed": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["started_incomplete"]
+    },
+    "setup_failed": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started", "started_incomplete"]
+    },
+    "setup_timeout": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["started_incomplete"]
+    },
+    "test_command_unavailable": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started", "started_incomplete"]
+    },
+    "test_timeout": {
+      "verdicts": ["ERROR", "FAIL"],
+      "execution_states": ["started_incomplete"]
+    },
+    "tests_failed": {
+      "verdicts": ["FAIL"],
+      "execution_states": ["completed"]
+    },
+    "tests_passed": {
+      "verdicts": ["PASS"],
+      "execution_states": ["completed"]
+    },
+    "unsafe_path": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started", "static_gate"]
+    },
+    "verifier_pack_identity_mismatch": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "verifier_pack_invalid": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "verifier_pack_not_found": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "verifier_pack_required": {
+      "verdicts": ["ERROR"],
+      "execution_states": ["not_started"]
+    },
+    "verifier_pack_snapshot_changed": {
+      "verdicts": ["TAMPERED"],
+      "execution_states": ["completed", "not_started", "started_incomplete"]
+    }
+  },
+  "policy_keys": [
+    "allow",
+    "allow_new_tests",
+    "baseline_evidence",
+    "blackbox",
+    "blackbox_only",
+    "docker_image",
+    "docker_network",
+    "expect_verifier_pack_sha256",
+    "isolation",
+    "mem_limit_mb",
+    "min_diff_coverage",
+    "mode",
+    "policy_id",
+    "policy_version",
+    "protected",
+    "require_candidate_isolation",
+    "require_demonstrated_fix",
+    "require_report_integrity",
+    "setup_command",
+    "setup_output_globs",
+    "test_command",
+    "timeout",
+    "trust_setup_on_host",
+    "verifier_pack_required"
+  ],
+  "required_keys": {
+    "top_level": [
+      "assurance",
+      "attestation",
+      "base_reconstruction",
+      "baseline",
+      "diagnostics",
+      "diff_coverage",
+      "execution_phase",
+      "execution_state",
+      "exit_code",
+      "files_changed",
+      "isolation",
+      "passed",
+      "protected_violations",
+      "reason",
+      "reason_code",
+      "risk_level",
+      "risk_score",
+      "schema_version",
+      "source",
+      "test_command_ran",
+      "tests_passed",
+      "tests_total",
+      "tool",
+      "tool_version",
+      "verdict",
+      "verdict_source"
+    ],
+    "assurance": [
+      "candidate_isolation",
+      "execution_phase",
+      "execution_state",
+      "harness_integrity",
+      "overall_profile",
+      "report_integrity",
+      "runtime_continuity",
+      "setup_isolation",
+      "suite_isolation",
+      "verifier_pack"
+    ],
+    "attestation": [
+      "candidate_invocations",
+      "candidate_launcher_invocation_observed",
+      "candidate_sha256",
+      "created_utc",
+      "delivered_isolation",
+      "effective_candidate_isolation",
+      "effective_policy",
+      "execution_phase",
+      "execution_state",
+      "guard_version",
+      "mode",
+      "policy_sha256",
+      "test_command_started",
+      "verifier_pack_completed",
+      "verifier_pack_digest_format",
+      "verifier_pack_present",
+      "verifier_pack_sha256",
+      "verifier_pack_started",
+      "verifier_pack_tests_passed",
+      "verifier_pack_tests_total"
+    ]
+  },
+  "legacy_symbols": {
+    "ERROR": "ERROR",
+    "EXECUTION_COMPLETED": "completed",
+    "EXECUTION_NOT_STARTED": "not_started",
+    "EXECUTION_STARTED_INCOMPLETE": "started_incomplete",
+    "EXECUTION_STATIC_GATE": "static_gate",
+    "FAIL": "FAIL",
+    "PASS": "PASS",
+    "REASON_ASSURANCE_REQUIREMENT_NOT_MET": "assurance_requirement_not_met",
+    "REASON_BINARY_PATCH": "binary_patch",
+    "REASON_CANDIDATE_NOT_EXERCISED": "candidate_not_exercised",
+    "REASON_CANDIDATE_TREE_CHANGED": "candidate_tree_changed_during_run",
+    "REASON_DIFF_COVERAGE_BELOW_THRESHOLD": "diff_coverage_below_threshold",
+    "REASON_EMPTY_DIFF": "empty_diff",
+    "REASON_FIX_NOT_DEMONSTRATED": "fix_not_demonstrated",
+    "REASON_JUNIT_EXIT_MISMATCH": "junit_exit_mismatch",
+    "REASON_NO_PARSEABLE_EDITS": "no_parseable_edits",
+    "REASON_NO_TEST_VERDICT": "no_test_verdict",
+    "REASON_NO_VERIFIABLE_CHANGES": "no_verifiable_changes",
+    "REASON_PATCH_APPLY_FAILED": "patch_apply_failed",
+    "REASON_POLICY_REQUIREMENT_UNSUPPORTED": "policy_requirement_unsupported",
+    "REASON_PROTECTED_HARNESS_EDIT": "protected_harness_edit",
+    "REASON_REVERSE_APPLY_FAILED": "reverse_apply_failed",
+    "REASON_RUNTIME_CLEANUP_FAILED": "runtime_cleanup_failed",
+    "REASON_SETUP_FAILED": "setup_failed",
+    "REASON_SETUP_TIMEOUT": "setup_timeout",
+    "REASON_TEST_COMMAND_UNAVAILABLE": "test_command_unavailable",
+    "REASON_TEST_TIMEOUT": "test_timeout",
+    "REASON_TESTS_FAILED": "tests_failed",
+    "REASON_TESTS_PASSED": "tests_passed",
+    "REASON_UNSAFE_PATH": "unsafe_path",
+    "REASON_VERIFIER_PACK_IDENTITY_MISMATCH": "verifier_pack_identity_mismatch",
+    "REASON_VERIFIER_PACK_INVALID": "verifier_pack_invalid",
+    "REASON_VERIFIER_PACK_NOT_FOUND": "verifier_pack_not_found",
+    "REASON_VERIFIER_PACK_REQUIRED": "verifier_pack_required",
+    "REASON_VERIFIER_PACK_SNAPSHOT_CHANGED": "verifier_pack_snapshot_changed",
+    "REJECTED": "REJECTED",
+    "SCHEMA_VERSION": "1.11",
+    "TAMPERED": "TAMPERED"
+  },
+  "records": {
+    "valid_composite": {
+      "assurance": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "overall_profile": "composite_blackbox_repo_native",
+        "repo_native_suite": "composed_completed",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "attestation": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "candidate_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "created_utc": "2026-07-13T00:00:00Z",
+        "delivered_isolation": "subprocess",
+        "effective_candidate_isolation": "subprocess",
+        "effective_policy": {
+          "allow": [],
+          "allow_new_tests": false,
+          "baseline_evidence": false,
+          "blackbox": true,
+          "blackbox_only": false,
+          "docker_image": null,
+          "docker_network": "none",
+          "expect_verifier_pack_sha256": null,
+          "isolation": "subprocess",
+          "mem_limit_mb": 1024,
+          "min_diff_coverage": null,
+          "mode": "blackbox",
+          "policy_id": "strict-ci",
+          "policy_version": "1",
+          "protected": [],
+          "require_candidate_isolation": null,
+          "require_demonstrated_fix": false,
+          "require_report_integrity": null,
+          "setup_command": null,
+          "setup_output_globs": [],
+          "test_command": "default:python -m pytest",
+          "timeout": 120,
+          "trust_setup_on_host": false,
+          "verifier_pack_required": true
+        },
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "guard_version": "3.5.0",
+        "mode": "blackbox",
+        "policy_id": "strict-ci",
+        "policy_sha256": "233ef298a54a3a46829f324bd373cd9a147b66cfb81d3fdf47c9801efa65b99d",
+        "policy_version": "1",
+        "repo_suite_completed": true,
+        "repo_suite_passed": true,
+        "repo_suite_started": true,
+        "repo_suite_state": "composed_completed",
+        "test_command_started": true,
+        "verifier_pack_completed": true,
+        "verifier_pack_digest_format": "EVOGUARD_PACK_V2",
+        "verifier_pack_present": true,
+        "verifier_pack_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "verifier_pack_started": true,
+        "verifier_pack_tests_passed": 1,
+        "verifier_pack_tests_total": 1
+      },
+      "base_reconstruction": "ok",
+      "baseline": null,
+      "diagnostics": "",
+      "diff_coverage": null,
+      "execution_phase": "repo_suite",
+      "execution_state": "completed",
+      "exit_code": 0,
+      "files_changed": ["app.py"],
+      "isolation": "subprocess",
+      "passed": true,
+      "protected_violations": [],
+      "reason": "all required phases passed",
+      "reason_code": "tests_passed",
+      "risk_level": "low",
+      "risk_score": 0.1,
+      "schema_version": "1.11",
+      "source": "diff",
+      "test_command_ran": true,
+      "tests_passed": 3,
+      "tests_total": 3,
+      "tool": "evoguard",
+      "tool_version": "3.5.0",
+      "verdict": "PASS",
+      "verdict_source": "composite:blackbox+repo"
+    }
+  },
+  "reports": {
+    "valid": {
+      "ok": true,
+      "summary": {"passed": 45, "failed": 0, "skipped": 5, "total": 50},
+      "checks": [
+        ["document.object", "pass"],
+        ["envelope.required_fields", "pass"],
+        ["envelope.types", "pass"],
+        ["envelope.shape", "pass"],
+        ["identity.schema_version", "pass"],
+        ["identity.tool", "pass"],
+        ["identity.tool_version", "pass"],
+        ["identity.enums", "pass"],
+        ["risk.range", "pass"],
+        ["assurance.required_fields", "pass"],
+        ["assurance.types", "pass"],
+        ["assurance.shape", "pass"],
+        ["attestation.required_fields", "pass"],
+        ["attestation.types", "pass"],
+        ["attestation.shape", "pass"],
+        ["identity.guard_version_parity", "pass"],
+        ["lifecycle.assurance_parity", "pass"],
+        ["lifecycle.attestation_parity", "pass"],
+        ["lifecycle.state_semantics", "pass"],
+        ["verdict.boolean_exit", "pass"],
+        ["verdict.reason_code", "pass"],
+        ["verdict.protected_violations", "pass"],
+        ["counts.range_pair", "pass"],
+        ["counts.source_semantics", "pass"],
+        ["verdict.failure_evidence", "skip"],
+        ["verdict.tamper_evidence", "skip"],
+        ["verdict.pass_evidence", "pass"],
+        ["policy.contract", "pass"],
+        ["policy.digest", "pass"],
+        ["policy.context_parity", "pass"],
+        ["diff_coverage.shape", "skip"],
+        ["baseline.shape", "skip"],
+        ["diff_coverage.policy_semantics", "pass"],
+        ["baseline.policy_semantics", "pass"],
+        ["policy.assurance_floors", "pass"],
+        ["policy.pack_digest_pin", "pass"],
+        ["candidate_receipt.zero_nonzero", "pass"],
+        ["candidate_receipt.isolation", "pass"],
+        ["isolation.assurance_parity", "pass"],
+        ["isolation.attestation_parity", "pass"],
+        ["source.mode_policy", "pass"],
+        ["assurance.lifecycle_profile", "pass"],
+        ["pack.configuration_parity", "pass"],
+        ["pack.identity_parity", "pass"],
+        ["pack.lifecycle_parity", "pass"],
+        ["pack.counts", "pass"],
+        ["pack.blackbox_count_parity", "skip"],
+        ["pack.pass_evidence", "pass"],
+        ["composite.counts", "pass"],
+        ["composite.phase_semantics", "pass"]
+      ]
+    },
+    "tampered": {
+      "ok": false,
+      "summary": {"passed": 44, "failed": 1, "skipped": 5, "total": 50},
+      "checks": [
+        ["document.object", "pass"],
+        ["envelope.required_fields", "pass"],
+        ["envelope.types", "pass"],
+        ["envelope.shape", "pass"],
+        ["identity.schema_version", "pass"],
+        ["identity.tool", "pass"],
+        ["identity.tool_version", "pass"],
+        ["identity.enums", "pass"],
+        ["risk.range", "pass"],
+        ["assurance.required_fields", "pass"],
+        ["assurance.types", "pass"],
+        ["assurance.shape", "pass"],
+        ["attestation.required_fields", "pass"],
+        ["attestation.types", "pass"],
+        ["attestation.shape", "pass"],
+        ["identity.guard_version_parity", "pass"],
+        ["lifecycle.assurance_parity", "pass"],
+        ["lifecycle.attestation_parity", "pass"],
+        ["lifecycle.state_semantics", "pass"],
+        ["verdict.boolean_exit", "fail"],
+        ["verdict.reason_code", "pass"],
+        ["verdict.protected_violations", "pass"],
+        ["counts.range_pair", "pass"],
+        ["counts.source_semantics", "pass"],
+        ["verdict.failure_evidence", "skip"],
+        ["verdict.tamper_evidence", "skip"],
+        ["verdict.pass_evidence", "pass"],
+        ["policy.contract", "pass"],
+        ["policy.digest", "pass"],
+        ["policy.context_parity", "pass"],
+        ["diff_coverage.shape", "skip"],
+        ["baseline.shape", "skip"],
+        ["diff_coverage.policy_semantics", "pass"],
+        ["baseline.policy_semantics", "pass"],
+        ["policy.assurance_floors", "pass"],
+        ["policy.pack_digest_pin", "pass"],
+        ["candidate_receipt.zero_nonzero", "pass"],
+        ["candidate_receipt.isolation", "pass"],
+        ["isolation.assurance_parity", "pass"],
+        ["isolation.attestation_parity", "pass"],
+        ["source.mode_policy", "pass"],
+        ["assurance.lifecycle_profile", "pass"],
+        ["pack.configuration_parity", "pass"],
+        ["pack.identity_parity", "pass"],
+        ["pack.lifecycle_parity", "pass"],
+        ["pack.counts", "pass"],
+        ["pack.blackbox_count_parity", "skip"],
+        ["pack.pass_evidence", "pass"],
+        ["composite.counts", "pass"],
+        ["composite.phase_semantics", "pass"]
+      ]
+    }
+  }
+}

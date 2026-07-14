@@ -7,8 +7,7 @@
 """Build a single-file, zero-dependency ``evo-guard.pyz`` (a Python zipapp).
 
 EvoGuard's core is stdlib-only, so the whole CLI ships as **one executable
-archive** — no clone, no ``pip``, no third-party install, and crucially **no
-access to the private source repo** needed to run the gate. Run it with
+archive** — no clone, no ``pip``, and no third-party install. Run it with
 ``python evo-guard.pyz …`` (or ``./evo-guard.pyz …`` via the shebang). The version baked
 into the archive is read from the packaged ``evoom_guard/__init__.py``, so
 ``python evo-guard.pyz version`` matches the release it was built from.
@@ -41,7 +40,7 @@ def _archive_bytes(archive_name: str, source: str) -> bytes:
     """
     with open(source, "rb") as file_handle:
         data = file_handle.read()
-    if archive_name.endswith(".py") or (
+    if archive_name == "LICENSE" or archive_name.endswith(".py") or (
         archive_name.startswith("evoom_guard/schemas/")
         and archive_name.endswith(".json")
     ):
@@ -101,6 +100,9 @@ def build(
     pkg = os.path.join(root, "evoom_guard")
     if not os.path.isdir(pkg):
         raise FileNotFoundError(f"evoom_guard package not found under {root!r}")
+    license_path = os.path.join(root, "LICENSE")
+    if not os.path.isfile(license_path):
+        raise FileNotFoundError(f"LICENSE not found under {root!r}")
     out_path = os.path.abspath(out_path)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="evoom_guard_pyz_") as stage:
@@ -108,6 +110,9 @@ def build(
             pkg, os.path.join(stage, "evoom_guard"),
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
+        # The standalone archive is a distribution in its own right. Keep its
+        # governing terms inside the exact bytes users download and verify.
+        shutil.copyfile(license_path, os.path.join(stage, "LICENSE"))
         # Hand-write __main__ so the CLI's return value becomes the process exit
         # code. zipapp's ``-m pkg:func`` entry only *calls* main() and discards its
         # return — which would make every verdict exit 0 (the gate would not block).

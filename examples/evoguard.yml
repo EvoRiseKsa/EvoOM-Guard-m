@@ -17,12 +17,12 @@ jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0            # Guard needs the base commit to diff against
 
-      - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.0   # pin a release (@<sha> strictest, @main latest)
+      - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.1   # pin a release (@<sha> strictest, @main latest)
         with:
           test-command: "python -m pytest -q"
-          comment: "true"           # post the verdict as a PR comment
+          comment: "true"           # same-repo PR comment; forks keep the job summary
           fail-on: "any-non-pass"   # or "rejected-only" to gate only reward-hacks

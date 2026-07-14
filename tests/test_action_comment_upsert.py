@@ -42,6 +42,19 @@ class ActionStickyCommentTests(unittest.TestCase):
         # The lookup must key off the marker, not a brittle title match.
         self.assertIn("includes(MARKER)", self.text)
 
+    def test_comment_is_safe_for_fork_and_dependabot_prs(self) -> None:
+        """A read-only PR token must not turn a Guard result into a 403 failure."""
+        step = self.text[self.text.index("- name: Comment on the PR") :]
+        self.assertIn(
+            "github.event.pull_request.head.repo.full_name == github.repository",
+            step,
+        )
+        self.assertIn(
+            "github.event.pull_request.user.login != 'dependabot[bot]'", step
+        )
+        self.assertIn("continue-on-error: true", step)
+        self.assertLess(step.index("if:"), step.index("uses:"))
+
 
 class ActionCliParityTests(unittest.TestCase):
     """Every gate-relevant CLI flag must be reachable from the Action (issue: the
