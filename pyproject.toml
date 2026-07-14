@@ -95,11 +95,12 @@ source = ["evoom_guard"]
 branch = true
 
 [tool.coverage.report]
-# Branch-coverage measurement phase (frozen core, v3.5.2 baseline): the first
-# branch-inclusive measurement reads 79.578% on Windows (804 passed, 76
-# platform-conditional skips), where the old line-only gate read >=80. This
-# floor guards against regression from the measured baseline; raise it
-# deliberately after targeted branch tests for the security-sensitive modules
-# (workspace, verifiers/fidelity, runtime_identity, blackbox, record_verifier)
-# — never by writing tests whose only purpose is the percentage.
-fail_under = 78
+# Branch-coverage floor. The gate runs only in the Linux "Tests + coverage" CI
+# step, whose branch-inclusive total rose from 83% to 84% after direct branch
+# tests for the weakest security-sensitive modules landed:
+#   workspace 54->59, runtime_identity 63->65, verifiers/fidelity 66->70.
+# This ratchet from 78 to 80 guards that measured gain with a ~4-point margin
+# for run-to-run variation. It is a regression guard, not a target: raise it
+# again only after real branch tests move the number, never by writing tests
+# whose only purpose is the percentage.
+fail_under = 80
