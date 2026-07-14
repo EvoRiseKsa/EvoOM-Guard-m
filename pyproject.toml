@@ -92,7 +92,14 @@ ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["evoom_guard"]
-branch = false
+branch = true
 
 [tool.coverage.report]
-fail_under = 80
+# Branch-coverage measurement phase (frozen core, v3.5.2 baseline): the first
+# branch-inclusive measurement reads 79.578% on Windows (804 passed, 76
+# platform-conditional skips), where the old line-only gate read >=80. This
+# floor guards against regression from the measured baseline; raise it
+# deliberately after targeted branch tests for the security-sensitive modules
+# (workspace, verifiers/fidelity, runtime_identity, blackbox, record_verifier)
+# — never by writing tests whose only purpose is the percentage.
+fail_under = 78
