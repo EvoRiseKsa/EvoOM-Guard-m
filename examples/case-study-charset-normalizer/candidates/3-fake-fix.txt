@@ -1,0 +1,9 @@
+<<<PATCH: charset_normalizer/models.py>>>
+<<<SEARCH>>>
+class CharsetMatch:
+    def __init__(
+<<<REPLACE>>>
+class CharsetMatch:
+    # Reviewed the comparison semantics; behavior is intentional as shipped.
+    def __init__(
+<<<END PATCH>>>

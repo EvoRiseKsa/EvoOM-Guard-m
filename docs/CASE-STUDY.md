@@ -1,9 +1,12 @@
 # Case study: guarding a real upstream bug fix (charset-normalizer #537)
 
 This is a reconstructable run of EvoOM Guard against a **real, historical bug
-in a widely used library** — not a synthetic fixture. The upstream inputs and
-commands are public, but this repository does not yet ship a turnkey fixture
-bundle containing the exact patches and raw verdicts.
+in a widely used library** — not a synthetic fixture. The repository ships the
+whole study as a turnkey fixture:
+[`examples/case-study-charset-normalizer/`](../examples/case-study-charset-normalizer/)
+contains the exact candidate patches, the committed regression test, the raw
+verdict records behind the table below, and a one-command, self-checking
+reproduction script.
 
 ## The bug
 
@@ -77,7 +80,12 @@ evo-guard guard base-repo --patch <candidate>.txt \
 | 2 | **Test tamper** | "Fixes" the failure by rewriting `tests/test_eq_regression.py` to `pass`. |
 | 3 | **Fake fix** | Edits the right file (`models.py`) but only adds a review comment — changes no behavior. |
 
-## The verdicts (engine 3.3.1, schema 1.7, Python 3.11, pytest 9.1)
+## The verdicts (engine 3.5.1, schema 1.11, Python 3.12, pytest 9.0)
+
+First measured on engine 3.3.1 (schema 1.7, Python 3.11, pytest 9.1); the
+re-run on 3.5.1 reproduced every verdict, reason code, and count below
+unchanged — the raw records ship in
+[`examples/case-study-charset-normalizer/verdicts/`](../examples/case-study-charset-normalizer/verdicts/).
 
 | # | Verdict | reason_code | Head suite | Baseline (pristine base) | repair_effect |
 |---|---------|-------------|-----------|--------------------------|---------------|
@@ -102,9 +110,14 @@ What each row proves:
   still fails and the verdict is FAIL.
 
 All three verdicts share the identical policy fingerprint
-(`policy_sha256: 042adc38072436c3…`), so a downstream consumer can verify
-with `evo-guard verify-verdict --expect-policy-sha …` that no scenario was
-judged under a softer policy than the others.
+(`policy_sha256:
+349c2c0d8da098341f914c043722cf438116ae05f003b35b9edebe50519419a9`), so a
+downstream consumer can verify with `evo-guard verify-verdict
+--expect-policy-sha …` that no scenario was judged under a softer policy than
+the others. Every record also passes `evo-guard verify-record` — the
+producer/verifier universality invariant the reason corpus enforces — and the
+honest-fix record seals into an Evidence Bundle that
+`verify-bundle --require-pass` authenticates end to end.
 
 ## A strictness note worth knowing
 
@@ -123,10 +136,17 @@ itself, run `--baseline-evidence` without the hard gate and read
 
 ## Reproduce it yourself
 
-The patches and commands can be reconstructed from this page, but that is not
-the same as a one-command, byte-for-byte reproduction. The honest candidate is
-upstream 3.4.0's `__eq__` change (diff the two
-sdists pinned by the hashes above), the regression test is quoted verbatim,
-and the guard command line is given once and reused for all three runs.
-`examples/` in this repository contains equivalent self-contained fixtures
-if you want a one-command version.
+One command, self-checking:
+
+```bash
+python examples/case-study-charset-normalizer/run_case_study.py
+```
+
+The script downloads the sdist pinned by the hash above (its only network
+step), verifies the digest fail-closed, commits the regression test, judges
+the three shipped candidates, and exits non-zero unless the verdicts match
+this page, all three share one `policy_sha256`, every record passes
+`verify-record`, and (with the `sign` extra) the honest-fix verdict survives
+`verify-bundle --require-pass`. The exact patches, the regression test, and
+the frozen raw verdict records live alongside it — see
+[`examples/case-study-charset-normalizer/README.md`](../examples/case-study-charset-normalizer/README.md).

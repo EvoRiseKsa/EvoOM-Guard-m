@@ -6,4 +6,6 @@
 # run INSIDE the Guard judge's copy (where the sample package is import-able), not
 # from this repo's root. So a stray `pytest examples/` must not try to collect
 # them. The judge is unaffected — it runs pytest from within the copied sample_repo.
-collect_ignore_glob = ["*/sample_repo/*", "*/sample-repo/*"]
+# The case study's `fixtures/` regression test and its `work/` output are the
+# same kind of artifact: they run inside the judged charset-normalizer copy.
+collect_ignore_glob = ["*/sample_repo/*", "*/sample-repo/*", "*/fixtures/*", "*/work/*"]
