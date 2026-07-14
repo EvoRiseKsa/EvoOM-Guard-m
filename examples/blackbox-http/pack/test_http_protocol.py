@@ -20,6 +20,20 @@ import subprocess
 import time
 import urllib.request
 
+import pytest
+
+# This pack is meaningful only when the Guard judge runs it (it sets
+# EVOGUARD_EXEC and points the launcher at a candidate). Collected on its own —
+# e.g. a bare `pytest examples/` — it has no candidate to launch, so skip
+# rather than fail, exactly like the blackbox-cli and blackbox-pack packs. An
+# all-skipped pack still FAILS under the judge (no judge-owned test results),
+# so this cannot become a vacuous pass.
+if not os.environ.get("EVOGUARD_EXEC"):
+    pytest.skip(
+        "black-box verifier pack runs only under the EvoOM Guard judge",
+        allow_module_level=True,
+    )
+
 
 def _free_port() -> int:
     with socket.socket() as s:
