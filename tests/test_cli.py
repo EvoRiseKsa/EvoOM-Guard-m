@@ -582,6 +582,22 @@ def test_init_private_custom_secret_name(tmp_path):
     assert "EVOGUARD_TOKEN" not in body
 
 
+@pytest.mark.parametrize("credential_key", ("bad-name", "A B", "${{ x }}", "GITHUB_TOKEN"))
+def test_init_private_rejects_an_unsafe_credential_reference(
+    tmp_path, capsys, credential_key
+):
+    wf = tmp_path / "evoguard.yml"
+
+    rc = cli.main([
+        "init", "--path", str(wf), "--private-evoguard",
+        "--evoguard-token-secret", credential_key,
+    ])
+
+    assert rc == 2
+    assert not wf.exists()
+    assert "usage: --evoguard-token-secret" in capsys.readouterr().out
+
+
 # ───────────────────────────── config (.evoguard.json) ──────────────────────
 _QUIET = lambda *_a, **_k: None  # noqa: E731 - swallow warnings in unit tests
 
