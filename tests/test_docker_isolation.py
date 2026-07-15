@@ -153,7 +153,7 @@ def test_setup_runs_inside_requested_container_by_default(tmp_path, monkeypatch)
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
     seen = []
 
-    def fake_run(cmd, **_kwargs):
+    def fake_run(cmd, _name):
         seen.append(cmd)
         return subprocess.CompletedProcess(cmd, 3, "", "setup failed")
 
@@ -162,7 +162,7 @@ def test_setup_runs_inside_requested_container_by_default(tmp_path, monkeypatch)
         setup_command=["python", "-c", "print('x; touch PWNED')"],
     )
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(verifier, "_run_docker_client", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
     )
@@ -184,9 +184,9 @@ def test_setup_container_exit_125_is_isolation_unavailable(tmp_path, monkeypatch
     )
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
     monkeypatch.setattr(
-        repo_verifier_module.subprocess,
-        "run",
-        lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 125, "", "daemon error"),
+        verifier,
+        "_run_docker_client",
+        lambda cmd, _name: subprocess.CompletedProcess(cmd, 125, "", "daemon error"),
     )
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
@@ -201,9 +201,9 @@ def test_suite_container_exit_125_is_isolation_unavailable(tmp_path, monkeypatch
     verifier = RepoVerifier(isolation="docker", docker_image="python:3.12-slim")
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
     monkeypatch.setattr(
-        repo_verifier_module.subprocess,
-        "run",
-        lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 125, "", "daemon error"),
+        verifier,
+        "_run_docker_client",
+        lambda cmd, _name: subprocess.CompletedProcess(cmd, 125, "", "daemon error"),
     )
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
@@ -225,7 +225,7 @@ def test_host_setup_requires_explicit_opt_in_and_is_recorded(tmp_path, monkeypat
         setup_command=["trusted-setup", "--offline"], trust_setup_on_host=True,
     )
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
     )
@@ -259,7 +259,7 @@ def test_setup_suite_and_pack_share_one_resolved_image_id(tmp_path, monkeypatch)
         resolve_calls += 1
         return "sha256:fixed-image"
 
-    def fake_run(cmd, **_kwargs):
+    def fake_run(cmd, _name):
         docker_commands.append(cmd)
         for token in cmd:
             if isinstance(token, str) and token.endswith(":/out:rw"):
@@ -275,7 +275,7 @@ def test_setup_suite_and_pack_share_one_resolved_image_id(tmp_path, monkeypatch)
         return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(verifier, "_resolve_docker_image", resolve_once)
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(verifier, "_run_docker_client", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>",
         {"repo_path": str(repo), "verifier_pack": str(pack)},

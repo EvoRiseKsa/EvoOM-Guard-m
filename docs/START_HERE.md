@@ -33,6 +33,13 @@ Already have a verdict and need an offline admission/audit result? Use
 context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
 [`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md).
 
+> **Using the GitHub Action on a PR?** Commit the judge policy in
+> `.evoguard.json` on the base branch; `evo-guard init` creates it alongside the
+> workflow. The Action reads that base policy, not candidate-controlled `with:`
+> values. Protect the workflow itself with a required workflow/status check, or
+> a PR could prevent the gate from starting. Details:
+> [`GUARD.md`](GUARD.md#pull-request-policy-source-security-critical).
+
 ---
 
 ## Path 1 — Basic integrity gate ("Basic Guard")
@@ -54,10 +61,11 @@ git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "pyth
 **Expected:** `✅ PASS` if the suite passes and the harness is untouched; `⛔ REJECTED`
 if the patch touches a test/config; `❌ FAIL` if tests fail.
 
-**Optional independent checks:** adding `--verifier-pack /secure/pack` snapshots
+**Optional independent checks:** adding a pinned
+`--verifier-pack /secure/pack --expect-verifier-pack-sha256 <digest>` snapshots
 that pack outside the candidate tree and runs it as a **separate mandatory
 phase**. Repo suite and pack must both pass, and zero collected pack tests cannot
-produce `PASS`. Pin its `EVOGUARD_PACK_V2` identity as shown below.
+produce `PASS`.
 
 ---
 
@@ -148,6 +156,21 @@ evo-guard guard . --diff patch.diff --no-config --verifier-pack /secure/pack \
 V2 binds the pack's typed directory/file paths and content; symlinks and special
 files are refused. Guard verifies the accepted snapshot before and after it runs
 and records the digest, manifest and pack test counts in the attestation.
+
+For a direct `--diff` run, `/secure/pack` must be outside the candidate checkout.
+For the GitHub Action on `pull_request`, put the pair in the base policy instead:
+
+```json
+{
+  "verifier_pack": "security/evoguard-pack",
+  "expect_verifier_pack_sha256": "<64-hex-EVOGUARD_PACK_V2-digest>"
+}
+```
+
+The Action stages that repository-relative directory from the base SHA, never
+from the candidate checkout. Do not put these judge settings in workflow
+`with:` fields; candidate workflow values are not policy. See
+[`VERIFIER_PACKS.md`](VERIFIER_PACKS.md) for the exact source rules.
 
 For repo-native docker/gVisor runs, `setup_command` runs inside a writable setup
 container by default, then suite and pack receive the candidate read-only. New

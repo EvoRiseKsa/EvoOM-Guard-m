@@ -70,6 +70,10 @@ def test_schema_1_11_surfaces_match_frozen_contract() -> None:
     assert sorted(contract.EXECUTION_STATES) == golden["execution_states"]
     assert sorted(contract.REASON_CODES) == sorted(golden["reason_contract"])
     assert sorted(contract.POLICY_KEYS) == golden["policy_keys"]
+    assert sorted(contract.OPTIONAL_POLICY_KEYS) == golden["optional_policy_keys"]
+    assert sorted(contract.ALLOWED_POLICY_KEYS) == sorted(
+        golden["policy_keys"] + golden["optional_policy_keys"]
+    )
     assert sorted(contract.REQUIRED_TOP_LEVEL) == required["top_level"]
     assert sorted(contract.REQUIRED_ASSURANCE) == required["assurance"]
     assert sorted(contract.REQUIRED_ATTESTATION) == required["attestation"]
@@ -80,6 +84,7 @@ def test_schema_1_11_surfaces_match_frozen_contract() -> None:
     assert sorted(record_verifier._EXECUTION_STATES) == golden["execution_states"]
     assert sorted(record_verifier._REASON_CODES) == sorted(golden["reason_contract"])
     assert sorted(record_verifier._POLICY_KEYS) == golden["policy_keys"]
+    assert sorted(record_verifier._OPTIONAL_POLICY_KEYS) == golden["optional_policy_keys"]
     assert sorted(record_verifier._REQUIRED_TOP_LEVEL) == required["top_level"]
     assert sorted(record_verifier._REQUIRED_ASSURANCE) == required["assurance"]
     assert sorted(record_verifier._REQUIRED_ATTESTATION) == required["attestation"]
@@ -96,6 +101,9 @@ def test_schema_1_11_surfaces_match_frozen_contract() -> None:
     assert sorted(schema["$defs"]["effectivePolicy"]["required"]) == golden[
         "policy_keys"
     ]
+    for key in golden["optional_policy_keys"]:
+        assert key in schema["$defs"]["effectivePolicy"]["properties"]
+        assert key not in schema["$defs"]["effectivePolicy"]["required"]
     assert sorted(schema["$defs"]["assurance"]["required"]) == required["assurance"]
     assert sorted(schema["$defs"]["attestation"]["required"]) == required[
         "attestation"

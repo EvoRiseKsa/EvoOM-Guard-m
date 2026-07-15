@@ -24,6 +24,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard import __version__, cli
+from evoom_guard.pack_manifest import pack_digest
 
 HAS_PYTEST = importlib.util.find_spec("pytest") is not None
 needs_pytest = pytest.mark.skipif(not HAS_PYTEST, reason="needs pytest to run the suite")
@@ -82,13 +83,77 @@ def test_guard_missing_args_is_usage(capsys):
 
 
 def test_guard_parser_accepts_docker_network():
-    # the flag parses and defaults to the safe 'none'.
+    # ``None`` means "defer to trusted policy"; cmd_guard supplies the safe
+    # ``none`` fallback only after that policy has been loaded.
     args = cli.build_parser().parse_args(["guard", ".", "--patch", "-"])
-    assert args.docker_network == "none"
+    assert args.docker_network is None
     args = cli.build_parser().parse_args(
         ["guard", ".", "--patch", "-", "--docker-network", "mynet"]
     )
     assert args.docker_network == "mynet"
+
+
+def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypatch):
+    """Policy knobs omitted from CLI flags still reach the trusted judge call."""
+    from evoom_guard.guard import PASS, GuardResult
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    patch = tmp_path / "candidate.txt"
+    patch.write_text("<<<FILE: app.py>>>\nvalue = 2\n<<<END FILE>>>", encoding="utf-8")
+    (repo / ".evoguard.json").write_text(
+        json.dumps(
+            {
+                "strict_harness": True,
+                "isolation": "docker",
+                "docker_image": "judge:latest",
+                "docker_network": "none",
+                "blackbox": True,
+                "blackbox_only": True,
+                "diff_coverage": True,
+                "baseline_evidence": True,
+                "require_demonstrated_fix": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_guard(_repo, _candidate, **kwargs):
+        captured.update(kwargs)
+        return GuardResult(
+            PASS, True, "stub", ["app.py"], [], "low", 0.0,
+            verdict_source="exit",
+        )
+
+    monkeypatch.setattr("evoom_guard.guard.guard", fake_guard)
+    args = cli.build_parser().parse_args(["guard", str(repo), "--patch", str(patch)])
+
+    assert cli.cmd_guard(args, out=lambda _message: None) == 0
+    assert {
+        key: captured[key]
+        for key in (
+            "strict_harness",
+            "isolation",
+            "docker_image",
+            "docker_network",
+            "blackbox",
+            "blackbox_only",
+            "diff_coverage",
+            "baseline_evidence",
+            "require_demonstrated_fix",
+        )
+    } == {
+        "strict_harness": True,
+        "isolation": "docker",
+        "docker_image": "judge:latest",
+        "docker_network": "none",
+        "blackbox": True,
+        "blackbox_only": True,
+        "diff_coverage": True,
+        "baseline_evidence": True,
+        "require_demonstrated_fix": True,
+    }
 
 
 def test_guard_docker_isolation_requires_image(capsys):
@@ -124,6 +189,74 @@ def test_guard_base_head_mode(tmp_path, capsys):
     assert cli.main(["guard", "--base", str(base), "--head", str(head)]) == 0
     out = capsys.readouterr().out
     assert "PASS" in out and "base/head" in out
+
+
+def test_base_head_rejects_a_candidate_controlled_verifier_pack(tmp_path):
+    """The CLI must not snapshot a verifier from the untrusted head checkout."""
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    _make_repo(str(base), m_body=_BUG)
+    shutil.copytree(base, head)
+    (head / "pkg" / "m.py").write_text(_FIXED, encoding="utf-8")
+    pack = head / "judge-pack"
+    pack.mkdir()
+    (pack / "test_invariant.py").write_text(
+        "def test_invariant():\n    assert True\n", encoding="utf-8"
+    )
+    verdict = tmp_path / "verdict.json"
+
+    assert (
+        cli.main(
+            [
+                "guard",
+                "--base", str(base),
+                "--head", str(head),
+                "--verifier-pack", str(pack),
+                "--expect-verifier-pack-sha256", "0" * 64,
+                "--json", str(verdict),
+            ]
+        )
+        == 1
+    )
+    record = json.loads(verdict.read_text(encoding="utf-8"))
+    assert record["verdict"] == "ERROR"
+    assert record["reason_code"] == "verifier_pack_invalid"
+    assert record["source"] == "base/head"
+    assert record["test_command_ran"] is False
+
+
+@needs_pytest
+def test_base_head_uses_a_pack_resolved_from_the_trusted_base_policy(tmp_path):
+    """A relative policy pack resolves from base, not from the untrusted head."""
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    _make_repo(str(base), m_body=_BUG)
+    pack = base / "security" / "judge-pack"
+    pack.mkdir(parents=True)
+    (pack / "test_invariant.py").write_text(
+        "def test_independent_invariant():\n    assert True\n", encoding="utf-8"
+    )
+    (base / ".evoguard.json").write_text(
+        json.dumps(
+            {
+                "verifier_pack": "security/judge-pack",
+                "expect_verifier_pack_sha256": pack_digest(str(pack)),
+            }
+        ),
+        encoding="utf-8",
+    )
+    shutil.copytree(base, head)
+    (head / "pkg" / "m.py").write_text(_FIXED, encoding="utf-8")
+    verdict = tmp_path / "verdict.json"
+
+    assert cli.main(["guard", "--base", str(base), "--head", str(head),
+                     "--json", str(verdict)]) == 0
+    record = json.loads(verdict.read_text(encoding="utf-8"))
+    assert record["verdict"] == "PASS"
+    assert record["attestation"]["verifier_pack_sha256"] == pack_digest(str(pack))
+    assert record["verdict_source"] == "composite:repo+verifier-pack"
 
 
 @needs_pytest
@@ -351,8 +484,13 @@ def test_init_writes_workflow(tmp_path, capsys):
     assert "name: EvoGuard" in body
     assert "on:\n  pull_request:" in body
     assert "EvoOM-Guard-m@v9.9.9" in body                 # ref pinned as requested
-    assert 'test-command: "pytest -q app/"' in body  # custom command embedded
-    assert "wrote" in capsys.readouterr().out
+    assert "test-command:" not in body
+    policy = tmp_path / ".evoguard.json"
+    assert json.loads(policy.read_text(encoding="utf-8")) == {
+        "test_command": "pytest -q app/"
+    }
+    output = capsys.readouterr().out
+    assert "wrote" in output and str(policy) in output
 
 
 def test_init_default_ref_is_current_version(tmp_path):
@@ -381,6 +519,7 @@ def test_init_stdout_does_not_write(tmp_path, capsys):
     wf = tmp_path / "nope.yml"
     assert cli.main(["init", "--path", str(wf), "--stdout"]) == 0
     assert not wf.exists()                                # nothing written
+    assert not (tmp_path / ".evoguard.json").exists()
     assert "name: EvoGuard" in capsys.readouterr().out
 
 
@@ -413,6 +552,22 @@ def test_init_private_evoguard_generates_pip_workflow(tmp_path, capsys):
         in body
     )
     assert "actions/github-script@v" not in body
+    assert json.loads((tmp_path / ".evoguard.json").read_text(encoding="utf-8")) == {
+        "test_command": "pytest -q"
+    }
+
+
+def test_init_preserves_an_existing_policy(tmp_path, capsys):
+    wf = tmp_path / ".github" / "workflows" / "evoguard.yml"
+    policy = tmp_path / ".evoguard.json"
+    policy.write_text('{"test_command": ["custom", "suite"]}\n', encoding="utf-8")
+
+    assert cli.main(["init", "--path", str(wf), "--test-command", "ignored"]) == 0
+
+    assert json.loads(policy.read_text(encoding="utf-8")) == {
+        "test_command": ["custom", "suite"]
+    }
+    assert "kept existing trusted policy" in capsys.readouterr().out
 
 
 def test_init_private_custom_secret_name(tmp_path):
@@ -563,6 +718,7 @@ def test_load_config_reads_setup_boundary_and_output_contract(tmp_path):
             {
                 "trust_setup_on_host": True,
                 "setup_output_globs": ["generated/**", "tool-cache/*"],
+                "verifier_pack": "security/org-pack",
                 "expect_verifier_pack_sha256": "A" * 64,
             }
         ),
@@ -571,6 +727,7 @@ def test_load_config_reads_setup_boundary_and_output_contract(tmp_path):
     cfg = cli._load_config(str(p), out=_QUIET)
     assert cfg["trust_setup_on_host"] is True
     assert cfg["setup_output_globs"] == ["generated/**", "tool-cache/*"]
+    assert cfg["verifier_pack"] == "security/org-pack"
     assert cfg["expect_verifier_pack_sha256"] == "a" * 64
 
 
@@ -579,6 +736,8 @@ def test_load_config_invalid_setup_policy_types_are_fail_closed(tmp_path):
         {"trust_setup_on_host": "true"},
         {"setup_output_globs": "generated/**"},
         {"setup_output_globs": ["generated/**", 1]},
+        {"verifier_pack": ""},
+        {"verifier_pack": []},
         {"expect_verifier_pack_sha256": "not-a-digest"},
     ):
         p = tmp_path / ".evoguard.json"

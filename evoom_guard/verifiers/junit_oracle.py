@@ -69,9 +69,14 @@ def _count_testcases(root: ET.Element) -> JUnitCounts | None:
 
 
 # A JUnit report is small (a few KB even for thousands of cases); anything much
-# larger is pathological. Cap the input so a runaway/hostile report cannot exhaust
-# memory or parse time.
-_MAX_REPORT_CHARS = 8 * 1024 * 1024
+# larger is pathological.  Keep the historical character-name as a compatibility
+# alias, but enforce the limit *in bytes before decoding a file*.  Checking only
+# after ``open(...).read()`` has already let a candidate force an unbounded host
+# allocation.
+_MAX_REPORT_BYTES = 8 * 1024 * 1024
+_MAX_REPORT_CHARS = _MAX_REPORT_BYTES
+_MAX_REPORT_SET_BYTES = 16 * 1024 * 1024
+_MAX_REPORT_FILES = 2_048
 
 
 def parse_junit_xml(xml_text: str) -> JUnitCounts | None:
@@ -122,12 +127,31 @@ def parse_junit_xml(xml_text: str) -> JUnitCounts | None:
 
 
 def _read_text_or_none(path: str) -> str | None:
-    """Read UTF-8 text, returning ``None`` if it cannot be read."""
+    """Read one JUnit report without ever allocating beyond its byte cap.
+
+    The report is candidate-influenced even though the pathname is judge-owned.
+    Both the metadata check and the bounded read are required: metadata can race
+    with a writer, while a bounded read alone avoids trusting stale metadata.
+    """
     try:
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+        if os.stat(path).st_size > _MAX_REPORT_BYTES:
+            return None
+        with open(path, "rb") as f:
+            raw = f.read(_MAX_REPORT_BYTES + 1)
     except OSError:
         return None
+    if len(raw) > _MAX_REPORT_BYTES:
+        return None
+    return raw.decode("utf-8", errors="replace")
+
+
+def read_junit_xml(path: str) -> str | None:
+    """Read one bounded JUnit XML document from a judge-owned path.
+
+    This public helper gives runners a safe alternative to ``open(...).read()``
+    and deliberately shares the parser's input cap.
+    """
+    return _read_text_or_none(path)
 
 
 def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
@@ -145,6 +169,8 @@ def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
     if not dirpath or not os.path.isdir(dirpath):
         return None
     passed = total = failures = errors = 0
+    report_bytes = 0
+    report_files = 0
     seen = False
     try:
         entries = sorted(os.listdir(dirpath))
@@ -155,10 +181,18 @@ def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
             continue
         path = os.path.join(dirpath, fn)
         try:
-            mode = os.lstat(path).st_mode
+            entry = os.lstat(path)
         except OSError:
             return None
-        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        if stat.S_ISLNK(entry.st_mode) or not stat.S_ISREG(entry.st_mode):
+            return None
+        report_files += 1
+        report_bytes += entry.st_size
+        if (
+            report_files > _MAX_REPORT_FILES
+            or entry.st_size > _MAX_REPORT_BYTES
+            or report_bytes > _MAX_REPORT_SET_BYTES
+        ):
             return None
         text = _read_text_or_none(path)
         if text is None:
@@ -227,4 +261,5 @@ __all__ = [
     "parse_junit_dir",
     "parse_junit_xml",
     "parse_pytest_counts",
+    "read_junit_xml",
 ]

@@ -20,6 +20,7 @@ from evoom_guard.verifiers.grading import fraction_score
 from evoom_guard.verifiers.repo_verifier import (
     RepoVerifier,
     apply_blocks_to_copy,
+    discover_local_action_dirs,
     distill_diagnostics,
     grade_repo_run,
     is_judge_autoexec,
@@ -261,6 +262,30 @@ class SafetyTests(unittest.TestCase):
         self.assertFalse(is_protected("src/app.py"))
         self.assertTrue(is_protected("src/secret.py", ("src/secret.py",)))
 
+    def test_common_test_harness_conventions_are_protected(self) -> None:
+        """Protect conventional test roots and names without broad false matches."""
+        for path in (
+            "src/__tests__/widget.js",
+            "packages/web/__tests__/button.tsx",
+            "cypress/e2e/login.ts",
+            "apps/web/cypress/e2e/checkout.helper.ts",
+            "cypress/e2e/login.cy.ts",
+            "src/login.cy.js",
+            "internal/widget_test.go",
+            "spec/models/user.rb",
+            "lib/service_spec.rb",
+        ):
+            self.assertTrue(is_protected(path), path)
+        for path in (
+            "src/__tests_helpers__/widget.js",
+            "cypress/e2e_notes/login.ts",
+            "src/login.cyberspace.ts",
+            "internal/widget_test.golang",
+            "specification/models/user.rb",
+            "lib/service_spec.ruby",
+        ):
+            self.assertFalse(is_protected(path), path)
+
     def test_protected_is_case_insensitive_without_overmatching(self) -> None:
         for path in ("TESTS/foo.py", "A/TEST/b.py", "Conftest.PY",
                      "TEST_x.py", "src/App_TEST.py"):
@@ -348,6 +373,55 @@ class SafetyTests(unittest.TestCase):
         for path in ("src/app.py", "docs/workflows.md", "github/workflows/x.yml"):
             self.assertFalse(is_protected_ci(path), path)
 
+    def test_local_action_directory_policy_protects_every_helper(self) -> None:
+        """A manifest's sibling code is as judge-owned as the manifest itself."""
+        with tempfile.TemporaryDirectory(prefix="evo_local_action_") as root:
+            os.makedirs(os.path.join(root, ".ci", "guard"))
+            os.makedirs(os.path.join(root, "nested", "action"))
+            os.makedirs(os.path.join(root, ".ci", "unreferenced"))
+            os.makedirs(os.path.join(root, ".github", "workflows"))
+            with open(os.path.join(root, ".ci", "guard", "action.yml"), "w") as f:
+                f.write("runs:\n  using: composite\n")
+            with open(os.path.join(root, "nested", "action", "action.yaml"), "w") as f:
+                f.write("runs:\n  using: composite\n")
+            with open(os.path.join(root, ".ci", "unreferenced", "action.yml"), "w") as f:
+                f.write("runs:\n  using: composite\n")
+            with open(os.path.join(root, ".github", "workflows", "ci.yml"), "w") as f:
+                f.write(
+                    "jobs:\n"
+                    "  verify:\n"
+                    "    steps:\n"
+                    "      - uses: ./.ci/guard\n"
+                    "      - uses: './nested/action' # quoted local action\n"
+                )
+
+            dirs = discover_local_action_dirs(root)
+
+        self.assertEqual(dirs, (".ci/guard", "nested/action"))
+        self.assertTrue(
+            is_protected_ci(".ci/guard/helpers/check.py", local_action_dirs=dirs)
+        )
+        self.assertTrue(
+            is_protected_ci("nested/action/run.sh", local_action_dirs=dirs)
+        )
+        self.assertFalse(
+            is_protected_ci(".ci/guardian/check.py", local_action_dirs=dirs)
+        )
+
+    def test_root_local_action_is_not_treated_as_the_whole_repository(self) -> None:
+        """A root Action manifest is protected, but it cannot freeze all source code."""
+        with tempfile.TemporaryDirectory(prefix="evo_root_action_") as root:
+            os.makedirs(os.path.join(root, ".github", "workflows"))
+            with open(os.path.join(root, "action.yml"), "w") as f:
+                f.write("runs:\n  using: composite\n")
+            with open(os.path.join(root, ".github", "workflows", "ci.yaml"), "w") as f:
+                f.write("jobs:\n  verify:\n    steps:\n      - uses: ./\n")
+            dirs = discover_local_action_dirs(root)
+
+        self.assertEqual(dirs, ())
+        self.assertTrue(is_protected_ci("action.yml"))
+        self.assertFalse(is_protected_ci("src/helper.py", local_action_dirs=dirs))
+
 
 class RewardHackRejectionTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -419,6 +493,47 @@ class RewardHackRejectionTests(unittest.TestCase):
         """Editing the CI workflow that runs the gate must be REJECTED."""
         r = self.v.verify(
             block(".github/workflows/evoguard.yml", "name: pwned\n"), self.problem
+        )
+        self.assertFalse(r.passed)
+        self.assertEqual(r.score, 0.05)
+        self.assertIn("forbidden", r.diagnostics)
+
+    def test_existing_local_action_helper_edit_is_rejected(self) -> None:
+        """The preflight discovers base Action directories before applying a patch."""
+        action_dir = os.path.join(self.root, ".ci", "guard")
+        os.makedirs(action_dir)
+        os.makedirs(os.path.join(self.root, ".github", "workflows"))
+        with open(os.path.join(action_dir, "action.yml"), "w", encoding="utf-8") as f:
+            f.write("runs:\n  using: composite\n")
+        with open(
+            os.path.join(self.root, ".github", "workflows", "evoguard.yml"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write("jobs:\n  guard:\n    steps:\n      - uses: ./.ci/guard\n")
+        r = RepoVerifier(timeout=30, allow=(".ci/guard/*",)).verify(
+            block(".ci/guard/helper.py", "print('candidate controlled')"), self.problem
+        )
+        self.assertFalse(r.passed)
+        self.assertEqual(r.score, 0.05)
+        self.assertIn("forbidden", r.diagnostics)
+
+    def test_feature_mode_cannot_add_a_test_to_a_local_action_directory(self) -> None:
+        """Feature mode never grants a candidate write access to Action helpers."""
+        action_dir = os.path.join(self.root, ".ci", "guard")
+        os.makedirs(action_dir)
+        os.makedirs(os.path.join(self.root, ".github", "workflows"))
+        with open(os.path.join(action_dir, "action.yaml"), "w", encoding="utf-8") as f:
+            f.write("runs:\n  using: composite\n")
+        with open(
+            os.path.join(self.root, ".github", "workflows", "evoguard.yml"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write("jobs:\n  guard:\n    steps:\n      - uses: ./.ci/guard\n")
+        r = RepoVerifier(timeout=30, allow_new_tests=True).verify(
+            block(".ci/guard/test_helper.py", "print('candidate controlled')"),
+            self.problem,
         )
         self.assertFalse(r.passed)
         self.assertEqual(r.score, 0.05)

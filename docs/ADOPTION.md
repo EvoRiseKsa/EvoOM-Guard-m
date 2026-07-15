@@ -17,9 +17,10 @@ From the repo you want to protect (EvoGuard is public; pin an immutable release
 tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.3"
-evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
-git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.4"
+evo-guard init --test-command "python -m pytest -q"     # writes workflow + .evoguard.json when absent
+git add .github/workflows/evoguard.yml .evoguard.json
+git commit -m "ci: add EvoGuard policy" && git push
 ```
 
 That's it. On the next PR, the Action diffs it against the base, runs your suite,
@@ -66,8 +67,11 @@ Drop a `.evoguard.json` at the repo root so you don't repeat flags:
 { "test_command": "python -m pytest -q", "protected": ["migrations/*"], "timeout": 180 }
 ```
 
-Explicit CLI flags always override it. `protected` adds globs the patch may not
-touch, on top of the built-in tests/config/auto-exec set.
+For a local or deliberately trusted non-PR invocation, explicit CLI flags can
+override it. Do **not** use that rule as a PR policy mechanism: a PR workflow is
+candidate-controlled. On `pull_request`, the Action materializes the policy from
+the verified base SHA and ignores judge-shaping `with:` inputs. `protected` adds
+globs the patch may not touch, on top of the built-in tests/config/auto-exec set.
 
 **Baseline allowlist (`allow`).**
 This applies only to adopter-defined extra `protected` globs. It cannot
@@ -93,6 +97,45 @@ Marketplace Action materializes it from the verified PR base commit. Raw `--diff
 mode never loads it from the candidate checkout: provide a trusted external
 `--config` or explicitly choose `--no-config`.
 
+### GitHub Action PR trust model
+
+The Action does not treat the workflow file in a PR as judge policy. It resolves
+the event base SHA, materializes `$BASE:.evoguard.json`, and invokes Guard with
+that temporary base-owned file. Therefore put the test command, path rules,
+limits, assurance requirements, and verifier-pack policy in `.evoguard.json`,
+not in Action `with:` fields. Candidate `with:` values that would shape the
+judge are ignored; a conflicting base ref, fail mode, or verifier-pack input
+fails closed.
+
+For a PR verifier pack, use both fields together:
+
+```json
+{
+  "test_command": ["python", "-m", "pytest", "-q"],
+  "verifier_pack": "security/org-invariants",
+  "expect_verifier_pack_sha256": "<64-hex-EVOGUARD_PACK_V2-digest>"
+}
+```
+
+The path is repository-relative. The Action archives it from the verified base
+commit into a temporary trusted directory before it runs candidate code. It
+never takes the active pack from the candidate checkout. An absent digest,
+invalid path, malformed base policy, or conflicting pack input is an error.
+
+For a high-assurance verification lane, add `"strict_harness": true` to that
+same base policy. It makes dependency/lock/compiler manifests immutable and
+requires a non-empty structured JUnit verdict, so keep routine dependency and
+toolchain upgrades in a separately reviewed maintenance lane. It is a harness
+integrity control, not a substitute for an isolated black-box judge.
+
+This trust boundary begins only once the workflow has started. Configure a
+required workflow/status check (and appropriate review or CODEOWNERS controls
+for `.github/workflows/`) so a PR cannot bypass the gate by removing or replacing
+the workflow. Keep untrusted candidate checkouts on `pull_request`, not
+`pull_request_target` with secrets. See
+[`REPOSITORY_PROTECTION.md`](REPOSITORY_PROTECTION.md) for the required GitHub
+controls and what the composite Action cannot enforce on its own.
+
 `.evoguard.json` is itself protected harness (a candidate that edits it is
 REJECTED), so it can carry the *security policy* — not just runner settings —
 as a repository-contained contract no patch can weaken:
@@ -102,15 +145,17 @@ as a repository-contained contract no patch can weaken:
   "policy_id": "org/production-strong",
   "policy_version": "1",
   "test_command": ["python", "-m", "pytest", "-q"],
-  "require_report_integrity": "same_process_candidate_writable",
-  "require_candidate_isolation": "docker"
+  "protected": ["migrations/**"],
+  "timeout": 180
 }
 ```
 
 For the stronger end-to-end `external_process_isolated` floor, invoke the gate
-with `--blackbox --blackbox-only --verifier-pack ...` (or the equivalent Action
-inputs). The default black-box composite intentionally cannot satisfy that
-floor because it also requires the weaker repo-native report channel.
+with `--blackbox --blackbox-only --verifier-pack ...`. On a PR, use the
+protected base-policy settings supported by the installed Action release; do not
+try to establish this requirement through candidate workflow inputs. The default
+black-box composite intentionally cannot satisfy that floor because it also
+requires the weaker repo-native report channel.
 
 > **Mode-consistency (fail-closed in v3.4.0):** `min_diff_coverage` and
 > `require_demonstrated_fix` run under the **subprocess judge only** today.
@@ -132,7 +177,9 @@ consumer knows exactly which policy produced a PASS (and
 `verify-verdict --expect-policy-id …` can demand it). **Fail-closed:** a
 present-but-broken config — unreadable JSON, an unknown key (a misspelled
 floor!), a wrong-typed value — stops the run with exit 2; it never silently
-degrades to weaker defaults. CLI flags still override valid config values.
+degrades to weaker defaults. Explicit CLI flags override valid config only in a
+local or otherwise trusted invocation; an Action PR does not forward
+candidate-controlled judge overrides.
 
 ## 3¾. Hardening the setup command (the "setup mutation" surface)
 
@@ -203,10 +250,11 @@ evo-guard guard . --diff patch.diff --no-config \
 ```
 
 The V2 identity binds typed directory/file paths and content; symlinks and
-special files are rejected. The expected digest can also live in
-`.evoguard.json` as `expect_verifier_pack_sha256`, or in the Action input
-`expect-verifier-pack-sha256`. The attestation records the observed digest,
-manifest and pack test counts.
+special files are rejected. The expected digest can live in `.evoguard.json` as
+`expect_verifier_pack_sha256`. For an Action PR it must accompany
+`verifier_pack` in the verified base policy; an Action input does not establish
+the pin. The attestation records the observed digest, manifest and pack test
+counts.
 
 ## 4. Supported test runners — the compatibility matrix
 
@@ -278,7 +326,7 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 - EvoGuard writes every report to the job summary. Its optional sticky PR comment
   is skipped for fork and Dependabot PRs because their `GITHUB_TOKEN` is read-only;
   a missing comment therefore cannot replace the Guard verdict with an HTTP 403.
-- Add `--isolation docker --docker-image <img>` for a **network-less, read-only**
+- Configure container isolation through the protected base policy, never through candidate workflow `with:`. It creates a network-less, read-only
   container judge (defence in depth; not a complete boundary — see
   [`GUARD.md`](GUARD.md)). The image must carry your test runner (e.g.
   `node:22-slim` for `node --test`).
@@ -295,7 +343,7 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.5.3` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.5.4` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

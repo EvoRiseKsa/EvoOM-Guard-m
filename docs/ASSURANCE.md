@@ -260,9 +260,17 @@ A configured pack is not just copied next to the candidate. Guard creates a
 snapshot outside the candidate tree, validates the canonical manifest, rejects
 symlinks/special files, and calculates a framed `EVOGUARD_PACK_V2` SHA-256 over
 typed path/content records. `--expect-verifier-pack-sha256 <64-hex>` (or the
-equivalent protected config/Action input) pins the accepted identity before
-candidate code runs. The attestation records that digest, manifest, digest
-format and pack test counts.
+equivalent protected policy value) pins the accepted identity before candidate
+code runs. The attestation records that digest, manifest, digest format and pack
+test counts.
+
+For a GitHub Action `pull_request`, the protected policy is
+`$BASE:.evoguard.json`, materialized from the event base SHA. A pack policy must
+use a repository-relative `verifier_pack` plus its 64-hex
+`expect_verifier_pack_sha256`; the Action stages that directory from the base
+revision. Candidate workflow `with:` values cannot select or pin the pack, and
+a conflicting pack input fails closed. This is a policy-source rule, not an
+assurance level: it prevents the candidate from supplying the external judge.
 
 Schema 1.11 exposes the pack lifecycle without converting policy into evidence:
 
@@ -302,17 +310,17 @@ is recorded as secrecy, not falsely as a read-only pack mount.
 the pack's external protocol tests, and both must pass. A narrow protocol test
 can therefore never hide an internal regression:
 
-```yaml
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.3      # repo suite AND external pack (composite)
-  with: { verifier-pack: ./pack, blackbox: "true",
-          require-report-integrity: same_process_candidate_writable }
-```
+For a direct or deliberately trusted invocation, configure this with the CLI
+flags shown above. In a GitHub Action PR, do not put `verifier-pack`, `blackbox`,
+or assurance settings in candidate workflow `with:`; use the protected
+base-policy fields supported by the installed Action release instead.
 
 The attestation records both results (`repo_suite_passed`,
 `repo_suite_junit_sha256`) next to the pack's. A pure-CLI/service target that has
-no in-repo suite passes `blackbox-only: "true"` to judge the pack alone.
-Set that input when requiring `external_process_isolated`; the default
-composite cannot honestly satisfy that floor.
+no in-repo suite uses `--blackbox-only` to judge the pack alone. On an Action
+PR, that choice must come from the protected base policy rather than a workflow
+input. The default composite cannot honestly satisfy an
+`external_process_isolated` floor.
 
 ## How to use it
 

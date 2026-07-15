@@ -278,6 +278,25 @@ def test_valid_composite_record_passes_all_available_claims() -> None:
     assert _check(report, "composite.phase_semantics")["status"] == "pass"
 
 
+def test_schema_1_11_accepts_optional_strict_harness_without_rejecting_old_records() -> None:
+    # Published 1.11 records omit this later additive policy fact and must stay
+    # valid.  New producer records state it explicitly and are valid too.
+    legacy = _valid_composite_record()
+    assert verify_record(legacy)["ok"] is True
+
+    strict = _valid_composite_record()
+    policy = _refresh_policy_digest(strict)
+    policy["strict_harness"] = True
+    _refresh_policy_digest(strict)
+    assert verify_record(strict)["ok"] is True
+
+    malformed = _valid_composite_record()
+    policy = _refresh_policy_digest(malformed)
+    policy["strict_harness"] = "true"
+    _refresh_policy_digest(malformed)
+    assert verify_record(malformed)["ok"] is False
+
+
 def test_real_static_guard_record_is_semantically_valid(tmp_path) -> None:
     tests = tmp_path / "tests"
     tests.mkdir()

@@ -100,12 +100,19 @@ def test_fail_on_documents_the_pr_safety_boundary() -> None:
         assert token in desc, f"fail-on description must warn about {token}"
 
 
-def test_host_setup_escape_hatch_is_explicitly_forwarded_and_documented() -> None:
+def test_host_setup_escape_hatch_is_explicitly_forwarded_only_for_trusted_runs() -> None:
     text = ACTION.read_text(encoding="utf-8")
     assert "trust-setup-on-host:" in text
     assert "INPUT_TRUST_SETUP_ON_HOST: ${{ inputs.trust-setup-on-host }}" in text
     assert 'ARGS+=(--trust-setup-on-host)' in text
     assert 'ARGS+=(--no-trust-setup-on-host)' in text
+    overrides = text[
+        text.index("# BEGIN NON_PR_WORKFLOW_OVERRIDES") : text.index(
+            "# END NON_PR_WORKFLOW_OVERRIDES"
+        )
+    ]
+    assert 'if [ "$IS_PR" != "true" ]; then' in overrides
+    assert "INPUT_TRUST_SETUP_ON_HOST" in overrides
     description = text[text.index("trust-setup-on-host:") : text.index("diff-coverage:")]
     assert "weakens" in description
     assert "subprocess" in description
@@ -118,4 +125,79 @@ def test_verifier_pack_identity_pin_is_forwarded_without_shell_interpolation() -
         "INPUT_EXPECT_VERIFIER_PACK_SHA256: "
         "${{ inputs.expect-verifier-pack-sha256 }}"
     ) in text
-    assert 'ARGS+=(--expect-verifier-pack-sha256 "$INPUT_EXPECT_VERIFIER_PACK_SHA256")' in text
+    assert (
+        'ARGS+=(--expect-verifier-pack-sha256 '
+        '"$EFFECTIVE_EXPECT_VERIFIER_PACK_SHA256")'
+    ) in text
+
+
+def test_pr_verifier_pack_is_materialized_from_the_verified_base() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    assert 'read_base_policy_string verifier_pack' in text
+    assert 'read_base_policy_string expect_verifier_pack_sha256' in text
+    assert 'EFFECTIVE_VERIFIER_PACK="$TRUSTED_POLICY_VERIFIER_PACK"' in text
+    assert (
+        'EFFECTIVE_EXPECT_VERIFIER_PACK_SHA256='
+        '"$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256"'
+    ) in text
+    assert 'git archive --format=tar "$BASE" -- "$EFFECTIVE_VERIFIER_PACK"' in text
+    assert 'TRUSTED_VERIFIER_PACK="$PACK_ROOT/$EFFECTIVE_VERIFIER_PACK"' in text
+    assert 'ARGS+=(--verifier-pack "$TRUSTED_VERIFIER_PACK")' in text
+    assert "untrusted_verifier_pack_path" in text
+    assert "untrusted_verifier_pack_override" in text
+    assert 'ARGS+=(--verifier-pack "$INPUT_VERIFIER_PACK")' not in text
+
+
+def test_pr_mode_never_forwards_candidate_judge_inputs() -> None:
+    """Workflow ``with:`` values are candidate-controlled in pull_request.
+
+    Keep every action-input override in the named trusted-only block, rather
+    than relying on a future editor to remember which individual options can
+    weaken the judge.
+    """
+    text = ACTION.read_text(encoding="utf-8")
+    args_start = text.index('ARGS=(guard --diff - --config "$BASE_POLICY_CONFIG"')
+    overrides_start = text.index("# BEGIN NON_PR_WORKFLOW_OVERRIDES", args_start)
+    overrides_end = text.index("# END NON_PR_WORKFLOW_OVERRIDES", overrides_start)
+    args_end = text.index("# Exact-revision binding", overrides_end)
+    overrides = text[overrides_start:overrides_end]
+    outside_overrides = text[args_start:overrides_start] + text[overrides_end:args_end]
+
+    assert 'if [ "$IS_PR" != "true" ]; then' in overrides
+    for input_name in (
+        "INPUT_TEST_COMMAND",
+        "INPUT_PROTECTED",
+        "INPUT_ALLOW",
+        "INPUT_ALLOW_NEW_TESTS",
+        "INPUT_ISOLATION",
+        "INPUT_DOCKER_IMAGE",
+        "INPUT_DOCKER_NETWORK",
+        "INPUT_STRICT_HARNESS",
+        "INPUT_TIMEOUT",
+        "INPUT_MEM_LIMIT",
+        "INPUT_SARIF",
+        "INPUT_BLACKBOX",
+        "INPUT_BLACKBOX_ONLY",
+        "INPUT_REQUIRE_REPORT_INTEGRITY",
+        "INPUT_REQUIRE_CANDIDATE_ISOLATION",
+        "INPUT_TRUST_SETUP_ON_HOST",
+        "INPUT_DIFF_COVERAGE",
+        "INPUT_MIN_DIFF_COVERAGE",
+        "INPUT_BASELINE_EVIDENCE",
+        "INPUT_REQUIRE_DEMONSTRATED_FIX",
+    ):
+        assert input_name in overrides
+        assert input_name not in outside_overrides
+
+    assert "candidate workflow overrides were ignored" in text
+    assert "pull_request ignores workflow inputs that shape the judge" in text
+
+
+def test_pr_mode_installs_coverage_without_trusting_candidate_coverage_inputs() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    install_start = text.index("- name: Install EvoGuard")
+    run_start = text.index("- name: Run EvoGuard", install_start)
+    install = text[install_start:run_start]
+    assert "PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in install
+    assert 'if [ -n "$PR_BASE_SHA" ]; then' in install
+    assert 'pip install -q "${{ github.action_path }}[cov]"' in install

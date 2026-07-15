@@ -35,6 +35,8 @@ _EXECUTION_STATES = _contract.EXECUTION_STATES
 _REASON_CODES = _contract.REASON_CODES
 _REASON_CONTRACT = _contract.REASON_CONTRACT
 _POLICY_KEYS = _contract.POLICY_KEYS
+_OPTIONAL_POLICY_KEYS = _contract.OPTIONAL_POLICY_KEYS
+_ALLOWED_POLICY_KEYS = _contract.ALLOWED_POLICY_KEYS
 _REQUIRED_TOP_LEVEL = _contract.REQUIRED_TOP_LEVEL
 _REQUIRED_ASSURANCE = _contract.REQUIRED_ASSURANCE
 _REQUIRED_ATTESTATION = _contract.REQUIRED_ATTESTATION
@@ -210,7 +212,9 @@ def _valid_utc_timestamp(value: object) -> bool:
 def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     missing = sorted(_POLICY_KEYS - policy.keys())
-    extra = sorted(key for key in policy if isinstance(key, str) and key not in _POLICY_KEYS)
+    extra = sorted(
+        key for key in policy if isinstance(key, str) and key not in _ALLOWED_POLICY_KEYS
+    )
     if missing:
         errors.append(f"missing keys: {', '.join(missing)}")
     if extra:
@@ -254,6 +258,8 @@ def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
     ):
         if not isinstance(policy.get(field), bool):
             errors.append(f"{field} must be a boolean")
+    if "strict_harness" in policy and not isinstance(policy["strict_harness"], bool):
+        errors.append("strict_harness must be a boolean when present")
     timeout = policy.get("timeout")
     if not _is_int(timeout) or timeout <= 0:
         errors.append("timeout must be a positive integer")
@@ -943,7 +949,7 @@ def _check_policy(
     checks.expect(
         "policy.contract",
         not policy_errors,
-        "effective_policy has the complete typed 24-key schema-1.11 contract",
+        "effective_policy has the complete typed schema-1.11 contract",
         "; ".join(policy_errors),
     )
     try:

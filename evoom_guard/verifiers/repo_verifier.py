@@ -80,9 +80,11 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from typing import Any, TypedDict, cast
 
@@ -168,6 +170,9 @@ from evoom_guard.verifiers.harness_policy import (
     _matches_globs as _matches_globs,
 )
 from evoom_guard.verifiers.harness_policy import (
+    discover_local_action_dirs as discover_local_action_dirs,
+)
+from evoom_guard.verifiers.harness_policy import (
     is_addable_new_test as is_addable_new_test,
 )
 from evoom_guard.verifiers.harness_policy import (
@@ -214,6 +219,9 @@ from evoom_guard.verifiers.junit_oracle import (
 )
 from evoom_guard.verifiers.junit_oracle import (
     parse_pytest_counts as parse_pytest_counts,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    read_junit_xml as read_junit_xml,
 )
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
@@ -362,13 +370,353 @@ class RepoProblem(TypedDict, total=False):
     tmpfs: list[str]          # container paths granted scratch (tmpfs) writes
 
 
-def _read_text_or_none(path: str) -> str | None:
-    """Read a UTF-8 file, returning ``None`` if it does not exist / cannot be read."""
+# Candidate commands control stdout/stderr.  A full ``capture_output=True`` is
+# therefore an unbounded host-memory allocation, not merely a diagnostic choice.
+# The cap is deliberately shared by both streams so a split-stream flood cannot
+# double the bound.
+_MAX_SUBPROCESS_OUTPUT_BYTES = 1 * 1024 * 1024
+_SUBPROCESS_READ_CHUNK_BYTES = 64 * 1024
+_PROCESS_TERM_GRACE_SECONDS = 1.0
+_PROCESS_KILL_GRACE_SECONDS = 3.0
+_READER_JOIN_SECONDS = 2.0
+_DOCKER_CONTROL_TIMEOUT_SECONDS = 30.0
+_DOCKER_PULL_TIMEOUT_SECONDS = 600.0
+
+
+class _SubprocessOutputLimitExceeded(RuntimeError):
+    """A candidate command exceeded the judge's bounded diagnostic channel."""
+
+    def __init__(self, limit: int | None = None) -> None:
+        self.limit = _MAX_SUBPROCESS_OUTPUT_BYTES if limit is None else limit
+        super().__init__(
+            "candidate subprocess output exceeded the "
+            f"{self.limit}-byte judge capture limit"
+        )
+
+
+class _SubprocessContainmentError(RuntimeError):
+    """The judge cannot prove that a timed-out process tree was contained."""
+
+
+class _DockerRunOutputLimit(_SubprocessOutputLimitExceeded):
+    """A bounded Docker client overflowed after optional container start."""
+
+    def __init__(
+        self,
+        output_error: _SubprocessOutputLimitExceeded,
+        *,
+        container_started: bool,
+    ) -> None:
+        super().__init__(output_error.limit)
+        self.container_started = container_started
+
+
+class _DockerRunContainmentError(_SubprocessContainmentError):
+    """Docker client/container cleanup could not be proven after a failure."""
+
+    def __init__(self, message: str, *, container_started: bool) -> None:
+        super().__init__(message)
+        self.container_started = container_started
+
+
+class _BoundedOutput:
+    """Thread-safe, combined-cap capture for two subprocess pipes."""
+
+    def __init__(self, limit: int | None = None) -> None:
+        self.limit = _MAX_SUBPROCESS_OUTPUT_BYTES if limit is None else limit
+        self._stdout = bytearray()
+        self._stderr = bytearray()
+        self._captured = 0
+        self._exceeded = False
+        self._lock = threading.Lock()
+
+    def append(self, stream: str, data: bytes) -> None:
+        with self._lock:
+            remaining = max(0, self.limit - self._captured)
+            accepted = data[:remaining]
+            if stream == "stdout":
+                self._stdout.extend(accepted)
+            else:
+                self._stderr.extend(accepted)
+            self._captured += len(accepted)
+            if len(accepted) != len(data):
+                self._exceeded = True
+
+    @property
+    def exceeded(self) -> bool:
+        with self._lock:
+            return self._exceeded
+
+    def text(self, stream: str) -> str:
+        with self._lock:
+            data = bytes(self._stdout if stream == "stdout" else self._stderr)
+        return data.decode("utf-8", errors="replace")
+
+
+def _drain_subprocess_pipe(
+    stream: Any, capture: _BoundedOutput, stream_name: str
+) -> None:
+    """Drain one pipe without retaining more than the global output cap."""
     try:
-        with open(path, encoding="utf-8") as f:
-            return f.read()
+        while True:
+            chunk = stream.read(_SUBPROCESS_READ_CHUNK_BYTES)
+            if not chunk:
+                return
+            capture.append(stream_name, chunk)
+    except (OSError, ValueError):
+        # A containment path may close a reader that was still blocked in read().
+        return
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
+def _subprocess_group_kwargs() -> dict[str, Any]:
+    """Create an independently terminable process tree on each supported host."""
+    if os.name == "posix":
+        return {"start_new_session": True}
+    if os.name == "nt":
+        return {
+            "creationflags": int(
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            )
+        }
+    return {}
+
+
+def _wait_for_exit(process: subprocess.Popen[Any], timeout: float) -> bool:
+    try:
+        process.wait(timeout=max(0.0, timeout))
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return True
+
+
+def _posix_group_exists(pid: int) -> bool:
+    try:
+        _kill_process_group(pid, 0)
+    except ProcessLookupError:
+        return False
     except OSError:
-        return None
+        # Permission / platform errors do not prove that the group is gone.
+        return True
+    return True
+
+
+def _kill_process_group(pid: int, signum: int) -> None:
+    """Call POSIX ``killpg`` without importing an unavailable Windows symbol."""
+    killpg = getattr(os, "killpg", None)
+    if not callable(killpg):
+        raise OSError("process-group cleanup is unavailable on this host")
+    killpg(pid, signum)
+
+
+def _terminate_process_tree(process: subprocess.Popen[Any]) -> bool:
+    """Terminate a launched command and prove its managed tree has gone away.
+
+    POSIX commands are session leaders, so their process group is a useful
+    containment boundary.  Windows uses ``taskkill /T`` because a console signal
+    is not reliable for arbitrary child processes.  A failure to issue or verify
+    cleanup returns ``False``; callers must report an ERROR rather than pretend a
+    normal timeout left no work behind.
+    """
+    if os.name == "posix":
+        try:
+            _kill_process_group(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            # No process remains in the dedicated group.  That proves cleanup
+            # of the tree the judge created and manages (a child that calls
+            # setsid deliberately escapes any process-group containment).
+            return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
+        except OSError:
+            return False
+
+        deadline = time.monotonic() + _PROCESS_TERM_GRACE_SECONDS
+        while time.monotonic() < deadline:
+            # Reap the root promptly.  A zombie keeps its process group visible
+            # to killpg(0), which otherwise turns a successful cleanup into a
+            # false containment failure.
+            process.poll()
+            if not _posix_group_exists(process.pid):
+                return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
+            time.sleep(0.02)
+        try:
+            _kill_process_group(
+                process.pid, getattr(signal, "SIGKILL", signal.SIGTERM)
+            )
+        except ProcessLookupError:
+            return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
+        except OSError:
+            return False
+        deadline = time.monotonic() + _PROCESS_KILL_GRACE_SECONDS
+        while time.monotonic() < deadline:
+            process.poll()
+            if not _posix_group_exists(process.pid):
+                return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
+            time.sleep(0.02)
+        return False
+
+    if os.name == "nt":
+        # /T follows descendants; /F avoids relying on a cooperative console
+        # handler.  If the root has already disappeared taskkill cannot prove
+        # whether an orphan remains, so fail closed instead of assuming success.
+        if process.poll() is not None:
+            return False
+        try:
+            killed = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=_PROCESS_KILL_GRACE_SECONDS,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return killed.returncode == 0 and _wait_for_exit(
+            process, _PROCESS_KILL_GRACE_SECONDS
+        )
+
+    return False
+
+
+def _join_pipe_readers(
+    readers: list[threading.Thread], streams: list[Any]
+) -> bool:
+    """Wait for pipe drain; force-close stuck descriptors before giving up."""
+    for reader in readers:
+        reader.join(_READER_JOIN_SECONDS)
+    if not any(reader.is_alive() for reader in readers):
+        return True
+    for stream in streams:
+        try:
+            stream.close()
+        except OSError:
+            pass
+    for reader in readers:
+        reader.join(_READER_JOIN_SECONDS)
+    return not any(reader.is_alive() for reader in readers)
+
+
+def _run_bounded_subprocess(
+    command: list[str],
+    *,
+    cwd: str | None,
+    env: dict[str, str] | None,
+    timeout: float,
+    preexec_fn: Any = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a candidate command with bounded output and process-tree cleanup.
+
+    This replaces ``subprocess.run(..., capture_output=True)`` for the native
+    judge.  Reader threads continuously drain both pipes, keeping at most
+    :data:`_MAX_SUBPROCESS_OUTPUT_BYTES` total; when the limit or deadline is
+    crossed, the complete managed process tree is stopped before an error is
+    returned. On POSIX a completed command also gets a final process-group
+    cleanup/proof, so a background descendant that closed stdio cannot outlive
+    a nominally successful run.
+    """
+    kwargs: dict[str, Any] = {
+        "cwd": cwd,
+        "env": env,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        **_subprocess_group_kwargs(),
+    }
+    if preexec_fn is not None and os.name == "posix":
+        kwargs["preexec_fn"] = preexec_fn
+    process = subprocess.Popen(command, **kwargs)
+    assert process.stdout is not None and process.stderr is not None
+    capture = _BoundedOutput()
+    streams = [process.stdout, process.stderr]
+    readers = [
+        threading.Thread(
+            target=_drain_subprocess_pipe,
+            args=(process.stdout, capture, "stdout"),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=_drain_subprocess_pipe,
+            args=(process.stderr, capture, "stderr"),
+            daemon=True,
+        ),
+    ]
+    for reader in readers:
+        reader.start()
+
+    def stop_and_prove(reason: str) -> None:
+        if not _terminate_process_tree(process):
+            raise _SubprocessContainmentError(
+                f"{reason}; could not prove subprocess-tree cleanup"
+            )
+        if not _join_pipe_readers(readers, streams):
+            raise _SubprocessContainmentError(
+                f"{reason}; subprocess output pipes did not close after cleanup"
+            )
+
+    try:
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while process.poll() is None:
+            if capture.exceeded:
+                stop_and_prove("subprocess output limit reached")
+                raise _SubprocessOutputLimitExceeded()
+            if time.monotonic() >= deadline:
+                stop_and_prove("subprocess timed out")
+                raise subprocess.TimeoutExpired(
+                    command,
+                    timeout,
+                    output=capture.text("stdout"),
+                    stderr=capture.text("stderr"),
+                )
+            time.sleep(0.02)
+
+        # A short-lived process can fill the pipe and exit before the polling
+        # loop observes it.  It is still an invalid run; kill any inherited
+        # descendants before reporting the bounded-capture error.
+        if capture.exceeded:
+            stop_and_prove("subprocess output limit reached")
+            raise _SubprocessOutputLimitExceeded()
+        if not _join_pipe_readers(readers, streams):
+            stop_and_prove("subprocess exited with live output pipes")
+            raise _SubprocessContainmentError(
+                "subprocess exited but its output pipes did not close"
+            )
+        if capture.exceeded:
+            stop_and_prove("subprocess output limit reached")
+            raise _SubprocessOutputLimitExceeded()
+        # On POSIX the launcher created a dedicated session.  A clean leader
+        # exit does not prove that a child which closed inherited stdio has
+        # gone away; it can still alter the host after a nominal PASS.  Probe
+        # and reap that PGID before treating the completed result as evidence.
+        # Windows can contain a live tree through ``taskkill /T`` on abort, but
+        # cannot reliably reconstruct a departed leader's descendants, so this
+        # post-completion proof is intentionally POSIX-only rather than turning
+        # every clean Windows result into a false cleanup failure.
+        if os.name == "posix" and not _terminate_process_tree(process):
+            raise _SubprocessContainmentError(
+                "subprocess completed but post-completion tree cleanup was not proven"
+            )
+        return subprocess.CompletedProcess(
+            command,
+            process.returncode,
+            stdout=capture.text("stdout"),
+            stderr=capture.text("stderr"),
+        )
+    except BaseException:
+        # Cancellation and unexpected reader errors must not leak the judge's
+        # own child tree.  The original exception stays authoritative.
+        if process.poll() is None:
+            _terminate_process_tree(process)
+        _join_pipe_readers(readers, streams)
+        raise
+
+
+def _read_text_or_none(path: str) -> str | None:
+    """Compatibility wrapper for bounded judge-owned JUnit report reads."""
+    return read_junit_xml(path)
 
 
 def copy_repo_tree(src: str, dst: str) -> None:
@@ -523,6 +871,24 @@ class _DockerRunTimeout(subprocess.TimeoutExpired):
         self.container_started = container_started
 
 
+def _run_docker_control(
+    command: list[str], *, timeout: float
+) -> subprocess.CompletedProcess[str]:
+    """Run a Docker control-plane command with the same bounded capture.
+
+    Docker's own diagnostics are not trustworthy enough to let ``inspect`` or
+    ``pull`` allocate unbounded memory in the judge.  These commands do not run
+    a candidate process directly, but their daemon responses are still external
+    input and can be arbitrarily large on a compromised or misconfigured host.
+    """
+    return _run_bounded_subprocess(
+        command,
+        cwd=None,
+        env=os.environ.copy(),
+        timeout=timeout,
+    )
+
+
 def _docker_container_started(name: str) -> bool:
     """Return true only when Docker proves that the named container started.
 
@@ -531,11 +897,9 @@ def _docker_container_started(name: str) -> bool:
     fail-closed: any missing/empty/zero ``StartedAt`` value means not proven.
     """
     try:  # pragma: no cover - the real command requires a docker daemon
-        inspected = subprocess.run(
+        inspected = _run_docker_control(
             ["docker", "inspect", "--format", "{{.State.StartedAt}}", name],
-            capture_output=True,
-            encoding="utf-8", errors="replace",
-            timeout=30,
+            timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
         )
     except BaseException:
         return False
@@ -547,16 +911,33 @@ def _docker_container_started(name: str) -> bool:
     )
 
 
-def _cleanup_docker_container(name: str) -> None:
-    """Best-effort cleanup that never masks the exception being propagated."""
-    try:  # pragma: no cover - requires a docker daemon
-        subprocess.run(
-            ["docker", "rm", "-f", name], capture_output=True, timeout=30
+def _docker_container_absent(name: str) -> bool:
+    """Return true only when Docker reports the named container no longer exists."""
+    try:  # pragma: no cover - the real command requires a docker daemon
+        inspected = _run_docker_control(
+            ["docker", "inspect", name], timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS
         )
     except BaseException:
-        # Cleanup is deliberately subordinate to the original BaseException
-        # (including KeyboardInterrupt/SystemExit), which must be re-raised.
-        pass
+        return False
+    return inspected.returncode != 0
+
+
+def _cleanup_docker_container(name: str) -> bool:
+    """Force-remove a named container and prove that its name is now absent.
+
+    ``docker run --rm`` normally removes a container when its client exits, but
+    an interrupted client can leave the daemon-side workload alive.  A failed
+    or unverifiable cleanup is a containment failure, not a routine timeout.
+    ``docker rm`` output is captured only through the shared bounded control
+    channel.
+    """
+    try:  # pragma: no cover - requires a docker daemon
+        _run_docker_control(
+            ["docker", "rm", "-f", name], timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS
+        )
+    except BaseException:
+        return False
+    return _docker_container_absent(name)
 
 
 class RepoVerifier:
@@ -580,6 +961,7 @@ class RepoVerifier:
         docker_runtime: str | None = None,
         trust_setup_on_host: bool = False,
         setup_output_globs: tuple[str, ...] = (),
+        strict_harness: bool = False,
     ) -> None:
         self.timeout = timeout
         self.mem_limit_mb = mem_limit_mb
@@ -606,6 +988,10 @@ class RepoVerifier:
         # setup runs inside the same requested boundary as the suite.
         self.trust_setup_on_host = trust_setup_on_host
         self.setup_output_globs = setup_output_globs
+        # Strict profile is opt-in: it makes the verifier refuse exit-only or
+        # zero-test success, and the preflight treats execution-environment
+        # manifests as immutable judge inputs.
+        self.strict_harness = strict_harness
 
     # ------------------------------------------------------------------ #
     def _limits(self):  # pragma: no cover - exercised in the child process
@@ -684,35 +1070,111 @@ class RepoVerifier:
         if self._resolved_docker_image:
             return self._resolved_docker_image
         image = str(self.docker_image or "")
-        inspect = subprocess.run(
-            ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-            capture_output=True,
-            encoding="utf-8", errors="replace",
-            timeout=60,
-        )
-        if inspect.returncode != 0:
-            pull = subprocess.run(
-                ["docker", "pull", image],
-                capture_output=True,
-                encoding="utf-8", errors="replace",
-                timeout=600,
+        try:
+            inspect = _run_docker_control(
+                ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+                timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
             )
+        except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
+            raise RuntimeError(
+                f"container image {image!r} inspection could not be safely captured: {exc}"
+            ) from exc
+        if inspect.returncode != 0:
+            try:
+                pull = _run_docker_control(
+                    ["docker", "pull", image], timeout=_DOCKER_PULL_TIMEOUT_SECONDS
+                )
+            except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
+                raise RuntimeError(
+                    f"container image {image!r} pull could not be safely captured: {exc}"
+                ) from exc
             if pull.returncode != 0:
                 raise RuntimeError(
                     f"container image {image!r} could not be resolved: "
                     + distill_diagnostics(pull.stdout + "\n" + pull.stderr)
                 )
-            inspect = subprocess.run(
-                ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-                capture_output=True,
-                encoding="utf-8", errors="replace",
-                timeout=60,
-            )
+            try:
+                inspect = _run_docker_control(
+                    ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+                    timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
+                )
+            except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
+                raise RuntimeError(
+                    f"container image {image!r} inspection could not be safely captured: {exc}"
+                ) from exc
         resolved = inspect.stdout.strip()
         if inspect.returncode != 0 or not resolved:
             raise RuntimeError(f"container image {image!r} has no resolvable image ID")
         self._resolved_docker_image = resolved
         return resolved
+
+    def _run_docker_client(
+        self, docker_cmd: list[str], name: str
+    ) -> subprocess.CompletedProcess[str]:
+        """Run one named container, bounding output and cleaning it on every abort.
+
+        Killing the Docker CLI is not enough: the daemon may keep the named
+        container alive.  We observe whether it started *before* removing it,
+        then require a successful, observable cleanup before returning any
+        timeout or output-limit result to the caller.
+        """
+        try:
+            result = _run_bounded_subprocess(
+                docker_cmd,
+                cwd=None,
+                env=os.environ.copy(),
+                timeout=self.timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            container_started = _docker_container_started(name)
+            if not _cleanup_docker_container(name):
+                raise _DockerRunContainmentError(
+                    "docker client timed out and named container cleanup was not proven",
+                    container_started=container_started,
+                ) from exc
+            raise _DockerRunTimeout(
+                exc, container_started=container_started
+            ) from exc
+        except _SubprocessOutputLimitExceeded as exc:
+            container_started = _docker_container_started(name)
+            if not _cleanup_docker_container(name):
+                raise _DockerRunContainmentError(
+                    "docker client exceeded the output limit and named container "
+                    "cleanup was not proven",
+                    container_started=container_started,
+                ) from exc
+            raise _DockerRunOutputLimit(
+                exc, container_started=container_started
+            ) from exc
+        except _SubprocessContainmentError as exc:
+            container_started = _docker_container_started(name)
+            # The native runner already could not prove client-tree cleanup;
+            # still attempt daemon-side removal before reporting the combined
+            # containment failure to the caller.
+            cleaned = _cleanup_docker_container(name)
+            suffix = "was not proven" if not cleaned else "was attempted after client failure"
+            raise _DockerRunContainmentError(
+                f"{exc}; docker named-container cleanup {suffix}",
+                container_started=container_started,
+            ) from exc
+        except BaseException:
+            # Preserve cancellation and unexpected exceptions, but never leave a
+            # named daemon workload behind merely because the client aborted.
+            _cleanup_docker_container(name)
+            raise
+        # ``--rm`` is expected to remove a normally completed container.  A
+        # non-zero client result is precisely where Docker can have failed part
+        # way through that guarantee, so demand that the name is absent before
+        # allowing the ordinary test/setup failure path to interpret the exit.
+        if result.returncode != 0:
+            container_started = _docker_container_started(name)
+            if not _cleanup_docker_container(name):
+                raise _DockerRunContainmentError(
+                    "docker client returned a non-zero exit and named container "
+                    "cleanup was not proven",
+                    container_started=container_started,
+                )
+        return result
 
     def _run_docker(
         self, base_cmd, copy, workdir, *, pack_dir=None
@@ -726,23 +1188,7 @@ class RepoVerifier:
         docker_cmd = self._docker_command(
             cmd, copy, outdir, name, report_env, pack_dir=pack_dir
         )
-        try:
-            r = subprocess.run(
-                docker_cmd, capture_output=True, encoding="utf-8", errors="replace",
-                timeout=self.timeout, env=os.environ.copy(),
-            )
-        except subprocess.TimeoutExpired as exc:
-            # The docker client can time out before the daemon has even created
-            # the container.  Inspect *before* cleanup and propagate the proof
-            # bit so callers do not turn a CLI timeout into a false runtime claim.
-            container_started = _docker_container_started(name)
-            _cleanup_docker_container(name)
-            raise _DockerRunTimeout(
-                exc, container_started=container_started
-            ) from exc
-        except BaseException:
-            _cleanup_docker_container(name)
-            raise
+        r = self._run_docker_client(docker_cmd, name)
         return host_xml, r, report_expected
 
     def _phase_isolation_evidence(
@@ -829,14 +1275,25 @@ class RepoVerifier:
 
         extra = self.protected + tuple(problem.get("protected", ()))
         allow = self.allow + tuple(problem.get("allow", ()))
+        # Local actions may execute helper files beside their manifest.  Discover
+        # their directories in the unmodified repository before candidate files
+        # are applied, then pass that base-owned policy into the pure preflight.
+        local_action_dirs = discover_local_action_dirs(repo_path)
         changed = sorted(set(file_blocks) | {pb.path for pb in patch_blocks})
         allow_new_tests = self.allow_new_tests or bool(problem.get("allow_new_tests"))
+        strict_harness = self.strict_harness or problem.get("strict_harness") is True
         new_paths = frozenset(
             p for p in changed
             if is_safe_relpath(p) and not os.path.exists(os.path.join(repo_path, p))
         )
         rejection = reject_unsafe_or_protected(
-            changed, extra, allow_new_tests=allow_new_tests, new_paths=new_paths, allow=allow,
+            changed,
+            extra,
+            allow_new_tests=allow_new_tests,
+            new_paths=new_paths,
+            allow=allow,
+            local_action_dirs=local_action_dirs,
+            strict_harness=strict_harness,
         )
         if rejection is not None:
             return rejection
@@ -844,7 +1301,13 @@ class RepoVerifier:
         # so a protected deletion is always rejected (defence in depth — Guard also
         # filters these before calling verify).
         if deleted_paths:
-            del_rejection = reject_unsafe_or_protected(deleted_paths, extra, allow=allow)
+            del_rejection = reject_unsafe_or_protected(
+                deleted_paths,
+                extra,
+                allow=allow,
+                local_action_dirs=local_action_dirs,
+                strict_harness=strict_harness,
+            )
             if del_rejection is not None:
                 return del_rejection
 
@@ -1049,27 +1512,19 @@ class RepoVerifier:
                         },
                     )
                 try:
-                    try:
-                        r_setup = subprocess.run(
+                    if setup_in_container:
+                        assert setup_name is not None
+                        r_setup = self._run_docker_client(setup_run_cmd, setup_name)
+                    else:
+                        r_setup = _run_bounded_subprocess(
                             setup_run_cmd,
                             cwd=setup_cwd,
-                            capture_output=True,
-                            encoding="utf-8", errors="replace",
-                            timeout=self.timeout,
                             env=setup_env,
+                            timeout=self.timeout,
+                            preexec_fn=(
+                                self._limits() if os.name == "posix" else None
+                            ),
                         )
-                    except subprocess.TimeoutExpired as exc:
-                        if setup_name is not None:
-                            container_started = _docker_container_started(setup_name)
-                            _cleanup_docker_container(setup_name)
-                            raise _DockerRunTimeout(
-                                exc, container_started=container_started
-                            ) from exc
-                        raise
-                    except BaseException:
-                        if setup_name is not None:
-                            _cleanup_docker_container(setup_name)
-                        raise
                 except _DockerRunTimeout as exc:
                     delivered = self.isolation if exc.container_started else "not_run"
                     trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
@@ -1095,6 +1550,78 @@ class RepoVerifier:
                             "files_changed": changed,
                             "outcome": "setup_timeout",
                             "setup_isolation": setup_isolation,
+                        },
+                    )
+                except _SubprocessOutputLimitExceeded as exc:
+                    docker_failure = isinstance(exc, _DockerRunOutputLimit)
+                    container_started = bool(
+                        getattr(exc, "container_started", True)
+                    )
+                    delivered = (
+                        self.isolation
+                        if docker_failure and container_started
+                        else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
+                    )
+                    reported_setup_isolation = (
+                        self.isolation
+                        if docker_failure and container_started
+                        else (None if docker_failure else setup_isolation)
+                    )
+                    if container_started:
+                        trace["execution_state"] = "started_incomplete"
+                    trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                        delivered,
+                        resolved_image,
+                        note=(
+                            None
+                            if container_started
+                            else "docker client output limit was reached before container start was proven"
+                        ),
+                    )
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"setup command output was rejected: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "setup_output_limit",
+                            "setup_isolation": reported_setup_isolation,
+                        },
+                    )
+                except _SubprocessContainmentError as exc:
+                    docker_failure = isinstance(exc, _DockerRunContainmentError)
+                    container_started = bool(
+                        getattr(exc, "container_started", True)
+                    )
+                    delivered = (
+                        self.isolation
+                        if docker_failure and container_started
+                        else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
+                    )
+                    reported_setup_isolation = (
+                        self.isolation
+                        if docker_failure and container_started
+                        else (None if docker_failure else setup_isolation)
+                    )
+                    if container_started:
+                        trace["execution_state"] = "started_incomplete"
+                    trace["setup_isolation_evidence"] = self._phase_isolation_evidence(
+                        delivered,
+                        resolved_image,
+                        note=(
+                            "docker container cleanup was not proven"
+                            if docker_failure
+                            else "subprocess cleanup was not proven"
+                        ),
+                    )
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"setup command containment failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "runtime_containment_error",
+                            "setup_isolation": reported_setup_isolation,
                         },
                     )
                 except subprocess.TimeoutExpired:
@@ -1286,13 +1813,11 @@ class RepoVerifier:
                     cmd, report_expected, report_env = instrument_command(base_cmd, host_xml)
                     run_env = {**env, **report_env}
                     cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
-                    r = subprocess.run(
+                    r = _run_bounded_subprocess(
                         cmd,
                         cwd=copy,
-                        capture_output=True,
-                        encoding="utf-8", errors="replace",
-                        timeout=self.timeout,
                         env=run_env,
+                        timeout=self.timeout,
                         preexec_fn=self._limits() if os.name == "posix" else None,
                     )
             except _DockerRunTimeout as exc:
@@ -1322,6 +1847,74 @@ class RepoVerifier:
                         "files_changed": changed,
                         "outcome": "test_timeout",
                         "isolation_evidence": suite_isolation_evidence,
+                        **runtime_evidence(),
+                    },
+                )
+            except _SubprocessOutputLimitExceeded as exc:
+                docker_failure = isinstance(exc, _DockerRunOutputLimit)
+                container_started = bool(getattr(exc, "container_started", True))
+                delivered = (
+                    self.isolation
+                    if docker_failure and container_started
+                    else ("not_run" if docker_failure else "subprocess")
+                )
+                if container_started:
+                    trace.update(
+                        execution_state="started_incomplete",
+                        test_command_started=True,
+                        delivered_isolation=delivered,
+                    )
+                trace["repo_suite_isolation_evidence"] = self._phase_isolation_evidence(
+                    delivered,
+                    resolved_image,
+                    note=(
+                        None
+                        if container_started
+                        else "docker client output limit was reached before container start was proven"
+                    ),
+                )
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=f"test suite output was rejected: {exc}",
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "test_output_limit",
+                        "setup_isolation": setup_isolation,
+                        **runtime_evidence(),
+                    },
+                )
+            except _SubprocessContainmentError as exc:
+                docker_failure = isinstance(exc, _DockerRunContainmentError)
+                container_started = bool(getattr(exc, "container_started", True))
+                delivered = (
+                    self.isolation
+                    if docker_failure and container_started
+                    else ("not_run" if docker_failure else "subprocess")
+                )
+                if container_started:
+                    trace.update(
+                        execution_state="started_incomplete",
+                        test_command_started=True,
+                        delivered_isolation=delivered,
+                    )
+                trace["repo_suite_isolation_evidence"] = self._phase_isolation_evidence(
+                    delivered,
+                    resolved_image,
+                    note=(
+                        "docker container cleanup was not proven"
+                        if docker_failure
+                        else "subprocess cleanup was not proven"
+                    ),
+                )
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=f"test suite containment failed: {exc}",
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "runtime_containment_error",
+                        "setup_isolation": setup_isolation,
                         **runtime_evidence(),
                     },
                 )
@@ -1470,6 +2063,18 @@ class RepoVerifier:
             verdict_source = _clean_verdict_source(
                 r.returncode, junit, report_expected=report_expected
             )
+            # The normal profile preserves compatibility with runners for which
+            # EvoGuard cannot inject JUnit.  The strict profile deliberately
+            # does not: exit code 0 with no report (or a report collecting zero
+            # cases) is not a test verdict and must never become PASS.
+            if strict_harness and (junit is None or junit.total <= 0):
+                passed = False
+                score = 0.0
+                verdict_source = None
+                output += (
+                    "\nstrict_harness requires a non-empty structured JUnit "
+                    "test verdict; exit-only/zero-test success was rejected"
+                )
             pack_tests_passed: int | None = None
             pack_tests_total: int | None = None
             outcome: str | None = (
@@ -1521,14 +2126,14 @@ class RepoVerifier:
                         instrumented = _resolve_host_command(
                             instrumented, cwd=copy, env=pack_env
                         )
-                        pack_run = subprocess.run(
+                        pack_run = _run_bounded_subprocess(
                             instrumented,
                             cwd=copy,
-                            capture_output=True,
-                            encoding="utf-8", errors="replace",
-                            timeout=self.timeout,
                             env=pack_env,
-                            preexec_fn=self._limits() if os.name == "posix" else None,
+                            timeout=self.timeout,
+                            preexec_fn=(
+                                self._limits() if os.name == "posix" else None
+                            ),
                         )
                 except _DockerRunTimeout as exc:
                     delivered = self.isolation if exc.container_started else "not_run"
@@ -1560,6 +2165,86 @@ class RepoVerifier:
                             "outcome": "test_timeout",
                             "setup_isolation": setup_isolation,
                             "isolation_evidence": suite_isolation_evidence,
+                            **runtime_evidence(),
+                        },
+                    )
+                except _SubprocessOutputLimitExceeded as exc:
+                    docker_failure = isinstance(exc, _DockerRunOutputLimit)
+                    container_started = bool(
+                        getattr(exc, "container_started", True)
+                    )
+                    delivered = (
+                        self.isolation
+                        if docker_failure and container_started
+                        else ("not_run" if docker_failure else "subprocess")
+                    )
+                    if container_started:
+                        trace.update(
+                            execution_state="started_incomplete",
+                            verifier_pack_started=True,
+                        )
+                    trace["verifier_pack_isolation_evidence"] = (
+                        self._phase_isolation_evidence(
+                            delivered,
+                            resolved_image,
+                            note=(
+                                None
+                                if container_started
+                                else "docker client output limit was reached before container start was proven"
+                            ),
+                        )
+                    )
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"verifier pack output was rejected: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "test_output_limit",
+                            "setup_isolation": setup_isolation,
+                            "isolation_evidence": (
+                                suite_isolation_evidence if container_mode else None
+                            ),
+                            **runtime_evidence(),
+                        },
+                    )
+                except _SubprocessContainmentError as exc:
+                    docker_failure = isinstance(exc, _DockerRunContainmentError)
+                    container_started = bool(
+                        getattr(exc, "container_started", True)
+                    )
+                    delivered = (
+                        self.isolation
+                        if docker_failure and container_started
+                        else ("not_run" if docker_failure else "subprocess")
+                    )
+                    if container_started:
+                        trace.update(
+                            execution_state="started_incomplete",
+                            verifier_pack_started=True,
+                        )
+                    trace["verifier_pack_isolation_evidence"] = (
+                        self._phase_isolation_evidence(
+                            delivered,
+                            resolved_image,
+                            note=(
+                                "docker container cleanup was not proven"
+                                if docker_failure
+                                else "subprocess cleanup was not proven"
+                            ),
+                        )
+                    )
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=f"verifier pack containment failed: {exc}",
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "runtime_containment_error",
+                            "setup_isolation": setup_isolation,
+                            "isolation_evidence": (
+                                suite_isolation_evidence if container_mode else None
+                            ),
                             **runtime_evidence(),
                         },
                     )

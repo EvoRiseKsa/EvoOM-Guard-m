@@ -12,6 +12,7 @@ skipped when pytest is absent.
 
 import difflib
 import importlib.util
+import json
 import os
 import shutil
 import sys
@@ -25,7 +26,11 @@ from evoom_guard.guard import (
     ERROR,
     FAIL,
     PASS,
+    REASON_NO_VERIFIABLE_CHANGES,
+    REASON_VERIFIER_PACK_INVALID,
     REJECTED,
+    _UnverifiableChangedPathsError,
+    blocks_from_dirs,
     candidate_from_dirs,
     guard,
     guard_from_diff,
@@ -91,6 +96,27 @@ class GuardGateTests(unittest.TestCase):
         r = guard(self.root, cheat)
         self.assertEqual(r.verdict, REJECTED)
         self.assertIn("sitecustomize.py", r.protected_violations)
+
+    def test_static_gate_rejects_a_helper_in_a_referenced_local_action(self) -> None:
+        """The cheap preflight must see Action helpers before any suite runs."""
+        action_dir = os.path.join(self.root, ".ci", "guard")
+        os.makedirs(os.path.join(self.root, ".github", "workflows"))
+        os.makedirs(action_dir)
+        with open(os.path.join(action_dir, "action.yml"), "w", encoding="utf-8") as f:
+            f.write("runs:\n  using: composite\n")
+        with open(os.path.join(action_dir, "check.py"), "w", encoding="utf-8") as f:
+            f.write("raise SystemExit(0)\n")
+        with open(
+            os.path.join(self.root, ".github", "workflows", "guard.yml"),
+            "w", encoding="utf-8",
+        ) as f:
+            f.write("jobs:\n  guard:\n    steps:\n      - uses: ./.ci/guard\n")
+
+        r = guard(self.root, _block(".ci/guard/check.py", "raise SystemExit(0)\n"))
+
+        self.assertEqual(r.verdict, REJECTED)
+        self.assertIn(".ci/guard/check.py", r.protected_violations)
+        self.assertFalse(r.test_command_ran)
 
     def test_editing_pom_xml_is_rejected(self) -> None:
         # a Maven Surefire <excludes> in pom.xml can deselect failing tests.
@@ -212,6 +238,89 @@ class GuardDiffTests(unittest.TestCase):
             shutil.rmtree(base, ignore_errors=True)
             shutil.rmtree(head, ignore_errors=True)
 
+    def test_blocks_from_dirs_fails_closed_for_changed_oversized_text(self) -> None:
+        """A changed >1 MB test must not disappear before the static gate."""
+        base = tempfile.mkdtemp()
+        head = tempfile.mkdtemp()
+        try:
+            for root in (base, head):
+                os.makedirs(os.path.join(root, "tests"))
+            small = "def test_still_valid():\n    assert True\n"
+            large = small + "#" + ("x" * 1_000_001) + "\n"
+            with open(os.path.join(base, "tests", "test_big.py"), "w", encoding="utf-8") as f:
+                f.write(small)
+            with open(os.path.join(head, "tests", "test_big.py"), "w", encoding="utf-8") as f:
+                f.write(large)
+
+            with self.assertRaisesRegex(ValueError, r"tests/test_big\.py"):
+                blocks_from_dirs(base, head)
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            shutil.rmtree(head, ignore_errors=True)
+
+    def test_blocks_from_dirs_refuses_a_new_empty_directory(self) -> None:
+        """An empty directory is otherwise absent from FILE-block input."""
+        base = tempfile.mkdtemp()
+        head = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(head, "tests", "new-empty"))
+
+            with self.assertRaises(_UnverifiableChangedPathsError) as raised:
+                blocks_from_dirs(base, head)
+
+            self.assertIn("new empty directory", str(raised.exception))
+            self.assertIn("tests/new-empty", str(raised.exception))
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            shutil.rmtree(head, ignore_errors=True)
+
+    def test_blocks_from_dirs_allows_a_new_directory_implied_by_a_file_block(self) -> None:
+        base = tempfile.mkdtemp()
+        head = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(head, "new_package"))
+            with open(os.path.join(head, "new_package", "module.py"), "wb") as f:
+                f.write(b"VALUE = 1\n")
+
+            blocks, deleted = blocks_from_dirs(base, head)
+
+            self.assertEqual(blocks, {"new_package/module.py": "VALUE = 1\n"})
+            self.assertEqual(deleted, [])
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            shutil.rmtree(head, ignore_errors=True)
+
+    def test_blocks_from_dirs_surfaces_deleted_empty_directories(self) -> None:
+        """Directory deletion is applied by the safe recursive deletion path."""
+        base = tempfile.mkdtemp()
+        head = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(base, "obsolete"))
+
+            blocks, deleted = blocks_from_dirs(base, head)
+
+            self.assertEqual(blocks, {})
+            self.assertEqual(deleted, ["obsolete"])
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            shutil.rmtree(head, ignore_errors=True)
+
+    def test_blocks_from_dirs_surfaces_deleted_oversized_path(self) -> None:
+        """Deletion needs no text payload, so it must remain visible to the gate."""
+        base = tempfile.mkdtemp()
+        head = tempfile.mkdtemp()
+        try:
+            os.makedirs(os.path.join(base, "tests"))
+            with open(os.path.join(base, "tests", "test_big.py"), "w", encoding="utf-8") as f:
+                f.write("#" + ("x" * 1_000_001) + "\n")
+
+            blocks, deleted = blocks_from_dirs(base, head)
+            self.assertEqual(blocks, {})
+            self.assertEqual(deleted, ["tests", "tests/test_big.py"])
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            shutil.rmtree(head, ignore_errors=True)
+
 
 class GuardDeletionTests(unittest.TestCase):
     """Deletions are gated (schema 1.1): a deleted harness file is REJECTED, and a
@@ -318,6 +427,65 @@ class GuardDiffModeTests(unittest.TestCase):
         result, _ = guard_from_diff(self.head, diff)
         self.assertEqual(result.verdict, REJECTED)
         self.assertIn("tests/test_m.py", result.protected_violations)
+
+    def test_large_test_edit_is_error_not_a_pass(self) -> None:
+        """Regression for a >1 MB test edit silently vanishing from --diff."""
+        original_test = (
+            "from pkg.m import dbl\n\n\n"
+            "def test_dbl():\n"
+            "    assert dbl(3) == 6\n"
+        )
+        large_test = original_test + "#" + ("x" * 1_000_001) + "\n"
+        with open(os.path.join(self.head, "tests", "test_m.py"), "w", encoding="utf-8") as f:
+            f.write(large_test)
+        diff = (
+            _udiff("pkg/m.py", _BUGGY_M, _FIXED_M)
+            + _udiff("tests/test_m.py", original_test, large_test)
+        )
+
+        result, _ = guard_from_diff(self.head, diff)
+
+        self.assertEqual(result.verdict, ERROR)
+        self.assertEqual(result.reason_code, REASON_NO_VERIFIABLE_CHANGES)
+        self.assertIn("tests/test_m.py", result.reason)
+        self.assertFalse(result.to_dict()["test_command_ran"])
+
+    def test_diff_verifier_pack_requires_an_identity_pin(self) -> None:
+        """An external-looking but unpinned pack is not a trusted diff oracle."""
+        pack = tempfile.mkdtemp(prefix="evo_guard_external_pack_")
+        try:
+            with open(os.path.join(pack, "test_invariant.py"), "w", encoding="utf-8") as f:
+                f.write("def test_invariant():\n    assert True\n")
+            diff = _udiff("pkg/m.py", _BUGGY_M, _FIXED_M)
+
+            result, _ = guard_from_diff(self.head, diff, verifier_pack=pack)
+
+            self.assertEqual(result.verdict, ERROR)
+            self.assertEqual(result.reason_code, REASON_VERIFIER_PACK_INVALID)
+            self.assertIn("SHA-256 pin", result.reason)
+            self.assertFalse(result.test_command_ran)
+        finally:
+            shutil.rmtree(pack, ignore_errors=True)
+
+    def test_diff_rejects_a_pinned_pack_nested_in_the_candidate_checkout(self) -> None:
+        """A SHA cannot make candidate-selected verifier bytes judge-owned."""
+        pack = os.path.join(self.head, "judge-pack")
+        os.makedirs(pack)
+        with open(os.path.join(pack, "test_invariant.py"), "w", encoding="utf-8") as f:
+            f.write("def test_invariant():\n    assert True\n")
+        diff = _udiff("pkg/m.py", _BUGGY_M, _FIXED_M)
+
+        result, _ = guard_from_diff(
+            self.head,
+            diff,
+            verifier_pack=pack,
+            expect_verifier_pack_sha256="0" * 64,
+        )
+
+        self.assertEqual(result.verdict, ERROR)
+        self.assertEqual(result.reason_code, REASON_VERIFIER_PACK_INVALID)
+        self.assertIn("inside the candidate checkout", result.reason)
+        self.assertFalse(result.test_command_ran)
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_diff_forging_stdout_cannot_fake_a_pass(self) -> None:
@@ -447,6 +615,35 @@ class GuardCliTests(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_cli_base_head_large_test_edit_fails_closed(self) -> None:
+        """The --base/--head route must report ERROR, not crash or pass."""
+        base = tempfile.mkdtemp(prefix="evo_guard_cli_base_")
+        head = tempfile.mkdtemp(prefix="evo_guard_cli_head_")
+        json_out = os.path.join(head, "guard.json")
+        try:
+            _make_repo(base)
+            shutil.copytree(base, head, dirs_exist_ok=True)
+            with open(os.path.join(head, "pkg", "m.py"), "w", encoding="utf-8") as f:
+                f.write(_FIXED_M)
+            with open(os.path.join(head, "tests", "test_m.py"), "a", encoding="utf-8") as f:
+                f.write("#" + ("x" * 1_000_001) + "\n")
+
+            rc = cli_main([
+                "guard", "--base", base, "--head", head, "--no-config", "--json", json_out,
+            ])
+
+            self.assertEqual(rc, 1)
+            with open(json_out, encoding="utf-8") as f:
+                payload = json.load(f)
+            self.assertEqual(payload["verdict"], ERROR)
+            self.assertEqual(payload["reason_code"], REASON_NO_VERIFIABLE_CHANGES)
+            self.assertEqual(payload["source"], "base/head")
+            self.assertIn("tests/test_m.py", payload["reason"])
+            self.assertFalse(payload["test_command_ran"])
+        finally:
+            shutil.rmtree(base, ignore_errors=True)
+            shutil.rmtree(head, ignore_errors=True)
+
 
 class MemLimitOptionTests(unittest.TestCase):
     """The ``--mem-limit`` CLI option threads the address-space cap to the judge.
@@ -552,6 +749,69 @@ class MemLimitOptionTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)
+
+
+class RuntimeContainmentOutcomeTests(unittest.TestCase):
+    """Runner containment failures must preserve a truthful public verdict."""
+
+    def setUp(self) -> None:
+        self.root = tempfile.mkdtemp(prefix="evo_runtime_outcome_")
+        _make_repo(self.root)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_output_cap_is_an_incomplete_error_not_a_pass_or_apply_failure(self) -> None:
+        import evoom_guard.guard as guard_mod
+        from evoom_guard.contracts import VerdictResult
+
+        real = guard_mod.RepoVerifier
+
+        class _FloodedRunner(real):  # type: ignore[misc, valid-type]
+            def verify(self, hypothesis, problem):
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics="test suite output was rejected: capture limit exceeded",
+                    artifact={"outcome": "test_output_limit", "files_changed": ["pkg/m.py"]},
+                )
+
+        guard_mod.RepoVerifier = _FloodedRunner  # type: ignore[misc]
+        try:
+            result = guard_mod.guard(self.root, FIX)
+        finally:
+            guard_mod.RepoVerifier = real  # type: ignore[misc]
+
+        self.assertEqual(result.verdict, ERROR)
+        self.assertEqual(result.reason_code, "test_timeout")
+        self.assertEqual(result.execution_state, "started_incomplete")
+        self.assertTrue(result.test_command_ran)
+
+    def test_unproven_process_tree_cleanup_is_a_distinct_runtime_error(self) -> None:
+        import evoom_guard.guard as guard_mod
+        from evoom_guard.contracts import VerdictResult
+
+        real = guard_mod.RepoVerifier
+
+        class _UncontainedRunner(real):  # type: ignore[misc, valid-type]
+            def verify(self, hypothesis, problem):
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics="test suite containment failed",
+                    artifact={"outcome": "runtime_containment_error", "files_changed": ["pkg/m.py"]},
+                )
+
+        guard_mod.RepoVerifier = _UncontainedRunner  # type: ignore[misc]
+        try:
+            result = guard_mod.guard(self.root, FIX)
+        finally:
+            guard_mod.RepoVerifier = real  # type: ignore[misc]
+
+        self.assertEqual(result.verdict, ERROR)
+        self.assertEqual(result.reason_code, "runtime_cleanup_failed")
+        self.assertEqual(result.execution_state, "started_incomplete")
+        self.assertFalse(result.test_command_ran)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,13 @@
 # Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
 # ─────────────────────────────────────────────────────────────────────────────
 # Example workflow — copy to `.github/workflows/evoguard.yml` in the repo you
-# want to protect. EvoGuard verifies each PR's source changes against the repo's
-# own tests and REJECTS any edit to the tests or their configuration.
+# want to protect. Commit a `.evoguard.json` at the repository root too, for
+# example: { "test_command": ["python", "-m", "pytest", "-q"] }.
+# On pull_request, EvoGuard reads that policy from the verified base SHA. Do NOT
+# put test-command, verifier-pack, black-box, isolation, or other judge settings
+# in `with:`: the candidate can edit this workflow, so those values are ignored.
+# Protect this workflow with a required workflow/status check and review policy;
+# a gate cannot run if a PR removes or replaces its own workflow.
 name: EvoGuard
 
 on:
@@ -21,8 +26,7 @@ jobs:
         with:
           fetch-depth: 0            # Guard needs the base commit to diff against
 
-      - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.3   # pin a release (@<sha> strictest, @main latest)
+      - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.4   # pin a release (@<sha> strictest, @main latest)
         with:
-          test-command: "python -m pytest -q"
           comment: "true"           # same-repo PR comment; forks keep the job summary
           fail-on: "any-non-pass"   # required for pull_request security gating

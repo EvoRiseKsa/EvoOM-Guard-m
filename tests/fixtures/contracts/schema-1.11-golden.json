@@ -147,6 +147,7 @@
     "trust_setup_on_host",
     "verifier_pack_required"
   ],
+  "optional_policy_keys": ["strict_harness"],
   "required_keys": {
     "top_level": [
       "assurance",

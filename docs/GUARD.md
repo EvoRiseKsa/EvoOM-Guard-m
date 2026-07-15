@@ -68,14 +68,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.3   # a release tag; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.4   # a release tag; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.3"   # a release tag — recommended
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.4"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
@@ -83,7 +83,7 @@ evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.d
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v3.5.3`** — a release tag. The recommended pin and the right choice for
+> - **`@v3.5.4`** — a release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -163,6 +163,12 @@ materialized from the base revision, or explicitly use `--no-config`. The
 Marketplace Action performs this materialization automatically from the verified
 PR base commit.
 
+When a direct `--diff` run uses a verifier pack, the pack must be outside the
+candidate checkout and its `EVOGUARD_PACK_V2` SHA-256 must be pinned with
+`--expect-verifier-pack-sha256`. A pack resolved from the candidate tree, or a
+pack without a pin, is an `ERROR` before candidate code runs. This prevents a
+patch from supplying the judge that is meant to evaluate it.
+
 - **The real working tree is never modified.** Guard reverse-applies the diff to a
   throwaway *copy*; `head_dir`/cwd is only ever read.
 - **Unsafe paths are refused, not applied.** A diff that targets an absolute path,
@@ -178,13 +184,13 @@ PR base commit.
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-`EvoRiseKsa/EvoOM-Guard-m@v3.5.3`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+`EvoRiseKsa/EvoOM-Guard-m@v3.5.4`. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.3   # pin a release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.4   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # required on pull_request runs
@@ -195,6 +201,74 @@ A composite action ships at the repo root ([`action.yml`](../action.yml)), used 
 > `FAIL` (tests genuinely failing), `TAMPERED` signature, or `ERROR` **green**.
 > It is available only for a trusted non-PR invocation where a maintainer
 > deliberately wants a narrow harness-integrity report.
+
+### Pull-request policy source (security-critical)
+
+A `pull_request` workflow file is part of the candidate merge result. Its
+`with:` values must therefore not choose the judge. On a PR, the Action takes
+the following steps instead:
+
+1. Resolves the event's base SHA and materializes
+   `$BASE:.evoguard.json` into a temporary file.
+2. Runs Guard with that materialized base policy. A missing policy is an empty
+   policy; a present but unreadable, malformed, or invalid one fails closed.
+3. Ignores candidate workflow inputs that shape the judge (`test-command`, path
+   rules, feature mode, setup/isolation, black-box, coverage, limits, and
+   assurance floors). `base-ref` may not replace the event base SHA and
+   `fail-on` must be `any-non-pass`.
+
+Only settings represented in the protected policy can take effect in a PR; a
+`with:` value never substitutes for a missing policy field.
+
+### Strict harness profile
+
+Set `"strict_harness": true` in the protected base policy when the verification
+lane must treat the execution environment itself as judge-owned. In that mode,
+dependency manifests/locks and compiler/project configuration (for example
+`requirements*.txt`, `uv.lock`, `package.json`, `tsconfig*.json`, `go.mod`, and
+`Cargo.toml`) are non-exemptible protected paths. It also rejects a nominally
+successful command unless a non-empty structured JUnit verdict is available.
+
+This is deliberately **not** the default: dependency or build-system upgrades
+need a separately reviewed maintenance path. It strengthens harness integrity;
+it does not turn a same-process repo-native judge into an external isolation
+boundary. Use the black-box profile when that stronger boundary is required.
+
+Put the policy in the base branch, for example:
+
+```json
+{
+  "test_command": ["python", "-m", "pytest", "-q"],
+  "timeout": 180,
+  "strict_harness": true
+}
+```
+
+For a verifier pack, both fields live in the same base policy and the path is a
+safe repository-relative directory:
+
+```json
+{
+  "test_command": ["python", "-m", "pytest", "-q"],
+  "verifier_pack": "security/evoguard-pack",
+  "expect_verifier_pack_sha256": "<64-hex-EVOGUARD_PACK_V2-digest>"
+}
+```
+
+The Action archives that directory from the verified base commit into a runner
+temporary directory, then passes only the staged copy to Guard. It never accepts
+a candidate-checkout pack for a PR. The pin is mandatory when a pack is set;
+missing/invalid policy data or a conflicting pack input fails closed. A matching
+`with:` pack value is not an alternate policy source.
+
+This protects policy *after the workflow starts*. It cannot make a workflow run
+if a PR removes, replaces, or disables that workflow. Require the Guard workflow
+or status check in your repository ruleset/branch protection and protect
+`.github/workflows/` with appropriate review/CODEOWNERS controls. Keep
+untrusted code on `pull_request`; do not checkout a candidate with secrets under
+`pull_request_target` to work around workflow protection. See
+[`REPOSITORY_PROTECTION.md`](REPOSITORY_PROTECTION.md) for the concrete GitHub
+controls and their remaining limits.
 
 It writes the report to the **job summary**, posts it as a **PR comment**, exposes a
 `verdict` output, and fails the step per `fail-on`. To gate only machine-made PRs,
@@ -207,7 +281,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.3"   # see Install; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.4"   # see Install; @<sha> strictest for CI
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
     git fetch --no-tags origin "$BASE"
@@ -215,11 +289,15 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
       || printf '{}\n' > "$RUNNER_TEMP/evoguard-base-policy.json"
     git diff "$BASE...HEAD" | evo-guard guard --diff - \
       --config "$RUNNER_TEMP/evoguard-base-policy.json" \
-      --test-command "python -m pytest -q" --report "$GITHUB_STEP_SUMMARY"
+      --report "$GITHUB_STEP_SUMMARY"
 ```
 
 `evo-guard guard` returns a non-zero exit on anything but `PASS`, so the step fails the
-check automatically.
+check automatically. The test command belongs in the materialized base policy;
+putting it as a literal CLI flag in a `pull_request` workflow would let the
+candidate edit the judge. This no-action pattern has the same deployment
+prerequisite as the composite Action: branch/ruleset protection must ensure the
+workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
@@ -235,6 +313,8 @@ or require a stronger boundary:
 - `--expect-verifier-pack-sha256 <digest>` — require the accepted
   `EVOGUARD_PACK_V2` content/tree identity (from `pack-doctor --json`) before any
   candidate code runs. A mismatch is `ERROR verifier_pack_identity_mismatch`.
+  For Action PRs, set this together with `verifier_pack` in the verified base
+  `.evoguard.json`; Action `with:` values do not establish this policy.
 - `--blackbox` — after the static harness gate passes, an external phase comes
   from the **judge's own pytest** over the pack, which never imports the
   candidate. That phase is

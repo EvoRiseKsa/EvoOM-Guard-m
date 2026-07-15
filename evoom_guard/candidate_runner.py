@@ -46,10 +46,19 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
+from evoom_guard.verifiers.repo_verifier import (
+    _run_bounded_subprocess,
+    _SubprocessContainmentError,
+    _SubprocessOutputLimitExceeded,
+)
+
 # Docker writes candidate container IDs here.  The directory is owned by the
 # judge and deliberately lives beside (not inside) the disposable repo copy, so
 # candidate code cannot forge cleanup targets through its mounted source tree.
 CANDIDATE_CID_DIRNAME = "candidate-container-cids"
+
+_DOCKER_CONTROL_TIMEOUT_SECONDS = 30.0
+_DOCKER_PULL_TIMEOUT_SECONDS = 600.0
 
 
 class IsolationUnavailable(RuntimeError):
@@ -58,6 +67,29 @@ class IsolationUnavailable(RuntimeError):
     Raised instead of falling back to a weaker boundary, so a verdict never
     claims isolation it did not actually run under.
     """
+
+
+def _run_docker_control(
+    command: list[str], *, timeout: float
+) -> subprocess.CompletedProcess[str]:
+    """Run a Docker control-plane command without unbounded host capture.
+
+    The Docker daemon and client diagnostics are outside the judge's trust
+    boundary.  An image pull or inspect must therefore not retain arbitrary
+    output in memory, and an interrupted Docker client must have its process
+    tree contained before the preflight can be reported as unavailable.
+    """
+    try:
+        return _run_bounded_subprocess(
+            command,
+            cwd=None,
+            env=os.environ.copy(),
+            timeout=timeout,
+        )
+    except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
+        raise IsolationUnavailable(
+            f"Docker control command could not be safely captured: {exc}"
+        ) from exc
 
 
 @dataclass
@@ -185,9 +217,9 @@ class CandidateRunner:
                 f"{self.isolation} isolation requested but the docker CLI was not found"
             )
         # Fail-closed daemon probe: no daemon → no container → no docker verdict.
-        probe = subprocess.run(
+        probe = _run_docker_control(
             ["docker", "version", "--format", "{{.Server.Version}}"],
-            capture_output=True, encoding="utf-8", errors="replace", timeout=30,
+            timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
         )
         if probe.returncode != 0:
             raise IsolationUnavailable(
@@ -278,8 +310,8 @@ class CandidateRunner:
         digest = self._image_digest(image)
         if digest is not None:
             return digest
-        pull = subprocess.run(
-            ["docker", "pull", image], capture_output=True, encoding="utf-8", errors="replace", timeout=600
+        pull = _run_docker_control(
+            ["docker", "pull", image], timeout=_DOCKER_PULL_TIMEOUT_SECONDS
         )
         if pull.returncode != 0:
             raise IsolationUnavailable(
@@ -295,9 +327,9 @@ class CandidateRunner:
 
     @staticmethod
     def _image_digest(image: str) -> str | None:
-        r = subprocess.run(
+        r = _run_docker_control(
             ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-            capture_output=True, encoding="utf-8", errors="replace", timeout=60,
+            timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
         )
         if r.returncode != 0:
             return None

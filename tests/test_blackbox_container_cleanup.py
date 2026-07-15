@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import signal
@@ -19,6 +20,7 @@ from unittest import mock
 import pytest
 
 import evoom_guard.blackbox as blackbox_module
+import evoom_guard.verifiers.repo_verifier as repo_verifier
 from evoom_guard.blackbox import run_blackbox
 from evoom_guard.candidate_runner import CANDIDATE_CID_DIRNAME, CandidateRunner
 from evoom_guard.guard import ERROR, REASON_RUNTIME_CLEANUP_FAILED, guard
@@ -34,10 +36,8 @@ class _TimedOutJudgeProcess:
     def __init__(self, primary: BaseException) -> None:
         self.primary = primary
         self.wait_calls = 0
-
-    def communicate(self, *, timeout: int) -> tuple[str, str]:
-        del timeout
-        raise self.primary
+        self.stdout = io.BytesIO()
+        self.stderr = io.BytesIO()
 
     def poll(self) -> int | None:
         return self.returncode
@@ -61,10 +61,8 @@ class _CompletedLeaderWithDescendant(_TimedOutJudgeProcess):
     def __init__(self) -> None:
         super().__init__(RuntimeError("unused"))
         self.returncode = 0
-
-    def communicate(self, *, timeout: int) -> tuple[str, str]:
-        del timeout
-        return "judge output", ""
+        self.stdout = io.BytesIO(b"judge output")
+        self.stderr = io.BytesIO()
 
 
 class _DockerEvidence:
@@ -154,7 +152,7 @@ def test_judge_timeout_kills_the_isolated_process_group_and_preserves_timeout(
 
     with pytest.raises(subprocess.TimeoutExpired):
         blackbox_module._run_judge_process(
-            ["pytest"], cwd="/judge", env={}, timeout=1
+            ["pytest"], cwd="/judge", env={}, timeout=0
         )
 
     assert popen_kwargs["start_new_session"] is True
@@ -197,6 +195,30 @@ def test_completed_leader_still_cleans_its_live_process_group(
     assert completed.returncode == 0
     assert completed.stdout == "judge output"
     assert group_signals == [int(signal.SIGTERM)]
+
+
+def test_judge_output_flood_is_bounded_and_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(repo_verifier, "_MAX_SUBPROCESS_OUTPUT_BYTES", 1024)
+
+    with pytest.raises(blackbox_module.JudgeOutputLimitError) as exc:
+        blackbox_module._run_judge_process(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys, time; "
+                    "sys.stdout.buffer.write(b'x' * 200000); "
+                    "sys.stdout.flush(); time.sleep(60)"
+                ),
+            ],
+            cwd=str(tmp_path),
+            env=dict(os.environ),
+            timeout=10,
+        )
+
+    assert exc.value.limit == 1024
 
 
 def test_surviving_group_after_sigkill_is_an_explicit_cleanup_failure(
@@ -278,6 +300,11 @@ def test_judge_cleanup_baseexception_cannot_mask_original_interrupt(
         "_terminate_judge_process_group",
         lambda _process: (_ for _ in ()).throw(SystemExit("cleanup failed")),
     )
+    monkeypatch.setattr(
+        blackbox_module.time,
+        "sleep",
+        lambda _seconds: (_ for _ in ()).throw(KeyboardInterrupt("stop judge")),
+    )
 
     with pytest.raises(KeyboardInterrupt, match="stop judge"):
         blackbox_module._run_judge_process(
@@ -348,7 +375,7 @@ def test_prepare_container_configures_judge_owned_cid_directory(tmp_path: Path) 
             "evoom_guard.candidate_runner.shutil.which", return_value="/usr/bin/docker"
         ),
         mock.patch(
-            "evoom_guard.candidate_runner.subprocess.run",
+            "evoom_guard.candidate_runner._run_docker_control",
             return_value=SimpleNamespace(returncode=0, stdout="28", stderr=""),
         ),
         mock.patch.object(CandidateRunner, "_ensure_image", return_value="sha256:pinned"),
@@ -395,7 +422,7 @@ def test_cleanup_parses_only_valid_cids_and_continues_after_error(
         present.discard(command[-1])
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
     blackbox_module._cleanup_candidate_containers(str(cidfile_dir))
 
     assert [command for command, _kwargs in calls if command[1] == "rm"] == [
@@ -403,13 +430,7 @@ def test_cleanup_parses_only_valid_cids_and_continues_after_error(
         ["docker", "rm", "-f", _CID_B],
     ]
     for _command, kwargs in calls:
-        assert kwargs == {
-            "capture_output": True,
-            "encoding": "utf-8",
-            "errors": "replace",
-            "timeout": 30,
-            "check": False,
-        }
+        assert kwargs == {"timeout": 30}
 
 
 def test_strict_cid_directory_scan_failure_is_explicit(
@@ -445,7 +466,7 @@ def test_known_absent_container_is_a_success_even_when_rescan_is_empty(
         assert command[1] == "ps"
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
     blackbox_module._cleanup_candidate_containers(
         str(cidfile_dir),
         strict=True,
@@ -454,6 +475,25 @@ def test_known_absent_container_is_a_success_even_when_rescan_is_empty(
 
     assert len(calls) == 1
     assert calls[0][-1] == f"id={_CID_A}"
+
+
+def test_strict_cleanup_rejects_docker_control_output_overflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cidfile_dir = tmp_path / CANDIDATE_CID_DIRNAME
+    cidfile_dir.mkdir()
+    (cidfile_dir / "candidate.cid").write_text(_CID_A, encoding="ascii")
+
+    def overflow(*_args: object, **_kwargs: object) -> None:
+        raise blackbox_module._SubprocessOutputLimitExceeded(128)
+
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", overflow)
+
+    with pytest.raises(
+        blackbox_module.CandidateContainerCleanupError,
+        match="could not prove absence",
+    ):
+        blackbox_module._cleanup_candidate_containers(str(cidfile_dir), strict=True)
 
 
 @pytest.mark.parametrize("rescan_failure", ["empty", "exception"])
@@ -496,7 +536,7 @@ def test_observed_cid_cannot_be_forgotten_before_public_pass(
     monkeypatch.setattr(CandidateRunner, "prepare", _prepare_with_cid)
     monkeypatch.setattr(blackbox_module, "_run_judge_process", _completed_judge)
     monkeypatch.setattr(blackbox_module, "_candidate_container_ids", changing_scan)
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
 
     raw = run_blackbox(
         str(repo), candidate, str(pack), isolation="docker", docker_image="image"
@@ -548,7 +588,7 @@ def test_timeout_force_removes_candidate_container(
 
     monkeypatch.setattr(CandidateRunner, "prepare", _prepare_with_cid)
     monkeypatch.setattr(blackbox_module, "_run_judge_process", timed_out_judge)
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
     monkeypatch.setattr(blackbox_module.time, "sleep", lambda _seconds: None)
 
     result = run_blackbox(
@@ -575,7 +615,7 @@ def test_normal_judge_cleanup_failure_cannot_return_pass(
 
     monkeypatch.setattr(CandidateRunner, "prepare", _prepare_with_cid)
     monkeypatch.setattr(blackbox_module, "_run_judge_process", _completed_judge)
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
 
     result = run_blackbox(
         str(repo), candidate, str(pack), timeout=1, isolation="docker"
@@ -608,7 +648,7 @@ def test_normal_judge_cleanup_success_preserves_result(
 
     monkeypatch.setattr(CandidateRunner, "prepare", _prepare_with_cid)
     monkeypatch.setattr(blackbox_module, "_run_judge_process", _completed_judge)
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
 
     result = run_blackbox(
         str(repo), candidate, str(pack), timeout=1, isolation="docker"
@@ -638,7 +678,7 @@ def test_keyboard_interrupt_is_preserved_after_cleanup_failure(
 
     monkeypatch.setattr(CandidateRunner, "prepare", _prepare_with_cid)
     monkeypatch.setattr(blackbox_module, "_run_judge_process", interrupted_judge)
-    monkeypatch.setattr(blackbox_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(blackbox_module, "_run_docker_control", fake_run)
     monkeypatch.setattr(blackbox_module.time, "sleep", lambda _seconds: None)
 
     with pytest.raises(KeyboardInterrupt, match="stop the judge"):

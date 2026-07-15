@@ -38,6 +38,7 @@ IMPORTED_SURFACE = {
     "_setup_fidelity_snapshot",
     "apply_blocks_to_copy",
     "copy_repo_tree",
+    "discover_local_action_dirs",
     "detect_tamper",
     "distill_diagnostics",
     "grade_repo_run",
@@ -92,6 +93,7 @@ def test_split_helpers_are_legacy_reexports() -> None:
         ),
         harness_policy: (
             "_matches_globs",
+            "discover_local_action_dirs",
             "is_addable_new_test",
             "is_allowlist_exemptible",
             "is_judge_autoexec",
@@ -145,6 +147,7 @@ def test_important_call_shapes_remain_compatible() -> None:
         "_setup_fidelity_snapshot": (("repo", ()), {"baseline": None}),
         "apply_blocks_to_copy": (("repo", {}, []), {}),
         "copy_repo_tree": (("source", "destination"), {}),
+        "discover_local_action_dirs": (("repo",), {}),
         "detect_tamper": ((0, None), {"report_expected": False}),
         "distill_diagnostics": (("output",), {"max_chars": 100}),
         "grade_repo_run": ((0, None), {"report_expected": False}),

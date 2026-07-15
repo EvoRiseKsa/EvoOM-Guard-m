@@ -42,6 +42,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -90,12 +91,18 @@ from evoom_guard.verdict_contract_v1_11 import (
     SCHEMA_VERSION,
     TAMPERED,
 )
-from evoom_guard.verifiers.harness_policy import is_allowlist_exemptible
+from evoom_guard.verifiers.harness_policy import (
+    discover_local_action_dirs,
+    is_allowlist_exemptible,
+)
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
     _matches_globs,
     _resolve_host_command,
+    _run_bounded_subprocess,
+    _SubprocessContainmentError,
+    _SubprocessOutputLimitExceeded,
     copy_repo_tree,
     is_addable_new_test,
     is_judge_autoexec,
@@ -191,8 +198,14 @@ _ISOLATION_RANK = {"subprocess": 0, "docker": 1, "gvisor": 2}
 # setup step must NOT be mislabelled as "the patch did not apply".
 _OUTCOME_REASON = {
     "test_timeout": (FAIL, REASON_TEST_TIMEOUT),
+    # The public schema intentionally has no separate output-cap reason.  An
+    # output flood leaves the test phase incomplete for the same reason a
+    # timeout does: the judge could not obtain a bounded, trustworthy verdict.
+    "test_output_limit": (ERROR, REASON_TEST_TIMEOUT),
     "setup_timeout": (ERROR, REASON_SETUP_TIMEOUT),
+    "setup_output_limit": (ERROR, REASON_SETUP_TIMEOUT),
     "setup_failed": (ERROR, REASON_SETUP_FAILED),
+    "runtime_containment_error": (ERROR, REASON_RUNTIME_CLEANUP_FAILED),
     "isolation_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
     "runtime_identity_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
     "pack_identity_mismatch": (ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH),
@@ -400,6 +413,7 @@ def guard(
     policy_version: str | None = None,
     baseline_evidence: bool = False,
     require_demonstrated_fix: bool = False,
+    strict_harness: bool = False,
     file_blocks: dict[str, str] | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
@@ -466,6 +480,8 @@ def guard(
         raise ValueError("timeout must be a positive integer")
     if type(mem_limit_mb) is not int or mem_limit_mb < 0:
         raise ValueError("mem_limit_mb must be a non-negative integer")
+    if type(strict_harness) is not bool:
+        raise ValueError("strict_harness must be a boolean")
     # The frozen 1.11 policy contract names these two combinations
     # contradictory ("blackbox_only requires blackbox"; "an expected pack
     # digest requires verifier_pack_required"), so any attestation echoing
@@ -506,6 +522,7 @@ def guard(
             min_diff_coverage=min_diff_coverage,
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
             policy_id=policy_id, policy_version=policy_version,
         )
         return GuardResult(
@@ -550,25 +567,42 @@ def guard(
         p for p in changed
         if is_safe_relpath(p) and not os.path.exists(os.path.join(repo_path, p))
     )
+    # A trusted workflow may invoke a local Action whose helper files live
+    # beside action.yml.  Discover those paths from the base tree before any
+    # candidate files are applied so the static gate—not only RepoVerifier—
+    # rejects edits to the Action implementation.
+    local_action_dirs = discover_local_action_dirs(repo_path)
 
     def _is_violation(p: str) -> bool:
         if p == VERIFIER_PACK_DIR or p.startswith(VERIFIER_PACK_DIR + "/"):
             return True  # the judge-owned pack mount point — never writable
         if is_judge_autoexec(p):
             return True  # auto-exec runs in the judge process — never exempt
+        # Strict dependency/compiler manifests are checked before user-defined
+        # globs, so an ``allow`` entry cannot weaken this opt-in profile.
+        if is_protected_config(p, strict_harness=strict_harness) or is_protected_ci(
+            p, local_action_dirs=local_action_dirs
+        ):
+            return True
         # Built-in judge-owned paths are never allowlist-exempt. A PR workflow is
         # part of the candidate in GitHub Actions, so letting it configure an
         # allowlist for tests/config/CI would let it rewrite its own judge.
         if is_protected(p, protected):
             if allow_new_tests and is_addable_new_test(
-                p, protected, is_new=p in new_paths
+                p,
+                protected,
+                is_new=p in new_paths,
+                local_action_dirs=local_action_dirs,
+                strict_harness=strict_harness,
             ):
                 return False
-            if not is_allowlist_exemptible(p):
+            if not is_allowlist_exemptible(
+                p,
+                local_action_dirs=local_action_dirs,
+                strict_harness=strict_harness,
+            ):
                 return True
             return not _matches_globs(p, allow)
-        if is_protected_config(p) or is_protected_ci(p):
-            return True
         return False
 
     # A deleted path is never "new", so a protected deletion is always a violation
@@ -590,6 +624,8 @@ def guard(
         problem["allow"] = list(allow)
     if allow_new_tests:
         problem["allow_new_tests"] = True
+    if strict_harness:
+        problem["strict_harness"] = True
     if safe_deleted:
         problem["deleted"] = safe_deleted
     if verifier_pack:
@@ -623,6 +659,7 @@ def guard(
                 min_diff_coverage=min_diff_coverage,
                 baseline_evidence=baseline_evidence,
                 require_demonstrated_fix=require_demonstrated_fix,
+                strict_harness=strict_harness,
                 policy_id=policy_id, policy_version=policy_version,
             )
             return GuardResult(
@@ -757,6 +794,7 @@ def guard(
                 docker_network=docker_network,
                 trust_setup_on_host=trust_setup_on_host,
                 setup_output_globs=setup_output_globs,
+                strict_harness=strict_harness,
             ).verify(candidate, repo_problem)
 
         repo_art = repo_verdict.artifact if repo_verdict is not None else {}
@@ -985,6 +1023,7 @@ def guard(
             min_diff_coverage=min_diff_coverage,
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
             policy_id=policy_id, policy_version=policy_version,
         )
         return GuardResult(
@@ -1075,6 +1114,7 @@ def guard(
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             trust_setup_on_host=trust_setup_on_host,
             setup_output_globs=setup_output_globs,
+            strict_harness=strict_harness,
         ).verify(candidate, problem)
         art = verdict.artifact or {}
         diagnostics = verdict.diagnostics or ""
@@ -1220,6 +1260,7 @@ def guard(
             repo_path, test_command=test_command, setup_command=setup_command,
             setup_output_globs=setup_output_globs,
             timeout=timeout, mem_limit_mb=mem_limit_mb,
+            strict_harness=strict_harness,
         )
         if baseline_info.get("verdict") == "NO_CLEAN_VERDICT":
             baseline_info["repair_effect"] = "unmeasured"
@@ -1255,19 +1296,30 @@ def guard(
             )
 
     if run_suite:
+        incomplete_outcomes = {
+            "test_timeout",
+            "test_output_limit",
+            "setup_timeout",
+            "setup_output_limit",
+            "runtime_containment_error",
+        }
         execution_state = str(
             art.get(
                 "execution_state",
                 EXECUTION_COMPLETED
                 if art.get("verdict_source")
                 else EXECUTION_STARTED_INCOMPLETE
-                if art.get("outcome") == "test_timeout"
+                if art.get("outcome") in incomplete_outcomes
                 else EXECUTION_NOT_STARTED,
             )
         )
         execution_phase = str(art.get("execution_phase", "repo_suite"))
         test_command_started = bool(
-            art.get("test_command_started", art.get("verdict_source") is not None)
+            art.get(
+                "test_command_started",
+                art.get("verdict_source") is not None
+                or art.get("outcome") in {"test_timeout", "test_output_limit"},
+            )
         )
         recorded_isolation = str(
             art.get(
@@ -1321,6 +1373,7 @@ def guard(
             min_diff_coverage=min_diff_coverage,
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
             policy_id=policy_id, policy_version=policy_version,
         ), art={
             **art,
@@ -1397,6 +1450,7 @@ def _run_baseline_suite(
     setup_output_globs: tuple[str, ...],
     timeout: int,
     mem_limit_mb: int,
+    strict_harness: bool,
 ) -> dict[str, Any]:
     """Run the repo's suite on a PRISTINE copy (no candidate) — the baseline.
 
@@ -1412,15 +1466,23 @@ def _run_baseline_suite(
     from evoom_guard.verifiers.repo_verifier import (
         RepoVerifier,
         SetupFidelityError,
+        _run_bounded_subprocess,
         _setup_fidelity_changes,
         _setup_fidelity_snapshot,
+        _SubprocessContainmentError,
+        _SubprocessOutputLimitExceeded,
         detect_tamper,
         grade_repo_run,
         parse_junit_dir,
         parse_junit_xml,
+        read_junit_xml,
     )
 
-    rv = RepoVerifier(timeout=timeout, mem_limit_mb=mem_limit_mb)
+    rv = RepoVerifier(
+        timeout=timeout,
+        mem_limit_mb=mem_limit_mb,
+        strict_harness=strict_harness,
+    )
     workdir = _tempfile.mkdtemp(prefix="evo_baseline_")
     copy = os.path.join(workdir, "repo")
     try:
@@ -1433,14 +1495,26 @@ def _run_baseline_suite(
                 setup_cmd = _resolve_host_command(
                     list(setup_command), cwd=copy, env=setup_env
                 )
-                r_setup = subprocess.run(
-                    setup_cmd, cwd=copy, capture_output=True,
-                    encoding="utf-8", errors="replace", timeout=timeout, env=setup_env,
+                # Baseline evidence is still candidate-adjacent execution: its
+                # setup command and suite must not regain an unbounded stdout /
+                # stderr channel merely because they run on the pristine tree.
+                r_setup = _run_bounded_subprocess(
+                    setup_cmd,
+                    cwd=copy,
+                    env=setup_env,
+                    timeout=timeout,
+                    preexec_fn=rv._limits() if os.name == "posix" else None,
                 )
                 setup_after = _setup_fidelity_snapshot(
                     copy, setup_output_globs, baseline=setup_before
                 )
-            except (OSError, SetupFidelityError, subprocess.TimeoutExpired):
+            except (
+                OSError,
+                SetupFidelityError,
+                _SubprocessContainmentError,
+                _SubprocessOutputLimitExceeded,
+                subprocess.TimeoutExpired,
+            ):
                 return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
                         "tests_total": None, "setup_fidelity": "unverified"}
             if r_setup.returncode != 0:
@@ -1463,20 +1537,26 @@ def _run_baseline_suite(
         run_env = {**env, **report_env}
         cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
         try:
-            r = subprocess.run(
-                cmd, cwd=copy, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+            r = _run_bounded_subprocess(
+                cmd,
+                cwd=copy,
                 env=run_env,
                 preexec_fn=rv._limits() if os.name == "posix" else None,
+                timeout=timeout,
             )
-        except (OSError, subprocess.TimeoutExpired):
+        except (
+            OSError,
+            _SubprocessContainmentError,
+            _SubprocessOutputLimitExceeded,
+            subprocess.TimeoutExpired,
+        ):
             return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
                     "tests_total": None}
-        xml_text = ""
-        try:
-            with open(host_xml, encoding="utf-8") as f:
-                xml_text = f.read()
-        except OSError:
-            pass
+        # The report path is judge-owned, but its contents are produced by the
+        # command being judged.  Read it through the same byte-bounded helper as
+        # the main RepoVerifier path; a missing, oversized, or racing report is
+        # no clean baseline evidence.
+        xml_text = read_junit_xml(host_xml) or ""
         junit = parse_junit_xml(xml_text)
         if junit is None:
             junit = parse_junit_dir(host_xml + ".d")
@@ -1484,7 +1564,10 @@ def _run_baseline_suite(
             r.returncode, junit, report_expected=report_expected
         )
         tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
-        if tampered or (junit is None and report_expected):
+        if tampered or (junit is None and report_expected) or (
+            strict_harness
+            and (not report_expected or junit is None or junit.total <= 0)
+        ):
             return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": tp, "tests_total": tt}
         return {
             "verdict": "PASS" if passed else "FAIL",
@@ -1533,7 +1616,8 @@ def _effective_policy(
     blackbox: bool, blackbox_only: bool,
     require_report_integrity: str | None, require_candidate_isolation: str | None,
     min_diff_coverage: float | None, baseline_evidence: bool,
-    require_demonstrated_fix: bool, policy_id: str | None, policy_version: str | None,
+    require_demonstrated_fix: bool, strict_harness: bool,
+    policy_id: str | None, policy_version: str | None,
 ) -> dict[str, Any]:
     """The COMPLETE canonical policy that shaped this judgment (1.7).
 
@@ -1572,6 +1656,9 @@ def _effective_policy(
         "min_diff_coverage": min_diff_coverage,
         "baseline_evidence": baseline_evidence,
         "require_demonstrated_fix": require_demonstrated_fix,
+        # Additive schema-1.11 policy field: absent means false when verifying
+        # older published records, while all new producer records state it.
+        "strict_harness": strict_harness,
         "policy_id": policy_id,
         "policy_version": policy_version,
     }
@@ -2007,27 +2094,92 @@ def _assurance_profile(
     }
 
 
+@dataclass(frozen=True)
+class _TreeEntry:
+    """A non-ignored filesystem entry used by ``blocks_from_dirs``.
+
+    Metadata is retained even for entries that cannot become text edit blocks.
+    Otherwise a changed oversized or binary harness file could disappear before
+    the static gate saw it.
+    """
+
+    full_path: str
+    kind: str
+    mode: int | None
+    size: int | None
+    link_target: str | None = None
+    problem: str | None = None
+
+
+class _UnverifiableChangedPathsError(ValueError):
+    """A base/head change cannot be represented safely as Guard file blocks."""
+
+    def __init__(self, problems: list[tuple[str, str]]) -> None:
+        self.problems = tuple(problems)
+        listed = "; ".join(f"{path}: {reason}" for path, reason in problems)
+        super().__init__(
+            "changed path(s) cannot be safely represented for verification "
+            f"({listed})"
+        )
+
+
 def blocks_from_dirs(
     base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000
 ) -> tuple[dict[str, str], list[str]]:
     """Diff a base and head checkout into a STRUCTURED candidate.
 
-    Returns ``({relpath: new_content}, deleted)`` for every file added or
-    modified in ``head`` relative to ``base`` (skipping ``.git`` and the standard
-    ignored dirs); ``deleted`` lists files present in base but absent in head.
-    Binary/oversized files are skipped. This mapping is the authoritative
+    Returns ``({relpath: new_content}, deleted)`` for every changed regular text
+    file (skipping ``.git`` and the standard ignored dirs); ``deleted`` lists all
+    paths present in base but absent in head, including directories and
+    large/binary deletions. A changed path that cannot be represented faithfully
+    (oversized, binary, unreadable, symlink/special, mode-only, or a new empty
+    directory) raises fail-closed instead of disappearing from the candidate.
+    This mapping is the authoritative
     candidate for the dirs/diff path — it never round-trips through the
     ``<<<FILE>>>`` text format, so content containing literal block markers
     survives intact.
     """
-    base_files = _walk_text_files(base_dir, max_bytes)
-    head_files = _walk_text_files(head_dir, max_bytes)
+    if max_bytes < 0:
+        raise ValueError("max_bytes must be non-negative")
+
+    base_entries = _walk_tree_entries(base_dir)
+    head_entries = _walk_tree_entries(head_dir)
     blocks: dict[str, str] = {}
-    for rel in sorted(head_files):
-        new = head_files[rel]
-        if base_files.get(rel) != new:  # added or modified
-            blocks[rel] = new
-    deleted = sorted(set(base_files) - set(head_files))
+    deleted = sorted(set(base_entries) - set(head_entries))
+    problems: list[tuple[str, str]] = []
+
+    for rel in sorted(head_entries):
+        head = head_entries[rel]
+        base = base_entries.get(rel)
+        # Writing a file creates its parent directories, so a new directory
+        # with a regular-file descendant is faithfully implied by ``blocks``.
+        # Git cannot serialize an empty directory through the FILE-block
+        # format, however; accepting it would recreate the old silent-drop
+        # class of bypass for filesystem-sensitive projects.
+        if head.kind == "directory" and base is None:
+            if not _directory_has_regular_descendant(head_entries, rel):
+                problems.append((rel, "new empty directory cannot be represented"))
+            continue
+        changed, comparison_problem = _entries_changed(base, head)
+        if comparison_problem:
+            problems.append((rel, comparison_problem))
+            continue
+        if not changed:
+            continue
+        if head.kind != "regular":
+            problems.append((rel, _entry_problem(head)))
+            continue
+        try:
+            blocks[rel] = _read_changed_text(head, max_bytes)
+        except OSError as exc:
+            problems.append((rel, f"cannot read changed file ({exc.strerror or exc})"))
+        except UnicodeDecodeError:
+            problems.append((rel, "changed file is not valid UTF-8 text"))
+        except ValueError as exc:
+            problems.append((rel, str(exc)))
+
+    if problems:
+        raise _UnverifiableChangedPathsError(problems)
     return blocks, deleted
 
 
@@ -2048,22 +2200,162 @@ def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_
     return text, deleted
 
 
-def _walk_text_files(root: str, max_bytes: int) -> dict[str, str]:
-    out: dict[str, str] = {}
+def _walk_tree_entries(root: str) -> dict[str, _TreeEntry]:
+    """Return every non-ignored path without dropping non-text entries."""
+    out: dict[str, _TreeEntry] = {}
     ignore = set(COPY_IGNORE) | {".git"}
-    for dirpath, dirnames, filenames in os.walk(root):
+    def walk_error(exc: OSError) -> None:
+        # ``os.walk`` otherwise silently skips an unreadable directory. Keep a
+        # sentinel so a change cannot vanish merely because it became
+        # inaccessible between the base/head walks.
+        if not exc.filename:
+            return
+        try:
+            rel = os.path.relpath(exc.filename, root).replace(os.sep, "/")
+        except ValueError:
+            return
+        if rel in (".", "") or rel.startswith("../"):
+            return
+        out[rel] = _TreeEntry(
+            exc.filename, "unreadable", None, None,
+            problem=f"cannot walk directory ({exc.strerror or exc})",
+        )
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error):
         dirnames[:] = [d for d in dirnames if d not in ignore]
+        traversable_dirs: list[str] = []
+        for dirname in dirnames:
+            full = os.path.join(dirpath, dirname)
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
+            entry = _tree_entry(full)
+            out[rel] = entry
+            # ``os.walk`` normally avoids symlink recursion, but explicitly
+            # removing every non-directory protects against platform-specific
+            # reparse/special behaviour and prevents an escape on followlinks.
+            if entry.kind == "directory":
+                traversable_dirs.append(dirname)
+        dirnames[:] = traversable_dirs
         for fn in filenames:
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root).replace(os.sep, "/")
-            try:
-                if os.path.getsize(full) > max_bytes:
-                    continue
-                with open(full, encoding="utf-8") as f:
-                    out[rel] = f.read()
-            except (OSError, UnicodeDecodeError):
-                continue  # binary or unreadable — not a text patch target
+            out[rel] = _tree_entry(full)
     return out
+
+
+def _tree_entry(full_path: str) -> _TreeEntry:
+    """Describe a path without following a symlink or reading its payload."""
+    try:
+        info = os.lstat(full_path)
+    except OSError as exc:
+        return _TreeEntry(
+            full_path, "unreadable", None, None,
+            problem=f"cannot stat path ({exc.strerror or exc})",
+        )
+
+    mode = stat.S_IMODE(info.st_mode)
+    if stat.S_ISREG(info.st_mode):
+        return _TreeEntry(full_path, "regular", mode, int(info.st_size))
+    if stat.S_ISDIR(info.st_mode):
+        return _TreeEntry(full_path, "directory", mode, None)
+    if stat.S_ISLNK(info.st_mode):
+        try:
+            return _TreeEntry(
+                full_path, "symlink", mode, None, os.readlink(full_path)
+            )
+        except OSError as exc:
+            return _TreeEntry(
+                full_path, "unreadable", mode, None,
+                problem=f"cannot read symlink ({exc.strerror or exc})",
+            )
+    return _TreeEntry(
+        full_path, "special", mode, None,
+        problem="path is not a regular file or symlink",
+    )
+
+
+def _entries_changed(
+    base: _TreeEntry | None, head: _TreeEntry
+) -> tuple[bool, str | None]:
+    """Return whether a path changed and whether that fact is unverifiable."""
+    if base is None:
+        return True, None
+    if base.kind == "unreadable":
+        return True, _entry_problem(base)
+    if head.kind == "unreadable":
+        return True, _entry_problem(head)
+    if base.kind != head.kind:
+        return True, f"path type changed from {base.kind} to {head.kind}"
+    if base.mode != head.mode:
+        return True, "path mode changed; Guard file blocks cannot preserve modes"
+    if head.kind == "regular":
+        if base.size != head.size:
+            return True, None
+        try:
+            return (not _regular_files_equal(base.full_path, head.full_path)), None
+        except OSError as exc:
+            return True, f"cannot compare file content ({exc.strerror or exc})"
+    if head.kind == "symlink":
+        return base.link_target != head.link_target, None
+    if head.kind == "directory":
+        # Existing directories carry no independent payload. Their descendant
+        # file blocks (or explicit deletion paths) reconstruct membership; the
+        # only unrepresentable directory state is a mode change above.
+        return False, None
+    # A special path is never a safe candidate representation, even if two
+    # filesystem objects superficially look alike.
+    return True, _entry_problem(head)
+
+
+def _regular_files_equal(base_path: str, head_path: str) -> bool:
+    """Compare two regular files exactly while keeping memory bounded."""
+    with open(base_path, "rb") as base_file, open(head_path, "rb") as head_file:
+        while True:
+            left = base_file.read(1024 * 1024)
+            right = head_file.read(1024 * 1024)
+            if left != right:
+                return False
+            if not left:
+                return True
+
+
+def _entry_problem(entry: _TreeEntry) -> str:
+    if entry.problem:
+        return entry.problem
+    if entry.kind == "symlink":
+        return "path is a symlink, which Guard file blocks cannot represent"
+    if entry.kind == "special":
+        return "path is not a regular file"
+    return "path cannot be represented safely"
+
+
+def _directory_has_regular_descendant(
+    entries: dict[str, _TreeEntry], directory: str
+) -> bool:
+    """Whether FILE blocks implicitly recreate a newly added directory."""
+    prefix = directory.rstrip("/") + "/"
+    return any(
+        path.startswith(prefix) and entry.kind == "regular"
+        for path, entry in entries.items()
+    )
+
+
+def _read_changed_text(entry: _TreeEntry, max_bytes: int) -> str:
+    """Read one changed regular text file, failing before it can be dropped."""
+    if entry.size is None:
+        raise ValueError("changed file has no stable size")
+    if entry.size > max_bytes:
+        raise ValueError(
+            f"changed file is {entry.size} bytes, above the {max_bytes}-byte limit"
+        )
+    # Read one extra byte so a concurrent enlargement cannot turn into a silent
+    # truncation after the lstat above. Candidate memory is still bounded.
+    with open(entry.full_path, "rb") as f:
+        data = f.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError(
+            f"changed file grew above the {max_bytes}-byte limit while being read"
+        )
+    return data.decode("utf-8")
 
 
 def _reverse_apply(work_dir: str, diff_file: str) -> bool:
@@ -2090,34 +2382,95 @@ def _reverse_apply(work_dir: str, diff_file: str) -> bool:
         if shutil.which(cmd[0]) is None:
             continue
         try:
-            r = subprocess.run(
+            # A malformed diff can make ``git apply``/``patch`` print an
+            # arbitrarily large diagnostic. This is still untrusted input, so
+            # use the same bounded capture and process-tree cleanup primitive
+            # as the actual judge rather than ``capture_output=True``.
+            r = _run_bounded_subprocess(
                 cmd,
                 cwd=work_dir,
-                capture_output=True,
-                encoding="utf-8", errors="replace",
                 timeout=60,
                 env=git_env if cmd[0] == "git" else None,
             )
-        except (OSError, subprocess.TimeoutExpired):
+        except (
+            OSError,
+            subprocess.TimeoutExpired,
+            _SubprocessOutputLimitExceeded,
+            _SubprocessContainmentError,
+        ):
             continue
         if r.returncode == 0:
             return True
     return False
 
 
-def _diff_error(
-    reason: str, *, reason_code: str, base_reconstruction: str = "failed"
+def input_error_result(
+    reason: str,
+    *,
+    reason_code: str,
+    source: str,
+    base_reconstruction: str | None = None,
+    verifier_pack: str | None = None,
 ) -> GuardResult:
+    """Create a fail-closed result before a candidate tree is assembled."""
     return GuardResult(
         verdict=ERROR, passed=False, reason=reason,
         files_changed=[], protected_violations=[],
         risk_level="low", risk_score=0.0, diagnostics="",
-        source="diff", base_reconstruction=base_reconstruction,
+        source=source, base_reconstruction=base_reconstruction,
         reason_code=reason_code, isolation="not_run",
         execution_state=EXECUTION_NOT_STARTED,
         execution_phase="preflight",
-        assurance=_preflight_assurance_profile(None),
+        assurance=_preflight_assurance_profile(verifier_pack),
     )
+
+
+def _diff_error(
+    reason: str, *, reason_code: str, base_reconstruction: str = "failed"
+) -> GuardResult:
+    return input_error_result(
+        reason,
+        reason_code=reason_code,
+        source="diff",
+        base_reconstruction=base_reconstruction,
+    )
+
+
+def verifier_pack_trust_error(
+    candidate_dir: str,
+    verifier_pack: str | None,
+    expect_verifier_pack_sha256: str | None,
+) -> str | None:
+    """Return a fail-closed reason when a pack is candidate-controlled.
+
+    ``--diff`` and ``--base/--head`` receive an on-disk candidate checkout. A
+    pack below that checkout can be edited by the same change under judgment,
+    so snapshotting it would only preserve attacker-selected bytes. Require an
+    identity pin and an external (or base-materialized) path before the runner
+    ever touches candidate code.  ``realpath`` also closes an external-looking
+    symlink that resolves back into the candidate tree.
+    """
+    if not verifier_pack:
+        return None
+    if not expect_verifier_pack_sha256:
+        return (
+            "an untrusted-change diff requires an EVOGUARD_PACK_V2 SHA-256 pin "
+            "for --verifier-pack; materialize the pack from a trusted base or "
+            "immutable artifact outside the candidate checkout"
+        )
+    try:
+        candidate_real = os.path.normcase(os.path.realpath(candidate_dir))
+        pack_real = os.path.normcase(os.path.realpath(verifier_pack))
+        inside_candidate = os.path.commonpath((candidate_real, pack_real)) == candidate_real
+    except ValueError:
+        # Different Windows volumes cannot have a containment relationship.
+        inside_candidate = False
+    if inside_candidate:
+        return (
+            "verifier-pack resolves inside the candidate checkout; use a pack "
+            "materialized from the trusted base or an immutable external artifact"
+        )
+    return None
 
 
 def _is_binary_diff(diff_text: str) -> bool:
@@ -2198,6 +2551,7 @@ def guard_from_diff(
     policy_version: str | None = None,
     baseline_evidence: bool = False,
     require_demonstrated_fix: bool = False,
+    strict_harness: bool = False,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -2227,6 +2581,17 @@ def guard_from_diff(
             f"escaping the root) — refusing to apply: {', '.join(unsafe)}",
             reason_code=REASON_UNSAFE_PATH,
         ), []
+    pack_trust_problem = verifier_pack_trust_error(
+        head_dir, verifier_pack, expect_verifier_pack_sha256
+    )
+    if pack_trust_problem:
+        return input_error_result(
+            pack_trust_problem,
+            reason_code=REASON_VERIFIER_PACK_INVALID,
+            source="diff",
+            base_reconstruction="failed",
+            verifier_pack=verifier_pack,
+        ), []
 
     workdir = tempfile.mkdtemp(prefix="evo_guard_diff_")
     base = os.path.join(workdir, "base")
@@ -2244,7 +2609,15 @@ def guard_from_diff(
                 "are in the head checkout and the diff is 'base...HEAD' (git/patch needed)",
                 reason_code=REASON_REVERSE_APPLY_FAILED,
             ), []
-        file_blocks, deleted = blocks_from_dirs(base, head_dir)
+        try:
+            file_blocks, deleted = blocks_from_dirs(base, head_dir)
+        except _UnverifiableChangedPathsError as exc:
+            return _diff_error(
+                "the diff includes changed path(s) Guard cannot safely verify: "
+                f"{exc}",
+                reason_code=REASON_NO_VERIFIABLE_CHANGES,
+                base_reconstruction="ok",
+            ), []
         candidate = "\n".join(
             f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
             for rel, new in file_blocks.items()
@@ -2277,6 +2650,7 @@ def guard_from_diff(
             policy_id=policy_id, policy_version=policy_version,
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
             file_blocks=file_blocks,
         )
         result.source = "diff"

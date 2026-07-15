@@ -151,7 +151,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.5.3"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.5.4"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -191,6 +191,11 @@ The fastest path — scaffold the workflow from inside your repo:
 evo-guard init --test-command "python -m pytest -q"
 ```
 
+This writes two files when they do not already exist: the workflow and the
+base-owned judge policy `.evoguard.json`. Commit **both**. The policy, not the
+pull-request workflow, is where the test command and every setting that shapes
+the judge belong.
+
 or drop the composite action in yourself:
 
 ```yaml
@@ -201,22 +206,66 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.3   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.4   # a release tag (pin a SHA for strictest CI)
     with:
-      test-command: "python -m pytest -q"
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
+      fail-on: "any-non-pass"          # required on pull_request runs
 ```
 
-The step fails on any non-`PASS` verdict. On a pull request, the Action requires
-`fail-on: any-non-pass`; `rejected-only` is reserved for a trusted non-PR
-invocation because it would otherwise leave `FAIL`/`TAMPERED`/`ERROR` **green**.
-The report also lands in the job summary. Further
-inputs: `verifier-pack`, `expect-verifier-pack-sha256`,
-`blackbox`/`blackbox-only`, `require-report-integrity`,
-`require-candidate-isolation`, `isolation`/`docker-image`/`docker-network`,
-`trust-setup-on-host`,
-`sarif`, `allow`, `allow-new-tests`, `timeout`, `mem-limit` — see
-[`action.yml`](action.yml) and [`docs/ADOPTION.md`](docs/ADOPTION.md).
+For a `pull_request`, the Action materializes `.evoguard.json` from the verified
+base SHA and passes that file as the judge policy. Put policy in that file, for
+example:
+
+```json
+{
+  "test_command": ["python", "-m", "pytest", "-q"],
+  "timeout": 180,
+  "strict_harness": true
+}
+```
+
+`strict_harness` is an opt-in CI profile for repositories that prefer a
+separate maintenance lane for toolchain changes. It makes dependency, lock, and
+compiler/project manifests immutable to an untrusted patch and refuses an
+exit-only or zero-test success: the judge must obtain a non-empty structured
+JUnit result. Leave it off when ordinary feature PRs are expected to update
+those manifests; it is intentionally not a claim of process isolation or
+report-forgery resistance.
+
+The PR workflow is candidate-controlled, so its `with:` values are **not** a
+trusted policy source. In PR mode the Action ignores judge-shaping overrides
+such as `test-command`, `protected`, `allow-new-tests`, isolation, black-box,
+coverage, timeout, and assurance settings; conflicting verifier-pack inputs
+fail closed. `comment` only controls the optional report comment. The step
+always requires `fail-on: any-non-pass`, so `FAIL`, `TAMPERED`, and `ERROR`
+cannot turn green.
+
+For a verifier pack on a PR, place both settings in the base policy:
+
+```json
+{
+  "test_command": ["python", "-m", "pytest", "-q"],
+  "verifier_pack": "security/evoguard-pack",
+  "expect_verifier_pack_sha256": "<64-hex-EVOGUARD_PACK_V2-digest>"
+}
+```
+
+The path must be repository-relative. The Action archives that directory from
+the verified base commit into a temporary trusted location before candidate code
+runs; it does not judge a pack from the candidate checkout. A missing pin,
+invalid path, or conflicting PR input is an error, not a fallback.
+
+The report also lands in the job summary. The remaining Action inputs are useful
+for trusted non-PR invocations, but are not the policy mechanism for PR gates.
+See [`action.yml`](action.yml), [`docs/ADOPTION.md`](docs/ADOPTION.md), and
+[`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
+
+> **Deployment prerequisite.** This Action can only protect a PR after its
+> workflow has started. A candidate that removes or replaces the workflow can
+> prevent it from running. Protect the workflow with your repository ruleset or
+> branch protection (required workflow/status check and appropriate review or
+> CODEOWNERS controls). Do not run a candidate checkout with secrets under
+> `pull_request_target` as a substitute for that protection.
 
 ## Other input shapes & useful flags
 
@@ -407,6 +456,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) | External-repository demonstration (a separate target repo under the same account — not third-party validation): four scenarios reproduced with the published release |
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
+| [`docs/REPOSITORY_PROTECTION.md`](docs/REPOSITORY_PROTECTION.md) | GitHub merge/ruleset controls that a composite Action cannot enforce from inside itself |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |
