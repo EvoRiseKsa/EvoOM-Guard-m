@@ -17,7 +17,7 @@ From the repo you want to protect (EvoGuard is public; pin an immutable release
 tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.2"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.3"
 evo-guard init --test-command "python -m pytest -q"     # writes .github/workflows/evoguard.yml
 git add .github/workflows/evoguard.yml && git commit -m "ci: add EvoGuard" && git push
 ```
@@ -295,7 +295,7 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.5.2` (a release tag) or `@<sha>`
+EvoGuard is a *gate*, so pin what you run: `@v3.5.3` (a release tag) or `@<sha>`
 (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

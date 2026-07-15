@@ -17,6 +17,7 @@ from referencing import Registry, Resource
 from referencing.exceptions import NoSuchResource
 from referencing.jsonschema import DRAFT202012
 
+from evoom_guard import __version__
 from evoom_guard import evidence_bundle as bundle
 from evoom_guard.signing import generate_keypair
 
@@ -712,7 +713,7 @@ def test_published_evidence_schemas_are_valid_json_and_match_v1_constants() -> N
     Draft202012Validator.check_schema(manifest_schema)
     raw_base = (
         "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/"
-        "v3.5.2/evoom_guard/schemas/"
+        f"v{__version__}/evoom_guard/schemas/"
     )
     assert context_schema["$id"] == raw_base + "evidence-context-1.schema.json"
     assert manifest_schema["$id"] == raw_base + "evidence-manifest-1.schema.json"
