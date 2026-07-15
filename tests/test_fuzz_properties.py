@@ -27,6 +27,7 @@ import string
 
 import pytest
 
+from evoom_guard import __version__
 from evoom_guard.evidence_bundle import (
     EvidenceBundleError,
     create_evidence_bundle,
@@ -170,7 +171,7 @@ def test_any_flipped_byte_in_a_bundle_fails_closed(tmp_path) -> None:
     verdict = tmp_path / "verdict.json"
     verdict.write_text(
         '{"schema_version":"1.11","tool":"evoguard",'
-        '"tool_version":"3.5.2","verdict":"PASS",'
+        f'"tool_version":"{__version__}","verdict":"PASS",'
         '"attestation":{"candidate_sha256":"' + _CANDIDATE + '",'
         '"policy_sha256":"' + _POLICY + '",'
         '"verifier_pack_sha256":null,"base_sha":null,"head_sha":null}}\n',

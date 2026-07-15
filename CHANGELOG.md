@@ -9,7 +9,7 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
-## [Unreleased]
+## [3.5.3] — 2026-07-15
 
 ### Security
 
