@@ -69,11 +69,14 @@ Drop a `.evoguard.json` at the repo root so you don't repeat flags:
 Explicit CLI flags always override it. `protected` adds globs the patch may not
 touch, on top of the built-in tests/config/auto-exec set.
 
-**Baseline allowlist (`allow`).** The inverse of `protected`: globs **exempt** from
-the test / config / CI rejection — for a path a built-in pattern misclassifies (e.g.
-a `Makefile` that runs no tests) or a known pre-existing hit. It **never** exempts an
-auto-exec file (`sitecustomize.py` / `*.pth`) or an unsafe path. Curate it by hand
-(`--allow` or `.evoguard.json`) — allowlisting a real judging test reopens that hole.
+**Baseline allowlist (`allow`).**
+This applies only to adopter-defined extra `protected` globs. It cannot
+exempt built-in tests, test/build configuration, CI, or auto-executed judge files;
+those changes require a separate trusted policy-maintenance path, not a candidate
+PR exception.
+
+Use it only for an adopter-defined extra protected path that was deliberately
+classified by the repository owner. It is not a general harness override.
 
 **Adding new tests (`allow_new_tests`).** By default *any* test-file change is
 rejected — great for bug-fix PRs, but it blocks a feature PR that ships its own
@@ -84,6 +87,11 @@ the judge process, so it's for **trusted authors + review** — see
 [`FEATURE_MODE.md`](FEATURE_MODE.md).
 
 ## 3½. The protected policy contract (`.evoguard.json`)
+
+For `--base/--head`, Guard loads `.evoguard.json` from the base directory. The
+Marketplace Action materializes it from the verified PR base commit. Raw `--diff`
+mode never loads it from the candidate checkout: provide a trusted external
+`--config` or explicitly choose `--no-config`.
 
 `.evoguard.json` is itself protected harness (a candidate that edits it is
 REJECTED), so it can carry the *security policy* — not just runner settings —
@@ -189,7 +197,7 @@ test. Validate and capture its canonical identity first:
 ```bash
 evo-guard pack-doctor /secure/org-pack
 # Set PACK_SHA256 to the reported "pack sha256" in protected CI/policy.
-evo-guard guard . --diff patch.diff \
+evo-guard guard . --diff patch.diff --no-config \
   --verifier-pack /secure/org-pack \
   --expect-verifier-pack-sha256 "$PACK_SHA256"
 ```

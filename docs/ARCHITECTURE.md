@@ -49,7 +49,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `evidence_bundle.py` | Canonical, bounded evidence envelopes: exact verdict/material bytes, manifest digests, Ed25519 authentication, and exact external context binding. Structural inspection does not imply authentication. |
 | `schemas/` | Packaged JSON Schema 2020-12 contracts for verdict records, evidence contexts, and evidence manifests; shipped in both wheel and zipapp artifacts. |
 | `signing.py` | Optional Ed25519 byte/file signatures and stable DER-SPKI key identities. `cryptography` remains a lazy `sign` extra, not a core dependency. |
-| `cli.py` | The `evo-guard` command: execution (`guard`), offline verification (`verify-verdict`, `verify-record`, `verify-bundle`), bundle creation, pack/environment diagnostics, initialization, and version reporting. It also owns `.evoguard.json` loading and flag↔config precedence. |
+| `cli.py` | The `evo-guard` command: execution (`guard`), offline verification (`verify-verdict`, `verify-record`, `verify-bundle`), bundle creation, pack/environment diagnostics, initialization, and version reporting. It owns trusted `.evoguard.json` loading and flag/config precedence: base for `--base/--head`, repo for edit blocks, and an explicit external policy (or `--no-config`) for `--diff`. |
 
 ## Contract ownership and independence
 

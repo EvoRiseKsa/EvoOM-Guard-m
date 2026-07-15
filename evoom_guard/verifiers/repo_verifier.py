@@ -171,6 +171,9 @@ from evoom_guard.verifiers.harness_policy import (
     is_addable_new_test as is_addable_new_test,
 )
 from evoom_guard.verifiers.harness_policy import (
+    is_allowlist_exemptible as is_allowlist_exemptible,
+)
+from evoom_guard.verifiers.harness_policy import (
     is_judge_autoexec as is_judge_autoexec,
 )
 from evoom_guard.verifiers.harness_policy import (

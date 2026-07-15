@@ -27,7 +27,7 @@ is allowed **if it is brand-new** to the repo. Everything else stays rejected.
 | **Edit / delete an existing** test | ⛔ REJECTED | ⛔ REJECTED |
 | Edit test/build **config** or a **lock file** (`pyproject.toml`, `pytest.ini`, `pnpm-lock.yaml`, `.evoguard.json` …) | ⛔ REJECTED | ⛔ REJECTED |
 | Add/edit an **auto-exec** judge file (`conftest.py`, `sitecustomize.py`, `*.pth`, `Makefile` …) | ⛔ REJECTED | ⛔ REJECTED |
-| Edit a **CI / gate** file (`.github/workflows/**`, `.github/actions/**`) | ⛔ REJECTED | ⛔ REJECTED |
+| Edit a **CI / gate** file (`.github/workflows/**`, local `action.yml` / `action.yaml`) | ⛔ REJECTED | ⛔ REJECTED |
 | Touch a path matched by a caller **`protected`** glob | ⛔ REJECTED | ⛔ REJECTED |
 
 So a feature PR can ship its **own new tests**, but it can never weaken or delete

@@ -66,14 +66,37 @@ def test_base_resolution_fails_fast_with_named_causes() -> None:
     assert text.index("base_diff_failed") < guard_call
 
 
-def test_fail_on_documents_the_rejected_only_footgun() -> None:
+def test_action_uses_a_verified_base_policy_not_candidate_workspace() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    base_check = text.index('git rev-parse --verify --quiet "${BASE}^{commit}"')
+    materialize = text.index('git show "${BASE}:.evoguard.json"')
+    guard_call = text.index('evo-guard "${ARGS[@]}"')
+    assert base_check < materialize < guard_call
+    assert 'BASE_POLICY_CONFIG="$RUNNER_TEMP/evoguard-base-policy.json"' in text
+    assert 'ARGS=(guard --diff - --config "$BASE_POLICY_CONFIG"' in text
+    assert "base_policy_config_unavailable" in text
+
+
+def test_pr_action_inputs_cannot_weaken_the_base_or_failure_policy() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    assert 'BASE="$PR_BASE_SHA"' in text
+    assert "untrusted_base_ref_override" in text
+    assert "untrusted_fail_on_override" in text
+    # The PR guards must execute before resolving the diff and before Guard.
+    base_guard = text.index("untrusted_base_ref_override")
+    diff = text.index('git diff "$BASE...HEAD"')
+    guard_call = text.index('evo-guard "${ARGS[@]}"')
+    assert base_guard < diff < guard_call
+
+
+def test_fail_on_documents_the_pr_safety_boundary() -> None:
     """'rejected-only' turns FAIL/TAMPERED/ERROR green; the input description
     must say so loudly (external-review finding §6.4)."""
     text = ACTION.read_text(encoding="utf-8")
     fail_on = text.index("fail-on:")
     desc_end = text.index("isolation:", fail_on)
     desc = text[fail_on:desc_end]
-    for token in ("FAIL", "TAMPERED", "ERROR", "GREEN"):
+    for token in ("PR", "any-non-pass", "rejected-only", "trusted non-PR"):
         assert token in desc, f"fail-on description must warn about {token}"
 
 

@@ -12,7 +12,7 @@ then runs the accepted pack snapshot as a **separate mandatory phase**; both
 must pass.
 
 ```bash
-evo-guard guard . --diff - --verifier-pack /secure/org-invariants
+evo-guard guard . --diff - --no-config --verifier-pack /secure/org-invariants
 ```
 
 The judge copies the pack to a temporary snapshot **outside** the candidate
@@ -38,7 +38,7 @@ evo-guard pack-doctor /secure/org-invariants --json
 Then make that identity a fail-closed policy requirement:
 
 ```bash
-evo-guard guard . --diff - \
+evo-guard guard . --diff - --no-config \
   --verifier-pack /secure/org-invariants \
   --expect-verifier-pack-sha256 <64-hex-v2-digest>
 ```

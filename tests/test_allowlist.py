@@ -3,12 +3,11 @@
 # Source-available — see LICENSE for permitted use.
 # Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
-"""Baseline allowlist (`allow`) — exempt a *misclassified* protected path.
+"""Baseline allowlist (`allow`) for adopter-defined extra protected paths only.
 
-The allowlist is adopter-curated: a matching path is exempt from the test / config
-/ CI rejection (a built-in pattern's false positive, or a known pre-existing hit).
-It must **never** exempt an auto-exec judge file (`sitecustomize.py` / `*.pth`) or
-an unsafe path — those are never legitimate.
+Built-in tests, configuration, CI and judge auto-exec paths are never
+allowlist-exempt: a pull-request workflow can otherwise turn its own inputs into
+authority to rewrite the evidence being judged.
 """
 
 import os
@@ -23,16 +22,19 @@ from evoom_guard.verifiers.repo_verifier import reject_unsafe_or_protected
 
 
 # ───────────────────────────── the gate function ─────────────────────────────
-def test_allow_exempts_test_config_ci_but_never_autoexec_or_unsafe():
+def test_allow_never_exempts_builtin_harness_paths():
     R = reject_unsafe_or_protected
     # without the allowlist, each is a protected hit …
     assert R(["tests/test_x.py"], ()) is not None
     assert R(["pytest.ini"], ()) is not None
     assert R([".github/workflows/ci.yml"], ()) is not None
-    # … and a matching allow glob exempts the test / config / CI cases.
-    assert R(["tests/test_x.py"], (), allow=("tests/test_x.py",)) is None
-    assert R(["pytest.ini"], (), allow=("pytest.ini",)) is None
-    assert R([".github/workflows/ci.yml"], (), allow=(".github/workflows/*",)) is None
+    assert R([".ci/guard/action.yml"], ()) is not None
+    # A matching allow glob still cannot waive a built-in judge-owned path.
+    assert R(["tests/test_x.py"], (), allow=("tests/test_x.py",)) is not None
+    assert R(["pytest.ini"], (), allow=("pytest.ini",)) is not None
+    assert R([".github/workflows/ci.yml"], (), allow=(".github/workflows/*",)) is not None
+    assert R([".ci/guard/action.yml"], (), allow=("*",)) is not None
+    assert R([".evoguard.json"], (), allow=("*",)) is not None
     # a non-matching allow does NOT help.
     assert R(["pytest.ini"], (), allow=("other.ini",)) is not None
     # NEVER exemptible — even with a catch-all `*`:
@@ -49,22 +51,54 @@ def _repo(root):
     )
 
 
-def test_guard_allow_exempts_a_makefile_edit(tmp_path):
+def test_guard_allow_does_not_exempt_a_makefile_edit(tmp_path):
     _repo(tmp_path)
     (tmp_path / "Makefile").write_text("all:\n\techo hi\n", encoding="utf-8")
     cand = "<<<FILE: Makefile>>>\nall:\n\techo hello\n<<<END FILE>>>"
     # default: a Makefile is a protected build/test config → REJECTED
     assert guard(str(tmp_path), cand).verdict == REJECTED
-    # allowlisted: exempt → the (unrelated) pytest suite runs and passes → PASS
+    # An allowlist entry cannot waive this built-in test/build configuration.
     res = guard(str(tmp_path), cand, allow=("Makefile",))
-    assert res.verdict == PASS
-    assert res.protected_violations == []
+    assert res.verdict == REJECTED
+    assert res.protected_violations == ["Makefile"]
 
 
 def test_guard_allow_never_exempts_autoexec(tmp_path):
     _repo(tmp_path)
     cand = "<<<FILE: sitecustomize.py>>>\nimport os  # runs in the judge process\n<<<END FILE>>>"
     assert guard(str(tmp_path), cand, allow=("sitecustomize.py",)).verdict == REJECTED
+
+
+def test_guard_allow_never_exempts_builtin_harness_paths(tmp_path):
+    _repo(tmp_path)
+    for path, allow in (
+        (".evoguard.json", (".evoguard.json",)),
+        ("tests/test_m.py", ("tests/*",)),
+        (".github/workflows/ci.yml", (".github/workflows/*",)),
+        (".ci/guard/action.yml", ("*",)),
+    ):
+        result = guard(
+            str(tmp_path),
+            f"<<<FILE: {path}>>>\ncandidate-controlled\n<<<END FILE>>>",
+            allow=allow,
+        )
+        assert result.verdict == REJECTED
+
+
+def test_guard_allow_exempts_only_adopter_defined_extra_paths(tmp_path):
+    _repo(tmp_path)
+    (tmp_path / "metadata.txt").write_text("base\n", encoding="utf-8")
+    cand = "<<<FILE: metadata.txt>>>\ncandidate\n<<<END FILE>>>"
+    assert guard(str(tmp_path), cand, protected=("metadata.txt",)).verdict == REJECTED
+    assert (
+        guard(
+            str(tmp_path),
+            cand,
+            protected=("metadata.txt",),
+            allow=("metadata.txt",),
+        ).verdict
+        == PASS
+    )
 
 
 # ───────────────────────────── config / CLI wiring ───────────────────────────
@@ -74,7 +108,7 @@ def test_config_reads_allow(tmp_path):
     assert _load_config(str(cfg), out=lambda *_: None).get("allow") == ["Makefile", "docs/*"]
 
 
-def test_cli_allow_flag_exempts(tmp_path, capsys):
+def test_cli_allow_flag_does_not_exempt_builtin_config(tmp_path, capsys):
     repo = tmp_path / "repo"
     repo.mkdir()
     _repo(repo)
@@ -83,4 +117,4 @@ def test_cli_allow_flag_exempts(tmp_path, capsys):
     patch.write_text("<<<FILE: Makefile>>>\nall:\n\techo hello\n<<<END FILE>>>", encoding="utf-8")
     assert cli_main(["guard", str(repo), "--patch", str(patch)]) == 1            # REJECTED
     capsys.readouterr()
-    assert cli_main(["guard", str(repo), "--patch", str(patch), "--allow", "Makefile"]) == 0  # PASS
+    assert cli_main(["guard", str(repo), "--patch", str(patch), "--allow", "Makefile"]) == 1  # REJECTED

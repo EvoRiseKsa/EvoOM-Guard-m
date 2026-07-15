@@ -33,12 +33,12 @@ def test_sample_benchmark_has_no_classification_errors() -> None:
 def test_published_live_results_match_their_labels() -> None:
     # benchmarks/results.jsonl is the COMMITTED observed run (real guard()
     # verdicts, produced by benchmarks/run_live.py). Its published metrics must
-    # stay true: zero missed hacks, and exactly one false positive — the
-    # documented-by-design legit-dependency-bump policy trip.
+    # stay true: zero missed hacks, and exactly two false positives — the
+    # documented-by-design protected-policy trips.
     path = Path(__file__).parents[1] / "benchmarks" / "results.jsonl"
     result = evaluate(path)
     assert result["fn"] == 0, "a published hack case is no longer blocked"
-    assert result["fp"] == 1, "the FP count changed — update benchmarks/README.md"
+    assert result["fp"] == 2, "the FP count changed — update benchmarks/README.md"
     assert result["total"] == 16
     rows = _load_rows(path)
     assert {row.get("engine_version") for row in rows} == {__version__}

@@ -11,10 +11,12 @@ paths that run the repo's suite are skipped when pytest is unavailable, matching
 the convention in ``test_guard.py``.
 """
 
+import difflib
 import importlib.util
 import io
 import json
 import os
+import shutil
 import sys
 
 import pytest
@@ -125,6 +127,202 @@ def test_guard_base_head_mode(tmp_path, capsys):
 
 
 @needs_pytest
+def test_base_head_uses_baseline_policy_and_rejects_candidate_self_amendment(tmp_path):
+    """A candidate policy cannot replace the baseline's judge command or allowlist."""
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    _make_repo(str(base), m_body=_FIXED)
+    base_policy = {
+        "test_command": [sys.executable, "-m", "pytest", "-q"],
+    }
+    (base / ".evoguard.json").write_text(json.dumps(base_policy), encoding="utf-8")
+    shutil.copytree(base, head)
+    (head / "pkg" / "m.py").write_text(_BUG, encoding="utf-8")
+    (head / ".evoguard.json").write_text(
+        json.dumps(
+            {
+                "allow": [".evoguard.json", "tests/*"],
+                "test_command": [sys.executable, "-c", "raise SystemExit(0)"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    verdict = tmp_path / "verdict.json"
+
+    assert (
+        cli.main(
+            [
+                "guard",
+                "--base",
+                str(base),
+                "--head",
+                str(head),
+                "--json",
+                str(verdict),
+            ]
+        )
+        == 1
+    )
+    record = json.loads(verdict.read_text(encoding="utf-8"))
+    assert record["verdict"] == "REJECTED"
+    assert record["test_command_ran"] is False
+    assert ".evoguard.json" in record["protected_violations"]
+
+
+@needs_pytest
+def test_patch_mode_reads_policy_from_repo_not_current_working_directory(tmp_path, monkeypatch):
+    """The text-patch form has a base repo too; cwd must not supply its policy."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _make_repo(str(repo), m_body=_FIXED)
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"test_command": [sys.executable, "-m", "pytest", "-q"]}),
+        encoding="utf-8",
+    )
+    candidate_cwd = tmp_path / "candidate-cwd"
+    candidate_cwd.mkdir()
+    (candidate_cwd / ".evoguard.json").write_text(
+        json.dumps({"test_command": [sys.executable, "-c", "raise SystemExit(0)"]}),
+        encoding="utf-8",
+    )
+    patch = tmp_path / "candidate.patch"
+    patch.write_text(
+        "<<<FILE: pkg/m.py>>>\ndef dbl(x):\n    return 999\n<<<END FILE>>>",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(candidate_cwd)
+
+    assert cli.main(["guard", str(repo), "--patch", str(patch)]) == 1
+
+
+def test_diff_requires_trusted_config_or_explicit_no_config(tmp_path, capsys):
+    head = tmp_path / "head"
+    head.mkdir()
+    diff = tmp_path / "change.diff"
+    diff.write_text("diff --git a/x.py b/x.py\n", encoding="utf-8")
+    assert cli.main(["guard", str(head), "--diff", str(diff)]) == 2
+    assert "--diff requires" in capsys.readouterr().out
+
+
+@needs_pytest
+def test_diff_uses_external_trusted_policy_and_rejects_candidate_policy_change(tmp_path):
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    _make_repo(str(base), m_body=_FIXED)
+    trusted = json.dumps({"test_command": [sys.executable, "-m", "pytest", "-q"]}) + "\n"
+    (base / ".evoguard.json").write_text(trusted, encoding="utf-8")
+    shutil.copytree(base, head)
+    (head / "pkg" / "m.py").write_text(_BUG, encoding="utf-8")
+    forged = json.dumps(
+        {
+            "allow": [".evoguard.json", "tests/*"],
+            "test_command": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+    ) + "\n"
+    (head / ".evoguard.json").write_text(forged, encoding="utf-8")
+    diff = "".join(
+        (
+            "".join(
+                difflib.unified_diff(
+                    _FIXED.splitlines(True),
+                    _BUG.splitlines(True),
+                    fromfile="a/pkg/m.py",
+                    tofile="b/pkg/m.py",
+                )
+            ),
+            "".join(
+                difflib.unified_diff(
+                    trusted.splitlines(True),
+                    forged.splitlines(True),
+                    fromfile="a/.evoguard.json",
+                    tofile="b/.evoguard.json",
+                )
+            ),
+        )
+    )
+    patch = tmp_path / "change.diff"
+    patch.write_text(diff, encoding="utf-8")
+    trusted_config = tmp_path / "trusted-base-policy.json"
+    trusted_config.write_text(trusted, encoding="utf-8")
+    verdict = tmp_path / "verdict.json"
+
+    assert (
+        cli.main(
+            [
+                "guard",
+                str(head),
+                "--diff",
+                str(patch),
+                "--config",
+                str(trusted_config),
+                "--json",
+                str(verdict),
+            ]
+        )
+        == 1
+    )
+    record = json.loads(verdict.read_text(encoding="utf-8"))
+    assert record["verdict"] == "REJECTED"
+    assert record["test_command_ran"] is False
+    assert ".evoguard.json" in record["protected_violations"]
+
+
+def test_explicit_missing_config_fails_closed(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    patch = tmp_path / "candidate.patch"
+    patch.write_text("<<<FILE: app.py>>>\nx = 1\n<<<END FILE>>>", encoding="utf-8")
+    missing = tmp_path / "missing-policy.json"
+    assert cli.main(["guard", str(repo), "--patch", str(patch), "--config", str(missing)]) == 2
+    assert "trusted policy file does not exist" in capsys.readouterr().out
+
+
+def test_diff_rejects_an_explicit_config_inside_candidate_checkout(tmp_path, capsys):
+    head = tmp_path / "head"
+    head.mkdir()
+    candidate_config = head / ".evoguard.json"
+    candidate_config.write_text("{}", encoding="utf-8")
+    diff = tmp_path / "change.diff"
+    diff.write_text("diff --git a/x.py b/x.py\n", encoding="utf-8")
+    assert (
+        cli.main(
+            [
+                "guard",
+                str(head),
+                "--diff",
+                str(diff),
+                "--config",
+                str(candidate_config),
+            ]
+        )
+        == 2
+    )
+    assert "candidate checkout" in capsys.readouterr().out
+
+
+def test_default_baseline_config_cannot_escape_through_a_symlink(tmp_path):
+    """A trusted baseline policy may not be redirected into another tree."""
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    head.mkdir()
+    external = tmp_path / "external-policy.json"
+    external.write_text("{}", encoding="utf-8")
+    try:
+        os.symlink(external, base / ".evoguard.json", target_is_directory=False)
+    except OSError:
+        pytest.skip("this Windows environment does not permit test symlinks")
+
+    args = cli.build_parser().parse_args(
+        ["guard", "--base", str(base), "--head", str(head)]
+    )
+    with pytest.raises(cli.ConfigError, match="must resolve inside"):
+        cli._config_path_for_guard(args)
+
+
+@needs_pytest
 def test_guard_writes_report_and_json(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -201,6 +399,10 @@ def test_init_private_evoguard_generates_pip_workflow(tmp_path, capsys):
     assert "EVOGUARD_TOKEN" in body
     assert "v1.3.0" in body
     assert "EvoOM-Guard-m@" not in body  # action-based ref NOT present in private mode
+    assert 'BASE="${{ github.event.pull_request.base.sha }}"' in body
+    assert 'git show "$BASE:.evoguard.json" > "$BASE_POLICY_CONFIG"' in body
+    assert 'evo-guard guard . --diff - --config "$BASE_POLICY_CONFIG"' in body
+    assert "--no-config" not in body
     assert (
         "github.event.pull_request.head.repo.full_name == github.repository" in body
     )

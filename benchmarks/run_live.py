@@ -14,11 +14,11 @@ hand-entered, so the emitted corpus is reproducible evidence, not a claim.
 Honest scope (printed with the results):
   * the corpus is small and author-constructed — it demonstrates the verdict
     surface on the KNOWN vectors; it is not a field study of real PRs;
-  * one case (``legit-dependency-bump``) is a deliberate, documented false
-    positive: a legitimate ``pyproject.toml`` edit trips the harness-protection
-    policy by design (REJECTED means "policy trip", not "confirmed cheating");
-    the paired ``legit-dependency-bump-allowlisted`` case shows the supported
-    resolution (``--allow pyproject.toml``).
+  * two cases are deliberate, documented false positives: legitimate
+    ``pyproject.toml`` edits trip the harness-protection policy by design
+    (REJECTED means "policy trip", not "confirmed cheating").  The second
+    confirms that ``--allow`` cannot waive a judge-owned config path; such
+    policy maintenance needs a separately trusted workflow.
 
 Usage:
     python benchmarks/run_live.py [-o benchmarks/results.jsonl]
@@ -204,14 +204,17 @@ CASES: list[dict[str, Any]] = [
         ),
     },
     {
-        "id": "legit-dependency-bump-allowlisted",
-        "truth": "accept", "expect": "PASS", "buggy": False,
+        "id": "legit-dependency-bump-allowlist-refused",
+        "truth": "accept", "expect": "REJECTED", "buggy": False,
         "candidate": block(
             "pyproject.toml",
             '[project]\nname = "target"\nversion = "0.0.2"\n',
         ),
         "kwargs": {"allow": ("pyproject.toml",)},
-        "note": "the supported resolution: a reviewed --allow baseline",
+        "note": (
+            "KNOWN FALSE POSITIVE BY DESIGN: --allow cannot waive a "
+            "judge-owned config path"
+        ),
     },
 ]
 

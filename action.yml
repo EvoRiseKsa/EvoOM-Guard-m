@@ -28,8 +28,9 @@ inputs:
     description: "Post the report on same-repository PRs (needs pull-requests: write). Fork/Dependabot PRs keep the job summary and skip the API comment."
     required: false
     default: "true"
+  # PR runs enforce any-non-pass at runtime; rejected-only is only for trusted non-PR use.
   fail-on:
-    description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'. WARNING — 'rejected-only' gates ONLY harness integrity: FAIL, TAMPERED and ERROR verdicts leave the step GREEN. It is not a correctness gate; keep the default unless you consciously want that."
+    description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'. PR runs require any-non-pass; rejected-only is accepted only for trusted non-PR invocations."
     required: false
     default: "any-non-pass"
   isolation:
@@ -48,8 +49,9 @@ inputs:
     description: "If set, write a SARIF 2.1.0 report to this workspace path (upload it with github/codeql-action/upload-sarif)."
     required: false
     default: ""
+  # Built-in judge-owned tests/config/CI/auto-exec remain non-exemptible.
   allow:
-    description: "Baseline allowlist: space-separated globs exempt from the test/config/CI rejection (never auto-exec/unsafe paths)."
+    description: "Baseline allowlist for adopter-defined extra protected globs only; built-in tests, config, CI, and auto-exec paths are never exemptible."
     required: false
     default: ""
   allow-new-tests:
@@ -189,10 +191,24 @@ runs:
           echo "verdict=ERROR" >> "$GITHUB_OUTPUT"
           exit 1
         }
-        # Resolve the base to diff against: explicit input, else the PR base, else HEAD^.
-        BASE="$INPUT_BASE_REF"
-        if [ -z "$BASE" ]; then BASE="$PR_BASE_SHA"; fi
-        if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
+        # On a PR, the event payload is the authority for the base and this
+        # action must not accept candidate-controlled workflow inputs that weaken
+        # the gate. Outside a PR, a maintainer may choose a base/ref and the
+        # narrow rejected-only reporting mode deliberately.
+        if [ -n "$PR_BASE_SHA" ]; then
+          if [ -n "$INPUT_BASE_REF" ] && [ "$INPUT_BASE_REF" != "$PR_BASE_SHA" ]; then
+            fail_setup "untrusted_base_ref_override" \
+              "pull_request runs must use the event base SHA; a workflow input may not replace it"
+          fi
+          if [ "$INPUT_FAIL_ON" != "any-non-pass" ]; then
+            fail_setup "untrusted_fail_on_override" \
+              "pull_request runs require fail-on=any-non-pass so ERROR/FAIL/TAMPERED cannot turn green"
+          fi
+          BASE="$PR_BASE_SHA"
+        else
+          BASE="$INPUT_BASE_REF"
+          if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
+        fi
         echo "Diffing against base: $BASE"
         # Best-effort deepen (the PR base SHA is usually absent from a default
         # depth-1 checkout). Failure here is only a warning — the authoritative,
@@ -202,6 +218,20 @@ runs:
         git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null \
           || fail_setup "base_ref_unavailable" \
                "cannot resolve the diff base '$BASE' in this checkout. Use actions/checkout with 'fetch-depth: 0', or pass a 'base-ref' that is reachable from this checkout."
+        # Policy is judge-owned input. Read it from the verified base commit, not
+        # from the candidate workspace. A missing base policy is a deterministic
+        # empty object; an unreadable or malformed present policy fails closed in
+        # the CLI below.
+        BASE_POLICY_CONFIG="$RUNNER_TEMP/evoguard-base-policy.json"
+        if git cat-file -e "${BASE}:.evoguard.json" 2>/dev/null; then
+          git show "${BASE}:.evoguard.json" > "$BASE_POLICY_CONFIG" \
+            || fail_setup "base_policy_config_unavailable" \
+                 "could not materialize .evoguard.json from the verified base commit"
+        else
+          printf '{}\n' > "$BASE_POLICY_CONFIG" \
+            || fail_setup "base_policy_config_unavailable" \
+                 "could not write the empty trusted base policy"
+        fi
         set +e
         git diff "$BASE...HEAD" > "$RUNNER_TEMP/guard.diff" 2> "$RUNNER_TEMP/guard-diff.err"
         DIFF_CODE=$?
@@ -212,7 +242,7 @@ runs:
         fi
         # The recommended path: pipe the diff; EvoGuard reverse-applies it to the head
         # checkout (this working dir) — no second checkout or worktree.
-        ARGS=(guard --diff - --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
+        ARGS=(guard --diff - --config "$BASE_POLICY_CONFIG" --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
         if [ -n "$INPUT_TEST_COMMAND" ]; then ARGS+=(--test-command "$INPUT_TEST_COMMAND"); fi
         if [ -n "$INPUT_PROTECTED" ]; then read -r -a PROTECTED <<< "$INPUT_PROTECTED"; ARGS+=(--protected "${PROTECTED[@]}"); fi
         if [ -n "$INPUT_ALLOW" ]; then read -r -a ALLOW <<< "$INPUT_ALLOW"; ARGS+=(--allow "${ALLOW[@]}"); fi

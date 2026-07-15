@@ -90,6 +90,7 @@ from evoom_guard.verdict_contract_v1_11 import (
     SCHEMA_VERSION,
     TAMPERED,
 )
+from evoom_guard.verifiers.harness_policy import is_allowlist_exemptible
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
@@ -431,9 +432,9 @@ def guard(
     test code still runs in the judge process; this is for trusted authors (see
     ``docs/FEATURE_MODE.md``).
 
-    ``allow`` is an adopter-curated allowlist of globs (a *baseline*): a matching
-    path is exempt from the test/config/CI rejection — for a built-in pattern's false
-    positive or a known pre-existing hit. It never exempts auto-exec or unsafe paths.
+    ``allow`` is an adopter-curated allowlist of *extra* ``protected`` globs. It
+    cannot exempt built-in tests, test/build configuration, CI, auto-executed files,
+    or unsafe paths: those are judge-owned evidence rather than candidate policy.
 
     ``isolation="docker"`` runs the suite inside a short-lived, network-less,
     read-only container (``docker_image`` required; defence in depth for semi-trusted
@@ -555,11 +556,20 @@ def guard(
             return True  # the judge-owned pack mount point — never writable
         if is_judge_autoexec(p):
             return True  # auto-exec runs in the judge process — never exempt
-        if not (is_protected(p, protected) or is_protected_config(p) or is_protected_ci(p)):
-            return False
-        if _matches_globs(p, allow):
-            return False  # adopter-allowlisted (baseline)
-        return not (allow_new_tests and is_addable_new_test(p, protected, is_new=p in new_paths))
+        # Built-in judge-owned paths are never allowlist-exempt. A PR workflow is
+        # part of the candidate in GitHub Actions, so letting it configure an
+        # allowlist for tests/config/CI would let it rewrite its own judge.
+        if is_protected(p, protected):
+            if allow_new_tests and is_addable_new_test(
+                p, protected, is_new=p in new_paths
+            ):
+                return False
+            if not is_allowlist_exemptible(p):
+                return True
+            return not _matches_globs(p, allow)
+        if is_protected_config(p) or is_protected_ci(p):
+            return True
+        return False
 
     # A deleted path is never "new", so a protected deletion is always a violation
     # (feature mode lets you *add* a new test, never *remove* an existing check).

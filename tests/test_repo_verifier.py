@@ -340,6 +340,8 @@ class SafetyTests(unittest.TestCase):
             ".github/workflows/evoguard.yml",
             ".github/workflows/ci.yaml",
             ".github/actions/evoguard/action.yml",
+            "action.yml",  # local root action (`uses: ./`)
+            ".ci/guard/action.yaml",  # local action outside .github/actions
             ".GITHUB/WORKFLOWS/x.yml",  # case-insensitive
         ):
             self.assertTrue(is_protected_ci(path), path)
@@ -421,6 +423,20 @@ class RewardHackRejectionTests(unittest.TestCase):
         self.assertFalse(r.passed)
         self.assertEqual(r.score, 0.05)
         self.assertIn("forbidden", r.diagnostics)
+
+    def test_allowlist_cannot_exempt_judge_owned_config_or_ci(self) -> None:
+        for path, allow in (
+            (".evoguard.json", (".evoguard.json",)),
+            ("tests/test_mathx.py", ("tests/*",)),
+            (".github/workflows/evoguard.yml", (".github/workflows/*",)),
+            (".ci/guard/action.yml", ("*",)),
+        ):
+            with self.subTest(path=path):
+                r = RepoVerifier(timeout=30, allow=allow).verify(
+                    block(path, "candidate-controlled\n"), self.problem
+                )
+                self.assertFalse(r.passed)
+                self.assertEqual(r.score, 0.05)
 
 
 class SetupCommandTests(unittest.TestCase):

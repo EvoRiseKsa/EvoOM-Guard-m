@@ -36,10 +36,13 @@ before the suite runs.
 > the change touched a path the current harness-protection policy protects. That
 > is the right default for an AI-generated patch, but it is **not by itself proof
 > of intent to cheat** — a legitimate dependency bump that edits `pom.xml`, or a
-> real build fix in a `Makefile`, trips the same rule. When a protected edit is
-> genuinely intended, review it like any harness change and exempt it explicitly
-> with `--allow <glob>` (a deliberate, reviewed baseline — see
-> [`ADOPTION.md`](ADOPTION.md)).
+> real build fix in a `Makefile`, trips the same rule. Review a genuinely intended
+> built-in harness change through a separate trusted policy-maintenance workflow.
+
+> **Security policy:** `--allow` applies only to adopter-defined extra `--protected`
+> globs. It cannot exempt built-in tests, configuration, CI (including local
+> `action.yml` / `action.yaml` manifests), or judge auto-exec
+> paths. Use a reviewed policy-maintenance workflow for those changes.
 
 The verdict and its stable `reason_code` are emitted as JSON for integrations — see
 [`JSON_SCHEMA.md`](JSON_SCHEMA.md).
@@ -74,7 +77,7 @@ no third-party dependencies, so this is a fast, clean install — no clone neede
 ```bash
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.2"   # a release tag — recommended
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
-evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
+evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
 
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
@@ -97,8 +100,8 @@ evo-guard guard --diff - --test-command "python -m pytest -q" < pr.diff
 ```bash
 # Easiest: pipe a normal git diff from your working tree (the head checkout).
 # Guard reverse-applies it to reconstruct the base, then verifies — zero setup.
-git diff main...HEAD | evo-guard guard --diff - --test-command "python -m pytest -q"
-evo-guard guard --diff pr.diff --report report.md --json guard.json
+git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
+evo-guard guard --diff pr.diff --no-config --report report.md --json guard.json
 
 # Verify a candidate in EvoGuard's edit-block format against a repo:
 evo-guard guard path/to/repo --patch candidate.txt
@@ -154,6 +157,12 @@ only on the candidate run.
 
 ### `--diff` safety (for untrusted PRs)
 
+`--diff` has only the candidate checkout available, so it deliberately refuses
+to infer `.evoguard.json` from cwd. Pass a trusted, absolute `--config` file
+materialized from the base revision, or explicitly use `--no-config`. The
+Marketplace Action performs this materialization automatically from the verified
+PR base commit.
+
 - **The real working tree is never modified.** Guard reverse-applies the diff to a
   throwaway *copy*; `head_dir`/cwd is only ever read.
 - **Unsafe paths are refused, not applied.** A diff that targets an absolute path,
@@ -178,14 +187,14 @@ A composite action ships at the repo root ([`action.yml`](../action.yml)), used 
 - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.2   # pin a release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
-    fail-on: "any-non-pass"           # or "rejected-only" — see the warning below
+    fail-on: "any-non-pass"           # required on pull_request runs
 ```
 
-> ⚠️ **`fail-on: rejected-only` is a harness-integrity gate, not a correctness
-> gate.** With it, only `REJECTED` fails the step — a `FAIL` (tests genuinely
-> failing), a `TAMPERED` signature, and an `ERROR` all leave the check **green**.
-> Use it only when another required check already runs the suite and you want
-> Guard to gate *only* harness edits; otherwise keep the default `any-non-pass`.
+> ⚠️ **`fail-on: rejected-only` is unavailable on `pull_request` runs.** The
+> Action requires `any-non-pass` there because `rejected-only` would leave a
+> `FAIL` (tests genuinely failing), `TAMPERED` signature, or `ERROR` **green**.
+> It is available only for a trusted non-PR invocation where a maintainer
+> deliberately wants a narrow harness-integrity report.
 
 It writes the report to the **job summary**, posts it as a **PR comment**, exposes a
 `verdict` output, and fails the step per `fail-on`. To gate only machine-made PRs,
@@ -200,9 +209,13 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
 - run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.2"   # see Install; @<sha> strictest for CI
 - run: |
-    BASE="origin/${{ github.event.pull_request.base.ref }}"
-    git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
-    git diff "$BASE...HEAD" | evo-guard guard --diff - --test-command "python -m pytest -q" --report "$GITHUB_STEP_SUMMARY"
+    BASE="${{ github.event.pull_request.base.sha }}"
+    git fetch --no-tags origin "$BASE"
+    git show "$BASE:.evoguard.json" > "$RUNNER_TEMP/evoguard-base-policy.json" \
+      || printf '{}\n' > "$RUNNER_TEMP/evoguard-base-policy.json"
+    git diff "$BASE...HEAD" | evo-guard guard --diff - \
+      --config "$RUNNER_TEMP/evoguard-base-policy.json" \
+      --test-command "python -m pytest -q" --report "$GITHUB_STEP_SUMMARY"
 ```
 
 `evo-guard guard` returns a non-zero exit on anything but `PASS`, so the step fails the

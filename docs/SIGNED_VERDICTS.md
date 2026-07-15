@@ -27,7 +27,7 @@ pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m
 evo-guard keygen --key evoguard-signing.pem --pub evoguard-signing.pub
 
 # Every run: sign the JSON verdict as it is written.
-git diff main...HEAD | evo-guard guard --diff - \
+git diff main...HEAD | evo-guard guard --diff - --no-config \
     --test-command "python -m pytest -q" \
     --json verdict.json --sign-key evoguard-signing.pem
 # -> verdict.json + verdict.json.sig (base64, detached)

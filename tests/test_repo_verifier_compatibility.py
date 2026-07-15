@@ -93,6 +93,7 @@ def test_split_helpers_are_legacy_reexports() -> None:
         harness_policy: (
             "_matches_globs",
             "is_addable_new_test",
+            "is_allowlist_exemptible",
             "is_judge_autoexec",
             "is_protected",
             "is_protected_ci",

@@ -99,11 +99,11 @@ class GuardGateTests(unittest.TestCase):
         self.assertEqual(r.verdict, REJECTED)
         self.assertIn("pom.xml", r.protected_violations)
 
-    def test_pom_xml_can_be_allowlisted(self) -> None:
-        # an adopter who needs dependency edits can exempt pom.xml via --allow.
+    def test_pom_xml_cannot_be_allowlisted(self) -> None:
+        # Build/test configuration controls the judge and remains immutable.
         cheat = _block("pom.xml", "<project><!-- deps --></project>\n")
         r = guard(self.root, cheat, allow=("pom.xml",))
-        self.assertNotEqual(r.verdict, REJECTED)
+        self.assertEqual(r.verdict, REJECTED)
 
     def test_no_blocks_is_an_error(self) -> None:
         r = guard(self.root, "just some prose, no edits")
@@ -442,7 +442,7 @@ class GuardCliTests(unittest.TestCase):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(diff)
         try:
-            rc = cli_main(["guard", self.root, "--diff", path])
+            rc = cli_main(["guard", self.root, "--diff", path, "--no-config"])
             self.assertEqual(rc, 1)  # REJECTED -> non-zero
         finally:
             os.unlink(path)
@@ -498,8 +498,7 @@ class MemLimitOptionTests(unittest.TestCase):
         with open(pf, "w", encoding="utf-8") as f:
             f.write("<<<FILE: pkg/m.py>>>\n# a safe source edit\n<<<END FILE>>>")
         try:
-            cli_main(["guard", self.root, "--patch", pf,
-                      "--config", os.path.join(self.root, "no-such-config.json")])
+            cli_main(["guard", self.root, "--patch", pf, "--no-config"])
         finally:
             guard_mod.RepoVerifier = real  # type: ignore[misc]
         self.assertEqual(seen.get("timeout"), 120)

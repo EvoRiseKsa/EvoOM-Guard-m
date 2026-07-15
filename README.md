@@ -41,7 +41,8 @@ Guard closes that hole with two mechanisms:
 
 1. **Protected harness paths are rejected before execution** (a robust
    guarantee). Any edit — or **deletion** — of the tests, their configuration
-   (`pyproject.toml`, `pytest.ini`, `vitest.config.*`, `Makefile`, CI workflows,
+   (`pyproject.toml`, `pytest.ini`, `vitest.config.*`, `Makefile`, CI workflow
+   files, local Action manifests,
    …), or an auto-executed file (`sitecustomize.py`, `*.pth`) is **REJECTED
    before the suite even runs**. This is a *static* check on the patch's file
    list, so runtime code cannot undo it. `package.json` is dual-purpose, so instead of
@@ -154,7 +155,7 @@ pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.5.2"   # a relea
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
-git diff main...HEAD | evo-guard guard --diff - --test-command "python -m pytest -q"
+git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
 ```
 
 You get a PR-ready Markdown report and a CI-friendly exit code:
@@ -162,10 +163,14 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 | Verdict | Meaning | Exit |
 |---|---|---|
 | ✅ `PASS` | the repo's tests pass **and** the patch left the protected harness untouched | 0 |
-| ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency change trips it too — review and exempt with `--allow` | 1 |
+| ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency change trips it too — review it through a trusted policy-maintenance path | 1 |
 | ❌ `FAIL` | the patch applied and the suite ran, but tests fail | 1 |
 | 🚨 `TAMPERED` | the exit code and JUnit disagree, or the judged candidate/pack snapshot changed during execution | 1 |
 | ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff (refused, never applied), a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
+
+> **Security policy:** built-in tests, test/build configuration, CI, and judge
+> auto-exec files cannot be exempted with `--allow`. Review those changes in a
+> separate trusted policy-maintenance path.
 
 Every run can also emit a machine-readable JSON record (`--json`) with a stable
 `schema_version` and a fixed `reason_code` for the verdict's cause, plus an
@@ -202,9 +207,10 @@ steps:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
 ```
 
-The step fails on any non-`PASS` verdict. (`fail-on: rejected-only` gates ONLY
-harness integrity — with it, `FAIL`/`TAMPERED`/`ERROR` leave the check **green**;
-use it only when another required check already runs the suite.) The report also lands in the job summary. Further
+The step fails on any non-`PASS` verdict. On a pull request, the Action requires
+`fail-on: any-non-pass`; `rejected-only` is reserved for a trusted non-PR
+invocation because it would otherwise leave `FAIL`/`TAMPERED`/`ERROR` **green**.
+The report also lands in the job summary. Further
 inputs: `verifier-pack`, `expect-verifier-pack-sha256`,
 `blackbox`/`blackbox-only`, `require-report-integrity`,
 `require-candidate-isolation`, `isolation`/`docker-image`/`docker-network`,
@@ -224,7 +230,7 @@ evo-guard guard ./repo --patch candidate.txt
 
 # Useful flags:
 #   --protected "src/billing/*"   extra globs the patch may not touch
-#   --allow "docs/pytest.ini"     baseline allowlist (never auto-exec/unsafe paths)
+#   --allow "docs/generated.txt"  allowlist for extra --protected globs only
 #   --allow-new-tests             feature mode: NEW test files allowed; edits to
 #                                 existing tests/config stay rejected
 #   --isolation docker|gvisor     run the suite in a network-less, read-only
@@ -246,6 +252,11 @@ evo-guard doctor
 evo-guard init --test-command "npm test"
 evo-guard version
 ```
+
+> **Trusted policy source.** For `--base/--head`, Guard reads `.evoguard.json`
+> from the baseline. For `--diff`, it requires an external trusted `--config`
+> or explicit `--no-config`; it never reads policy from the candidate checkout.
+> The Marketplace Action materializes policy from the verified PR base.
 
 Project defaults can live in a `.evoguard.json` at the repo root (itself a
 protected file — a patch cannot edit its own gate). Python API:
@@ -322,13 +333,13 @@ independent pieces of evidence to every verdict:
 ```bash
 # Which changed lines did the suite actually EXECUTE? (one extra suite run,
 # needs the 'cov' extra). Evidence by default; --min-diff-coverage makes it a gate:
-evo-guard guard . --diff - --diff-coverage --min-diff-coverage 80
+evo-guard guard . --diff - --no-config --diff-coverage --min-diff-coverage 80
 
 # Judge-owned tests the PATCH CANNOT MODIFY (org invariants, integration
 # checks) — injected at judgment time and run as a separate mandatory phase:
 evo-guard pack-doctor /secure/org-pack
 # Copy the reported "pack sha256" into this protected policy/CI value:
-evo-guard guard . --diff - --verifier-pack /secure/org-pack \
+evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
   --expect-verifier-pack-sha256 "$PACK_SHA256"
 ```
 

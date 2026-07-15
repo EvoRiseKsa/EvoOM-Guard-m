@@ -9,6 +9,28 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [Unreleased]
+
+### Security
+
+- Policy for a change is now resolved only from a trusted baseline: `--base` /
+  `--head` read the base policy, edit-block mode reads the supplied repository,
+  and raw `--diff` requires an explicit external policy or `--no-config`.
+  Candidate-controlled `.evoguard.json` files can no longer set the judge command
+  or allowlist for the run they are being judged in.
+- The composite Action binds pull-request runs to GitHub's event base SHA,
+  materializes `.evoguard.json` from that verified base, and rejects a PR attempt
+  to override the base reference or downgrade `fail-on`.
+- GitHub Action manifests (`action.yml` / `action.yaml`) are protected wherever
+  they occur in a repository, including a root local Action (`uses: ./`) and
+  local actions outside `.github/actions/`.
+
+### Changed
+
+- `allow` now applies only to adopter-defined extra `protected` globs. Built-in
+  tests, test/build configuration, CI, and judge auto-exec paths are never
+  allowlist-exemptible.
+
 ## [3.5.2] — 2026-07-14
 
 A conformance-hardening release. The verdict schema remains 1.11; the one

@@ -27,8 +27,8 @@ _PROTECTED_BASENAMES = (
     "*.snap",
 )
 
-# Test-runner/build configuration and dependency locks the candidate may not
-# touch without an explicit adopter-curated allowlist entry.
+# Test-runner/build configuration and dependency locks are judge-owned evidence:
+# candidates may not touch them, and ``allow`` cannot waive them.
 _PROTECTED_CONFIG = (
     ".evoguard.json",
     "pytest.ini", ".pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml",
@@ -46,8 +46,11 @@ _PROTECTED_CONFIG = (
 # Files Python auto-executes in the judge process.
 _PROTECTED_AUTOEXEC = ("sitecustomize.py", "usercustomize.py", "*.pth")
 
-# CI definitions that control the gate itself.
+# CI definitions that control the gate itself. GitHub permits a local Action at
+# the repository root (``uses: ./``) or at an arbitrary checked-in directory,
+# so action manifests must be protected even outside ``.github/actions/``.
 _PROTECTED_CI_PREFIXES = (".github/workflows/", ".github/actions/")
+_PROTECTED_CI_MANIFESTS = ("action.yml", "action.yaml")
 
 # Test-like basenames auto-applied to the whole suite.
 _AUTOEXEC_TESTLIKE = ("conftest.py",)
@@ -87,10 +90,31 @@ def is_judge_autoexec(path: str) -> bool:
     return any(fnmatch(base, pattern.lower()) for pattern in _PROTECTED_AUTOEXEC)
 
 
+def is_allowlist_exemptible(path: str) -> bool:
+    """May an adopter allowlist exempt this path?
+
+    The answer is deliberately false for every built-in judge-owned path. A
+    workflow can be part of a pull-request candidate, so treating its inputs as
+    an authority to exempt tests/config/CI would let the candidate rewrite the
+    evidence that decides its own verdict. ``allow`` remains available only for
+    adopter-defined extra protected globs.
+    """
+    return not (
+        is_protected(path, ())
+        or is_protected_config(path)
+        or is_protected_ci(path)
+        or is_judge_autoexec(path)
+    )
+
+
 def is_protected_ci(path: str) -> bool:
     """Is this a CI workflow/local action file that defines how the gate runs?"""
     normalized = path.lower()
-    return any(normalized.startswith(prefix) for prefix in _PROTECTED_CI_PREFIXES)
+    return (
+        any(normalized.startswith(prefix) for prefix in _PROTECTED_CI_PREFIXES)
+        or normalized in _PROTECTED_CI_MANIFESTS
+        or any(normalized.endswith(f"/{name}") for name in _PROTECTED_CI_MANIFESTS)
+    )
 
 
 def _matches_globs(path: str, globs: tuple[str, ...]) -> bool:
@@ -184,13 +208,12 @@ def reject_unsafe_or_protected(
                 diagnostics=f"unsafe path rejected: {path}",
                 artifact={"files_changed": []},
             )
-        allowed = _matches_globs(path, allow)
         if is_protected(path, extra):
             if allow_new_tests and is_addable_new_test(
                 path, extra, is_new=path in new_paths
             ):
                 continue
-            if allowed:
+            if is_allowlist_exemptible(path) and _matches_globs(path, allow):
                 continue
             return VerdictResult(
                 passed=False,
@@ -199,8 +222,6 @@ def reject_unsafe_or_protected(
                 artifact={"files_changed": []},
             )
         if is_protected_config(path):
-            if allowed:
-                continue
             return VerdictResult(
                 passed=False,
                 score=0.05,
@@ -211,8 +232,6 @@ def reject_unsafe_or_protected(
                 artifact={"files_changed": []},
             )
         if is_protected_ci(path):
-            if allowed:
-                continue
             return VerdictResult(
                 passed=False,
                 score=0.05,

@@ -25,4 +25,4 @@ jobs:
         with:
           test-command: "python -m pytest -q"
           comment: "true"           # same-repo PR comment; forks keep the job summary
-          fail-on: "any-non-pass"   # or "rejected-only" to gate only reward-hacks
+          fail-on: "any-non-pass"   # required for pull_request security gating

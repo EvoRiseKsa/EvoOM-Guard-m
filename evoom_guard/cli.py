@@ -105,7 +105,12 @@ _REPORT_INTEGRITY_VALUES = ("same_process_candidate_writable", "external_process
 _ISOLATION_VALUES = ("subprocess", "docker", "gvisor")
 
 
-def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, object]:
+def _load_config(
+    path: str,
+    *,
+    required: bool = False,
+    out: Callable[[str], None] = print,
+) -> dict[str, object]:
     """Repo-level policy from ``.evoguard.json`` — **fail-closed**.
 
     Recognises ``test_command`` (string or token list), ``setup_command``
@@ -122,6 +127,8 @@ def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, 
     stdlib-only on Python 3.10, where ``tomllib`` is absent.
     """
     if not path or not os.path.exists(path):
+        if required:
+            raise ConfigError(f"trusted policy file does not exist: {path}")
         return {}
     try:
         with open(path, encoding="utf-8") as f:
@@ -215,6 +222,89 @@ def _load_config(path: str, *, out: Callable[[str], None] = print) -> dict[str, 
     return cfg
 
 
+def _path_is_within(path: str, root: str) -> bool:
+    """Return whether ``path`` resolves inside ``root``.
+
+    Real paths matter here: a candidate checkout must not be able to smuggle its
+    policy in through a symlink when a caller supplied an apparently external
+    ``--config`` file.
+    """
+    try:
+        return (
+            os.path.commonpath((os.path.realpath(path), os.path.realpath(root)))
+            == os.path.realpath(root)
+        )
+    except ValueError:
+        # Different Windows drives, for example, cannot be nested.
+        return False
+
+
+def _config_path_for_guard(args: argparse.Namespace) -> str | None:
+    """Resolve the policy file from a trusted side of a change comparison.
+
+    Repository policy can shape the command, protected paths, and assurance
+    floor. It must therefore never be read from the candidate checkout. The
+    edit-block and ``--base/--head`` forms have an explicit baseline directory,
+    so an omitted config resolves there. A unified diff has only a candidate
+    checkout; it deliberately gets *no* implicit config. Automation must
+    materialize a base-owned policy outside that checkout and pass its absolute
+    path explicitly.
+    """
+    if args.no_config:
+        return None
+
+    if args.diff is not None:
+        if args.config is None:
+            raise ConfigError(
+                "--diff requires an explicit trusted --config outside the candidate "
+                "checkout, or --no-config"
+            )
+        if not os.path.isabs(args.config):
+            raise ConfigError(
+                "--diff requires --config to be an absolute path outside the "
+                "candidate checkout (or use --no-config)"
+            )
+        head = args.repo or os.getcwd()
+        if _path_is_within(args.config, head):
+            raise ConfigError(
+                "--diff refuses a config from the candidate checkout; materialize "
+                "the policy from the trusted base outside that checkout"
+            )
+        return os.path.abspath(args.config)
+
+    if args.base and args.head:
+        baseline = args.base
+        candidate = args.head
+    elif args.repo and args.patch:
+        # The patch is text, not a checked-out candidate tree: ``repo`` is the
+        # trusted baseline for this input form.
+        baseline = args.repo
+        candidate = None
+    else:
+        return None
+
+    if args.config is None:
+        config_path = os.path.abspath(os.path.join(baseline, ".evoguard.json"))
+        if not _path_is_within(config_path, baseline):
+            raise ConfigError(
+                "baseline .evoguard.json must resolve inside the trusted baseline "
+                "directory"
+            )
+        return config_path
+    if os.path.isabs(args.config):
+        if candidate and _path_is_within(args.config, candidate):
+            raise ConfigError(
+                "--base/--head refuses a config from the candidate checkout; "
+                "use the base policy or an external trusted policy file"
+            )
+        return os.path.abspath(args.config)
+
+    candidate_path = os.path.abspath(os.path.join(baseline, args.config))
+    if not _path_is_within(candidate_path, baseline):
+        raise ConfigError("--config must stay inside the trusted baseline directory")
+    return candidate_path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="evo-guard",
@@ -252,8 +342,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_p.add_argument(
         "--allow", nargs="*", default=None,
-        help="baseline allowlist: globs exempt from the test/config/CI rejection (for a "
-        "misclassified path or a known pre-existing hit; never auto-exec/unsafe). "
+        help="baseline allowlist for extra --protected globs only. It never exempts "
+        "built-in tests, test/build config, CI, or auto-executed judge files. "
         "Default: none; or .evoguard.json",
     )
     g_p.add_argument(
@@ -379,10 +469,18 @@ def build_parser() -> argparse.ArgumentParser:
         "(required for Node/V8 suites, which reserve far more virtual memory than "
         "any sane RLIMIT_AS). Default: 1024; or .evoguard.json.",
     )
-    g_p.add_argument(
-        "--config", default=".evoguard.json",
-        help="repo config (JSON) with defaults for test-command/protected/timeout/"
-        "mem-limit; default: .evoguard.json in the cwd. CLI flags override it.",
+    config_group = g_p.add_mutually_exclusive_group()
+    config_group.add_argument(
+        "--config", default=None,
+        help="trusted repo policy (JSON). With --base/--head or <repo> --patch, "
+        "an omitted value reads .evoguard.json from the baseline. With --diff, "
+        "pass an absolute config path outside the candidate checkout. CLI flags "
+        "override it.",
+    )
+    config_group.add_argument(
+        "--no-config", action="store_true",
+        help="run without a repository policy. Required explicitly with --diff "
+        "when no trusted base policy is materialized.",
     )
     g_p.add_argument(
         "--isolation", choices=("subprocess", "docker", "gvisor"), default="subprocess",
@@ -595,11 +693,21 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         write_sarif,
     )
 
-    # Effective settings: an explicit CLI flag wins; else .evoguard.json; else the
-    # built-in default. All CLI defaults are None so "given" is distinguishable.
-    # A present-but-broken config is fail-closed: exit 2, never weaker defaults.
+    # Effective settings: an explicit CLI flag wins; else a policy loaded from the
+    # trusted baseline; else the built-in default. In --diff mode a trusted policy
+    # or an explicit --no-config choice is required. A present but broken trusted
+    # policy is fail-closed: exit 2, never weaker defaults.
     try:
-        cfg = _load_config(args.config, out=out)
+        config_path = _config_path_for_guard(args)
+        cfg = (
+            _load_config(
+                config_path,
+                required=args.config is not None,
+                out=out,
+            )
+            if config_path
+            else {}
+        )
     except ConfigError as exc:
         out(f"config error (fail-closed): {exc}")
         return 2
@@ -943,8 +1051,17 @@ jobs:
 
       - name: Run EvoGuard
         run: |
-          git diff "origin/${{{{ github.base_ref }}}}...HEAD" | \\
-            evo-guard guard . --diff - --test-command "{test_command}" \\
+          # Materialize policy from the event's base commit, never from the PR head.
+          BASE="${{{{ github.event.pull_request.base.sha }}}}"
+          git rev-parse --verify --quiet "$BASE^{{commit}}" >/dev/null
+          BASE_POLICY_CONFIG="$RUNNER_TEMP/evoguard-base-policy.json"
+          if git cat-file -e "$BASE:.evoguard.json" 2>/dev/null; then
+            git show "$BASE:.evoguard.json" > "$BASE_POLICY_CONFIG"
+          else
+            printf '{{}}\\n' > "$BASE_POLICY_CONFIG"
+          fi
+          git diff "$BASE...HEAD" | \\
+            evo-guard guard . --diff - --config "$BASE_POLICY_CONFIG" --test-command "{test_command}" \\
             --report evoguard.md --json evoguard.json
           cat evoguard.md >> "$GITHUB_STEP_SUMMARY"
 

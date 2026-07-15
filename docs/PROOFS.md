@@ -110,7 +110,7 @@ not the host kernel. See [`VM_ISOLATION.md`](VM_ISOLATION.md).
 ## Reproduce (any repo)
 
 ```bash
-git diff <base>...<head> | evo-guard guard --diff - --report report.md --json verdict.json
+git diff <base>...<head> | evo-guard guard --diff - --no-config --report report.md --json verdict.json
 # PASS -> exit 0 ; REJECTED / FAIL / TAMPERED / ERROR -> non-zero
 ```
 
@@ -168,6 +168,10 @@ The strongest fixture available without a third party: **this repository run
 through its own gate**, with the real CLI (`git diff | evo-guard guard --diff -`)
 and the real built `.pyz` artifact. Four scenarios, reproduced live:
 
+> **Historical note.** The S2 allowlist run below documents a prior behavior.
+> Current Guard never allowlist-exempts built-in tests, config, or CI; use a
+> separate reviewed policy-maintenance workflow for such changes.
+
 | # | Scenario | Verdict | Key evidence |
 |---|---|---|---|
 | S1 | The development diff itself (edits 4 existing test files) | ⛔ `REJECTED` | `reason_code: protected_harness_edit`, `test_command_ran: false` — pre-gated before any suite ran; a *legitimate* maintenance change trips the policy exactly as documented (REJECTED = policy trip, not proven cheating) |
@@ -175,15 +179,17 @@ and the real built `.pyz` artifact. Four scenarios, reproduced live:
 | S3 | A cheat patch weakening one of Guard's own tests | ⛔ `REJECTED` | instant, `test_command_ran: false` |
 | S4 | The same cheat judged by the **built `evo-guard.pyz` release artifact** | ⛔ `REJECTED` | the shipped single-file form enforces the same gate |
 
-**What this run proves:** the gate works on a real, non-toy repository (this
+**What this historical run proved:** the gate worked on a real, non-toy repository (this
 one), the pre-gate fires before execution for both edits and deletions, and the
-`--allow` escape hatch composes with a full structured-verdict suite run.
+The former `--allow` exception shown in S2 is intentionally no longer available
+for built-in judge-owned paths.
 **What it does not prove:** third-party validation (same author), or coverage
 of ecosystems this repo does not use.
 
 Reproduce from the repo root:
 
 ```bash
+# Historical v3.5.2 transcript; do not run these commands as current guidance.
 git diff HEAD | evo-guard guard --diff -                    # S1 → REJECTED
 git diff HEAD | evo-guard guard --diff - --allow 'tests/*' \
   --mem-limit 0 --timeout 600                               # S2 → PASS (full self-suite)

@@ -49,7 +49,7 @@ same_process_candidate_writable`). Use a black-box path to close that.
 
 **Try it:**
 ```bash
-git diff main...HEAD | evo-guard guard --diff - --test-command "python -m pytest -q"
+git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
 ```
 **Expected:** `✅ PASS` if the suite passes and the harness is untouched; `⛔ REJECTED`
 if the patch touches a test/config; `❌ FAIL` if tests fail.
@@ -141,7 +141,7 @@ dependencies into the image/environment.
 ```bash
 evo-guard pack-doctor /secure/pack
 # Set PACK_SHA256 to the reported "pack sha256" in protected CI/policy.
-evo-guard guard . --diff patch.diff --verifier-pack /secure/pack \
+evo-guard guard . --diff patch.diff --no-config --verifier-pack /secure/pack \
   --expect-verifier-pack-sha256 "$PACK_SHA256"
 ```
 
