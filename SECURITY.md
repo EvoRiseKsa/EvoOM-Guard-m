@@ -88,11 +88,16 @@ These are stated limits, not defects (see [`docs/ASSURANCE.md`](docs/ASSURANCE.m
   observations. `read_only_enforced` is reserved for Docker/gVisor suite/pack
   mounts when setup was not moved to the host with `trust_setup_on_host`.
 - The verdict binds to the runtime image digest, **not** a separately built
-  artifact (artifact-bound verification is on the roadmap).
-- The v3.6.0 Trusted Finalizer reference re-derives the PR, run, and Git tree
-  bindings before sealing, but it does not independently recompute the candidate,
-  effective-policy, or verifier-pack digests from Git/API data in the sealing job.
-  It is therefore not an independent proof of those three derived values.
+  artifact. The V1 artifact-admission command can bind a regular file observed
+  at read time to an authenticated pre-merge finalizer `ALLOW`, but it does not
+  establish build provenance, reproducibility, OCI/registry identity, release
+  publication, deployment, SBOM coverage, or vulnerability status.
+- The v3.7.0 Trusted Finalizer reference re-derives PR/run/tree bindings and
+  independently recomputes candidate text, ordered deletions, effective policy,
+  and verifier-pack identity from raw base/head Git objects before sealing. It
+  is an independent check of those specified identities, not a proof that the
+  runner is an unbreakable hostile-code boundary or that a later build/release
+  artifact came from the admitted source.
 - The Trusted Finalizer workflows are reference templates under
   `examples/trusted-finalizer/`; they are not deployed as a merge gate in this
   repository. Their manual same-repository-PR scope, Environment review, and

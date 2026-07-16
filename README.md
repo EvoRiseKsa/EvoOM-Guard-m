@@ -28,7 +28,7 @@ correctness or security.
 > an honest fix passes, test tampering is rejected, a fake `9999 passed` on stdout
 > still fails, and black-box report forgery is caught. That repository records a
 > v3.5.2 scenario; it is not an independent assessment and does not validate the
-> v3.6.0 Trusted Finalizer.
+> v3.7.0 raw-Git Trusted Finalizer.
 >
 > **See it judge a real historical bug → [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md)**:
 > charset-normalizer's real `TypeError`-on-comparison bug (≤3.3.2, fixed upstream in
@@ -36,8 +36,9 @@ correctness or security.
 > test-silencing variant is `REJECTED` before a single test runs, and the do-nothing
 > patch `FAIL`s. Reproducible from hash-pinned PyPI sdists.
 
-> **Trusted Finalizer status.** v3.6.0 introduced the split, higher-assurance
-> reference deployment; v3.6.1 repairs its unprivileged judge runtime. It is not
+> **Trusted Finalizer status.** v3.6.0 introduced the split, v3.6.1 repaired
+> its unprivileged judge runtime, and v3.7.0 independently derives raw-Git
+> candidate, deletion, policy, and verifier-pack bindings before key access. It is not
 > an enabled merge gate in this repository. Install it in a protected consumer
 > repository and complete the documented Round 1 operational audit before making
 > it a required check. Read
@@ -163,7 +164,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.6.1"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.7.0"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -218,7 +219,7 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.6.1   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.7.0   # a release tag (pin a SHA for strictest CI)
     with:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
       fail-on: "any-non-pass"          # required on pull_request runs

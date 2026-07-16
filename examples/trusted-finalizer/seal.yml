@@ -246,7 +246,7 @@ jobs:
           printf '%s  %s\n' "$GUARD_ARTIFACT_SHA256" "$RUNNER_TEMP/evo-guard.pyz" > "$RUNNER_TEMP/guard.sha256"
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$RUNNER_TEMP/evo-guard.pyz" \
-            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.6.1/evo-guard.pyz"
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.7.0/evo-guard.pyz"
           sha256sum --check "$RUNNER_TEMP/guard.sha256"
           chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
 
@@ -258,7 +258,6 @@ jobs:
         name: Re-derive source and context from the GitHub control plane
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          EVIDENCE_DIR: ${{ runner.temp }}/reverify-evidence
           PR_NUMBER: ${{ steps.control.outputs.pull_request_number }}
           CONTROL_BASE_SHA: ${{ steps.control.outputs.base_sha }}
           CONTROL_HEAD_SHA: ${{ steps.control.outputs.head_sha }}
@@ -267,24 +266,7 @@ jobs:
           GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
         with:
           script: |
-            const fs = require('fs');
-            const path = require('path');
-            const evidenceDir = process.env.EVIDENCE_DIR;
             const { owner, repo } = context.repo;
-            const workflowRun = context.payload.workflow_run;
-
-            function readBoundedJson(directory, filename, maximum, label) {
-              const target = path.join(directory, filename);
-              const stat = fs.lstatSync(target);
-              if (!stat.isFile() || stat.size < 1 || stat.size > maximum) {
-                throw new Error(`${label} must be a regular file from 1 through ${maximum} bytes`);
-              }
-              try {
-                return JSON.parse(fs.readFileSync(target, 'utf8'));
-              } catch (error) {
-                throw new Error(`${label} is not valid JSON: ${error.message}`);
-              }
-            }
 
             const control = {
               pull_request_number: Number(process.env.PR_NUMBER),
@@ -330,13 +312,6 @@ jobs:
                 headCommit.data.tree.sha !== control.head_tree_sha) {
               throw new Error('PR tree changed after re-verification; do not seal stale evidence');
             }
-            const source = {
-              pull_request_number: control.pull_request_number,
-              workflow_run_id: String(workflowRun.id),
-              workflow_run_attempt: workflowRun.run_attempt,
-              base_sha: pr.base.sha,
-              head_sha: pr.head.sha,
-            };
             // Do not parse the verdict here. The next no-secret step derives
             // candidate, policy, and pack bindings from raw Git objects and
             // only then compares the untrusted verdict and handoff.

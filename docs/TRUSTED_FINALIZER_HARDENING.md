@@ -5,8 +5,8 @@
 
 # Raw-Git Trusted Finalizer derivation
 
-This document specifies the raw-Git derivation boundary implemented for the
-next release after v3.6.1. The frozen v3.6.1 release remains useful evidence,
+This document specifies the raw-Git derivation boundary implemented in v3.7.0.
+The frozen v3.6.1 release remains useful historical evidence,
 but it does **not** gain this guarantee retroactively.
 
 ## Objective

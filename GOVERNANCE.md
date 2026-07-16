@@ -18,8 +18,8 @@ account controlled by the same person is not independent review. `CODEOWNERS`
 will not be added as a symbolic control until a real reviewer or team exists and
 GitHub is configured to require that review.
 
-The core repository's v3.6.0 Trusted Finalizer remains a reference deployment;
-it is not an active merge requirement here.
+The core repository's v3.7.0 raw-Git Trusted Finalizer remains a reference
+deployment; it is not an active merge requirement here.
 
 ## Security-policy changes
 
@@ -46,7 +46,8 @@ Before a repository makes the finalizer a required merge condition, it must have
 2. A protected `evoguard-finalizer` Environment holding the private key, with a
    real reviewer distinct from the candidate author.
 3. A protected Guard release SHA and fully pinned GitHub Actions.
-4. A recorded Round 1 audit of repeated Check Run behaviour.
+4. A recorded operational audit of repeated Check Run behaviour and raw-Git
+   finalizer evidence for the deployed version.
 5. A policy for re-running every open PR after any security-policy change.
 
 Until those conditions are true, finalizer output is a pilot record, not a
