@@ -44,6 +44,12 @@ permission) when fixed.
   judge. A Maven/Surefire-style report directory containing any symlinked,
   special, unreadable, malformed, oversized, DTD, or entity-bearing `*.xml`
   entry must fail closed; a valid sibling cannot mask it.
+- A Trusted Finalizer false `ALLOW` caused by cross-PR, cross-run, or cross-attempt
+  replay; confusion between an immutable control record and an untrusted handoff;
+  stale base/head/tree metadata; or reuse of an old Check Run.
+- Any path by which candidate-controlled code, an untrusted workflow artifact, or
+  a candidate-adjacent token can read the finalizer key, cause privileged sealing,
+  or cause a seal job to execute candidate code.
 
 ## Known and documented — NOT vulnerabilities
 
@@ -83,5 +89,13 @@ These are stated limits, not defects (see [`docs/ASSURANCE.md`](docs/ASSURANCE.m
   mounts when setup was not moved to the host with `trust_setup_on_host`.
 - The verdict binds to the runtime image digest, **not** a separately built
   artifact (artifact-bound verification is on the roadmap).
+- The v3.6.0 Trusted Finalizer reference re-derives the PR, run, and Git tree
+  bindings before sealing, but it does not independently recompute the candidate,
+  effective-policy, or verifier-pack digests from Git/API data in the sealing job.
+  It is therefore not an independent proof of those three derived values.
+- The Trusted Finalizer workflows are reference templates under
+  `examples/trusted-finalizer/`; they are not deployed as a merge gate in this
+  repository. Their manual same-repository-PR scope, Environment review, and
+  Round 1 requirement are documented in `docs/TRUSTED_FINALIZER.md`.
 
 If you are unsure whether something is in scope, report it privately anyway.

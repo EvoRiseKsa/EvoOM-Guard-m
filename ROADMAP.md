@@ -70,12 +70,31 @@ evidence used to judge it. Guard still focuses on one narrow question:
 - Networked-service (HTTP) targets need a judge↔candidate channel the hardened
   `--network none` container does not yet provide.
 
-## Direction
+## Next work is gated by evidence
 
-Future development will be driven by **verified adoption, real threat cases, and
-observed user needs** — not by speculation. Areas under evaluation include
-artifact-bound deployment identity, stronger fork/VM execution boundaries, and
-organization-level policy enforcement.
+Future work is driven by verified adoption, real threat cases, and observed user
+needs — not feature accumulation. The order matters:
+
+1. **Operational pilot / Round 1.** Install the v3.6.0 reference finalizer in a
+   protected consumer repository, record PASS → cancelled or failed attempt →
+   fresh PASS behaviour on one unchanged PR head, and verify what GitHub actually
+   treats as a merge requirement. It is not a required check until that behaviour
+   is recorded. A second account controlled by the same person is useful for an
+   operational exercise, not independent review.
+2. **Independent finalizer derivation.** Define and implement canonical,
+   Git/API-derived candidate, effective-policy, and verifier-pack identities in
+   the sealing job without executing candidate code. See
+   [`docs/TRUSTED_FINALIZER_HARDENING.md`](docs/TRUSTED_FINALIZER_HARDENING.md).
+3. **Artifact-bound admission.** Bind a signed ALLOW/DENY to the exact container
+   image, package, binary, or release bundle that is built after admission, then
+   make that evidence consumable alongside build provenance.
+4. **Only after external evidence.** Stronger fork/VM boundaries, organization
+   policy enforcement, and an adapter/pack SDK require evidence from real
+   adopters and their onboarding failures. They are not assumed product needs.
+
+Risk scoring and ML may become advisory research tools only after an independent,
+frozen labelled corpus exists. They must not decide `ALLOW`, `DENY`, or merge
+eligibility merely because a model assigns a probability.
 
 **No future capability is considered committed until it has an implemented,
 tested, and documented security boundary.**

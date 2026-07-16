@@ -22,6 +22,17 @@ The final check is an admission decision, not a proof of universal correctness.
 external bindings. `DENY` is also signed and retained, rather than being
 discarded as a failed job.
 
+## Deployment status
+
+The paired workflows in `examples/trusted-finalizer/` are reference templates.
+They are not enabled as a merge gate in the EvoOM Guard core repository, and this
+repository currently makes no claim that its own merges are enforced by a
+finalizer. A consumer installation needs its own protected branch, Environment
+secret and reviewer, protected Guard-artifact digest, and the Round 1 audit below.
+The next hardening boundary is specified in
+[`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md); it is a design
+target, not a v3.6.0 guarantee.
+
 ## The threat model this closes
 
 A normal `pull_request` job must be treated as candidate-adjacent. Its workflow,
