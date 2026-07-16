@@ -42,7 +42,7 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Verification
 
-- Full local suite: 949 passed, 83 skipped, 52 subtests passed; Ruff, Mypy,
+- Full local suite: 953 passed, 83 skipped, 52 subtests passed; Ruff, Mypy,
   compile checks, YAML parsing, and whitespace checks passed before release
   preparation. The committed live benchmark is regenerated for this version.
 
