@@ -23,6 +23,8 @@ def test_reference_finalizer_separates_candidate_execution_from_key() -> None:
     assert "secrets." not in reverify
     assert "EVOGUARD_FINALIZER_KEY" not in reverify
     assert "--sign-key" not in reverify
+    assert "derive-finalizer-bindings" in reverify
+    assert "verify-finalizer-bindings" in reverify
     assert "contents: read" in reverify
     assert "contents: write" not in reverify
     assert "pull-requests: write" not in reverify
@@ -45,12 +47,24 @@ def test_reference_finalizer_separates_candidate_execution_from_key() -> None:
     assert "--sign-key" in seal
     assert "--expected-source" in seal
     assert "--expected-context" in seal
+    assert "--expected-derivation" in seal
+    assert "trusted-finalizer-git-bindings" in seal
+    assert "git init --bare" in seal
+    assert "derive-finalizer-bindings" in seal
+    assert "verify-finalizer-bindings" in seal
+    assert "actions/checkout" not in seal
+    seal_step = seal.index("- id: seal")
+    assert seal.index("id: derive_and_compare") < seal_step
+    assert seal.index("EVOGUARD_FINALIZER_KEY", seal_step) > seal_step
+    assert 'attestation["candidate_sha256"]' not in seal
+    assert 'attestation["policy_sha256"]' not in seal
+    assert 'attestation["verifier_pack_sha256"]' not in seal
     assert "run-id: ${{ github.event.workflow_run.id }}" in seal
     assert "github.event.workflow_run.workflow_id" in seal
     assert "actions/setup-python" in seal
     assert "--require-hashes" in seal
     assert "--only-binary=:all:" in seal
-    assert "python-version: \"3.12\"" in seal
+    assert 'python-version: "3.12"' in seal
     reconcile = seal.split("\n  reconcile:\n", 1)[1].split("\n  seal:\n", 1)[0]
     assert "environment:" not in reconcile
     assert "secrets." not in reconcile
@@ -80,9 +94,13 @@ def test_reference_finalizer_pins_every_action_and_uploads_only_data_from_reveri
     assert "Refuse a partial workflow re-run" in reverify
     assert "Re-run all jobs or dispatch a new workflow" in reverify
     assert "  reverify:\n    needs: metadata" in reverify
-    assert reverify.index("Upload immutable control-plane binding") < reverify.index("\n  reverify:")
+    assert reverify.index("Upload immutable control-plane binding") < reverify.index(
+        "\n  reverify:"
+    )
     assert "name: evoguard-reverify-control-v1-${{ github.event.workflow_run.run_attempt }}" in seal
-    assert "name: evoguard-reverify-evidence-v1-${{ github.event.workflow_run.run_attempt }}" in seal
+    assert (
+        "name: evoguard-reverify-evidence-v1-${{ github.event.workflow_run.run_attempt }}" in seal
+    )
     assert "CONTROL_DIR" in seal
     assert "steps.control.outputs.pull_request_number" in seal
     assert "handoff.source" not in seal
@@ -93,14 +111,16 @@ def test_reference_finalizer_pins_every_action_and_uploads_only_data_from_reveri
     assert "github.rest.checks.listForRef" not in seal
 
 
-def test_reference_finalizer_documents_the_immutable_executable_root_and_current_head_check() -> None:
+def test_reference_finalizer_documents_the_immutable_executable_root_and_current_head_check() -> (
+    None
+):
     reverify = _text(REVERIFY)
     seal = _text(SEAL)
     assert "EVOGUARD_GUARD_ARTIFACT_SHA256" in reverify
     assert "sha256sum --check" in reverify
     assert "EVOGUARD_GUARD_ARTIFACT_SHA256" in seal
-    assert "[[ \"$GUARD_ARTIFACT_SHA256\" =~ ^[0-9a-f]{64}$ ]]" in reverify
-    assert "[[ \"$GUARD_ARTIFACT_SHA256\" =~ ^[0-9a-f]{64}$ ]]" in seal
+    assert '[[ "$GUARD_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]]' in reverify
+    assert '[[ "$GUARD_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]]' in seal
     assert "PR changed after re-verification" in seal
     assert "protected default branch as PR base" in reverify
     assert "protected default branch as PR base" in seal
@@ -109,6 +129,6 @@ def test_reference_finalizer_documents_the_immutable_executable_root_and_current
     assert "fromJSON(vars.EVOGUARD_REVERIFY_WORKFLOW_ID)" not in seal
     assert "CHECK_RUN_ID: ${{ steps.control.outputs.check_run_id }}" in seal
     assert "check_run_id: checkRunId" in seal
-    assert "steps.derive.outputs.head_sha" not in seal
+    assert "steps.derive.outputs.head_sha" in seal
     assert "github.rest.checks.update" in seal
     assert "Round 1 audit" in _text(ROOT / "docs" / "TRUSTED_FINALIZER.md")

@@ -11,9 +11,9 @@ or semi-trusted authors. It separates two jobs that must not share authority:
 ```text
 fixed metadata preflight          unprivileged re-verification     privileged sealing
 ------------------------          ----------------------------     -----------------
-validate PR + create pending  ->  fetch base + exact head     ->   re-derive PR metadata from GitHub API
+validate PR + create pending  ->  fetch base + exact head     ->   re-derive PR metadata and raw Git
 attempt-bound Check Run           run Guard with no secrets        compare exact handoff + verdict bytes
-write control record              write verdict + handoff          load pre-candidate control record, then sign
+write control record              write verdict + handoff          derive candidate/policy/pack/deletions, then sign
 narrow checks:write only          no write token / signing key     never checkout or execute candidate code
 ```
 
@@ -29,9 +29,11 @@ They are not enabled as a merge gate in the EvoOM Guard core repository, and thi
 repository currently makes no claim that its own merges are enforced by a
 finalizer. A consumer installation needs its own protected branch, Environment
 secret and reviewer, protected Guard-artifact digest, and the Round 1 audit below.
-The next hardening boundary is specified in
-[`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md); it is a design
-target, not a v3.6.0 guarantee.
+The raw-Git derivation contract is specified in
+[`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md). A consumer
+must deploy a release that contains this command set and update the protected
+Guard zipapp SHA together with the templates; the frozen v3.6.1 release does
+not receive the new behavior merely because these source templates changed.
 
 ## The threat model this closes
 
@@ -55,14 +57,17 @@ source object and evidence context at sealing time:
 
 The reference metadata job writes an immutable control artifact **before**
 candidate execution begins. The seal job uses it—not the handoff—to select the
-PR, re-fetches the current PR and tree identities from GitHub, and derives the
-source plus repository/run/revision/tree context fields. The Guard executable
-digest comes from a protected variable. It compares those structured values
-for exact equality and compares the canonical handoff and verdict as exact
-bytes before opening the key. The handoff is mandatory material in the
-resulting `.evb` evidence bundle.
+PR and re-fetches current PR/tree identities from GitHub. In a bare object
+store with no checkout, it fetches the exact base/head objects and derives the
+candidate text digest, ordered deletion list, effective policy, and pinned
+verifier-pack identity from raw Git blobs. Only then does it semantically
+validate and compare the untrusted verdict and handoff. The Guard executable
+digest comes from a protected variable. A raw-binding mismatch stops before
+the private key is read; a passing raw binding can still seal a semantic DENY
+as evidence. The raw binding file and canonical handoff are mandatory materials
+in the resulting `.evb` evidence bundle.
 
-In v3.6.0 the metadata job first creates a fresh pending Check Run, records its
+The current template first creates a fresh pending Check Run, records its
 numeric ID in that pre-candidate control artifact, and has only the narrow
 `checks: write` scope necessary for this operation. The candidate-execution job
 itself has no write token. The seal job validates the Check Run ID against the
@@ -76,21 +81,23 @@ target the protected default branch only**. Fork support and non-default base
 branches need their own checkout, runner, and policy review; neither is a safe
 one-line extension.
 
-## What v3.6.0 proves — and what it does not
+## What the raw-Git finalizer proves — and what it does not
 
 On a successful `verify-finalized` call, the consumer has checked:
 
 - canonical bundle bytes and an Ed25519 signature under an external public key;
 - exact external repository/run/revision/tree and Guard-executable bindings;
+- independently derived candidate text, ordered deletion list, effective-policy,
+  and base-anchored verifier-pack bindings;
 - a canonical handoff that identifies the re-verification run and PR;
 - exact equality between the handoff record digest and the enclosed verdict;
 - semantic validity of that verdict; and
 - `ALLOW` only when that verdict is `PASS` with `passed: true`.
 
-The candidate, policy, and verifier-pack digests are exact fields from the
-validated record and handoff, but v3.6.0 does not independently recompute them
-inside the sealing job. Their meaning therefore depends on the isolation and
-fixed re-verification workflow described below.
+The candidate, deletion, policy, and verifier-pack values are not accepted as
+authority merely because an untrusted record carries them. The no-checkout seal
+step derives them from exact raw Git objects, then rejects any mismatch before
+the finalizer key is opened.
 
 It does **not** by itself prove that a candidate program is correct, that a
 Docker daemon/kernel is impossible to escape, or that a deployment artifact was
@@ -103,11 +110,10 @@ depth, not a complete hostile-code boundary. For public/forked untrusted code,
 use a separately administered runner with gVisor or a stronger isolation layer;
 do not upgrade the claim merely because the YAML says `docker`.
 
-The first finalizer release also re-checks mutable PR base/head/tree identity in
-the sealing job. It relies on the re-verification job's isolated Guard record
-for the candidate, policy, and verifier-pack digests; it does not yet recompute
-all three independently from Git trees in the sealing job. That is deliberate
-scope, not an omitted guarantee.
+A raw-binding mismatch is not a signed denial because the signing key has not
+entered that execution path. It is an attempt-bound failed finalizer Check Run,
+with logs but no signed evidence bundle. A semantic Guard rejection that does
+match raw bindings may be sealed as a signed DENY evidence bundle.
 
 ## Required repository controls
 
@@ -154,6 +160,10 @@ Before enabling the final check as a merge requirement:
    ID, policy, and verifier-pack change as a security-policy change. Re-run the
    finalizer for every open PR before merge; an old success on an unchanged
    head was not computed under the new configuration.
+8. For a Node project, set `mem_limit` explicitly in the base policy (normally
+   `0` for V8). The ordinary Guard CLI has a checkout-based Node default; the
+   raw-Git finalizer refuses to guess it from a candidate-controlled working
+   tree, so an implicit Node memory setting fails closed.
 
 ### Retry invariant
 
@@ -173,19 +183,28 @@ is possible.
 The small primitives are intentionally separate:
 
 ```bash
-# In the unprivileged re-verification job, after Guard wrote verdict.json.
-evo-guard finalizer-handoff verdict.json \
-  --out handoff.json \
-  --source trusted-source.json \
-  --context trusted-context.json
+# No-secret re-verification: derive from the exact raw base/head Git objects.
+evo-guard derive-finalizer-bindings \
+  --base-repo base --head-repo candidate \
+  --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" \
+  --base-tree-sha "$BASE_TREE_SHA" --head-tree-sha "$HEAD_TREE_SHA" \
+  --repository "$GITHUB_REPOSITORY" --repository-id "$REPOSITORY_ID" \
+  --pr-number "$PR_NUMBER" --run-id "$GITHUB_RUN_ID" \
+  --run-attempt "$GITHUB_RUN_ATTEMPT" \
+  --guard-artifact-sha "$GUARD_ARTIFACT_SHA256" --out bindings.json
+evo-guard verify-finalizer-bindings verdict.json --bindings bindings.json \
+  --source-out trusted-source.json --context-out trusted-context.json
+evo-guard finalizer-handoff verdict.json --out handoff.json \
+  --source trusted-source.json --context trusted-context.json
 
-# In the sealing job, after re-deriving both files from the control plane.
+# Privileged job: repeat raw-Git derivation from a bare object store, compare,
+# then let this command recheck the same bindings before it reads the key.
 evo-guard seal-finalizer handoff.json verdict.json \
-  --out final.evb \
-  --expected-source expected-source.json \
+  --out final.evb --expected-source expected-source.json \
   --expected-context expected-context.json \
-  --sign-key finalizer.pem \
-  --require-pass
+  --expected-derivation bindings.json \
+  --material trusted-finalizer-git-bindings=bindings.json \
+  --sign-key finalizer.pem --require-pass
 
 # An independent consumer uses external trust inputs again.
 evo-guard verify-finalized final.evb \
@@ -214,9 +233,12 @@ format is fixed as `EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1` and contains only:
 ```
 
 The source base/head values must equal the evidence context values exactly;
-branch names and movable refs are rejected. `seal-finalizer` reserves the
-bundle material role `trusted-finalizer-handoff`, so callers cannot substitute a
-different descriptor under the same semantic label.
+branch names and movable refs are rejected. The raw binding is canonical JSON,
+not a trust root: the sealing code recomputes its relation to the semantic
+verdict and requires its output source/context to match exactly. `seal-finalizer`
+reserves the bundle material role `trusted-finalizer-handoff`; the template also
+includes the `trusted-finalizer-git-bindings` material so an external reviewer
+can inspect the exact comparison input.
 
 For lower-level uses, `finalize-record` seals a semantically valid record
 against a context and returns `ALLOW` or `DENY`. It is a provenance primitive,

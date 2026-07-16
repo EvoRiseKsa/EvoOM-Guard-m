@@ -30,7 +30,7 @@ import re
 import shutil
 import sys
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from evoom_guard import __version__
 from evoom_guard.pack_manifest import (
@@ -40,6 +40,7 @@ from evoom_guard.pack_manifest import (
     pack_digest,
     pack_test_files,
 )
+from evoom_guard.strict_json import strict_json_loads
 
 if TYPE_CHECKING:
     from evoom_guard.evidence_bundle import EvidenceMaterial
@@ -171,7 +172,7 @@ def _load_config(
         return {}
     try:
         with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+            data = strict_json_loads(f.read())
     except (OSError, ValueError) as exc:
         raise ConfigError(f"{path} is not readable JSON ({exc})") from exc
     if not isinstance(data, dict):
@@ -779,6 +780,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="context JSON re-derived by the sealing job; exact match is required",
     )
     sf_p.add_argument(
+        "--expected-derivation",
+        default=None,
+        help="optional canonical raw-Git binding record; rechecked before the signing key is read",
+    )
+    sf_p.add_argument(
         "--sign-key",
         required=True,
         help="sealing Ed25519 private key; use only in a job that never executes candidate code",
@@ -799,6 +805,51 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-pass",
         action="store_true",
         help="return exit 1 for a sealed denial while preserving its signed evidence bundle",
+    )
+
+    # ----- derive-finalizer-bindings --------------------------------------- #
+    df_p = sub.add_parser(
+        "derive-finalizer-bindings",
+        help="derive finalizer bindings from raw immutable Git objects without a checkout",
+    )
+    df_p.add_argument("--base-repo", required=True, help="base Git worktree or object store")
+    df_p.add_argument("--head-repo", required=True, help="head Git worktree or object store")
+    df_p.add_argument("--base-bare", action="store_true", help="base-repo is a bare Git dir")
+    df_p.add_argument("--head-bare", action="store_true", help="head-repo is a bare Git dir")
+    df_p.add_argument("--base-sha", required=True, help="immutable base commit SHA")
+    df_p.add_argument("--head-sha", required=True, help="immutable head commit SHA")
+    df_p.add_argument("--base-tree-sha", required=True, help="expected base tree SHA")
+    df_p.add_argument("--head-tree-sha", required=True, help="expected head tree SHA")
+    df_p.add_argument("--repository", required=True, help="GitHub owner/repository identity")
+    df_p.add_argument("--repository-id", required=True, help="immutable GitHub repository ID")
+    df_p.add_argument("--pr-number", required=True, type=int, help="pull-request number")
+    df_p.add_argument("--run-id", required=True, help="reverification workflow run ID")
+    df_p.add_argument("--run-attempt", required=True, type=int, help="reverification run attempt")
+    df_p.add_argument(
+        "--guard-artifact-sha",
+        required=True,
+        help="protected SHA-256 of the reviewed Guard runtime",
+    )
+    df_p.add_argument("--out", required=True, help="canonical raw-Git binding JSON output")
+    df_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+
+    # ----- verify-finalizer-bindings --------------------------------------- #
+    vfdb_p = sub.add_parser(
+        "verify-finalizer-bindings",
+        help="compare a verdict to raw-Git bindings and write safe finalizer metadata",
+    )
+    vfdb_p.add_argument("verdict", help="regular semantic verdict JSON")
+    vfdb_p.add_argument("--bindings", required=True, help="canonical raw-Git binding JSON")
+    vfdb_p.add_argument("--source-out", required=True, help="verified source JSON output")
+    vfdb_p.add_argument("--context-out", required=True, help="verified context JSON output")
+    vfdb_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace existing source/context outputs (default is no-clobber)",
     )
 
     # ----- verify-finalized ------------------------------------------------ #
@@ -929,6 +980,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         guard_from_diff,
         input_error_result,
         render_report,
+        serialize_candidate_blocks,
         verifier_pack_trust_error,
         write_json,
         write_sarif,
@@ -1187,10 +1239,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
                     verifier_pack=verifier_pack,
                 )
             else:
-                candidate = "\n".join(
-                    f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
-                    for rel, new in file_blocks.items()
-                )
+                candidate = serialize_candidate_blocks(file_blocks)
                 result = guard(
                     args.base, candidate,
                     deleted=tuple(deleted),
@@ -1945,6 +1994,140 @@ def _parse_finalizer_materials(specifications: list[str]) -> list[EvidenceMateri
     return materials
 
 
+def cmd_derive_finalizer_bindings(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Derive trusted-finalizer values from raw Git objects without a checkout."""
+
+    from evoom_guard.finalizer_derivation import (
+        FINALIZER_DERIVATION_FORMAT,
+        FinalizerDerivationError,
+        derive_finalizer_bindings,
+        write_finalizer_bindings,
+    )
+
+    source = {
+        "pull_request_number": args.pr_number,
+        "workflow_run_id": args.run_id,
+        "workflow_run_attempt": args.run_attempt,
+        "base_sha": args.base_sha,
+        "head_sha": args.head_sha,
+    }
+    try:
+        bindings = derive_finalizer_bindings(
+            base_repo=args.base_repo,
+            head_repo=args.head_repo,
+            base_sha=args.base_sha,
+            head_sha=args.head_sha,
+            base_tree_sha=args.base_tree_sha,
+            head_tree_sha=args.head_tree_sha,
+            source=source,
+            repository=args.repository,
+            repository_id=args.repository_id,
+            guard_artifact_sha256=args.guard_artifact_sha,
+            base_is_bare=args.base_bare,
+            head_is_bare=args.head_bare,
+        )
+        output = write_finalizer_bindings(bindings, bindings_path=args.out, force=args.force)
+    except (FinalizerDerivationError, OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": FINALIZER_DERIVATION_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": FINALIZER_DERIVATION_FORMAT,
+            "ok": True,
+            "status": "DERIVED",
+            "bindings": output,
+            "candidate_sha256": bindings.candidate_sha256,
+            "policy_sha256": bindings.policy_sha256,
+            "verifier_pack_sha256": bindings.verifier_pack_sha256,
+        },
+    )
+    return 0
+
+
+def _read_semantic_finalizer_record(path: str) -> dict[str, Any]:
+    """Read and validate one untrusted verdict before using its digest fields."""
+
+    from evoom_guard.evidence_bundle import MAX_VERDICT_BYTES, _load_json_object, _read_regular_file
+    from evoom_guard.record_verifier import verify_record
+
+    if path == "-":
+        raise ValueError("verdict must be a regular JSON file, not standard input")
+    data = _read_regular_file(path, limit=MAX_VERDICT_BYTES, label="verdict")
+    record = _load_json_object(data, "verdict")
+    report = verify_record(record)
+    if not report["ok"]:
+        failed = ", ".join(
+            item["id"] for item in report["checks"] if item.get("status") == "fail"
+        )
+        raise ValueError("verdict record is semantically invalid: " + failed)
+    return record
+
+
+def cmd_verify_finalizer_bindings(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Compare a semantic record to independently derived raw-Git bindings."""
+
+    from evoom_guard.finalizer_derivation import (
+        FINALIZER_DERIVATION_FORMAT,
+        FinalizerDerivationError,
+        context_from_verified_bindings,
+        read_finalizer_bindings,
+        write_verified_finalizer_context,
+    )
+
+    try:
+        bindings = read_finalizer_bindings(args.bindings)
+        record = _read_semantic_finalizer_record(args.verdict)
+        source, context = context_from_verified_bindings(bindings, record)
+        source_out, context_out = write_verified_finalizer_context(
+            bindings,
+            record,
+            source_path=args.source_out,
+            context_path=args.context_out,
+            force=args.force,
+        )
+    except (FinalizerDerivationError, OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": FINALIZER_DERIVATION_FORMAT,
+                "ok": False,
+                "status": "MISMATCH",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": FINALIZER_DERIVATION_FORMAT,
+            "ok": True,
+            "status": "VERIFIED",
+            "source": source,
+            "context": context,
+            "source_path": source_out,
+            "context_path": context_out,
+        },
+    )
+    return 0
+
+
 def cmd_finalizer_handoff(
     args: argparse.Namespace,
     *,
@@ -2036,6 +2219,7 @@ def cmd_seal_finalizer(
     """Seal only a handoff that matches externally re-derived metadata."""
 
     from evoom_guard.evidence_bundle import EvidenceBundleError
+    from evoom_guard.finalizer_derivation import read_finalizer_bindings
     from evoom_guard.signing import SigningUnavailableError
     from evoom_guard.trusted_finalizer import FinalizerHandoffError, seal_finalizer_bundle
 
@@ -2058,6 +2242,11 @@ def cmd_seal_finalizer(
         expected_context = _read_external_finalizer_object(
             args.expected_context, label="expected context"
         )
+        expected_derivation = (
+            read_finalizer_bindings(args.expected_derivation).payload
+            if args.expected_derivation is not None
+            else None
+        )
         materials = _parse_finalizer_materials(args.material)
     except (OSError, UnicodeError, ValueError) as exc:
         _machine_report(
@@ -2079,6 +2268,7 @@ def cmd_seal_finalizer(
             expected_source=expected_source,
             expected_context=expected_context,
             private_key_path=args.sign_key,
+            expected_derivation=expected_derivation,
             materials=materials,
             force=args.force,
         )
@@ -2451,6 +2641,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_finalize_record(args)
     if args.command == "finalizer-handoff":
         return cmd_finalizer_handoff(args)
+    if args.command == "derive-finalizer-bindings":
+        return cmd_derive_finalizer_bindings(args)
+    if args.command == "verify-finalizer-bindings":
+        return cmd_verify_finalizer_bindings(args)
     if args.command == "seal-finalizer":
         return cmd_seal_finalizer(args)
     if args.command == "verify-finalized":

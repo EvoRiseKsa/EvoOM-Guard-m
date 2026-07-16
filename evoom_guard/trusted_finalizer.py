@@ -389,6 +389,7 @@ def seal_finalizer_bundle(
     expected_source: Mapping[str, Any],
     expected_context: Mapping[str, Any],
     private_key_path: str,
+    expected_derivation: Mapping[str, Any] | None = None,
     materials: Iterable[EvidenceMaterial] = (),
     force: bool = False,
 ) -> FinalizedTrustedEvidence:
@@ -407,6 +408,25 @@ def seal_finalizer_bundle(
         expected_source=expected_source,
         expected_context=expected_context,
     )
+    if expected_derivation is not None:
+        from evoom_guard.finalizer_derivation import (
+            FinalizerDerivationError,
+            context_from_verified_bindings,
+            validate_finalizer_bindings,
+        )
+
+        try:
+            derived_source, derived_context = context_from_verified_bindings(
+                validate_finalizer_bindings(expected_derivation), handoff.verdict
+            )
+        except FinalizerDerivationError as exc:
+            raise FinalizerHandoffError(
+                f"independent finalizer derivation did not bind the record: {exc}"
+            ) from exc
+        if derived_source != dict(expected_source) or derived_context != dict(expected_context):
+            raise FinalizerHandoffError(
+                "independent finalizer derivation does not exactly match expected metadata"
+            )
     caller_materials = tuple(materials)
     if any(material.role == FINALIZER_HANDOFF_ROLE for material in caller_materials):
         raise FinalizerHandoffError(
