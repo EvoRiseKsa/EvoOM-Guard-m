@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +45,8 @@ MAX_CANDIDATE_FILE_BYTES = 1 * 1024 * 1024
 MAX_PACK_FILE_BYTES = 8 * 1024 * 1024
 MAX_PACK_BYTES = 32 * 1024 * 1024
 MAX_BINDINGS_BYTES = 512 * 1024
+MAX_GIT_STDERR_BYTES = 64 * 1024
+_GIT_STREAM_CHUNK_BYTES = 64 * 1024
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -174,28 +177,99 @@ def _git_command(
     bare: bool,
     limit: int = MAX_GIT_TREE_BYTES,
 ) -> bytes:
+    """Run one read-only Git query with bounded streaming output.
+
+    A raw tree can be candidate-controlled.  Do not use ``capture_output`` and
+    check its size afterwards: that would let a very large tree occupy memory
+    in the privileged finalizer process before the stated limit takes effect.
+    Both pipes are drained concurrently so a verbose error cannot deadlock the
+    child or bypass a resource bound.
+    """
+
     command = ["git"]
     command.extend(["--git-dir", repo] if bare else ["-C", repo])
     command.extend(args)
     environment = os.environ.copy()
     environment["GIT_OPTIONAL_LOCKS"] = "0"
     try:
-        process = subprocess.run(
+        process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
-            check=False,
-            timeout=30,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             env=environment,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except OSError as exc:
         raise FinalizerDerivationError(f"could not read immutable Git object: {exc}") from exc
-    if len(process.stdout) > limit:
+
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout = bytearray()
+    stderr = bytearray()
+    overflow: list[str] = []
+    read_errors: list[OSError] = []
+
+    def stop_child() -> None:
+        try:
+            process.kill()
+        except OSError:
+            # The process may have exited between the stream limit and kill.
+            pass
+
+    def drain(stream: Any, *, maximum: int, target: bytearray, label: str) -> None:
+        try:
+            while True:
+                chunk = stream.read(_GIT_STREAM_CHUNK_BYTES)
+                if not chunk:
+                    return
+                remaining = maximum + 1 - len(target)
+                if remaining > 0:
+                    target.extend(chunk[:remaining])
+                if len(target) > maximum:
+                    overflow.append(label)
+                    stop_child()
+        except OSError as exc:
+            read_errors.append(exc)
+            stop_child()
+
+    stdout_reader = threading.Thread(
+        target=drain,
+        args=(process.stdout,),
+        kwargs={"maximum": limit, "target": stdout, "label": "stdout"},
+        daemon=True,
+    )
+    stderr_reader = threading.Thread(
+        target=drain,
+        args=(process.stderr,),
+        kwargs={"maximum": MAX_GIT_STDERR_BYTES, "target": stderr, "label": "stderr"},
+        daemon=True,
+    )
+    stdout_reader.start()
+    stderr_reader.start()
+    timed_out = False
+    try:
+        process.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        stop_child()
+        process.wait()
+    stdout_reader.join()
+    stderr_reader.join()
+
+    if timed_out:
+        raise FinalizerDerivationError("could not read immutable Git object: Git query timed out")
+    if read_errors:
+        raise FinalizerDerivationError(
+            f"could not read immutable Git object: {read_errors[0]}"
+        ) from read_errors[0]
+    if "stdout" in overflow:
         raise FinalizerDerivationError("Git object listing exceeds the finalizer limit")
+    if "stderr" in overflow:
+        raise FinalizerDerivationError("Git error output exceeds the finalizer limit")
     if process.returncode != 0:
-        detail = process.stderr.decode("utf-8", "replace")[:512].strip()
+        detail = bytes(stderr).decode("utf-8", "replace")[:512].strip()
         raise FinalizerDerivationError(f"Git object lookup failed: {detail or process.returncode}")
-    return process.stdout
+    return bytes(stdout)
 
 
 class _GitReader:

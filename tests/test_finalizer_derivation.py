@@ -3,15 +3,18 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from evoom_guard import trusted_finalizer
+from evoom_guard import finalizer_derivation, trusted_finalizer
 from evoom_guard.cli import main as cli_main
 from evoom_guard.finalizer_derivation import (
     FINALIZER_DERIVATION_FORMAT,
+    MAX_GIT_STDERR_BYTES,
     FinalizerDerivationError,
+    _git_command,
     context_from_verified_bindings,
     derive_finalizer_bindings,
     read_finalizer_bindings,
@@ -137,6 +140,59 @@ def _record_for_pair(tmp_path: Path, repo: Path, base: str, head: str) -> dict[s
     record = result.to_dict()
     assert record["attestation"] is not None
     return record
+
+
+@pytest.mark.parametrize(
+    ("stream", "maximum", "message"),
+    [
+        ("stdout", 1024, "Git object listing exceeds the finalizer limit"),
+        ("stderr", MAX_GIT_STDERR_BYTES, "Git error output exceeds the finalizer limit"),
+    ],
+)
+def test_raw_git_command_bounds_pipes_while_the_child_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+    stream: str,
+    maximum: int,
+    message: str,
+) -> None:
+    """The finalizer kills a noisy Git child instead of buffering it all first."""
+
+    payload = maximum + 1
+    script = (
+        "import sys\n"
+        f"target = sys.{stream}.buffer\n"
+        f"target.write(b'x' * {payload})\n"
+        "target.flush()\n"
+    )
+    real_popen = subprocess.Popen
+    killed: list[bool] = []
+
+    class TrackingProcess:
+        def __init__(self, inner: subprocess.Popen[bytes]) -> None:
+            self._inner = inner
+            self.stdout = inner.stdout
+            self.stderr = inner.stderr
+
+        @property
+        def returncode(self) -> int | None:
+            return self._inner.returncode
+
+        def wait(self, *args: object, **kwargs: object) -> int:
+            return self._inner.wait(*args, **kwargs)
+
+        def kill(self) -> None:
+            killed.append(True)
+            self._inner.kill()
+
+    def noisy_git(_command: list[str], **kwargs: object) -> TrackingProcess:
+        return TrackingProcess(real_popen([sys.executable, "-c", script], **kwargs))
+
+    monkeypatch.setattr(finalizer_derivation.subprocess, "Popen", noisy_git)
+
+    with pytest.raises(FinalizerDerivationError, match=message):
+        _git_command(".", ["rev-parse", "HEAD"], bare=False, limit=maximum)
+
+    assert killed
 
 
 def test_raw_git_derivation_matches_guard_candidate_and_policy(tmp_path: Path) -> None:
