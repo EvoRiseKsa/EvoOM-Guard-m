@@ -98,9 +98,7 @@ class InspectedArtifactBinding:
         """Return a fresh validated view, never mutable inspection state."""
 
         try:
-            return _validate_payload(
-                _load_json_object(self.binding_bytes, "artifact binding")
-            )
+            return _validate_payload(_load_json_object(self.binding_bytes, "artifact binding"))
         except EvidenceBundleError as exc:  # defensive: bytes were checked at inspection
             raise ArtifactAdmissionError(f"invalid artifact binding: {exc}") from exc
 
@@ -229,8 +227,7 @@ def _validate_subject(value: Mapping[str, Any]) -> ArtifactSubject:
     size = subject.get("size")
     if type(size) is not int or size < 0 or size > MAX_ARTIFACT_FILE_BYTES:
         raise ArtifactAdmissionError(
-            "artifact subject.size must be an integer from 0 through "
-            f"{MAX_ARTIFACT_FILE_BYTES}"
+            f"artifact subject.size must be an integer from 0 through {MAX_ARTIFACT_FILE_BYTES}"
         )
     return ArtifactSubject(sha256=digest, size=size)
 
@@ -252,7 +249,9 @@ def _validate_finalizer(value: Mapping[str, Any]) -> dict[str, Any]:
     source = finalizer.get("source")
     context = finalizer.get("context")
     if not isinstance(source, dict) or not isinstance(context, dict):
-        raise ArtifactAdmissionError("artifact binding finalizer.source and context must be objects")
+        raise ArtifactAdmissionError(
+            "artifact binding finalizer.source and context must be objects"
+        )
     try:
         verified_source = _validate_source(source)
         verified_context = validate_evidence_context(context, verdict=None)
@@ -275,13 +274,11 @@ def _validate_authentication(value: Mapping[str, Any]) -> dict[str, str]:
         raise ArtifactAdmissionError("artifact binding authentication.algorithm must be Ed25519")
     if authentication.get("purpose") != ARTIFACT_BINDING_PURPOSE:
         raise ArtifactAdmissionError(
-            "artifact binding authentication.purpose must be "
-            f"{ARTIFACT_BINDING_PURPOSE!r}"
+            f"artifact binding authentication.purpose must be {ARTIFACT_BINDING_PURPOSE!r}"
         )
     if authentication.get("signature_path") != ARTIFACT_SIGNATURE_PATH:
         raise ArtifactAdmissionError(
-            "artifact binding authentication.signature_path must be "
-            f"{ARTIFACT_SIGNATURE_PATH!r}"
+            f"artifact binding authentication.signature_path must be {ARTIFACT_SIGNATURE_PATH!r}"
         )
     key_id = authentication.get("key_id")
     if not isinstance(key_id, str) or _KEY_ID.fullmatch(key_id) is None:
@@ -303,10 +300,14 @@ def _validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     subject = payload.get("subject")
     finalizer = payload.get("finalizer")
     authentication = payload.get("authentication")
-    if not isinstance(subject, dict) or not isinstance(finalizer, dict) or not isinstance(
-        authentication, dict
+    if (
+        not isinstance(subject, dict)
+        or not isinstance(finalizer, dict)
+        or not isinstance(authentication, dict)
     ):
-        raise ArtifactAdmissionError("artifact binding subject, finalizer, and authentication must be objects")
+        raise ArtifactAdmissionError(
+            "artifact binding subject, finalizer, and authentication must be objects"
+        )
     verified_subject = _validate_subject(subject)
     verified_finalizer = _validate_finalizer(finalizer)
     verified_authentication = _validate_authentication(authentication)
@@ -331,7 +332,9 @@ def _decode_signature(data: bytes) -> bytes:
     except (ValueError, binascii.Error) as exc:
         raise ArtifactAdmissionError("artifact binding signature is not canonical base64") from exc
     if len(signature) != 64 or base64.b64encode(signature) != data:
-        raise ArtifactAdmissionError("artifact binding signature is not one canonical Ed25519 signature")
+        raise ArtifactAdmissionError(
+            "artifact binding signature is not one canonical Ed25519 signature"
+        )
     return signature
 
 
@@ -404,9 +407,12 @@ def inspect_artifact_binding(path: str) -> InspectedArtifactBinding:
     if canonical != binding_bytes:
         raise ArtifactAdmissionError("artifact binding is not canonical JSON")
     signature = _decode_signature(signature_bytes)
-    if _archive_bytes(
-        ((ARTIFACT_BINDING_PATH, binding_bytes), (ARTIFACT_SIGNATURE_PATH, signature_bytes))
-    ) != snapshot:
+    if (
+        _archive_bytes(
+            ((ARTIFACT_BINDING_PATH, binding_bytes), (ARTIFACT_SIGNATURE_PATH, signature_bytes))
+        )
+        != snapshot
+    ):
         raise ArtifactAdmissionError("artifact binding container bytes are not canonical")
     return InspectedArtifactBinding(
         binding_bytes=binding_bytes,
@@ -559,7 +565,9 @@ def seal_artifact_admission(
         "authentication": authentication,
     }
     canonical_payload = _canonical_json(payload)
-    signature, key_id = _sign_bytes_with_key_id(ARTIFACT_BINDING_DOMAIN + canonical_payload, signing_key)
+    signature, key_id = _sign_bytes_with_key_id(
+        ARTIFACT_BINDING_DOMAIN + canonical_payload, signing_key
+    )
     if key_id != authentication["key_id"]:
         raise ArtifactAdmissionError("artifact binding signer key_id changed before publication")
     binding_path = _write_binding(output_path, payload, signature, force=force)
@@ -594,11 +602,10 @@ def verify_artifact_admission(
             "artifact binding key_id does not match the externally trusted public key"
         )
     if not verified_signature:
-        raise ArtifactAdmissionError("artifact binding signature is invalid under the trusted public key")
+        raise ArtifactAdmissionError(
+            "artifact binding signature is invalid under the trusted public key"
+        )
 
-    subject = hash_regular_artifact(artifact_path)
-    if inspected.subject != subject.as_dict():
-        raise ArtifactAdmissionError("artifact binding subject does not exactly match the artifact file")
     verified_finalizer, finalizer = _verified_finalizer_descriptor(
         finalizer_bundle_path,
         trusted_public_key_path=trusted_finalizer_public_key_path,
@@ -608,6 +615,11 @@ def verify_artifact_admission(
     if inspected.finalizer != finalizer:
         raise ArtifactAdmissionError(
             "artifact binding finalizer does not exactly match external finalizer evidence"
+        )
+    subject = hash_regular_artifact(artifact_path)
+    if inspected.subject != subject.as_dict():
+        raise ArtifactAdmissionError(
+            "artifact binding subject does not exactly match the artifact file"
         )
     return VerifiedArtifactBinding(
         inspection=inspected,

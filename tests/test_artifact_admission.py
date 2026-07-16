@@ -39,9 +39,7 @@ def _finalized_allow(tmp_path: Path, *, denied: bool = False):
         encoding="utf-8",
     )
     candidate = (
-        "<<<FILE: tests/test_app.py>>>\n"
-        "def test_value():\n    assert True\n"
-        "<<<END FILE>>>"
+        "<<<FILE: tests/test_app.py>>>\ndef test_value():\n    assert True\n<<<END FILE>>>"
         if denied
         else "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>"
     )
@@ -93,7 +91,9 @@ def _finalized_allow(tmp_path: Path, *, denied: bool = False):
 
 
 def test_artifact_binding_round_trip_is_file_and_finalizer_bound(tmp_path: Path) -> None:
-    bundle, _finalizer_private, finalizer_public, source, context, decision = _finalized_allow(tmp_path)
+    bundle, _finalizer_private, finalizer_public, source, context, decision = _finalized_allow(
+        tmp_path
+    )
     assert decision == "ALLOW"
     artifact = tmp_path / "dist" / "app.whl"
     artifact.parent.mkdir()
@@ -112,9 +112,10 @@ def test_artifact_binding_round_trip_is_file_and_finalizer_bound(tmp_path: Path)
     )
 
     assert sealed.payload["decision"] == "ALLOW"
-    assert sealed.payload["subject"] == artifact_admission.hash_regular_artifact(
-        str(artifact)
-    ).as_dict()
+    assert (
+        sealed.payload["subject"]
+        == artifact_admission.hash_regular_artifact(str(artifact)).as_dict()
+    )
     inspected = artifact_admission.inspect_artifact_binding(str(binding))
     assert inspected.payload == sealed.payload
     verified = artifact_admission.verify_artifact_admission(
@@ -131,7 +132,9 @@ def test_artifact_binding_round_trip_is_file_and_finalizer_bound(tmp_path: Path)
 
 
 def test_artifact_binding_rejects_artifact_and_finalizer_replays(tmp_path: Path) -> None:
-    bundle, _finalizer_private, finalizer_public, source, context, _decision = _finalized_allow(tmp_path)
+    bundle, _finalizer_private, finalizer_public, source, context, _decision = _finalized_allow(
+        tmp_path
+    )
     artifact = tmp_path / "artifact.bin"
     artifact.write_bytes(b"first")
     binding_private, binding_public = _keys(tmp_path, "artifact")
@@ -199,7 +202,9 @@ def test_artifact_binding_rejects_a_valid_finalizer_deny_before_key_load(
 
     monkeypatch.setattr(signing, "_load_private_key_snapshot", fail_if_loaded)
     monkeypatch.setattr(artifact_admission, "hash_regular_artifact", fail_if_hashed)
-    with pytest.raises(artifact_admission.ArtifactAdmissionError, match="requires a verified finalizer ALLOW"):
+    with pytest.raises(
+        artifact_admission.ArtifactAdmissionError, match="requires a verified finalizer ALLOW"
+    ):
         artifact_admission.seal_artifact_admission(
             str(artifact),
             str(bundle),
@@ -213,8 +218,59 @@ def test_artifact_binding_rejects_a_valid_finalizer_deny_before_key_load(
     assert artifact_hashed is False
 
 
+def test_artifact_verification_rejects_finalizer_deny_before_artifact_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allow_bundle, _allow_private, allow_public, allow_source, allow_context, decision = (
+        _finalized_allow(tmp_path / "allow")
+    )
+    assert decision == "ALLOW"
+    artifact = tmp_path / "artifact.bin"
+    artifact.write_bytes(b"artifact")
+    binding_private, binding_public = _keys(tmp_path, "artifact")
+    binding = tmp_path / "admission.eab"
+    artifact_admission.seal_artifact_admission(
+        str(artifact),
+        str(allow_bundle),
+        str(binding),
+        trusted_finalizer_public_key_path=str(allow_public),
+        expected_finalizer_source=allow_source,
+        expected_finalizer_context=allow_context,
+        private_key_path=str(binding_private),
+    )
+
+    denied_bundle, _denied_private, denied_public, denied_source, denied_context, decision = (
+        _finalized_allow(tmp_path / "denied", denied=True)
+    )
+    assert decision == "DENY"
+    hashed = False
+
+    def fail_if_hashed(*_args: object, **_kwargs: object) -> object:
+        nonlocal hashed
+        hashed = True
+        raise AssertionError("artifact must not be read before finalizer DENY is rejected")
+
+    monkeypatch.setattr(artifact_admission, "hash_regular_artifact", fail_if_hashed)
+    with pytest.raises(
+        artifact_admission.ArtifactAdmissionError, match="requires a verified finalizer ALLOW"
+    ):
+        artifact_admission.verify_artifact_admission(
+            str(binding),
+            str(artifact),
+            str(denied_bundle),
+            trusted_public_key_path=str(binding_public),
+            trusted_finalizer_public_key_path=str(denied_public),
+            expected_finalizer_source=denied_source,
+            expected_finalizer_context=denied_context,
+        )
+    assert hashed is False
+
+
 def test_artifact_binding_requires_a_key_distinct_from_the_finalizer(tmp_path: Path) -> None:
-    bundle, finalizer_private, finalizer_public, source, context, decision = _finalized_allow(tmp_path)
+    bundle, finalizer_private, finalizer_public, source, context, decision = _finalized_allow(
+        tmp_path
+    )
     assert decision == "ALLOW"
     artifact = tmp_path / "artifact.bin"
     artifact.write_bytes(b"artifact")
@@ -234,7 +290,9 @@ def test_artifact_binding_requires_a_key_distinct_from_the_finalizer(tmp_path: P
 def test_artifact_binding_rejects_a_canonical_payload_with_replayed_signature(
     tmp_path: Path,
 ) -> None:
-    bundle, _finalizer_private, finalizer_public, source, context, _decision = _finalized_allow(tmp_path)
+    bundle, _finalizer_private, finalizer_public, source, context, _decision = _finalized_allow(
+        tmp_path
+    )
     artifact = tmp_path / "artifact.bin"
     artifact.write_bytes(b"artifact")
     binding_private, binding_public = _keys(tmp_path, "artifact")
@@ -275,7 +333,9 @@ def test_artifact_binding_rejects_a_canonical_payload_with_replayed_signature(
         )
 
 
-def test_artifact_binding_refuses_noncanonical_shape_and_non_regular_subject(tmp_path: Path) -> None:
+def test_artifact_binding_refuses_noncanonical_shape_and_non_regular_subject(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(artifact_admission.ArtifactAdmissionError, match="regular non-symlink"):
         artifact_admission.hash_regular_artifact(str(tmp_path))
     with pytest.raises(artifact_admission.ArtifactAdmissionError, match="subject.kind"):
@@ -286,7 +346,9 @@ def test_artifact_binding_refuses_noncanonical_shape_and_non_regular_subject(tmp
         )
 
 
-def test_artifact_hash_rejects_a_file_that_changes_while_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_artifact_hash_rejects_a_file_that_changes_while_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     artifact = tmp_path / "artifact.bin"
     artifact.write_bytes(b"artifact")
     real_fstat = artifact_admission.os.fstat
@@ -309,11 +371,15 @@ def test_artifact_hash_rejects_a_file_that_changes_while_read(tmp_path: Path, mo
         )
 
     monkeypatch.setattr(artifact_admission.os, "fstat", changing_fstat)
-    with pytest.raises(artifact_admission.ArtifactAdmissionError, match="changed while it was being read"):
+    with pytest.raises(
+        artifact_admission.ArtifactAdmissionError, match="changed while it was being read"
+    ):
         artifact_admission.hash_regular_artifact(str(artifact))
 
 
-def test_artifact_hash_rejects_a_short_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_artifact_hash_rejects_a_short_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     artifact = tmp_path / "artifact.bin"
     artifact.write_bytes(b"artifact")
 
@@ -348,8 +414,12 @@ def test_external_finalizer_json_rejects_a_symlink(tmp_path: Path) -> None:
         cli._read_external_finalizer_object(str(link), label="expected source")
 
 
-def test_artifact_admission_cli_round_trip(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    bundle, _finalizer_private, finalizer_public, source, context, _decision = _finalized_allow(tmp_path)
+def test_artifact_admission_cli_round_trip(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bundle, _finalizer_private, finalizer_public, source, context, _decision = _finalized_allow(
+        tmp_path
+    )
     artifact = tmp_path / "artifact.bin"
     artifact.write_bytes(b"artifact")
     binding_private, binding_public = _keys(tmp_path, "artifact")

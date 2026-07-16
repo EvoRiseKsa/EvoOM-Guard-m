@@ -439,6 +439,18 @@ def _effective_policy_from_raw_config(
         value = cfg.get(key)
         return value if isinstance(value, bool) else False
 
+    def policy_int(key: str) -> int | None:
+        value = cfg.get(key)
+        return value if type(value) is int else None
+
+    def policy_str(key: str) -> str | None:
+        value = cfg.get(key)
+        return value if isinstance(value, str) else None
+
+    def policy_float(key: str) -> float | None:
+        value = cfg.get(key)
+        return value if isinstance(value, float) else None
+
     raw_command = cfg.get("test_command")
     if isinstance(raw_command, str):
         shell_operators = ("&&", "||", ";", "|", ">", "<", "$(", chr(96))
@@ -463,27 +475,22 @@ def _effective_policy_from_raw_config(
     setup_globs = (
         tuple(str(item) for item in setup_globs_raw) if isinstance(setup_globs_raw, list) else ()
     )
-    timeout = cfg.get("timeout") if isinstance(cfg.get("timeout"), int) else 120
-    mem_limit = cfg.get("mem_limit") if isinstance(cfg.get("mem_limit"), int) else 1024
+    timeout = policy_int("timeout") or 120
+    configured_mem_limit = policy_int("mem_limit")
+    mem_limit = configured_mem_limit if configured_mem_limit is not None else 1024
     if mem_limit == 1024 and head_has_package_json:
         if "mem_limit" not in cfg:
             raise FinalizerDerivationError(
                 "trusted finalizer requires an explicit base-policy mem_limit for a Node project"
             )
         mem_limit = 0
-    isolation = cfg.get("isolation") if isinstance(cfg.get("isolation"), str) else "subprocess"
-    docker_image = cfg.get("docker_image") if isinstance(cfg.get("docker_image"), str) else None
-    docker_network = (
-        cfg.get("docker_network") if isinstance(cfg.get("docker_network"), str) else "none"
-    )
+    isolation = policy_str("isolation") or "subprocess"
+    docker_image = policy_str("docker_image")
+    docker_network = policy_str("docker_network") or "none"
     if isolation in {"docker", "gvisor"} and not docker_image:
         raise FinalizerDerivationError(f"base policy {isolation!r} requires docker_image")
-    pack = cfg.get("verifier_pack") if isinstance(cfg.get("verifier_pack"), str) else None
-    pack_pin = (
-        cfg.get("expect_verifier_pack_sha256")
-        if isinstance(cfg.get("expect_verifier_pack_sha256"), str)
-        else None
-    )
+    pack = policy_str("verifier_pack")
+    pack_pin = policy_str("expect_verifier_pack_sha256")
     policy = _effective_policy(
         mode="blackbox" if policy_bool("blackbox") else "repo",
         isolation=isolation,
@@ -502,28 +509,14 @@ def _effective_policy_from_raw_config(
         expect_verifier_pack_sha256=pack_pin,
         blackbox=policy_bool("blackbox"),
         blackbox_only=policy_bool("blackbox_only"),
-        require_report_integrity=(
-            cfg.get("require_report_integrity")
-            if isinstance(cfg.get("require_report_integrity"), str)
-            else None
-        ),
-        require_candidate_isolation=(
-            cfg.get("require_candidate_isolation")
-            if isinstance(cfg.get("require_candidate_isolation"), str)
-            else None
-        ),
-        min_diff_coverage=(
-            cfg.get("min_diff_coverage")
-            if isinstance(cfg.get("min_diff_coverage"), float)
-            else None
-        ),
+        require_report_integrity=policy_str("require_report_integrity"),
+        require_candidate_isolation=policy_str("require_candidate_isolation"),
+        min_diff_coverage=policy_float("min_diff_coverage"),
         baseline_evidence=policy_bool("baseline_evidence"),
         require_demonstrated_fix=policy_bool("require_demonstrated_fix"),
         strict_harness=policy_bool("strict_harness"),
-        policy_id=cfg.get("policy_id") if isinstance(cfg.get("policy_id"), str) else None,
-        policy_version=(
-            cfg.get("policy_version") if isinstance(cfg.get("policy_version"), str) else None
-        ),
+        policy_id=policy_str("policy_id"),
+        policy_version=policy_str("policy_version"),
     )
     return policy, pack, pack_pin
 
