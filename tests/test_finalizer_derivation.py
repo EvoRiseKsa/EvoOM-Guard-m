@@ -232,7 +232,21 @@ def test_raw_git_derivation_rejects_changed_binary_path(tmp_path: Path) -> None:
 def test_raw_git_derivation_rejects_mode_only_change(tmp_path: Path) -> None:
     repo, base, head = _create_repository(tmp_path)
     _git(repo, "update-index", "--chmod=+x", "app.py")
-    mode_head = _commit(repo, "mode candidate")
+    # Do not call _commit here: it intentionally refreshes the index with
+    # `git add --all`, which resets this index-only mode delta on Linux because
+    # the on-disk fixture remains non-executable. Commit the staged Git mode
+    # explicitly so the test is portable across Windows and POSIX.
+    _git(
+        repo,
+        "-c",
+        "user.name=EvoGuard Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "mode candidate",
+    )
+    mode_head = _git(repo, "rev-parse", "HEAD")
 
     with pytest.raises(FinalizerDerivationError, match="path mode changed"):
         _derived(repo, base, mode_head)
