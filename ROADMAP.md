@@ -85,9 +85,12 @@ needs — not feature accumulation. The order matters:
    Git/API-derived candidate, effective-policy, and verifier-pack identities in
    the sealing job without executing candidate code. See
    [`docs/TRUSTED_FINALIZER_HARDENING.md`](docs/TRUSTED_FINALIZER_HARDENING.md).
-3. **Artifact-bound admission.** Bind a signed ALLOW/DENY to the exact container
-   image, package, binary, or release bundle that is built after admission, then
-   make that evidence consumable alongside build provenance.
+3. **Artifact-bound admission.** The narrow file-only primitive can bind one
+   pre-merge regular-file digest to a verified finalizer `ALLOW`; it does not
+   establish how that file was built or published. A release/container/package
+   claim still requires independent finalizer derivation plus a provider-specific
+   provenance verifier and a merge-candidate boundary. Do not treat a matching
+   file digest as a deployment or supply-chain guarantee.
 4. **Only after external evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and their onboarding failures. They are not assumed product needs.

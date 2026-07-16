@@ -382,6 +382,12 @@ The private key must never be available to the candidate job. See
 [`docs/EVIDENCE_BUNDLES.md`](docs/EVIDENCE_BUNDLES.md) and
 [`docs/RECORD_VERIFICATION.md`](docs/RECORD_VERIFICATION.md).
 
+For a deliberately narrow relation between a single regular-file digest and an
+externally verified **pre-merge** finalizer `ALLOW`, use
+[`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md). It is not build
+provenance, release proof, OCI verification, publication authorization, or
+deployment attestation.
+
 ## Evidence beyond "the tests passed"
 
 **Baseline differential evidence** (`--baseline-evidence`, v3.3): the suite also
@@ -474,6 +480,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REPOSITORY_PROTECTION.md`](docs/REPOSITORY_PROTECTION.md) | GitHub merge/ruleset controls that a composite Action cannot enforce from inside itself |
 | [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
+| [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |

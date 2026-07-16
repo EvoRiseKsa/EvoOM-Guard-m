@@ -104,6 +104,23 @@ Docker daemon/kernel is impossible to escape, or that a deployment artifact was
 the one tested. `guard_artifact_sha256` identifies the Guard executable; it is
 not the SHA of the candidate container, package, binary, or release asset.
 
+## Narrow file artifact admission
+
+The optional [`Artifact Admission`](ARTIFACT_ADMISSION.md) primitive can bind a
+single regular-file digest to an already externally verified finalizer `ALLOW`.
+It is intentionally a **pre-merge** relation: its source is the exact PR
+`head_sha` accepted by this finalizer, not a later merge/rebase commit or a
+published release. It uses a separate artifact-admission key and requires the
+consumer to supply the finalizer public key, exact source/context, and final
+bundle again when verifying the file binding.
+
+It does not replace the limitations above and does not prove build provenance,
+reproducibility, registry identity, release publication, deployment, OCI image
+integrity, SBOM contents, or vulnerability status. The reference finalizer
+workflows do not create or publish artifact bindings. Those integrations require
+independent canonical finalizer derivation and a separately reviewed,
+provider-specific build-provenance boundary.
+
 The reference re-verifier requires an external black-box path with a
 network-less container before it will create a handoff. Docker is defense in
 depth, not a complete hostile-code boundary. For public/forked untrusted code,

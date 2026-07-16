@@ -155,6 +155,11 @@ exact-context checks but deliberately does not decide record semantics. Admissio
 code should use `verify_evidence_bundle()`, which performs all four checks, or the
 CLI command above.
 
+For a narrowly scoped relation between one regular file and an already verified
+Trusted Finalizer `ALLOW`, see [`ARTIFACT_ADMISSION.md`](ARTIFACT_ADMISSION.md).
+It is a separate format with a distinct key and signing domain; a generic
+evidence-bundle material is not artifact admission or build provenance.
+
 Machine-readable contracts:
 
 - [`evidence-context-1.schema.json`](../evoom_guard/schemas/evidence-context-1.schema.json)

@@ -9,6 +9,26 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [Unreleased]
+
+### Added
+
+- A deliberately narrow `EVOGUARD_ARTIFACT_BINDING_V1` core: a detached
+  Ed25519-signed `.eab` binds one regular-file SHA-256 and byte length to an
+  externally verified Trusted Finalizer `ALLOW`. Both sealing and verification
+  require the finalizer public key plus exact external source/context inputs;
+  a finalizer `DENY` cannot produce an artifact `ALLOW`.
+- `seal-artifact-admission` and `verify-artifact-admission` commands, strict
+  canonical container/schema validation, and a 4 GiB bounded streaming file
+  hash.
+
+### Deliberate limits
+
+- This is pre-merge file binding only. It does not claim build provenance,
+  reproducibility, OCI/container identity, registry or release publication,
+  deployment, SBOM coverage, or vulnerability status. GitHub/Sigstore
+  provenance and protected build workflow integration remain separate work.
+
 ## [3.6.1] — 2026-07-16
 
 ### Fixed

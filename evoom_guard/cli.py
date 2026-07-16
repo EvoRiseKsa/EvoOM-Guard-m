@@ -14,6 +14,8 @@ Subcommands:
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
   * ``evo-guard finalizer-handoff`` — bind a re-verification record to source metadata.
   * ``evo-guard seal-finalizer`` — sign only a handoff matched to external metadata.
+  * ``evo-guard seal-artifact-admission`` — bind one file to a verified finalizer ALLOW.
+  * ``evo-guard verify-artifact-admission`` — verify that file/finalizer binding.
   * ``evo-guard version`` — print the EvoGuard version.
 """
 
@@ -877,6 +879,71 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-pass",
         action="store_true",
         help="also act as a gate: exit 0 only for a verified semantic PASS",
+    )
+
+    # ----- artifact admission --------------------------------------------- #
+    saa_p = sub.add_parser(
+        "seal-artifact-admission",
+        help="bind one regular file to an externally verified finalizer ALLOW",
+    )
+    saa_p.add_argument(
+        "artifact",
+        help="regular file to bind; this command does not establish build provenance",
+    )
+    saa_p.add_argument("finalizer_bundle", help="signed .evb from the Trusted Finalizer")
+    saa_p.add_argument("--out", required=True, help="output signed .eab artifact binding")
+    saa_p.add_argument(
+        "--finalizer-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the finalizer",
+    )
+    saa_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external finalizer source JSON; exact match is required",
+    )
+    saa_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="external finalizer context JSON; exact match is required",
+    )
+    saa_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="artifact-admission Ed25519 private key in a post-build protected job",
+    )
+    saa_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+
+    vaa_p = sub.add_parser(
+        "verify-artifact-admission",
+        help="verify a file artifact binding and its external finalizer prerequisite",
+    )
+    vaa_p.add_argument("binding", help="signed .eab artifact binding")
+    vaa_p.add_argument("artifact", help="regular file artifact to hash independently")
+    vaa_p.add_argument("finalizer_bundle", help="signed .evb from the Trusted Finalizer")
+    vaa_p.add_argument(
+        "--trusted-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the artifact-admission signer",
+    )
+    vaa_p.add_argument(
+        "--finalizer-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the finalizer",
+    )
+    vaa_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external finalizer source JSON; exact match is required",
+    )
+    vaa_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="external finalizer context JSON; exact match is required",
     )
 
     # ----- verify-bundle ---------------------------------------------------- #
@@ -1967,11 +2034,15 @@ def cmd_finalize_record(
 def _read_external_finalizer_object(path: str, *, label: str) -> dict[str, object]:
     """Read a bounded JSON object supplied outside candidate-controlled artifacts."""
 
+    from evoom_guard.evidence_bundle import EvidenceBundleError, _read_regular_file
     from evoom_guard.record_verifier import strict_json_loads
 
     if path == "-":
         raise ValueError(f"{label} must be a regular JSON file, not standard input")
-    data = _read_bounded_bytes(path, limit=MAX_CONTEXT_INPUT_BYTES, label=label)
+    try:
+        data = _read_regular_file(path, limit=MAX_CONTEXT_INPUT_BYTES, label=label)
+    except EvidenceBundleError as exc:
+        raise ValueError(str(exc)) from exc
     value = strict_json_loads(data.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{label} JSON must be an object")
@@ -2393,6 +2464,198 @@ def cmd_verify_finalized(
     return 0 if ok else 1
 
 
+def cmd_seal_artifact_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Seal one file only after an external Trusted Finalizer ALLOW."""
+
+    from evoom_guard.artifact_admission import (
+        ARTIFACT_BINDING_FORMAT,
+        ArtifactAdmissionError,
+        seal_artifact_admission,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    if args.artifact == "-" or args.finalizer_bundle == "-":
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": "artifact and finalizer bundle must be regular files, not standard input",
+            },
+        )
+        return 2
+    try:
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        sealed = seal_artifact_admission(
+            args.artifact,
+            args.finalizer_bundle,
+            args.out,
+            trusted_finalizer_public_key_path=args.finalizer_pub,
+            expected_finalizer_source=expected_source,
+            expected_finalizer_context=expected_context,
+            private_key_path=args.sign_key,
+            force=args.force,
+        )
+    except ArtifactAdmissionError as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "INVALID_INPUT",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError, SigningUnavailableError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": ARTIFACT_BINDING_FORMAT,
+            "ok": True,
+            "sealed": True,
+            "status": "SEALED",
+            "decision": "ALLOW",
+            "binding": sealed.binding_path,
+            "subject": sealed.subject.as_dict(),
+            "finalizer": sealed.payload["finalizer"],
+            "key_id": sealed.payload["authentication"]["key_id"],
+        },
+    )
+    return 0
+
+
+def cmd_verify_artifact_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify a file binding with external artifact/finalizer trust inputs."""
+
+    from evoom_guard.artifact_admission import (
+        ARTIFACT_BINDING_FORMAT,
+        ArtifactAdmissionError,
+        verify_artifact_admission,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    if any(value == "-" for value in (args.binding, args.artifact, args.finalizer_bundle)):
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": "binding, artifact, and finalizer bundle must be regular files, not standard input",
+            },
+        )
+        return 2
+    try:
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        verified = verify_artifact_admission(
+            args.binding,
+            args.artifact,
+            args.finalizer_bundle,
+            trusted_public_key_path=args.trusted_pub,
+            trusted_finalizer_public_key_path=args.finalizer_pub,
+            expected_finalizer_source=expected_source,
+            expected_finalizer_context=expected_context,
+        )
+    except ArtifactAdmissionError as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "INVALID",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError, SigningUnavailableError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": ARTIFACT_BINDING_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "VERIFIED",
+            "decision": "ALLOW",
+            "subject": verified.subject.as_dict(),
+            "finalizer": verified.inspection.finalizer,
+            "key_id": verified.inspection.payload["authentication"]["key_id"],
+        },
+    )
+    return 0
+
+
 def cmd_verify_bundle(
     args: argparse.Namespace,
     *,
@@ -2649,6 +2912,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_finalizer(args)
     if args.command == "verify-finalized":
         return cmd_verify_finalized(args)
+    if args.command == "seal-artifact-admission":
+        return cmd_seal_artifact_admission(args)
+    if args.command == "verify-artifact-admission":
+        return cmd_verify_artifact_admission(args)
     if args.command == "verify-bundle":
         return cmd_verify_bundle(args)
     if args.command == "pack-doctor":
