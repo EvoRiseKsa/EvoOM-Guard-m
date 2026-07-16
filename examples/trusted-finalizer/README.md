@@ -1,13 +1,13 @@
 # Reference Trusted Finalizer workflows
 
-These are a paired reference deployment for the v3.6.0 split finalizer. They
+These are a paired reference deployment for the v3.6.1 split finalizer. They
 are intentionally not activated inside EvoOM Guard itself; copy them to the
 consumer repository in one protected change and test them on a disposable PR.
 
 1. Copy `reverify.yml` to `.github/workflows/evoguard-reverify.yml`.
 2. Copy `seal.yml` to `.github/workflows/evoguard-seal.yml`.
 3. Create protected variable `EVOGUARD_GUARD_ARTIFACT_SHA256` with the reviewed
-   SHA-256 of the v3.6.0 `evo-guard.pyz` asset.
+   SHA-256 of the v3.6.1 `evo-guard.pyz` asset.
 4. Create Environment `evoguard-finalizer`, add the PEM private key as
    `EVOGUARD_FINALIZER_KEY`, and configure a genuine required reviewer.
 5. Run **EvoGuard Reverify** manually **from the protected default branch** for

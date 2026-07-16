@@ -30,6 +30,12 @@ def test_reference_finalizer_separates_candidate_execution_from_key() -> None:
     candidate_job = reverify.split("\n  reverify:\n", 1)[1]
     assert "    permissions:\n      contents: read" in candidate_job
     assert "checks: write" not in candidate_job.split("\n    steps:", 1)[0]
+    assert "actions/setup-python" in candidate_job
+    assert 'python-version: "3.12"' in candidate_job
+    assert "Install hash-locked judge test dependencies" in candidate_job
+    assert "pytest==9.0.3" in candidate_job
+    assert "--require-hashes" in candidate_job
+    assert "--only-binary=:all:" in candidate_job
 
     assert "workflow_run:" in seal
     assert "pull_request_target" not in seal
