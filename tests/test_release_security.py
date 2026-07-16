@@ -115,11 +115,34 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     assert "'^[0-9a-f]{64}  evo-guard\\.pyz$'" in prepare
 
 
-def test_release_branch_is_retained_until_the_draft_is_published() -> None:
+def test_release_is_manual_and_accepts_only_the_default_branch() -> None:
     text = RELEASE.read_text(encoding="utf-8")
-    assert "retain that branch until the immutable tag is published" in text
-    assert "git/refs/heads/$GITHUB_REF_NAME" not in text
-    assert "Delete the release/* trigger branch" not in text
+    assert "workflow_dispatch:" in text
+    assert "\n  push:" not in text
+    assert "release/v" not in text
+    assert "permissions: {}" in text
+    default_branch_guard = (
+        "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+    )
+    for job in (
+        "validate-test",
+        "release-e2e",
+        "release-windows-e2e",
+        "build-artifact",
+        "prepare-draft",
+    ):
+        assert default_branch_guard in _job_block(RELEASE, job)
+
+
+def test_non_release_workflows_declare_their_read_only_baseline() -> None:
+    for workflow in (CI, WINDOWS):
+        text = workflow.read_text(encoding="utf-8")
+        assert "permissions:\n  contents: read" in text
+
+    codeql = (WORKFLOWS / "codeql.yml").read_text(encoding="utf-8")
+    assert "permissions:\n  contents: read" in codeql
+    analyze = _job_block(WORKFLOWS / "codeql.yml", "analyze")
+    assert "security-events: write" in analyze
 
 
 def test_release_workflow_prepares_a_draft_and_never_publishes_it() -> None:

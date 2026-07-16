@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# The Windows compatibility suite only reads the source tree.
+permissions:
+  contents: read
+
 jobs:
   smoke:
     runs-on: windows-latest

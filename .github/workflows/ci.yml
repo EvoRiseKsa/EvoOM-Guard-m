@@ -10,6 +10,11 @@ on:
     tags: ['v*']
   pull_request:
 
+# CI never needs a write-capable token. Keep this explicit so adding a job
+# cannot silently inherit a broader repository default.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

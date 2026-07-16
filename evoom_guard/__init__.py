@@ -23,4 +23,4 @@ from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
 __all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__version__ = "3.5.4"
+__version__ = "3.5.5"

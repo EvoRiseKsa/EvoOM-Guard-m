@@ -5,10 +5,9 @@
 # Release: validates the requested version, runs the full test suite, builds the
 # zero-dependency `evo-guard.pyz` (+ SHA256SUMS), and prepares a draft release.
 #
-# Two triggers:
-#   * push of a branch named `release/vX.Y.Z` (the tag is derived from the
-#     branch name; retain that branch until the immutable tag is published), or
-#   * manual workflow_dispatch with a `tag` input (Actions tab).
+# The workflow is manual-only and its jobs accept the default branch only.
+# A push to an unprotected release/* branch must never receive the contents:write
+# token used to create a draft release.
 #
 # Immutable Releases is enabled for this repository. GitHub's required order is
 # draft -> upload every asset -> publish; publishing locks the tag and assets.
@@ -24,16 +23,27 @@
 name: Release
 
 on:
-  push:
-    branches: ['release/v*']
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag (must equal 'v' + evoom_guard.__version__)"
         required: true
 
+# Every permission is declared at the narrowest possible scope below. This
+# prevents a future job from inheriting a repository-wide write token by
+# accident; only prepare-draft needs contents:write.
+permissions: {}
+
+# Never cancel an earlier release run: cancellation after uploading one asset
+# would leave an incomplete draft that a later run must audit before mutation.
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   validate-test:
+    # workflow_dispatch can be invoked with another ref; that must be a no-op.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,14 +54,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Resolve the tag (input, or the release/* branch name)
+      - name: Resolve and validate the requested tag
         id: resolve-tag
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           TAG="$DISPATCH_TAG"
-          if [ -z "$TAG" ]; then TAG="${GITHUB_REF_NAME#release/}"; fi
           if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::invalid_release_tag: expected canonical vMAJOR.MINOR.PATCH, got '$TAG'"
             exit 2
@@ -81,9 +90,9 @@ jobs:
         run: python -m pytest tests/ -q
 
   release-e2e:
-    # A release branch does not trigger ci.yml. Re-run the two integration
-    # boundaries here and make the artifact build depend on them, so a direct
-    # release-branch change cannot create a draft before runner/Docker E2E.
+    # Re-run the two integration boundaries for the manually selected default
+    # branch; the write-capable job cannot run before these complete.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -121,6 +130,7 @@ jobs:
           tests/test_docker_isolation.py::test_docker_setup_suite_and_pack_e2e -v
 
   release-windows-e2e:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: windows-latest
     permissions:
       contents: read
@@ -143,6 +153,7 @@ jobs:
 
   build-artifact:
     needs: [validate-test, release-e2e, release-windows-e2e]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -181,6 +192,7 @@ jobs:
 
   prepare-draft:
     needs: [validate-test, build-artifact]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
       contents: write
