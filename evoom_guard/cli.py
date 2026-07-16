@@ -93,6 +93,17 @@ _CONFIG_KEYS = frozenset({
     "test_command", "setup_command", "protected", "allow",
     "timeout", "mem_limit", "allow_new_tests", "trust_setup_on_host",
     "setup_output_globs",
+    # Strict profile: immutable dependency/compiler manifests plus a required
+    # non-empty structured test verdict.  The default stays false for adoption
+    # compatibility; PR Actions load this only from the trusted base policy.
+    "strict_harness",
+    # Execution policy keys are accepted here so a pull_request Action can
+    # obtain them from its verified base .evoguard.json rather than candidate
+    # workflow ``with:`` inputs.
+    "isolation", "docker_image", "docker_network",
+    "blackbox", "blackbox_only",
+    "diff_coverage", "baseline_evidence", "require_demonstrated_fix",
+    "verifier_pack",
     "expect_verifier_pack_sha256",
     # Protected policy contract (enforced fail-closed by the engine):
     "require_report_integrity", "require_candidate_isolation",
@@ -103,6 +114,25 @@ _CONFIG_KEYS = frozenset({
 })
 _REPORT_INTEGRITY_VALUES = ("same_process_candidate_writable", "external_process_isolated")
 _ISOLATION_VALUES = ("subprocess", "docker", "gvisor")
+_GITHUB_ACTIONS_CREDENTIAL_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+def _github_actions_credential_key(value: object) -> str:
+    """Validate the *name* of a GitHub Actions credential reference.
+
+    ``evo-guard init --private-evoguard`` never receives a PAT value. It writes
+    a literal ``${{ secrets.NAME }}`` expression into a workflow for GitHub to
+    resolve later. Restricting ``NAME`` prevents a caller from injecting YAML,
+    shell syntax, or a second expression into that generated template.
+    """
+    if not isinstance(value, str) or _GITHUB_ACTIONS_CREDENTIAL_KEY_RE.fullmatch(value) is None:
+        raise ValueError(
+            "--evoguard-token-secret must be a GitHub Actions credential name "
+            "containing only letters, digits, and underscores"
+        )
+    if value.upper().startswith("GITHUB_"):
+        raise ValueError("--evoguard-token-secret must not begin with GITHUB_")
+    return value
 
 
 def _load_config(
@@ -117,8 +147,10 @@ def _load_config(
     (token list), ``protected`` / ``allow`` (glob lists), ``timeout`` /
     ``mem_limit`` (ints), ``allow_new_tests`` (bool), the protected assurance
     floors ``require_report_integrity`` / ``require_candidate_isolation``,
-    ``min_diff_coverage`` (number, 0–100) and the policy identity
-    ``policy_id`` / ``policy_version`` (strings).
+    execution/isolation controls, evidence gates, ``strict_harness`` and the
+    policy identity ``policy_id`` / ``policy_version`` (strings).
+    ``verifier_pack`` may name a judge-owned pack; relative paths resolve from
+    the trusted policy file.
 
     A missing file yields no defaults. A present-but-broken file — unreadable
     JSON, a non-object, an unknown key, or a wrong-typed/invalid value —
@@ -178,16 +210,34 @@ def _load_config(
             if key == "mem_limit" and v < 0:
                 raise _bad(key, "expected a non-negative integer")
             cfg[key] = v
-    if "allow_new_tests" in data:
-        v = data["allow_new_tests"]
-        if not isinstance(v, bool):
-            raise _bad("allow_new_tests", "expected true or false")
-        cfg["allow_new_tests"] = v
-    if "trust_setup_on_host" in data:
-        v = data["trust_setup_on_host"]
-        if not isinstance(v, bool):
-            raise _bad("trust_setup_on_host", "expected true or false")
-        cfg["trust_setup_on_host"] = v
+    for key in (
+        "allow_new_tests", "trust_setup_on_host", "strict_harness",
+        "blackbox", "blackbox_only", "diff_coverage", "baseline_evidence",
+        "require_demonstrated_fix",
+    ):
+        if key in data:
+            v = data[key]
+            if not isinstance(v, bool):
+                raise _bad(key, "expected true or false")
+            cfg[key] = v
+    if data.get("blackbox_only") is True and data.get("blackbox") is not True:
+        raise _bad("blackbox_only", "requires blackbox: true")
+    if "isolation" in data:
+        v = data["isolation"]
+        if v not in _ISOLATION_VALUES:
+            raise _bad("isolation", f"expected one of {list(_ISOLATION_VALUES)}")
+        cfg["isolation"] = v
+    for key in ("docker_image", "docker_network"):
+        if key in data:
+            v = data[key]
+            if not isinstance(v, str) or not v.strip() or "\x00" in v:
+                raise _bad(key, "expected a non-empty string without NUL")
+            cfg[key] = v
+    if "verifier_pack" in data:
+        v = data["verifier_pack"]
+        if not isinstance(v, str) or not v.strip():
+            raise _bad("verifier_pack", "expected a non-empty path string")
+        cfg["verifier_pack"] = v
     if "expect_verifier_pack_sha256" in data:
         v = data["expect_verifier_pack_sha256"]
         if not isinstance(v, str) or re.fullmatch(r"[0-9a-fA-F]{64}", v) is None:
@@ -359,10 +409,14 @@ def build_parser() -> argparse.ArgumentParser:
         "suite; black-box mode runs it first and may short-circuit before the repo "
         "phase. A narrowed repo command cannot skip it. Repo-native candidate imports "
         "share the judge process — the pack is not secret (use "
-        "--blackbox with --isolation docker for that). See docs/VERIFIER_PACKS.md.",
+        "--blackbox with --isolation docker for that). In --diff and --base/--head "
+        "modes it must be outside the candidate checkout (or materialized from the "
+        "trusted base) and have --expect-verifier-pack-sha256. "
+        "See docs/VERIFIER_PACKS.md.",
     )
-    g_p.add_argument(
-        "--blackbox", dest="blackbox", action="store_true",
+    blackbox_group = g_p.add_mutually_exclusive_group()
+    blackbox_group.add_argument(
+        "--blackbox", dest="blackbox", action="store_const", const=True, default=None,
         help="external black-box judge (needs --verifier-pack): the verdict comes "
         "from the JUDGE's own pytest over the pack, which never imports the "
         "candidate — closing same-process report forgery for that phase. The "
@@ -372,11 +426,21 @@ def build_parser() -> argparse.ArgumentParser:
         "composite has the weaker repo-native report-integrity level. "
         "See docs/BLACKBOX.md.",
     )
-    g_p.add_argument(
-        "--blackbox-only", dest="blackbox_only", action="store_true",
+    blackbox_group.add_argument(
+        "--no-blackbox", dest="blackbox", action="store_const", const=False,
+        help="explicitly override blackbox: true from a trusted policy",
+    )
+    blackbox_only_group = g_p.add_mutually_exclusive_group()
+    blackbox_only_group.add_argument(
+        "--blackbox-only", dest="blackbox_only", action="store_const", const=True,
+        default=None,
         help="with --blackbox, judge ONLY the external pack and skip the repo's own "
         "suite (for pure-CLI/service targets that have no in-repo tests). Without "
         "this, a failing repo suite blocks the merge even if the pack passes.",
+    )
+    blackbox_only_group.add_argument(
+        "--no-blackbox-only", dest="blackbox_only", action="store_const", const=False,
+        help="explicitly override blackbox_only: true from a trusted policy",
     )
     g_p.add_argument(
         "--require-report-integrity", dest="require_report_integrity", default=None,
@@ -415,19 +479,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="explicitly override trust_setup_on_host=true from .evoguard.json and "
         "keep docker/gvisor setup inside the requested container boundary.",
     )
-    g_p.add_argument(
-        "--baseline-evidence", dest="baseline_evidence", action="store_true",
+    baseline_group = g_p.add_mutually_exclusive_group()
+    baseline_group.add_argument(
+        "--baseline-evidence", dest="baseline_evidence", action="store_const",
+        const=True, default=None,
         help="differential evidence (opt-in): also run the suite on the PRISTINE "
         "base (no candidate) and report repair_effect — 'demonstrated' only when "
         "the base fails and the candidate passes under the same judge/policy/env. "
         "Evidence only; the verdict is unchanged. Subprocess judge only.",
     )
-    g_p.add_argument(
-        "--require-demonstrated-fix", dest="require_demonstrated_fix", action="store_true",
+    baseline_group.add_argument(
+        "--no-baseline-evidence", dest="baseline_evidence", action="store_const",
+        const=False,
+        help="explicitly override baseline_evidence: true from a trusted policy",
+    )
+    demonstrated_fix_group = g_p.add_mutually_exclusive_group()
+    demonstrated_fix_group.add_argument(
+        "--require-demonstrated-fix", dest="require_demonstrated_fix", action="store_const",
+        const=True, default=None,
         help="gate (opt-in, implies --baseline-evidence): a PASS whose repair "
         "effect is not demonstrated (the base already passed, or no clean "
         "baseline verdict) becomes FAIL (fix_not_demonstrated). For agent 'fix' "
         "PRs; do NOT use on ordinary feature PRs, which start from a green base.",
+    )
+    demonstrated_fix_group.add_argument(
+        "--no-require-demonstrated-fix", dest="require_demonstrated_fix",
+        action="store_const", const=False,
+        help="explicitly override require_demonstrated_fix: true from a trusted policy",
     )
     g_p.add_argument(
         "--base-sha", dest="base_sha", default=None,
@@ -447,11 +525,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--head-tree-sha", dest="head_tree_sha", default=None,
         help="head TREE SHA (git rev-parse HEAD^{tree})",
     )
-    g_p.add_argument(
-        "--diff-coverage", dest="diff_coverage", action="store_true",
+    coverage_group = g_p.add_mutually_exclusive_group()
+    coverage_group.add_argument(
+        "--diff-coverage", dest="diff_coverage", action="store_const", const=True,
+        default=None,
         help="measure which changed lines the suite actually executed (one extra "
         "suite run under coverage; needs the 'cov' extra). Evidence only unless "
         "--min-diff-coverage is set. Executed is not asserted.",
+    )
+    coverage_group.add_argument(
+        "--no-diff-coverage", dest="diff_coverage", action="store_const", const=False,
+        help="explicitly override diff_coverage: true from a trusted policy",
     )
     g_p.add_argument(
         "--min-diff-coverage", dest="min_diff_coverage", type=float, default=None,
@@ -483,7 +567,7 @@ def build_parser() -> argparse.ArgumentParser:
         "when no trusted base policy is materialized.",
     )
     g_p.add_argument(
-        "--isolation", choices=("subprocess", "docker", "gvisor"), default="subprocess",
+        "--isolation", choices=("subprocess", "docker", "gvisor"), default=None,
         help="how to run the suite: 'subprocess' (default; rlimits+timeout, not a "
         "sandbox), 'docker' (network-less, read-only container — defence in depth for "
         "semi-trusted code), or 'gvisor' (same, via the runsc OCI runtime — a "
@@ -496,10 +580,22 @@ def build_parser() -> argparse.ArgumentParser:
         "test runner, e.g. node:22-slim for `node --test`)",
     )
     g_p.add_argument(
-        "--docker-network", dest="docker_network", default="none",
+        "--docker-network", dest="docker_network", default=None,
         help="container network for --isolation docker/gvisor (default: 'none' — no "
         "network, the safe choice; pass a docker network name only if the suite "
         "genuinely needs it)",
+    )
+    strict_harness_group = g_p.add_mutually_exclusive_group()
+    strict_harness_group.add_argument(
+        "--strict-harness", dest="strict_harness", action="store_const",
+        const=True, default=None,
+        help="opt-in strict profile: make dependency/compiler/project manifests "
+        "immutable and require a non-empty structured JUnit test verdict",
+    )
+    strict_harness_group.add_argument(
+        "--no-strict-harness", dest="strict_harness", action="store_const",
+        const=False,
+        help="explicitly override strict_harness: true from a trusted policy",
     )
     g_p.add_argument("--json", dest="json_out", default=None, help="write the JSON verdict to this path")
     g_p.add_argument(
@@ -650,9 +746,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     i_p.add_argument(
         "--test-command", dest="test_command", default="python -m pytest -q",
-        help="test command to embed in the workflow (default: python -m pytest -q — "
-        "the -m form puts the repo root on sys.path so top-level packages import "
-        "without an install/conftest)",
+        help="test command to write into the trusted .evoguard.json policy "
+        "(default: python -m pytest -q; the -m form puts the repo root on sys.path)",
+    )
+    i_p.add_argument(
+        "--policy-path", default=None,
+        help="where to write the trusted policy (default: .evoguard.json at the "
+        "repository root inferred from --path)",
     )
     i_p.add_argument(
         "--ref", default=f"v{__version__}",
@@ -670,7 +770,7 @@ def build_parser() -> argparse.ArgumentParser:
         "(required when the EvoGuard repo is not accessible with the default GITHUB_TOKEN)",
     )
     i_p.add_argument(
-        "--evoguard-token-secret", dest="evoguard_token_secret",
+        "--evoguard-token-secret", dest="github_actions_credential_key",
         default="EVOGUARD_TOKEN",
         help="name of the Actions secret that holds the PAT for the private EvoGuard "
         "repo (default: EVOGUARD_TOKEN; only used with --private-evoguard)",
@@ -685,10 +785,15 @@ def build_parser() -> argparse.ArgumentParser:
 def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard guard`` — the untrusted-change verification gate."""
     from evoom_guard.guard import (
+        REASON_NO_VERIFIABLE_CHANGES,
+        REASON_VERIFIER_PACK_INVALID,
+        _UnverifiableChangedPathsError,
         blocks_from_dirs,
         guard,
         guard_from_diff,
+        input_error_result,
         render_report,
+        verifier_pack_trust_error,
         write_json,
         write_sarif,
     )
@@ -712,7 +817,26 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         out(f"config error (fail-closed): {exc}")
         return 2
 
-    if args.blackbox_only and not args.blackbox:
+    def _policy_bool(key: str, cli_value: bool | None) -> bool:
+        """Resolve a tri-state CLI flag against the already trusted policy."""
+        if cli_value is not None:
+            return cli_value
+        value = cfg.get(key)
+        return value if isinstance(value, bool) else False
+
+    # These must be resolved *before* validation.  In pull_request mode the
+    # Action deliberately supplies no candidate workflow flags, so the verified
+    # base policy is the only source for these judge-shaping settings.
+    blackbox = _policy_bool("blackbox", args.blackbox)
+    blackbox_only = _policy_bool("blackbox_only", args.blackbox_only)
+    diff_coverage_requested = _policy_bool("diff_coverage", args.diff_coverage)
+    baseline_evidence = _policy_bool("baseline_evidence", args.baseline_evidence)
+    require_demonstrated_fix = _policy_bool(
+        "require_demonstrated_fix", args.require_demonstrated_fix
+    )
+    strict_harness = _policy_bool("strict_harness", args.strict_harness)
+
+    if blackbox_only and not blackbox:
         out("usage: --blackbox-only requires --blackbox")
         return 2
 
@@ -745,6 +869,23 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
     setup_output_globs = (
         tuple(str(glob) for glob in cfg_sog) if isinstance(cfg_sog, list) else ()
     )
+    # A policy-owned pack makes the Action's PR mode usable without taking its
+    # location from a candidate-controlled workflow.  Relative config values
+    # are relative to the trusted policy file, never the candidate cwd.
+    cfg_pack = cfg.get("verifier_pack")
+    verifier_pack = args.verifier_pack
+    if verifier_pack is None and isinstance(cfg_pack, str):
+        # A value in cfg proves a config file was loaded; keep the invariant
+        # explicit so relative paths cannot accidentally fall back to cwd.
+        if config_path is None:
+            raise AssertionError("configured verifier pack without a policy path")
+        verifier_pack = (
+            cfg_pack
+            if os.path.isabs(cfg_pack)
+            else os.path.abspath(
+                os.path.join(os.path.dirname(os.path.abspath(config_path)), cfg_pack)
+            )
+        )
     cfg_pack_sha = cfg.get("expect_verifier_pack_sha256")
     expect_verifier_pack_sha256 = (
         args.expect_verifier_pack_sha256
@@ -755,7 +896,7 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         if re.fullmatch(r"[0-9a-fA-F]{64}", expect_verifier_pack_sha256) is None:
             out("usage: --expect-verifier-pack-sha256 must be exactly 64 hex characters")
             return 2
-        if not args.verifier_pack:
+        if not verifier_pack:
             out("usage: --expect-verifier-pack-sha256 requires --verifier-pack")
             return 2
         expect_verifier_pack_sha256 = expect_verifier_pack_sha256.lower()
@@ -815,6 +956,10 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
     policy_id: str | None = _cfg_pid if isinstance(_cfg_pid, str) else None
     _cfg_pv = cfg.get("policy_version")
     policy_version: str | None = _cfg_pv if isinstance(_cfg_pv, str) else None
+    # A coverage floor is itself a gate, so an explicit ``--no-diff-coverage``
+    # must never weaken it.  The floor implies measurement in every policy
+    # source; an unsupported execution mode still fails closed in ``guard``.
+    diff_coverage = diff_coverage_requested or min_diff_coverage is not None
 
     # Auto-detect a Node.js project: V8 reserves huge virtual address space, which
     # makes RLIMIT_AS kill the test subprocess at startup. If package.json exists
@@ -825,9 +970,24 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         if os.path.isfile(os.path.join(_node_root, "package.json")):
             mem_limit = 0
 
-    isolation = args.isolation
-    docker_image = args.docker_image
-    docker_network = args.docker_network
+    _cfg_isolation = cfg.get("isolation")
+    isolation = (
+        args.isolation
+        if args.isolation is not None
+        else (_cfg_isolation if isinstance(_cfg_isolation, str) else "subprocess")
+    )
+    _cfg_docker_image = cfg.get("docker_image")
+    docker_image = (
+        args.docker_image
+        if args.docker_image is not None
+        else (_cfg_docker_image if isinstance(_cfg_docker_image, str) else None)
+    )
+    _cfg_docker_network = cfg.get("docker_network")
+    docker_network = (
+        args.docker_network
+        if args.docker_network is not None
+        else (_cfg_docker_network if isinstance(_cfg_docker_network, str) else "none")
+    )
     if isolation in ("docker", "gvisor") and not docker_image:
         out(f"usage: --isolation {isolation} requires --docker-image <image> "
             "(an image carrying the repo's test runner, e.g. node:22-slim)")
@@ -847,52 +1007,79 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
-            verifier_pack=args.verifier_pack,
+            verifier_pack=verifier_pack,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            diff_coverage=args.diff_coverage or min_diff_coverage is not None,
+            diff_coverage=diff_coverage,
             min_diff_coverage=min_diff_coverage,
-            blackbox=args.blackbox, blackbox_only=args.blackbox_only,
+            blackbox=blackbox, blackbox_only=blackbox_only,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
             base_sha=args.base_sha, head_sha=args.head_sha,
             base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
             policy_id=policy_id, policy_version=policy_version,
-            baseline_evidence=args.baseline_evidence,
-            require_demonstrated_fix=args.require_demonstrated_fix,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
         )
     elif args.base and args.head:
         # Structured candidate: never round-trip file content through the
         # <<<FILE>>> text format (content containing a literal marker line
         # must survive intact — see guard.blocks_from_dirs).
-        file_blocks, deleted = blocks_from_dirs(args.base, args.head)
-        candidate = "\n".join(
-            f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
-            for rel, new in file_blocks.items()
+        # ``head`` is untrusted in this mode.  A pack nested beneath it would
+        # let the candidate rewrite its own verifier before the snapshot is
+        # taken, even if its eventual digest matched the rewritten content.
+        # Require a pinned pack which is external or materialized from ``base``.
+        pack_trust_problem = verifier_pack_trust_error(
+            args.head, verifier_pack, expect_verifier_pack_sha256
         )
-        result = guard(
-            args.base, candidate,
-            deleted=tuple(deleted),
-            file_blocks=file_blocks,
-            test_command=test_command, setup_command=setup_command,
-            trust_setup_on_host=trust_setup_on_host,
-            setup_output_globs=setup_output_globs,
-            protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
-            mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
-            docker_network=docker_network,
-            verifier_pack=args.verifier_pack,
-            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            diff_coverage=args.diff_coverage or min_diff_coverage is not None,
-            min_diff_coverage=min_diff_coverage,
-            blackbox=args.blackbox, blackbox_only=args.blackbox_only,
-            require_report_integrity=require_report_integrity,
-            require_candidate_isolation=require_candidate_isolation,
-            base_sha=args.base_sha, head_sha=args.head_sha,
-            base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
-            policy_id=policy_id, policy_version=policy_version,
-            baseline_evidence=args.baseline_evidence,
-            require_demonstrated_fix=args.require_demonstrated_fix,
-        )
-        result.source = "base/head"
+        if pack_trust_problem:
+            result = input_error_result(
+                pack_trust_problem,
+                reason_code=REASON_VERIFIER_PACK_INVALID,
+                source="base/head",
+                verifier_pack=verifier_pack,
+            )
+        else:
+            try:
+                file_blocks, deleted = blocks_from_dirs(args.base, args.head)
+            except _UnverifiableChangedPathsError as exc:
+                result = input_error_result(
+                    "the base/head input includes changed path(s) Guard cannot safely "
+                    f"verify: {exc}",
+                    reason_code=REASON_NO_VERIFIABLE_CHANGES,
+                    source="base/head",
+                    verifier_pack=verifier_pack,
+                )
+            else:
+                candidate = "\n".join(
+                    f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
+                    for rel, new in file_blocks.items()
+                )
+                result = guard(
+                    args.base, candidate,
+                    deleted=tuple(deleted),
+                    file_blocks=file_blocks,
+                    test_command=test_command, setup_command=setup_command,
+                    trust_setup_on_host=trust_setup_on_host,
+                    setup_output_globs=setup_output_globs,
+                    protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
+                    mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
+                    docker_network=docker_network,
+                    verifier_pack=verifier_pack,
+                    expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+                    diff_coverage=diff_coverage,
+                    min_diff_coverage=min_diff_coverage,
+                    blackbox=blackbox, blackbox_only=blackbox_only,
+                    require_report_integrity=require_report_integrity,
+                    require_candidate_isolation=require_candidate_isolation,
+                    base_sha=args.base_sha, head_sha=args.head_sha,
+                    base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
+                    policy_id=policy_id, policy_version=policy_version,
+                    baseline_evidence=baseline_evidence,
+                    require_demonstrated_fix=require_demonstrated_fix,
+                    strict_harness=strict_harness,
+                )
+                result.source = "base/head"
     elif args.repo and args.patch:
         result = guard(
             args.repo, _read_text(args.patch),
@@ -902,18 +1089,19 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
             mem_limit_mb=mem_limit, isolation=isolation, docker_image=docker_image,
             docker_network=docker_network,
-            verifier_pack=args.verifier_pack,
+            verifier_pack=verifier_pack,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            diff_coverage=args.diff_coverage or min_diff_coverage is not None,
+            diff_coverage=diff_coverage,
             min_diff_coverage=min_diff_coverage,
-            blackbox=args.blackbox, blackbox_only=args.blackbox_only,
+            blackbox=blackbox, blackbox_only=blackbox_only,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
             base_sha=args.base_sha, head_sha=args.head_sha,
             base_tree_sha=args.base_tree_sha, head_tree_sha=args.head_tree_sha,
             policy_id=policy_id, policy_version=policy_version,
-            baseline_evidence=args.baseline_evidence,
-            require_demonstrated_fix=args.require_demonstrated_fix,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
         )
         result.source = "edit blocks"
     else:
@@ -978,17 +1166,18 @@ def cmd_doctor(args: argparse.Namespace, *, out: Callable[[str], None] = print) 
     return 0 if info["supported"] else 1
 
 
-def _workflow_yaml(test_command: str, ref: str) -> str:
+def _workflow_yaml(ref: str) -> str:
     """The EvoGuard GitHub Actions workflow that ``evo-guard init`` scaffolds.
 
-    Pins the action to ``ref`` (the matching release tag by default) and embeds the
-    given ``test_command``. Mirrors ``examples/evoguard.yml`` so the generated file
-    is the same gate the docs describe.
+    Pins the action to ``ref`` (the matching release tag by default). The judge
+    command belongs in the base-owned ``.evoguard.json`` policy rather than the
+    candidate-controlled pull-request workflow.
     """
     return f"""\
 # EvoGuard — generated by `evo-guard init`.
 # Verifies each PR's source changes against the repo's own tests and REJECTS any
 # edit to the tests or their configuration (an AI-patch reward-hack gate).
+# Judge settings are read from the target branch's .evoguard.json policy.
 name: EvoGuard
 
 on:
@@ -1008,13 +1197,12 @@ jobs:
 
       - uses: EvoRiseKsa/EvoOM-Guard-m@{ref}
         with:
-          test-command: "{test_command}"
           comment: "true"           # same-repo PR comment; forks keep the job summary
           fail-on: "any-non-pass"   # or "rejected-only" to gate only reward-hacks
 """
 
 
-def _workflow_yaml_private(test_command: str, ref: str, token_secret: str = "EVOGUARD_TOKEN") -> str:
+def _workflow_yaml_private(ref: str, credential_key: str = "EVOGUARD_TOKEN") -> str:
     """EvoGuard workflow for private EvoGuard repos — installs via pip + a PAT secret.
 
     Use when the EvoGuard repo is private and cannot be accessed by the default
@@ -1025,7 +1213,8 @@ def _workflow_yaml_private(test_command: str, ref: str, token_secret: str = "EVO
     return f"""\
 # EvoGuard — generated by `evo-guard init --private-evoguard`.
 # EvoGuard is installed from a private GitHub repo via pip.
-# Add a PAT with read access to the EvoGuard repo as the {token_secret} secret:
+# Judge settings are read from the target branch's .evoguard.json policy.
+# Add a PAT with read access to the EvoGuard repo as the {credential_key} secret:
 #   Settings -> Secrets and variables -> Actions -> New repository secret
 name: EvoGuard
 
@@ -1046,8 +1235,8 @@ jobs:
 
       - name: Install EvoGuard
         env:
-          {token_secret}: ${{{{ secrets.{token_secret} }}}}
-        run: pip install "git+https://x-access-token:${{{token_secret}}}@github.com/EvoRiseKsa/EvoOM-Guard-m.git@{ref}"
+          {credential_key}: ${{{{ secrets.{credential_key} }}}}
+        run: pip install "git+https://x-access-token:${{{credential_key}}}@github.com/EvoRiseKsa/EvoOM-Guard-m.git@{ref}"
 
       - name: Run EvoGuard
         run: |
@@ -1061,7 +1250,7 @@ jobs:
             printf '{{}}\\n' > "$BASE_POLICY_CONFIG"
           fi
           git diff "$BASE...HEAD" | \\
-            evo-guard guard . --diff - --config "$BASE_POLICY_CONFIG" --test-command "{test_command}" \\
+            evo-guard guard . --diff - --config "$BASE_POLICY_CONFIG" \\
             --report evoguard.md --json evoguard.json
           cat evoguard.md >> "$GITHUB_STEP_SUMMARY"
 
@@ -1084,20 +1273,40 @@ jobs:
 """
 
 
+def _default_policy_path(workflow_path: str) -> str:
+    """Infer a repository-root policy path from the conventional workflow path."""
+    absolute = os.path.abspath(workflow_path)
+    workflow_dir = os.path.dirname(absolute)
+    github_dir = os.path.dirname(workflow_dir)
+    if (
+        os.path.basename(workflow_dir) == "workflows"
+        and os.path.basename(github_dir) == ".github"
+    ):
+        return os.path.join(os.path.dirname(github_dir), ".evoguard.json")
+    return os.path.join(workflow_dir or os.getcwd(), ".evoguard.json")
+
+
 def cmd_init(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard init`` — scaffold a ready-to-use GitHub Actions workflow.
 
-    Writes the workflow to ``--path`` (refusing to clobber an existing file unless
-    ``--force``), or prints it with ``--stdout``. Pass ``--private-evoguard`` to
-    generate a pip-install workflow for repos where the EvoGuard action is not
-    accessible via the default GITHUB_TOKEN. Returns ``0`` on success, ``1`` if
-    the target exists and ``--force`` was not given.
+    Writes the workflow and, when absent, a trusted ``.evoguard.json`` policy.
+    The workflow is refused when it exists unless ``--force`` is given; an
+    existing policy is deliberately preserved so initialization cannot erase an
+    adopter's judge contract. ``--stdout`` prints only the workflow. Pass
+    ``--private-evoguard`` to generate a pip-install workflow for repos where the
+    EvoGuard action is not accessible via the default GITHUB_TOKEN.
     """
     if getattr(args, "private_evoguard", False):
-        token_secret = getattr(args, "evoguard_token_secret", "EVOGUARD_TOKEN")
-        content = _workflow_yaml_private(args.test_command, args.ref, token_secret)
+        try:
+            credential_key = _github_actions_credential_key(
+                getattr(args, "github_actions_credential_key", "EVOGUARD_TOKEN")
+            )
+        except ValueError as exc:
+            out(f"usage: {exc}")
+            return 2
+        content = _workflow_yaml_private(args.ref, credential_key)
     else:
-        content = _workflow_yaml(args.test_command, args.ref)
+        content = _workflow_yaml(args.ref)
     if args.stdout:
         out(content)
         return 0
@@ -1110,10 +1319,21 @@ def cmd_init(args: argparse.Namespace, *, out: Callable[[str], None] = print) ->
         os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+    policy_path = args.policy_path or _default_policy_path(path)
+    if os.path.exists(policy_path):
+        out(f"kept existing trusted policy {policy_path}")
+    else:
+        policy_parent = os.path.dirname(policy_path)
+        if policy_parent:
+            os.makedirs(policy_parent, exist_ok=True)
+        with open(policy_path, "w", encoding="utf-8") as f:
+            json.dump({"test_command": args.test_command}, f, indent=2)
+            f.write("\n")
+        out(f"wrote {policy_path}")
     out(f"wrote {path}")
     out(
         "next: commit it and open a PR — EvoGuard posts a verdict and fails the "
-        "check on anything but PASS. Edit `test-command` for your suite."
+        "check on anything but PASS. Edit .evoguard.json to change the trusted judge policy."
     )
     return 0
 

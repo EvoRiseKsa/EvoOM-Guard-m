@@ -180,6 +180,26 @@ def test_surviving_judge_group_is_an_explicit_incomplete_error(
     assert result.execution_state == "started_incomplete"
 
 
+def test_judge_output_limit_is_an_explicit_incomplete_error(
+    repo_and_pack: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, pack = repo_and_pack
+    monkeypatch.setattr(blackbox_module.CandidateRunner, "prepare", _prepare)
+
+    def output_limit(*_args: object, **_kwargs: object) -> None:
+        raise blackbox_module.JudgeOutputLimitError(1024)
+
+    monkeypatch.setattr(blackbox_module, "_run_judge_process", output_limit)
+    result = run_blackbox(str(repo), _candidate(), str(pack), timeout=1)
+
+    assert result.passed is False
+    assert result.ran is False
+    assert result.error == "black-box output limit"
+    assert result.started is True
+    assert result.completed is False
+    assert result.execution_state == "started_incomplete"
+
+
 @pytest.mark.parametrize(
     ("returncode", "xml", "expected_error", "expected_ran"),
     [

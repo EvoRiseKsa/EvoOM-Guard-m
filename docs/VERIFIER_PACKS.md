@@ -6,14 +6,10 @@
 # Independent Verifier Packs
 
 A Verifier Pack is a directory of **judge-owned pytest tests and invariants**
-supplied at judgment time. The patch cannot include, replace, delete, or
-deselect those files. In repo-native mode Guard runs the repo's own suite and
-then runs the accepted pack snapshot as a **separate mandatory phase**; both
-must pass.
-
-```bash
-evo-guard guard . --diff - --no-config --verifier-pack /secure/org-invariants
-```
+supplied from a trusted source at judgment time. The candidate must not choose,
+replace, delete, or deselect those files. In repo-native mode Guard runs the
+repo's own suite and then runs the accepted pack snapshot as a **separate
+mandatory phase**; both must pass.
 
 The judge copies the pack to a temporary snapshot **outside** the candidate
 tree and its `HOME`, records its V2 content identity, and addresses that
@@ -43,19 +39,43 @@ evo-guard guard . --diff - --no-config \
   --expect-verifier-pack-sha256 <64-hex-v2-digest>
 ```
 
-Equivalent protected config and Action input:
+### Source the pack from the trusted side of the comparison
+
+The identity pin is necessary but not sufficient: the command also has to avoid
+loading pack bytes from the candidate side.
+
+- **Direct `--diff`:** use a physically external judge directory and the digest
+  pin above. A pack located inside the candidate checkout, or any unpinned pack,
+  is refused before candidate code runs.
+- **Direct `--base/--head`:** a protected policy loaded from the base directory
+  may name a relative pack path; it resolves relative to that trusted policy
+  file, not the candidate directory. An external pack is also valid when pinned.
+- **GitHub Action on `pull_request`:** put `verifier_pack` and
+  `expect_verifier_pack_sha256` in the verified base branch's `.evoguard.json`.
+  The path is a safe repository-relative directory. The Action archives it from
+  the base SHA into a temporary trusted directory and passes that staged copy to
+  Guard. It never selects a candidate-checkout pack. Candidate workflow
+  `with:` values are not a policy source; conflicting pack inputs fail closed.
+
+The Action policy is therefore:
 
 ```json
 {
+  "verifier_pack": "security/org-invariants",
   "expect_verifier_pack_sha256": "<64-hex-v2-digest>"
 }
 ```
 
 ```yaml
-with:
-  verifier-pack: /secure/org-invariants
-  expect-verifier-pack-sha256: <64-hex-v2-digest>
+# .github/workflows/evoguard.yml
+- uses: EvoRiseKsa/EvoOM-Guard-m@<reviewed-full-sha>
+  with:
+    comment: "true"                  # reporting only
+    fail-on: "any-non-pass"          # required on pull_request
 ```
+
+The `with:` block above deliberately contains no judge policy. For a PR, an
+input cannot replace the base policy even when it has the same text.
 
 The expected digest is checked before candidate code runs and is included in
 `attestation.effective_policy`, so it also changes `policy_sha256`. A mismatch
@@ -77,7 +97,9 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
 **Guarantees (the real value):**
 
 - **Patch-immutable checks.** The diff cannot edit, delete, or deselect the
-  pack's tests: they live outside the repo and are added by the judge.
+  active pack snapshot. Direct mode takes it from an external judge path; the
+  GitHub Action stages it from the verified base revision outside the candidate
+  checkout before judging.
 - **Observed snapshot fidelity.** The accepted snapshot is re-hashed
   immediately before and after its phase. Persistent drift is `TAMPERED` /
   `verifier_pack_snapshot_changed`, never accepted as evidence for the original
@@ -180,6 +202,10 @@ version to the judgment. The manifest version alone is not a content identity.
   even if the repo's own suite uses Node, Go, Ruby, Java, or a custom command.
 - Symlinks, special files/directories, unreadable paths, and a symlinked pack
   root are refused; they cannot be represented by the portable V2 contract.
+- In a GitHub Action PR policy, `verifier_pack` must be a safe
+  repository-relative path and the matching 64-hex V2 pin is mandatory. Use a
+  normal trusted policy-maintenance change on the base branch to update the
+  pack and its pin together; a candidate PR cannot change the active snapshot.
 - In Docker/gVisor repo-native mode, the candidate tree and pack snapshot are
   mounted read-only for their execution phases. The pack can still import the
   candidate in the same pytest process, so this protects storage/host state,

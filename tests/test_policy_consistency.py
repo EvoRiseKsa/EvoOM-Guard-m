@@ -170,6 +170,7 @@ class EffectivePolicyHashTests(unittest.TestCase):
             "expect_verifier_pack_sha256",
             "require_report_integrity", "require_candidate_isolation",
             "min_diff_coverage", "baseline_evidence", "require_demonstrated_fix",
+            "strict_harness",
             "blackbox", "blackbox_only", "verifier_pack_required",
             "docker_image", "docker_network", "policy_id", "policy_version",
         ):

@@ -75,7 +75,14 @@ from evoom_guard.pack_manifest import (
     snapshot_pack,
     verify_pack_snapshot,
 )
+from evoom_guard.verifiers.junit_oracle import read_junit_xml
 from evoom_guard.verifiers.repo_verifier import (
+    _BoundedOutput,
+    _drain_subprocess_pipe,
+    _join_pipe_readers,
+    _run_bounded_subprocess,
+    _SubprocessContainmentError,
+    _SubprocessOutputLimitExceeded,
     apply_blocks_to_copy,
     copy_repo_tree,
     distill_diagnostics,
@@ -123,6 +130,18 @@ class BlackboxResult(NamedTuple):
 
 
 _DOCKER_CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def _run_docker_control(
+    command: list[str], *, timeout: float = 30.0
+) -> subprocess.CompletedProcess[str]:
+    """Bound Docker cleanup diagnostics before they reach judge memory."""
+    return _run_bounded_subprocess(
+        command,
+        cwd=None,
+        env=os.environ.copy(),
+        timeout=timeout,
+    )
 
 
 class _InvocationRecorder:
@@ -384,7 +403,7 @@ def _cleanup_candidate_containers(
     failures: list[str] = []
 
     def container_present(container_id: str) -> bool:
-        probe = subprocess.run(
+        probe = _run_docker_control(
             [
                 "docker",
                 "ps",
@@ -393,10 +412,7 @@ def _cleanup_candidate_containers(
                 "--filter",
                 f"id={container_id}",
             ],
-            capture_output=True,
-            encoding="utf-8", errors="replace",
             timeout=30,
-            check=False,
         )
         if probe.returncode != 0:
             detail = (probe.stderr or probe.stdout).strip()[:200]
@@ -424,12 +440,9 @@ def _cleanup_candidate_containers(
                 # locale-specific Docker stderr text.
                 if not container_present(container_id):
                     continue
-                removal = subprocess.run(
+                removal = _run_docker_control(
                     ["docker", "rm", "-f", container_id],
-                    capture_output=True,
-                    encoding="utf-8", errors="replace",
                     timeout=30,
-                    check=False,
                 )
                 if removal.returncode != 0:
                     detail = (removal.stderr or removal.stdout).strip()[:200]
@@ -441,7 +454,13 @@ def _cleanup_candidate_containers(
                     raise CandidateContainerCleanupError(
                         f"candidate container {container_id} remained after docker rm -f"
                     )
-            except (OSError, subprocess.SubprocessError, CandidateContainerCleanupError) as exc:
+            except (
+                OSError,
+                subprocess.SubprocessError,
+                CandidateContainerCleanupError,
+                _SubprocessOutputLimitExceeded,
+                _SubprocessContainmentError,
+            ) as exc:
                 failures.append(f"{container_id}: {exc}")
         if attempt + 1 < attempts:
             time.sleep(0.05)
@@ -475,6 +494,17 @@ class JudgeProcessCleanupError(RuntimeError):
     """The judge session could not be proven free of surviving descendants."""
 
 
+class JudgeOutputLimitError(RuntimeError):
+    """The judge-owned pack exceeded its bounded diagnostic channel."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        super().__init__(
+            "black-box judge output exceeded the "
+            f"{limit}-byte judge capture limit"
+        )
+
+
 class CandidateContainerCleanupError(RuntimeError):
     """A candidate container could not be proven absent after execution."""
 
@@ -488,7 +518,7 @@ class _BlackboxCleanupFailure(RuntimeError):
 
 
 def _signal_judge_process_group(
-    process: subprocess.Popen[str], sig: int
+    process: subprocess.Popen[Any], sig: int
 ) -> None:
     """Signal only the isolated judge session created by ``Popen`` below."""
     killpg = getattr(os, "killpg", None)
@@ -521,7 +551,7 @@ def _process_group_exists(process_group: int) -> bool:
 
 
 def _wait_for_process_group_exit(
-    process: subprocess.Popen[str], process_group: int, timeout: float
+    process: subprocess.Popen[Any], process_group: int, timeout: float
 ) -> bool:
     deadline = time.monotonic() + max(timeout, 0.0)
     while True:
@@ -536,7 +566,7 @@ def _wait_for_process_group_exit(
         time.sleep(min(_JUDGE_GROUP_POLL_SECONDS, max(deadline - time.monotonic(), 0.0)))
 
 
-def _reap_judge_leader(process: subprocess.Popen[str]) -> None:
+def _reap_judge_leader(process: subprocess.Popen[Any]) -> None:
     if process.poll() is not None:
         return
     try:
@@ -547,7 +577,7 @@ def _reap_judge_leader(process: subprocess.Popen[str]) -> None:
         ) from exc
 
 
-def _terminate_judge_process_group(process: subprocess.Popen[str]) -> None:
+def _terminate_judge_process_group(process: subprocess.Popen[Any]) -> None:
     """Boundedly reap pytest and every non-detached process-group descendant.
 
     The leader may already be reaped while a background child still owns the
@@ -613,38 +643,93 @@ def _run_judge_process(
     process = subprocess.Popen(
         command,
         cwd=cwd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        encoding="utf-8", errors="replace",
         env=env,
         start_new_session=True,
     )
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except BaseException:
+    assert process.stdout is not None and process.stderr is not None
+    capture = _BoundedOutput()
+    streams = [process.stdout, process.stderr]
+    readers = [
+        threading.Thread(
+            target=_drain_subprocess_pipe,
+            args=(process.stdout, capture, "stdout"),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=_drain_subprocess_pipe,
+            args=(process.stderr, capture, "stderr"),
+            daemon=True,
+        ),
+    ]
+    for reader in readers:
+        reader.start()
+
+    def cleanup_and_prove(reason: str) -> None:
         try:
             _terminate_judge_process_group(process)
+        except JudgeProcessCleanupError:
+            raise
+        except Exception as exc:
+            raise JudgeProcessCleanupError(
+                f"unexpected judge process-group cleanup failure: {exc}"
+            ) from exc
+        if not _join_pipe_readers(readers, streams):
+            raise JudgeProcessCleanupError(
+                f"{reason}; judge output pipes did not close after cleanup"
+            )
+
+    try:
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        while process.poll() is None:
+            if capture.exceeded:
+                cleanup_and_prove("judge output limit reached")
+                raise JudgeOutputLimitError(capture.limit)
+            if time.monotonic() >= deadline:
+                cleanup_and_prove("judge timed out")
+                raise subprocess.TimeoutExpired(
+                    command,
+                    timeout,
+                    output=capture.text("stdout"),
+                    stderr=capture.text("stderr"),
+                )
+            time.sleep(_JUDGE_GROUP_POLL_SECONDS)
+
+        # A short-lived process can flood a pipe and exit before the polling
+        # loop observes it. It is still not a gradeable judge run; first reap
+        # the complete process group before reporting the bounded-capture error.
+        if capture.exceeded:
+            cleanup_and_prove("judge output limit reached")
+            raise JudgeOutputLimitError(capture.limit)
+        if not _join_pipe_readers(readers, streams):
+            cleanup_and_prove("judge exited with live output pipes")
+            raise JudgeProcessCleanupError(
+                "judge exited but its output pipes did not close"
+            )
+        if capture.exceeded:
+            cleanup_and_prove("judge output limit reached")
+            raise JudgeOutputLimitError(capture.limit)
+        # A clean pytest exit is not sufficient: a pack/candidate may have
+        # spawned a background descendant that closed inherited stdio. Remove
+        # and verify the whole PGID before any PASS can be returned.
+        cleanup_and_prove("judge completed")
+        return subprocess.CompletedProcess(
+            command,
+            int(process.returncode or 0),
+            capture.text("stdout"),
+            capture.text("stderr"),
+        )
+    except BaseException:
+        try:
+            if process.poll() is None:
+                _terminate_judge_process_group(process)
         except BaseException:
             # An active primary exception must not be replaced by cleanup.
             pass
+        _join_pipe_readers(readers, streams)
         raise
-    # A clean pytest exit is not sufficient: a pack/candidate may have spawned
-    # a background descendant that closed inherited stdio. Remove and verify the
-    # whole PGID before any PASS can be returned.
-    try:
-        _terminate_judge_process_group(process)
-    except JudgeProcessCleanupError:
-        raise
-    except Exception as exc:
-        raise JudgeProcessCleanupError(
-            f"unexpected judge process-group cleanup failure: {exc}"
-        ) from exc
-    return subprocess.CompletedProcess(
-        command,
-        int(process.returncode or 0),
-        stdout,
-        stderr,
-    )
 
 
 def _run_blackbox_impl(
@@ -828,6 +913,28 @@ def _run_blackbox_impl(
                 ),
                 wait_for_late_container_evidence=True,
             )
+        except JudgeOutputLimitError as exc:
+            return with_candidate_evidence(
+                BlackboxResult(
+                    False,
+                    0,
+                    0,
+                    str(exc),
+                    False,
+                    "black-box output limit",
+                    pack_sha256,
+                    pack_manifest,
+                    None,
+                    iso,
+                    deleted_applied,
+                    started=True,
+                    completed=False,
+                    execution_state="started_incomplete",
+                    execution_phase="blackbox_pack",
+                    pack_present=True,
+                ),
+                wait_for_late_container_evidence=True,
+            )
         except JudgeProcessCleanupError as exc:
             return with_candidate_evidence(
                 BlackboxResult(
@@ -879,13 +986,10 @@ def _run_blackbox_impl(
         # exited by now). The JUDGE's exit code is authoritative regardless.
         junit = None
         junit_sha256 = None
-        try:
-            with open(xml_path, encoding="utf-8") as f:
-                xml_text = f.read()
+        xml_text = read_junit_xml(xml_path)
+        if xml_text is not None:
             junit = parse_junit_xml(xml_text)
             junit_sha256 = hashlib.sha256(xml_text.encode("utf-8")).hexdigest()
-        except OSError:
-            pass
         _elapsed = time.perf_counter() - t0
         diagnostics = distill_diagnostics(r.stdout + "\n" + r.stderr)
 

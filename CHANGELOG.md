@@ -9,6 +9,43 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.5.4] — 2026-07-15
+
+### Security
+
+- The base/head and raw-diff routes now fail closed when a changed filesystem
+  entry cannot be represented faithfully for the static gate (including changed
+  oversized/binary/unreadable/symlink/special/mode-only files and new empty
+  directories). Such a change can no longer disappear before harness checks.
+- Pull-request Action runs now derive every judge-shaping setting from the
+  verified base `.evoguard.json`; candidate workflow inputs are ignored. A
+  verifier pack is archived from that base into a temporary trusted directory
+  and requires its `EVOGUARD_PACK_V2` SHA-256 identity pin.
+- The default protected-path model now recognizes additional test conventions
+  and helper directories of base-referenced local Actions. The opt-in
+  `strict_harness` policy additionally freezes dependency/lock/compiler
+  manifests and requires a non-empty structured JUnit verdict.
+- Candidate, Docker-control, black-box, coverage, baseline, JUnit, and reverse
+  diff-apply paths use bounded output/file reads. Timeout, output flood, or
+  unproven cleanup yields a non-pass result. POSIX native runs also reap a
+  background process-group descendant after an otherwise clean leader exit.
+
+### Changed
+
+- `evo-guard init` writes a separate base-owned `.evoguard.json` policy and
+  preserves an existing policy instead of embedding the test command in a
+  candidate-controlled PR workflow.
+- Schema 1.11 remains compatible with historical records; `strict_harness` is
+  an additive optional effective-policy field whose absence means `false`.
+- Documentation now states the Action's actual trust boundary and includes
+  repository ruleset/branch-protection deployment requirements.
+
+### Verification
+
+- Full local suite: 953 passed, 83 skipped, 52 subtests passed; Ruff, Mypy,
+  compile checks, YAML parsing, and whitespace checks passed before release
+  preparation. The committed live benchmark is regenerated for this version.
+
 ## [3.5.3] — 2026-07-15
 
 ### Security

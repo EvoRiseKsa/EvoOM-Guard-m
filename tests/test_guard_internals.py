@@ -24,8 +24,10 @@ from evoom_guard.guard import (
     TAMPERED,
     GuardResult,
     _diff_target_paths,
+    _entries_changed,
     _risk_map,
-    _walk_text_files,
+    _TreeEntry,
+    _walk_tree_entries,
     guard,
     render_report,
     write_json,
@@ -58,15 +60,30 @@ def test_risk_map_counts_patch_blocks(tmp_path):
     assert m["a.py"] == (2, 1)
 
 
-# ───────────────────────────── _walk_text_files ─────────────────────────────
-def test_walk_text_files_skips_large_and_binary(tmp_path):
+# ──────────────────────────── _walk_tree_entries ────────────────────────────
+def test_walk_tree_entries_retains_large_and_binary_metadata(tmp_path):
     (tmp_path / "small.py").write_text("ok\n", encoding="utf-8")
     (tmp_path / "big.py").write_text("x" * 500, encoding="utf-8")
     (tmp_path / "blob.bin").write_bytes(b"\xff\xfe\x00\x01not-utf8\x80")
-    walked = _walk_text_files(str(tmp_path), max_bytes=20)
+    walked = _walk_tree_entries(str(tmp_path))
     assert "small.py" in walked
-    assert "big.py" not in walked    # over max_bytes → skipped
-    assert "blob.bin" not in walked  # not valid UTF-8 → skipped
+    assert walked["big.py"].size == 500
+    assert walked["blob.bin"].kind == "regular"
+
+
+def test_walk_tree_entries_retains_directory_metadata(tmp_path):
+    (tmp_path / "package").mkdir()
+    walked = _walk_tree_entries(str(tmp_path))
+    assert walked["package"].kind == "directory"
+
+
+def test_directory_mode_change_is_unrepresentable():
+    changed, problem = _entries_changed(
+        _TreeEntry("base/package", "directory", 0o755, None),
+        _TreeEntry("head/package", "directory", 0o700, None),
+    )
+    assert changed is True
+    assert problem is not None and "mode changed" in problem
 
 
 # ───────────────────────────── _diff_target_paths ───────────────────────────

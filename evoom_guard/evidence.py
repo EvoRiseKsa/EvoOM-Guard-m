@@ -38,6 +38,7 @@ import difflib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,9 @@ from typing import Any
 
 from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.verifiers.repo_verifier import (
+    _run_bounded_subprocess,
+    _SubprocessContainmentError,
+    _SubprocessOutputLimitExceeded,
     apply_blocks_to_copy,
     copy_repo_tree,
     is_safe_relpath,
@@ -59,6 +63,67 @@ EXECUTED_IS_NOT_ASSERTED = (
     "executed is not asserted: a test can run a changed line and check nothing "
     "about it — this evidence is a floor of scrutiny, not a proof of correctness"
 )
+
+# ``coverage json`` is written outside the candidate tree, but the test process
+# can still try to replace or grow it through the judge's scratch directory.
+# Coverage evidence is optional; refusing a pathological report is safer than
+# allowing an unbounded evidence-only allocation.
+_MAX_COVERAGE_REPORT_BYTES = 16 * 1024 * 1024
+
+
+def _coverage_file_identity(info: os.stat_result) -> tuple[int, int, int, int, int, int]:
+    """The regular-file facts that must not change while a report is read."""
+    return (
+        info.st_dev,
+        info.st_ino,
+        stat.S_IFMT(info.st_mode),
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def _read_coverage_files(path: str) -> dict[str, Any] | None:
+    """Return bounded ``coverage json`` file data, or no evidence.
+
+    The path is judge-selected but candidate-influenced at runtime. Reject
+    symlinks/special files and enforce the byte cap before decoding so a report
+    cannot turn an opt-in coverage measurement into a host-memory allocation.
+    """
+    try:
+        info = os.lstat(path)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > _MAX_COVERAGE_REPORT_BYTES:
+            return None
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_COVERAGE_REPORT_BYTES:
+            return None
+        raw = bytearray()
+        while len(raw) <= _MAX_COVERAGE_REPORT_BYTES:
+            chunk = os.read(fd, min(1024 * 1024, _MAX_COVERAGE_REPORT_BYTES + 1 - len(raw)))
+            if not chunk:
+                break
+            raw.extend(chunk)
+        after = os.fstat(fd)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    if (
+        len(raw) > _MAX_COVERAGE_REPORT_BYTES
+        or _coverage_file_identity(before) != _coverage_file_identity(after)
+    ):
+        return None
+    try:
+        decoded = json.loads(bytes(raw).decode("utf-8"))
+        files = decoded.get("files", {})
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return files if isinstance(files, dict) else None
 
 
 def _new_content_map(repo_path: str, candidate: str) -> dict[str, str | None]:
@@ -197,34 +262,53 @@ def collect_diff_coverage(
 
         env = _judge_env(workdir)
         try:
-            subprocess.run(
-                wrapped, cwd=copy, capture_output=True, encoding="utf-8", errors="replace",
-                timeout=timeout, env=env,
+            _run_bounded_subprocess(
+                wrapped, cwd=copy, env=env, timeout=timeout,
             )
+        except _SubprocessOutputLimitExceeded:
+            base["note"] = "the coverage-wrapped suite output exceeded the judge capture limit"
+            return base
+        except _SubprocessContainmentError:
+            base["note"] = "the coverage-wrapped suite cleanup could not be proven"
+            return base
         except (OSError, subprocess.TimeoutExpired):
             base["note"] = "the coverage-wrapped suite run did not complete"
             return base
 
         cov_json = os.path.join(workdir, "judge-coverage.json")
-        r = subprocess.run(
-            [sys.executable, "-m", "coverage", "json",
-             f"--data-file={data_file}", "-o", cov_json, "-q"],
-            cwd=copy, capture_output=True, encoding="utf-8", errors="replace", timeout=60, env=env,
-        )
+        try:
+            r = _run_bounded_subprocess(
+                [sys.executable, "-m", "coverage", "json",
+                 f"--data-file={data_file}", "-o", cov_json, "-q"],
+                cwd=copy, env=env, timeout=60,
+            )
+        except _SubprocessOutputLimitExceeded:
+            base["note"] = "the coverage report command output exceeded the judge capture limit"
+            return base
+        except _SubprocessContainmentError:
+            base["note"] = "the coverage report command cleanup could not be proven"
+            return base
+        except (OSError, subprocess.TimeoutExpired):
+            base["note"] = "the coverage report command did not complete"
+            return base
         if r.returncode != 0 or not os.path.exists(cov_json):
             base["note"] = "coverage produced no report (suite may not have started)"
             return base
-        with open(cov_json, encoding="utf-8") as f:
-            raw_files = json.load(f).get("files", {})
-            # coverage.py emits platform-native path separators (and may emit
-            # absolute paths depending on its config). The candidate contract is
-            # always repo-relative POSIX-style paths, so normalize before lookup.
-            files = {}
-            for measured_path, entry in raw_files.items():
-                normalized = str(measured_path)
-                if os.path.isabs(normalized):
-                    normalized = os.path.relpath(normalized, copy)
-                files[normalized.replace("\\", "/")] = entry
+        raw_files = _read_coverage_files(cov_json)
+        if raw_files is None:
+            base["note"] = "coverage report was unavailable or exceeded the judge size limit"
+            return base
+        # coverage.py emits platform-native path separators (and may emit
+        # absolute paths depending on its config). The candidate contract is
+        # always repo-relative POSIX-style paths, so normalize before lookup.
+        files = {}
+        for measured_path, entry in raw_files.items():
+            if not isinstance(entry, dict):
+                continue
+            normalized = str(measured_path)
+            if os.path.isabs(normalized):
+                normalized = os.path.relpath(normalized, copy)
+            files[normalized.replace("\\", "/")] = entry
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

@@ -64,7 +64,7 @@ class RepoExecutionTraceTests(unittest.TestCase):
     def test_suite_timeout_records_started_but_incomplete(self) -> None:
         timeout = subprocess.TimeoutExpired(["judge"], 1)
         with mock.patch(
-            "evoom_guard.verifiers.repo_verifier.subprocess.run",
+            "evoom_guard.verifiers.repo_verifier._run_bounded_subprocess",
             side_effect=timeout,
         ):
             result = self._verify(command=["judge"])
@@ -96,7 +96,8 @@ class RepoExecutionTraceTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
         with mock.patch(
-            "evoom_guard.verifiers.repo_verifier.subprocess.run", side_effect=run
+            "evoom_guard.verifiers.repo_verifier._run_bounded_subprocess",
+            side_effect=run,
         ):
             result = self._verify(
                 command=[sys.executable, "-c", "raise SystemExit(0)"],
@@ -140,19 +141,18 @@ class RepoExecutionTraceTests(unittest.TestCase):
         with mock.patch.object(
             verifier, "_docker_command", return_value=["docker", "run"]
         ), mock.patch(
-            "evoom_guard.verifiers.repo_verifier.subprocess.run",
-            side_effect=[
-                KeyboardInterrupt(),
-                subprocess.CompletedProcess(["docker", "rm"], 0),
-            ],
-        ) as run:
+            "evoom_guard.verifiers.repo_verifier._run_bounded_subprocess",
+            side_effect=KeyboardInterrupt(),
+        ) as run, mock.patch(
+            "evoom_guard.verifiers.repo_verifier._cleanup_docker_container",
+            return_value=True,
+        ) as cleanup:
             with self.assertRaises(KeyboardInterrupt):
                 verifier._run_docker(["python"], self.repo, self.tmp.name)
 
-        self.assertEqual(run.call_count, 2)
-        cleanup_command = run.call_args_list[1].args[0]
-        self.assertEqual(cleanup_command[:3], ["docker", "rm", "-f"])
-        self.assertTrue(cleanup_command[3].startswith("evoguard_"))
+        self.assertEqual(run.call_count, 1)
+        cleanup_name = cleanup.call_args.args[0]
+        self.assertTrue(cleanup_name.startswith("evoguard_"))
 
     def test_docker_setup_cleans_up_on_base_exception_and_reraises(self) -> None:
         verifier = RepoVerifier(
@@ -165,19 +165,18 @@ class RepoExecutionTraceTests(unittest.TestCase):
         with mock.patch.object(
             verifier, "_resolve_docker_image", return_value="sha256:judge"
         ), mock.patch(
-            "evoom_guard.verifiers.repo_verifier.subprocess.run",
-            side_effect=[
-                KeyboardInterrupt(),
-                subprocess.CompletedProcess(["docker", "rm"], 0),
-            ],
-        ) as run:
+            "evoom_guard.verifiers.repo_verifier._run_bounded_subprocess",
+            side_effect=KeyboardInterrupt(),
+        ) as run, mock.patch(
+            "evoom_guard.verifiers.repo_verifier._cleanup_docker_container",
+            return_value=True,
+        ) as cleanup:
             with self.assertRaises(KeyboardInterrupt):
                 verifier.verify(_candidate(), {"repo_path": self.repo})
 
-        self.assertEqual(run.call_count, 2)
-        cleanup_command = run.call_args_list[1].args[0]
-        self.assertEqual(cleanup_command[:3], ["docker", "rm", "-f"])
-        self.assertTrue(cleanup_command[3].startswith("evoguard_setup_"))
+        self.assertEqual(run.call_count, 1)
+        cleanup_name = cleanup.call_args.args[0]
+        self.assertTrue(cleanup_name.startswith("evoguard_setup_"))
 
 
 if __name__ == "__main__":  # pragma: no cover

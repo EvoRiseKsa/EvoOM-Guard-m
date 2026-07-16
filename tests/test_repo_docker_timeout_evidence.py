@@ -42,6 +42,7 @@ class _DockerFake:
         self.container_started = container_started
         self.pack_exit_125 = pack_exit_125
         self.calls: list[list[str]] = []
+        self.removed_names: set[str] = set()
 
     @staticmethod
     def _phase(command: list[str]) -> str:
@@ -70,13 +71,16 @@ class _DockerFake:
         cmd = list(command)
         self.calls.append(cmd)
         if cmd[:2] == ["docker", "inspect"]:
+            name = cmd[-1]
+            exists = self.container_started and name not in self.removed_names
             return subprocess.CompletedProcess(
                 cmd,
-                0 if self.container_started else 1,
-                _STARTED_AT if self.container_started else "",
+                0 if exists else 1,
+                _STARTED_AT if exists else "",
                 "",
             )
         if cmd[:3] == ["docker", "rm", "-f"]:
+            self.removed_names.add(cmd[-1])
             return subprocess.CompletedProcess(cmd, 0, "", "")
         assert cmd[:3] == ["docker", "run", "--rm"]
         phase = self._phase(cmd)
@@ -109,7 +113,7 @@ def test_setup_timeout_requires_inspect_proof(
     fake = _DockerFake(timeout_phase="setup", container_started=container_started)
     verifier = _verifier(setup=True)
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake)
+    monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(_candidate(), {"repo_path": str(repo)})
 
@@ -139,7 +143,7 @@ def test_repo_suite_timeout_requires_inspect_proof(
     )
     verifier = _verifier()
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake)
+    monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(_candidate(), {"repo_path": str(repo)})
 
@@ -170,7 +174,7 @@ def test_verifier_pack_timeout_requires_inspect_proof_without_erasing_suite(
     )
     verifier = _verifier()
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake)
+    monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(
         _candidate(), {"repo_path": str(repo), "verifier_pack": str(pack)}
@@ -195,7 +199,7 @@ def test_pack_exit_125_keeps_repo_suite_delivery_and_records_pack_unavailable(
     fake = _DockerFake(pack_exit_125=True)
     verifier = _verifier()
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
-    monkeypatch.setattr(repo_verifier_module.subprocess, "run", fake)
+    monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(
         _candidate(), {"repo_path": str(repo), "verifier_pack": str(pack)}

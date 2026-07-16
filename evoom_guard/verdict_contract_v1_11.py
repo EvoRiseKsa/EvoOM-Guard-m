@@ -262,6 +262,14 @@ POLICY_KEYS = frozenset(
     }
 )
 
+# Additive policy fields accepted by schema 1.11.  They are deliberately not
+# folded into ``POLICY_KEYS``: published 1.11 evidence records were signed over
+# the 24-key object above, so making this field required would invalidate their
+# historical digest and reject valid records.  An absent value means ``false``;
+# new producers state it explicitly and bind it into their policy SHA.
+OPTIONAL_POLICY_KEYS = frozenset({"strict_harness"})
+ALLOWED_POLICY_KEYS = POLICY_KEYS | OPTIONAL_POLICY_KEYS
+
 REQUIRED_TOP_LEVEL = frozenset(
     {
         "schema_version",
