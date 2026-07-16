@@ -11,6 +11,9 @@ Subcommands:
     any edit to the tests or their configuration.
   * ``evo-guard verify-record`` — verify a verdict's structural/semantic contract.
   * ``evo-guard verify-bundle`` — authenticate a portable verdict envelope.
+  * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
+  * ``evo-guard finalizer-handoff`` — bind a re-verification record to source metadata.
+  * ``evo-guard seal-finalizer`` — sign only a handoff matched to external metadata.
   * ``evo-guard version`` — print the EvoGuard version.
 """
 
@@ -27,6 +30,7 @@ import re
 import shutil
 import sys
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from evoom_guard import __version__
 from evoom_guard.pack_manifest import (
@@ -36,6 +40,9 @@ from evoom_guard.pack_manifest import (
     pack_digest,
     pack_test_files,
 )
+
+if TYPE_CHECKING:
+    from evoom_guard.evidence_bundle import EvidenceMaterial
 
 MAX_OFFLINE_RECORD_BYTES = 8 * 1024 * 1024
 MAX_CONTEXT_INPUT_BYTES = 1 * 1024 * 1024
@@ -690,6 +697,135 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="replace an existing output (default is atomic no-clobber)",
+    )
+
+    # ----- finalize-record -------------------------------------------------- #
+    fr_p = sub.add_parser(
+        "finalize-record",
+        help="seal a semantic record against externally derived finalizer context",
+    )
+    fr_p.add_argument(
+        "verdict",
+        help="regular JSON verdict file from the trusted re-verification job",
+    )
+    fr_p.add_argument("--out", required=True, help="output .evb path")
+    fr_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="context derived outside the candidate/artifact (exactly bound before signing)",
+    )
+    fr_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="finalizer Ed25519 private key (PEM; never expose it to candidate execution)",
+    )
+    fr_p.add_argument(
+        "--material",
+        action="append",
+        default=[],
+        metavar="ROLE=PATH",
+        help="supporting regular file to bind; repeat for multiple materials",
+    )
+    fr_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+    fr_p.add_argument(
+        "--require-pass",
+        action="store_true",
+        help="return exit 1 for a sealed semantic denial while preserving its evidence bundle",
+    )
+
+    # ----- finalizer-handoff ----------------------------------------------- #
+    fh_p = sub.add_parser(
+        "finalizer-handoff",
+        help="write a canonical re-verification handoff without signing it",
+    )
+    fh_p.add_argument("verdict", help="regular semantic verdict JSON from the re-verification job")
+    fh_p.add_argument("--out", required=True, help="output canonical handoff JSON")
+    fh_p.add_argument(
+        "--source",
+        required=True,
+        help="trusted pull-request/reverify-run metadata JSON, not a candidate artifact",
+    )
+    fh_p.add_argument(
+        "--context",
+        required=True,
+        help="trusted finalizer evidence-context JSON bound to the verdict",
+    )
+    fh_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+
+    # ----- seal-finalizer -------------------------------------------------- #
+    sf_p = sub.add_parser(
+        "seal-finalizer",
+        help="validate a finalizer handoff against external inputs, then sign its evidence",
+    )
+    sf_p.add_argument("handoff", help="canonical handoff JSON from the unprivileged reverify job")
+    sf_p.add_argument("verdict", help="regular semantic verdict JSON referenced by the handoff")
+    sf_p.add_argument("--out", required=True, help="output signed .evb path")
+    sf_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="source JSON re-derived by the sealing job from trusted control-plane metadata",
+    )
+    sf_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="context JSON re-derived by the sealing job; exact match is required",
+    )
+    sf_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="sealing Ed25519 private key; use only in a job that never executes candidate code",
+    )
+    sf_p.add_argument(
+        "--material",
+        action="append",
+        default=[],
+        metavar="ROLE=PATH",
+        help="supporting regular file to bind; repeat for multiple materials",
+    )
+    sf_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+    sf_p.add_argument(
+        "--require-pass",
+        action="store_true",
+        help="return exit 1 for a sealed denial while preserving its signed evidence bundle",
+    )
+
+    # ----- verify-finalized ------------------------------------------------ #
+    vf_p = sub.add_parser(
+        "verify-finalized",
+        help="verify a signed finalizer bundle, its exact handoff, and external bindings",
+    )
+    vf_p.add_argument("bundle", help="the signed finalizer .evb evidence bundle")
+    vf_p.add_argument(
+        "--trusted-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the sealing job",
+    )
+    vf_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external source JSON; exact match is required to prevent replays",
+    )
+    vf_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="external context JSON; exact match is required to prevent replays",
+    )
+    vf_p.add_argument(
+        "--require-pass",
+        action="store_true",
+        help="also act as a gate: exit 0 only for a verified semantic PASS",
     )
 
     # ----- verify-bundle ---------------------------------------------------- #
@@ -1603,6 +1739,470 @@ def cmd_bundle_evidence(
     return 0
 
 
+def cmd_finalize_record(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Seal a semantic record against trusted context and expose ALLOW/DENY.
+
+    The command is deliberately not an execution verifier: its context must be
+    derived by a trusted finalizer from the control plane, after an isolated
+    re-verification.  It never upgrades a PR artifact into a trusted runtime
+    observation by itself.
+    """
+
+    from evoom_guard.evidence_bundle import (
+        EvidenceBundleError,
+        EvidenceMaterial,
+        finalize_evidence_bundle,
+    )
+    from evoom_guard.record_verifier import strict_json_loads, verify_record
+    from evoom_guard.signing import SigningUnavailableError
+
+    if args.verdict == "-":
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "ERROR",
+                "error": "finalize-record verdict must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        verdict_bytes = _read_bounded_bytes(
+            args.verdict,
+            limit=MAX_OFFLINE_RECORD_BYTES,
+            label="verdict",
+        )
+        context_bytes = _read_bounded_bytes(
+            args.expected_context,
+            limit=MAX_CONTEXT_INPUT_BYTES,
+            label="expected context",
+        )
+        verdict = strict_json_loads(verdict_bytes.decode("utf-8"))
+        expected_context = strict_json_loads(context_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "ERROR",
+                "error": f"unusable JSON input: {exc}",
+            },
+        )
+        return 2
+    if not isinstance(verdict, dict):
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "INVALID_RECORD",
+                "error": "verdict JSON must be an object",
+            },
+        )
+        return 1
+    record_report = verify_record(verdict)
+    if not record_report["ok"]:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "INVALID_RECORD",
+                "record": record_report,
+            },
+        )
+        return 1
+    if not isinstance(expected_context, dict):
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "ERROR",
+                "error": "expected context JSON must be an object",
+            },
+        )
+        return 2
+
+    materials: list[EvidenceMaterial] = []
+    for specification in args.material:
+        role, separator, path = specification.partition("=")
+        if not separator or not role or not path:
+            _machine_report(
+                out,
+                {
+                    "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                    "ok": False,
+                    "finalized": False,
+                    "status": "ERROR",
+                    "error": f"invalid --material {specification!r}; expected ROLE=PATH",
+                },
+            )
+            return 2
+        materials.append(EvidenceMaterial(role=role, source_path=path))
+
+    try:
+        finalized = finalize_evidence_bundle(
+            args.verdict,
+            args.out,
+            expected_context=expected_context,
+            private_key_path=args.sign_key,
+            materials=materials,
+            force=args.force,
+        )
+    except EvidenceBundleError as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "INVALID_INPUT",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError, SigningUnavailableError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "finalized": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+
+    canonical_manifest = (
+        json.dumps(
+            finalized.manifest,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("ascii")
+    allowed = finalized.decision == "ALLOW"
+    _machine_report(
+        out,
+        {
+            "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+            "ok": allowed,
+            "finalized": True,
+            "status": "FINALIZED" if allowed else "DENIED",
+            "decision": finalized.decision,
+            "bundle": finalized.bundle_path,
+            "manifest_sha256": hashlib.sha256(canonical_manifest).hexdigest(),
+            "record_sha256": finalized.manifest["record"]["sha256"],
+            "key_id": finalized.manifest["authentication"]["key_id"],
+            "record": finalized.record_report,
+        },
+    )
+    return 0 if allowed or not args.require_pass else 1
+
+
+def _read_external_finalizer_object(path: str, *, label: str) -> dict[str, object]:
+    """Read a bounded JSON object supplied outside candidate-controlled artifacts."""
+
+    from evoom_guard.record_verifier import strict_json_loads
+
+    if path == "-":
+        raise ValueError(f"{label} must be a regular JSON file, not standard input")
+    data = _read_bounded_bytes(path, limit=MAX_CONTEXT_INPUT_BYTES, label=label)
+    value = strict_json_loads(data.decode("utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} JSON must be an object")
+    return value
+
+
+def _parse_finalizer_materials(specifications: list[str]) -> list[EvidenceMaterial]:
+    """Parse bounded material declarations shared by the finalizer commands."""
+
+    from evoom_guard.evidence_bundle import EvidenceMaterial
+
+    materials: list[EvidenceMaterial] = []
+    for specification in specifications:
+        role, separator, path = specification.partition("=")
+        if not separator or not role or not path:
+            raise ValueError(
+                f"invalid --material {specification!r}; expected ROLE=PATH"
+            )
+        materials.append(EvidenceMaterial(role=role, source_path=path))
+    return materials
+
+
+def cmd_finalizer_handoff(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Bind a semantic re-verification record to explicit trusted metadata."""
+
+    from evoom_guard.evidence_bundle import EvidenceBundleError
+    from evoom_guard.trusted_finalizer import (
+        FinalizerHandoffError,
+        create_finalizer_handoff,
+    )
+
+    if args.verdict == "-":
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
+                "ok": False,
+                "status": "ERROR",
+                "error": "finalizer-handoff verdict must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        source = _read_external_finalizer_object(args.source, label="source")
+        context = _read_external_finalizer_object(args.context, label="context")
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
+                "ok": False,
+                "status": "ERROR",
+                "error": f"unusable trusted metadata: {exc}",
+            },
+        )
+        return 2
+    try:
+        handoff = create_finalizer_handoff(
+            args.verdict,
+            args.out,
+            source=source,
+            context=context,
+            force=args.force,
+        )
+    except (EvidenceBundleError, FinalizerHandoffError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
+                "ok": False,
+                "status": "INVALID_INPUT",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except OSError as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
+                "ok": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
+            "ok": True,
+            "status": "CREATED",
+            "handoff": os.path.abspath(args.out),
+            "record_sha256": handoff["record"]["sha256"],
+            "source": handoff["source"],
+            "context": handoff["context"],
+        },
+    )
+    return 0
+
+
+def cmd_seal_finalizer(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Seal only a handoff that matches externally re-derived metadata."""
+
+    from evoom_guard.evidence_bundle import EvidenceBundleError
+    from evoom_guard.signing import SigningUnavailableError
+    from evoom_guard.trusted_finalizer import FinalizerHandoffError, seal_finalizer_bundle
+
+    if args.verdict == "-":
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": "seal-finalizer verdict must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+        materials = _parse_finalizer_materials(args.material)
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": f"unusable trusted input: {exc}",
+            },
+        )
+        return 2
+    try:
+        sealed = seal_finalizer_bundle(
+            args.handoff,
+            args.verdict,
+            args.out,
+            expected_source=expected_source,
+            expected_context=expected_context,
+            private_key_path=args.sign_key,
+            materials=materials,
+            force=args.force,
+        )
+    except (EvidenceBundleError, FinalizerHandoffError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "sealed": False,
+                "status": "INVALID_INPUT",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError, SigningUnavailableError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    allowed = sealed.decision == "ALLOW"
+    _machine_report(
+        out,
+        {
+            "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
+            "ok": allowed,
+            "sealed": True,
+            "status": "FINALIZED" if allowed else "DENIED",
+            "decision": sealed.decision,
+            "bundle": sealed.finalized.bundle_path,
+            "record_sha256": sealed.finalized.manifest["record"]["sha256"],
+            "key_id": sealed.finalized.manifest["authentication"]["key_id"],
+        },
+    )
+    return 0 if allowed or not args.require_pass else 1
+
+
+def cmd_verify_finalized(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify a signed finalizer bundle and all external anti-replay bindings."""
+
+    from evoom_guard.signing import SigningUnavailableError
+    from evoom_guard.trusted_finalizer import (
+        FinalizerHandoffError,
+        verify_finalized_bundle,
+    )
+
+    try:
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
+                "ok": False,
+                "verified": False,
+                "status": "INCOMPLETE",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        verified = verify_finalized_bundle(
+            args.bundle,
+            trusted_public_key_path=args.trusted_pub,
+            expected_source=expected_source,
+            expected_context=expected_context,
+        )
+    except SigningUnavailableError as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
+                "ok": False,
+                "verified": False,
+                "status": "INCOMPLETE",
+                "error": str(exc),
+            },
+        )
+        return 2
+    except (OSError, ValueError, FinalizerHandoffError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
+                "ok": False,
+                "verified": False,
+                "status": "INVALID",
+                "error": str(exc),
+            },
+        )
+        return 1
+    allowed = verified.decision == "ALLOW"
+    ok = allowed or not args.require_pass
+    _machine_report(
+        out,
+        {
+            "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
+            "ok": ok,
+            "verified": True,
+            "status": "VERIFIED" if ok else "DENIED",
+            "decision": verified.decision,
+            "key_id": verified.bundle.manifest["authentication"]["key_id"],
+            "record": verified.bundle.record_report,
+        },
+    )
+    return 0 if ok else 1
+
+
 def cmd_verify_bundle(
     args: argparse.Namespace,
     *,
@@ -1847,6 +2447,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify_record(args)
     if args.command == "bundle-evidence":
         return cmd_bundle_evidence(args)
+    if args.command == "finalize-record":
+        return cmd_finalize_record(args)
+    if args.command == "finalizer-handoff":
+        return cmd_finalizer_handoff(args)
+    if args.command == "seal-finalizer":
+        return cmd_seal_finalizer(args)
+    if args.command == "verify-finalized":
+        return cmd_verify_finalized(args)
     if args.command == "verify-bundle":
         return cmd_verify_bundle(args)
     if args.command == "pack-doctor":

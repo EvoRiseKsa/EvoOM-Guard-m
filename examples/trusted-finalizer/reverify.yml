@@ -1,0 +1,366 @@
+# EvoGuard trusted-finalizer reference: unprivileged re-verification only.
+#
+# Copy this as .github/workflows/evoguard-reverify.yml through a protected
+# policy-maintenance change. Its candidate job deliberately has no secrets, no
+# write token, no cache, and no self-hosted runner. The metadata-only job holds
+# `checks: write` solely to create a new pending finalizer check for this exact
+# run attempt before candidate execution starts. It currently supports only open same-repository PRs
+# targeting the protected default branch; do not remove those checks for forks
+# or other bases without a separate threat-model review.
+name: EvoGuard Reverify
+# This title is audit-friendly only. The seal job derives its authority from
+# the immutable metadata artifact written before candidate execution.
+run-name: "EvoGuard Reverify PR #${{ inputs.pr_number }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Same-repository PR number to re-verify"
+        required: true
+        type: string
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      base_sha: ${{ steps.pr.outputs.base_sha }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      base_tree_sha: ${{ steps.pr.outputs.base_tree_sha }}
+      head_tree_sha: ${{ steps.pr.outputs.head_tree_sha }}
+      repository_id: ${{ steps.pr.outputs.repository_id }}
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      check_run_id: ${{ steps.pending.outputs.check_run_id }}
+      workflow_run_attempt: ${{ steps.attempt.outputs.value }}
+    steps:
+      - id: attempt
+        name: Capture this workflow attempt
+        run: printf 'value=%s\n' "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
+      - id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+        with:
+          script: |
+            const raw = process.env.PR_NUMBER || '';
+            if (!/^[1-9][0-9]*$/.test(raw)) {
+              core.setFailed('pr_number must be a positive decimal integer');
+              return;
+            }
+            const { owner, repo } = context.repo;
+            if (context.ref !== `refs/heads/${context.payload.repository.default_branch}`) {
+              core.setFailed('reference finalizer workflow must be dispatched from the default branch');
+              return;
+            }
+            const pr = (await github.rest.pulls.get({
+              owner, repo, pull_number: Number(raw),
+            })).data;
+            if (pr.state !== 'open') {
+              core.setFailed('reference finalizer accepts open PRs only');
+              return;
+            }
+            if (pr.base.ref !== context.payload.repository.default_branch) {
+              core.setFailed('reference finalizer requires the protected default branch as PR base');
+              return;
+            }
+            if (!pr.head.repo || pr.head.repo.full_name !== `${owner}/${repo}`) {
+              core.setFailed('reference finalizer accepts same-repository PRs only');
+              return;
+            }
+            const [baseCommit, headCommit] = await Promise.all([
+              github.rest.git.getCommit({ owner, repo, commit_sha: pr.base.sha }),
+              github.rest.git.getCommit({ owner, repo, commit_sha: pr.head.sha }),
+            ]);
+            core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_tree_sha', baseCommit.data.tree.sha);
+            core.setOutput('head_tree_sha', headCommit.data.tree.sha);
+            core.setOutput('repository_id', String(context.payload.repository.id));
+            core.setOutput('pr_number', String(Number(raw)));
+
+      # Do not reuse a completed check run. GitHub documents the normal
+      # lifecycle as create-pending then update-that-ID, and a distinct check
+      # per workflow attempt prevents a prior ALLOW on the same head from
+      # standing in for this re-verification.
+      - id: pending
+        name: Create an attempt-bound pending finalizer check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        with:
+          script: |
+            const headSha = process.env.HEAD_SHA || '';
+            const runId = process.env.RUN_ID || '';
+            const runAttempt = process.env.RUN_ATTEMPT || '';
+            if (!/^[0-9a-f]{40,64}$/.test(headSha)) {
+              throw new Error('metadata job could not determine the PR head SHA');
+            }
+            if (!/^[1-9][0-9]*$/.test(runId) || !/^[1-9][0-9]*$/.test(runAttempt)) {
+              throw new Error('metadata job has invalid workflow run identity');
+            }
+            const created = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: headSha,
+              name: 'EvoGuard Trusted Finalizer',
+              external_id: `evoguard-trusted-finalizer:${runId}:${runAttempt}`,
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+              output: {
+                title: 'EvoGuard final decision: pending re-verification',
+                summary: 'This check is bound to one re-verification workflow attempt.',
+              },
+            });
+            core.setOutput('check_run_id', String(created.data.id));
+
+      # This artifact is written in the metadata job before the candidate job
+      # starts. Its name is immutable for this run *attempt*, so the candidate
+      # cannot replace this control-plane binding with its verdict artifact or
+      # make a re-run read a previous attempt's metadata.
+      - name: Write immutable re-verification control record
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          REPOSITORY_ID: ${{ steps.pr.outputs.repository_id }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          BASE_TREE_SHA: ${{ steps.pr.outputs.base_tree_sha }}
+          HEAD_TREE_SHA: ${{ steps.pr.outputs.head_tree_sha }}
+          CHECK_RUN_ID: ${{ steps.pending.outputs.check_run_id }}
+        run: |
+          python - "$RUNNER_TEMP/finalizer-control.json" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          values = {
+              "base_sha": os.environ["BASE_SHA"],
+              "base_tree_sha": os.environ["BASE_TREE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "head_tree_sha": os.environ["HEAD_TREE_SHA"],
+          }
+          if any(re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", value) is None
+                 for value in values.values()):
+              raise SystemExit("metadata API returned an invalid Git digest")
+          record = {
+              "base_sha": values["base_sha"],
+              "base_tree_sha": values["base_tree_sha"],
+              "check_run_id": int(os.environ["CHECK_RUN_ID"]),
+              "format": "EVOGUARD_REVERIFY_CONTROL_V1",
+              "head_sha": values["head_sha"],
+              "head_tree_sha": values["head_tree_sha"],
+              "pull_request_number": int(os.environ["PR_NUMBER"]),
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "repository_id": os.environ["REPOSITORY_ID"],
+              "workflow_run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+          }
+          with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as handle:
+              json.dump(record, handle, sort_keys=True, separators=(",", ":"))
+              handle.write("\n")
+          PY
+
+      - name: Upload immutable control-plane binding
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-reverify-control-v1-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/finalizer-control.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 1
+
+  reverify:
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # A GitHub partial re-run would skip metadata but increment
+      # GITHUB_RUN_ATTEMPT, leaving no new control record or Check Run for the
+      # candidate retry. Require "Re-run all jobs" (or a new dispatch) instead.
+      - name: Refuse a partial workflow re-run
+        env:
+          METADATA_RUN_ATTEMPT: ${{ needs.metadata.outputs.workflow_run_attempt }}
+        run: |
+          set -euo pipefail
+          test "$METADATA_RUN_ATTEMPT" = "$GITHUB_RUN_ATTEMPT" || {
+            echo "Re-run all jobs or dispatch a new workflow; partial re-runs are not finalizer attempts." >&2
+            exit 1
+          }
+
+      # Both exact revisions are supplied by the fixed metadata job; do not
+      # substitute a branch/ref or persist credentials in either checkout.
+      - name: Checkout trusted base
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.metadata.outputs.base_sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Checkout exact candidate revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.metadata.outputs.head_sha }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+
+      # This protected variable is the trust root for the executable. Do not
+      # treat a checksum downloaded from the same mutable URL as sufficient.
+      - name: Download and verify the reviewed Guard zipapp
+        env:
+          GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$GUARD_ARTIFACT_SHA256"
+          test "$GUARD_ARTIFACT_SHA256" = "$(printf '%s' "$GUARD_ARTIFACT_SHA256" | tr -d '\n')"
+          [[ "$GUARD_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s  %s\n' "$GUARD_ARTIFACT_SHA256" "$RUNNER_TEMP/evo-guard.pyz" > "$RUNNER_TEMP/guard.sha256"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/evo-guard.pyz" \
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.6.0/evo-guard.pyz"
+          sha256sum --check "$RUNNER_TEMP/guard.sha256"
+          chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
+
+      # The policy comes from the exact base checkout. This reference requires
+      # an external black-box gate, no network, and no host setup before it
+      # allows a handoff. Docker is still defence in depth only; use a
+      # separately administered gVisor/stronger runner for hostile code.
+      - name: Refuse a weak trusted-base policy
+        run: |
+          python - "$GITHUB_WORKSPACE/base/.evoguard.json" <<'PY'
+          import json
+          import re
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              policy = json.load(handle)
+          required = {
+              "blackbox": True,
+              "blackbox_only": True,
+              "require_report_integrity": "external_process_isolated",
+          }
+          for key, value in required.items():
+              if policy.get(key) != value:
+                  raise SystemExit(f"trusted finalizer requires {key}={value!r}")
+          isolation = policy.get("isolation")
+          if isolation not in {"docker", "gvisor"}:
+              raise SystemExit("trusted finalizer requires isolation docker or gvisor")
+          if policy.get("require_candidate_isolation") != isolation:
+              raise SystemExit("trusted finalizer requires matching require_candidate_isolation")
+          if policy.get("docker_network", "none") != "none":
+              raise SystemExit("trusted finalizer requires docker_network=none")
+          if policy.get("trust_setup_on_host", False):
+              raise SystemExit("trusted finalizer refuses trust_setup_on_host=true")
+          image = policy.get("docker_image")
+          if not isinstance(image, str) or re.search(r"@sha256:[0-9a-f]{64}$", image) is None:
+              raise SystemExit("trusted finalizer requires an immutable docker_image@sha256 policy")
+          if not isinstance(policy.get("verifier_pack"), str) or not policy["verifier_pack"]:
+              raise SystemExit("trusted finalizer requires a trusted verifier_pack")
+          digest = policy.get("expect_verifier_pack_sha256")
+          if not isinstance(digest, str) or len(digest) != 64:
+              raise SystemExit("trusted finalizer requires verifier-pack identity pin")
+          PY
+
+      - name: Re-verify the exact base/head pair without secrets
+        id: guard
+        env:
+          BASE_SHA: ${{ needs.metadata.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.metadata.outputs.head_sha }}
+          BASE_TREE_SHA: ${{ needs.metadata.outputs.base_tree_sha }}
+          HEAD_TREE_SHA: ${{ needs.metadata.outputs.head_tree_sha }}
+        run: |
+          set +e
+          python -I "$RUNNER_TEMP/evo-guard.pyz" guard \
+            --base "$GITHUB_WORKSPACE/base" \
+            --head "$GITHUB_WORKSPACE/candidate" \
+            --config "$GITHUB_WORKSPACE/base/.evoguard.json" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --base-tree-sha "$BASE_TREE_SHA" \
+            --head-tree-sha "$HEAD_TREE_SHA" \
+            --json "$RUNNER_TEMP/verdict.json" \
+            --report "$RUNNER_TEMP/reverify.md"
+          code=$?
+          set -e
+          test -f "$RUNNER_TEMP/verdict.json"
+          echo "guard_exit=$code" >> "$GITHUB_OUTPUT"
+
+      # This constructs a bounded descriptor. It has no key and remains data,
+      # not a trust root, until the sealing workflow independently matches it.
+      - name: Bind re-verification record to the exact run and revisions
+        env:
+          REPOSITORY_ID: ${{ needs.metadata.outputs.repository_id }}
+          BASE_SHA: ${{ needs.metadata.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.metadata.outputs.head_sha }}
+          BASE_TREE_SHA: ${{ needs.metadata.outputs.base_tree_sha }}
+          HEAD_TREE_SHA: ${{ needs.metadata.outputs.head_tree_sha }}
+          PR_NUMBER: ${{ needs.metadata.outputs.pr_number }}
+          GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/verdict.json" "$RUNNER_TEMP/source.json" "$RUNNER_TEMP/context.json" <<'PY'
+          import json
+          import os
+          import sys
+
+          verdict_path, source_path, context_path = sys.argv[1:]
+          with open(verdict_path, encoding="utf-8") as handle:
+              record = json.load(handle)
+          attestation = record.get("attestation")
+          if not isinstance(attestation, dict):
+              raise SystemExit("Guard record lacks attestation")
+          source = {
+              "pull_request_number": int(os.environ["PR_NUMBER"]),
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "base_sha": os.environ["BASE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+          }
+          context = {
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "repository_id": os.environ["REPOSITORY_ID"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "base_sha": os.environ["BASE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "base_tree_sha": os.environ["BASE_TREE_SHA"],
+              "head_tree_sha": os.environ["HEAD_TREE_SHA"],
+              "candidate_sha256": attestation["candidate_sha256"],
+              "policy_sha256": attestation["policy_sha256"],
+              "verifier_pack_sha256": attestation["verifier_pack_sha256"],
+              "guard_artifact_sha256": os.environ["GUARD_ARTIFACT_SHA256"],
+          }
+          for path, value in ((source_path, source), (context_path, context)):
+              with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                  json.dump(value, handle, sort_keys=True, separators=(",", ":"))
+                  handle.write("\n")
+          PY
+          python -I "$RUNNER_TEMP/evo-guard.pyz" finalizer-handoff \
+            "$RUNNER_TEMP/verdict.json" \
+            --out "$RUNNER_TEMP/handoff.json" \
+            --source "$RUNNER_TEMP/source.json" \
+            --context "$RUNNER_TEMP/context.json"
+
+      # Upload data only. The following sealing workflow treats these files as
+      # untrusted until it has re-derived and compared the external bindings.
+      - name: Upload re-verification evidence for the seal job
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-reverify-evidence-v1-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/verdict.json
+            ${{ runner.temp }}/handoff.json
+          if-no-files-found: warn
+          retention-days: 1

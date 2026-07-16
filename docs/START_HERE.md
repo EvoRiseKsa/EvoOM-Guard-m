@@ -18,6 +18,7 @@ to start.
 | Stop an untrusted change (including an AI patch) from editing/deleting tests, and run your suite | **Basic integrity gate** (Path 1) | *(none — the default; optional `--verifier-pack` adds org checks)* |
 | Also verify a **CLI's** external behaviour with a judge-owned external verdict | **External behavior gate** (Path 2) | `--blackbox` + `--verifier-pack` |
 | Run the black-box candidate behind a real OS isolation boundary | **Isolated external gate** (Path 3) | `--isolation docker` (fail-closed) |
+| Admit a semi-trusted PR only after a separate re-verification/sealing boundary | **Trusted Finalizer** (Path 4) | split GitHub workflows |
 
 Quick tree:
 
@@ -25,6 +26,7 @@ Quick tree:
 Just want to block test-harness tampering?           → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a guaranteed OS isolation boundary?              → add --isolation docker (fail-closed)
+Need a signed PR admission record with separated key?  → Trusted Finalizer
 ```
 
 Already have a verdict and need an offline admission/audit result? Use
@@ -39,6 +41,12 @@ context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
 > values. Protect the workflow itself with a required workflow/status check, or
 > a PR could prevent the gate from starting. Details:
 > [`GUARD.md`](GUARD.md#pull-request-policy-source-security-critical).
+
+> **Need a final admission decision for semi-trusted PRs?** The ordinary Action
+> is not the place for a signing key. Use the split re-verification + sealing
+> deployment in [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md), after configuring
+> branch rules and a protected Environment. It is deliberately stronger and more
+> operationally involved than Paths 1–3.
 
 ---
 
@@ -141,6 +149,33 @@ dependencies into the image/environment.
 > **subprocess** black-box boundary: the hardened `--network none` container
 > deliberately severs the judge↔candidate channel, so for container-level
 > isolation wrap the behaviour behind a CLI entry point instead.
+
+---
+
+## Path 4 — Trusted Finalizer (split re-verification and signing)
+
+**When:** a PR author is semi-trusted or untrusted and a normal Guard job must
+not receive a signing key, deployment credential, or write-capable token.
+
+**Guarantees:** a metadata job writes the PR/run/base/head/tree control record
+before candidate execution; the unprivileged job re-verifies that exact pair;
+then a separate job re-fetches current PR/tree metadata, matches the exact
+handoff and verdict bytes, and signs a final `ALLOW` or `DENY` evidence bundle.
+The signing job never checks out or runs candidate code.
+
+The fixed metadata preflight creates one pending Check Run per re-verification
+attempt before candidate execution; the candidate job has no write permission.
+Test the resulting repeated Check Runs against the actual GitHub ruleset before
+requiring their shared display name, or prefer a Required Workflow rule.
+
+**Does NOT guarantee:** universal correctness, a fully hostile-code-safe Docker
+kernel boundary, or verification of your deployment artifact. It starts with
+open same-repository PRs targeting the protected default branch and manual
+maintainer dispatch. These limits are intentional and fail closed rather than
+being hidden behind an automatic workflow.
+
+**Start here:** [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md) and the paired
+[`examples/trusted-finalizer/`](../examples/trusted-finalizer/) workflows.
 
 ---
 

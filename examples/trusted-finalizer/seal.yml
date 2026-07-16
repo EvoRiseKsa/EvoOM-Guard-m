@@ -1,0 +1,435 @@
+# EvoGuard trusted-finalizer reference: privileged sealing only.
+#
+# Copy this as .github/workflows/evoguard-seal.yml through a protected
+# policy-maintenance change. This job never checks out the PR head, never runs
+# candidate code, and receives the key only through a protected Environment.
+name: EvoGuard Seal
+
+on:
+  workflow_run:
+    workflows: ["EvoGuard Reverify"]
+    types: [completed]
+
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  # A failed/cancelled run, a bootstrap run with no configured workflow ID, or
+  # a same-named but unconfigured workflow never reaches the key-bearing seal
+  # job. Reconcile its check to failure without reading a candidate checkout or
+  # using the finalizer Environment/key. If its immutable control artifact is
+  # unavailable, this job fails and the check remains pending (fail closed).
+  reconcile:
+    if: >-
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      (github.event.workflow_run.conclusion != 'success' ||
+       vars.EVOGUARD_REVERIFY_WORKFLOW_ID == '' ||
+       format('{0}', github.event.workflow_run.workflow_id) != vars.EVOGUARD_REVERIFY_WORKFLOW_ID)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+    steps:
+      - name: Download this failed attempt's immutable control data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-reverify-control-v1-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ runner.temp }}/reverify-control
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Complete the attempt-bound finalizer check as failure
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CONTROL_DIR: ${{ runner.temp }}/reverify-control
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const workflowRun = context.payload.workflow_run;
+            const target = path.join(process.env.CONTROL_DIR, 'finalizer-control.json');
+            const stat = fs.lstatSync(target);
+            if (!stat.isFile() || stat.size < 1 || stat.size > 16 * 1024) {
+              throw new Error('control record must be a bounded regular file');
+            }
+            let control;
+            try {
+              control = JSON.parse(fs.readFileSync(target, 'utf8'));
+            } catch (error) {
+              throw new Error(`control record is not valid JSON: ${error.message}`);
+            }
+            const keys = [
+              'base_sha', 'base_tree_sha', 'check_run_id', 'format', 'head_sha',
+              'head_tree_sha', 'pull_request_number', 'repository', 'repository_id',
+              'workflow_run_attempt', 'workflow_run_id',
+            ];
+            if (Object.keys(control).length !== keys.length ||
+                keys.some((key) => !(key in control)) ||
+                control.format !== 'EVOGUARD_REVERIFY_CONTROL_V1' ||
+                control.repository !== `${context.repo.owner}/${context.repo.repo}` ||
+                control.repository_id !== String(context.payload.repository.id) ||
+                control.workflow_run_id !== String(workflowRun.id) ||
+                control.workflow_run_attempt !== workflowRun.run_attempt ||
+                !Number.isSafeInteger(control.check_run_id) || control.check_run_id < 1 ||
+                typeof control.head_sha !== 'string' || !/^[0-9a-f]{40,64}$/.test(control.head_sha)) {
+              throw new Error('control record is not bound to this failed workflow attempt');
+            }
+            const check = (await github.rest.checks.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: control.check_run_id,
+            })).data;
+            const externalId = `evoguard-trusted-finalizer:${workflowRun.id}:${workflowRun.run_attempt}`;
+            if (check.name !== 'EvoGuard Trusted Finalizer' ||
+                check.external_id !== externalId || check.head_sha !== control.head_sha ||
+                check.status !== 'in_progress') {
+              throw new Error('control record does not select this pending finalizer check');
+            }
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: control.check_run_id,
+              status: 'completed',
+              conclusion: 'failure',
+              completed_at: new Date().toISOString(),
+              output: {
+                title: 'EvoGuard final decision: DENY',
+                summary: 'This attempt did not reach the configured trusted seal; no evidence was sealed.',
+              },
+            });
+
+  seal:
+    # Set EVOGUARD_REVERIFY_WORKFLOW_ID to the numeric workflow ID after first
+    # installation. This prevents a same-named but different workflow from
+    # becoming a source for the key-bearing sealing job.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch &&
+      vars.EVOGUARD_REVERIFY_WORKFLOW_ID != '' &&
+      format('{0}', github.event.workflow_run.workflow_id) == vars.EVOGUARD_REVERIFY_WORKFLOW_ID
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Configure this environment with required reviewers and put the key only
+    # in its EVOGUARD_FINALIZER_KEY secret. Do not use a generic repo secret.
+    environment: evoguard-finalizer
+    steps:
+      # The Guard release zipapp is deliberately dependency-free. Sealing needs
+      # Ed25519 support, so install a small Linux x86_64 Python-3.12 lock with
+      # exact hashes in the privileged job only. A platform mismatch fails
+      # closed instead of silently selecting a different signing dependency.
+      - name: Set up the sealed Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+      - name: Install hash-locked Ed25519 dependency
+        run: |
+          python - "$RUNNER_TEMP/finalizer-requirements.txt" <<'PY'
+          from pathlib import Path
+          import sys
+
+          Path(sys.argv[1]).write_text(
+              """cryptography==46.0.7 \\
+              --hash=sha256:420b1e4109cc95f0e5700eed79908cef9268265c773d3a66f7af1eef53d409ef
+          cffi==2.1.0 \\
+              --hash=sha256:1e9f50d192a3e525b15a75ab5114e442d83d657b7ec29182a991bc9a88fd3a66
+          pycparser==3.0 \\
+              --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
+          """,
+              encoding="utf-8",
+          )
+          PY
+          python -m pip install --disable-pip-version-check --only-binary=:all: \
+            --require-hashes -r "$RUNNER_TEMP/finalizer-requirements.txt"
+
+      # This control artifact was uploaded by the metadata job before the
+      # candidate job started. It is the source for the PR number and exact
+      # base/head/tree bindings; data from the candidate artifact never selects
+      # a PR in this privileged workflow.
+      - name: Download immutable control data from this re-verification run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-reverify-control-v1-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ runner.temp }}/reverify-control
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # Validate the immutable selector and the pending Check Run before any
+      # candidate-derived evidence is downloaded. Every later completion uses
+      # only this exact Check Run ID, never a name lookup on the PR head.
+      - id: control
+        name: Validate the attempt-bound control and finalizer check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CONTROL_DIR: ${{ runner.temp }}/reverify-control
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const workflowRun = context.payload.workflow_run;
+            const target = path.join(process.env.CONTROL_DIR, 'finalizer-control.json');
+            const stat = fs.lstatSync(target);
+            if (!stat.isFile() || stat.size < 1 || stat.size > 16 * 1024) {
+              throw new Error('control record must be a bounded regular file');
+            }
+            let control;
+            try {
+              control = JSON.parse(fs.readFileSync(target, 'utf8'));
+            } catch (error) {
+              throw new Error(`control record is not valid JSON: ${error.message}`);
+            }
+            const keys = [
+              'base_sha', 'base_tree_sha', 'check_run_id', 'format', 'head_sha',
+              'head_tree_sha', 'pull_request_number', 'repository', 'repository_id',
+              'workflow_run_attempt', 'workflow_run_id',
+            ];
+            if (Object.keys(control).length !== keys.length ||
+                keys.some((key) => !(key in control)) ||
+                control.format !== 'EVOGUARD_REVERIFY_CONTROL_V1' ||
+                !Number.isSafeInteger(control.pull_request_number) ||
+                control.pull_request_number < 1 || control.pull_request_number > 2147483647 ||
+                !Number.isSafeInteger(control.check_run_id) || control.check_run_id < 1 ||
+                control.repository !== `${context.repo.owner}/${context.repo.repo}` ||
+                control.repository_id !== String(context.payload.repository.id) ||
+                control.workflow_run_id !== String(workflowRun.id) ||
+                control.workflow_run_attempt !== workflowRun.run_attempt) {
+              throw new Error('control record is not bound to this workflow attempt');
+            }
+            for (const field of ['base_sha', 'head_sha', 'base_tree_sha', 'head_tree_sha']) {
+              if (typeof control[field] !== 'string' ||
+                  !/^[0-9a-f]{40,64}$/.test(control[field])) {
+                throw new Error(`control record has invalid ${field}`);
+              }
+            }
+            const check = (await github.rest.checks.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: control.check_run_id,
+            })).data;
+            const externalId = `evoguard-trusted-finalizer:${workflowRun.id}:${workflowRun.run_attempt}`;
+            if (check.name !== 'EvoGuard Trusted Finalizer' ||
+                check.external_id !== externalId || check.head_sha !== control.head_sha ||
+                check.status !== 'in_progress') {
+              throw new Error('control record does not select this pending finalizer check');
+            }
+            for (const field of [
+              'pull_request_number', 'base_sha', 'head_sha', 'base_tree_sha',
+              'head_tree_sha', 'check_run_id',
+            ]) {
+              core.setOutput(field, String(control[field]));
+            }
+
+      - name: Download untrusted data from this exact completed re-verification run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-reverify-evidence-v1-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ runner.temp }}/reverify-evidence
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # The protected variable, rather than the release URL itself, is the
+      # executable trust root. The candidate was never checked out in this job.
+      - name: Download and verify the reviewed Guard zipapp
+        env:
+          GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$GUARD_ARTIFACT_SHA256"
+          test "$GUARD_ARTIFACT_SHA256" = "$(printf '%s' "$GUARD_ARTIFACT_SHA256" | tr -d '\n')"
+          [[ "$GUARD_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s  %s\n' "$GUARD_ARTIFACT_SHA256" "$RUNNER_TEMP/evo-guard.pyz" > "$RUNNER_TEMP/guard.sha256"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/evo-guard.pyz" \
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.6.0/evo-guard.pyz"
+          sha256sum --check "$RUNNER_TEMP/guard.sha256"
+          chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
+
+      # The downloaded handoff is only a locator and comparison target. This
+      # fixed action uses metadata written before candidate execution, then
+      # re-fetches the PR and tree identities before any signing step. A new
+      # push makes the old handoff and control record fail closed.
+      - id: derive
+        name: Re-derive source and context from the GitHub control plane
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/reverify-evidence
+          PR_NUMBER: ${{ steps.control.outputs.pull_request_number }}
+          CONTROL_BASE_SHA: ${{ steps.control.outputs.base_sha }}
+          CONTROL_HEAD_SHA: ${{ steps.control.outputs.head_sha }}
+          CONTROL_BASE_TREE_SHA: ${{ steps.control.outputs.base_tree_sha }}
+          CONTROL_HEAD_TREE_SHA: ${{ steps.control.outputs.head_tree_sha }}
+          GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const evidenceDir = process.env.EVIDENCE_DIR;
+            const { owner, repo } = context.repo;
+            const workflowRun = context.payload.workflow_run;
+
+            function readBoundedJson(directory, filename, maximum, label) {
+              const target = path.join(directory, filename);
+              const stat = fs.lstatSync(target);
+              if (!stat.isFile() || stat.size < 1 || stat.size > maximum) {
+                throw new Error(`${label} must be a regular file from 1 through ${maximum} bytes`);
+              }
+              try {
+                return JSON.parse(fs.readFileSync(target, 'utf8'));
+              } catch (error) {
+                throw new Error(`${label} is not valid JSON: ${error.message}`);
+              }
+            }
+
+            const control = {
+              pull_request_number: Number(process.env.PR_NUMBER),
+              base_sha: process.env.CONTROL_BASE_SHA || '',
+              head_sha: process.env.CONTROL_HEAD_SHA || '',
+              base_tree_sha: process.env.CONTROL_BASE_TREE_SHA || '',
+              head_tree_sha: process.env.CONTROL_HEAD_TREE_SHA || '',
+            };
+            if (!Number.isSafeInteger(control.pull_request_number) ||
+                control.pull_request_number < 1 ||
+                control.pull_request_number > 2147483647) {
+              throw new Error('validated control record has an invalid pull_request_number');
+            }
+            for (const field of ['base_sha', 'head_sha', 'base_tree_sha', 'head_tree_sha']) {
+              if (typeof control[field] !== 'string' ||
+                  !/^[0-9a-f]{40,64}$/.test(control[field])) {
+                throw new Error(`validated control record has invalid ${field}`);
+              }
+            }
+            if (!/^[0-9a-f]{64}$/.test(process.env.GUARD_ARTIFACT_SHA256 || '')) {
+              throw new Error('protected Guard artifact digest is invalid');
+            }
+            const pr = (await github.rest.pulls.get({
+              owner, repo, pull_number: control.pull_request_number,
+            })).data;
+            if (pr.state !== 'open') {
+              throw new Error('reference finalizer accepts open PRs only');
+            }
+            if (pr.base.ref !== context.payload.repository.default_branch) {
+              throw new Error('reference finalizer requires the protected default branch as PR base');
+            }
+            if (!pr.head.repo || pr.head.repo.full_name !== `${owner}/${repo}`) {
+              throw new Error('reference finalizer accepts same-repository PRs only');
+            }
+            if (pr.base.sha !== control.base_sha || pr.head.sha !== control.head_sha) {
+              throw new Error('PR changed after re-verification; do not seal stale evidence');
+            }
+            const [baseCommit, headCommit] = await Promise.all([
+              github.rest.git.getCommit({ owner, repo, commit_sha: pr.base.sha }),
+              github.rest.git.getCommit({ owner, repo, commit_sha: pr.head.sha }),
+            ]);
+            if (baseCommit.data.tree.sha !== control.base_tree_sha ||
+                headCommit.data.tree.sha !== control.head_tree_sha) {
+              throw new Error('PR tree changed after re-verification; do not seal stale evidence');
+            }
+            // The record remains untrusted until seal-finalizer validates its
+            // canonical handoff, exact bytes, and semantic contract. Bound it
+            // before parsing so it cannot exhaust this privileged job.
+            const record = readBoundedJson(
+              evidenceDir, 'verdict.json', 8 * 1024 * 1024, 'verdict record',
+            );
+            const attestation = record.attestation;
+            if (!attestation || typeof attestation !== 'object') {
+              throw new Error('record has no attestation');
+            }
+            const source = {
+              pull_request_number: control.pull_request_number,
+              workflow_run_id: String(workflowRun.id),
+              workflow_run_attempt: workflowRun.run_attempt,
+              base_sha: pr.base.sha,
+              head_sha: pr.head.sha,
+            };
+            // run_id/run_attempt identify the re-verification run, not this
+            // sealing run. That makes context available before the secret job.
+            const expectedContext = {
+              repository: `${owner}/${repo}`,
+              repository_id: String(context.payload.repository.id),
+              run_id: String(workflowRun.id),
+              run_attempt: workflowRun.run_attempt,
+              base_sha: pr.base.sha,
+              head_sha: pr.head.sha,
+              base_tree_sha: baseCommit.data.tree.sha,
+              head_tree_sha: headCommit.data.tree.sha,
+              candidate_sha256: attestation.candidate_sha256,
+              policy_sha256: attestation.policy_sha256,
+              verifier_pack_sha256: attestation.verifier_pack_sha256,
+              guard_artifact_sha256: process.env.GUARD_ARTIFACT_SHA256,
+            };
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'expected-source.json'), JSON.stringify(source) + '\n');
+            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'expected-context.json'), JSON.stringify(expectedContext) + '\n');
+
+      # The private key enters only this post-reverification step. `seal-finalizer`
+      # validates the handoff/record/external metadata before opening the key.
+      # It returns 1 for a signed DENY, but preserves the evidence for upload.
+      - id: seal
+        name: Seal the matched evidence and compute the final decision
+        env:
+          EVOGUARD_FINALIZER_KEY: ${{ secrets.EVOGUARD_FINALIZER_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$EVOGUARD_FINALIZER_KEY"
+          key="$RUNNER_TEMP/finalizer-key.pem"
+          umask 077
+          printf '%s' "$EVOGUARD_FINALIZER_KEY" > "$key"
+          trap 'rm -f "$key"' EXIT
+          set +e
+          python -I "$RUNNER_TEMP/evo-guard.pyz" seal-finalizer \
+            "$RUNNER_TEMP/reverify-evidence/handoff.json" \
+            "$RUNNER_TEMP/reverify-evidence/verdict.json" \
+            --out "$RUNNER_TEMP/finalized.evb" \
+            --expected-source "$RUNNER_TEMP/expected-source.json" \
+            --expected-context "$RUNNER_TEMP/expected-context.json" \
+            --sign-key "$key" \
+            --require-pass
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed evidence (including DENY evidence)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-finalized-evidence-${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/finalized.evb
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Complete only the Check Run created by metadata for this exact attempt.
+      # No name/head lookup occurs here, so a result for one attempt cannot
+      # update another attempt's check.
+      - name: Complete the attempt-bound finalizer check
+        if: ${{ always() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CHECK_RUN_ID: ${{ steps.control.outputs.check_run_id }}
+          SEAL_EXIT: ${{ steps.seal.outputs.exit_code }}
+        with:
+          script: |
+            const checkRunId = Number(process.env.CHECK_RUN_ID);
+            if (!Number.isSafeInteger(checkRunId) || checkRunId < 1) {
+              throw new Error('could not determine the attempt-bound finalizer check');
+            }
+            const ok = process.env.SEAL_EXIT === '0';
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: checkRunId,
+              status: 'completed',
+              conclusion: ok ? 'success' : 'failure',
+              completed_at: new Date().toISOString(),
+              output: {
+                title: ok ? 'EvoGuard final decision: ALLOW' : 'EvoGuard final decision: DENY',
+                summary: ok
+                  ? 'Signed evidence matched the current PR/reverification context.'
+                  : 'The finalizer refused or denied the evidence; inspect the signed artifact and job logs.',
+              },
+            });
+            if (!ok) core.setFailed('EvoGuard Trusted Finalizer denied or could not seal this PR');

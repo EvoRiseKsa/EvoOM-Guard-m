@@ -6,12 +6,17 @@ the GitHub Action that produced the verdict. It does **not** turn producer
 assertions into independently observed runtime facts, and `VERIFIED` does not
 mean that the enclosed verdict is `PASS`.
 
+For a pull-request merge gate, this general bundle format is **not sufficient
+by itself**: never take a candidate-job artifact and sign it from a privileged
+`workflow_run` job. Use the split [`Trusted Finalizer`](TRUSTED_FINALIZER.md)
+reference workflow, which binds the PR control plane before candidate execution.
+
 ## Create in a trusted finalizer
 
 Install the signing extra and generate an Ed25519 key once:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.5.5"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.6.0"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
 
