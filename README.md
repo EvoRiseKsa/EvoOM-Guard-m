@@ -36,10 +36,11 @@ correctness or security.
 > test-silencing variant is `REJECTED` before a single test runs, and the do-nothing
 > patch `FAIL`s. Reproducible from hash-pinned PyPI sdists.
 
-> **Trusted Finalizer status.** v3.6.0 contains a split, higher-assurance
-> reference deployment, not an enabled merge gate in this repository. It must be
-> installed in a protected consumer repository and pass the documented Round 1
-> operational audit before it is made a required check. Read
+> **Trusted Finalizer status.** v3.6.0 introduced the split, higher-assurance
+> reference deployment; v3.6.1 repairs its unprivileged judge runtime. It is not
+> an enabled merge gate in this repository. Install it in a protected consumer
+> repository and complete the documented Round 1 operational audit before making
+> it a required check. Read
 > [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) and
 > [`docs/ASSURANCE.md`](docs/ASSURANCE.md) before relying on it.
 
@@ -162,7 +163,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.6.0"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.6.1"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -217,7 +218,7 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.6.0   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.6.1   # a release tag (pin a SHA for strictest CI)
     with:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
       fail-on: "any-non-pass"          # required on pull_request runs

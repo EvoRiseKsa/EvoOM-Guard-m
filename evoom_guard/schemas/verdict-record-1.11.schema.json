@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.6.0/evoom_guard/schemas/verdict-record-1.11.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.6.1/evoom_guard/schemas/verdict-record-1.11.schema.json",
   "title": "EvoGuard verdict record schema 1.11",
   "description": "Machine-readable structural contract for EvoGuard verdict records.",
   "$comment": "JSON Schema validates shape. Run `evo-guard verify-record` for cross-field lifecycle, policy digest, receipt, isolation, pack, and composite-count invariants.",

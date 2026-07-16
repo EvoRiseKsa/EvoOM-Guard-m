@@ -9,6 +9,26 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.6.1] — 2026-07-16
+
+### Fixed
+
+- The Trusted Finalizer reference re-verification job now provisions its own
+  Python 3.12 runtime and installs its judge dependency set with
+  `--require-hashes`. The earlier template assumed `pytest` was present on the
+  runner's system Python; a clean consumer could therefore receive an
+  `ERROR/no_test_verdict` instead of a verdict. The sealed job remains
+  hash-locked and privileged only after Environment approval.
+- The reference workflows and copy/paste installation examples now point at the
+  3.6.1 release artifact/tag. Schema `$id` addresses move with the release
+  address while schema version `1.11` remains unchanged.
+
+### Verification
+
+- Regenerated the 16-case live Guard benchmark with 3.6.1. It retained the
+  same outcomes and aggregate classification counts (11 TP, 3 TN, 2 documented
+  policy false positives, 0 FN); recorded timings are diagnostic only.
+
 ## [3.6.0] — 2026-07-16
 
 ### Added
