@@ -31,8 +31,10 @@ ROOT = Path(__file__).parents[1]
 # runs and use narrative text, not pin patterns.
 _DOC_FILES = (
     [ROOT / "README.md"]
-    + sorted((ROOT / "docs").glob("*.md"))
-    + sorted((ROOT / "examples").glob("*.yml"))
+    + sorted((ROOT / "docs").rglob("*.md"))
+    + sorted((ROOT / "examples").rglob("*.md"))
+    + sorted((ROOT / "examples").rglob("*.yml"))
+    + sorted((ROOT / "examples").rglob("*.yaml"))
 )
 
 # Install/pin shapes taught by the docs. Each captures the version they pin.

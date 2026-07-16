@@ -151,7 +151,7 @@ the workflow fail closed.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.5.5"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.6.0"   # a released tag; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -206,7 +206,7 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.5.5   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.6.0   # a release tag (pin a SHA for strictest CI)
     with:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
       fail-on: "any-non-pass"          # required on pull_request runs
@@ -362,6 +362,10 @@ evo-guard verify-bundle evidence.evb \
 `VERIFIED` authenticates the enclosed record and its exact context; it does not
 mean the enclosed verdict is `PASS` or that all software behavior is correct.
 Add `--require-pass` when this command is the merge/deploy gate.
+This generic `bundle-evidence` path is a provenance primitive, not a safe
+pull-request finalizer: do not feed it an artifact from a candidate job and
+then sign it in `workflow_run`. For PR admission, use the split
+[`Trusted Finalizer`](docs/TRUSTED_FINALIZER.md) path.
 The private key must never be available to the candidate job. See
 [`docs/EVIDENCE_BUNDLES.md`](docs/EVIDENCE_BUNDLES.md) and
 [`docs/RECORD_VERIFICATION.md`](docs/RECORD_VERIFICATION.md).
@@ -457,6 +461,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REPOSITORY_PROTECTION.md`](docs/REPOSITORY_PROTECTION.md) | GitHub merge/ruleset controls that a composite Action cannot enforce from inside itself |
+| [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |

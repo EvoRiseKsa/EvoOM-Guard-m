@@ -164,6 +164,23 @@ class VerifiedBundle:
         return self.inspection.materials_for(role)
 
 
+@dataclass(frozen=True)
+class FinalizedEvidence:
+    """One evidence bundle sealed against an externally supplied context.
+
+    ``decision`` is an admission decision derived solely from the enclosed
+    semantic record: ``ALLOW`` requires a completed Guard ``PASS`` and
+    ``DENY`` preserves every other semantically valid result as signed
+    evidence.  It does not claim that this API independently executed the
+    candidate or derived the supplied context.
+    """
+
+    manifest: dict[str, Any]
+    record_report: dict[str, Any]
+    decision: str
+    bundle_path: str
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -280,11 +297,17 @@ def _required_bounded_string(value: object, *, label: str, maximum: int) -> str:
     return value
 
 
-def _validate_context(
+def validate_evidence_context(
     value: Mapping[str, Any],
     *,
     verdict: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Validate the exact context a trusted finalizer supplies externally.
+
+    The function only checks representation and record bindings.  Callers are
+    responsible for deriving repository, workflow, and revision fields from a
+    trusted control plane rather than from a candidate artifact.
+    """
     context = dict(value)
     _require_exact_keys(context, _CONTEXT_KEYS, "bundle context")
     _required_bounded_string(context.get("repository"), label="context.repository", maximum=512)
@@ -337,6 +360,16 @@ def _validate_context(
                     f"context.{field} does not match the non-null verdict attestation"
                 )
     return context
+
+
+def _validate_context(
+    value: Mapping[str, Any],
+    *,
+    verdict: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Backward-compatible private alias for :func:`validate_evidence_context`."""
+
+    return validate_evidence_context(value, verdict=verdict)
 
 
 def _validate_role(role: str) -> None:
@@ -560,6 +593,62 @@ def create_evidence_bundle(
             pass
         raise
     return manifest
+
+
+def finalize_evidence_bundle(
+    verdict_path: str,
+    output_path: str,
+    *,
+    expected_context: Mapping[str, Any],
+    private_key_path: str,
+    materials: Iterable[EvidenceMaterial] = (),
+    force: bool = False,
+) -> FinalizedEvidence:
+    """Seal one semantic Guard record and return its explicit gate decision.
+
+    ``expected_context`` must come from the finalizer's trusted control plane
+    (for example, GitHub API metadata and separately verified Guard release
+    bytes), never from the PR artifact being sealed.  This function creates a
+    deterministic evidence bundle and re-inspects the published bytes before
+    returning.  It intentionally signs valid denials so an external consumer
+    can audit why a change was not admitted.
+
+    This is a provenance/sealing primitive.  It does not re-run the candidate,
+    prove that a previous runner was isolated, or turn an untrusted producer
+    artifact into a trusted execution observation.
+    """
+
+    create_evidence_bundle(
+        verdict_path,
+        output_path,
+        context=expected_context,
+        private_key_path=private_key_path,
+        materials=materials,
+        force=force,
+        require_valid_record=True,
+    )
+    inspected = inspect_evidence_bundle(output_path)
+    verify_bundle_context(inspected, expected_context=expected_context)
+
+    from evoom_guard.record_verifier import verify_record
+
+    record_report = verify_record(inspected.verdict)
+    if not record_report["ok"]:
+        raise EvidenceBundleError(
+            "finalized evidence bundle contains a semantically invalid record"
+        )
+    decision = (
+        "ALLOW"
+        if inspected.verdict.get("verdict") == "PASS"
+        and inspected.verdict.get("passed") is True
+        else "DENY"
+    )
+    return FinalizedEvidence(
+        manifest=inspected.manifest,
+        record_report=record_report,
+        decision=decision,
+        bundle_path=os.path.abspath(output_path),
+    )
 
 
 def _safe_member_name(name: str) -> bool:

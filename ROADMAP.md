@@ -26,6 +26,12 @@ evidence used to judge it. Guard still focuses on one narrow question:
 - **Authenticated evidence envelopes** — deterministic bundles bind the exact
   record and optional materials to external repository/run/revision context and
   an Ed25519 key; verification requires the key and expected context out of band.
+- **Split Trusted Finalizer** — a pre-candidate immutable control record and
+  no-secret re-verification handoff are compared with current PR/tree metadata
+  in a separate signing job that never checks out or runs candidate code. The
+  signed bundle carries that exact handoff and preserves both `ALLOW` and `DENY`
+  decisions. Each run attempt has a distinct pending Check Run and artifact
+  bindings; a non-secret reconciler completes failed attempts as `DENY`.
 - **Assurance reporting** — every verdict states its `report_integrity` and
   `candidate_isolation` honestly.
 - **External black-box verification** (`--blackbox`) — the verdict comes from the
@@ -54,6 +60,13 @@ evidence used to judge it. Guard still focuses on one narrow question:
 - `setup_output_globs` are trusted exclusions, so overly broad repository policy
   weakens setup-fidelity coverage by design.
 - A verdict binds to the runtime image, not a separately built artifact.
+- The reference Trusted Finalizer starts with manual, open same-repository PRs
+  targeting the protected default branch and a protected Environment secret. It
+  does not turn a
+  Docker runner into a complete hostile-code boundary, support forks, or
+  independently recompute every candidate/policy/pack digest in the seal job.
+  Its shared display name must be audited against the actual GitHub ruleset
+  before it is enforced as a required check; a Required Workflow is preferred.
 - Networked-service (HTTP) targets need a judge↔candidate channel the hardened
   `--network none` container does not yet provide.
 
@@ -61,7 +74,7 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 Future development will be driven by **verified adoption, real threat cases, and
 observed user needs** — not by speculation. Areas under evaluation include
-stronger artifact identity, broader process-boundary verification, and
+artifact-bound deployment identity, stronger fork/VM execution boundaries, and
 organization-level policy enforcement.
 
 **No future capability is considered committed until it has an implemented,

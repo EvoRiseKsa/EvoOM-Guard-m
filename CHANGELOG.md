@@ -9,6 +9,47 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.6.0] — 2026-07-16
+
+### Added
+
+- A split Trusted Finalizer contract: a canonical, unsigned re-verification
+  handoff binds the exact verdict bytes to a PR number, re-verification run
+  attempt, and base/head revisions; a separate sealing job must independently
+  match those fields before it can open the Ed25519 key.
+- `finalizer-handoff`, `seal-finalizer`, and `verify-finalized` CLI commands,
+  plus matching Python APIs. The sealed evidence bundle contains the exact
+  handoff as a mandatory material and preserves signed `DENY` evidence as well
+  as `ALLOW` evidence.
+- A reference pair of GitHub Actions workflows: an unprivileged manual
+  re-verifier for same-repository PRs and a `workflow_run` sealing job that
+  never checks out or executes candidate code.
+- The reference metadata job writes an immutable pre-candidate control artifact
+  with the chosen PR/run/base/head/tree bindings. The privileged job uses that
+  artifact, not the candidate handoff, to select and re-check the PR.
+- The reference creates a distinct pending finalizer Check Run for every
+  re-verification run/attempt, records its ID in the pre-candidate control
+  artifact, and completes that ID only. A non-secret reconciler turns a failed
+  or cancelled re-verification into `DENY`; control and evidence artifacts are
+  attempt-bound so a full GitHub workflow re-run cannot reuse an earlier
+  attempt's files. Partial job reruns are explicitly rejected.
+
+### Security boundary
+
+- The finalizer does not sign a record uploaded directly by a PR job. The
+  reference seal job takes PR identity from the pre-candidate control artifact,
+  re-derives current base/head/tree metadata through the GitHub API, and rejects
+  stale/replayed handoffs before signing.
+- The reference requires a protected Guard zipapp SHA-256 and an Environment
+  secret for the finalizer key. Docker is documented as defence in depth, not a
+  complete hostile-code boundary; fork support is intentionally deferred.
+- The reference deliberately does not claim that a branch rule will resolve
+  repeated same-named Check Runs newest-first. It requires a Round 1 audit of
+  the actual GitHub ruleset (or a Required Workflow rule) before enforcement.
+- The sealed decision is not a claim that a deployment artifact was verified or
+  that all candidate behavior is correct. `guard_artifact_sha256` identifies
+  the Guard executable only.
+
 ## [3.5.5] — 2026-07-16
 
 ### Security

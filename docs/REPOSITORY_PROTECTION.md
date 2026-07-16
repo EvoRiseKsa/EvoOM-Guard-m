@@ -38,6 +38,11 @@ repository's merge rule immutable. Configure those separately.
    Otherwise require the exact, protected job/status check and confirm with a
    test PR that removing the workflow cannot make the PR mergeable. A status
    check name by itself is weaker if another workflow can mint the same name.
+   When the gate binds a base commit (including Trusted Finalizer), require the
+   branch to be up to date before merging. A merge queue is an alternative only
+   when it runs an equivalent gate against its merge candidate; otherwise a
+   passing check against an older base can remain attached to an unchanged PR
+   head after the target branch advances.
 
 2. **Require trusted review for policy surfaces.** Put at least these paths
    under protected CODEOWNERS review, and protect the base `CODEOWNERS` file
@@ -74,6 +79,15 @@ repository's merge rule immutable. Configure those separately.
    for the protected branch, and that the first run after a workflow/policy
    change is reviewed. The GitHub UI configuration is part of the security
    boundary and is not versioned with this repository.
+
+7. **Invalidate open-PR decisions after out-of-band trust changes.** Treat a
+   change to a protected Guard artifact SHA, finalizer Environment/key/reviewer,
+   workflow-ID variable, verifier pack, or policy as a security-policy change.
+   Re-run the finalizer on every open PR before merge; an older successful check
+   on the same commit was evaluated under older trusted inputs. For the v3.6
+   Trusted Finalizer reference, test repeated Check Runs with the actual
+   ruleset before requiring their shared display name; prefer a Required
+   Workflow rule when possible.
 
 ## Minimal PR workflow
 
