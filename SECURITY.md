@@ -13,6 +13,7 @@ it makes about itself — are especially welcome.
 
 - Preferred: GitHub **private vulnerability reporting** — the **Security** tab →
   **Report a vulnerability**. This repository has that private channel enabled.
+- Direct form: <https://github.com/EvoRiseKsa/EvoOM-Guard-m/security/advisories/new>.
 - Include: the version (`evo-guard version`), a minimal repro, and the impact.
 
 This is a solo, best-effort project: there is no bug-bounty and no guaranteed

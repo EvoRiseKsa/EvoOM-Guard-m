@@ -9,6 +9,24 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.5.5] — 2026-07-16
+
+### Security
+
+- The draft-release workflow is now manual-only and every job refuses a
+  non-default ref. A push to `release/*` can no longer reach the one
+  `contents: write` job that creates a draft release.
+- Workflow permissions are explicit: ordinary CI and Windows checks are
+  source-read only, CodeQL's SARIF permission is confined to its analysis job,
+  and the release workflow starts with no inherited permissions.
+- The security policy now links directly to GitHub's private advisory form.
+
+### Remaining deployment control
+
+- A protected GitHub Environment with a distinct human reviewer remains an
+  out-of-repository configuration step. This release removes the unsafe branch
+  trigger; it does not falsely claim that YAML alone substitutes for approval.
+
 ## [3.5.4] — 2026-07-15
 
 ### Security
