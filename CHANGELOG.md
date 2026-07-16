@@ -9,6 +9,56 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.7.0] — 2026-07-16
+
+### Security
+
+- The Trusted Finalizer now independently derives candidate text, ordered
+  deletions, effective policy, and verifier-pack identities directly from the
+  exact raw base/head Git objects before the finalizer key is read. It rejects
+  binary, mode-only, symlink/special, and EOL-transformed differences rather
+  than silently approximating a Guard candidate.
+- `seal-finalizer` rechecks the canonical raw-Git derivation input before
+  opening its signing key. A raw-binding mismatch is an unsigned failed
+  attempt; a matching semantic `DENY` may still be retained as signed evidence.
+- Raw Git queries now drain stdout and stderr with explicit streaming limits;
+  an oversized object listing or error response is killed and rejected before
+  it can consume unbounded finalizer-process memory.
+
+### Added
+
+- A deliberately narrow `EVOGUARD_ARTIFACT_BINDING_V1` core: a detached
+  Ed25519-signed `.eab` binds one regular-file SHA-256 and byte length to an
+  externally verified Trusted Finalizer `ALLOW`. Both sealing and verification
+  require the finalizer public key plus exact external source/context inputs;
+  a finalizer `DENY` cannot produce an artifact `ALLOW`.
+- `seal-artifact-admission` and `verify-artifact-admission` commands, strict
+  canonical container/schema validation, and a 4 GiB bounded streaming file
+  hash.
+- `derive-finalizer-bindings` and `verify-finalizer-bindings` commands plus
+  raw-Git reference workflow steps that avoid checkout and candidate execution
+  in the privileged sealing job.
+- A frozen `audit/v3.6.1/` reproduction package for the previous release:
+  exact release/tag/assets, a pinned-hash verifier, and stated reproducibility
+  limits.
+
+### Deliberate limits
+
+- This is pre-merge file binding only. It does not claim build provenance,
+  reproducibility, OCI/container identity, registry or release publication,
+  deployment, SBOM coverage, or vulnerability status. GitHub/Sigstore
+  provenance and protected build workflow integration remain separate work.
+- Raw-Git finalizer derivation authenticates its stated Git/policy/pack
+  relationship; it does not make a Docker runner a complete hostile-code
+  boundary, support fork PRs, or establish a post-merge/release artifact
+  relationship.
+
+### Verification
+
+- Regenerated the 16-case live Guard benchmark with 3.7.0. It retained 11 true
+  positives, 3 true negatives, 2 documented policy false positives, and 0 false
+  negatives; recorded timings are diagnostic only.
+
 ## [3.6.1] — 2026-07-16
 
 ### Fixed

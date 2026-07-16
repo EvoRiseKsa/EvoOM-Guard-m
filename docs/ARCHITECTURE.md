@@ -47,7 +47,9 @@ canonical evidence envelope against external key and run-context inputs.
 | `record_verification/` | Internal verifier components extracted incrementally behind the public API. `report.py` owns the stable report envelope and independent schema-support pin; `isolation.py` owns isolation-parity checks. |
 | `strict_json.py` | Shared fail-closed JSON decoding limits for offline record and bundle consumers (duplicates, numbers, nesting, and Unicode). |
 | `evidence_bundle.py` | Canonical, bounded evidence envelopes: exact verdict/material bytes, manifest digests, Ed25519 authentication, and exact external context binding. Structural inspection does not imply authentication. |
-| `schemas/` | Packaged JSON Schema 2020-12 contracts for verdict records, evidence contexts, and evidence manifests; shipped in both wheel and zipapp artifacts. |
+| `finalizer_derivation.py` | No-checkout raw-Git reader and canonical `EVOGUARD_FINALIZER_GIT_BINDINGS_V1` derivation for candidate text, ordered deletions, effective policy, and verifier-pack identity. It compares those results with an untrusted verdict before finalizer signing. |
+| `artifact_admission.py` | Narrow detached-signature `.eab` records that bind one regular file's SHA-256 and size to an externally verified Trusted Finalizer `ALLOW`. It deliberately does not implement build provenance, OCI, publication, or deployment claims. |
+| `schemas/` | Packaged JSON Schema 2020-12 contracts for verdict records, evidence contexts/manifests, and artifact bindings; shipped in both wheel and zipapp artifacts. |
 | `signing.py` | Optional Ed25519 byte/file signatures and stable DER-SPKI key identities. `cryptography` remains a lazy `sign` extra, not a core dependency. |
 | `cli.py` | The `evo-guard` command: execution (`guard`), offline verification (`verify-verdict`, `verify-record`, `verify-bundle`), bundle creation, pack/environment diagnostics, initialization, and version reporting. It owns trusted `.evoguard.json` loading and flag/config precedence: base for `--base/--head`, repo for edit blocks, and an explicit external policy (or `--no-config`) for `--diff`. |
 

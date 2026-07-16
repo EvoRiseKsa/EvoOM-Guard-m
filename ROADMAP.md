@@ -29,9 +29,17 @@ evidence used to judge it. Guard still focuses on one narrow question:
 - **Split Trusted Finalizer** — a pre-candidate immutable control record and
   no-secret re-verification handoff are compared with current PR/tree metadata
   in a separate signing job that never checks out or runs candidate code. The
-  signed bundle carries that exact handoff and preserves both `ALLOW` and `DENY`
-  decisions. Each run attempt has a distinct pending Check Run and artifact
-  bindings; a non-secret reconciler completes failed attempts as `DENY`.
+  v3.7.0 template independently reconstructs candidate text, ordered deletions,
+  effective policy, and verifier-pack identity from exact raw Git objects
+  before it opens the signing key. The signed bundle carries that exact handoff
+  and preserves both `ALLOW` and `DENY` decisions. Each run attempt has a
+  distinct pending Check Run and artifact bindings; a non-secret reconciler
+  completes failed attempts as `DENY`.
+- **Narrow artifact admission** — a separately keyed
+  `EVOGUARD_ARTIFACT_BINDING_V1` can bind one regular-file digest and size to a
+  verified pre-merge finalizer `ALLOW`. Its format and verification order are
+  deliberately small; it is not a build, OCI, release, registry, or deployment
+  provenance system.
 - **Assurance reporting** — every verdict states its `report_integrity` and
   `candidate_isolation` honestly.
 - **External black-box verification** (`--blackbox`) — the verdict comes from the
@@ -59,12 +67,17 @@ evidence used to judge it. Guard still focuses on one narrow question:
   writable development-container workflow.
 - `setup_output_globs` are trusted exclusions, so overly broad repository policy
   weakens setup-fidelity coverage by design.
-- A verdict binds to the runtime image, not a separately built artifact.
+- A Guard verdict binds to the runtime image, not a separately built artifact.
+  The optional V1 artifact binding only relates bytes read at sealing time to a
+  pre-merge finalizer decision; it still does not establish how those bytes were
+  built, published, or deployed.
 - The reference Trusted Finalizer starts with manual, open same-repository PRs
   targeting the protected default branch and a protected Environment secret. It
   does not turn a
-  Docker runner into a complete hostile-code boundary, support forks, or
-  independently recompute every candidate/policy/pack digest in the seal job.
+  Docker runner into a complete hostile-code boundary or support forks. The
+  v3.7.0 reference does independently derive candidate/policy/pack/deletion
+  bindings from raw Git, but that does not prove that GitHub's runner or a later
+  build/release artifact is trustworthy.
   Its shared display name must be audited against the actual GitHub ruleset
   before it is enforced as a required check; a Required Workflow is preferred.
 - Networked-service (HTTP) targets need a judge↔candidate channel the hardened
@@ -75,20 +88,19 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Operational pilot / Round 1.** Install the v3.6.0 reference finalizer in a
-   protected consumer repository, record PASS → cancelled or failed attempt →
-   fresh PASS behaviour on one unchanged PR head, and verify what GitHub actually
-   treats as a merge requirement. It is not a required check until that behaviour
-   is recorded. A second account controlled by the same person is useful for an
-   operational exercise, not independent review.
-2. **Independent finalizer derivation.** Define and implement canonical,
-   Git/API-derived candidate, effective-policy, and verifier-pack identities in
-   the sealing job without executing candidate code. See
-   [`docs/TRUSTED_FINALIZER_HARDENING.md`](docs/TRUSTED_FINALIZER_HARDENING.md).
-3. **Artifact-bound admission.** Bind a signed ALLOW/DENY to the exact container
-   image, package, binary, or release bundle that is built after admission, then
-   make that evidence consumable alongside build provenance.
-4. **Only after external evidence.** Stronger fork/VM boundaries, organization
+1. **Operational pilot / Round 2.** Upgrade a protected consumer repository to
+   the v3.7.0 reference templates, record a raw-binding `ALLOW` → deliberately
+   failed or cancelled attempt → fresh `ALLOW` sequence on one unchanged PR
+   head, and independently verify the resulting `.evb` using saved external
+   source/context inputs. Confirm what GitHub actually treats as a merge
+   requirement. Same-owner cross-account operation is useful evidence of the
+   workflow, not independent review.
+2. **Trusted build and merge-candidate boundary.** Before using artifact
+   admission for a release, verify a provider-specific immutable build
+   provenance statement and bind it to a protected build and merge-candidate
+   identity. The current V1 file relation alone cannot support an OCI,
+   package-release, registry, or deployment claim.
+3. **Only after external evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and their onboarding failures. They are not assumed product needs.
 

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.7.0/evoom_guard/schemas/artifact-binding-1.schema.json",
+  "title": "EvoGuard artifact admission binding v1",
+  "description": "Canonical binding.json member of EVOGUARD_ARTIFACT_BINDING_V1. Its detached signature is binding.sig.",
+  "type": "object",
+  "required": ["format", "decision", "subject", "finalizer", "authentication"],
+  "properties": {
+    "format": { "const": "EVOGUARD_ARTIFACT_BINDING_V1" },
+    "decision": { "const": "ALLOW" },
+    "subject": {
+      "type": "object",
+      "required": ["kind", "sha256", "size"],
+      "properties": {
+        "kind": { "const": "file" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967296
+        }
+      },
+      "additionalProperties": false
+    },
+    "finalizer": {
+      "type": "object",
+      "required": ["bundle_sha256", "record_sha256", "key_id", "source", "context"],
+      "properties": {
+        "bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "record_sha256": { "$ref": "#/$defs/sha256" },
+        "key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "source": { "$ref": "#/$defs/finalizerSource" },
+        "context": { "$ref": "evidence-context-1.schema.json" }
+      },
+      "additionalProperties": false
+    },
+    "authentication": {
+      "type": "object",
+      "required": ["algorithm", "key_id", "purpose", "signature_path"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "purpose": { "const": "evoguard-artifact-admission" },
+        "signature_path": { "const": "binding.sig" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitDigest": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "finalizerSource": {
+      "type": "object",
+      "required": [
+        "pull_request_number",
+        "workflow_run_id",
+        "workflow_run_attempt",
+        "base_sha",
+        "head_sha"
+      ],
+      "properties": {
+        "pull_request_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "workflow_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]*$"
+        },
+        "workflow_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "base_sha": { "$ref": "#/$defs/gitDigest" },
+        "head_sha": { "$ref": "#/$defs/gitDigest" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

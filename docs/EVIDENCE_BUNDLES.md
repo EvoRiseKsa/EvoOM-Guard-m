@@ -16,7 +16,7 @@ reference workflow, which binds the PR control plane before candidate execution.
 Install the signing extra and generate an Ed25519 key once:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.6.1"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.7.0"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
 
@@ -154,6 +154,11 @@ consistency only. `authenticate_evidence_bundle()` adds the external key and
 exact-context checks but deliberately does not decide record semantics. Admission
 code should use `verify_evidence_bundle()`, which performs all four checks, or the
 CLI command above.
+
+For a narrowly scoped relation between one regular file and an already verified
+Trusted Finalizer `ALLOW`, see [`ARTIFACT_ADMISSION.md`](ARTIFACT_ADMISSION.md).
+It is a separate format with a distinct key and signing domain; a generic
+evidence-bundle material is not artifact admission or build provenance.
 
 Machine-readable contracts:
 

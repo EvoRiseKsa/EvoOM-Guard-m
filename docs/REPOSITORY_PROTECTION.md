@@ -84,7 +84,7 @@ repository's merge rule immutable. Configure those separately.
    change to a protected Guard artifact SHA, finalizer Environment/key/reviewer,
    workflow-ID variable, verifier pack, or policy as a security-policy change.
    Re-run the finalizer on every open PR before merge; an older successful check
-   on the same commit was evaluated under older trusted inputs. For the v3.6
+   on the same commit was evaluated under older trusted inputs. For the v3.7.0
    Trusted Finalizer reference, test repeated Check Runs with the actual
    ruleset before requiring their shared display name; prefer a Required
    Workflow rule when possible.

@@ -45,6 +45,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -1664,6 +1665,12 @@ def _effective_policy(
     }
 
 
+def effective_policy_sha256(policy: Mapping[str, Any]) -> str:
+    """Return the frozen JSON fingerprint used by Guard attestations."""
+
+    return hashlib.sha256(json.dumps(policy, sort_keys=True).encode("utf-8")).hexdigest()
+
+
 def _build_attestation(
     candidate: str, *, safe_deleted: list[str], test_command: list[str] | None,
     effective_policy: dict[str, Any], art: dict[str, Any], mode: str,
@@ -1681,9 +1688,7 @@ def _build_attestation(
         "deleted_paths": list(safe_deleted),
         "test_command": list(test_command) if test_command else "default:python -m pytest",
         "effective_policy": effective_policy,
-        "policy_sha256": hashlib.sha256(
-            json.dumps(effective_policy, sort_keys=True).encode("utf-8")
-        ).hexdigest(),
+        "policy_sha256": effective_policy_sha256(effective_policy),
         "junit_sha256": art.get("junit_sha256"),
         "junit_digest_format": art.get("junit_digest_format"),
         "verifier_pack_sha256": art.get("verifier_pack_sha256"),
@@ -2183,6 +2188,23 @@ def blocks_from_dirs(
     return blocks, deleted
 
 
+def serialize_candidate_blocks(blocks: Mapping[str, str]) -> str:
+    """Return the canonical textual identity for structured candidate blocks.
+
+    The engine uses ``blocks`` directly when it applies a base/head candidate;
+    this serialization exists only for the stable candidate digest and human
+    display.  Sorting here, rather than relying on a caller's insertion order,
+    keeps that identity stable for filesystem and raw-Git derivations alike.
+    Deletions are deliberately not serialized: the immutable base/head tree
+    bindings carry their identity separately.
+    """
+
+    return "\n".join(
+        f"<<<FILE: {rel}>>>\n{blocks[rel]}\n<<<END FILE>>>"
+        for rel in sorted(blocks)
+    )
+
+
 def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
     """Diff a base and head checkout into an EvoOM ``<<<FILE>>>`` candidate.
 
@@ -2194,9 +2216,7 @@ def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_
     would terminate its own block in the parse.
     """
     blocks, deleted = blocks_from_dirs(base_dir, head_dir, max_bytes=max_bytes)
-    text = "\n".join(
-        f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>" for rel, new in blocks.items()
-    )
+    text = serialize_candidate_blocks(blocks)
     return text, deleted
 
 

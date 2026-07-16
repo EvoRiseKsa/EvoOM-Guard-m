@@ -27,7 +27,7 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 ## Example (`PASS`)
 
 Schema 1.11 was introduced in EvoGuard v3.4.4 and remains the current verdict
-contract in v3.5.0.
+contract.
 
 A machine-readable structural schema is available at
 [`evoom_guard/schemas/verdict-record-1.11.schema.json`](../evoom_guard/schemas/verdict-record-1.11.schema.json).
@@ -42,7 +42,7 @@ semantic checks that JSON Schema cannot express; see
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.6.1",
+  "tool_version": "3.7.0",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -453,7 +453,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.6.1",
+  "version": "3.7.0",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

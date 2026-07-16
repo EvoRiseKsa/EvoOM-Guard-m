@@ -246,7 +246,7 @@ jobs:
           printf '%s  %s\n' "$GUARD_ARTIFACT_SHA256" "$RUNNER_TEMP/evo-guard.pyz" > "$RUNNER_TEMP/guard.sha256"
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$RUNNER_TEMP/evo-guard.pyz" \
-            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.6.1/evo-guard.pyz"
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.7.0/evo-guard.pyz"
           sha256sum --check "$RUNNER_TEMP/guard.sha256"
           chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
 
@@ -258,7 +258,6 @@ jobs:
         name: Re-derive source and context from the GitHub control plane
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          EVIDENCE_DIR: ${{ runner.temp }}/reverify-evidence
           PR_NUMBER: ${{ steps.control.outputs.pull_request_number }}
           CONTROL_BASE_SHA: ${{ steps.control.outputs.base_sha }}
           CONTROL_HEAD_SHA: ${{ steps.control.outputs.head_sha }}
@@ -267,24 +266,7 @@ jobs:
           GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
         with:
           script: |
-            const fs = require('fs');
-            const path = require('path');
-            const evidenceDir = process.env.EVIDENCE_DIR;
             const { owner, repo } = context.repo;
-            const workflowRun = context.payload.workflow_run;
-
-            function readBoundedJson(directory, filename, maximum, label) {
-              const target = path.join(directory, filename);
-              const stat = fs.lstatSync(target);
-              if (!stat.isFile() || stat.size < 1 || stat.size > maximum) {
-                throw new Error(`${label} must be a regular file from 1 through ${maximum} bytes`);
-              }
-              try {
-                return JSON.parse(fs.readFileSync(target, 'utf8'));
-              } catch (error) {
-                throw new Error(`${label} is not valid JSON: ${error.message}`);
-              }
-            }
 
             const control = {
               pull_request_number: Number(process.env.PR_NUMBER),
@@ -330,47 +312,69 @@ jobs:
                 headCommit.data.tree.sha !== control.head_tree_sha) {
               throw new Error('PR tree changed after re-verification; do not seal stale evidence');
             }
-            // The record remains untrusted until seal-finalizer validates its
-            // canonical handoff, exact bytes, and semantic contract. Bound it
-            // before parsing so it cannot exhaust this privileged job.
-            const record = readBoundedJson(
-              evidenceDir, 'verdict.json', 8 * 1024 * 1024, 'verdict record',
-            );
-            const attestation = record.attestation;
-            if (!attestation || typeof attestation !== 'object') {
-              throw new Error('record has no attestation');
-            }
-            const source = {
-              pull_request_number: control.pull_request_number,
-              workflow_run_id: String(workflowRun.id),
-              workflow_run_attempt: workflowRun.run_attempt,
-              base_sha: pr.base.sha,
-              head_sha: pr.head.sha,
-            };
-            // run_id/run_attempt identify the re-verification run, not this
-            // sealing run. That makes context available before the secret job.
-            const expectedContext = {
-              repository: `${owner}/${repo}`,
-              repository_id: String(context.payload.repository.id),
-              run_id: String(workflowRun.id),
-              run_attempt: workflowRun.run_attempt,
-              base_sha: pr.base.sha,
-              head_sha: pr.head.sha,
-              base_tree_sha: baseCommit.data.tree.sha,
-              head_tree_sha: headCommit.data.tree.sha,
-              candidate_sha256: attestation.candidate_sha256,
-              policy_sha256: attestation.policy_sha256,
-              verifier_pack_sha256: attestation.verifier_pack_sha256,
-              guard_artifact_sha256: process.env.GUARD_ARTIFACT_SHA256,
-            };
-            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'expected-source.json'), JSON.stringify(source) + '\n');
-            fs.writeFileSync(path.join(process.env.RUNNER_TEMP, 'expected-context.json'), JSON.stringify(expectedContext) + '\n');
+            // Do not parse the verdict here. The next no-secret step derives
+            // candidate, policy, and pack bindings from raw Git objects and
+            // only then compares the untrusted verdict and handoff.
+            core.setOutput('repository', `${owner}/${repo}`);
+            core.setOutput('repository_id', String(context.payload.repository.id));
+            core.setOutput('pr_number', String(control.pull_request_number));
+            core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_tree_sha', baseCommit.data.tree.sha);
+            core.setOutput('head_tree_sha', headCommit.data.tree.sha);
 
-      # The private key enters only this post-reverification step. `seal-finalizer`
-      # validates the handoff/record/external metadata before opening the key.
-      # It returns 1 for a signed DENY, but preserves the evidence for upload.
+      # A bare object store may fetch immutable objects but never materializes a
+      # candidate worktree. It derives and compares raw-Git values before a step
+      # can reference the finalizer secret.
+      - id: derive_and_compare
+        name: Derive and compare raw-Git bindings without a checkout
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ steps.derive.outputs.repository }}
+          REPOSITORY_ID: ${{ steps.derive.outputs.repository_id }}
+          PR_NUMBER: ${{ steps.derive.outputs.pr_number }}
+          BASE_SHA: ${{ steps.derive.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.derive.outputs.head_sha }}
+          BASE_TREE_SHA: ${{ steps.derive.outputs.base_tree_sha }}
+          HEAD_TREE_SHA: ${{ steps.derive.outputs.head_tree_sha }}
+          GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$GITHUB_TOKEN"
+          objects="$RUNNER_TEMP/evoguard-finalizer-objects.git"
+          git init --bare --quiet "$objects"
+          git -C "$objects" remote add origin "https://github.com/$REPOSITORY.git"
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          trap 'git -C "$objects" config --unset-all http.https://github.com/.extraheader || true' EXIT
+          git -C "$objects" config http.https://github.com/.extraheader "AUTHORIZATION: basic $auth"
+          git -C "$objects" fetch --quiet --no-tags --filter=blob:none origin "$BASE_SHA" "$HEAD_SHA"
+          python -I "$RUNNER_TEMP/evo-guard.pyz" derive-finalizer-bindings \
+            --base-repo "$objects" \
+            --head-repo "$objects" \
+            --base-bare \
+            --head-bare \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --base-tree-sha "$BASE_TREE_SHA" \
+            --head-tree-sha "$HEAD_TREE_SHA" \
+            --repository "$REPOSITORY" \
+            --repository-id "$REPOSITORY_ID" \
+            --pr-number "$PR_NUMBER" \
+            --run-id "${{ github.event.workflow_run.id }}" \
+            --run-attempt "${{ github.event.workflow_run.run_attempt }}" \
+            --guard-artifact-sha "$GUARD_ARTIFACT_SHA256" \
+            --out "$RUNNER_TEMP/derived-bindings.json"
+          python -I "$RUNNER_TEMP/evo-guard.pyz" verify-finalizer-bindings \
+            "$RUNNER_TEMP/reverify-evidence/verdict.json" \
+            --bindings "$RUNNER_TEMP/derived-bindings.json" \
+            --source-out "$RUNNER_TEMP/expected-source.json" \
+            --context-out "$RUNNER_TEMP/expected-context.json"
+
+      # The private key enters only after raw-Git derivation has passed. It
+      # returns 1 for a signed semantic DENY, but preserves the evidence.
       - id: seal
         name: Seal the matched evidence and compute the final decision
+        if: ${{ steps.derive_and_compare.outcome == 'success' }}
         env:
           EVOGUARD_FINALIZER_KEY: ${{ secrets.EVOGUARD_FINALIZER_KEY }}
         run: |
@@ -387,6 +391,8 @@ jobs:
             --out "$RUNNER_TEMP/finalized.evb" \
             --expected-source "$RUNNER_TEMP/expected-source.json" \
             --expected-context "$RUNNER_TEMP/expected-context.json" \
+            --expected-derivation "$RUNNER_TEMP/derived-bindings.json" \
+            --material "trusted-finalizer-git-bindings=$RUNNER_TEMP/derived-bindings.json" \
             --sign-key "$key" \
             --require-pass
           code=$?
@@ -429,7 +435,7 @@ jobs:
                 title: ok ? 'EvoGuard final decision: ALLOW' : 'EvoGuard final decision: DENY',
                 summary: ok
                   ? 'Signed evidence matched the current PR/reverification context.'
-                  : 'The finalizer refused or denied the evidence; inspect the signed artifact and job logs.',
+                  : 'The finalizer refused, denied, or could not derive trusted bindings; inspect signed evidence when present and the job logs.',
               },
             });
             if (!ok) core.setFailed('EvoGuard Trusted Finalizer denied or could not seal this PR');

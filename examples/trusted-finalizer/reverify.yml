@@ -262,7 +262,7 @@ jobs:
           printf '%s  %s\n' "$GUARD_ARTIFACT_SHA256" "$RUNNER_TEMP/evo-guard.pyz" > "$RUNNER_TEMP/guard.sha256"
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$RUNNER_TEMP/evo-guard.pyz" \
-            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.6.1/evo-guard.pyz"
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v3.7.0/evo-guard.pyz"
           sha256sum --check "$RUNNER_TEMP/guard.sha256"
           chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
 
@@ -330,9 +330,8 @@ jobs:
           test -f "$RUNNER_TEMP/verdict.json"
           echo "guard_exit=$code" >> "$GITHUB_OUTPUT"
 
-      # This constructs a bounded descriptor. It has no key and remains data,
-      # not a trust root, until the sealing workflow independently matches it.
-      - name: Bind re-verification record to the exact run and revisions
+      # Compare the record against raw immutable Git objects before any handoff.
+      - name: Derive and verify raw-Git finalizer bindings
         env:
           REPOSITORY_ID: ${{ needs.metadata.outputs.repository_id }}
           BASE_SHA: ${{ needs.metadata.outputs.base_sha }}
@@ -343,43 +342,27 @@ jobs:
           GUARD_ARTIFACT_SHA256: ${{ vars.EVOGUARD_GUARD_ARTIFACT_SHA256 }}
         run: |
           set -euo pipefail
-          python - "$RUNNER_TEMP/verdict.json" "$RUNNER_TEMP/source.json" "$RUNNER_TEMP/context.json" <<'PY'
-          import json
-          import os
-          import sys
-
-          verdict_path, source_path, context_path = sys.argv[1:]
-          with open(verdict_path, encoding="utf-8") as handle:
-              record = json.load(handle)
-          attestation = record.get("attestation")
-          if not isinstance(attestation, dict):
-              raise SystemExit("Guard record lacks attestation")
-          source = {
-              "pull_request_number": int(os.environ["PR_NUMBER"]),
-              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
-              "workflow_run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-              "base_sha": os.environ["BASE_SHA"],
-              "head_sha": os.environ["HEAD_SHA"],
-          }
-          context = {
-              "repository": os.environ["GITHUB_REPOSITORY"],
-              "repository_id": os.environ["REPOSITORY_ID"],
-              "run_id": os.environ["GITHUB_RUN_ID"],
-              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-              "base_sha": os.environ["BASE_SHA"],
-              "head_sha": os.environ["HEAD_SHA"],
-              "base_tree_sha": os.environ["BASE_TREE_SHA"],
-              "head_tree_sha": os.environ["HEAD_TREE_SHA"],
-              "candidate_sha256": attestation["candidate_sha256"],
-              "policy_sha256": attestation["policy_sha256"],
-              "verifier_pack_sha256": attestation["verifier_pack_sha256"],
-              "guard_artifact_sha256": os.environ["GUARD_ARTIFACT_SHA256"],
-          }
-          for path, value in ((source_path, source), (context_path, context)):
-              with open(path, "w", encoding="utf-8", newline="\n") as handle:
-                  json.dump(value, handle, sort_keys=True, separators=(",", ":"))
-                  handle.write("\n")
-          PY
+          python -I "$RUNNER_TEMP/evo-guard.pyz" derive-finalizer-bindings \
+            --base-repo "$GITHUB_WORKSPACE/base" \
+            --head-repo "$GITHUB_WORKSPACE/candidate" \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --base-tree-sha "$BASE_TREE_SHA" \
+            --head-tree-sha "$HEAD_TREE_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$REPOSITORY_ID" \
+            --pr-number "$PR_NUMBER" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --guard-artifact-sha "$GUARD_ARTIFACT_SHA256" \
+            --out "$RUNNER_TEMP/derived-bindings.json"
+          python -I "$RUNNER_TEMP/evo-guard.pyz" verify-finalizer-bindings \
+            "$RUNNER_TEMP/verdict.json" \
+            --bindings "$RUNNER_TEMP/derived-bindings.json" \
+            --source-out "$RUNNER_TEMP/source.json" \
+            --context-out "$RUNNER_TEMP/context.json"
+          # The handoff is data, not a trust root. The sealing job repeats the
+          # raw-Git derivation before it can receive its signing key.
           python -I "$RUNNER_TEMP/evo-guard.pyz" finalizer-handoff \
             "$RUNNER_TEMP/verdict.json" \
             --out "$RUNNER_TEMP/handoff.json" \
