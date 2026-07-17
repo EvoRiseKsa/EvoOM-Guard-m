@@ -18,6 +18,9 @@ Subcommands:
   * ``evo-guard verify-artifact-admission`` — verify that file/finalizer binding.
   * ``evo-guard seal-artifact-digest-admission`` — bind one immutable digest to a finalizer.
   * ``evo-guard verify-artifact-digest-admission`` — verify that V2 digest relation.
+  * ``evo-guard github-attestation-receipt`` — record one constrained GitHub verification.
+  * ``evo-guard verify-github-attestation-receipt`` — check retained attestation bytes.
+  * ``evo-guard reverify-github-attestation-receipt`` — make a fresh constrained GitHub check.
   * ``evo-guard version`` — print the EvoGuard version.
 """
 
@@ -365,6 +368,58 @@ def _config_path_for_guard(args: argparse.Namespace) -> str | None:
     if not _path_is_within(candidate_path, baseline):
         raise ConfigError("--config must stay inside the trusted baseline directory")
     return candidate_path
+
+
+def _add_github_attestation_policy_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the fixed provider policy inputs; no caller can omit a trust pin."""
+
+    parser.add_argument(
+        "--repo",
+        required=True,
+        help="exact GitHub owner/repository whose artifact attestation is verified",
+    )
+    parser.add_argument(
+        "--signer-workflow",
+        required=True,
+        help="same-repository workflow path; GitHub URL aliases are normalized before gh",
+    )
+    parser.add_argument(
+        "--signer-digest",
+        required=True,
+        help="exact lowercase 40- or 64-hex Git object ID for the signer workflow",
+    )
+    parser.add_argument(
+        "--source-ref",
+        required=True,
+        help="exact canonical refs/heads/... or refs/tags/... source reference",
+    )
+    parser.add_argument(
+        "--source-digest",
+        required=True,
+        help="exact lowercase 40- or 64-hex Git object ID for the source",
+    )
+    parser.add_argument(
+        "--cert-oidc-issuer",
+        required=True,
+        help="must be exactly https://token.actions.githubusercontent.com",
+    )
+
+
+def _add_github_attestation_verifier_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--gh-executable",
+        default="gh",
+        help=(
+            "protected GitHub CLI executable (default: gh); local gh config is ignored, "
+            "so a protected GH_TOKEN or GITHUB_TOKEN is required"
+        ),
+    )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=120,
+        help="bounded GitHub CLI verification timeout in seconds (default: 120)",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1049,6 +1104,43 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="external finalizer context JSON; exact match is required",
     )
+
+    # ----- GitHub Artifact Attestation protected-boundary adapter --------- #
+    gar_p = sub.add_parser(
+        "github-attestation-receipt",
+        help="run one fixed-policy GitHub artifact attestation verification and retain its receipt",
+    )
+    gar_p.add_argument("artifact", help="regular immutable artifact file to verify")
+    gar_p.add_argument(
+        "--receipt-out",
+        required=True,
+        help="new canonical receipt output; never overwrites an existing file",
+    )
+    gar_p.add_argument(
+        "--raw-output-out",
+        required=True,
+        help="new exact GitHub CLI JSON output; never overwrites an existing file",
+    )
+    _add_github_attestation_policy_arguments(gar_p)
+    _add_github_attestation_verifier_arguments(gar_p)
+
+    vgar_p = sub.add_parser(
+        "verify-github-attestation-receipt",
+        help="check retained GitHub attestation receipt/output bytes against exact external policy",
+    )
+    vgar_p.add_argument("receipt", help="canonical retained GitHub attestation receipt")
+    vgar_p.add_argument("artifact", help="regular artifact expected by the receipt")
+    vgar_p.add_argument("raw_output", help="retained exact GitHub CLI JSON output")
+    _add_github_attestation_policy_arguments(vgar_p)
+
+    rgar_p = sub.add_parser(
+        "reverify-github-attestation-receipt",
+        help="perform a fresh fixed-policy GitHub artifact attestation verification",
+    )
+    rgar_p.add_argument("receipt", help="canonical retained GitHub attestation receipt")
+    rgar_p.add_argument("artifact", help="regular artifact expected by the receipt")
+    _add_github_attestation_policy_arguments(rgar_p)
+    _add_github_attestation_verifier_arguments(rgar_p)
 
     # ----- verify-bundle ---------------------------------------------------- #
     vb_p = sub.add_parser(
@@ -2960,6 +3052,205 @@ def cmd_verify_artifact_digest_admission(
     return 0
 
 
+def _github_attestation_policy_kwargs(args: argparse.Namespace) -> dict[str, str]:
+    """Return only the exact policy inputs accepted by the provider adapter."""
+
+    return {
+        "repository": args.repo,
+        "signer_workflow": args.signer_workflow,
+        "signer_digest": args.signer_digest,
+        "source_ref": args.source_ref,
+        "source_digest": args.source_digest,
+        "cert_oidc_issuer": args.cert_oidc_issuer,
+    }
+
+
+def cmd_github_attestation_receipt(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Run the narrow provider verifier and retain its exact bounded evidence."""
+
+    from evoom_guard.github_attestation import (
+        GITHUB_ATTESTATION_RECEIPT_FORMAT,
+        GitHubAttestationError,
+        create_github_attestation_receipt,
+    )
+
+    try:
+        created = create_github_attestation_receipt(
+            args.artifact,
+            args.receipt_out,
+            args.raw_output_out,
+            **_github_attestation_policy_kwargs(args),
+            gh_executable=args.gh_executable,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except GitHubAttestationError as exc:
+        _machine_report(
+            out,
+            {
+                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "PROVIDER_VERIFIED",
+            "verification_scope": "fresh-provider-gh-attestation-verify",
+            "receipt": created.receipt_path,
+            "raw_output": created.raw_output_path,
+            "artifact": created.artifact.as_dict(),
+            "verification_policy": created.policy.as_dict(),
+            "verified_attestation_count": created.verified_attestation_count,
+        },
+    )
+    return 0
+
+
+def cmd_verify_github_attestation_receipt(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Check retained evidence continuity without making a live provider call."""
+
+    from evoom_guard.github_attestation import (
+        GITHUB_ATTESTATION_RECEIPT_FORMAT,
+        GitHubAttestationError,
+        verify_github_attestation_receipt,
+    )
+
+    try:
+        verified = verify_github_attestation_receipt(
+            args.receipt,
+            args.artifact,
+            args.raw_output,
+            **_github_attestation_policy_kwargs(args),
+        )
+    except GitHubAttestationError as exc:
+        _machine_report(
+            out,
+            {
+                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "INVALID",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "RETAINED_RECEIPT_VERIFIED",
+            "verification_scope": "retained-byte-continuity-only",
+            "live_provider_reverification": False,
+            "artifact": verified.artifact.as_dict(),
+            "verification_policy": verified.policy.as_dict(),
+        },
+    )
+    return 0
+
+
+def cmd_reverify_github_attestation_receipt(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Make a fresh constrained GitHub CLI verification for a retained receipt."""
+
+    from evoom_guard.github_attestation import (
+        GITHUB_ATTESTATION_RECEIPT_FORMAT,
+        GitHubAttestationError,
+        reverify_github_attestation_receipt,
+    )
+
+    try:
+        fresh = reverify_github_attestation_receipt(
+            args.receipt,
+            args.artifact,
+            **_github_attestation_policy_kwargs(args),
+            gh_executable=args.gh_executable,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except GitHubAttestationError as exc:
+        _machine_report(
+            out,
+            {
+                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "FRESH_PROVIDER_REVERIFIED",
+            "verification_scope": "fresh-provider-gh-attestation-verify",
+            "artifact": fresh.artifact.as_dict(),
+            "verification_policy": fresh.policy.as_dict(),
+            "verified_attestation_count": fresh.verified_attestation_count,
+            "reverification": "fresh-gh-attestation-verify",
+        },
+    )
+    return 0
+
+
 def cmd_verify_bundle(
     args: argparse.Namespace,
     *,
@@ -3224,6 +3515,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_artifact_digest_admission(args)
     if args.command == "verify-artifact-digest-admission":
         return cmd_verify_artifact_digest_admission(args)
+    if args.command == "github-attestation-receipt":
+        return cmd_github_attestation_receipt(args)
+    if args.command == "verify-github-attestation-receipt":
+        return cmd_verify_github_attestation_receipt(args)
+    if args.command == "reverify-github-attestation-receipt":
+        return cmd_reverify_github_attestation_receipt(args)
     if args.command == "verify-bundle":
         return cmd_verify_bundle(args)
     if args.command == "pack-doctor":

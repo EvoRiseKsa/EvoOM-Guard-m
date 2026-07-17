@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:github-attestation-receipt:1",
+  "title": "EvoGuard GitHub Artifact Attestation receipt v1",
+  "description": "Canonical retained receipt of a successful protected gh attestation verify invocation. It records external verification policy and output bytes; it is not itself a GitHub/Sigstore signature or an independent re-verification.",
+  "type": "object",
+  "required": ["format", "artifact", "verification_policy", "verification_output"],
+  "properties": {
+    "format": { "const": "EVOGUARD_GITHUB_ATTESTATION_RECEIPT_V1" },
+    "artifact": {
+      "type": "object",
+      "required": ["sha256", "size"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 0, "maximum": 4294967296 }
+      },
+      "additionalProperties": false
+    },
+    "verification_policy": {
+      "type": "object",
+      "required": [
+        "repository",
+        "signer_workflow",
+        "signer_digest",
+        "source_ref",
+        "source_digest",
+        "cert_oidc_issuer",
+        "predicate_type",
+        "deny_self_hosted_runners",
+        "attestation_limit"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "signer_workflow": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$"
+        },
+        "signer_digest": { "$ref": "#/$defs/gitDigest" },
+        "source_ref": {
+          "type": "string",
+          "allOf": [
+            { "pattern": "^refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]*$" },
+            { "not": { "pattern": "//" } },
+            { "not": { "pattern": "/(?:\\.|\\.\\.)(?:/|$)" } },
+            { "not": { "pattern": "/$" } }
+          ]
+        },
+        "source_digest": { "$ref": "#/$defs/gitDigest" },
+        "cert_oidc_issuer": { "const": "https://token.actions.githubusercontent.com" },
+        "predicate_type": { "const": "https://slsa.dev/provenance/v1" },
+        "deny_self_hosted_runners": { "const": true },
+        "attestation_limit": { "const": 1 }
+      },
+      "additionalProperties": false
+    },
+    "verification_output": {
+      "type": "object",
+      "required": ["sha256", "size", "verified_attestation_count"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 2, "maximum": 4194304 },
+        "verified_attestation_count": { "const": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" }
+  }
+}

@@ -128,3 +128,13 @@ non-canonical archive bytes.
 
 It does not close Issue 78 by itself. The remaining work is a narrowly defined
 provenance verifier and protected build or merge-candidate integration.
+
+## GitHub Artifact Attestation adapter
+
+The unreleased [`GITHUB_ATTESTATION_ADMISSION.md`](GITHUB_ATTESTATION_ADMISSION.md)
+adapter is a provider-specific protected-boundary path for the GitHub CLI. It
+does not redefine V2 or make every V2 provenance reference verified: only its
+own function invokes `gh attestation verify` with a constrained policy before
+it creates a V2 binding. The record must retain both its canonical receipt and
+the exact raw GitHub CLI output. Its recheck is byte continuity, not a new
+online signature verification.
