@@ -11,6 +11,13 @@ target is the immutable [v3.7.0 release][release], resolved to commit
 evo-guard.pyz and SHA256SUMS. Exact identifiers, asset sizes, and checksums are
 in [manifest.json](manifest.json).
 
+This companion is frozen separately as
+[`review-v3.7.0-r1`][companion-release]. It is a review-instruction snapshot,
+not a new Guard version, Marketplace release, or amendment to v3.7.0. Verify
+the companion tag before relying on its instructions; the target and companion
+are two distinct immutable identities. [`REVIEWER_RUNBOOK.md`](REVIEWER_RUNBOOK.md)
+states the exact order and the boundaries of an authorized review.
+
 Do not use main, a newer documentation revision, an unpinned Marketplace
 reference, or this directory as a substitute for verifying the release asset
 first. The review target is the published zipapp plus the commit named above.
@@ -18,32 +25,40 @@ The target request is public in [issue #80][issue].
 
 [release]: https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0
 [issue]: https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/80
+[companion-release]: https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v3.7.0-r1
 
-## Start with target verification
+## Start with target verification (no target execution)
 
-On Linux or WSL with GitHub CLI, Git, sha256sum, and Python 3.10 or newer:
+On Linux or WSL with GitHub CLI, Git, and sha256sum:
 
 ~~~
 bash audit/v3.7.0/reproduce.sh /tmp/evoguard-v3.7.0-review
 ~~~
 
-On Windows PowerShell with GitHub CLI, Git, and Python:
+On Windows PowerShell with GitHub CLI and Git:
 
 ~~~
 & .\audit\v3.7.0\reproduce.ps1 -OutputDirectory "$env:TEMP\evoguard-v3.7.0-review"
 ~~~
 
-The scripts intentionally do only these read-only operations:
+By default, the scripts download data into a new local output directory and do
+only identity checks. They do **not** execute the released zipapp, a candidate
+repository, or a finalizer artifact:
 
 1. verify GitHub's release attestation;
 2. download the two release assets and verify exact SHA-256 values, sizes, and
    SHA256SUMS bytes;
-3. clone the fixed release tag and verify the resolved source commit; and
-4. run the released zipapp's version and doctor commands.
+3. clone the fixed release tag and verify the resolved source commit.
 
-They do not accept a candidate repository, request a GitHub token, download a
-finalizer artifact, or use any signing material. A passing script verifies
-target identity; it does not complete a security review.
+Use `--smoke` on Linux/WSL or `-Smoke` on PowerShell only in a disposable,
+authorized environment if you also want to execute `version` and `doctor` from
+the released zipapp. `-I` isolates Python imports; it is not a no-side-effects
+or sandbox guarantee. The optional smoke run is not needed to establish target
+identity.
+
+The scripts do not accept a candidate repository, request a GitHub token,
+download a finalizer artifact, or use any signing material. A passing script
+verifies target identity; it does not complete a security review.
 
 ## Threat model and review boundary
 

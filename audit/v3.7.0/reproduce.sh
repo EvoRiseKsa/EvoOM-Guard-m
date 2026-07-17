@@ -17,12 +17,28 @@ readonly PYZ_SIZE="852118"
 readonly SUMS_SIZE="80"
 readonly PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-if [[ $# -gt 1 ]]; then
-  echo "usage: $0 [output-directory]" >&2
-  exit 64
-fi
-
-out_dir="${1:-$(pwd)/evoguard-v3.7.0-review}"
+run_smoke=false
+out_dir=""
+for arg in "$@"; do
+  case "$arg" in
+    --smoke)
+      run_smoke=true
+      ;;
+    --help|-h)
+      echo "usage: $0 [--smoke] [output-directory]"
+      exit 0
+      ;;
+    *)
+      if [[ -z "$out_dir" ]]; then
+        out_dir="$arg"
+      else
+        echo "usage: $0 [--smoke] [output-directory]" >&2
+        exit 64
+      fi
+      ;;
+  esac
+done
+out_dir="${out_dir:-$(pwd)/evoguard-v3.7.0-review}"
 if [[ -e "$out_dir" ]]; then
   if [[ -d "$out_dir" ]] && [[ -z "$(find "$out_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
     :
@@ -32,12 +48,18 @@ if [[ -e "$out_dir" ]]; then
   fi
 fi
 
-for command in gh git sha256sum cmp "$PYTHON_BIN"; do
+for command in gh git sha256sum cmp; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "required command not found: $command" >&2
     exit 69
   }
 done
+if [[ "$run_smoke" == true ]]; then
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
+    echo "required command not found for --smoke: $PYTHON_BIN" >&2
+    exit 69
+  }
+fi
 
 mkdir -p "$out_dir"
 release_dir="$out_dir/release"
@@ -83,9 +105,11 @@ actual_commit="$(git -C "$source_dir" rev-parse HEAD)"
   exit 65
 }
 
-echo "== Released zipapp smoke check =="
-[[ "$("$PYTHON_BIN" -I "$release_dir/evo-guard.pyz" version)" == "evo-guard 3.7.0" ]]
-"$PYTHON_BIN" -I "$release_dir/evo-guard.pyz" doctor
+if [[ "$run_smoke" == true ]]; then
+  echo "== Optional released zipapp smoke check =="
+  [[ "$("$PYTHON_BIN" -I "$release_dir/evo-guard.pyz" version)" == "evo-guard 3.7.0" ]]
+  "$PYTHON_BIN" -I "$release_dir/evo-guard.pyz" doctor
+fi
 
 printf '\nVerified target:\n  release: %s\n  commit:  %s\n  pyz:     %s\n' \
   "$TAG" "$COMMIT" "$PYZ_SHA256"

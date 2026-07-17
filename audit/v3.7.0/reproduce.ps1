@@ -13,7 +13,10 @@ param(
     [string]$OutputDirectory = (Join-Path (Get-Location) 'evoguard-v3.7.0-review'),
 
     [Parameter()]
-    [string]$Python = 'python'
+    [string]$Python = 'python',
+
+    [Parameter()]
+    [switch]$Smoke
 )
 
 Set-StrictMode -Version Latest
@@ -27,10 +30,13 @@ $sumsSha256 = 'bc7c85aa06f29298e6ee1af2ad793c6164ede9b9162474f66344dfe9227980c7'
 $pyzSize = 852118L
 $sumsSize = 80L
 
-foreach ($command in @('gh', 'git', $Python)) {
+foreach ($command in @('gh', 'git')) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
         throw "Required command not found: $command"
     }
+}
+if ($Smoke -and -not (Get-Command $Python -ErrorAction SilentlyContinue)) {
+    throw "Required command not found for -Smoke: $Python"
 }
 
 if (Test-Path -LiteralPath $OutputDirectory) {
@@ -74,11 +80,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Fixed source tag clone failed.' }
 $actualCommit = (& git -C $sourceDirectory rev-parse HEAD).Trim()
 if ($actualCommit -ne $commit) { throw "Tag resolved to unexpected commit: $actualCommit" }
 
-Write-Host '== Released zipapp smoke check =='
-$version = (& $Python -I $pyzPath version).Trim()
-if ($LASTEXITCODE -ne 0 -or $version -ne 'evo-guard 3.7.0') { throw "Unexpected zipapp version: $version" }
-& $Python -I $pyzPath doctor
-if ($LASTEXITCODE -ne 0) { throw 'Zipapp doctor failed.' }
+if ($Smoke) {
+    Write-Host '== Optional released zipapp smoke check =='
+    $version = (& $Python -I $pyzPath version).Trim()
+    if ($LASTEXITCODE -ne 0 -or $version -ne 'evo-guard 3.7.0') { throw "Unexpected zipapp version: $version" }
+    & $Python -I $pyzPath doctor
+    if ($LASTEXITCODE -ne 0) { throw 'Zipapp doctor failed.' }
+}
 
 Write-Host ''
 Write-Host 'Verified target:'
