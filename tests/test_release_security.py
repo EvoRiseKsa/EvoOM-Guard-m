@@ -81,6 +81,8 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     assert "vitest@4.1.10" in ci_windows
     assert "python -m pytest tests/ -q" in ci_windows
     assert "contents: read" in build
+    assert "attestations: write" in build
+    assert "id-token: write" in build
     assert "persist-credentials: false" in build
     assert (
         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
@@ -113,6 +115,16 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     assert "python dist/evo-guard.pyz" not in prepare
     assert "release_checksum_format_invalid" in prepare
     assert "'^[0-9a-f]{64}  evo-guard\\.pyz$'" in prepare
+
+
+def test_future_release_artifact_is_attested_before_crossing_job_boundary() -> None:
+    build = _job_block(RELEASE, "build-artifact")
+    attestation_action = "actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6"
+    assert attestation_action in build
+    assert "subject-path: dist/evo-guard.pyz" in build
+    assert "Generate GitHub build provenance for the exact artifact" in build
+    assert build.index("Checksums (release integrity)") < build.index(attestation_action)
+    assert build.index(attestation_action) < build.index("Transfer the verified release assets")
 
 
 def test_release_is_manual_and_accepts_only_the_default_branch() -> None:
