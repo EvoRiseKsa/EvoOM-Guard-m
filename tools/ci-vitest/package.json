@@ -1,0 +1,8 @@
+{
+  "name": "evoom-guard-ci-vitest",
+  "private": true,
+  "description": "Locked CI-only runner dependency; not part of the EvoOM Guard product runtime.",
+  "devDependencies": {
+    "vitest": "4.1.10"
+  }
+}

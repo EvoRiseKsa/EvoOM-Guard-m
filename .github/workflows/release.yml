@@ -75,16 +75,17 @@ jobs:
 
       - name: Version matches the requested tag
         run: |
-          pip install -e ".[dev]"
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
           V="$(python -c 'import evoom_guard; print(evoom_guard.__version__)')"
           echo "package=$V tag=$TAG"
           test "v$V" = "$TAG"
 
       - name: Lint (Ruff)
-        run: ruff check evoom_guard/ tests/
+        run: python -m ruff check evoom_guard/ tests/
 
       - name: Type-check (Mypy)
-        run: mypy evoom_guard/
+        run: python -m mypy evoom_guard/
 
       - name: Tests must be green before a release
         run: python -m pytest tests/ -q
@@ -96,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Same immutable OCI index as CI's Docker proof.
+      EVOGUARD_E2E_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -108,22 +112,22 @@ jobs:
           python-version: "3.12"
       - name: Install integration-test dependencies
         run: |
-          npm install -g vitest@4.1.10
-          pip install -e ".[dev]"
+          npm ci --ignore-scripts --prefix tools/ci-vitest
+          echo "${GITHUB_WORKSPACE}/tools/ci-vitest/node_modules/.bin" >> "$GITHUB_PATH"
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: E2E — vitest and node:test oracles
         run: python -m pytest tests/test_vitest_oracle.py tests/test_node_oracle.py -v
       - name: Sanity — a real Docker daemon is present
         run: docker version
       - name: Prepare pinned runner dependencies
         run: |
-          docker pull python:3.12-slim
-          docker build -t evoguard-e2e-pytest:local - <<'DOCKER'
-          FROM python:3.12-slim
-          RUN pip install --no-cache-dir pytest==9.0.3
-          DOCKER
+          docker pull "$EVOGUARD_E2E_IMAGE"
+          docker build --build-arg PYTHON_IMAGE="$EVOGUARD_E2E_IMAGE" \
+            --tag evoguard-e2e-pytest:local \
+            --file ops/ci/docker/evoguard-e2e-pytest.Dockerfile .
       - name: Docker E2E — the candidate must be confined
         env:
-          EVOGUARD_E2E_IMAGE: python:3.12-slim
           EVOGUARD_E2E_PYTEST_IMAGE: evoguard-e2e-pytest:local
         run: >-
           python -m pytest tests/test_blackbox_docker_e2e.py
@@ -146,8 +150,10 @@ jobs:
           python-version: "3.12"
       - name: Install pinned runner and test dependencies
         run: |
-          npm install -g vitest@4.1.10
-          pip install -e ".[dev]"
+          npm ci --ignore-scripts --prefix tools/ci-vitest
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\tools\ci-vitest\node_modules\.bin"
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: Windows E2E — native runner and baseline command resolution
         run: python -m pytest tests/test_vitest_oracle.py tests/test_node_oracle.py -v
 

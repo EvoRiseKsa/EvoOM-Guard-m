@@ -30,19 +30,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install (dev extras)
-        run: pip install -e ".[dev]"
+      - name: Install locked Python CI dependencies
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          # The repository itself has no runtime dependencies. Avoid a second
+          # resolver pass and keep the build backend inside the hash-locked set.
+          python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Lint (ruff)
-        run: ruff check evoom_guard/ tests/
+        run: python -m ruff check evoom_guard/ tests/
 
       - name: Type-check (mypy)
-        run: mypy evoom_guard/
+        run: python -m mypy evoom_guard/
 
       - name: Tests + coverage
         run: |
-          coverage run -m pytest tests/ -q
-          coverage report
+          python -m coverage run -m pytest tests/ -q
+          python -m coverage report
 
       - name: Import smoke (stdlib-only core, no extras)
         run: |
@@ -75,10 +79,14 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
-      - name: Install the vitest CLI
-        run: npm install -g vitest@4.1.10
-      - name: Install (dev extras)
-        run: pip install -e ".[dev]"
+      - name: Install locked Vitest CLI
+        run: |
+          npm ci --ignore-scripts --prefix tools/ci-vitest
+          echo "${GITHUB_WORKSPACE}/tools/ci-vitest/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Install locked Python CI dependencies
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: e2e — vitest + node --test oracles
         run: python -m pytest tests/test_vitest_oracle.py tests/test_node_oracle.py -v
 
@@ -90,26 +98,30 @@ jobs:
     # time. A breach flips the pack to FAIL and fails this job loudly. See
     # tests/test_blackbox_docker_e2e.py.
     runs-on: ubuntu-latest  # GitHub-hosted runners ship a working Docker daemon
+    env:
+      # Immutable OCI index for Docker Hub's python:3.12-slim. Docker selects
+      # the platform manifest from this reviewed index, rather than a mutable tag.
+      EVOGUARD_E2E_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
-      - name: Install (dev extras)
-        run: pip install -e ".[dev]"
+      - name: Install locked Python CI dependencies
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: Sanity — a real Docker daemon is present
         run: docker version
       - name: Pre-pull runtime images
         run: |
-          docker pull python:3.12-slim
+          docker pull "$EVOGUARD_E2E_IMAGE"
           # A runner-bearing image lets the composite-under-docker case run too.
-          docker build -t evoguard-e2e-pytest:local - <<'DOCKER'
-          FROM python:3.12-slim
-          RUN pip install --no-cache-dir pytest==9.0.3
-          DOCKER
+          docker build --build-arg PYTHON_IMAGE="$EVOGUARD_E2E_IMAGE" \
+            --tag evoguard-e2e-pytest:local \
+            --file ops/ci/docker/evoguard-e2e-pytest.Dockerfile .
       - name: Docker E2E — the candidate must be confined
         env:
-          EVOGUARD_E2E_IMAGE: python:3.12-slim
           EVOGUARD_E2E_PYTEST_IMAGE: evoguard-e2e-pytest:local
         run: >-
           python -m pytest tests/test_blackbox_docker_e2e.py
@@ -128,8 +140,9 @@ jobs:
           python-version: "3.12"
       - name: Version matches tag
         run: |
-          pip install -e .
-          V="$(python -c 'import evoom_guard; print(evoom_guard.__version__)')"
+          # This guard only reads source metadata; do not invoke a package
+          # resolver or build backend merely to obtain the local version.
+          V="$(PYTHONPATH="$GITHUB_WORKSPACE" python -c 'import evoom_guard; print(evoom_guard.__version__)')"
           TAG="${GITHUB_REF_NAME#v}"
           echo "package=$V tag=$TAG"
           test "$V" = "$TAG"

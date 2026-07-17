@@ -1,0 +1,12 @@
+# Source declarations for the trusted CI/release toolchain.
+#
+# Keep each product tooling requirement synchronized with pyproject.toml's
+# build-system and [project.optional-dependencies].dev declarations. The
+# generated ci.lock is the only Python dependency input consumed by CI/release.
+setuptools>=64
+pytest>=8
+ruff>=0.6
+mypy>=1.10
+coverage>=7
+cryptography>=41
+jsonschema>=4.23

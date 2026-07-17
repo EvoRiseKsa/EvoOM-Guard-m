@@ -24,8 +24,10 @@ jobs:
           python-version: "3.12"
       - name: Install pinned runner and test dependencies
         run: |
-          npm install -g vitest@4.1.10
-          pip install -e ".[dev]"
+          npm ci --ignore-scripts --prefix tools/ci-vitest
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:GITHUB_WORKSPACE\tools\ci-vitest\node_modules\.bin"
+          python -m pip install --only-binary=:all: --require-hashes -r requirements/ci.lock
+          python -m pip install --no-deps --no-build-isolation -e .
       - name: Full Windows unit and security suite
         run: python -m pytest tests/ -q
       - name: CLI Unicode and zipapp smoke

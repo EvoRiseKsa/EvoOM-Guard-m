@@ -73,12 +73,14 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     release_windows = _job_block(RELEASE, "release-windows-e2e")
     assert "runs-on: windows-latest" in release_windows
     assert "contents: read" in release_windows
-    assert "vitest@4.1.10" in release_windows
+    assert "npm ci --ignore-scripts --prefix tools/ci-vitest" in release_windows
+    assert "npm install -g" not in release_windows
     assert "test_vitest_oracle.py" in release_windows
     ci_windows = _job_block(WINDOWS, "smoke")
     assert "runs-on: windows-latest" in ci_windows
     assert "persist-credentials: false" in ci_windows
-    assert "vitest@4.1.10" in ci_windows
+    assert "npm ci --ignore-scripts --prefix tools/ci-vitest" in ci_windows
+    assert "npm install -g" not in ci_windows
     assert "python -m pytest tests/ -q" in ci_windows
     assert "contents: read" in build
     assert "attestations: write" in build

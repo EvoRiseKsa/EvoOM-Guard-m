@@ -15,6 +15,10 @@
 /SECURITY.md @MANA-awam
 /GOVERNANCE.md @MANA-awam
 /CONTRIBUTING.md @MANA-awam
+/requirements/ @MANA-awam
+/tools/ci-vitest/ @MANA-awam
+/ops/ci/ @MANA-awam
+/tests/test_dependency_lock_policy.py @MANA-awam
 
 # Core verification, finalizer, and artifact-admission implementation.
 /evoom_guard/ @MANA-awam
@@ -27,3 +31,4 @@
 /docs/REPOSITORY_PROTECTION.md @MANA-awam
 /docs/TRUSTED_FINALIZER.md @MANA-awam
 /docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam
+/docs/DEPENDENCY_POLICY.md @MANA-awam
