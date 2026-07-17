@@ -1,0 +1,29 @@
+# Copyright (c) 2026 Mana Alharbi. All rights reserved.
+# Source-available — see LICENSE for permitted use.
+#
+# @MANA-awam is operated by the same project owner as @EvoRiseKsa. This mapping
+# supports a separate GitHub identity for technical review workflow only; it is
+# not independent review, third-party validation, or a separate security
+# authority. It has effect only when a protected branch/ruleset requires Code
+# Owner review and this file remains protected.
+
+# GitHub configuration, release definition, and published security claims.
+/.github/ @MANA-awam
+/action.yml @MANA-awam
+/pyproject.toml @MANA-awam
+/LICENSE @MANA-awam
+/SECURITY.md @MANA-awam
+/GOVERNANCE.md @MANA-awam
+/CONTRIBUTING.md @MANA-awam
+
+# Core verification, finalizer, and artifact-admission implementation.
+/evoom_guard/ @MANA-awam
+/examples/trusted-finalizer/ @MANA-awam
+
+# Documents that define a release's assurance and trusted-boundary claims.
+/docs/GOVERNANCE.md @MANA-awam
+/docs/ASSURANCE.md @MANA-awam
+/docs/ARTIFACT_ADMISSION.md @MANA-awam
+/docs/REPOSITORY_PROTECTION.md @MANA-awam
+/docs/TRUSTED_FINALIZER.md @MANA-awam
+/docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam
