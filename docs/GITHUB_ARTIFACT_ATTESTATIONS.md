@@ -11,12 +11,19 @@
 Actions build-artifact attestation for `evo-guard.pyz`. Do not describe the
 v3.7.0 release attestation as build provenance.
 
-After the release workflow change documented here is merged, a *future* manual
-release run builds `dist/evo-guard.pyz` on the protected default branch,
-checksums it, then asks GitHub to generate an artifact attestation for those
-exact bytes before the file is transferred to the release-writing job. The
-build job receives only `contents: read`, `id-token: write`, and
+The workflow support described here is already on `main`; it has not
+retroactively created build provenance for `v3.7.0`. Only an intentional
+future manual release run can create a GitHub Actions build-artifact
+attestation. That run builds `dist/evo-guard.pyz` on the protected default
+branch, checksums it, then asks GitHub to generate an artifact attestation for
+those exact bytes before the file is transferred to the release-writing job.
+The build job receives only `contents: read`, `id-token: write`, and
 `attestations: write`; it does not receive `contents: write`.
+
+Artifact attestation is not itself a reason to create a release. Follow the
+[release-channel policy](../README.md#release-channel): make a new release
+only for an intentional versioned product change, after its version and
+consumer pins are updated and the protected release validation succeeds.
 
 The record is a GitHub/Sigstore artifact attestation. It is not an EvoGuard
 verdict, an artifact-admission record, proof of a published release, or proof

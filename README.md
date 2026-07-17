@@ -175,6 +175,28 @@ Release reruns have a separate, stronger immutability rule: an asset already
 attached to a tag is byte-compared and is never replaced—different bytes make
 the workflow fail closed.
 
+## Release channel
+
+`v3.7.0` is the current published release in [GitHub
+Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) and
+the [GitHub Marketplace](https://github.com/marketplace/actions/evoom-guard).
+Production workflows should use `EvoRiseKsa/EvoOM-Guard-m@v3.7.0`, or the full
+commit SHA resolved from that release tag when a mutable tag reference is not
+acceptable. Do not use `@main` as a production release channel.
+
+Commits after `v3.7.0` on `main` are unreleased development; they do not imply
+another published version. A later release requires an intentional SemVer
+version bump, matching documentation and action pins, successful manual
+release validation on the protected default branch, a reviewed release
+publication, and Marketplace publication where applicable. Do not cut a
+release merely to exercise artifact attestation.
+
+`v3.7.0` has a GitHub **release** attestation, but it does **not** have a
+GitHub Actions build-artifact attestation for `evo-guard.pyz`. That distinction
+matters: the release attestation is not build provenance. See
+[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md)
+for the exact scope and the procedure available to future releases.
+
 ## Try it in two minutes
 
 ```bash
