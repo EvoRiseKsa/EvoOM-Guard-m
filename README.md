@@ -45,6 +45,14 @@ correctness or security.
 > [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) and
 > [`docs/ASSURANCE.md`](docs/ASSURANCE.md) before relying on it.
 
+> **Governance and contribution.** The public core is source-available and
+> deliberately reviewable; signing keys, customer policy, held-out evaluation
+> data, and future operational-control-plane inputs are not public source
+> inputs. Read [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) and
+> [`CONTRIBUTING.md`](CONTRIBUTING.md) for the review boundary. The designated
+> second account provides technical separation of roles only, not independent
+> review.
+
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
 passing"` deselect, print a fake `9999 passed` to stdout, or drop a
@@ -480,6 +488,8 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
 | [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
 | [`docs/REPOSITORY_PROTECTION.md`](docs/REPOSITORY_PROTECTION.md) | GitHub merge/ruleset controls that a composite Action cannot enforce from inside itself |
+| [`GOVERNANCE.md`](GOVERNANCE.md) | Current ownership and trust-boundary governance, including the explicit limit of same-owner cross-account review |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and threat-model review process for ordinary changes versus trust-boundary changes |
 | [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
 | [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |

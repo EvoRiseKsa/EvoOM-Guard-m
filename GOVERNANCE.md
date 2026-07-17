@@ -12,11 +12,18 @@ process that does not exist.
 
 ## Current status
 
-The authoritative repository is currently maintained by one owner. There is no
-independent required reviewer configured for its protected paths, and a second
-account controlled by the same person is not independent review. `CODEOWNERS`
-will not be added as a symbolic control until a real reviewer or team exists and
-GitHub is configured to require that review.
+The authoritative repository is currently maintained by one owner.
+`@MANA-awam` is a second GitHub account controlled by that same owner. The
+repository's [`CODEOWNERS`](.github/CODEOWNERS) mapping uses it for a technically
+separate review workflow on trust-root paths; it is **not** independent review,
+third-party validation, or a separate security authority.
+
+`CODEOWNERS` is a routing file, not a security control by itself. It becomes an
+enforced control only when GitHub branch protection or a ruleset requires code
+owner review, protects `CODEOWNERS` itself, and the listed account retains the
+necessary repository access. It must never be cited as evidence of an
+independent audit. The operational rules for the current v3.7 boundary are in
+[`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
 
 The core repository's v3.7.0 raw-Git Trusted Finalizer remains a reference
 deployment; it is not an active merge requirement here.
@@ -37,6 +44,13 @@ The following are security-policy changes, not ordinary feature edits:
 Any change in this table requires an explicit threat-model review. Open pull
 requests must be re-verified after it lands; an earlier finalizer result did not
 run under the new policy.
+
+The review routing is intentionally narrow. It covers GitHub configuration,
+the core verifier/finalizer implementation, finalizer templates, release
+definition, and documents that state an assurance or trusted-boundary claim.
+See [`.github/CODEOWNERS`](.github/CODEOWNERS) and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the exact path mapping and contribution
+requirements.
 
 ## Required state before production finalizer enforcement
 
