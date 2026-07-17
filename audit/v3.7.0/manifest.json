@@ -1,0 +1,68 @@
+{
+  "format": "EVOGUARD_EXTERNAL_REVIEW_TARGET_V1",
+  "copyright": "Copyright (c) 2026 Mana Alharbi. Source-available — see LICENSE.",
+  "purpose": "Verification metadata and reviewer instructions for the frozen EvoOM Guard v3.7.0 release target.",
+  "companion_status": {
+    "is_part_of_frozen_target": false,
+    "does_not_change_release_claims": true,
+    "does_not_establish_independent_review": true
+  },
+  "target": {
+    "repository": "EvoRiseKsa/EvoOM-Guard-m",
+    "release_tag": "v3.7.0",
+    "release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0",
+    "resolved_commit": "1f0ceae5009198b1bf161a3a07fced54c1f01337",
+    "guard_version": "3.7.0",
+    "evidence_schema_version": "1.11",
+    "release_is_immutable": true,
+    "release_published_at": "2026-07-16T21:01:39Z",
+    "release_workflow_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29527952035",
+    "review_issue": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/80",
+    "marketplace_url": "https://github.com/marketplace/actions/evoom-guard"
+  },
+  "assets": [
+    {
+      "name": "evo-guard.pyz",
+      "size_bytes": 852118,
+      "sha256": "1d36f7ec45f47f9f6c3178a25a58accf8f8beb0ffd9d29e7bf93b7fe17ad3ec9"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size_bytes": 80,
+      "sha256": "bc7c85aa06f29298e6ee1af2ad793c6164ede9b9162474f66344dfe9227980c7",
+      "utf8_content": "1d36f7ec45f47f9f6c3178a25a58accf8f8beb0ffd9d29e7bf93b7fe17ad3ec9  evo-guard.pyz\n"
+    }
+  ],
+  "verification": {
+    "release_attestation_command": "gh release verify v3.7.0 --repo EvoRiseKsa/EvoOM-Guard-m",
+    "source_remote": "https://github.com/EvoRiseKsa/EvoOM-Guard-m.git",
+    "artifact_command": "python -I evo-guard.pyz version"
+  },
+  "requested_properties": [
+    "base_owned_authority_and_protected_harness_refusal",
+    "verdict_and_evidence_integrity",
+    "assurance_boundary_truthfulness",
+    "verifier_pack_identity_and_execution",
+    "trusted_finalizer_v370_raw_git_derivation",
+    "artifact_admission_v1",
+    "action_and_release_supply_chain"
+  ],
+  "known_reproducibility_gaps": [
+    {
+      "id": "unlocked_dev_dependencies",
+      "statement": "The v3.7.0 pyproject dev dependencies use version ranges, so a later source test replay is not the historical dependency-locked release environment.",
+      "status": "known_gap"
+    },
+    {
+      "id": "incomplete_container_environment_capture",
+      "statement": "This companion does not freeze every Docker image digest and runner-image detail used by every historical CI lane.",
+      "status": "known_gap"
+    }
+  ],
+  "disclosure": {
+    "security_policy": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/v3.7.0/SECURITY.md",
+    "private_advisory_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/security/advisories/new",
+    "public_issue_is_not_a_vulnerability_channel": true,
+    "no_credentials_requested": true
+  }
+}

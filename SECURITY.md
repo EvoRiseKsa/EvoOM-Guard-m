@@ -20,6 +20,12 @@ This is a solo, best-effort project: there is no bug-bounty and no guaranteed
 response time, but genuine reports will be looked at and credited (with your
 permission) when fixed.
 
+For a non-sensitive independent-review starting point, see the frozen
+[v3.7.0 review companion](audit/v3.7.0/). It names the exact release target
+and a safe evidence/report template. Do not put a working bypass, secret, or
+credential-bearing artifact in its public tracking issue; use the private route
+above for a potential vulnerability.
+
 ## In scope
 
 - A patch that obtains a **false `PASS`** within a guarantee Guard claims — e.g.

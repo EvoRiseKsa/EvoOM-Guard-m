@@ -505,6 +505,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md) | The docker/gVisor isolation modes and their threat model |
 | [`docs/FEATURE_MODE.md`](docs/FEATURE_MODE.md) | `--allow-new-tests`: gating feature work that adds tests |
 | [`adversarial/README.md`](adversarial/README.md) | Executable adversarial corpus: enforced controls, known gaps, documented exceptions, and the environment-labelled security baseline |
+| [audit/v3.7.0/](audit/v3.7.0/) | Frozen v3.7.0 external-review companion: artifact verification, threat boundary, review matrix, and private-report template |
 
 ## Where this comes from
 
