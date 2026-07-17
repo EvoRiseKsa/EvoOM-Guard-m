@@ -53,6 +53,12 @@ correctness or security.
 > second account provides technical separation of roles only, not independent
 > review.
 
+> **Repository map and current evidence.** See
+> [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
+> version boundary of the core, demo, evaluation record, and finalizer pilot;
+> the distinction between public code and private operational assets; and the
+> claims the current evidence does and does not support.
+
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
 passing"` deselect, print a fake `9999 passed` to stdout, or drop a
