@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:artifact-digest-binding:2",
+  "title": "EvoGuard artifact digest admission binding v2",
+  "description": "Unreleased next-minor canonical binding.json contract. It binds one exact digest and opaque provenance-reference bytes to a verified finalizer ALLOW; it does not verify OCI, provenance, build, release, or deployment semantics.",
+  "type": "object",
+  "required": [
+    "format",
+    "decision",
+    "subject",
+    "provenance_reference",
+    "finalizer",
+    "authentication"
+  ],
+  "properties": {
+    "format": { "const": "EVOGUARD_ARTIFACT_BINDING_V2" },
+    "decision": { "const": "ALLOW" },
+    "subject": {
+      "type": "object",
+      "required": ["kind", "digest"],
+      "properties": {
+        "kind": {
+          "enum": ["artifact-sha256", "oci-manifest-or-index"]
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance_reference": {
+      "type": "object",
+      "required": ["format", "identity", "sha256", "size"],
+      "properties": {
+        "format": {
+          "const": "EVOGUARD_OPAQUE_PROVENANCE_REFERENCE_V1"
+        },
+        "identity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]*$"
+        },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        }
+      },
+      "additionalProperties": false
+    },
+    "finalizer": {
+      "type": "object",
+      "required": ["bundle_sha256", "record_sha256", "key_id", "source", "context"],
+      "properties": {
+        "bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "record_sha256": { "$ref": "#/$defs/sha256" },
+        "key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "source": { "$ref": "#/$defs/finalizerSource" },
+        "context": {
+          "$ref": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.7.0/evoom_guard/schemas/evidence-context-1.schema.json"
+        }
+      },
+      "additionalProperties": false
+    },
+    "authentication": {
+      "type": "object",
+      "required": ["algorithm", "key_id", "purpose", "signature_path"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "purpose": { "const": "evoguard-artifact-digest-admission" },
+        "signature_path": { "const": "binding.sig" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitDigest": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "finalizerSource": {
+      "type": "object",
+      "required": [
+        "pull_request_number",
+        "workflow_run_id",
+        "workflow_run_attempt",
+        "base_sha",
+        "head_sha"
+      ],
+      "properties": {
+        "pull_request_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "workflow_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]*$"
+        },
+        "workflow_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "base_sha": { "$ref": "#/$defs/gitDigest" },
+        "head_sha": { "$ref": "#/$defs/gitDigest" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

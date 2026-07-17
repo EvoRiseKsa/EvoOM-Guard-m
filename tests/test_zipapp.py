@@ -81,7 +81,9 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
         assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
         assert {
             "evoom_guard/artifact_admission.py",
+            "evoom_guard/artifact_digest_admission.py",
             "evoom_guard/schemas/artifact-binding-1.schema.json",
+            "evoom_guard/schemas/artifact-digest-binding-2.schema.json",
             "LICENSE",
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",
