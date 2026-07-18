@@ -45,6 +45,34 @@ def test_pyz_builds_and_reports_version(tmp_path):
     assert __version__ in r.stdout
 
 
+def test_pyz_exposes_github_attestation_admission_cli_contract(tmp_path):
+    out = _build(tmp_path)
+    sealed = subprocess.run(
+        [sys.executable, out, "seal-github-attestation-admission", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert sealed.returncode == 0, sealed.stdout + sealed.stderr
+    assert "--receipt-out" in sealed.stdout
+    assert "--raw-output-out" in sealed.stdout
+    assert "--finalizer-pub" in sealed.stdout
+    assert "--expected-context" in sealed.stdout
+    assert "--sign-key" in sealed.stdout
+    assert "--force" not in sealed.stdout
+
+    verified = subprocess.run(
+        [sys.executable, out, "verify-github-attestation-admission", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+    assert "--trusted-pub" in verified.stdout
+    assert "--finalizer-pub" in verified.stdout
+    assert "--expected-source" in verified.stdout
+
+
 def test_pyz_contains_the_offline_record_verifier(tmp_path):
     out = _build(tmp_path)
     record = tmp_path / "invalid-record.json"
@@ -82,8 +110,10 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
         assert {
             "evoom_guard/artifact_admission.py",
             "evoom_guard/artifact_digest_admission.py",
+            "evoom_guard/github_attestation.py",
             "evoom_guard/schemas/artifact-binding-1.schema.json",
             "evoom_guard/schemas/artifact-digest-binding-2.schema.json",
+            "evoom_guard/schemas/github-attestation-receipt-1.schema.json",
             "LICENSE",
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",

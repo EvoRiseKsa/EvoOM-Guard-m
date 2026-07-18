@@ -10,6 +10,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from evoom_guard import github_attestation
+from evoom_guard.cli import build_parser
 from evoom_guard.cli import main as cli_main
 from evoom_guard.guard import guard
 from evoom_guard.signing import generate_keypair
@@ -674,3 +675,130 @@ def test_cli_receipt_and_rechecks_require_all_policy_pins(
     rejected_report = json.loads(capsys.readouterr().out)
     assert rejected_report["status"] == "REJECTED"
     assert "source ref" in rejected_report["error"]
+
+
+def test_cli_seal_and_verify_github_attestation_admission_require_every_trust_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = _successful_gh(monkeypatch)
+    bundle, finalizer_public, source, context = _finalized_allow(tmp_path)
+    admission_private, admission_public = _keys(tmp_path, "admission")
+    artifact, receipt_path, raw_path = _receipt_inputs(tmp_path)
+    binding_path = tmp_path / "github-attestation-admission.eab"
+    source_path = tmp_path / "expected-source.json"
+    context_path = tmp_path / "expected-context.json"
+    _write_json(source_path, source)
+    _write_json(context_path, context)
+    policy = _policy_kwargs(source_digest=context["head_sha"])
+    policy_flags = [
+        "--repo",
+        policy["repository"],
+        "--signer-workflow",
+        policy["signer_workflow"],
+        "--signer-digest",
+        policy["signer_digest"],
+        "--source-ref",
+        policy["source_ref"],
+        "--source-digest",
+        policy["source_digest"],
+        "--cert-oidc-issuer",
+        policy["cert_oidc_issuer"],
+    ]
+    seal_args = [
+        "seal-github-attestation-admission",
+        str(artifact),
+        str(bundle),
+        "--receipt-out",
+        str(receipt_path),
+        "--raw-output-out",
+        str(raw_path),
+        "--out",
+        str(binding_path),
+        "--finalizer-pub",
+        str(finalizer_public),
+        "--expected-source",
+        str(source_path),
+        "--expected-context",
+        str(context_path),
+        "--sign-key",
+        str(admission_private),
+        "--gh-executable",
+        "trusted-gh",
+        *policy_flags,
+    ]
+    assert cli_main(seal_args) == 0
+    sealed_report = json.loads(capsys.readouterr().out)
+    assert sealed_report["format"] == "EVOGUARD_ARTIFACT_BINDING_V2"
+    assert sealed_report["status"] == "SEALED"
+    assert sealed_report["decision"] == "ALLOW"
+    assert sealed_report["verification_scope"] == (
+        "fresh-provider-gh-attestation-verify-plus-trusted-finalizer-allow"
+    )
+    assert sealed_report["subject"]["kind"] == "artifact-sha256"
+    assert len(calls) == 1
+
+    assert cli_main(
+        [
+            "verify-github-attestation-admission",
+            str(binding_path),
+            str(artifact),
+            str(receipt_path),
+            str(raw_path),
+            str(bundle),
+            "--trusted-pub",
+            str(admission_public),
+            "--finalizer-pub",
+            str(finalizer_public),
+            "--expected-source",
+            str(source_path),
+            "--expected-context",
+            str(context_path),
+            *policy_flags,
+        ]
+    ) == 0
+    verified_report = json.loads(capsys.readouterr().out)
+    assert verified_report["status"] == "VERIFIED"
+    assert verified_report["decision"] == "ALLOW"
+    assert verified_report["live_provider_reverification"] is False
+    assert verified_report["verification_scope"] == (
+        "retained-provider-bytes-plus-trusted-finalizer-allow"
+    )
+    assert len(calls) == 1
+
+    mismatched_policy_flags = list(policy_flags)
+    mismatched_policy_flags[mismatched_policy_flags.index("--source-digest") + 1] = "a" * 40
+    rejected_receipt = tmp_path / "mismatched-receipt.json"
+    rejected_raw = tmp_path / "mismatched-raw.json"
+    assert cli_main(
+        [
+            "seal-github-attestation-admission",
+            str(artifact),
+            str(bundle),
+            "--receipt-out",
+            str(rejected_receipt),
+            "--raw-output-out",
+            str(rejected_raw),
+            "--out",
+            str(tmp_path / "mismatched.eab"),
+            "--finalizer-pub",
+            str(finalizer_public),
+            "--expected-source",
+            str(source_path),
+            "--expected-context",
+            str(context_path),
+            "--sign-key",
+            str(admission_private),
+            "--gh-executable",
+            "trusted-gh",
+            *mismatched_policy_flags,
+        ]
+    ) == 1
+    rejected_report = json.loads(capsys.readouterr().out)
+    assert rejected_report["status"] == "REJECTED"
+    assert "context.head_sha" in rejected_report["error"]
+    assert not rejected_receipt.exists()
+    assert not rejected_raw.exists()
+    assert len(calls) == 1
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args([*seal_args, "--force"])

@@ -154,7 +154,11 @@ finalizer/admission-key/subject checks.
 
 ## CLI boundary commands
 
-The unreleased CLI exposes the same policy without free-form weakening:
+The unreleased CLI exposes the same policy without free-form weakening. All
+policy pins, both external finalizer objects, both public keys, retained receipt
+paths, and the separate admission key are explicit command inputs; no command
+accepts a wildcard repository, mutable ref, optional OIDC issuer, or a
+"trust receipt" switch.
 
 ```bash
 evo-guard github-attestation-receipt dist/product.whl \
@@ -173,6 +177,57 @@ check; `reverify-github-attestation-receipt` makes a fresh constrained GitHub
 CLI verification. Neither command makes the result an admission decision: the
 separate V2 admission bridge still requires a matching externally verified
 Trusted Finalizer `ALLOW`.
+
+The CLI bridge is available only through the two commands below. The sealing
+command performs the live provider verification **before** it reads the
+separate admission signing key. It additionally rejects the request unless
+`--source-digest` equals the externally supplied finalizer context's exact
+`head_sha`.
+
+```bash
+evo-guard seal-github-attestation-admission artifacts/product.json evidence/finalized.evb \
+  --receipt-out evidence/github-attestation.receipt.json \
+  --raw-output-out evidence/github-attestation.raw.json \
+  --out evidence/product.github-attestation.eab \
+  --repo owner/project \
+  --signer-workflow owner/project/.github/workflows/artifact-builder.yml \
+  --signer-digest "$TRUSTED_SIGNER_WORKFLOW_SHA" \
+  --source-ref refs/heads/main \
+  --source-digest "$TRUSTED_FINALIZER_HEAD_SHA" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --finalizer-pub security/finalizer-public.pem \
+  --expected-source evidence/expected-source.json \
+  --expected-context evidence/expected-context.json \
+  --sign-key "$EVOGUARD_ARTIFACT_ADMISSION_KEY" \
+  --gh-executable "$PINNED_GH"
+
+evo-guard verify-github-attestation-admission \
+  evidence/product.github-attestation.eab artifacts/product.json \
+  evidence/github-attestation.receipt.json evidence/github-attestation.raw.json \
+  evidence/finalized.evb \
+  --repo owner/project \
+  --signer-workflow owner/project/.github/workflows/artifact-builder.yml \
+  --signer-digest "$TRUSTED_SIGNER_WORKFLOW_SHA" \
+  --source-ref refs/heads/main \
+  --source-digest "$TRUSTED_FINALIZER_HEAD_SHA" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --trusted-pub security/artifact-admission-public.pem \
+  --finalizer-pub security/finalizer-public.pem \
+  --expected-source evidence/expected-source.json \
+  --expected-context evidence/expected-context.json
+```
+
+`seal-github-attestation-admission` intentionally has no `--force` or
+stdin/stdout mode. Each receipt, raw-output, and V2 binding path is created
+with no-clobber semantics, so a protected job cannot quietly replace a prior
+evidence record. The operation is not all-or-nothing: if finalizer validation
+or V2 sealing fails after the fresh provider verification, the valid new
+receipt and raw-output files may remain without a V2 binding and must be
+retained or handled explicitly by the protected job.
+`verify-github-attestation-admission` rechecks retained bytes, the exact V2
+binding, both public keys, and the external finalizer `ALLOW`; it does **not**
+contact GitHub. Run the explicit receipt reverify command if a fresh provider
+check is required.
 
 Their machine reports make this distinction explicit: the retained check emits
 `RETAINED_RECEIPT_VERIFIED` with

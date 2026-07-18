@@ -21,6 +21,9 @@ Subcommands:
   * ``evo-guard github-attestation-receipt`` — record one constrained GitHub verification.
   * ``evo-guard verify-github-attestation-receipt`` — check retained attestation bytes.
   * ``evo-guard reverify-github-attestation-receipt`` — make a fresh constrained GitHub check.
+  * ``evo-guard seal-github-attestation-admission`` — bind one freshly verified
+    GitHub attestation to a Trusted Finalizer ALLOW through the separate V2 key.
+  * ``evo-guard verify-github-attestation-admission`` — check that retained V2 relation.
   * ``evo-guard version`` — print the EvoGuard version.
 """
 
@@ -1141,6 +1144,99 @@ def build_parser() -> argparse.ArgumentParser:
     rgar_p.add_argument("artifact", help="regular artifact expected by the receipt")
     _add_github_attestation_policy_arguments(rgar_p)
     _add_github_attestation_verifier_arguments(rgar_p)
+
+    sgaa_p = sub.add_parser(
+        "seal-github-attestation-admission",
+        help=(
+            "freshly verify one GitHub artifact attestation, then bind it to a "
+            "Trusted Finalizer ALLOW through the separate V2 admission key"
+        ),
+    )
+    sgaa_p.add_argument(
+        "artifact",
+        help="regular immutable artifact file; this command does not prove publication or deployment",
+    )
+    sgaa_p.add_argument(
+        "finalizer_bundle",
+        help="signed Trusted Finalizer .evb that must independently verify as ALLOW",
+    )
+    sgaa_p.add_argument(
+        "--receipt-out",
+        required=True,
+        help="new canonical GitHub verification receipt; never overwrites an existing file",
+    )
+    sgaa_p.add_argument(
+        "--raw-output-out",
+        required=True,
+        help="new exact GitHub CLI JSON output; never overwrites an existing file",
+    )
+    sgaa_p.add_argument(
+        "--out",
+        required=True,
+        help="new signed V2 admission binding; never overwrites an existing file",
+    )
+    sgaa_p.add_argument(
+        "--finalizer-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the finalizer",
+    )
+    sgaa_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external finalizer source JSON; exact match is required",
+    )
+    sgaa_p.add_argument(
+        "--expected-context",
+        required=True,
+        help=(
+            "external finalizer context JSON; exact match is required and its head_sha "
+            "must equal --source-digest"
+        ),
+    )
+    sgaa_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="separate V2 artifact-admission Ed25519 private key in a protected job",
+    )
+    _add_github_attestation_policy_arguments(sgaa_p)
+    _add_github_attestation_verifier_arguments(sgaa_p)
+
+    vgaa_p = sub.add_parser(
+        "verify-github-attestation-admission",
+        help=(
+            "verify a retained GitHub attestation receipt and its V2 admission "
+            "binding against exact external finalizer and provider-policy inputs"
+        ),
+    )
+    vgaa_p.add_argument("binding", help="signed V2 GitHub attestation admission binding")
+    vgaa_p.add_argument("artifact", help="regular artifact expected by the receipt and binding")
+    vgaa_p.add_argument("receipt", help="canonical retained GitHub attestation receipt")
+    vgaa_p.add_argument("raw_output", help="retained exact GitHub CLI JSON output")
+    vgaa_p.add_argument("finalizer_bundle", help="signed Trusted Finalizer .evb")
+    vgaa_p.add_argument(
+        "--trusted-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the V2 admission signer",
+    )
+    vgaa_p.add_argument(
+        "--finalizer-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the finalizer",
+    )
+    vgaa_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external finalizer source JSON; exact match is required",
+    )
+    vgaa_p.add_argument(
+        "--expected-context",
+        required=True,
+        help=(
+            "external finalizer context JSON; exact match is required and its head_sha "
+            "must equal --source-digest"
+        ),
+    )
+    _add_github_attestation_policy_arguments(vgaa_p)
 
     # ----- verify-bundle ---------------------------------------------------- #
     vb_p = sub.add_parser(
@@ -3251,6 +3347,248 @@ def cmd_reverify_github_attestation_receipt(
     return 0
 
 
+def cmd_seal_github_attestation_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Freshly verify provider evidence, then bind it to a finalizer ALLOW.
+
+    This command intentionally owns no shortcut around the provider policy,
+    external finalizer source/context, or separate V2 admission key.  In
+    particular it exposes no overwrite switch: a protected job must choose
+    fresh, reviewable evidence paths for every run.
+    """
+
+    from evoom_guard.artifact_digest_admission import ARTIFACT_DIGEST_BINDING_FORMAT
+    from evoom_guard.github_attestation import (
+        GitHubAttestationError,
+        seal_github_attestation_admission,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    regular_paths = (
+        args.artifact,
+        args.finalizer_bundle,
+        args.receipt_out,
+        args.raw_output_out,
+        args.out,
+        args.finalizer_pub,
+        args.sign_key,
+    )
+    if any(value == "-" for value in regular_paths):
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": (
+                    "artifact, finalizer bundle, receipt, raw output, binding, and key "
+                    "paths must be regular files, not standard input/output"
+                ),
+            },
+        )
+        return 2
+    try:
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        sealed = seal_github_attestation_admission(
+            args.artifact,
+            args.receipt_out,
+            args.raw_output_out,
+            args.finalizer_bundle,
+            args.out,
+            **_github_attestation_policy_kwargs(args),
+            trusted_finalizer_public_key_path=args.finalizer_pub,
+            expected_finalizer_source=expected_source,
+            expected_finalizer_context=expected_context,
+            private_key_path=args.sign_key,
+            gh_executable=args.gh_executable,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except GitHubAttestationError as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError, SigningUnavailableError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+            "ok": True,
+            "sealed": True,
+            "status": "SEALED",
+            "decision": "ALLOW",
+            "verification_scope": (
+                "fresh-provider-gh-attestation-verify-plus-trusted-finalizer-allow"
+            ),
+            "receipt": sealed.receipt.receipt_path,
+            "raw_output": sealed.receipt.raw_output_path,
+            "binding": sealed.admission.binding_path,
+            "artifact": sealed.receipt.artifact.as_dict(),
+            "verification_policy": sealed.receipt.policy.as_dict(),
+            "subject": sealed.admission.subject.as_dict(),
+            "provenance_reference": sealed.admission.provenance_reference.as_dict(),
+            "finalizer": sealed.admission.payload["finalizer"],
+            "key_id": sealed.admission.payload["authentication"]["key_id"],
+        },
+    )
+    return 0
+
+
+def cmd_verify_github_attestation_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify retained provider bytes and their V2 finalizer-bound relation."""
+
+    from evoom_guard.artifact_digest_admission import ARTIFACT_DIGEST_BINDING_FORMAT
+    from evoom_guard.github_attestation import (
+        GitHubAttestationError,
+        verify_github_attestation_admission,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    regular_paths = (
+        args.binding,
+        args.artifact,
+        args.receipt,
+        args.raw_output,
+        args.finalizer_bundle,
+        args.trusted_pub,
+        args.finalizer_pub,
+    )
+    if any(value == "-" for value in regular_paths):
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": (
+                    "binding, artifact, receipt, raw output, finalizer bundle, and key "
+                    "paths must be regular files, not standard input/output"
+                ),
+            },
+        )
+        return 2
+    try:
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        verified = verify_github_attestation_admission(
+            args.binding,
+            args.artifact,
+            args.receipt,
+            args.raw_output,
+            args.finalizer_bundle,
+            **_github_attestation_policy_kwargs(args),
+            trusted_public_key_path=args.trusted_pub,
+            trusted_finalizer_public_key_path=args.finalizer_pub,
+            expected_finalizer_source=expected_source,
+            expected_finalizer_context=expected_context,
+        )
+    except GitHubAttestationError as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "INVALID",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except (OSError, ValueError, SigningUnavailableError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": ARTIFACT_DIGEST_BINDING_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "VERIFIED",
+            "decision": "ALLOW",
+            "verification_scope": "retained-provider-bytes-plus-trusted-finalizer-allow",
+            "live_provider_reverification": False,
+            "artifact": verified.receipt.artifact.as_dict(),
+            "verification_policy": verified.receipt.policy.as_dict(),
+            "subject": verified.admission.subject.as_dict(),
+            "provenance_reference": verified.admission.provenance_reference.as_dict(),
+            "finalizer": verified.admission.inspection.finalizer,
+            "key_id": verified.admission.inspection.payload["authentication"]["key_id"],
+        },
+    )
+    return 0
+
+
 def cmd_verify_bundle(
     args: argparse.Namespace,
     *,
@@ -3521,6 +3859,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify_github_attestation_receipt(args)
     if args.command == "reverify-github-attestation-receipt":
         return cmd_reverify_github_attestation_receipt(args)
+    if args.command == "seal-github-attestation-admission":
+        return cmd_seal_github_attestation_admission(args)
+    if args.command == "verify-github-attestation-admission":
+        return cmd_verify_github_attestation_admission(args)
     if args.command == "verify-bundle":
         return cmd_verify_bundle(args)
     if args.command == "pack-doctor":
