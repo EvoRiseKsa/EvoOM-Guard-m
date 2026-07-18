@@ -51,7 +51,10 @@ correctness or security.
 > contract begins the protected-`main` evidence path without falsely reusing
 > PR source semantics.  V1 is deliberately `DENY`-only: it is a source-binding
 > library contract today, not an enabled release gate or artifact-admission
-> claim for this repository.
+> claim for this repository.  The follow-on
+> [`Authenticated Producer Receipt`](docs/AUTHENTICATED_PRODUCER_RECEIPT.md)
+> adds a non-admitting, provider-attestable receipt and reference workflow
+> topology; it still does not enable `ALLOW`, a key, a release, or publication.
 
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation

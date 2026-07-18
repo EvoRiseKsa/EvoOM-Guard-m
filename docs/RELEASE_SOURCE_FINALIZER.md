@@ -67,6 +67,22 @@ cannot be replayed as a release-source bundle even if a deployment accidentally
 points at the same key; the integration must additionally configure the
 release key as distinct from PR-finalizer and artifact-admission key IDs.
 
+## Authenticated producer receipt precursor (not an admission)
+
+The repository now also provides the separate
+[Authenticated producer receipt V1](AUTHENTICATED_PRODUCER_RECEIPT.md)
+contract and a reviewable
+[A → B → C reference topology](../examples/release-source-admission/).  It
+binds a strong semantic `PASS`, raw-Git source/context, a pinned prior Guard
+runtime, and distinct workflow-run identities into canonical receipt bytes.
+The receipt producer can obtain a GitHub Artifact Attestation for those exact
+bytes; the final reference stage re-verifies that provider assertion freshly.
+
+This does **not** upgrade V1 to `ALLOW`, sign an `.rse`, open a key, or enable a
+release workflow.  It is a prerequisite for a later, separately designed V2
+admission finalizer.  In particular, a local receipt or a retained provider
+verification is never sufficient authority for a release decision.
+
 ## Commands
 
 ```bash
@@ -119,11 +135,14 @@ protected-main source
   -> separately privileged draft-release consumer
 ```
 
-An admitting version must verify a producer receipt signed by a key that the
-candidate cannot access. That receipt must bind the exact source, raw-derived
-context, verdict digest, bootstrap-runtime digest, workflow run/attempt, and
-producer identity. A signature over a verdict artifact alone is insufficient:
-it proves possession of a key, not that Guard ran.
+An admitting version must verify independent provider authentication of the
+producer receipt's exact bytes through an identity the candidate cannot access.
+That may be a separately governed issuer key or a fresh constrained GitHub
+Artifact Attestation verification; a retained provider result is not enough.
+The receipt must bind the exact source, raw-derived context, verdict digest,
+bootstrap-runtime digest, workflow run/attempt, and producer identity. A
+signature or attestation over a verdict artifact alone is insufficient: it
+proves a producer processed bytes, not that Guard ran.
 
 The final key-bearing stage must then:
 

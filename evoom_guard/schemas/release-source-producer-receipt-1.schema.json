@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:release-source-producer-receipt:1",
+  "title": "EvoGuard authenticated-producer receipt claim v1",
+  "description": "Canonical local claim for a protected workflow_run receipt producer. It is not signed by EvoGuard and cannot admit a release without a fresh provider attestation verification and a separately scoped future admission finalizer.",
+  "type": "object",
+  "required": ["format", "source", "context", "record", "handoff", "bootstrap", "execution", "producer"],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_PRODUCER_RECEIPT_V1" },
+    "source": { "$ref": "#/$defs/source" },
+    "context": { "$ref": "#/$defs/context" },
+    "record": { "$ref": "#/$defs/recordDescriptor" },
+    "handoff": { "$ref": "#/$defs/handoffDescriptor" },
+    "bootstrap": {
+      "type": "object",
+      "required": ["runtime_identity_format", "guard_artifact_sha256"],
+      "properties": {
+        "runtime_identity_format": { "const": "EVOGUARD_GUARD_ZIPAPP_SHA256_V1" },
+        "guard_artifact_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": ["outcome", "guard_exit_code", "candidate_isolation", "network", "report_integrity", "overall_profile"],
+      "properties": {
+        "outcome": { "const": "PASS" },
+        "guard_exit_code": { "const": 0 },
+        "candidate_isolation": { "enum": ["docker", "gvisor"] },
+        "network": { "const": "none" },
+        "report_integrity": { "const": "external_process_isolated" },
+        "overall_profile": { "const": "black_box_external_judge" }
+      },
+      "additionalProperties": false
+    },
+    "producer": {
+      "type": "object",
+      "required": [
+        "workflow_repository", "workflow_repository_id", "workflow_id", "workflow_path", "workflow_blob_sha",
+        "workflow_run_id", "workflow_run_attempt", "workflow_event", "workflow_ref", "workflow_commit_sha",
+        "trigger_workflow_id", "trigger_workflow_path", "trigger_workflow_blob_sha", "trigger_workflow_run_id",
+        "trigger_workflow_run_attempt", "runner_class"
+      ],
+      "properties": {
+        "workflow_repository": { "$ref": "#/$defs/repository" },
+        "workflow_repository_id": { "$ref": "#/$defs/numericId" },
+        "workflow_id": { "$ref": "#/$defs/numericId" },
+        "workflow_path": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$", "maxLength": 256 },
+        "workflow_blob_sha": { "$ref": "#/$defs/gitDigest" },
+        "workflow_run_id": { "$ref": "#/$defs/numericId" },
+        "workflow_run_attempt": { "$ref": "#/$defs/runAttempt" },
+        "workflow_event": { "const": "workflow_run" },
+        "workflow_ref": { "const": "refs/heads/main" },
+        "workflow_commit_sha": { "$ref": "#/$defs/gitDigest" },
+        "trigger_workflow_id": { "$ref": "#/$defs/numericId" },
+        "trigger_workflow_path": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$", "maxLength": 256 },
+        "trigger_workflow_blob_sha": { "$ref": "#/$defs/gitDigest" },
+        "trigger_workflow_run_id": { "$ref": "#/$defs/numericId" },
+        "trigger_workflow_run_attempt": { "$ref": "#/$defs/runAttempt" },
+        "runner_class": { "const": "github-hosted" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$", "maxLength": 512 },
+    "numericId": { "type": "string", "pattern": "^[1-9][0-9]{0,255}$" },
+    "runAttempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "source": {
+      "type": "object",
+      "required": ["repository", "repository_id", "default_branch", "workflow_run_id", "workflow_run_attempt", "protected_ref", "target_commit_sha", "target_tree_sha"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "repository_id": { "$ref": "#/$defs/numericId" },
+        "default_branch": { "const": "main" },
+        "workflow_run_id": { "$ref": "#/$defs/numericId" },
+        "workflow_run_attempt": { "$ref": "#/$defs/runAttempt" },
+        "protected_ref": { "const": "refs/heads/main" },
+        "target_commit_sha": { "$ref": "#/$defs/gitDigest" },
+        "target_tree_sha": { "$ref": "#/$defs/gitDigest" }
+      },
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "required": ["format", "repository", "repository_id", "run_id", "run_attempt", "protected_ref", "target_commit_sha", "target_tree_sha", "parent_commit_sha", "parent_tree_sha", "candidate_sha256", "policy_sha256", "verifier_pack_sha256"],
+      "properties": {
+        "format": { "const": "EVOGUARD_RELEASE_SOURCE_CONTEXT_V1" },
+        "repository": { "$ref": "#/$defs/repository" },
+        "repository_id": { "$ref": "#/$defs/numericId" },
+        "run_id": { "$ref": "#/$defs/numericId" },
+        "run_attempt": { "$ref": "#/$defs/runAttempt" },
+        "protected_ref": { "const": "refs/heads/main" },
+        "target_commit_sha": { "$ref": "#/$defs/gitDigest" },
+        "target_tree_sha": { "$ref": "#/$defs/gitDigest" },
+        "parent_commit_sha": { "$ref": "#/$defs/gitDigest" },
+        "parent_tree_sha": { "$ref": "#/$defs/gitDigest" },
+        "candidate_sha256": { "$ref": "#/$defs/sha256" },
+        "policy_sha256": { "$ref": "#/$defs/sha256" },
+        "verifier_pack_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "recordDescriptor": {
+      "type": "object",
+      "required": ["sha256", "size"],
+      "properties": { "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 1, "maximum": 8388608 } },
+      "additionalProperties": false
+    },
+    "handoffDescriptor": {
+      "type": "object",
+      "required": ["sha256", "size"],
+      "properties": { "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 1, "maximum": 524288 } },
+      "additionalProperties": false
+    }
+  }
+}

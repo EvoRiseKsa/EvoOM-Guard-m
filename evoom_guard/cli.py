@@ -20,6 +20,14 @@ Subcommands:
     only after an external control plane exactly matches it.
   * ``evo-guard verify-release-source-finalized`` — verify the separate release
     source envelope and its exact control-plane bindings.
+  * ``evo-guard derive-release-source-controls`` — derive protected-main source/context
+    from raw Git without a checkout.
+  * ``evo-guard create-release-source-producer-receipt`` — create a canonical
+    non-admitting producer claim for later provider authentication.
+  * ``evo-guard verify-release-source-producer-receipt`` — recheck that claim,
+    raw-Git bindings, and its exact execution record without contacting a provider.
+  * ``evo-guard reverify-attested-release-source-producer-receipt`` — perform
+    those checks, then make one fresh constrained GitHub verification.
   * ``evo-guard seal-artifact-admission`` — bind one file to a verified finalizer ALLOW.
   * ``evo-guard verify-artifact-admission`` — verify that file/finalizer binding.
   * ``evo-guard seal-artifact-digest-admission`` — bind one immutable digest to a finalizer.
@@ -1068,6 +1076,126 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-deny-evidence",
         action="store_true",
         help="explicitly return zero after verifying DENY evidence; never use in a release gate",
+    )
+
+    # ----- authenticated producer receipt (non-admitting) ---------------- #
+    drsc_p = sub.add_parser(
+        "derive-release-source-controls",
+        help="derive protected-main source/context from raw Git without a checkout",
+    )
+    drsc_p.add_argument("verdict", help="regular semantic verdict JSON")
+    drsc_p.add_argument(
+        "--source",
+        required=True,
+        help="untrusted-to-verify protected-main source metadata JSON",
+    )
+    drsc_p.add_argument("--git-repository", required=True, help="raw Git worktree or object store")
+    drsc_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    drsc_p.add_argument("--source-out", required=True, help="verified source JSON output")
+    drsc_p.add_argument("--context-out", required=True, help="verified context JSON output")
+    drsc_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace existing output files (default is atomic no-clobber)",
+    )
+
+    crspr_p = sub.add_parser(
+        "create-release-source-producer-receipt",
+        help="create a canonical non-admitting producer claim after raw-Git rederivation",
+    )
+    crspr_p.add_argument("verdict", help="regular semantic verdict JSON")
+    crspr_p.add_argument("handoff", help="canonical release-source handoff JSON")
+    crspr_p.add_argument("--out", required=True, help="canonical producer-receipt JSON output")
+    crspr_p.add_argument("--source", required=True, help="verified release-source JSON")
+    crspr_p.add_argument("--context", required=True, help="verified release-source context JSON")
+    crspr_p.add_argument("--producer", required=True, help="trusted receipt-producer identity JSON")
+    crspr_p.add_argument(
+        "--bootstrap-guard-sha",
+        required=True,
+        help="protected SHA-256 of the immutable prior Guard runtime",
+    )
+    crspr_p.add_argument("--git-repository", required=True, help="raw Git worktree or object store")
+    crspr_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    crspr_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+
+    vrspr_p = sub.add_parser(
+        "verify-release-source-producer-receipt",
+        help="verify an unsigned producer claim against exact external and raw-Git inputs",
+    )
+    vrspr_p.add_argument("receipt", help="canonical producer-receipt JSON")
+    vrspr_p.add_argument("handoff", help="canonical release-source handoff JSON")
+    vrspr_p.add_argument("verdict", help="regular semantic verdict JSON")
+    vrspr_p.add_argument("--source", required=True, help="externally expected release-source JSON")
+    vrspr_p.add_argument("--context", required=True, help="externally expected release-source context JSON")
+    vrspr_p.add_argument("--producer", required=True, help="externally expected producer identity JSON")
+    vrspr_p.add_argument(
+        "--bootstrap-guard-sha",
+        required=True,
+        help="protected SHA-256 of the immutable prior Guard runtime",
+    )
+    vrspr_p.add_argument("--git-repository", required=True, help="raw Git worktree or object store")
+    vrspr_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    vrspr_p.add_argument(
+        "--allow-nonadmitting-evidence",
+        action="store_true",
+        help="explicitly return zero after non-admitting verification; never use in a release, deployment, or merge gate",
+    )
+
+    arspr_p = sub.add_parser(
+        "reverify-attested-release-source-producer-receipt",
+        help="verify a producer claim then make one fresh constrained GitHub attestation check",
+    )
+    arspr_p.add_argument("receipt", help="canonical producer-receipt JSON")
+    arspr_p.add_argument("handoff", help="canonical release-source handoff JSON")
+    arspr_p.add_argument("verdict", help="regular semantic verdict JSON")
+    arspr_p.add_argument("--source", required=True, help="externally expected release-source JSON")
+    arspr_p.add_argument("--context", required=True, help="externally expected release-source context JSON")
+    arspr_p.add_argument("--producer", required=True, help="externally expected producer identity JSON")
+    arspr_p.add_argument(
+        "--bootstrap-guard-sha",
+        required=True,
+        help="protected SHA-256 of the immutable prior Guard runtime",
+    )
+    arspr_p.add_argument(
+        "--github-policy",
+        required=True,
+        help="exact GitHub provider-policy JSON for the producer receipt",
+    )
+    arspr_p.add_argument("--git-repository", required=True, help="raw Git worktree or object store")
+    arspr_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    arspr_p.add_argument("--github-receipt-out", required=True, help="provider receipt output")
+    arspr_p.add_argument("--github-raw-output-out", required=True, help="provider raw-output file")
+    arspr_p.add_argument("--gh-executable", default="gh", help="trusted absolute gh executable")
+    arspr_p.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=120,
+        help="bounded GitHub attestation verification timeout",
+    )
+    arspr_p.add_argument(
+        "--allow-nonadmitting-evidence",
+        action="store_true",
+        help="explicitly return zero after non-admitting verification; never use in a release, deployment, or merge gate",
     )
 
     # ----- artifact admission --------------------------------------------- #
@@ -3133,6 +3261,301 @@ def cmd_verify_release_source_finalized(
     return 0 if allowed or args.allow_deny_evidence else 1
 
 
+def cmd_derive_release_source_controls(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Re-derive source/context from raw Git without making an admission claim."""
+
+    from evoom_guard.evidence_bundle import _canonical_json
+    from evoom_guard.release_source_finalizer import (
+        RELEASE_SOURCE_CONTEXT_FORMAT,
+        ReleaseSourceFinalizerError,
+        _publish_bytes,
+        _record_snapshot,
+        context_from_release_source_bindings,
+        derive_release_source_bindings,
+    )
+
+    if args.verdict == "-":
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_CONTEXT_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": "derive-release-source-controls verdict must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        source = _read_external_finalizer_object(args.source, label="release source")
+        _verdict_bytes, verdict, _record_report = _record_snapshot(args.verdict)
+        bindings = derive_release_source_bindings(
+            git_repository=args.git_repository,
+            source=source,
+            git_repository_is_bare=args.git_repository_bare,
+        )
+        context = context_from_release_source_bindings(bindings, verdict)
+        _publish_bytes(
+            args.source_out,
+            _canonical_json(bindings.source),
+            force=args.force,
+            prefix=".evoguard-release-source-",
+            label="verified release source",
+        )
+        _publish_bytes(
+            args.context_out,
+            _canonical_json(context),
+            force=args.force,
+            prefix=".evoguard-release-source-context-",
+            label="verified release-source context",
+        )
+    except (OSError, UnicodeError, ValueError, ReleaseSourceFinalizerError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_CONTEXT_FORMAT,
+                "ok": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_CONTEXT_FORMAT,
+            "ok": True,
+            "status": "RAW_GIT_CONTROLS_DERIVED",
+            "source": os.path.abspath(args.source_out),
+            "context": os.path.abspath(args.context_out),
+            "decision": "NONE",
+            "admission": False,
+        },
+    )
+    return 0
+
+
+def cmd_create_release_source_producer_receipt(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Create an unsigned canonical claim; it is never an admission decision."""
+
+    from evoom_guard.release_source_producer_receipt import (
+        RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+        ReleaseSourceProducerReceiptError,
+        create_release_source_producer_receipt,
+    )
+
+    if any(value == "-" for value in (args.verdict, args.handoff)):
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": "producer receipt verdict and handoff must be regular files, not standard input",
+            },
+        )
+        return 2
+    try:
+        source = _read_external_finalizer_object(args.source, label="release source")
+        context = _read_external_finalizer_object(args.context, label="release-source context")
+        producer = _read_external_finalizer_object(args.producer, label="producer identity")
+        receipt = create_release_source_producer_receipt(
+            args.verdict,
+            args.handoff,
+            args.out,
+            source=source,
+            context=context,
+            bootstrap_guard_sha256=args.bootstrap_guard_sha,
+            producer=producer,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            force=args.force,
+        )
+    except (OSError, UnicodeError, ValueError, ReleaseSourceProducerReceiptError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+                "ok": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+            "ok": True,
+            "status": "CANONICAL_CLAIM_CREATED",
+            "receipt": os.path.abspath(args.out),
+            "record_sha256": receipt["record"]["sha256"],
+            "decision": "NONE",
+            "admission": False,
+            "requires": "fresh-provider-gh-attestation-verify-before-any-future-admission",
+        },
+    )
+    return 0
+
+
+def _producer_receipt_external_inputs(args: argparse.Namespace) -> tuple[
+    dict[str, object], dict[str, object], dict[str, object]
+]:
+    return (
+        _read_external_finalizer_object(args.source, label="expected release source"),
+        _read_external_finalizer_object(args.context, label="expected release-source context"),
+        _read_external_finalizer_object(args.producer, label="expected producer identity"),
+    )
+
+
+def cmd_verify_release_source_producer_receipt(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify local/raw-Git producer binding without treating it as provider proof."""
+
+    from evoom_guard.release_source_producer_receipt import (
+        RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+        ReleaseSourceProducerReceiptError,
+        verify_release_source_producer_receipt,
+    )
+
+    if any(value == "-" for value in (args.receipt, args.handoff, args.verdict)):
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": "producer receipt, handoff, and verdict must be regular files, not standard input",
+            },
+        )
+        return 2
+    try:
+        source, context, producer = _producer_receipt_external_inputs(args)
+        verified = verify_release_source_producer_receipt(
+            args.receipt,
+            args.handoff,
+            args.verdict,
+            expected_source=source,
+            expected_context=context,
+            expected_producer=producer,
+            expected_bootstrap_guard_sha256=args.bootstrap_guard_sha,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+        )
+    except (OSError, UnicodeError, ValueError, ReleaseSourceProducerReceiptError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+            "ok": False,
+            "verified": True,
+            "status": "NONADMITTING_LOCAL_AND_RAW_GIT_VERIFIED",
+            "record_sha256": verified.receipt.payload["record"]["sha256"],
+            "decision": "NONE",
+            "admission": False,
+            "provider_verified": False,
+            "requires": "explicit-allow-nonadmitting-evidence-for-archive-only-success",
+        },
+    )
+    return 0 if args.allow_nonadmitting_evidence else 1
+
+
+def cmd_reverify_attested_release_source_producer_receipt(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Make a fresh GitHub provider check after local/raw-Git verification."""
+
+    from evoom_guard.release_source_producer_receipt import (
+        RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+        ReleaseSourceProducerReceiptError,
+        reverify_attested_release_source_producer_receipt,
+    )
+
+    if any(value == "-" for value in (args.receipt, args.handoff, args.verdict)):
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": "producer receipt, handoff, and verdict must be regular files, not standard input",
+            },
+        )
+        return 2
+    try:
+        source, context, producer = _producer_receipt_external_inputs(args)
+        github_policy = _read_external_finalizer_object(
+            args.github_policy, label="GitHub producer-attestation policy"
+        )
+        verified = reverify_attested_release_source_producer_receipt(
+            args.receipt,
+            args.handoff,
+            args.verdict,
+            expected_source=source,
+            expected_context=context,
+            expected_producer=producer,
+            expected_bootstrap_guard_sha256=args.bootstrap_guard_sha,
+            expected_github_policy=github_policy,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            github_receipt_path=args.github_receipt_out,
+            github_raw_output_path=args.github_raw_output_out,
+            gh_executable=args.gh_executable,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except (OSError, UnicodeError, ValueError, ReleaseSourceProducerReceiptError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+            "ok": False,
+            "verified": True,
+            "status": "NONADMITTING_FRESH_PROVIDER_VERIFIED",
+            "record_sha256": verified.verified.receipt.payload["record"]["sha256"],
+            "github_receipt": verified.github_receipt.receipt_path,
+            "github_raw_output": verified.github_receipt.raw_output_path,
+            "decision": "NONE",
+            "admission": False,
+            "requires": "explicit-allow-nonadmitting-evidence-for-archive-only-success",
+        },
+    )
+    return 0 if args.allow_nonadmitting_evidence else 1
+
+
 def cmd_seal_artifact_admission(
     args: argparse.Namespace,
     *,
@@ -4230,6 +4653,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_release_source_finalizer(args)
     if args.command == "verify-release-source-finalized":
         return cmd_verify_release_source_finalized(args)
+    if args.command == "derive-release-source-controls":
+        return cmd_derive_release_source_controls(args)
+    if args.command == "create-release-source-producer-receipt":
+        return cmd_create_release_source_producer_receipt(args)
+    if args.command == "verify-release-source-producer-receipt":
+        return cmd_verify_release_source_producer_receipt(args)
+    if args.command == "reverify-attested-release-source-producer-receipt":
+        return cmd_reverify_attested_release_source_producer_receipt(args)
     if args.command == "seal-artifact-admission":
         return cmd_seal_artifact_admission(args)
     if args.command == "verify-artifact-admission":
