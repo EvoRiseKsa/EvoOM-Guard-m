@@ -131,10 +131,10 @@ The next provider-specific design must independently verify immutable build
 provenance and a protected build control before it can bind a release or OCI
 manifest. Until then, this command is only a narrow file-to-finalizer relation.
 
-## Unreleased V2 follow-on
+## Experimental V2 follow-on
 
-The development branch also contains a separate opt-in V2 digest contract for
-one generic SHA-256 or OCI manifest-or-index digest plus opaque provenance
-bytes. It does not change this V1 contract or the immutable v3.7.0 release.
-See [Artifact digest admission V2](ARTIFACT_DIGEST_ADMISSION_V2.md) for its
-strictly limited claim and remaining provenance-verifier work.
+`v3.8.0` releases a separate opt-in V2 digest contract for one generic
+SHA-256 or OCI manifest-or-index digest plus opaque provenance bytes. It does
+not change this V1 contract or the immutable v3.7.0 release, and it remains
+experimental. See [Artifact digest admission V2](ARTIFACT_DIGEST_ADMISSION_V2.md)
+for its strictly limited claim and remaining provenance-verifier work.

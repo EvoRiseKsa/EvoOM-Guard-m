@@ -6,11 +6,11 @@
 
 Every *install/pin* reference in the docs (``uses: …@vX.Y.Z``, ``pip install
 git+…@vX.Y.Z``, ``releases/download/vX.Y.Z/``, the JSON-schema ``tool_version``
-example) must point at the current ``evoom_guard.__version__``. A release
-candidate can teach its own pin only with an explicit publication condition.
-The only exceptions are the byte-pinned, frozen v3.7 Trusted Finalizer
-reference templates: changing their URL without a matching reviewed SHA-256
-would be unsafe.
+example) must point at the current ``evoom_guard.__version__``. The current
+consumer version is documented through an exact published-release reference,
+not a stale pre-publication condition. The only exceptions are the byte-pinned,
+frozen v3.7 Trusted Finalizer reference templates: changing their URL without a
+matching reviewed SHA-256 would be unsafe.
 
 Historical *narrative* mentions ("v2.0.0 consolidated the engine…", the PROOFS
 records, CHANGELOG entries) are deliberately NOT checked: only the patterns a
@@ -54,15 +54,16 @@ _PIN_PATTERNS = (
 # The JSON-schema example payloads show the current tool version — both the
 # guard verdict's "tool_version" and the doctor report's "version".
 _TOOL_VERSION_RE = re.compile(r'"(?:tool_)?version":\s*"(\d+\.\d+\.\d+)"')
-_PUBLICATION_CONDITION_RE = re.compile(
-    r"(?:release.{0,80}published|published.{0,80}release)", re.IGNORECASE
+_PREPUBLICATION_CONDITION_RE = re.compile(
+    r"(?:only\s+after|after).{0,80}(?:release.{0,80}published|published.{0,80}release)",
+    re.IGNORECASE,
 )
 
 
 class DocsVersionDriftTests(unittest.TestCase):
     def test_every_taught_pin_matches_the_package_version(self) -> None:
         stale: list[str] = []
-        unconditioned: list[str] = []
+        prepublication_conditions: list[str] = []
         for path in _DOC_FILES:
             text = path.read_text(encoding="utf-8")
             relative = path.relative_to(ROOT).as_posix()
@@ -78,10 +79,10 @@ class DocsVersionDriftTests(unittest.TestCase):
                             )
                         if pinned == __version__:
                             context = " ".join(lines[max(0, lineno - 5) : lineno + 2])
-                            if _PUBLICATION_CONDITION_RE.search(context) is None:
-                                unconditioned.append(
-                                    f"{relative}:{lineno}: v{pinned} pin lacks a nearby "
-                                    "published-Release condition"
+                            if _PREPUBLICATION_CONDITION_RE.search(context) is not None:
+                                prepublication_conditions.append(
+                                    f"{relative}:{lineno}: v{pinned} pin retains a nearby "
+                                    "pre-publication condition"
                                 )
         self.assertEqual(
             stale, [],
@@ -90,11 +91,34 @@ class DocsVersionDriftTests(unittest.TestCase):
             + "\n".join(stale),
         )
         self.assertEqual(
-            unconditioned,
+            prepublication_conditions,
             [],
-            "a release-candidate pin must say it is usable only after its "
-            "GitHub Release is published:\n" + "\n".join(unconditioned),
+            "a published-release pin must not retain a stale pre-publication "
+            "condition:\n" + "\n".join(prepublication_conditions),
         )
+
+    def test_current_release_is_documented_with_an_exact_published_reference(self) -> None:
+        release_url = (
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/"
+            f"v{__version__}"
+        )
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        status = (ROOT / "docs" / "PROJECT_STATUS.md").read_text(encoding="utf-8")
+        for relative, text in (("README.md", readme), ("docs/PROJECT_STATUS.md", status)):
+            self.assertIn(
+                release_url,
+                text,
+                f"{relative} must link the current released version explicitly",
+            )
+            self.assertRegex(
+                text,
+                re.compile(
+                    rf"v{re.escape(__version__)}.{{0,180}}"
+                    r"(?:published|immutable GitHub Release)",
+                    re.IGNORECASE | re.DOTALL,
+                ),
+                f"{relative} must describe the current version as a published release",
+            )
 
     def test_json_schema_example_tool_version_is_current(self) -> None:
         text = (ROOT / "docs" / "JSON_SCHEMA.md").read_text(encoding="utf-8")

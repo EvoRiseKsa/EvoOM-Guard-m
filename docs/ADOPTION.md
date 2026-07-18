@@ -13,14 +13,15 @@ pipeline.
 
 ## 1. Turn it on (one command)
 
-The `v3.8.0` command below is valid only after that exact GitHub Release is
-published. Before then, choose an existing published tag from Releases.
+[`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
+is the current published immutable GitHub Release. For a stricter CI pin, use
+the full commit SHA resolved from that release tag.
 
 From the repo you want to protect (EvoGuard is public; pin an immutable release
 tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.8.0"  # only after its GitHub Release is published
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v3.8.0"  # published release
 evo-guard init --test-command "python -m pytest -q"     # writes workflow + .evoguard.json when absent
 git add .github/workflows/evoguard.yml .evoguard.json
 git commit -m "ci: add EvoGuard policy" && git push
@@ -346,9 +347,8 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: `@v3.8.0` **after its GitHub Release
-is published**, or `@<sha>` (immutable, strictest for CI). Track `@main` only
-for a quick look.
+EvoGuard is a *gate*, so pin what you run: the published `@v3.8.0` release tag,
+or `@<sha>` (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do
 
