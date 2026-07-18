@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:release-source-context:1",
+  "title": "EvoGuard release-source finalizer context v1",
+  "description": "Closed-world context for an exact protected-main source. This is distinct from the pull-request evidence context.",
+  "type": "object",
+  "required": [
+    "format",
+    "repository",
+    "repository_id",
+    "run_id",
+    "run_attempt",
+    "protected_ref",
+    "target_commit_sha",
+    "target_tree_sha",
+    "parent_commit_sha",
+    "parent_tree_sha",
+    "candidate_sha256",
+    "policy_sha256",
+    "verifier_pack_sha256"
+  ],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_CONTEXT_V1" },
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$", "maxLength": 512 },
+    "repository_id": { "$ref": "#/$defs/numericId" },
+    "run_id": { "$ref": "#/$defs/numericId" },
+    "run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "protected_ref": { "const": "refs/heads/main" },
+    "target_commit_sha": { "$ref": "#/$defs/gitDigest" },
+    "target_tree_sha": { "$ref": "#/$defs/gitDigest" },
+    "parent_commit_sha": { "$ref": "#/$defs/gitDigest" },
+    "parent_tree_sha": { "$ref": "#/$defs/gitDigest" },
+    "candidate_sha256": { "$ref": "#/$defs/sha256" },
+    "policy_sha256": { "$ref": "#/$defs/sha256" },
+    "verifier_pack_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "numericId": { "type": "string", "pattern": "^[1-9][0-9]{0,255}$" },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

@@ -24,6 +24,18 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 - Additive nullable fields may appear within a schema version; ignore fields an
   older consumer does not understand.
 
+## Release Source Finalizer contracts
+
+The protected-`main` release-source path is intentionally not a PR evidence
+context. Its closed-world schemas are
+[`release-source-context-1.schema.json`](../evoom_guard/schemas/release-source-context-1.schema.json)
+and
+[`release-source-handoff-1.schema.json`](../evoom_guard/schemas/release-source-handoff-1.schema.json).
+They are validated semantically by the separate Release Source Finalizer and do
+not change the frozen PR `evidence-context-1` contract. See
+[RELEASE_SOURCE_FINALIZER.md](RELEASE_SOURCE_FINALIZER.md) for its trust and
+bootstrap boundaries.
+
 ## Example (`PASS`)
 
 Schema 1.11 was introduced in EvoGuard v3.4.4 and remains the current verdict

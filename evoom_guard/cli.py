@@ -14,6 +14,12 @@ Subcommands:
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
   * ``evo-guard finalizer-handoff`` — bind a re-verification record to source metadata.
   * ``evo-guard seal-finalizer`` — sign only a handoff matched to external metadata.
+  * ``evo-guard release-source-handoff`` — bind a protected-main re-verification
+    record to a distinct release-source contract.
+  * ``evo-guard seal-release-source-finalizer`` — sign that release-source handoff
+    only after an external control plane exactly matches it.
+  * ``evo-guard verify-release-source-finalized`` — verify the separate release
+    source envelope and its exact control-plane bindings.
   * ``evo-guard seal-artifact-admission`` — bind one file to a verified finalizer ALLOW.
   * ``evo-guard verify-artifact-admission`` — verify that file/finalizer binding.
   * ``evo-guard seal-artifact-digest-admission`` — bind one immutable digest to a finalizer.
@@ -956,6 +962,112 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-pass",
         action="store_true",
         help="also act as a gate: exit 0 only for a verified semantic PASS",
+    )
+
+    # ----- release-source finalizer V1 ----------------------------------- #
+    rsfh_p = sub.add_parser(
+        "release-source-handoff",
+        help="write an unsigned canonical handoff for one exact protected-main source",
+    )
+    rsfh_p.add_argument("verdict", help="regular semantic verdict JSON from re-verification")
+    rsfh_p.add_argument("--out", required=True, help="output canonical handoff JSON")
+    rsfh_p.add_argument(
+        "--source",
+        required=True,
+        help="trusted protected-main source metadata JSON, never a PR artifact",
+    )
+    rsfh_p.add_argument(
+        "--context",
+        required=True,
+        help="trusted release-source context JSON bound to the verdict",
+    )
+    rsfh_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+
+    srsf_p = sub.add_parser(
+        "seal-release-source-finalizer",
+        help="sign a release-source handoff only after exact external control-plane matching",
+    )
+    srsf_p.add_argument("handoff", help="canonical release-source handoff JSON")
+    srsf_p.add_argument("verdict", help="regular semantic verdict JSON referenced by handoff")
+    srsf_p.add_argument("--out", required=True, help="output signed .rse evidence bundle")
+    srsf_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="source JSON independently derived by the protected sealing job",
+    )
+    srsf_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="context JSON expected from raw-Git derivation by the protected sealing job",
+    )
+    srsf_p.add_argument(
+        "--git-repository",
+        required=True,
+        help="trusted raw-Git worktree/object store used to re-derive refs/heads/main",
+    )
+    srsf_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    srsf_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="distinct release-source Ed25519 private key; never expose it to source execution",
+    )
+    srsf_p.add_argument(
+        "--must-differ-from-key-id",
+        action="append",
+        required=True,
+        metavar="KEY_ID",
+        help="required: reject this signing key identity (repeat for PR/admission key identities)",
+    )
+    srsf_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing output (default is atomic no-clobber)",
+    )
+    srsf_p.add_argument(
+        "--allow-deny-evidence",
+        action="store_true",
+        help="explicitly return zero after recording DENY evidence; never use in a release gate",
+    )
+
+    vrsf_p = sub.add_parser(
+        "verify-release-source-finalized",
+        help="verify signed protected-main release-source evidence and exact external bindings",
+    )
+    vrsf_p.add_argument("bundle", help="signed .rse release-source evidence bundle")
+    vrsf_p.add_argument(
+        "--trusted-pub",
+        required=True,
+        help="externally trusted release-source Ed25519 public key",
+    )
+    vrsf_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external protected-main source JSON; exact match is required",
+    )
+    vrsf_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="external release-source context JSON; exact match is required",
+    )
+    vrsf_p.add_argument(
+        "--must-differ-from-key-id",
+        action="append",
+        required=True,
+        metavar="KEY_ID",
+        help="required: reject this trusted key identity (repeat for PR/admission key identities)",
+    )
+    vrsf_p.add_argument(
+        "--allow-deny-evidence",
+        action="store_true",
+        help="explicitly return zero after verifying DENY evidence; never use in a release gate",
     )
 
     # ----- artifact admission --------------------------------------------- #
@@ -2773,6 +2885,254 @@ def cmd_verify_finalized(
     return 0 if ok else 1
 
 
+def cmd_release_source_handoff(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Write an unsigned handoff for the separate protected-main contract."""
+
+    from evoom_guard.release_source_finalizer import (
+        RELEASE_SOURCE_HANDOFF_FORMAT,
+        ReleaseSourceFinalizerError,
+        create_release_source_handoff,
+    )
+
+    if args.verdict == "-":
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_HANDOFF_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": "release-source-handoff verdict must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        source = _read_external_finalizer_object(args.source, label="release source")
+        context = _read_external_finalizer_object(args.context, label="release-source context")
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_HANDOFF_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": f"unusable trusted metadata: {exc}",
+            },
+        )
+        return 2
+    try:
+        handoff = create_release_source_handoff(
+            args.verdict,
+            args.out,
+            source=source,
+            context=context,
+            force=args.force,
+        )
+    except (OSError, ValueError, ReleaseSourceFinalizerError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_HANDOFF_FORMAT,
+                "ok": False,
+                "status": "INVALID_INPUT",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_HANDOFF_FORMAT,
+            "ok": True,
+            "status": "CREATED",
+            "handoff": os.path.abspath(args.out),
+            "record_sha256": handoff["record"]["sha256"],
+            "source": handoff["source"],
+            "context": handoff["context"],
+        },
+    )
+    return 0
+
+
+def cmd_seal_release_source_finalizer(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Seal a protected-main handoff only after external source matching."""
+
+    from evoom_guard.release_source_finalizer import (
+        RELEASE_SOURCE_EVIDENCE_FORMAT,
+        ReleaseSourceFinalizerError,
+        seal_release_source_bundle,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    if args.verdict == "-":
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": "seal-release-source-finalizer verdict must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        source = _read_external_finalizer_object(args.expected_source, label="expected release source")
+        context = _read_external_finalizer_object(
+            args.expected_context, label="expected release-source context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        sealed = seal_release_source_bundle(
+            args.handoff,
+            args.verdict,
+            args.out,
+            expected_source=source,
+            expected_context=context,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            private_key_path=args.sign_key,
+            prohibited_key_ids=args.must_differ_from_key_id,
+            force=args.force,
+        )
+    except (OSError, ValueError, ReleaseSourceFinalizerError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "INVALID_INPUT",
+                "error": str(exc),
+            },
+        )
+        return 1
+    except SigningUnavailableError as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "INCOMPLETE",
+                "error": str(exc),
+            },
+        )
+        return 2
+    allowed = sealed.decision == "ALLOW"
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+            "ok": allowed,
+            "sealed": True,
+            "status": "FINALIZED" if allowed else "DENIED",
+            "decision": sealed.decision,
+            "bundle": sealed.bundle_path,
+            "record_sha256": sealed.manifest["record"]["sha256"],
+            "key_id": sealed.manifest["authentication"]["key_id"],
+        },
+    )
+    return 0 if allowed or args.allow_deny_evidence else 1
+
+
+def cmd_verify_release_source_finalized(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify a separate release-source envelope and external bindings."""
+
+    from evoom_guard.release_source_finalizer import (
+        RELEASE_SOURCE_EVIDENCE_FORMAT,
+        ReleaseSourceFinalizerError,
+        verify_release_source_bundle,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    try:
+        source = _read_external_finalizer_object(args.expected_source, label="expected release source")
+        context = _read_external_finalizer_object(
+            args.expected_context, label="expected release-source context"
+        )
+    except (OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "INCOMPLETE",
+                "error": f"unusable external trust input: {exc}",
+            },
+        )
+        return 2
+    try:
+        verified = verify_release_source_bundle(
+            args.bundle,
+            trusted_public_key_path=args.trusted_pub,
+            expected_source=source,
+            expected_context=context,
+            prohibited_key_ids=args.must_differ_from_key_id,
+        )
+    except SigningUnavailableError as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "INCOMPLETE",
+                "error": str(exc),
+            },
+        )
+        return 2
+    except (OSError, ValueError, ReleaseSourceFinalizerError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "INVALID",
+                "error": str(exc),
+            },
+        )
+        return 1
+    allowed = verified.decision == "ALLOW"
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
+            "ok": allowed,
+            "verified": True,
+            "status": "VERIFIED" if allowed else "DENIED",
+            "decision": verified.decision,
+            "key_id": verified.bundle.manifest["authentication"]["key_id"],
+            "record": verified.record_report,
+        },
+    )
+    return 0 if allowed or args.allow_deny_evidence else 1
+
+
 def cmd_seal_artifact_admission(
     args: argparse.Namespace,
     *,
@@ -3864,6 +4224,12 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_finalizer(args)
     if args.command == "verify-finalized":
         return cmd_verify_finalized(args)
+    if args.command == "release-source-handoff":
+        return cmd_release_source_handoff(args)
+    if args.command == "seal-release-source-finalizer":
+        return cmd_seal_release_source_finalizer(args)
+    if args.command == "verify-release-source-finalized":
+        return cmd_verify_release_source_finalized(args)
     if args.command == "seal-artifact-admission":
         return cmd_seal_artifact_admission(args)
     if args.command == "verify-artifact-admission":

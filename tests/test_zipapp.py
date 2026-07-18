@@ -73,6 +73,42 @@ def test_pyz_exposes_github_attestation_admission_cli_contract(tmp_path):
     assert "--expected-source" in verified.stdout
 
 
+def test_pyz_exposes_release_source_finalizer_cli_contract(tmp_path):
+    out = _build(tmp_path)
+    handoff = subprocess.run(
+        [sys.executable, out, "release-source-handoff", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert handoff.returncode == 0, handoff.stdout + handoff.stderr
+    assert "--source" in handoff.stdout
+    assert "--context" in handoff.stdout
+
+    sealed = subprocess.run(
+        [sys.executable, out, "seal-release-source-finalizer", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert sealed.returncode == 0, sealed.stdout + sealed.stderr
+    assert "--expected-source" in sealed.stdout
+    assert "--expected-context" in sealed.stdout
+    assert "--git-repository" in sealed.stdout
+    assert "--must-differ-from-key-id" in sealed.stdout
+    assert "--allow-deny-evidence" in sealed.stdout
+
+    verified = subprocess.run(
+        [sys.executable, out, "verify-release-source-finalized", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+    assert "--trusted-pub" in verified.stdout
+    assert "--allow-deny-evidence" in verified.stdout
+
+
 def test_pyz_contains_the_offline_record_verifier(tmp_path):
     out = _build(tmp_path)
     record = tmp_path / "invalid-record.json"
@@ -114,6 +150,8 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             "evoom_guard/schemas/artifact-binding-1.schema.json",
             "evoom_guard/schemas/artifact-digest-binding-2.schema.json",
             "evoom_guard/schemas/github-attestation-receipt-1.schema.json",
+            "evoom_guard/schemas/release-source-context-1.schema.json",
+            "evoom_guard/schemas/release-source-handoff-1.schema.json",
             "LICENSE",
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",
