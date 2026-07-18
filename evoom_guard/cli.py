@@ -40,7 +40,7 @@ import re
 import shutil
 import sys
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from evoom_guard import __version__
 from evoom_guard.pack_manifest import (
@@ -58,6 +58,23 @@ if TYPE_CHECKING:
 MAX_OFFLINE_RECORD_BYTES = 8 * 1024 * 1024
 MAX_CONTEXT_INPUT_BYTES = 1 * 1024 * 1024
 MAX_SIGNATURE_FILE_BYTES = 4096
+
+
+class _GitHubAttestationPolicyKwargs(TypedDict):
+    """Exact provider-policy keyword arguments shared by CLI adapters.
+
+    A plain ``dict[str, str]`` loses the names of these keys to static type
+    checkers.  Keeping the contract explicit prevents a policy string from
+    ever being confused with unrelated keyword-only controls such as
+    ``force``.
+    """
+
+    repository: str
+    signer_workflow: str
+    signer_digest: str
+    source_ref: str
+    source_digest: str
+    cert_oidc_issuer: str
 
 
 def _configure_stdio() -> None:
@@ -3148,7 +3165,9 @@ def cmd_verify_artifact_digest_admission(
     return 0
 
 
-def _github_attestation_policy_kwargs(args: argparse.Namespace) -> dict[str, str]:
+def _github_attestation_policy_kwargs(
+    args: argparse.Namespace,
+) -> _GitHubAttestationPolicyKwargs:
     """Return only the exact policy inputs accepted by the provider adapter."""
 
     return {
