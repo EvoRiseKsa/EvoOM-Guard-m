@@ -192,25 +192,32 @@ An exact source version becomes a consumer release only after its immutable
 GitHub Release is published. **Before copying any versioned pin, confirm that
 exact tag exists in [GitHub Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases).**
 
-This `v3.8.0` source release is prepared for that process. After its reviewed
-GitHub Release is published, production workflows should use
-`EvoRiseKsa/EvoOM-Guard-m@v3.8.0`, or the full commit SHA resolved from that
-release tag when a mutable tag reference is not acceptable. Until publication,
-use an already published release tag; do not use `@main` as a production release
-channel. A release requires successful manual validation on the protected default
-branch, reviewed release publication, and Marketplace publication where
-applicable. Do not cut a release merely to exercise artifact attestation.
+The current consumer release is
+[`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0),
+published as an immutable GitHub Release from commit
+[`8e11021c505c265b3884736454e4ec424c2b0d3d`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/8e11021c505c265b3884736454e4ec424c2b0d3d).
+Production workflows may use `EvoRiseKsa/EvoOM-Guard-m@v3.8.0`, or the full
+commit SHA resolved from that release tag when a mutable tag reference is not
+acceptable. Do not use `@main` as a production release channel. A release
+requires successful manual validation on the protected default branch, reviewed
+release publication, and Marketplace publication where applicable. Do not cut a
+release merely to exercise artifact attestation.
 
 `v3.7.0` has a GitHub **release** attestation, but it does **not** have a
 GitHub Actions build-artifact attestation for `evo-guard.pyz`. That distinction
-matters: the release attestation is not build provenance. See
+matters: the release attestation is not build provenance. `v3.8.0` has both a
+GitHub release attestation and a GitHub Actions build-artifact attestation for
+`evo-guard.pyz` (`SHA-256`
+`47bdcfbe2814fdd687afd62d1c476cbd5248db65683c97d2867a56dbbf9ee643`). Neither
+attestation is an EvoGuard verdict, an artifact-admission decision, or proof of
+deployment. See
 [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md)
-for the exact scope and the procedure available to future releases.
+for exact verification commands and their scope.
 
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.8.0"   # only after the v3.8.0 Release is published; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.8.0"   # published release; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -265,7 +272,7 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.8.0   # only after the v3.8.0 Release is published; pin a SHA for strictest CI
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.8.0   # published release; pin a SHA for strictest CI
     with:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
       fail-on: "any-non-pass"          # required on pull_request runs
@@ -530,7 +537,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and threat-model review process for ordinary changes versus trust-boundary changes |
 | [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
 | [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
-| [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for build attestations generated only by future release runs |
+| [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v3.8.0 build-artifact attestation and future release runs |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |

@@ -682,7 +682,7 @@ def test_v2_cli_round_trip_for_generic_artifact_digest(
     assert verify_report["status"] == "VERIFIED"
 
 
-def test_v2_schema_is_valid_and_describes_unreleased_contract(tmp_path: Path) -> None:
+def test_v2_schema_is_valid_and_describes_released_experimental_contract(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     schema = json.loads(
         (root / "evoom_guard" / "schemas" / "artifact-digest-binding-2.schema.json").read_text(
@@ -696,6 +696,8 @@ def test_v2_schema_is_valid_and_describes_unreleased_contract(tmp_path: Path) ->
     )
     Draft202012Validator.check_schema(schema)
     assert schema["$id"] == "urn:evoguard:artifact-digest-binding:2"
+    assert "released in v3.8.0" in schema["description"]
+    assert "Experimental" in schema["description"]
     assert schema["properties"]["format"]["const"] == (
         artifact_digest_admission.ARTIFACT_DIGEST_BINDING_FORMAT
     )

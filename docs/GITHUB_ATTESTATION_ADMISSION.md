@@ -5,9 +5,10 @@
 
 # GitHub Artifact Attestation admission — protected-boundary adapter
 
-This unreleased adapter is the narrow GitHub-specific follow-on to the generic
-V2 artifact-digest binding. It is not part of the immutable v3.7.0 release and
-does not close the wider artifact-provenance issue by itself.
+This experimental adapter, released in `v3.8.0`, is the narrow GitHub-specific
+follow-on to the generic V2 artifact-digest binding. It is not part of the
+immutable v3.7.0 release and does not close the wider artifact-provenance issue
+by itself.
 
 ## What it actually verifies
 
@@ -154,11 +155,11 @@ finalizer/admission-key/subject checks.
 
 ## CLI boundary commands
 
-The unreleased CLI exposes the same policy without free-form weakening. All
-policy pins, both external finalizer objects, both public keys, retained receipt
-paths, and the separate admission key are explicit command inputs; no command
-accepts a wildcard repository, mutable ref, optional OIDC issuer, or a
-"trust receipt" switch.
+The experimental v3.8.0 CLI exposes the same policy without free-form
+weakening. All policy pins, both external finalizer objects, both public keys,
+retained receipt paths, and the separate admission key are explicit command
+inputs; no command accepts a wildcard repository, mutable ref, optional OIDC
+issuer, or a "trust receipt" switch.
 
 ```bash
 evo-guard github-attestation-receipt dist/product.whl \

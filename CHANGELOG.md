@@ -20,6 +20,10 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   `verify-release-source-producer-receipt`, and
   `reverify-attested-release-source-producer-receipt` CLI commands, their JSON
   schema, local verification, and reference A → B → C workflow topology.
+- Experimental `EVOGUARD_ARTIFACT_BINDING_V2` records and the constrained
+  GitHub-attestation receipt/admission CLI commands. They preserve a bounded
+  relation to an externally verified finalizer `ALLOW`; they do not independently
+  verify provenance or create an enabled production admission gate.
 
 ### Deliberate limits
 
@@ -29,12 +33,17 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   receipt bytes; it does not independently prove that workflow A executed
   EvoOM Guard.
 
-### Release preparation
+### Published release
 
-- The `v3.8.0` consumer pins are valid only after the matching immutable GitHub
-  Release is published. Before that point, consumers must select an existing
-  published release tag rather than use `@main` or assume this source state is
-  published.
+- [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
+  is published as an immutable GitHub Release from
+  `8e11021c505c265b3884736454e4ec424c2b0d3d`. Its primary
+  `evo-guard.pyz` asset has SHA-256
+  `47bdcfbe2814fdd687afd62d1c476cbd5248db65683c97d2867a56dbbf9ee643`.
+- The release has a GitHub release attestation, and its primary asset has a
+  separate GitHub Actions build-artifact attestation. The exact verification
+  procedure and non-claims are in
+  [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md).
 
 ### Verification
 

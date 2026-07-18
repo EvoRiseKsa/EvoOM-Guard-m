@@ -13,8 +13,8 @@ emits a **detached signature** next to every verdict; anyone holding the public
 key can verify — offline, years later — that the verdict bytes are exactly what
 the judge wrote.
 
-Requires the `sign` extra (the core gate stays stdlib-only). The `v3.8.0` pin is
-valid only after its GitHub Release is published:
+Requires the `sign` extra (the core gate stays stdlib-only). `v3.8.0` is the
+published immutable GitHub Release:
 
 ```bash
 pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.8.0"

@@ -3,12 +3,13 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# Artifact digest admission V2 — unreleased next-minor contract
+# Artifact digest admission V2 — experimental v3.8.0 contract
 
 EVOGUARD_ARTIFACT_BINDING_V2 is an opt-in follow-on to the released V1
-regular-file relation. It has not changed the immutable v3.7.0 tag or release
-asset. A future release must publish this contract and its exact implementation
-before users rely on it.
+regular-file relation. It was released in `v3.8.0`; it has not changed the
+immutable v3.7.0 tag or release asset. It remains experimental and does not
+make an artifact-admission or provenance claim beyond this document's narrow
+contract.
 
 V2 binds one immutable SHA-256 subject and one opaque provenance-reference file
 to an externally verified Trusted Finalizer ALLOW. Its two legal subject kinds
@@ -131,10 +132,10 @@ provenance verifier and protected build or merge-candidate integration.
 
 ## GitHub Artifact Attestation adapter
 
-The unreleased [`GITHUB_ATTESTATION_ADMISSION.md`](GITHUB_ATTESTATION_ADMISSION.md)
-adapter is a provider-specific protected-boundary path for the GitHub CLI. It
-does not redefine V2 or make every V2 provenance reference verified: only its
-own function invokes `gh attestation verify` with a constrained policy before
-it creates a V2 binding. The record must retain both its canonical receipt and
-the exact raw GitHub CLI output. Its recheck is byte continuity, not a new
-online signature verification.
+The experimental [`GITHUB_ATTESTATION_ADMISSION.md`](GITHUB_ATTESTATION_ADMISSION.md)
+adapter, also released in `v3.8.0`, is a provider-specific protected-boundary
+path for the GitHub CLI. It does not redefine V2 or make every V2 provenance
+reference verified: only its own function invokes `gh attestation verify` with
+a constrained policy before it creates a V2 binding. The record must retain
+both its canonical receipt and the exact raw GitHub CLI output. Its recheck is
+byte continuity, not a new online signature verification.

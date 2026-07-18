@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:evoguard:artifact-digest-binding:2",
   "title": "EvoGuard artifact digest admission binding v2",
-  "description": "Unreleased next-minor canonical binding.json contract. It binds one exact digest and opaque provenance-reference bytes to a verified finalizer ALLOW; it does not verify OCI, provenance, build, release, or deployment semantics.",
+  "description": "Experimental canonical binding.json contract released in v3.8.0. It binds one exact digest and opaque provenance-reference bytes to a verified finalizer ALLOW; it does not verify OCI, provenance, build, release, or deployment semantics.",
   "type": "object",
   "required": [
     "format",
