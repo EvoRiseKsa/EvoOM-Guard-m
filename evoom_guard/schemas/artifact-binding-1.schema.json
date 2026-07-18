@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.7.0/evoom_guard/schemas/artifact-binding-1.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.8.0/evoom_guard/schemas/artifact-binding-1.schema.json",
   "title": "EvoGuard artifact admission binding v1",
   "description": "Canonical binding.json member of EVOGUARD_ARTIFACT_BINDING_V1. Its detached signature is binding.sig.",
   "type": "object",

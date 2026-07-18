@@ -9,6 +9,40 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [3.8.0]
+
+### Added
+
+- `EVOGUARD_RELEASE_SOURCE_PRODUCER_RECEIPT_V1`: a canonical authenticated
+  producer receipt that records a bounded, raw-Git and reviewed-workflow-bound
+  claim about which GitHub workflow produced its bytes.
+- `create-release-source-producer-receipt`,
+  `verify-release-source-producer-receipt`, and
+  `reverify-attested-release-source-producer-receipt` CLI commands, their JSON
+  schema, local verification, and reference A → B → C workflow topology.
+
+### Deliberate limits
+
+- The receipt is non-admitting evidence only: it does not create an `ALLOW`, a
+  signing key, a release, a build provenance claim, or an artifact-admission
+  gate. A GitHub Artifact Attestation proves that workflow B produced the
+  receipt bytes; it does not independently prove that workflow A executed
+  EvoOM Guard.
+
+### Release preparation
+
+- The `v3.8.0` consumer pins are valid only after the matching immutable GitHub
+  Release is published. Before that point, consumers must select an existing
+  published release tag rather than use `@main` or assume this source state is
+  published.
+
+### Verification
+
+- Regenerated the 16-case live Guard benchmark with source version 3.8.0: all
+  labels matched their expected verdicts (11 true positives, 3 true negatives,
+  2 documented policy false positives, and 0 false negatives). Recorded timings
+  are diagnostic only.
+
 ## [3.7.0] — 2026-07-16
 
 ### Security

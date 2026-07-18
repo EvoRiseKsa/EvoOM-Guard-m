@@ -188,19 +188,18 @@ the workflow fail closed.
 
 ## Release channel
 
-`v3.7.0` is the current published release in [GitHub
-Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) and
-the [GitHub Marketplace](https://github.com/marketplace/actions/evoom-guard).
-Production workflows should use `EvoRiseKsa/EvoOM-Guard-m@v3.7.0`, or the full
-commit SHA resolved from that release tag when a mutable tag reference is not
-acceptable. Do not use `@main` as a production release channel.
+An exact source version becomes a consumer release only after its immutable
+GitHub Release is published. **Before copying any versioned pin, confirm that
+exact tag exists in [GitHub Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases).**
 
-Commits after `v3.7.0` on `main` are unreleased development; they do not imply
-another published version. A later release requires an intentional SemVer
-version bump, matching documentation and action pins, successful manual
-release validation on the protected default branch, a reviewed release
-publication, and Marketplace publication where applicable. Do not cut a
-release merely to exercise artifact attestation.
+This `v3.8.0` source release is prepared for that process. After its reviewed
+GitHub Release is published, production workflows should use
+`EvoRiseKsa/EvoOM-Guard-m@v3.8.0`, or the full commit SHA resolved from that
+release tag when a mutable tag reference is not acceptable. Until publication,
+use an already published release tag; do not use `@main` as a production release
+channel. A release requires successful manual validation on the protected default
+branch, reviewed release publication, and Marketplace publication where
+applicable. Do not cut a release merely to exercise artifact attestation.
 
 `v3.7.0` has a GitHub **release** attestation, but it does **not** have a
 GitHub Actions build-artifact attestation for `evo-guard.pyz`. That distinction
@@ -211,7 +210,7 @@ for the exact scope and the procedure available to future releases.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.7.0"   # a released tag; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v3.8.0"   # only after the v3.8.0 Release is published; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -266,7 +265,7 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.7.0   # a release tag (pin a SHA for strictest CI)
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v3.8.0   # only after the v3.8.0 Release is published; pin a SHA for strictest CI
     with:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
       fail-on: "any-non-pass"          # required on pull_request runs

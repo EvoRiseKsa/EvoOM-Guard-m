@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.7.0/evoom_guard/schemas/evidence-manifest-1.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.8.0/evoom_guard/schemas/evidence-manifest-1.schema.json",
   "title": "EvoGuard evidence bundle manifest v1",
   "description": "The signed canonical bundle.json member of EVOGUARD_EVIDENCE_BUNDLE_V1.",
   "type": "object",

@@ -63,7 +63,7 @@
         },
         "source": { "$ref": "#/$defs/finalizerSource" },
         "context": {
-          "$ref": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.7.0/evoom_guard/schemas/evidence-context-1.schema.json"
+          "$ref": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v3.8.0/evoom_guard/schemas/evidence-context-1.schema.json"
         }
       },
       "additionalProperties": false

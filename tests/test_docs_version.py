@@ -6,10 +6,11 @@
 
 Every *install/pin* reference in the docs (``uses: …@vX.Y.Z``, ``pip install
 git+…@vX.Y.Z``, ``releases/download/vX.Y.Z/``, the JSON-schema ``tool_version``
-example) must point at the CURRENT ``evoom_guard.__version__``. A release that
-bumps the code version without bumping every taught pin ships copy-paste
-instructions for a different tool than the one being released — the exact
-"README says v3.2.2 but GUARD.md says v3.2.1" drift an external review caught.
+example) must point at the current ``evoom_guard.__version__``. A release
+candidate can teach its own pin only with an explicit publication condition.
+The only exceptions are the byte-pinned, frozen v3.7 Trusted Finalizer
+reference templates: changing their URL without a matching reviewed SHA-256
+would be unsafe.
 
 Historical *narrative* mentions ("v2.0.0 consolidated the engine…", the PROOFS
 records, CHANGELOG entries) are deliberately NOT checked: only the patterns a
@@ -25,6 +26,10 @@ from pathlib import Path
 from evoom_guard import __version__
 
 ROOT = Path(__file__).parents[1]
+_FROZEN_RELEASE_PINS = {
+    ("examples/trusted-finalizer/reverify.yml", "3.7.0"),
+    ("examples/trusted-finalizer/seal.yml", "3.7.0"),
+}
 
 # Files a user copies install/pin instructions from. CHANGELOG.md is excluded
 # (it legitimately names every past version); PROOFS/CATALOG record historical
@@ -49,26 +54,46 @@ _PIN_PATTERNS = (
 # The JSON-schema example payloads show the current tool version — both the
 # guard verdict's "tool_version" and the doctor report's "version".
 _TOOL_VERSION_RE = re.compile(r'"(?:tool_)?version":\s*"(\d+\.\d+\.\d+)"')
+_PUBLICATION_CONDITION_RE = re.compile(
+    r"(?:release.{0,80}published|published.{0,80}release)", re.IGNORECASE
+)
 
 
 class DocsVersionDriftTests(unittest.TestCase):
     def test_every_taught_pin_matches_the_package_version(self) -> None:
         stale: list[str] = []
+        unconditioned: list[str] = []
         for path in _DOC_FILES:
             text = path.read_text(encoding="utf-8")
-            for lineno, line in enumerate(text.splitlines(), 1):
+            relative = path.relative_to(ROOT).as_posix()
+            lines = text.splitlines()
+            for lineno, line in enumerate(lines, 1):
                 for pat in _PIN_PATTERNS:
                     for m in pat.finditer(line):
-                        if m.group(1) != __version__:
+                        pinned = m.group(1)
+                        if pinned != __version__ and (relative, pinned) not in _FROZEN_RELEASE_PINS:
                             stale.append(
-                                f"{path.relative_to(ROOT)}:{lineno}: pins "
-                                f"v{m.group(1)} but the package is v{__version__}"
+                                f"{relative}:{lineno}: pins v{pinned} but the "
+                                f"package is v{__version__}"
                             )
+                        if pinned == __version__:
+                            context = " ".join(lines[max(0, lineno - 5) : lineno + 2])
+                            if _PUBLICATION_CONDITION_RE.search(context) is None:
+                                unconditioned.append(
+                                    f"{relative}:{lineno}: v{pinned} pin lacks a nearby "
+                                    "published-Release condition"
+                                )
         self.assertEqual(
             stale, [],
-            "docs teach an install/pin for a version that is not the current "
-            "release — update them in the same change as the version bump:\n"
+            "docs teach an install/pin for a version that is neither the current "
+            "source runtime nor an explicit frozen byte-pinned reference:\n"
             + "\n".join(stale),
+        )
+        self.assertEqual(
+            unconditioned,
+            [],
+            "a release-candidate pin must say it is usable only after its "
+            "GitHub Release is published:\n" + "\n".join(unconditioned),
         )
 
     def test_json_schema_example_tool_version_is_current(self) -> None:
