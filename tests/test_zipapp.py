@@ -109,6 +109,32 @@ def test_pyz_exposes_release_source_finalizer_cli_contract(tmp_path):
     assert "--allow-deny-evidence" in verified.stdout
 
 
+def test_pyz_exposes_non_admitting_producer_receipt_cli_contract(tmp_path):
+    out = _build(tmp_path)
+    created = subprocess.run(
+        [sys.executable, out, "create-release-source-producer-receipt", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert created.returncode == 0, created.stdout + created.stderr
+    assert "--producer" in created.stdout
+    assert "--bootstrap-guard-sha" in created.stdout
+    assert "--git-repository" in created.stdout
+    assert "--sign-key" not in created.stdout
+
+    reverified = subprocess.run(
+        [sys.executable, out, "reverify-attested-release-source-producer-receipt", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert reverified.returncode == 0, reverified.stdout + reverified.stderr
+    assert "--github-policy" in reverified.stdout
+    assert "--github-receipt-out" in reverified.stdout
+    assert "--allow-nonadmitting-evidence" in reverified.stdout
+
+
 def test_pyz_contains_the_offline_record_verifier(tmp_path):
     out = _build(tmp_path)
     record = tmp_path / "invalid-record.json"
@@ -147,11 +173,13 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             "evoom_guard/artifact_admission.py",
             "evoom_guard/artifact_digest_admission.py",
             "evoom_guard/github_attestation.py",
+            "evoom_guard/release_source_producer_receipt.py",
             "evoom_guard/schemas/artifact-binding-1.schema.json",
             "evoom_guard/schemas/artifact-digest-binding-2.schema.json",
             "evoom_guard/schemas/github-attestation-receipt-1.schema.json",
             "evoom_guard/schemas/release-source-context-1.schema.json",
             "evoom_guard/schemas/release-source-handoff-1.schema.json",
+            "evoom_guard/schemas/release-source-producer-receipt-1.schema.json",
             "LICENSE",
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",

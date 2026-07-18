@@ -1,0 +1,262 @@
+# Reference only — see README.md before copying this under .github/workflows/.
+# This is deliberately a preflight, not an admission finalizer: it has no
+# Environment, secret, signing key, release action, or contents:write token.
+name: EvoGuard Release Source Admission Preflight
+
+on:
+  workflow_run:
+    workflows: ["EvoGuard Produce Release Source Receipt"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  reverify-provider-receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - name: Validate the exact configured receipt-producer run
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EXPECTED_RECEIPT_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_ID }}
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const expected = process.env.EXPECTED_RECEIPT_WORKFLOW_ID || '';
+            if (!/^[1-9][0-9]*$/.test(expected) ||
+                String(run.workflow_id) !== expected || run.event !== 'workflow_run' ||
+                run.conclusion !== 'success' || run.head_branch !== 'main' ||
+                run.head_repository?.full_name !== context.payload.repository.full_name ||
+                !/^[0-9a-f]{40,64}$/.test(run.head_sha)) {
+              throw new Error('trigger is not the configured successful producer-receipt workflow_run');
+            }
+            const current = (await github.rest.repos.getBranch({
+              owner: context.repo.owner, repo: context.repo.repo, branch: 'main',
+            })).data.commit.sha;
+            if (current !== run.head_sha || context.sha !== run.head_sha) {
+              throw new Error('protected main changed after receipt production');
+            }
+
+      - name: Download exact producer receipt attempt
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-source-producer-receipt-v1-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ runner.temp }}/receipt-inputs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Snapshot only regular bounded producer inputs before reading them
+        env:
+          INPUTS: ${{ runner.temp }}/receipt-inputs
+          SNAPSHOT: ${{ runner.temp }}/receipt-inputs-safe
+        run: |
+          set -euo pipefail
+          python - "$INPUTS" "$SNAPSHOT" <<'PY'
+          import os, stat, sys
+
+          source, destination = map(os.path.abspath, sys.argv[1:])
+          expected = {
+              'source.json': 128 * 1024,
+              'context.json': 256 * 1024,
+              'verdict.json': 8 * 1024 * 1024,
+              'handoff.json': 512 * 1024,
+              'producer.json': 128 * 1024,
+              'producer-receipt.json': 512 * 1024,
+          }
+          metadata = os.lstat(source)
+          if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+              raise SystemExit('downloaded receipt root must be a real directory')
+          if set(os.listdir(source)) != set(expected):
+              raise SystemExit('downloaded receipt has an unexpected file set')
+          os.mkdir(destination, 0o700)
+          flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+          for name, maximum in expected.items():
+              path = os.path.join(source, name)
+              before = os.lstat(path)
+              if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+                  raise SystemExit(f'{name} must be a regular non-symlink file')
+              if before.st_size < 1 or before.st_size > maximum:
+                  raise SystemExit(f'{name} is outside its bounded size')
+              descriptor = os.open(path, flags)
+              try:
+                  opened = os.fstat(descriptor)
+                  if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                      raise SystemExit(f'{name} changed while it was opened')
+                  target = os.path.join(destination, name)
+                  output = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                  try:
+                      with os.fdopen(descriptor, 'rb', closefd=False) as reader, os.fdopen(output, 'wb', closefd=False) as writer:
+                          while True:
+                              chunk = reader.read(1024 * 1024)
+                              if not chunk:
+                                  break
+                              writer.write(chunk)
+                          writer.flush()
+                          os.fsync(writer.fileno())
+                  finally:
+                      os.close(output)
+                  after = os.fstat(descriptor)
+                  if (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns):
+                      raise SystemExit(f'{name} changed while it was copied')
+                  if os.stat(target).st_size != opened.st_size:
+                      raise SystemExit(f'{name} copy size mismatch')
+              finally:
+                  os.close(descriptor)
+          PY
+
+      - name: Download and pin the receipt-capable prior Guard runtime
+        env:
+          BOOTSTRAP_URL: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_URL }}
+          BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$BOOTSTRAP_URL"
+          [[ "$BOOTSTRAP_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/evo-guard.pyz" "$BOOTSTRAP_URL"
+          printf '%s  %s\n' "$BOOTSTRAP_SHA256" "$RUNNER_TEMP/evo-guard.pyz" | sha256sum --check
+          chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
+
+      - name: Bind the downloaded inputs to both protected workflow runs
+        env:
+          INPUTS: ${{ runner.temp }}/receipt-inputs-safe
+          EXPECTED_REVERIFY_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_ID }}
+          EXPECTED_RECEIPT_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_ID }}
+          EXPECTED_REVERIFY_WORKFLOW_BLOB_SHA: ${{ vars.EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_BLOB_SHA }}
+          EXPECTED_RECEIPT_WORKFLOW_BLOB_SHA: ${{ vars.EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_BLOB_SHA }}
+          RECEIPT_RUN_ID: ${{ github.event.workflow_run.id }}
+          RECEIPT_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          REPOSITORY_ID: ${{ github.event.repository.id }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          python - "$INPUTS/source.json" "$INPUTS/context.json" "$INPUTS/producer.json" <<'PY'
+          import json, os, re, sys
+
+          source_path, context_path, producer_path = sys.argv[1:]
+          with open(source_path, encoding='utf-8') as handle:
+              source = json.load(handle)
+          with open(context_path, encoding='utf-8') as handle:
+              context = json.load(handle)
+          with open(producer_path, encoding='utf-8') as handle:
+              producer = json.load(handle)
+          if not all(isinstance(value, dict) for value in (source, context, producer)):
+              raise SystemExit('receipt inputs must be JSON objects')
+
+          values = {name: os.environ[name] for name in (
+              'GITHUB_REPOSITORY', 'REPOSITORY_ID', 'TARGET_SHA',
+              'EXPECTED_REVERIFY_WORKFLOW_ID', 'EXPECTED_RECEIPT_WORKFLOW_ID',
+              'RECEIPT_RUN_ID', 'RECEIPT_RUN_ATTEMPT',
+          )}
+          for name in ('REPOSITORY_ID', 'EXPECTED_REVERIFY_WORKFLOW_ID',
+                       'EXPECTED_RECEIPT_WORKFLOW_ID', 'RECEIPT_RUN_ID',
+                       'RECEIPT_RUN_ATTEMPT'):
+              if re.fullmatch(r'[1-9][0-9]*', values[name]) is None:
+                  raise SystemExit(f'invalid protected {name}')
+          if re.fullmatch(r'[0-9a-f]{40,64}', values['TARGET_SHA']) is None:
+              raise SystemExit('invalid protected TARGET_SHA')
+          for name in ('EXPECTED_REVERIFY_WORKFLOW_BLOB_SHA', 'EXPECTED_RECEIPT_WORKFLOW_BLOB_SHA'):
+              if re.fullmatch(r'[0-9a-f]{40,64}', os.environ[name]) is None:
+                  raise SystemExit(f'invalid protected {name}')
+
+          expected = {
+              'repository': values['GITHUB_REPOSITORY'],
+              'repository_id': values['REPOSITORY_ID'],
+              'target_commit_sha': values['TARGET_SHA'],
+          }
+          for key, value in expected.items():
+              if source.get(key) != value or context.get(key) != value:
+                  raise SystemExit(f'receipt {key} does not match protected workflow context')
+          if source.get('default_branch') != 'main' or source.get('protected_ref') != 'refs/heads/main':
+              raise SystemExit('source is not the protected main identity')
+          if context.get('protected_ref') != 'refs/heads/main':
+              raise SystemExit('context is not the protected main identity')
+          if source.get('workflow_run_id') != context.get('run_id') or source.get('workflow_run_attempt') != context.get('run_attempt'):
+              raise SystemExit('source and context do not identify the same reverify run')
+
+          producer_expected = {
+              'workflow_repository': values['GITHUB_REPOSITORY'],
+              'workflow_repository_id': values['REPOSITORY_ID'],
+              'workflow_id': values['EXPECTED_RECEIPT_WORKFLOW_ID'],
+              'workflow_run_id': values['RECEIPT_RUN_ID'],
+              'workflow_run_attempt': int(values['RECEIPT_RUN_ATTEMPT']),
+              'workflow_event': 'workflow_run',
+              'workflow_ref': 'refs/heads/main',
+              'workflow_commit_sha': values['TARGET_SHA'],
+              'trigger_workflow_id': values['EXPECTED_REVERIFY_WORKFLOW_ID'],
+              'workflow_blob_sha': os.environ['EXPECTED_RECEIPT_WORKFLOW_BLOB_SHA'],
+              'trigger_workflow_path': '.github/workflows/evoguard-release-source-reverify.yml',
+              'trigger_workflow_blob_sha': os.environ['EXPECTED_REVERIFY_WORKFLOW_BLOB_SHA'],
+              'trigger_workflow_run_id': source.get('workflow_run_id'),
+              'trigger_workflow_run_attempt': source.get('workflow_run_attempt'),
+              'runner_class': 'github-hosted',
+          }
+          for key, value in producer_expected.items():
+              if producer.get(key) != value:
+                  raise SystemExit(f'producer {key} does not match its protected workflow binding')
+          if producer.get('workflow_id') == producer.get('trigger_workflow_id'):
+              raise SystemExit('receipt and reverify workflow IDs must be distinct')
+          if producer.get('workflow_run_id') == producer.get('trigger_workflow_run_id'):
+              raise SystemExit('receipt and reverify runs must be distinct')
+          PY
+
+      - name: Freshly verify raw Git, receipt bytes, and provider attestation
+        env:
+          INPUTS: ${{ runner.temp }}/receipt-inputs-safe
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+          BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+          # Read-only job token for gh attestation verify. This fresh runner has
+          # not checked out or executed candidate source.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          objects="$RUNNER_TEMP/objects.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C "$objects" fetch --quiet --no-tags origin "+refs/heads/main:refs/heads/main"
+          test "$(git -C "$objects" rev-parse refs/heads/main)" = "$TARGET_SHA"
+          python - "$RUNNER_TEMP/github-policy.json" <<'PY'
+          import json, os, re, sys
+          sha = os.environ['TARGET_SHA']
+          if re.fullmatch(r'[0-9a-f]{40,64}', sha) is None:
+              raise SystemExit('invalid protected main SHA')
+          policy = {
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'signer_workflow': f"{os.environ['GITHUB_REPOSITORY']}/.github/workflows/evoguard-produce-release-source-receipt.yml",
+              'signer_digest': sha,
+              'source_ref': 'refs/heads/main',
+              'source_digest': sha,
+              'cert_oidc_issuer': 'https://token.actions.githubusercontent.com',
+          }
+          with open(sys.argv[1], 'w', encoding='utf-8', newline='\n') as out:
+              json.dump(policy, out, sort_keys=True, separators=(',', ':'))
+              out.write('\n')
+          PY
+          python -I "$RUNNER_TEMP/evo-guard.pyz" reverify-attested-release-source-producer-receipt \
+            "$INPUTS/producer-receipt.json" "$INPUTS/handoff.json" "$INPUTS/verdict.json" \
+            --source "$INPUTS/source.json" --context "$INPUTS/context.json" --producer "$INPUTS/producer.json" \
+            --bootstrap-guard-sha "$BOOTSTRAP_SHA256" --github-policy "$RUNNER_TEMP/github-policy.json" \
+            --git-repository "$objects" --git-repository-bare \
+            --github-receipt-out "$RUNNER_TEMP/fresh-provider-receipt.json" \
+            --github-raw-output-out "$RUNNER_TEMP/fresh-provider-output.json" \
+            --allow-nonadmitting-evidence
+
+      - name: Preserve fresh non-admitting verification data
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-source-preflight-v1-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/github-policy.json
+            ${{ runner.temp }}/fresh-provider-receipt.json
+            ${{ runner.temp }}/fresh-provider-output.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 1
+
+      - name: State the deliberately non-admitting result
+        run: |
+          echo "Authenticated producer receipt preflight passed."
+          echo "No release-source ALLOW, signing key, deployment, release, or publication is enabled by this workflow."

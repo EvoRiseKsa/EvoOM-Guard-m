@@ -1,0 +1,174 @@
+# Reference only — see README.md before copying this under .github/workflows/.
+# This job executes candidate source but has no secret, OIDC, attestation, key,
+# Environment, or write-capable repository permission.
+name: EvoGuard Release Source Reverify
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  metadata:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      target_sha: ${{ steps.main.outputs.target_sha }}
+      target_tree_sha: ${{ steps.main.outputs.target_tree_sha }}
+      parent_sha: ${{ steps.main.outputs.parent_sha }}
+      parent_tree_sha: ${{ steps.main.outputs.parent_tree_sha }}
+      repository_id: ${{ steps.main.outputs.repository_id }}
+    steps:
+      - id: main
+        name: Resolve exact protected main before candidate execution
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CONTROL_PATH: ${{ runner.temp }}/release-source.json
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            if (context.ref !== 'refs/heads/main' || context.payload.repository.default_branch !== 'main') {
+              throw new Error('V1 release-source reverify must be dispatched from protected main');
+            }
+            const branch = (await github.rest.repos.getBranch({ owner, repo, branch: 'main' })).data;
+            const targetSha = branch.commit.sha;
+            const target = (await github.rest.git.getCommit({ owner, repo, commit_sha: targetSha })).data;
+            if (!Array.isArray(target.parents) || target.parents.length !== 1) {
+              throw new Error('release-source V1 requires a non-merge main commit with one parent');
+            }
+            const parentSha = target.parents[0].sha;
+            const parent = (await github.rest.git.getCommit({ owner, repo, commit_sha: parentSha })).data;
+            // Keep this lexical order identical to EvoGuard's canonical JSON
+            // encoder.  The unprivileged reverify later compares these exact
+            // pre-execution bytes to a new raw-Git derivation; a semantically
+            // equivalent, differently ordered JSON object is deliberately not
+            // accepted as that control artifact.
+            const source = {
+              default_branch: 'main',
+              protected_ref: 'refs/heads/main',
+              repository: `${owner}/${repo}`,
+              repository_id: String(context.payload.repository.id),
+              target_commit_sha: targetSha,
+              target_tree_sha: target.tree.sha,
+              workflow_run_attempt: Number(process.env.RUN_ATTEMPT),
+              workflow_run_id: process.env.RUN_ID,
+            };
+            fs.writeFileSync(process.env.CONTROL_PATH, JSON.stringify(source) + '\n', { encoding: 'utf8', mode: 0o600 });
+            core.setOutput('target_sha', targetSha);
+            core.setOutput('target_tree_sha', target.tree.sha);
+            core.setOutput('parent_sha', parentSha);
+            core.setOutput('parent_tree_sha', parent.tree.sha);
+            core.setOutput('repository_id', String(context.payload.repository.id));
+
+      - name: Upload pre-execution source control
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-source-control-v1-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-source.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 1
+
+  reverify:
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Download exact pre-execution source control
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-source-control-v1-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/control
+
+      - name: Reject a partial re-run before candidate execution
+        env:
+          CONTROL: ${{ runner.temp }}/control/release-source.json
+        run: |
+          set -euo pipefail
+          test "$(jq -r .workflow_run_id "$CONTROL")" = "$GITHUB_RUN_ID"
+          test "$(jq -r .workflow_run_attempt "$CONTROL")" = "$GITHUB_RUN_ATTEMPT"
+
+      - name: Checkout exact parent only
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.metadata.outputs.parent_sha }}
+          path: base
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout exact protected-main candidate
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.metadata.outputs.target_sha }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Download and pin the prior Guard runtime
+        env:
+          BOOTSTRAP_URL: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_URL }}
+          BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$BOOTSTRAP_URL"
+          [[ "$BOOTSTRAP_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/evo-guard.pyz" "$BOOTSTRAP_URL"
+          printf '%s  %s\n' "$BOOTSTRAP_SHA256" "$RUNNER_TEMP/evo-guard.pyz" | sha256sum --check
+          chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
+
+      - name: Re-verify parent to protected main without credentials
+        env:
+          BASE_SHA: ${{ needs.metadata.outputs.parent_sha }}
+          BASE_TREE_SHA: ${{ needs.metadata.outputs.parent_tree_sha }}
+          HEAD_SHA: ${{ needs.metadata.outputs.target_sha }}
+          HEAD_TREE_SHA: ${{ needs.metadata.outputs.target_tree_sha }}
+        run: |
+          set -euo pipefail
+          python -I "$RUNNER_TEMP/evo-guard.pyz" guard \
+            --base "$GITHUB_WORKSPACE/base" \
+            --head "$GITHUB_WORKSPACE/candidate" \
+            --base-sha "$BASE_SHA" --base-tree-sha "$BASE_TREE_SHA" \
+            --head-sha "$HEAD_SHA" --head-tree-sha "$HEAD_TREE_SHA" \
+            --json "$RUNNER_TEMP/verdict.json"
+
+      - name: Derive raw-Git controls and canonical handoff without checkout execution
+        env:
+          CONTROL: ${{ runner.temp }}/control/release-source.json
+          BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+        run: |
+          set -euo pipefail
+          objects="$RUNNER_TEMP/objects.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C "$objects" fetch --quiet --no-tags origin \
+            "+refs/heads/main:refs/heads/main"
+          test "$(git -C "$objects" rev-parse refs/heads/main)" = "${{ needs.metadata.outputs.target_sha }}"
+          python -I "$RUNNER_TEMP/evo-guard.pyz" derive-release-source-controls \
+            "$RUNNER_TEMP/verdict.json" --source "$CONTROL" \
+            --git-repository "$objects" --git-repository-bare \
+            --source-out "$RUNNER_TEMP/source.json" --context-out "$RUNNER_TEMP/context.json"
+          cmp "$CONTROL" "$RUNNER_TEMP/source.json"
+          python -I "$RUNNER_TEMP/evo-guard.pyz" release-source-handoff \
+            "$RUNNER_TEMP/verdict.json" --source "$RUNNER_TEMP/source.json" \
+            --context "$RUNNER_TEMP/context.json" --out "$RUNNER_TEMP/handoff.json"
+
+      - name: Upload data-only reverify evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-source-evidence-v1-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/source.json
+            ${{ runner.temp }}/context.json
+            ${{ runner.temp }}/verdict.json
+            ${{ runner.temp }}/handoff.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 1
