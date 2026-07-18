@@ -45,6 +45,14 @@ correctness or security.
 > [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) and
 > [`docs/ASSURANCE.md`](docs/ASSURANCE.md) before relying on it.
 
+> **Release-source boundary.** A PR decision does not prove a later squash-merge
+> commit or release artifact.  The new, separate
+> [`docs/RELEASE_SOURCE_FINALIZER.md`](docs/RELEASE_SOURCE_FINALIZER.md)
+> contract begins the protected-`main` evidence path without falsely reusing
+> PR source semantics.  V1 is deliberately `DENY`-only: it is a source-binding
+> library contract today, not an enabled release gate or artifact-admission
+> claim for this repository.
+
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation
 > data, and future operational-control-plane inputs are not public source

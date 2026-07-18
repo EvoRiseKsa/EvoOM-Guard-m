@@ -328,6 +328,111 @@ class _GitReader:
         return data
 
 
+def derive_raw_ref_parent_pair(
+    *,
+    repository: str,
+    ref: str,
+    bare: bool = False,
+) -> tuple[str, str, str, str]:
+    """Resolve one exact ref and its single parent from raw immutable Git objects.
+
+    This deliberately uses Git plumbing only: no checkout, no import, and no
+    candidate command execution.  The returned tuple is ``(commit, tree,
+    parent_commit, parent_tree)``.  A V1 caller that needs a deterministic
+    before/after boundary must reject root and merge commits rather than
+    silently choosing one of several parents.
+    """
+
+    if not isinstance(ref, str) or not ref.startswith("refs/") or "\x00" in ref:
+        raise FinalizerDerivationError("raw Git ref must be a canonical refs/* name")
+    reader = _GitReader(repository, bare=bare)
+    raw_commit = reader.command(["rev-parse", "--verify", f"{ref}^{{commit}}"], limit=256)
+    commit = _valid_git_sha(raw_commit.decode("ascii", "strict").strip(), label="derived ref")
+    raw_parents = reader.command(["rev-list", "--parents", "-n", "1", commit], limit=512)
+    try:
+        parents = raw_parents.decode("ascii", "strict").strip().split()
+    except UnicodeDecodeError as exc:  # pragma: no cover - defensive parity with Git reader
+        raise FinalizerDerivationError("raw Git parent listing is not ASCII") from exc
+    if len(parents) != 2 or parents[0] != commit:
+        raise FinalizerDerivationError(
+            "V1 protected-release source must be a non-merge commit with exactly one parent"
+        )
+    parent = _valid_git_sha(parents[1], label="derived parent commit")
+    return commit, reader.commit_tree(commit), parent, reader.commit_tree(parent)
+
+
+def derive_raw_evaluation_bindings(
+    *,
+    base_repo: str,
+    head_repo: str,
+    base_sha: str,
+    head_sha: str,
+    base_tree_sha: str,
+    head_tree_sha: str,
+    base_is_bare: bool = False,
+    head_is_bare: bool = False,
+) -> dict[str, Any]:
+    """Derive candidate, policy, and verifier-pack values from raw Git only.
+
+    This is intentionally source-shape agnostic.  The PR finalizer and the
+    release-source finalizer share the exact immutable-object calculation but
+    retain separate public source and evidence contracts.
+    """
+
+    for label, value in (
+        ("base_sha", base_sha),
+        ("head_sha", head_sha),
+        ("base_tree_sha", base_tree_sha),
+        ("head_tree_sha", head_tree_sha),
+    ):
+        _valid_git_sha(value, label=label)
+    base = _GitReader(base_repo, bare=base_is_bare)
+    head = _GitReader(head_repo, bare=head_is_bare)
+    if base.commit_tree(base_sha) != base_tree_sha or head.commit_tree(head_sha) != head_tree_sha:
+        raise FinalizerDerivationError("provided commit/tree binding is not immutable Git reality")
+
+    base_entries = base.tree(base_sha)
+    head_entries = head.tree(head_sha)
+    policy_entry = base_entries.get(".evoguard.json")
+    if policy_entry is None or not policy_entry.regular:
+        raise FinalizerDerivationError("trusted finalizer requires a regular base .evoguard.json")
+    policy_bytes = base.blob(
+        policy_entry.object_id,
+        maximum=MAX_POLICY_BYTES,
+        label="base .evoguard.json",
+    )
+    head_package = head_entries.get("package.json")
+    policy, pack_path, pack_pin = _effective_policy_from_raw_config(
+        policy_bytes,
+        head_has_package_json=head_package is not None and head_package.regular,
+    )
+    pack_digest: str | None = None
+    pack_manifest: dict[str, Any] | None = None
+    if pack_path is not None:
+        pack_digest, pack_manifest = _raw_pack_identity(base, base_sha, pack_path)
+        if pack_pin is None:
+            raise FinalizerDerivationError(
+                "trusted finalizer requires expect_verifier_pack_sha256 with verifier_pack"
+            )
+        if pack_digest != pack_pin:
+            raise FinalizerDerivationError(
+                "base verifier-pack digest does not match its immutable policy pin"
+            )
+    elif pack_pin is not None:
+        raise FinalizerDerivationError("base policy pins a verifier pack without verifier_pack")
+    candidate = serialize_candidate_blocks(
+        _candidate_blocks(base, head, base_sha=base_sha, head_sha=head_sha)
+    )
+    return {
+        "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
+        "deleted_paths": _deleted_paths(base_entries, head_entries),
+        "policy_sha256": effective_policy_sha256(policy),
+        "verifier_pack_sha256": pack_digest,
+        "verifier_pack_manifest": pack_manifest,
+        "effective_policy": policy,
+    }
+
+
 def _ignored_path(path: str) -> bool:
     ignored = set(COPY_IGNORE) | {".git"}
     return any(part in ignored for part in path.split("/"))
@@ -625,42 +730,15 @@ def derive_finalizer_bindings(
     _bounded_string(repository, label="repository", maximum=512)
     _bounded_string(repository_id, label="repository_id", maximum=256)
     _validate_sha256(guard_artifact_sha256, label="guard_artifact_sha256")
-    base = _GitReader(base_repo, bare=base_is_bare)
-    head = _GitReader(head_repo, bare=head_is_bare)
-    if base.commit_tree(base_sha) != base_tree_sha or head.commit_tree(head_sha) != head_tree_sha:
-        raise FinalizerDerivationError("provided commit/tree binding is not immutable Git reality")
-
-    base_entries = base.tree(base_sha)
-    head_entries = head.tree(head_sha)
-    policy_entry = base_entries.get(".evoguard.json")
-    if policy_entry is None or not policy_entry.regular:
-        raise FinalizerDerivationError("trusted finalizer requires a regular base .evoguard.json")
-    policy_bytes = base.blob(
-        policy_entry.object_id,
-        maximum=MAX_POLICY_BYTES,
-        label="base .evoguard.json",
-    )
-    head_package = head_entries.get("package.json")
-    policy, pack_path, pack_pin = _effective_policy_from_raw_config(
-        policy_bytes,
-        head_has_package_json=head_package is not None and head_package.regular,
-    )
-    pack_digest: str | None = None
-    pack_manifest: dict[str, Any] | None = None
-    if pack_path is not None:
-        pack_digest, pack_manifest = _raw_pack_identity(base, base_sha, pack_path)
-        if pack_pin is None:
-            raise FinalizerDerivationError(
-                "trusted finalizer requires expect_verifier_pack_sha256 with verifier_pack"
-            )
-        if pack_digest != pack_pin:
-            raise FinalizerDerivationError(
-                "base verifier-pack digest does not match its immutable policy pin"
-            )
-    elif pack_pin is not None:
-        raise FinalizerDerivationError("base policy pins a verifier pack without verifier_pack")
-    candidate = serialize_candidate_blocks(
-        _candidate_blocks(base, head, base_sha=base_sha, head_sha=head_sha)
+    raw = derive_raw_evaluation_bindings(
+        base_repo=base_repo,
+        head_repo=head_repo,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        base_tree_sha=base_tree_sha,
+        head_tree_sha=head_tree_sha,
+        base_is_bare=base_is_bare,
+        head_is_bare=head_is_bare,
     )
     payload = {
         "format": FINALIZER_DERIVATION_FORMAT,
@@ -670,12 +748,12 @@ def derive_finalizer_bindings(
         "guard_artifact_sha256": guard_artifact_sha256,
         "base_tree_sha": base_tree_sha,
         "head_tree_sha": head_tree_sha,
-        "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
-        "deleted_paths": _deleted_paths(base_entries, head_entries),
-        "policy_sha256": effective_policy_sha256(policy),
-        "verifier_pack_sha256": pack_digest,
-        "verifier_pack_manifest": pack_manifest,
-        "effective_policy": policy,
+        "candidate_sha256": raw["candidate_sha256"],
+        "deleted_paths": raw["deleted_paths"],
+        "policy_sha256": raw["policy_sha256"],
+        "verifier_pack_sha256": raw["verifier_pack_sha256"],
+        "verifier_pack_manifest": raw["verifier_pack_manifest"],
+        "effective_policy": raw["effective_policy"],
     }
     return DerivedFinalizerBindings(payload=_validate_derived_bindings(payload))
 
