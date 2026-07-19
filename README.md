@@ -1,7 +1,6 @@
 <!--
   Copyright (c) 2026 Mana Alharbi. All rights reserved.
-  Original creator and copyright owner: Mana Alharbi (مانع الحربي).
-  Commercial licensing contact: EvoRise Company, acting on behalf of the copyright owner.
+  Commercial licensing is administered by EvoRise Company.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -73,12 +72,11 @@ correctness or security.
 > prepared release candidate; it is not a published GitHub Release. The latest
 > immutable consumer release remains
 > [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0),
-> with its own immutable license. A published v4 release will retain Mana
-> Alharbi as original creator and copyright owner, and name EvoRise Company as
-> the authorized commercial licensing contact acting on the owner's behalf. It
-> will not alter historical releases. See
-> [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) and
-> [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md).
+> with its own immutable license. Material distributed with v4 will be
+> source-available under the **EvoRise Source-Available License 1.0**.
+> Commercial licensing is administered by EvoRise Company. See
+> [LICENSE](LICENSE), [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
+> [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md).
 
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
@@ -597,16 +595,14 @@ user's own CI, subject to its terms.
 
 ### v4.0.0 release candidate — not yet published
 
-This source tree declares `v4.0.0` and prepares the **EvoRise Research and
-Evaluation License 1.0** for its eventual immutable release. It is
-source-available, not open source: it permits
-non-commercial study, qualifying education and research, good-faith security
-research, and one 30-day non-production evaluation. Commercial, production,
-required-CI, merge-gate, redistribution, hosted, and managed-service use would
-require a separate signed license.
+This source tree declares `v4.0.0` and prepares the **EvoRise Source-Available
+License 1.0** for its eventual immutable release. It permits non-commercial
+study and research, good-faith security research, and a limited internal
+non-production evaluation. Commercial, production, required-CI, merge-gate,
+redistribution, hosted, and managed-service use require a separate commercial
+agreement.
 
 This is not a published v4 release and must not be treated as one. See
 [LICENSE](LICENSE), [LICENSE_HISTORY.md](LICENSE_HISTORY.md),
-[COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md), and
-[docs/RELEASE_STATUS.md](docs/RELEASE_STATUS.md), and
-[docs/LICENSE_TRANSITION_V4.md](docs/LICENSE_TRANSITION_V4.md).
+[COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
+[docs/RELEASE_STATUS.md](docs/RELEASE_STATUS.md).

@@ -22,5 +22,5 @@ tag. A caller may supply `--ref` only for an existing, independently inspected
 ref.
 
 Historical releases retain the license and notices that shipped with them. The
-v4 licensing terms apply only to material first distributed in a published v4
-release.
+EvoRise Source-Available License 1.0 applies only to material first distributed
+with a published v4 release carrying that license.

@@ -183,6 +183,50 @@ class DocsVersionDriftTests(unittest.TestCase):
                     hits.append(f"{path.relative_to(ROOT)}:{lineno}: {line.strip()}")
         self.assertEqual(hits, [])
 
+    def test_public_license_documents_use_the_canonical_v4_model(self) -> None:
+        title = "EVORISE SOURCE-AVAILABLE LICENSE"
+        obsolete = (
+            "EvoRise Research and Evaluation License",
+            "LicenseRef-EvoRise-Research-Evaluation-1.0",
+            "COMMERCIAL-LICENSE.md",
+            "LICENSE_TRANSITION_V4.md",
+        )
+        paths = (
+            ROOT / "LICENSE",
+            ROOT / "NOTICE",
+            ROOT / "README.md",
+            ROOT / "CHANGELOG.md",
+            ROOT / "LICENSE_HISTORY.md",
+            ROOT / "LICENSE_ARABIC_SUMMARY.md",
+            ROOT / "THIRD_PARTY.md",
+            ROOT / "docs" / "PROJECT_STATUS.md",
+            ROOT / "docs" / "RELEASE_STATUS.md",
+        )
+
+        self.assertIn(title, (ROOT / "LICENSE").read_text(encoding="utf-8"))
+        self.assertIn(
+            "LicenseRef-EvoRise-Source-Available-1.0",
+            (ROOT / "NOTICE").read_text(encoding="utf-8"),
+        )
+        self.assertTrue((ROOT / "COMMERCIAL-LICENSING.md").is_file())
+        self.assertFalse((ROOT / "COMMERCIAL-LICENSE.md").exists())
+        self.assertFalse((ROOT / "docs" / "LICENSE_TRANSITION_V4.md").exists())
+
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                obsolete[0], text, f"{path.relative_to(ROOT)} has the retired license name"
+            )
+            self.assertNotIn(
+                obsolete[1], text, f"{path.relative_to(ROOT)} has the retired SPDX id"
+            )
+            self.assertNotIn(
+                obsolete[2], text, f"{path.relative_to(ROOT)} links the retired page"
+            )
+            self.assertNotIn(
+                obsolete[3], text, f"{path.relative_to(ROOT)} links internal transition notes"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

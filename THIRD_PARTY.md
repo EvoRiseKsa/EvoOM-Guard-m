@@ -1,6 +1,6 @@
 # Third-party materials and dependency inventory
 
-The EvoRise Research and Evaluation License applies only to material that the
+The EvoRise Source-Available License applies only to material that the
 Licensor has the right to license. This inventory is a release gate, not a
 substitute for checking the exact upstream terms and notices.
 
