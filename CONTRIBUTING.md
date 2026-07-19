@@ -13,6 +13,19 @@ This document describes the engineering process; it does not grant permission
 beyond the [LICENSE](LICENSE). Submit only material that you have the right to
 share.
 
+## Contribution and licensing boundary
+
+For a contribution first accepted into a future v4 release, the contributor
+must have authority to grant the contribution terms in Section 9 of the v4
+`LICENSE`. The project may require a separate Contributor License Agreement
+before accepting it. This prospective condition does **not** retroactively
+relicense historical releases, third-party material, or prior contributors'
+work; those remain governed by their existing notices and agreements.
+
+Do not submit employer-owned, customer-owned, confidential, export-controlled,
+or third-party material unless you have written authority to license it on the
+applicable terms. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
 ## Before opening a pull request
 
 1. Start from the current default branch; do not modify an existing release tag

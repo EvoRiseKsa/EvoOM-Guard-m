@@ -199,12 +199,13 @@ The current consumer release is
 [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0),
 published as an immutable GitHub Release from commit
 [`8e11021c505c265b3884736454e4ec424c2b0d3d`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/8e11021c505c265b3884736454e4ec424c2b0d3d).
-Production workflows may use `EvoRiseKsa/EvoOM-Guard-m@v3.8.0`, or the full
-commit SHA resolved from that release tag when a mutable tag reference is not
-acceptable. Do not use `@main` as a production release channel. A release
-requires successful manual validation on the protected default branch, reviewed
-release publication, and Marketplace publication where applicable. Do not cut a
-release merely to exercise artifact attestation.
+Under the license shipped with **that exact v3.8.0 release**, production
+workflows may use `EvoRiseKsa/EvoOM-Guard-m@v3.8.0`, or the full commit SHA
+resolved from that release tag when a mutable tag reference is not acceptable.
+Do not use `@main` as a production release channel. A release requires
+successful manual validation on the protected default branch, reviewed release
+publication, and Marketplace publication where applicable. Do not cut a release
+merely to exercise artifact attestation.
 
 `v3.7.0` has a GitHub **release** attestation, but it does **not** have a
 GitHub Actions build-artifact attestation for `evo-guard.pyz`. That distinction
@@ -573,5 +574,24 @@ shapes whether this tool grows.
 
 ## License
 
-Source-available: **free to use** (including commercially, in your own CI);
-**no redistribution or resale**. See [LICENSE](LICENSE).
+### Published releases through v3.8.0
+
+Every immutable release through
+[`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
+remains governed by the license shipped with that exact release. In particular,
+the published v3.8.0 license permitted commercial internal use, including the
+user's own CI, subject to its terms.
+
+### Planned v4 transition — not yet published
+
+This branch prepares the **EvoRise Research and Evaluation License 1.0** for a
+future `v4.0.0` release. It is source-available, not open source: it permits
+non-commercial study, qualifying education and research, good-faith security
+research, and one 30-day non-production evaluation. Commercial, production,
+required-CI, merge-gate, redistribution, hosted, and managed-service use would
+require a separate signed license.
+
+This is not a published v4 release and must not be treated as one. See
+[LICENSE](LICENSE), [LICENSE_HISTORY.md](LICENSE_HISTORY.md),
+[COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md), and
+[docs/LICENSE_TRANSITION_V4.md](docs/LICENSE_TRANSITION_V4.md).

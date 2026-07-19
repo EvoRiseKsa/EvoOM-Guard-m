@@ -1,0 +1,19 @@
+Copyright © 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+
+EvoRise, EvoRise Tech, EvoOM, and EvoOM Guard, together with associated logos,
+product names, evidence-format names, and branding, are proprietary
+identifiers of their respective owner. No trademark license is granted by
+distribution of this repository.
+
+Unless a file states otherwise, software and documentation first distributed
+in a future v4 release are licensed under:
+
+EvoRise Research and Evaluation License 1.0
+SPDX-License-Identifier: LicenseRef-EvoRise-Research-Evaluation-1.0
+
+This is source-available software, not open-source software. Immutable
+releases through v3.8.0 remain under their original release license; see
+LICENSE_HISTORY.md.
+
+Third-party materials remain governed by their own notices and licenses. See
+LICENSE, LICENSE_HISTORY.md, and THIRD_PARTY.md.

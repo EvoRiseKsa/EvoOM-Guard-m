@@ -65,8 +65,9 @@ depending on them. The following boundary is intentional.
 | --- | --- |
 | Released CLI/Action source, schemas, threat model, reproducible examples, frozen non-sensitive evidence, public keys, release checksums, and non-sensitive verifier-pack examples. | Signing/private keys, GitHub or cloud credentials, customer repositories, customer policy, internal verifier packs, unannounced vulnerability reports, held-out evaluation corpus and labels, label rationale, operational logs, and customer-specific results. |
 
-The public source is not a trade secret. The current custom source-available
-license permits commercial internal use, including use in the user's own CI,
+The public source is not a trade secret. The immutable v3.8.0 release's custom
+source-available license permits commercial internal use, including use in the
+user's own CI,
 while placing legal conditions on redistribution, sublicensing, publication,
 resale, and a third-party hosted or managed service whose primary value is
 EvoOM Guard. It does not prevent someone from studying the design or
@@ -74,6 +75,10 @@ independently implementing the ideas. Long-term differentiation therefore has
 to come from independently validated operational practice, high-quality private
 policy/packs and data, trustworthy service operation, and customer
 integrations—not from obscuring already published Python or workflow files.
+
+The proposed future v4 research/evaluation license is more restrictive. It
+cannot retract rights already granted with v3.8.0; see
+[LICENSE_HISTORY.md](../LICENSE_HISTORY.md).
 
 ## Evidence still required before stronger claims
 
