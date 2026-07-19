@@ -23,6 +23,9 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 - Human `reason` and `diagnostics` text may change. Do **not** parse them.
 - Additive nullable fields may appear within a schema version; ignore fields an
   older consumer does not understand.
+- A schema's `$id` remains on the immutable `v3.8.0` tag while its contract is
+  unchanged. It identifies the schema shape, not the newer runtime that carries
+  that same shape, so external resolvers retain a reachable stable reference.
 
 ## Release Source Finalizer contracts
 
@@ -54,7 +57,7 @@ semantic checks that JSON Schema cannot express; see
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "3.8.0",
+  "tool_version": "4.0.0",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -465,7 +468,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "3.8.0",
+  "version": "4.0.0",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

@@ -1,38 +1,434 @@
-EvoOM Guard Source-Available License, version 1.0
+EVORISE RESEARCH AND EVALUATION LICENSE
+Version 1.0 — 19 July 2026
 
-Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+SPDX-License-Identifier: LicenseRef-EvoRise-Research-Evaluation-1.0
 
-1. Grant. Subject to the terms below, the copyright holder grants you a
-   free, worldwide, non-exclusive, non-transferable license to:
+Copyright © 2026 Mana Alharbi. All rights reserved.
+Original creator and copyright owner: Mana Alharbi (مانع الحربي).
+Commercial licensing contact: EvoRise Company, acting on behalf of the
+copyright owner.
 
-   a. use, run, and reproduce this software, including for commercial
-      purposes, within your own projects, systems, and CI pipelines
-      (including hosted CI services acting on your behalf);
-   b. read and study the source code;
-   c. modify the software for your own internal use only.
+PRE-RELEASE TRANSITION DRAFT: This text is prepared for a future `v4.0.0`
+release. It is not a published grant until a new v4 release carrying this
+License is published. Mana Alharbi remains the copyright owner. EvoRise
+Company is the designated commercial licensing contact acting for the
+copyright owner; that designation does not itself transfer copyright. Until a
+new v4 release is published, this draft does not alter any historical v3
+release or its license.
 
-2. Restrictions. You may NOT, without prior written permission from the
-   copyright holder:
+IMPORTANT: THIS IS A SOURCE-AVAILABLE LICENSE, NOT AN OPEN-SOURCE LICENSE.
 
-   a. redistribute, sublicense, publish, or make the software (or a
-      modified version of it) available to any third party, whether for a
-      fee or free of charge;
-   b. sell the software, or offer it — or a service whose primary value is
-      this software's functionality — to third parties (including as a
-      hosted or managed service);
-   c. remove or alter copyright, authorship, or license notices.
+This License permits limited non-commercial study, education, research,
+good-faith security research, and time-limited non-production evaluation.
+Any Production Use or Commercial Use requires a separate written commercial
+license from the Licensor.
 
-3. Contributions. By submitting a contribution (e.g. a pull request) you
-   grant the copyright holder a perpetual, worldwide, irrevocable license
-   to use, modify, relicense, and distribute the contribution as part of
-   this software.
+1. DEFINITIONS
 
-4. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
-   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
-   IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES,
-   OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+1.1 "Licensor" means Mana Alharbi, the copyright owner. EvoRise Company acts
+solely as the Licensor's authorized commercial licensing contact and may sign
+a commercial license only in that capacity.
 
-5. Termination. This license terminates automatically if you breach it.
-   Rights already lawfully exercised under section 1 by other parties are
-   not affected by your termination.
+1.2 "Software" means the source code, object code, command-line programs,
+workflows, schemas, documentation, examples, tests, verifier packs,
+benchmarks, evaluation materials, and other files distributed with this
+License, except Third-Party Materials or files carrying a different license
+notice.
+
+1.3 "Third-Party Materials" means any component, dependency, data set,
+candidate change, or other material identified as owned or licensed by a
+third party. Third-Party Materials remain governed by their own terms.
+
+1.4 "You" means the individual or legal entity exercising rights under this
+License. If You act for an organization, "You" includes that organization,
+its Affiliates, and contractors acting on its behalf.
+
+1.5 "Affiliate" means an entity that controls, is controlled by, or is under
+common control with another entity. "Control" means the direct or indirect
+power to direct management or policies, whether by ownership, contract, or
+otherwise.
+
+1.6 "Commercial Use" means any use, directly or indirectly:
+(a) for commercial advantage, monetary compensation, revenue generation,
+    customer delivery, paid consulting, or product or service development;
+(b) as part of the internal business operations of a for-profit entity;
+(c) to support, secure, test, review, develop, sell, license, operate, or
+    provide a commercial product or service; or
+(d) in anticipation of a reasonably identifiable commercial application.
+Evaluation Use that strictly complies with Section 3.4 is not Commercial Use
+during the Evaluation Period.
+
+1.7 "Production Use" means use in a live, operational, customer-facing,
+revenue-generating, business-critical, or decision-authorizing environment.
+Production Use includes, without limitation, using the Software or its output
+to accept, reject, approve, block, merge, release, publish, deploy, operate,
+audit, certify, or secure a real software change, artifact, service, system,
+or customer workload.
+
+1.8 "Non-Commercial Research" means research primarily intended to advance
+public knowledge and not intended to develop, improve, validate, operate, or
+commercialize a product or service. Funding alone does not make research
+commercial, but research is not Non-Commercial Research if a sponsor or
+participant receives exclusive commercial rights, confidential product
+development results, or operational benefit from the Software.
+
+1.9 "Evaluation Use" means temporary internal use solely to determine whether
+the Software may be suitable for a future separately licensed use.
+
+1.10 "Evaluation Period" means thirty (30) consecutive calendar days beginning
+when any person acting for You first accesses or uses the applicable Major
+Version of the Software. You receive one Evaluation Period per Major Version,
+shared across You, Your Affiliates, and Your contractors, unless the Licensor
+agrees otherwise in writing.
+
+1.11 "Major Version" means the first numeric component of a semantic version.
+For example, versions 4.0.0 and 4.9.2 are the same Major Version.
+
+1.12 "Competing Offering" means a product or service whose primary purpose
+materially overlaps with the Software's change-verification, admission,
+evidence-integrity, finalization, policy-verification, or related security
+functionality.
+
+2. ACCEPTANCE AND CONDITIONAL LICENSE
+
+By accessing, copying, modifying, running, or otherwise using the Software,
+You accept this License. If You do not accept it, do not use the Software.
+
+Subject to continuous compliance with this License, the Licensor grants You
+a limited, worldwide, non-exclusive, non-transferable, non-sublicensable
+copyright license to:
+
+(a) access and read the Software;
+(b) reproduce reasonable internal copies;
+(c) run the Software; and
+(d) make internal modifications,
+
+solely for the Permitted Uses in Section 3.
+
+The Licensor also grants a limited patent license covering only patent claims
+the Licensor can license that would necessarily be infringed by exercising
+the copyright rights expressly granted above, and only for a Permitted Use.
+No patent license is granted for any Commercial Use, Production Use,
+distribution, or Competing Offering.
+
+No ownership is transferred. All rights not expressly granted are reserved.
+
+3. PERMITTED USES
+
+3.1 Personal Study and Learning
+
+An individual may use the Software for personal, non-commercial study,
+learning, experimentation, hobby work, and skills development, provided there
+is no anticipated commercial application and no Production Use.
+
+3.2 Education
+
+An individual, accredited educational institution, or non-profit educational
+program may use the Software for classroom teaching, coursework, academic
+demonstrations, and supervised student projects. This permission does not
+cover paid corporate training, professional consulting, or operational use by
+the institution.
+
+3.3 Non-Commercial Research
+
+You may use and internally modify the Software for Non-Commercial Research.
+You may publish research methods, findings, measurements, and criticism,
+provided that You:
+
+(a) identify the exact Software version, commit, and artifact digest used;
+(b) clearly distinguish Your findings from any Licensor claim or
+    certification;
+(c) do not distribute the Software or a modified version;
+(d) do not publish a substantial portion of the Software's source code,
+    private verifier packs, held-out data, non-public materials, or
+    credentials; and
+(e) follow Section 4 for vulnerability information.
+
+You may include minimal excerpts or patch fragments reasonably necessary to
+explain a result, but not enough to reconstruct a substantial part of the
+Software or a restricted verifier pack.
+
+3.4 Time-Limited Evaluation
+
+Any individual or organization may conduct Evaluation Use during the
+Evaluation Period only if all of the following are true:
+
+(a) the evaluation occurs in an isolated, non-production environment;
+(b) only synthetic, public, or specifically authorized non-production data
+    and repositories are used;
+(c) no customer, production, confidential third-party, or regulated data is
+    processed unless the Licensor gives prior written permission;
+(d) the Software and its output are not relied on to make a real merge,
+    release, deployment, security, audit, compliance, or business decision;
+(e) access is limited to personnel reasonably necessary for the evaluation;
+(f) the Software is not exposed as a network service to third parties; and
+(g) all use stops when the Evaluation Period ends unless a separate written
+    license has been obtained.
+
+3.5 Good-Faith Security Research
+
+Good-faith security research is permitted only as described in Section 4 and
+the repository's SECURITY.md file. If the two conflict, the more protective
+requirement for third-party systems, data, and coordinated disclosure applies.
+
+4. SECURITY RESEARCH SAFE HARBOR
+
+The Licensor will not assert a copyright-license claim solely against
+good-faith security research that fully complies with this Section.
+
+You must:
+
+(a) test only systems, accounts, data, and repositories You own or are
+    expressly authorized to test;
+(b) avoid privacy violations, data destruction, persistent access,
+    extortion, social engineering, denial of service, and unnecessary
+    disruption;
+(c) access only the minimum data needed to confirm a finding and stop if
+    sensitive data is encountered;
+(d) report a potentially exploitable vulnerability privately through the
+    channel identified in SECURITY.md without unreasonable delay;
+(e) provide enough detail to reproduce and remediate the issue;
+(f) allow a reasonable coordinated-disclosure period before public
+    disclosure, normally up to ninety (90) days unless the parties agree
+    otherwise or an urgent public-safety reason requires a different course;
+(g) not use the finding for Commercial Use, competitive product development,
+    unlawful access, or harm; and
+(h) comply with applicable law.
+
+This safe harbor does not authorize testing of third-party services or
+infrastructure, does not waive rights of third parties, and does not protect
+conduct outside this License.
+
+5. PROHIBITED USES
+
+Unless the Licensor gives prior written permission under a separate license,
+You must not, directly or indirectly:
+
+5.1 engage in any Commercial Use or Production Use;
+
+5.2 use the Software in real CI/CD, merge protection, release, deployment,
+security operations, compliance, audit, or customer-delivery workflows;
+
+5.3 sell, rent, lease, sublicense, assign, transfer, redistribute, publish,
+mirror, host for download, upload to a package registry, or otherwise make
+the Software or a modified version available to any third party, except for
+technical copies automatically created by a hosting platform under that
+platform's mandatory terms; every such copy remains subject to this License;
+
+5.4 provide the Software or its functionality as software-as-a-service,
+managed service, service bureau, hosted service, API, consulting deliverable,
+or embedded feature of another product or service;
+
+5.5 use the Software, its source code, documentation, tests, verifier packs,
+benchmarks, outputs, or non-public materials to create, train, fine-tune,
+evaluate, validate, improve, market, or operate a Competing Offering;
+
+5.6 ingest the Software or substantial portions of it into a machine-learning
+training, fine-tuning, embedding, retrieval-corpus, synthetic-data,
+benchmark-construction, or model-evaluation pipeline, except for
+Non-Commercial Research expressly permitted by Section 3.3 that does not
+produce or improve a commercial model, service, or Competing Offering;
+
+5.7 publish commercial benchmark results, comparative marketing claims, or
+certification claims based on the Software without prior written permission;
+
+5.8 remove, hide, alter, or misrepresent copyright, authorship, provenance,
+license, trademark, security, or attribution notices;
+
+5.9 circumvent a technical restriction, access control, licensing control,
+usage limit, signature boundary, or security mechanism included with the
+Software, except as strictly necessary for permitted good-faith security
+research under Section 4;
+
+5.10 use the Software or its output to claim that any software, artifact,
+system, process, organization, or person is certified, secure, correct,
+compliant, approved, or endorsed by the Licensor;
+
+5.11 use "EvoRise", "EvoRise Tech", "EvoOM", "EvoOM Guard", associated logos,
+or confusingly similar marks as the name or branding of a product, service,
+fork, domain, organization, or publication, except for truthful nominative
+reference to the unmodified Software; or
+
+5.12 cause or permit another person to do any prohibited act on Your behalf.
+
+6. COPIES, MODIFICATIONS, AND NOTICES
+
+Every permitted copy or internal modification must retain this License, the
+copyright notice, the SPDX LicenseRef identifier, and all existing attribution
+and third-party notices.
+
+Internal modifications remain subject to this License. You may not distribute
+them. The Licensor has no duty to maintain, review, merge, support, or accept
+any modification.
+
+7. THIRD-PARTY MATERIALS
+
+This License applies only to material the Licensor has the right to license.
+Third-Party Materials are governed solely by their respective licenses and
+notices. You are responsible for identifying and complying with those terms.
+
+If a file contains an explicit license notice different from this License,
+that file-specific notice controls for that file.
+
+8. OWNERSHIP, TRADEMARKS, AND RESERVATION OF RIGHTS
+
+The Software is licensed, not sold. The Licensor retains copyright in the
+first-party material that the Licensor owns, and applicable contributors retain
+rights in their respective materials subject to the contribution license below.
+EvoRise Company's role as commercial licensing contact does not, by itself,
+make it a copyright owner. All parties retain their respective patent,
+trademark, trade-secret, database, and other intellectual-property rights.
+
+No trademark license is granted. No right is granted by implication,
+estoppel, exhaustion beyond mandatory law, or otherwise.
+
+Public availability of source code does not grant rights beyond this License.
+
+9. CONTRIBUTIONS AND FEEDBACK
+
+If You intentionally submit code, documentation, tests, workflows, schemas,
+verifier packs, issue patches, pull requests, or other material for inclusion
+in the Software ("Contribution"), You represent that You have the right to do
+so and grant the Licensor, and EvoRise Company solely as the Licensor's
+authorized commercial licensing contact, a perpetual, irrevocable, worldwide,
+royalty-free, fully paid, transferable, and sublicensable license to use,
+reproduce, modify, prepare derivative works from, distribute, publicly
+perform, publicly display, commercialize, enforce, and relicense the
+Contribution under any terms.
+
+To the extent You control patent claims necessarily infringed by the
+Contribution, You grant the Licensor, EvoRise Company acting on the Licensor's
+behalf, and recipients authorized by the Licensor a perpetual, worldwide,
+royalty-free patent license to make, use, sell, offer for sale, import, and
+otherwise exploit the Contribution as part of the Software.
+
+General suggestions and feedback may be used by the Licensor without
+restriction or compensation. Do not submit material You are not authorized
+to license.
+
+The Licensor may require a separate Contributor License Agreement before
+accepting a Contribution.
+
+10. COMMERCIAL AND PRODUCTION LICENSES
+
+Commercial Use, Production Use, distribution, hosted use, managed services,
+enterprise deployment, customer use, and use beyond the Evaluation Period
+require a separate written agreement signed by the Licensor.
+
+Requests may be directed to:
+
+EvoRise Company
+Website: https://evoriseksa.com
+Email: evoriseksa@icloud.com
+
+Mana Alharbi is the original creator and copyright owner. EvoRise Company is
+the authorized commercial licensing contact for this Software; it may sign a
+commercial license only on behalf of Mana Alharbi unless a later documented
+assignment states otherwise.
+
+No purchase order, email, repository permission, issue response, pull-request
+acceptance, or course of conduct creates a commercial license unless Mana
+Alharbi, or EvoRise Company acting on Mana Alharbi's behalf, expressly signs a
+written agreement granting it.
+
+11. TERM AND TERMINATION
+
+11.1 This License begins when You first exercise a licensed right and continues
+until terminated.
+
+11.2 Evaluation rights end automatically when the Evaluation Period expires.
+
+11.3 Rights terminate immediately, without notice, upon intentional or material:
+(a) Commercial Use or Production Use;
+(b) distribution or sublicensing;
+(c) use for a Competing Offering;
+(d) prohibited machine-learning use;
+(e) misuse of trademarks;
+(f) circumvention outside permitted security research; or
+(g) unlawful or harmful security activity.
+
+11.4 For a first, non-willful breach not listed in Section 11.3, rights may be
+reinstated if You fully cure the breach, stop all unauthorized use, and provide
+written confirmation within fourteen (14) days after receiving written notice
+from the Licensor. Reinstatement is not automatic for repeated breaches.
+
+11.5 On termination or expiration, You must immediately stop all unlicensed
+use and delete or destroy all copies and modifications under Your control,
+except archival copies required by law and published research materials that
+do not contain the Software. Sections 5 through 16 survive termination to the
+extent necessary to give them effect.
+
+12. PATENT DEFENSE
+
+If You or Your Affiliate initiate a patent claim alleging that the Software
+or a Contribution infringes a patent, every patent license granted to You
+under this License terminates immediately.
+
+13. NO WARRANTY OR SUPPORT
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED
+"AS IS" AND "AS AVAILABLE", WITH ALL FAULTS, WITHOUT WARRANTY, CONDITION,
+REPRESENTATION, OR GUARANTEE OF ANY KIND, EXPRESS, IMPLIED, STATUTORY, OR
+OTHERWISE, INCLUDING WARRANTIES OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, SECURITY, RELIABILITY,
+AVAILABILITY, OR THAT THE SOFTWARE WILL DETECT, PREVENT, OR CORRECT ANY
+VULNERABILITY, DEFECT, UNAUTHORIZED CHANGE, OR HARM.
+
+THE LICENSOR HAS NO DUTY TO PROVIDE SUPPORT, MAINTENANCE, UPDATES, SECURITY
+FIXES, SERVICE LEVELS, OR CONTINUED AVAILABILITY.
+
+14. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR AND
+CONTRIBUTORS WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES; LOSS OF DATA, PROFITS,
+REVENUE, GOODWILL, BUSINESS, SECURITY, OR OPPORTUNITY; BUSINESS INTERRUPTION;
+COST OF SUBSTITUTE GOODS OR SERVICES; OR CLAIMS ARISING FROM OR RELATED TO
+THE SOFTWARE OR THIS LICENSE, UNDER ANY THEORY OF LIABILITY, EVEN IF ADVISED
+OF THE POSSIBILITY OF SUCH DAMAGES.
+
+IF LIABILITY CANNOT BE EXCLUDED, THE TOTAL AGGREGATE LIABILITY OF THE
+LICENSOR ARISING FROM THIS LICENSE OR THE SOFTWARE WILL NOT EXCEED THE GREATER
+OF ONE HUNDRED SAUDI RIYALS (SAR 100) OR THE AMOUNT YOU PAID DIRECTLY TO THE
+LICENSOR FOR THE PERMITTED USE GIVING RISE TO THE CLAIM DURING THE PRECEDING
+TWELVE MONTHS.
+
+15. RESPONSIBILITY FOR UNAUTHORIZED USE
+
+You are responsible for Your compliance and for the acts of personnel,
+Affiliates, and contractors using the Software on Your behalf. To the extent
+permitted by law, You will defend and indemnify the Licensor against
+third-party claims, losses, and reasonable costs arising from Your unlawful
+use, unauthorized Commercial or Production Use, prohibited distribution, or
+material breach of this License.
+
+16. GENERAL TERMS
+
+16.1 Governing Law and Courts. This License is governed by the laws of the
+Kingdom of Saudi Arabia, without regard to conflict-of-law rules. The
+competent courts of Riyadh, Kingdom of Saudi Arabia, have exclusive
+jurisdiction, except where mandatory applicable law requires otherwise.
+
+16.2 Mandatory Rights. Nothing in this License limits rights that applicable
+law does not allow the parties to waive or restrict.
+
+16.3 Severability. If any provision is held unenforceable, it will be enforced
+to the maximum extent permitted and the remaining provisions will remain in
+effect.
+
+16.4 No Waiver. A failure or delay to enforce a provision is not a waiver.
+
+16.5 Assignment. You may not assign or transfer this License or any right
+under it. Any attempted assignment is void. The Licensor may assign this
+License with the applicable intellectual-property rights.
+
+16.6 Entire Agreement. This License is the entire agreement for the free
+research and evaluation rights it grants. A separately signed commercial
+agreement controls to the extent it expressly conflicts with this License.
+
+16.7 Headings. Headings are for convenience and do not affect interpretation.
+
+16.8 Language. The English text of this License is the controlling legal text.
+Any translation is provided only for convenience.
+
+END OF TERMS

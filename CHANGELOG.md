@@ -9,6 +9,33 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [4.0.0] — release candidate, not published
+
+### Changed
+
+- The source version declares `4.0.0` in preparation for a new major release.
+- The existing JSON-schema identities remain bound to `v3.8.0` because their
+  schema contracts did not change; this keeps their external references
+  resolvable while v4 has no tag.
+- The prepared v4 license is the EvoRise Research and Evaluation License 1.0:
+  Mana Alharbi remains the copyright owner and original creator; EvoRise
+  Company is the authorized commercial licensing contact acting on the owner's
+  behalf.
+- Added a public [release-status record](docs/RELEASE_STATUS.md) so that the
+  source version, the latest published consumer release, and the transition
+  boundary cannot be conflated.
+- Regenerated the 16-case live benchmark with source version `4.0.0`: all
+  expected verdict labels matched (11 true positives, 3 true negatives, 2
+  documented policy false positives, and 0 false negatives).
+
+### Publication boundary
+
+- `v4.0.0` has no tag, GitHub Release, consumer asset, checksum, or release
+  provenance yet. It must not be installed, pinned, or described as released.
+- [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
+  remains the latest published immutable consumer release, with the license
+  that shipped in that exact release.
+
 ## [3.8.0]
 
 ### Added

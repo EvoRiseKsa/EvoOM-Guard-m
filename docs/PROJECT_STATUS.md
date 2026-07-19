@@ -1,5 +1,7 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Original creator and copyright owner: Mana Alharbi (مانع الحربي).
+  Commercial licensing contact: EvoRise Company, acting on behalf of the copyright owner.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -26,7 +28,7 @@ validated security service.
 
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
 | --- | --- | --- | --- |
-| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | Source declares `3.8.0`; [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0) is the published immutable GitHub Release at `8e11021c505c265b3884736454e4ec424c2b0d3d`. Consumers must still inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
+| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | Source declares `4.0.0` as a release candidate, not a published release. [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0) remains the latest published immutable GitHub Release at `8e11021c505c265b3884736454e4ec424c2b0d3d`; see [release status](RELEASE_STATUS.md). Consumers must inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
 | [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) *(public archive)* | Frozen reproducible demonstration of honest fixes, protected-harness tampering, stdout forgery, and black-box evidence. | Its public scenario is pinned to **v3.5.2** and frozen at [`proof-v3.5.2`](https://github.com/EvoRiseKsa/evoom-guard-demo/releases/tag/proof-v3.5.2). | Any capability added in v3.6 or v3.7, including the raw-Git Trusted Finalizer. |
 | [`evoom-guard-eval`](https://github.com/EvoRiseKsa/evoom-guard-eval) *(public archive)* | Historical evaluation protocol and reproducibility record. | Its public record is pinned to **v3.5.2**, frozen at [`historical-v3.5.2-evaluation`](https://github.com/EvoRiseKsa/evoom-guard-eval/releases/tag/historical-v3.5.2-evaluation), and explicitly records both conformance and infrastructure failures. | A general accuracy rate, an independent evaluation, or a v3.7 result. |
 | [`evoom-guard-finalizer-pilot`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot) | Controlled operational evidence for the v3.7 Trusted Finalizer reference. | It records a same-owner, cross-account v3.7.0 exercise and public verification inputs. | A deployed production merge gate, an independent audit, a hostile-runner boundary, or a software-release provenance claim. |
@@ -65,8 +67,9 @@ depending on them. The following boundary is intentional.
 | --- | --- |
 | Released CLI/Action source, schemas, threat model, reproducible examples, frozen non-sensitive evidence, public keys, release checksums, and non-sensitive verifier-pack examples. | Signing/private keys, GitHub or cloud credentials, customer repositories, customer policy, internal verifier packs, unannounced vulnerability reports, held-out evaluation corpus and labels, label rationale, operational logs, and customer-specific results. |
 
-The public source is not a trade secret. The current custom source-available
-license permits commercial internal use, including use in the user's own CI,
+The public source is not a trade secret. The immutable v3.8.0 release's custom
+source-available license permits commercial internal use, including use in the
+user's own CI,
 while placing legal conditions on redistribution, sublicensing, publication,
 resale, and a third-party hosted or managed service whose primary value is
 EvoOM Guard. It does not prevent someone from studying the design or
@@ -74,6 +77,15 @@ independently implementing the ideas. Long-term differentiation therefore has
 to come from independently validated operational practice, high-quality private
 policy/packs and data, trustworthy service operation, and customer
 integrations—not from obscuring already published Python or workflow files.
+
+The `4.0.0` source candidate prepares a more restrictive research/evaluation
+license. It cannot retract rights already granted with v3.8.0; see
+[LICENSE_HISTORY.md](../LICENSE_HISTORY.md). A published v4 release will name
+Mana Alharbi as original creator and copyright owner, with EvoRise Company as
+the authorized commercial licensing contact acting on Mana Alharbi's behalf.
+That license applies only when a new v4 release is published; see
+[RELEASE_STATUS.md](RELEASE_STATUS.md) and
+[LICENSE_TRANSITION_V4.md](LICENSE_TRANSITION_V4.md).
 
 ## Evidence still required before stronger claims
 

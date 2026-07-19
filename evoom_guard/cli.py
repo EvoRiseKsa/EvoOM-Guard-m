@@ -56,7 +56,7 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from evoom_guard import __version__
+from evoom_guard import LATEST_PUBLISHED_RELEASE, __version__
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
     PackManifestError,
@@ -1558,8 +1558,8 @@ def build_parser() -> argparse.ArgumentParser:
         "repository root inferred from --path)",
     )
     i_p.add_argument(
-        "--ref", default=f"v{__version__}",
-        help="the EvoGuard action ref to pin (default: the matching release tag)",
+        "--ref", default=f"v{LATEST_PUBLISHED_RELEASE}",
+        help="the EvoGuard action ref to pin (default: latest published release tag)",
     )
     i_p.add_argument("--force", action="store_true", help="overwrite an existing workflow file")
     i_p.add_argument(

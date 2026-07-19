@@ -23,7 +23,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evoom_guard import __version__, cli
+from evoom_guard import LATEST_PUBLISHED_RELEASE, __version__, cli
 from evoom_guard.pack_manifest import pack_digest
 
 HAS_PYTEST = importlib.util.find_spec("pytest") is not None
@@ -493,10 +493,10 @@ def test_init_writes_workflow(tmp_path, capsys):
     assert "wrote" in output and str(policy) in output
 
 
-def test_init_default_ref_is_current_version(tmp_path):
+def test_init_default_ref_is_latest_published_release(tmp_path):
     wf = tmp_path / "wf.yml"
     assert cli.main(["init", "--path", str(wf)]) == 0
-    assert f"EvoOM-Guard-m@v{__version__}" in wf.read_text(encoding="utf-8")
+    assert f"EvoOM-Guard-m@v{LATEST_PUBLISHED_RELEASE}" in wf.read_text(encoding="utf-8")
 
 
 def test_init_refuses_to_overwrite_without_force(tmp_path, capsys):
