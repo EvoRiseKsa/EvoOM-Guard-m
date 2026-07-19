@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-from evoom_guard import __version__, artifact_admission, cli
+from evoom_guard import SCHEMA_ID_RELEASE, artifact_admission, cli
 from evoom_guard.cli import main as cli_main
 from evoom_guard.evidence_bundle import _archive_bytes, _canonical_json
 from evoom_guard.guard import guard
@@ -486,7 +486,7 @@ def test_artifact_binding_schema_is_valid_and_release_addressed(tmp_path: Path) 
     Draft202012Validator.check_schema(schema)
     raw_base = (
         "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/"
-        f"v{__version__}/evoom_guard/schemas/"
+        f"v{SCHEMA_ID_RELEASE}/evoom_guard/schemas/"
     )
     assert schema["$id"] == raw_base + "artifact-binding-1.schema.json"
     assert schema["properties"]["format"]["const"] == artifact_admission.ARTIFACT_BINDING_FORMAT

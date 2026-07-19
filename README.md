@@ -69,12 +69,16 @@ correctness or security.
 > second account provides technical separation of roles only, not independent
 > review.
 
-> **v4 licensing status.** The current published `v3.8.0` release retains its
-> own immutable license. A future v4 release will retain Mana Alharbi as the
-> original creator and copyright owner, and name EvoRise Company as the
-> authorized commercial licensing contact acting on the owner's behalf. It
-> becomes effective only when a new v4 release is published; it does not alter
-> historical releases. See [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md).
+> **v4 licensing and release status.** This source tree declares `4.0.0` as a
+> prepared release candidate; it is not a published GitHub Release. The latest
+> immutable consumer release remains
+> [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0),
+> with its own immutable license. A published v4 release will retain Mana
+> Alharbi as original creator and copyright owner, and name EvoRise Company as
+> the authorized commercial licensing contact acting on the owner's behalf. It
+> will not alter historical releases. See
+> [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) and
+> [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md).
 
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
@@ -591,10 +595,11 @@ remains governed by the license shipped with that exact release. In particular,
 the published v3.8.0 license permitted commercial internal use, including the
 user's own CI, subject to its terms.
 
-### Planned v4 transition — not yet published
+### v4.0.0 release candidate — not yet published
 
-This branch prepares the **EvoRise Research and Evaluation License 1.0** for a
-future `v4.0.0` release. It is source-available, not open source: it permits
+This source tree declares `v4.0.0` and prepares the **EvoRise Research and
+Evaluation License 1.0** for its eventual immutable release. It is
+source-available, not open source: it permits
 non-commercial study, qualifying education and research, good-faith security
 research, and one 30-day non-production evaluation. Commercial, production,
 required-CI, merge-gate, redistribution, hosted, and managed-service use would
@@ -603,4 +608,5 @@ require a separate signed license.
 This is not a published v4 release and must not be treated as one. See
 [LICENSE](LICENSE), [LICENSE_HISTORY.md](LICENSE_HISTORY.md),
 [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md), and
+[docs/RELEASE_STATUS.md](docs/RELEASE_STATUS.md), and
 [docs/LICENSE_TRANSITION_V4.md](docs/LICENSE_TRANSITION_V4.md).
