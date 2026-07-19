@@ -17,10 +17,8 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 - The existing JSON-schema identities remain bound to `v3.8.0` because their
   schema contracts did not change; this keeps their external references
   resolvable while v4 has no tag.
-- The prepared v4 license is the EvoRise Research and Evaluation License 1.0:
-  Mana Alharbi remains the copyright owner and original creator; EvoRise
-  Company is the authorized commercial licensing contact acting on the owner's
-  behalf.
+- The prepared v4 license is the EvoRise Source-Available License 1.0.
+  Commercial licensing is administered by EvoRise Company.
 - Added a public [release-status record](docs/RELEASE_STATUS.md) so that the
   source version, the latest published consumer release, and the transition
   boundary cannot be conflated.
@@ -30,8 +28,9 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Publication boundary
 
-- `v4.0.0` has no tag, GitHub Release, consumer asset, checksum, or release
-  provenance yet. It must not be installed, pinned, or described as released.
+- `v4.0.0` has no published tag, GitHub Release, consumer asset, checksum, or
+  release provenance yet. It must not be installed, pinned, or described as
+  released.
 - [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
   remains the latest published immutable consumer release, with the license
   that shipped in that exact release.

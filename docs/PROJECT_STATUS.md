@@ -1,7 +1,6 @@
 <!--
   Copyright (c) 2026 Mana Alharbi. All rights reserved.
-  Original creator and copyright owner: Mana Alharbi (مانع الحربي).
-  Commercial licensing contact: EvoRise Company, acting on behalf of the copyright owner.
+  Commercial licensing is administered by EvoRise Company.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -78,14 +77,13 @@ to come from independently validated operational practice, high-quality private
 policy/packs and data, trustworthy service operation, and customer
 integrations—not from obscuring already published Python or workflow files.
 
-The `4.0.0` source candidate prepares a more restrictive research/evaluation
-license. It cannot retract rights already granted with v3.8.0; see
-[LICENSE_HISTORY.md](../LICENSE_HISTORY.md). A published v4 release will name
-Mana Alharbi as original creator and copyright owner, with EvoRise Company as
-the authorized commercial licensing contact acting on Mana Alharbi's behalf.
-That license applies only when a new v4 release is published; see
-[RELEASE_STATUS.md](RELEASE_STATUS.md) and
-[LICENSE_TRANSITION_V4.md](LICENSE_TRANSITION_V4.md).
+The `4.0.0` source candidate prepares the EvoRise Source-Available License
+1.0. It cannot retract rights already granted with v3.8.0; see
+[LICENSE_HISTORY.md](../LICENSE_HISTORY.md). The v4 license applies only to
+material distributed with it. Commercial licensing is administered by EvoRise
+Company; see [LICENSE](../LICENSE),
+[COMMERCIAL-LICENSING.md](../COMMERCIAL-LICENSING.md), and
+[RELEASE_STATUS.md](RELEASE_STATUS.md).
 
 ## Evidence still required before stronger claims
 
