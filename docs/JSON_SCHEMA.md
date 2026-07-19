@@ -57,7 +57,7 @@ semantic checks that JSON Schema cannot express; see
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "4.0.0",
+  "tool_version": "4.0.1",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -468,7 +468,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

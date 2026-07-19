@@ -9,32 +9,57 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
-## [4.0.0] — release candidate, not published
+## [4.0.1] — unreleased
+
+### Fixed
+
+- `evo-guard init` no longer guesses a stale “latest published” ref. It now
+  requires an explicit exact release tag (`vX.Y.Z`) or full 40-hex commit SHA
+  and refuses branches, major aliases, and partial SHAs.
+- Consumer scaffolding documentation now supplies an explicit immutable
+  `--ref v4.0.0` while v4.0.0 remains the current published release.
 
 ### Changed
 
-- The source version declares `4.0.0` in preparation for a new major release.
-- The existing JSON-schema identities remain bound to `v3.8.0` because their
-  schema contracts did not change; this keeps their external references
-  resolvable while v4 has no tag.
-- The prepared v4 license is the EvoRise Source-Available License 1.0.
-  Commercial licensing is administered by EvoRise Company.
-- Added a public [release-status record](docs/RELEASE_STATUS.md) so that the
-  source version, the latest published consumer release, and the transition
-  boundary cannot be conflated.
-- Regenerated the 16-case live benchmark with source version `4.0.0`: all
+- The source version declares `4.0.1` for this correction. It is not a
+  published consumer release; see [release status](docs/RELEASE_STATUS.md).
+- JSON-schema examples now identify the current source runtime while retaining
+  the unchanged historical schema identities under v3.8.0.
+- Regenerated the 16-case live benchmark with source version 4.0.1: all
   expected verdict labels matched (11 true positives, 3 true negatives, 2
   documented policy false positives, and 0 false negatives).
 
 ### Publication boundary
 
-- `v4.0.0` has no published tag, GitHub Release, consumer asset, checksum, or
+- `v4.0.1` has no published tag, GitHub Release, consumer asset, checksum, or
   release provenance yet. It must not be installed, pinned, or described as
-  released.
-- [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
-  remains the latest published immutable consumer release, with the license
-  that shipped in that exact release.
+  released until its immutable GitHub Release exists.
+- [`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0)
+  remains the latest published immutable consumer release.
 
+## [4.0.0] — 2026-07-19
+
+### Published release
+
+- [`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0)
+  is published as an immutable GitHub Release from
+  `301d62f2fd3e2e53b75e153201514f0f69e4ecf8`. Its primary
+  `evo-guard.pyz` asset has SHA-256
+  `99f9d0ed5029e22e3e06c22b32e55cfe35ce8e97568e304d4cf88a7bd19e7332`.
+- The release ships the EvoRise Source-Available License 1.0. Commercial
+  licensing is administered by EvoRise Company.
+- The existing JSON-schema identities remain bound to v3.8.0 because their
+  schema contracts did not change; they identify schema shape rather than the
+  runtime carrying it.
+
+### Verification
+
+- The release asset has a GitHub Actions build-artifact attestation. The exact
+  consumer verification procedure and non-claims are in
+  [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md).
+- The 16-case live benchmark was regenerated for source version 4.0.0: all
+  expected verdict labels matched (11 true positives, 3 true negatives, 2
+  documented policy false positives, and 0 false negatives).
 ## [3.8.0]
 
 ### Added

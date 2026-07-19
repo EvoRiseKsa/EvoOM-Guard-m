@@ -23,7 +23,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evoom_guard import LATEST_PUBLISHED_RELEASE, __version__, cli
+from evoom_guard import __version__, cli
 from evoom_guard.pack_manifest import pack_digest
 
 HAS_PYTEST = importlib.util.find_spec("pytest") is not None
@@ -493,16 +493,32 @@ def test_init_writes_workflow(tmp_path, capsys):
     assert "wrote" in output and str(policy) in output
 
 
-def test_init_default_ref_is_latest_published_release(tmp_path):
+def test_init_requires_an_explicit_immutable_ref(tmp_path, capsys):
     wf = tmp_path / "wf.yml"
-    assert cli.main(["init", "--path", str(wf)]) == 0
-    assert f"EvoOM-Guard-m@v{LATEST_PUBLISHED_RELEASE}" in wf.read_text(encoding="utf-8")
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["init", "--path", str(wf)])
+    assert excinfo.value.code == 2
+    assert "--ref" in capsys.readouterr().err
+
+
+def test_init_refuses_moving_or_partial_refs(tmp_path):
+    for ref in ("main", "v4", "8e11021"):
+        with pytest.raises(SystemExit) as excinfo:
+            cli.main(["init", "--path", str(tmp_path / f"{ref}.yml"), "--ref", ref])
+        assert excinfo.value.code == 2
+
+
+def test_init_accepts_a_full_commit_sha(tmp_path):
+    ref = "a" * 40
+    wf = tmp_path / "wf.yml"
+    assert cli.main(["init", "--path", str(wf), "--ref", ref]) == 0
+    assert f"EvoOM-Guard-m@{ref}" in wf.read_text(encoding="utf-8")
 
 
 def test_init_refuses_to_overwrite_without_force(tmp_path, capsys):
     wf = tmp_path / "wf.yml"
     wf.write_text("keep me", encoding="utf-8")
-    rc = cli.main(["init", "--path", str(wf)])
+    rc = cli.main(["init", "--path", str(wf), "--ref", "v9.9.9"])
     assert rc == 1
     assert wf.read_text(encoding="utf-8") == "keep me"   # untouched
     assert "refusing to overwrite" in capsys.readouterr().out
@@ -511,13 +527,13 @@ def test_init_refuses_to_overwrite_without_force(tmp_path, capsys):
 def test_init_force_overwrites(tmp_path):
     wf = tmp_path / "wf.yml"
     wf.write_text("old", encoding="utf-8")
-    assert cli.main(["init", "--path", str(wf), "--force"]) == 0
+    assert cli.main(["init", "--path", str(wf), "--force", "--ref", "v9.9.9"]) == 0
     assert "name: EvoGuard" in wf.read_text(encoding="utf-8")
 
 
 def test_init_stdout_does_not_write(tmp_path, capsys):
     wf = tmp_path / "nope.yml"
-    assert cli.main(["init", "--path", str(wf), "--stdout"]) == 0
+    assert cli.main(["init", "--path", str(wf), "--stdout", "--ref", "v9.9.9"]) == 0
     assert not wf.exists()                                # nothing written
     assert not (tmp_path / ".evoguard.json").exists()
     assert "name: EvoGuard" in capsys.readouterr().out
@@ -562,7 +578,7 @@ def test_init_preserves_an_existing_policy(tmp_path, capsys):
     policy = tmp_path / ".evoguard.json"
     policy.write_text('{"test_command": ["custom", "suite"]}\n', encoding="utf-8")
 
-    assert cli.main(["init", "--path", str(wf), "--test-command", "ignored"]) == 0
+    assert cli.main(["init", "--path", str(wf), "--test-command", "ignored", "--ref", "v9.9.9"]) == 0
 
     assert json.loads(policy.read_text(encoding="utf-8")) == {
         "test_command": ["custom", "suite"]
@@ -575,7 +591,7 @@ def test_init_private_custom_secret_name(tmp_path):
     cli.main([
         "init", "--path", str(wf),
         "--private-evoguard",
-        "--evoguard-token-secret", "MY_PAT",
+        "--evoguard-token-secret", "MY_PAT", "--ref", "v9.9.9",
     ])
     body = wf.read_text(encoding="utf-8")
     assert "MY_PAT" in body
@@ -590,7 +606,7 @@ def test_init_private_rejects_an_unsafe_credential_reference(
 
     rc = cli.main([
         "init", "--path", str(wf), "--private-evoguard",
-        "--evoguard-token-secret", credential_key,
+        "--evoguard-token-secret", credential_key, "--ref", "v9.9.9",
     ])
 
     assert rc == 2

@@ -23,11 +23,7 @@ from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
 __all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__version__ = "4.0.0"
-
-# This source tree is a v4 release candidate. Keep generated consumer
-# workflows on the latest immutable tag until v4 has itself been published.
-LATEST_PUBLISHED_RELEASE = "3.8.0"
+__version__ = "4.0.1"
 
 # These schemas retain their v3.8.0 identities until their contracts change.
 # A schema identity denotes its stable shape, not the runtime version carrying it.
