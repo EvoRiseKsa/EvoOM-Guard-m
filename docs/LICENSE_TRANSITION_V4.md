@@ -1,6 +1,7 @@
 <!--
-  Copyright (c) 2026 EvoRise Company. All rights reserved.
-  Original creator: Mana Alharbi.
+  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Original creator and copyright owner: Mana Alharbi.
+  Commercial licensing contact: EvoRise Company, acting on behalf of the copyright owner.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -8,8 +9,7 @@
 
 This document records the conditions for publishing EvoOM Guard `v4.0.0` under
 the EvoRise Research and Evaluation License 1.0. It is not evidence that a v4
-release has been published, that a commercial license exists, or that the
-required IP-assignment to EvoRise Company has been executed.
+release has been published or that a commercial license exists.
 
 ## What this transition changes
 
@@ -22,20 +22,19 @@ required IP-assignment to EvoRise Company has been executed.
 
 ## Conditions before merge and release
 
-1. Record the legal identity of the intended v4 licensor: EvoRise Company, an
-   active Saudi one-person limited-liability company. Keep registration evidence
+1. Record the public licensing roles accurately: Mana Alharbi is the original
+   creator and copyright owner; EvoRise Company is the commercial licensing
+   contact acting on Mana Alharbi's behalf. Keep company-registration evidence
    private; do not publish a national number or registration certificate here.
-2. Retain a signed IP-assignment or other chain-of-title record moving the
-   applicable economic rights from Mana Alharbi to EvoRise Company. Preserve
-   Mana Alharbi's original-creator attribution and exclude Third-Party
-   Materials. Retain an authorized EvoRise Company acceptance/manager decision
-   with an effective date and scope. Until both records are signed, do not
-   merge or publish this v4 license transition.
+2. Do not describe EvoRise Company as a copyright owner or assignee unless a
+   later documented assignment supports that statement. A future assignment is
+   optional for this licensing model, not a prerequisite for publishing v4.
 3. Review every contributor, copied fixture, upstream patch, dependency,
    generated asset, data set, and workflow dependency against
    [THIRD_PARTY.md](../THIRD_PARTY.md).
-4. Have qualified Saudi legal counsel review the license, commercial terms,
-   trademark wording, privacy/data handling, and any Marketplace listing.
+4. Before entering customer contracts, have qualified Saudi legal counsel
+   review the license, commercial terms, trademark wording, privacy/data
+   handling, and any Marketplace listing.
 5. Bump the source version to `4.0.0`, run the full test and release checks,
    create a new immutable tag and release, and publish fresh checksums and
    provenance for that exact artifact.
@@ -46,7 +45,7 @@ required IP-assignment to EvoRise Company has been executed.
    runtime as a production merge gate, managed service, independent audit, or
    certification.
 8. Before the actual v4 release, perform a deliberate copyright-banner
-   inventory. Update only non-historical company-owned material and preserve
+   inventory. Update only non-historical first-party material and preserve
    immutable audit/release records and third-party notices unchanged.
 
 ## Repository boundaries
@@ -63,6 +62,6 @@ required IP-assignment to EvoRise Company has been executed.
 ## Required release record
 
 The v4 release notes must state the target tag, source commit, artifact
-SHA-256, release-attestation status, governing license, EvoRise Company as
-commercial licensor, Mana Alharbi as original creator, and the fact that
-earlier releases remain governed by their original license.
+SHA-256, release-attestation status, governing license, Mana Alharbi as
+copyright owner, EvoRise Company as authorized commercial licensing contact,
+and the fact that earlier releases remain governed by their original license.

@@ -3,15 +3,18 @@ Version 1.0 — 19 July 2026
 
 SPDX-License-Identifier: LicenseRef-EvoRise-Research-Evaluation-1.0
 
-Copyright © 2026 EvoRise Company. All rights reserved.
-Original creator: Mana Alharbi (مانع الحربي).
+Copyright © 2026 Mana Alharbi. All rights reserved.
+Original creator and copyright owner: Mana Alharbi (مانع الحربي).
+Commercial licensing contact: EvoRise Company, acting on behalf of the
+copyright owner.
 
 PRE-RELEASE TRANSITION DRAFT: This text is prepared for a future `v4.0.0`
-release. It is not a published grant and becomes effective only after (a) a
-signed assignment or other documented chain of title from Mana Alharbi to
-EvoRise Company, (b) EvoRise Company's authorized acceptance of that record,
-and (c) publication of a new v4 release carrying this License. Until then,
-this draft does not alter any historical v3 release or its license.
+release. It is not a published grant until a new v4 release carrying this
+License is published. Mana Alharbi remains the copyright owner. EvoRise
+Company is the designated commercial licensing contact acting for the
+copyright owner; that designation does not itself transfer copyright. Until a
+new v4 release is published, this draft does not alter any historical v3
+release or its license.
 
 IMPORTANT: THIS IS A SOURCE-AVAILABLE LICENSE, NOT AN OPEN-SOURCE LICENSE.
 
@@ -22,7 +25,9 @@ license from the Licensor.
 
 1. DEFINITIONS
 
-1.1 "Licensor" means EvoRise Company.
+1.1 "Licensor" means Mana Alharbi, the copyright owner. EvoRise Company acts
+solely as the Licensor's authorized commercial licensing contact and may sign
+a commercial license only in that capacity.
 
 1.2 "Software" means the source code, object code, command-line programs,
 workflows, schemas, documentation, examples, tests, verifier packs,
@@ -267,9 +272,12 @@ that file-specific notice controls for that file.
 
 8. OWNERSHIP, TRADEMARKS, AND RESERVATION OF RIGHTS
 
-The Software is licensed, not sold. The Licensor and applicable contributors
-retain all copyright, patent, trademark, trade-secret, database, and other
-intellectual-property rights in their respective materials.
+The Software is licensed, not sold. The Licensor retains copyright in the
+first-party material that the Licensor owns, and applicable contributors retain
+rights in their respective materials subject to the contribution license below.
+EvoRise Company's role as commercial licensing contact does not, by itself,
+make it a copyright owner. All parties retain their respective patent,
+trademark, trade-secret, database, and other intellectual-property rights.
 
 No trademark license is granted. No right is granted by implication,
 estoppel, exhaustion beyond mandatory law, or otherwise.
@@ -281,16 +289,18 @@ Public availability of source code does not grant rights beyond this License.
 If You intentionally submit code, documentation, tests, workflows, schemas,
 verifier packs, issue patches, pull requests, or other material for inclusion
 in the Software ("Contribution"), You represent that You have the right to do
-so and grant the Licensor a perpetual, irrevocable, worldwide, royalty-free,
-fully paid, transferable, and sublicensable license to use, reproduce, modify,
-prepare derivative works from, distribute, publicly perform, publicly display,
-commercialize, enforce, and relicense the Contribution under any terms.
+so and grant the Licensor, and EvoRise Company solely as the Licensor's
+authorized commercial licensing contact, a perpetual, irrevocable, worldwide,
+royalty-free, fully paid, transferable, and sublicensable license to use,
+reproduce, modify, prepare derivative works from, distribute, publicly
+perform, publicly display, commercialize, enforce, and relicense the
+Contribution under any terms.
 
 To the extent You control patent claims necessarily infringed by the
-Contribution, You grant the Licensor and recipients authorized by the
-Licensor a perpetual, worldwide, royalty-free patent license to make, use,
-sell, offer for sale, import, and otherwise exploit the Contribution as part
-of the Software.
+Contribution, You grant the Licensor, EvoRise Company acting on the Licensor's
+behalf, and recipients authorized by the Licensor a perpetual, worldwide,
+royalty-free patent license to make, use, sell, offer for sale, import, and
+otherwise exploit the Contribution as part of the Software.
 
 General suggestions and feedback may be used by the Licensor without
 restriction or compensation. Do not submit material You are not authorized
@@ -311,12 +321,15 @@ EvoRise Company
 Website: https://evoriseksa.com
 Email: evoriseksa@icloud.com
 
-Mana Alharbi is identified as the original creator. That attribution alone
-does not grant a separate authority to issue commercial licenses.
+Mana Alharbi is the original creator and copyright owner. EvoRise Company is
+the authorized commercial licensing contact for this Software; it may sign a
+commercial license only on behalf of Mana Alharbi unless a later documented
+assignment states otherwise.
 
 No purchase order, email, repository permission, issue response, pull-request
-acceptance, or course of conduct creates a commercial license unless the
-Licensor expressly signs a written agreement granting it.
+acceptance, or course of conduct creates a commercial license unless Mana
+Alharbi, or EvoRise Company acting on Mana Alharbi's behalf, expressly signs a
+written agreement granting it.
 
 11. TERM AND TERMINATION
 

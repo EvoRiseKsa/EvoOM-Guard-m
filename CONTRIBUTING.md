@@ -1,6 +1,7 @@
 <!--
-  Copyright (c) 2026 EvoRise Company. All rights reserved.
-  Original creator: Mana Alharbi.
+  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Original creator and copyright owner: Mana Alharbi.
+  Commercial licensing contact: EvoRise Company, acting on behalf of the copyright owner.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -18,12 +19,12 @@ share.
 
 For a contribution first accepted into a future v4 release, the contributor
 must have authority to grant the contribution terms in Section 9 of the v4
-`LICENSE` to EvoRise Company as the intended v4 Licensor, after the transition
-gate in [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md) is
-complete. The project may require a separate Contributor License Agreement
-before accepting it. This prospective condition does **not** retroactively
-relicense historical releases, third-party material, or prior contributors'
-work; those remain governed by their existing notices and agreements.
+`LICENSE` to Mana Alharbi as copyright owner, and to EvoRise Company solely
+as Mana Alharbi's authorized commercial licensing contact. The project may
+require a separate Contributor License Agreement before accepting it. This
+prospective condition does **not** retroactively relicense historical
+releases, third-party material, or prior contributors' work; those remain
+governed by their existing notices and agreements.
 
 Do not submit employer-owned, customer-owned, confidential, export-controlled,
 or third-party material unless you have written authority to license it on the

@@ -1,6 +1,7 @@
 <!--
-  Copyright (c) 2026 EvoRise Company. All rights reserved.
-  Original creator: Mana Alharbi (مانع الحربي).
+  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Original creator and copyright owner: Mana Alharbi (مانع الحربي).
+  Commercial licensing contact: EvoRise Company, acting on behalf of the copyright owner.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -69,11 +70,11 @@ correctness or security.
 > review.
 
 > **v4 licensing status.** The current published `v3.8.0` release retains its
-> own immutable license. A future v4 draft names EvoRise Company as intended
-> copyright holder and commercial licensor, while retaining Mana Alharbi as
-> original creator; it is not effective until the documented private
-> chain-of-title and authorized company acceptance are complete and a new v4
-> release is published. See [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md).
+> own immutable license. A future v4 release will retain Mana Alharbi as the
+> original creator and copyright owner, and name EvoRise Company as the
+> authorized commercial licensing contact acting on the owner's behalf. It
+> becomes effective only when a new v4 release is published; it does not alter
+> historical releases. See [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md).
 
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and

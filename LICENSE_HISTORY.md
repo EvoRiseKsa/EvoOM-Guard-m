@@ -6,7 +6,7 @@ rights that were granted with an earlier published release.
 | Material / version | Governing license |
 | --- | --- |
 | Every immutable release through [`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0) | The license shipped in that exact release: **EvoOM Guard Source-Available License 1.0**. |
-| Material first published in a future `v4.0.0` or later release, after the documented transition gate | **EvoRise Research and Evaluation License 1.0** (`LicenseRef-EvoRise-Research-Evaluation-1.0`), with EvoRise Company as Licensor. |
+| Material first published in a future `v4.0.0` or later release | **EvoRise Research and Evaluation License 1.0** (`LicenseRef-EvoRise-Research-Evaluation-1.0`), with Mana Alharbi as copyright owner and EvoRise Company as authorized commercial licensing contact. |
 | Files carrying another notice, including third-party material | The applicable file-level or upstream license. |
 
 ## Rules
@@ -22,10 +22,11 @@ rights that were granted with an earlier published release.
    not be added to public historical repositories.
 5. See [THIRD_PARTY.md](THIRD_PARTY.md) before assuming that this repository
    license applies to a particular path.
-6. Do not name EvoRise Company as copyright holder or Licensor in a published
-   v4 release until the signed assignment and the company's authorized
-   acceptance documented in [LICENSE_TRANSITION_V4.md](docs/LICENSE_TRANSITION_V4.md)
-   are complete.
+6. Do not name EvoRise Company as copyright holder or assignee unless a later
+   documented assignment supports that statement. The v4 notice instead names
+   Mana Alharbi as copyright owner and EvoRise Company as the authorized
+   commercial licensing contact; see
+   [LICENSE_TRANSITION_V4.md](docs/LICENSE_TRANSITION_V4.md).
 
 ## Release notice for v4.0.0
 
@@ -36,5 +37,7 @@ rights that were granted with an earlier published release.
 > production use require a separate written license. Earlier immutable
 > releases remain governed by the license shipped with each release.
 
-Copyright © 2026 EvoRise Company. All rights reserved.
-Original creator: Mana Alharbi (مانع الحربي).
+Copyright © 2026 Mana Alharbi. All rights reserved.
+Original creator and copyright owner: Mana Alharbi (مانع الحربي).
+Commercial licensing contact: EvoRise Company, acting on behalf of the
+copyright owner.

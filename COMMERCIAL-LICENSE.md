@@ -19,12 +19,12 @@ EvoRise Company
 Website: <https://evoriseksa.com>
 Email: <evoriseksa@icloud.com>
 
-This v4 draft identifies EvoRise Company as the intended commercial licensor
-and holder of the applicable economic rights. It becomes effective only after
-a signed IP-assignment or other documented chain of title from Mana Alharbi to
-EvoRise Company, an authorized company acceptance/manager decision, and the
-publication of a new v4 release. It does not alter the rights or copyright
-notices that accompanied immutable historical releases.
+For a future v4 release, Mana Alharbi remains the copyright owner and EvoRise
+Company is the designated commercial licensing contact acting on Mana Alharbi's
+behalf. This designation does not claim an assignment of copyright or alter
+the rights or copyright notices that accompanied immutable historical releases.
+The future v4 terms become effective only when a new v4 release carrying them
+is published.
 
 This file is informational only. It is not a commercial license, quote, offer,
 service-level commitment, or warranty.
