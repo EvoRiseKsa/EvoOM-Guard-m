@@ -55,6 +55,9 @@ correctness or security.
 > [`Authenticated Producer Receipt`](docs/AUTHENTICATED_PRODUCER_RECEIPT.md)
 > adds a non-admitting, provider-attestable receipt and reference workflow
 > topology; it still does not enable `ALLOW`, a key, a release, or publication.
+> The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
+> is deliberately sanitized and disabled at baseline; it has not yet recorded a
+> successful clean A-to-B-to-C round.
 
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation
@@ -66,9 +69,9 @@ correctness or security.
 
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
-> version boundary of the core, demo, evaluation record, and finalizer pilot;
-> the distinction between public code and private operational assets; and the
-> claims the current evidence does and does not support.
+> version boundary of the core, demo, evaluation record, finalizer pilot, and
+> receipt pilot; the distinction between public code and private operational
+> assets; and the claims the current evidence does and does not support.
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
