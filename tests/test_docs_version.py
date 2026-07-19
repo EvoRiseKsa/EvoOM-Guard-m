@@ -5,10 +5,12 @@
 Every user-facing install/pin reference must use the latest published consumer
 release. A source tree may legitimately prepare a newer runtime before its
 immutable GitHub Release exists; ``docs/RELEASE_STATUS.md`` records the source
-and latest-published versions explicitly. JSON-schema examples always use the
-current source runtime. The byte-pinned v3.7 Trusted Finalizer templates remain
-the sole historical pin exception because changing those URLs without matching
-reviewed SHA-256 values would be unsafe.
+and latest-published versions explicitly. ``evo-guard init`` must never guess a
+release ref: every documented invocation supplies an exact tag or full SHA.
+JSON-schema examples always use the current source runtime. The byte-pinned
+v3.7 Trusted Finalizer templates remain the sole historical pin exception
+because changing those URLs without matching reviewed SHA-256 values would be
+unsafe.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import re
 import unittest
 from pathlib import Path
 
-from evoom_guard import LATEST_PUBLISHED_RELEASE, __version__
+from evoom_guard import __version__
 
 ROOT = Path(__file__).parents[1]
 _FROZEN_RELEASE_PINS = {
@@ -112,7 +114,6 @@ class DocsVersionDriftTests(unittest.TestCase):
     def test_release_status_and_consumer_docs_are_consistent(self) -> None:
         source_version, published_version, state = _release_status()
         self.assertEqual(source_version, __version__)
-        self.assertEqual(published_version, LATEST_PUBLISHED_RELEASE)
         release_url = (
             "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/"
             f"v{published_version}"
@@ -141,6 +142,22 @@ class DocsVersionDriftTests(unittest.TestCase):
             self.assertRegex(release_status, re.compile(r"not yet a published", re.I))
         else:
             self.assertEqual(published_version, __version__)
+
+    def test_documented_init_commands_supply_an_explicit_ref(self) -> None:
+        paths = (ROOT / "README.md", ROOT / "docs" / "ADOPTION.md", ROOT / "docs" / "GUARD.md")
+        commands: list[str] = []
+        for path in paths:
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if line.strip().startswith("evo-guard init"):
+                    commands.append(f"{path.relative_to(ROOT)}:{lineno}: {line.strip()}")
+        self.assertTrue(commands, "consumer docs should include an init example")
+        missing_ref = [command for command in commands if "--ref " not in command]
+        self.assertEqual(
+            missing_ref,
+            [],
+            "every executable init example must choose an explicit immutable ref:\n"
+            + "\n".join(missing_ref),
+        )
 
     def test_json_schema_example_tool_version_is_current(self) -> None:
         text = (ROOT / "docs" / "JSON_SCHEMA.md").read_text(encoding="utf-8")

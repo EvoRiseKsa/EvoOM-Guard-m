@@ -7,32 +7,28 @@
 
 ## Status and exact scope
 
+[`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0)
+is the current published immutable GitHub Release at
+`301d62f2fd3e2e53b75e153201514f0f69e4ecf8`. Its `evo-guard.pyz` asset has
+SHA-256 `99f9d0ed5029e22e3e06c22b32e55cfe35ce8e97568e304d4cf88a7bd19e7332`.
+The release has a GitHub release attestation, and this exact asset has a
+separate GitHub Actions build-artifact attestation. Verification against the
+published asset succeeds when constrained to the repository, the `Release`
+workflow at `.github/workflows/release.yml@refs/heads/main`, the `main`
+source ref, and GitHub-hosted runners.
+
 `v3.7.0` has a GitHub **release** attestation. It does **not** have a GitHub
 Actions build-artifact attestation for `evo-guard.pyz`. Do not describe the
-v3.7.0 release attestation as build provenance.
+v3.7.0 release attestation as build provenance. Historical release records,
+including v3.8.0, remain historical evidence; they are not the current
+consumer release.
 
-[`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
-is a published immutable GitHub Release at
-`8e11021c505c265b3884736454e4ec424c2b0d3d`. Its `evo-guard.pyz` asset has
-SHA-256 `47bdcfbe2814fdd687afd62d1c476cbd5248db65683c97d2867a56dbbf9ee643`.
-The release has a GitHub release attestation, and this exact asset has a
-separate GitHub Actions build-artifact attestation. The latter identifies the
-`Release` workflow at
-`.github/workflows/release.yml@refs/heads/main`, source and workflow digest
-`8e11021c505c265b3884736454e4ec424c2b0d3d`, and a GitHub-hosted runner.
-
-The workflow support described here did not retroactively create build
-provenance for `v3.7.0`. The manually dispatched v3.8.0 release run built
-`dist/evo-guard.pyz` from `refs/heads/main`, checksummed it, then asked GitHub
-to generate an artifact attestation for those exact bytes before the file was
-transferred to the release-writing job.
 The build job receives only `contents: read`, `id-token: write`, and
-`attestations: write`; it does not receive `contents: write`.
-
-Artifact attestation is not itself a reason to create a release. Follow the
-[release-channel policy](../README.md#release-channel): make a new release
-only for an intentional versioned product change, after its version and
-consumer pins are updated and the protected release validation succeeds.
+`attestations: write`; it does not receive `contents: write`. Artifact
+attestation is not itself a reason to create a release. Follow the
+[release-channel policy](../README.md#release-channel): make a new release only
+for an intentional versioned product change, after its version and consumer
+pins are updated and the protected release validation succeeds.
 
 The record is a GitHub/Sigstore artifact attestation. It is not an EvoGuard
 verdict, an artifact-admission record, proof of a published release, or proof
@@ -40,27 +36,25 @@ of deployment.
 
 ## Consumer verification
 
-Download the asset you intend to consume and verify its checksum first. For
-the published v3.8.0 asset, the expected SHA-256 is
-`47bdcfbe2814fdd687afd62d1c476cbd5248db65683c97d2867a56dbbf9ee643`.
+Download the asset you intend to consume and verify its checksum first. For the
+published v4.0.0 asset, the expected SHA-256 is
+`99f9d0ed5029e22e3e06c22b32e55cfe35ce8e97568e304d4cf88a7bd19e7332`.
 Then use a current GitHub CLI in an online environment. First verify the
 release attestation and its assets:
 
 ```bash
-gh release verify v3.8.0 --repo EvoRiseKsa/EvoOM-Guard-m
+gh release verify v4.0.0 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
 Then verify the separate build-artifact attestation, supplying the exact
-release/workflow/source identity rather than relying on a broad owner-only
+repository/workflow/source identity rather than relying on a broad owner-only
 lookup:
 
 ```bash
 gh attestation verify ./evo-guard.pyz \
   --repo EvoRiseKsa/EvoOM-Guard-m \
   --signer-workflow EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml \
-  --signer-digest 8e11021c505c265b3884736454e4ec424c2b0d3d \
   --source-ref refs/heads/main \
-  --source-digest 8e11021c505c265b3884736454e4ec424c2b0d3d \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --deny-self-hosted-runners \
   --format json
@@ -72,7 +66,6 @@ GitHub Actions provenance identity for the local asset bytes. Neither command
 substitutes for verifying the downloaded checksum. For offline verification,
 use the GitHub CLI's downloaded attestation bundle and trusted-root procedure
 rather than treating a copied JSON document as a trust root.
-
 ## Relation to EvoGuard Artifact Digest Admission V2
 
 `EVOGUARD_ARTIFACT_BINDING_V2` deliberately treats its provenance file as
@@ -113,6 +106,6 @@ thereby prove:
 
 This is a concrete prerequisite for the provider-specific portion of issue
 [#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78), not a closure of
-that issue. The v3.8.0 attestation does not implement or exercise a protected,
+that issue. The v4.0.0 attestation does not implement or exercise a protected,
 end-to-end finalizer-to-artifact admission run; that separate work remains
 required before any such claim.

@@ -56,7 +56,7 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from evoom_guard import LATEST_PUBLISHED_RELEASE, __version__
+from evoom_guard import __version__
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
     PackManifestError,
@@ -164,6 +164,7 @@ _CONFIG_KEYS = frozenset({
 _REPORT_INTEGRITY_VALUES = ("same_process_candidate_writable", "external_process_isolated")
 _ISOLATION_VALUES = ("subprocess", "docker", "gvisor")
 _GITHUB_ACTIONS_CREDENTIAL_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_IMMUTABLE_RELEASE_REF_RE = re.compile(r"(?:v\d+\.\d+\.\d+|[0-9a-f]{40})\Z")
 
 
 def _github_actions_credential_key(value: object) -> str:
@@ -181,6 +182,23 @@ def _github_actions_credential_key(value: object) -> str:
         )
     if value.upper().startswith("GITHUB_"):
         raise ValueError("--evoguard-token-secret must not begin with GITHUB_")
+    return value
+
+
+def _immutable_release_ref(value: object) -> str:
+    """Accept only an exact release tag or full commit SHA for ``init``.
+
+    Workflow scaffolding is a security-sensitive operation: silently choosing a
+    branch, an unverified tag, or a stale "latest" value makes the generated
+    gate less reproducible than the user believes. This local parser cannot
+    establish remote tag availability; it enforces the immutable-reference
+    shape and refuses moving branch names. The caller chooses a published tag
+    or full commit SHA explicitly.
+    """
+    if not isinstance(value, str) or _IMMUTABLE_RELEASE_REF_RE.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError(
+            "--ref must be an exact release tag (vX.Y.Z) or a full 40-hex commit SHA"
+        )
     return value
 
 
@@ -1558,8 +1576,10 @@ def build_parser() -> argparse.ArgumentParser:
         "repository root inferred from --path)",
     )
     i_p.add_argument(
-        "--ref", default=f"v{LATEST_PUBLISHED_RELEASE}",
-        help="the EvoGuard action ref to pin (default: latest published release tag)",
+        "--ref",
+        required=True,
+        type=_immutable_release_ref,
+        help="exact EvoGuard SemVer tag (vX.Y.Z) or full 40-hex commit SHA; branches are refused",
     )
     i_p.add_argument("--force", action="store_true", help="overwrite an existing workflow file")
     i_p.add_argument(
