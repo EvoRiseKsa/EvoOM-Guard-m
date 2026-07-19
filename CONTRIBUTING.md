@@ -1,5 +1,6 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Copyright (c) 2026 EvoRise Company. All rights reserved.
+  Original creator: Mana Alharbi.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -17,7 +18,9 @@ share.
 
 For a contribution first accepted into a future v4 release, the contributor
 must have authority to grant the contribution terms in Section 9 of the v4
-`LICENSE`. The project may require a separate Contributor License Agreement
+`LICENSE` to EvoRise Company as the intended v4 Licensor, after the transition
+gate in [`docs/LICENSE_TRANSITION_V4.md`](docs/LICENSE_TRANSITION_V4.md) is
+complete. The project may require a separate Contributor License Agreement
 before accepting it. This prospective condition does **not** retroactively
 relicense historical releases, third-party material, or prior contributors'
 work; those remain governed by their existing notices and agreements.

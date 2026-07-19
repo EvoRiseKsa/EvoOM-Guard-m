@@ -1,5 +1,6 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+  Copyright (c) 2026 EvoRise Company. All rights reserved.
+  Original creator: Mana Alharbi (مانع الحربي).
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -78,7 +79,11 @@ integrations—not from obscuring already published Python or workflow files.
 
 The proposed future v4 research/evaluation license is more restrictive. It
 cannot retract rights already granted with v3.8.0; see
-[LICENSE_HISTORY.md](../LICENSE_HISTORY.md).
+[LICENSE_HISTORY.md](../LICENSE_HISTORY.md). Its draft names EvoRise Company
+as intended v4 copyright holder and commercial licensor, while preserving Mana
+Alharbi's original-creator attribution. That identity is not effective until
+the signed assignment, authorized company acceptance, and a new published v4
+release are complete; see [LICENSE_TRANSITION_V4.md](LICENSE_TRANSITION_V4.md).
 
 ## Evidence still required before stronger claims
 

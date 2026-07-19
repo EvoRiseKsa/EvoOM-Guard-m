@@ -14,14 +14,17 @@ Licensor.
 
 ## Commercial contact
 
-EvoRise Tech / Mana Alharbi
+EvoRise Company
 
 Website: <https://evoriseksa.com>
 Email: <evoriseksa@icloud.com>
 
-EvoRise Tech is shown here as the commercial contact. This notice does not by
-itself transfer copyright or identify a different legal rights holder; the
-copyright notice and a documented IP transfer, if any, control that question.
+This v4 draft identifies EvoRise Company as the intended commercial licensor
+and holder of the applicable economic rights. It becomes effective only after
+a signed IP-assignment or other documented chain of title from Mana Alharbi to
+EvoRise Company, an authorized company acceptance/manager decision, and the
+publication of a new v4 release. It does not alter the rights or copyright
+notices that accompanied immutable historical releases.
 
 This file is informational only. It is not a commercial license, quote, offer,
 service-level commitment, or warranty.

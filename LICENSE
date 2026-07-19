@@ -3,7 +3,15 @@ Version 1.0 — 19 July 2026
 
 SPDX-License-Identifier: LicenseRef-EvoRise-Research-Evaluation-1.0
 
-Copyright © 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+Copyright © 2026 EvoRise Company. All rights reserved.
+Original creator: Mana Alharbi (مانع الحربي).
+
+PRE-RELEASE TRANSITION DRAFT: This text is prepared for a future `v4.0.0`
+release. It is not a published grant and becomes effective only after (a) a
+signed assignment or other documented chain of title from Mana Alharbi to
+EvoRise Company, (b) EvoRise Company's authorized acceptance of that record,
+and (c) publication of a new v4 release carrying this License. Until then,
+this draft does not alter any historical v3 release or its license.
 
 IMPORTANT: THIS IS A SOURCE-AVAILABLE LICENSE, NOT AN OPEN-SOURCE LICENSE.
 
@@ -14,9 +22,7 @@ license from the Licensor.
 
 1. DEFINITIONS
 
-1.1 "Licensor" means Mana Alharbi (مانع الحربي), or any successor legal
-entity that validly owns the applicable copyright and expressly identifies
-itself as the licensor in the Software's copyright notice.
+1.1 "Licensor" means EvoRise Company.
 
 1.2 "Software" means the source code, object code, command-line programs,
 workflows, schemas, documentation, examples, tests, verifier packs,
@@ -301,9 +307,12 @@ require a separate written agreement signed by the Licensor.
 
 Requests may be directed to:
 
-EvoRise Tech / Mana Alharbi
+EvoRise Company
 Website: https://evoriseksa.com
 Email: evoriseksa@icloud.com
+
+Mana Alharbi is identified as the original creator. That attribution alone
+does not grant a separate authority to issue commercial licenses.
 
 No purchase order, email, repository permission, issue response, pull-request
 acceptance, or course of conduct creates a commercial license unless the

@@ -29,7 +29,12 @@
 
 - الموقع: <https://evoriseksa.com>
 - البريد: <evoriseksa@icloud.com>
-- جهة التواصل: EvoRise Tech / Mana Alharbi
+- مالك الحقوق المالية والمرخِّص التجاري المستهدف لإصدار v4: EvoRise Company
+- المؤلف الأصلي: Mana Alharbi
+
+لا تصبح هذه الصياغة نافذة إلا بعد توقيع نقل الحقوق المالية أو سلسلة ملكية
+موثقة من Mana Alharbi إلى EvoRise Company، وقبولها من ممثل الشركة المخول،
+ثم نشر إصدار v4 جديد. ولا تغير هذه المسودة ترخيص أو حقوق الإصدارات السابقة.
 
 انظر إلى [LICENSE_HISTORY.md](LICENSE_HISTORY.md) و
 [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) و[THIRD_PARTY.md](THIRD_PARTY.md).

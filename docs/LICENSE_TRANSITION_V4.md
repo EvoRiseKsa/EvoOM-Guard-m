@@ -1,5 +1,6 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Copyright (c) 2026 EvoRise Company. All rights reserved.
+  Original creator: Mana Alharbi.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -7,8 +8,8 @@
 
 This document records the conditions for publishing EvoOM Guard `v4.0.0` under
 the EvoRise Research and Evaluation License 1.0. It is not evidence that a v4
-release has been published, that a commercial license exists, or that EvoRise
-Tech has acquired copyright.
+release has been published, that a commercial license exists, or that the
+required IP-assignment to EvoRise Company has been executed.
 
 ## What this transition changes
 
@@ -21,10 +22,15 @@ Tech has acquired copyright.
 
 ## Conditions before merge and release
 
-1. Record the exact legal name and jurisdiction of the EvoRise Tech entity.
-2. Retain a signed IP-assignment or other chain-of-title record if copyright is
-   to move from Mana Alharbi to that entity. Until then, do not replace the
-   copyright holder or Licensor in the published license.
+1. Record the legal identity of the intended v4 licensor: EvoRise Company, an
+   active Saudi one-person limited-liability company. Keep registration evidence
+   private; do not publish a national number or registration certificate here.
+2. Retain a signed IP-assignment or other chain-of-title record moving the
+   applicable economic rights from Mana Alharbi to EvoRise Company. Preserve
+   Mana Alharbi's original-creator attribution and exclude Third-Party
+   Materials. Retain an authorized EvoRise Company acceptance/manager decision
+   with an effective date and scope. Until both records are signed, do not
+   merge or publish this v4 license transition.
 3. Review every contributor, copied fixture, upstream patch, dependency,
    generated asset, data set, and workflow dependency against
    [THIRD_PARTY.md](../THIRD_PARTY.md).
@@ -39,6 +45,9 @@ Tech has acquired copyright.
 7. Ensure public documentation never describes the v4 research/evaluation
    runtime as a production merge gate, managed service, independent audit, or
    certification.
+8. Before the actual v4 release, perform a deliberate copyright-banner
+   inventory. Update only non-historical company-owned material and preserve
+   immutable audit/release records and third-party notices unchanged.
 
 ## Repository boundaries
 
@@ -54,5 +63,6 @@ Tech has acquired copyright.
 ## Required release record
 
 The v4 release notes must state the target tag, source commit, artifact
-SHA-256, release-attestation status, governing license, commercial contact,
-and the fact that earlier releases remain governed by their original license.
+SHA-256, release-attestation status, governing license, EvoRise Company as
+commercial licensor, Mana Alharbi as original creator, and the fact that
+earlier releases remain governed by their original license.
