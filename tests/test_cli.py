@@ -618,6 +618,30 @@ def test_init_private_rejects_an_unsafe_credential_reference(
 _QUIET = lambda *_a, **_k: None  # noqa: E731 - swallow warnings in unit tests
 
 
+def test_cli_config_names_are_exact_compatibility_aliases():
+    from evoom_guard.policy.config import ConfigError, load_config
+
+    assert cli.ConfigError is ConfigError
+    assert cli._load_config is load_config
+    assert not hasattr(cli, "load_config")
+
+
+def test_load_config_retains_unused_output_callback_until_after_read(tmp_path):
+    policy = tmp_path / ".evoguard.json"
+    policy.write_text('{"timeout": 7}', encoding="utf-8")
+
+    class DeletePolicyWhenReleased:
+        def __call__(self, _message: str) -> None:
+            pass
+
+        def __del__(self) -> None:
+            policy.unlink(missing_ok=True)
+
+    assert cli._load_config(
+        str(policy), out=DeletePolicyWhenReleased()
+    ) == {"timeout": 7}
+
+
 def test_load_config_reads_known_keys(tmp_path):
     p = tmp_path / ".evoguard.json"
     p.write_text(json.dumps({
