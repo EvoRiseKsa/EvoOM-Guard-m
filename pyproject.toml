@@ -69,6 +69,10 @@ version = { attr = "evoom_guard.__version__" }
 # to run under the Guard judge (with EVOGUARD_* env + a candidate target), not as
 # part of this repo's suite — so `python -m pytest -q` collects only tests/.
 testpaths = ["tests"]
+# Frozen verifier packs contain test_*.py files for the external judge. They are
+# evidence fixtures, not members of EvoOM Guard's own pytest suite; collecting
+# them would also write __pycache__ into and invalidate the frozen pack digest.
+norecursedirs = ["tests/baseline"]
 
 [tool.ruff]
 target-version = "py310"

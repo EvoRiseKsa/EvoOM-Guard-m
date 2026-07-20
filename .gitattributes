@@ -2,3 +2,8 @@
 # detected text file LF-stable across Windows and POSIX checkouts; binary files
 # remain binary under Git's text=auto detection.
 * text=auto eol=lf
+
+# This frozen test fixture is signed over its exact historical CRLF bytes.
+# Treat it as opaque data so checkout normalization cannot invalidate the
+# detached Ed25519 signature again.
+tests/baseline/v4.0.1/artifacts/record-pass-repo-signed.json -text -diff

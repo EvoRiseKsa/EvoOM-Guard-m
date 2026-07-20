@@ -31,12 +31,23 @@ distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
 
-For deterministic local verification of the published `v4.0.1` state, see:
+For byte-exact offline verification of the frozen `v4.0.1` baseline, see:
 
 - `tests/baseline/v4.0.1/BASELINE_MANIFEST.json`
+- `tests/baseline/v4.0.1/release-manifest.json`
 - `tests/baseline/v4.0.1/SHA256SUMS_v4.0.1.txt`
+- `tests/baseline/v4.0.1/ERRATA.md`
 - `docs/RELEASE_GATE_CHECKLIST.md`
 
-The baseline set contains command captures, PASS/FAIL/REJECTED sample outputs,
-pack identity vectors, detached-signature evidence, and a local `evo-guard.pyz`
-with checksum manifest (`SHA256SUMS_v4.0.1.txt`).
+The strict `baseline-v2` set contains the frozen Action contract and benchmark,
+command captures, PASS/FAIL/REJECTED sample outputs, pack identity vectors,
+detached-signature evidence, and the release-identical `evo-guard.pyz` with its
+checksum manifest. Offline tests validate every inventoried byte, execute the
+zipapp, recompute the pack identity, and verify the Ed25519 signature over the
+exact historical CRLF record bytes.
+
+The baseline records externally observed GitHub release, workflow, Marketplace,
+and provenance facts. Internal consistency tests do not replace an independent
+online re-query when those external facts must be trusted at a later date. The
+erratum corrects the former pre-release metadata without moving the immutable
+tag or changing any published asset.

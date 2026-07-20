@@ -1,0 +1,61 @@
+{
+  "schema_version": "evoguard-release-manifest-v1",
+  "project": "EvoOM Guard",
+  "version": "4.0.1",
+  "repository": "EvoRiseKsa/EvoOM-Guard-m",
+  "tag": "v4.0.1",
+  "commit_sha": "5ed7e84017619496521b813f859a6a8bf0a2b1df",
+  "tree_sha": "434d09817bd166be4e123836b941ee1b808d17bf",
+  "state": "published",
+  "prerelease": false,
+  "immutable": true,
+  "published_utc": "2026-07-20T18:30:01Z",
+  "release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1",
+  "marketplace": {
+    "action": "EvoOM Guard",
+    "version": "v4.0.1",
+    "verified_utc": "2026-07-20T20:00:00Z",
+    "url": "https://github.com/marketplace/actions/evoom-guard"
+  },
+  "assets": [
+    {
+      "name": "evo-guard.pyz",
+      "size_bytes": 1099446,
+      "sha256": "81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size_bytes": 80,
+      "sha256": "c53a9eb496c60ee663dd3c8e8dc1f334035a43ed29cb9b09f4399d9f1380f530"
+    }
+  ],
+  "release_workflow": {
+    "path": ".github/workflows/release.yml",
+    "event": "workflow_dispatch",
+    "source_ref": "refs/heads/main",
+    "run_id": 29766032321,
+    "attempt": 1,
+    "head_sha": "5ed7e84017619496521b813f859a6a8bf0a2b1df",
+    "conclusion": "success",
+    "run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29766032321",
+    "pytest": {
+      "passed": 1157,
+      "skipped": 11,
+      "subtests_passed": 52
+    },
+    "linux_e2e_passed": [10, 7],
+    "windows_e2e_passed": 10
+  },
+  "build_provenance": {
+    "predicate_type": "https://slsa.dev/provenance/v1",
+    "subject_name": "evo-guard.pyz",
+    "subject_sha256": "81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7",
+    "source_repository": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+    "source_digest": "5ed7e84017619496521b813f859a6a8bf0a2b1df",
+    "source_ref": "refs/heads/main",
+    "signer_identity": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml@refs/heads/main",
+    "runner_environment": "github-hosted",
+    "invocation_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29766032321/attempts/1",
+    "verification_scope": "recorded_external_attestation"
+  }
+}
