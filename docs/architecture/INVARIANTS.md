@@ -1,0 +1,24 @@
+# Invariants and security contracts
+
+The implementation must preserve these invariants across every refactor PR.
+
+1. `PASS` means static and runtime checks reported by trusted signal sources passed.
+2. `REJECTED` means a policy violation is confirmed.
+3. `FAIL` means environment/runtime failure that blocks trust.
+4. `TAMPERED` means evidence/report mismatch or integrity failure.
+5. `ERROR` paths must remain fail-closed.
+6. Docker isolation must preserve process cleanup evidence and terminate non-delivered artifacts.
+7. Verifier pack execution and validation must be non-empty for mandatory pathways.
+8. Digest and policy must be materialized in each decision lifecycle.
+9. Finalizer trust chain must include raw Git, handoff, and source identity.
+10. Byte-level evidence and canonical signing bytes must remain stable per format.
+11. External context must be pinned and validated.
+12. Verdicts, reason codes and exit codes must remain aligned.
+13. Canonical JSON and archive member order must remain deterministic.
+14. Process-tree lifecycle evidence must include parent/child/cleanup path.
+15. Same-process and isolated execution modes must be explicit and named in state transitions.
+16. Record verifier is the trusted producer of lifecycle evidence checks.
+
+Violations of these invariants are treated as security regressions and block release
+except with explicit emergency exception process.
+

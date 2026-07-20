@@ -1,0 +1,138 @@
+{
+  "schema_version": "baseline-v1",
+  "project": "EvoOM Guard",
+  "source_version": "4.0.1",
+  "git": {
+    "source_sha": "00427917c03266f99a9cf99a21e82ed57c46f226",
+    "source_branch": "agent/v4-0-1-release-correctness",
+    "evoom_guard_version": "4.0.1"
+  },
+  "release": {
+    "status": "pre-release",
+    "source_ref": "4.0.1-candidate",
+    "asset": {
+      "path": "pyz/evo-guard.pyz",
+      "size_bytes": 1099446,
+      "sha256": "81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7"
+    }
+  },
+  "command_manifest": {
+    "inventory": [
+      {
+        "name": "python -m evoom_guard.cli --help",
+        "artifact": {
+          "path": "commands/cli_help.txt",
+          "size_bytes": 12848,
+          "sha256": "7cfd9fc514f5b1d3e97010374e40f17d8f9de907c0ebf9b1668d5693905c4030"
+        }
+      },
+      {
+        "name": "python -m evoom_guard.cli init --help",
+        "artifact": {
+          "path": "commands/init_help.txt",
+          "size_bytes": 3618,
+          "sha256": "58a086c88bf013000e2dac778fefe95e19b97bc3bd447b59939a59305ca395c4"
+        }
+      },
+      {
+        "name": "python -m evoom_guard.cli version",
+        "artifact": {
+          "path": "commands/version.txt",
+          "size_bytes": 36,
+          "sha256": "582bf415f56c15a0e82dad12b344359160be109783fda62f16da2d80423a3a14"
+        }
+      }
+    ]
+  },
+  "evidence_formats": {
+    "record_schema": "1.11",
+    "sarif": "2.1.0",
+    "evidence_signature": "Ed25519 detached",
+    "pack_digest": "EVOGUARD_PACK_V2",
+    "junit_digest_format": "JUNIT_XML_SHA256"
+  },
+  "artifact_vectors": {
+    "command_output": {
+      "pass_repo": {
+        "record": {
+          "path": "evidence/record-pass-repo.json",
+          "size_bytes": 4636,
+          "sha256": "ed6fd7dc7c594eab6029c443b55df3068c624562a4685843d897e078d9f1d57a"
+        },
+        "report": {
+          "path": "evidence/report-pass-repo.md",
+          "size_bytes": 1312,
+          "sha256": "a11ac4a09283f9f532f56004daa838300c583669b99561606e4dcef69f574032"
+        },
+        "sarif": {
+          "path": "evidence/sarif-pass-repo.json",
+          "size_bytes": 347,
+          "sha256": "5dd267d5af04f32155ccb2f3866314465a9b36dfc6314e943b6fcf068f341708"
+        }
+      },
+      "fail_repo": {
+        "record": {
+          "path": "evidence/record-fail-repo.json",
+          "size_bytes": 4849,
+          "sha256": "987dfc019bdc58fe0423bf25093a361744e4d3c9a887682eb109b51980b3463c"
+        },
+        "report": {
+          "path": "evidence/report-fail-repo.md",
+          "size_bytes": 1274,
+          "sha256": "c2a3c6c7f8e0a98e837e9bf9d43ce59d0df7d688a71ffecd056f059d07d6c64d"
+        },
+        "sarif": {
+          "path": "evidence/sarif-fail-repo.json",
+          "size_bytes": 1188,
+          "sha256": "c06ee0f945d8c877f6fd6ee40ed575c72f3073a4c713c521fe1bfa3086c2c283"
+        }
+      },
+      "rejected_harness": {
+        "record": {
+          "path": "evidence/record-rejected-harness.json",
+          "size_bytes": 4533,
+          "sha256": "cc521017b918f1522c5a0cb877962982a740c002b722e46b3a01e1b4969da80f"
+        },
+        "report": {
+          "path": "evidence/report-rejected-harness.md",
+          "size_bytes": 998,
+          "sha256": "235090577a9e36670933068ad5e7ff91dfd12b192af81d69ee4acc93eb8a917f"
+        },
+        "sarif": {
+          "path": "evidence/sarif-rejected-harness.json",
+          "size_bytes": 1371,
+          "sha256": "1c85a88210add801a79d9b5078a8a49bcc5e43c5074bc8e615be30f76966136c"
+        }
+      }
+    },
+    "pack_digest_vector": {
+      "path": "packs/pack-doctor-report.json",
+      "size_bytes": 414,
+      "sha256": "f706e3071a4a51b328e9623d88449783c23f023e39710a62323a16a08a6f414b"
+    },
+    "signed_record": {
+      "record": {
+        "path": "artifacts/record-pass-repo-signed.json",
+        "size_bytes": 4636,
+        "sha256": "36ba75e635dc3c30362903ea2fd3a807e397287ffd0c6be81122950bc69c2a9e"
+      },
+      "signature": {
+        "path": "artifacts/record-pass-repo-signed.json.sig",
+        "size_bytes": 89,
+        "sha256": "8faff9f2d531c09b8f661b73a04e7cc8007e6d3d8592fae400c8e682f85bdfa8"
+      },
+      "pubkey": {
+        "path": "artifacts/baseline-sign-pub.pem",
+        "size_bytes": 113,
+        "sha256": "8021694dd0769c7d956ff34ebe0da353556301f7e743131323120b3038721ab7"
+      }
+    }
+  },
+  "benchmarks": {
+    "results_path": "benchmarks/results.jsonl",
+    "results_sha256": "2b98072aad55f2ba34e8e7d29701a56471db8772886a0a0cd7dee0c5ca41a552",
+    "rows": 16,
+    "schema_version": "bench-v1"
+  },
+  "generated_utc": "2026-07-20T17:32:13Z"
+}

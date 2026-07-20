@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "EvoGuard",
+          "version": "4.0.1",
+          "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+          "rules": [
+            {
+              "id": "protected_harness_edit",
+              "name": "REJECTED"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "protected_harness_edit",
+          "level": "error",
+          "message": {
+            "text": "EvoGuard REJECTED: reward-hack guard: the patch edits or deletes the judging tests, their configuration, the gate's CI/config, or an auto-executed file \u2014 fix the source under test, not the harness (tests/test_ops.py)"
+          },
+          "properties": {
+            "verdict": "REJECTED",
+            "risk_level": "high",
+            "verdict_source": null,
+            "isolation": "not_run",
+            "test_command_ran": false,
+            "execution_state": "static_gate",
+            "execution_phase": "pre_gate"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/test_ops.py"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

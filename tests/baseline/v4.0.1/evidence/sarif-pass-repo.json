@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "EvoGuard",
+          "version": "4.0.1",
+          "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+          "rules": []
+        }
+      },
+      "results": []
+    }
+  ]
+}

@@ -28,3 +28,16 @@ does not guess a "latest" release.
 Historical releases retain the license and notices that shipped with them. The
 EvoRise Source-Available License 1.0 applies only to material first distributed
 with a published v4 release carrying that license.
+
+
+## Baseline artifacts
+
+For deterministic local verification of the pre-release `v4.0.1` state, see:
+
+- `tests/baseline/v4.0.1/BASELINE_MANIFEST.json`
+- `docs/RELEASE_GATE_CHECKLIST.md`
+
+The baseline set contains command captures, PASS/FAIL/REJECTED sample outputs,
+pack identity vectors, detached-signature evidence, and a local `evo-guard.pyz`
+with checksum manifest (`SHA256SUMS_v4.0.1.txt`).
+

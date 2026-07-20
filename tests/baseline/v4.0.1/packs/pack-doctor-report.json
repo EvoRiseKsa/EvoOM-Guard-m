@@ -1,0 +1,16 @@
+{
+  "pack": "examples/blackbox-cli/pack",
+  "ok": true,
+  "problems": [],
+  "test_files": [
+    "test_protocol.py"
+  ],
+  "manifest": {
+    "id": "calc-cli-protocol",
+    "version": "1.0.0",
+    "description": "External behaviour of the calc CLI (add)",
+    "target_type": "cli"
+  },
+  "pack_sha256": "a4c61f396d35393bfaf5061d9e19aa16a9838f159ee679bf485e880856fb20be",
+  "pack_digest_format": "EVOGUARD_PACK_V2"
+}

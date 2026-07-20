@@ -54,6 +54,7 @@ requirements.
 
 ## Required state before production finalizer enforcement
 
+- Use `docs/RELEASE_GATE_CHECKLIST.md` as the hardening control ledger for this repository before merge gating.
 Before a repository makes the finalizer a required merge condition, it must have:
 
 1. A protected default branch that also protects policy, pack, and workflow paths.

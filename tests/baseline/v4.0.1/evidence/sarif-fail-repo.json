@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "EvoGuard",
+          "version": "4.0.1",
+          "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+          "rules": [
+            {
+              "id": "tests_failed",
+              "name": "FAIL"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "tests_failed",
+          "level": "error",
+          "message": {
+            "text": "EvoGuard FAIL: the repo's tests fail on this patch (1/2 passed)"
+          },
+          "properties": {
+            "verdict": "FAIL",
+            "risk_level": "low",
+            "verdict_source": "junit+exit",
+            "isolation": "subprocess",
+            "test_command_ran": true,
+            "execution_state": "completed",
+            "execution_phase": "repo_suite"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "calc/ops.py"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
