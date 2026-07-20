@@ -38,7 +38,7 @@ jobs:
           python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Lint (ruff)
-        run: python -m ruff check evoom_guard/ tests/
+        run: python -m ruff check evoom_guard/ tests/ tools/ci/
 
       - name: Type-check (mypy)
         run: python -m mypy evoom_guard/
@@ -50,6 +50,10 @@ jobs:
         run: |
           python -m coverage run -m pytest tests/ -q
           python -m coverage report
+
+      - name: Security mutation gate (Python 3.12)
+        if: matrix.python-version == '3.12'
+        run: python tools/ci/run_security_mutation_gate.py
 
       - name: Import smoke (stdlib-only core, no extras)
         run: |

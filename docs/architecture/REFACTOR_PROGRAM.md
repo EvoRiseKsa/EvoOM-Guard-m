@@ -37,10 +37,15 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
 
 ## Stage 2: Characterization and equivalence
 
-- Golden vectors for verdict/reason/lifecycle
-- Differential harness between old/new harness
+- Frozen `RepoVerifier` behavioral/evidence vectors, reproduced by
+  `python tools/ci/capture_repo_verifier_characterization.py` and reviewed before
+  any explicit `--write` update.
+- Differential seam between the compatibility facade and the frozen pre-refactor
+  outcomes; wall-clock duration is the only normalized field.
 - Fuzz/property suites for malformed inputs and tamper vectors
-- Mutation security gates for assurance-sensitive logic
+- A bounded deterministic mutation gate for assurance-sensitive logic:
+  `python tools/ci/run_security_mutation_gate.py`. Every reviewed mutant must be
+  killed by an assertion; timeouts and test infrastructure errors fail closed.
 
 ## Stage 3: Domain modeling
 
@@ -71,4 +76,3 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
 2. Golden/differential and mutation gates for the stage are green.
 3. No behavior regressions in existing verdict/reason/canonical outputs.
 4. PR labeled `no-behavior-change` unless migration scope is explicit and documented.
-
