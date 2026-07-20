@@ -2107,10 +2107,17 @@ class RepoVerifier:
                     )
                 pack_phase = os.path.join(workdir, "pack-phase")
                 os.makedirs(pack_phase, exist_ok=True)
+                pack_test_root = "/verifier-pack" if container_mode else pack_snapshot
                 pack_cmd = [
                     "python" if container_mode else sys.executable,
                     "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider",
-                    "/verifier-pack" if container_mode else pack_snapshot,
+                    # The pack snapshot is intentionally outside ``cwd=copy``.
+                    # Without an explicit conftest boundary pytest walks their
+                    # common ancestors and may enumerate unrelated volatile temp
+                    # siblings.  On Windows its same-file fallback then stats a
+                    # sibling another verifier has just cleaned up (WinError 2).
+                    f"--confcutdir={pack_test_root}",
+                    pack_test_root,
                 ]
                 try:
                     if container_mode:
