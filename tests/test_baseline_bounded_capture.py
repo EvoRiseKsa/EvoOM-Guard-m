@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import evoom_guard.guard as guard_module
+from evoom_guard.execution import ProcessContainmentError, ProcessOutputLimitExceeded
 from evoom_guard.guard import _run_baseline_suite
 from evoom_guard.verifiers import repo_verifier
 
@@ -16,9 +18,9 @@ def _repo(tmp_path) -> str:
 
 def test_baseline_output_limit_is_not_clean_evidence(tmp_path, monkeypatch) -> None:
     def overflow(*_args, **_kwargs):
-        raise repo_verifier._SubprocessOutputLimitExceeded()
+        raise ProcessOutputLimitExceeded()
 
-    monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", overflow)
+    monkeypatch.setattr(guard_module, "_run_bounded_subprocess", overflow)
 
     result = _run_baseline_suite(
         _repo(tmp_path),
@@ -39,9 +41,9 @@ def test_baseline_output_limit_is_not_clean_evidence(tmp_path, monkeypatch) -> N
 
 def test_baseline_containment_failure_in_setup_is_not_clean_evidence(tmp_path, monkeypatch) -> None:
     def containment_failure(*_args, **_kwargs):
-        raise repo_verifier._SubprocessContainmentError("cleanup unproven")
+        raise ProcessContainmentError("cleanup unproven")
 
-    monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", containment_failure)
+    monkeypatch.setattr(guard_module, "_run_bounded_subprocess", containment_failure)
 
     result = _run_baseline_suite(
         _repo(tmp_path),
@@ -71,7 +73,7 @@ def test_baseline_reads_junit_through_bounded_oracle(tmp_path, monkeypatch) -> N
         observed.append(path)
         return "<testsuite><testcase name='ok'/></testsuite>"
 
-    monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", completed)
+    monkeypatch.setattr(guard_module, "_run_bounded_subprocess", completed)
     monkeypatch.setattr(repo_verifier, "read_junit_xml", read_oracle)
 
     result = _run_baseline_suite(

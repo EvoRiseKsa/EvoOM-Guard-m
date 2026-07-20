@@ -89,7 +89,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="subprocess-output-cap-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/execution/process.py",
         before="                self._exceeded = True\n",
         after="                self._exceeded = False\n",
         test=(
@@ -98,6 +98,17 @@ MUTATIONS = (
         ),
     ),
 )
+
+
+def _module_name(path: str) -> str:
+    """Return the import name for one mutated Python source path."""
+
+    module = path.removesuffix(".py").replace("/", ".")
+    if module.endswith(".__init__"):
+        module = module.removesuffix(".__init__")
+    if not module.startswith("evoom_guard."):
+        raise RuntimeError(f"mutation path is outside the package: {path}")
+    return module
 
 
 def _apply_mutation(overlay: Path, mutation: Mutation) -> None:
@@ -115,6 +126,37 @@ def _apply_mutation(overlay: Path, mutation: Mutation) -> None:
     )
 
 
+def _run_overlay_test(
+    overlay: Path, mutation: Mutation, timeout: float
+) -> subprocess.CompletedProcess[str]:
+    """Run one focused test and prove it imported the requested overlay module."""
+
+    module_name = _module_name(mutation.path)
+    expected_path = str((overlay / mutation.path).resolve())
+    bootstrap = (
+        "import importlib, pathlib, sys; "
+        f"sys.path.insert(0, {str(overlay)!r}); "
+        f"mutated = importlib.import_module({module_name!r}); "
+        "loaded = pathlib.Path(mutated.__file__).resolve(); "
+        f"expected = pathlib.Path({expected_path!r}).resolve(); "
+        "assert loaded == expected, (loaded, expected); "
+        "import pytest; "
+        f"raise SystemExit(pytest.main([{mutation.test!r}, '-q']))"
+    )
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
+    return subprocess.run(
+        [sys.executable, "-c", bootstrap],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def _run_mutant(mutation: Mutation, timeout: float) -> tuple[str, str]:
     with tempfile.TemporaryDirectory(prefix="evoguard-mutant-") as temp:
         overlay = Path(temp)
@@ -123,35 +165,22 @@ def _run_mutant(mutation: Mutation, timeout: float) -> tuple[str, str]:
             overlay / "evoom_guard",
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         )
-        _apply_mutation(overlay, mutation)
-
-        # Pre-import from the overlay before pytest discovers the repository
-        # root.  sys.modules then prevents a test's path setup from replacing the
-        # mutated package with the working-tree package.
-        bootstrap = (
-            "import sys; "
-            f"sys.path.insert(0, {str(overlay)!r}); "
-            "import evoom_guard.verifiers.repo_verifier as repo_verifier; "
-            f"assert repo_verifier.__file__.startswith({str(overlay)!r}); "
-            "import evoom_guard.verifiers.junit_oracle; "
-            "import pytest; "
-            f"raise SystemExit(pytest.main([{mutation.test!r}, '-q']))"
-        )
-        env = os.environ.copy()
-        env.pop("PYTHONPATH", None)
-        env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
         try:
-            completed = subprocess.run(
-                [sys.executable, "-c", bootstrap],
-                cwd=ROOT,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
+            control = _run_overlay_test(overlay, mutation, timeout)
         except subprocess.TimeoutExpired:
-            return "infrastructure-error", f"exceeded {timeout:g}s"
+            return "infrastructure-error", f"control exceeded {timeout:g}s"
+        control_output = (control.stdout + "\n" + control.stderr).strip()
+        if control.returncode != 0:
+            return (
+                "infrastructure-error",
+                f"control pytest exit {control.returncode}\n{control_output}",
+            )
+
+        _apply_mutation(overlay, mutation)
+        try:
+            completed = _run_overlay_test(overlay, mutation, timeout)
+        except subprocess.TimeoutExpired:
+            return "infrastructure-error", f"mutant exceeded {timeout:g}s"
 
     output = (completed.stdout + "\n" + completed.stderr).strip()
     if completed.returncode == 1:
@@ -199,7 +228,7 @@ def main() -> int:
     if failures:
         print("\nMutation gate failed:\n" + "\n\n".join(failures), file=sys.stderr)
         return 1
-    print(f"\nSecurity mutation score: {len(selected)}/{len(selected)} killed")
+    print(f"\nReviewed security mutants: {len(selected)}/{len(selected)} killed")
     return 0
 
 

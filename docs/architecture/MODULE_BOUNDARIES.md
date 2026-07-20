@@ -22,3 +22,14 @@
 - The public API contract lives only in `evoom_guard/cli.py`, `evoom_guard/guard.py`,
   `evoom_guard/record_verifier.py`, and `evoom_guard/trusted_finalizer.py`.
 
+## Current extraction boundary
+
+The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
+It owns the typed bounded-process request/result contracts, shared output cap,
+timeout handling, and native process-tree cleanup. Verifiers may retain
+compatibility aliases, but execution consumers must import these primitives
+from `evoom_guard.execution`, not from `repo_verifier.py`.
+
+Docker command construction, image policy, and container lifecycle remain in
+their existing modules during this slice. They are deliberately outside the
+native-process extraction so the change does not alter Docker behavior.

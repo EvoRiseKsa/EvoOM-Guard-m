@@ -50,6 +50,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from evoom_guard import __version__
+from evoom_guard.execution import (
+    ProcessContainmentError as _SubprocessContainmentError,
+)
+from evoom_guard.execution import (
+    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
+from evoom_guard.execution import (
+    run_bounded_subprocess as _run_bounded_subprocess,
+)
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.patchmin import risk_score
 from evoom_guard.verdict_contract_v1_11 import (
@@ -101,9 +110,6 @@ from evoom_guard.verifiers.repo_verifier import (
     RepoVerifier,
     _matches_globs,
     _resolve_host_command,
-    _run_bounded_subprocess,
-    _SubprocessContainmentError,
-    _SubprocessOutputLimitExceeded,
     copy_repo_tree,
     is_addable_new_test,
     is_judge_autoexec,
@@ -1467,11 +1473,8 @@ def _run_baseline_suite(
     from evoom_guard.verifiers.repo_verifier import (
         RepoVerifier,
         SetupFidelityError,
-        _run_bounded_subprocess,
         _setup_fidelity_changes,
         _setup_fidelity_snapshot,
-        _SubprocessContainmentError,
-        _SubprocessOutputLimitExceeded,
         detect_tamper,
         grade_repo_run,
         parse_junit_dir,

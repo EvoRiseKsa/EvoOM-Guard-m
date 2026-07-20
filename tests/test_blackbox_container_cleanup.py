@@ -20,7 +20,6 @@ from unittest import mock
 import pytest
 
 import evoom_guard.blackbox as blackbox_module
-import evoom_guard.verifiers.repo_verifier as repo_verifier
 from evoom_guard.blackbox import run_blackbox
 from evoom_guard.candidate_runner import CANDIDATE_CID_DIRNAME, CandidateRunner
 from evoom_guard.guard import ERROR, REASON_RUNTIME_CLEANUP_FAILED, guard
@@ -200,7 +199,7 @@ def test_completed_leader_still_cleans_its_live_process_group(
 def test_judge_output_flood_is_bounded_and_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(repo_verifier, "_MAX_SUBPROCESS_OUTPUT_BYTES", 1024)
+    monkeypatch.setattr(blackbox_module, "_MAX_SUBPROCESS_OUTPUT_BYTES", 1024)
 
     with pytest.raises(blackbox_module.JudgeOutputLimitError) as exc:
         blackbox_module._run_judge_process(

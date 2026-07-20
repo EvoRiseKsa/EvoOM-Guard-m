@@ -80,16 +80,33 @@ import os
 import re
 import secrets
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from typing import Any, TypedDict, cast
 
 from evoom_guard.adapters import instrument_command
 from evoom_guard.contracts import VerdictResult
+from evoom_guard.execution import (
+    DEFAULT_KILL_GRACE_SECONDS,
+    DEFAULT_MAX_OUTPUT_BYTES,
+    DEFAULT_READ_CHUNK_BYTES,
+    DEFAULT_READER_JOIN_SECONDS,
+    DEFAULT_TERMINATION_GRACE_SECONDS,
+    BoundedOutput,
+    ProcessLimits,
+    drain_process_pipe,
+    join_pipe_readers,
+    process_group_popen_kwargs,
+    run_bounded_subprocess,
+)
+from evoom_guard.execution import (
+    ProcessContainmentError as _SubprocessContainmentError,
+)
+from evoom_guard.execution import (
+    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
 from evoom_guard.pack_manifest import (
     PackManifestError,
     snapshot_pack,
@@ -370,32 +387,46 @@ class RepoProblem(TypedDict, total=False):
     tmpfs: list[str]          # container paths granted scratch (tmpfs) writes
 
 
-# Candidate commands control stdout/stderr.  A full ``capture_output=True`` is
-# therefore an unbounded host-memory allocation, not merely a diagnostic choice.
-# The cap is deliberately shared by both streams so a split-stream flood cannot
-# double the bound.
-_MAX_SUBPROCESS_OUTPUT_BYTES = 1 * 1024 * 1024
-_SUBPROCESS_READ_CHUNK_BYTES = 64 * 1024
-_PROCESS_TERM_GRACE_SECONDS = 1.0
-_PROCESS_KILL_GRACE_SECONDS = 3.0
-_READER_JOIN_SECONDS = 2.0
+# Candidate commands control stdout/stderr. A full capture is therefore a
+# bounded execution concern, not verifier policy. These names remain as
+# compatibility seams for existing in-package callers and tests.
+_MAX_SUBPROCESS_OUTPUT_BYTES = DEFAULT_MAX_OUTPUT_BYTES
+_SUBPROCESS_READ_CHUNK_BYTES = DEFAULT_READ_CHUNK_BYTES
+_PROCESS_TERM_GRACE_SECONDS = DEFAULT_TERMINATION_GRACE_SECONDS
+_PROCESS_KILL_GRACE_SECONDS = DEFAULT_KILL_GRACE_SECONDS
+_READER_JOIN_SECONDS = DEFAULT_READER_JOIN_SECONDS
 _DOCKER_CONTROL_TIMEOUT_SECONDS = 30.0
 _DOCKER_PULL_TIMEOUT_SECONDS = 600.0
 
 
-class _SubprocessOutputLimitExceeded(RuntimeError):
-    """A candidate command exceeded the judge's bounded diagnostic channel."""
+class _BoundedOutput(BoundedOutput):
+    """Compatibility capture using the verifier's current patched limit."""
 
     def __init__(self, limit: int | None = None) -> None:
-        self.limit = _MAX_SUBPROCESS_OUTPUT_BYTES if limit is None else limit
         super().__init__(
-            "candidate subprocess output exceeded the "
-            f"{self.limit}-byte judge capture limit"
+            _MAX_SUBPROCESS_OUTPUT_BYTES if limit is None else limit
         )
 
 
-class _SubprocessContainmentError(RuntimeError):
-    """The judge cannot prove that a timed-out process tree was contained."""
+def _drain_subprocess_pipe(
+    stream: Any, capture: BoundedOutput, stream_name: str
+) -> None:
+    """Compatibility facade using the verifier's current read chunk."""
+
+    drain_process_pipe(
+        stream,
+        capture,
+        stream_name,
+        _SUBPROCESS_READ_CHUNK_BYTES,
+    )
+
+
+def _join_pipe_readers(
+    readers: list[Any], streams: list[Any]
+) -> bool:
+    """Compatibility facade using the verifier's current join deadline."""
+
+    return join_pipe_readers(readers, streams, _READER_JOIN_SECONDS)
 
 
 class _DockerRunOutputLimit(_SubprocessOutputLimitExceeded):
@@ -419,185 +450,10 @@ class _DockerRunContainmentError(_SubprocessContainmentError):
         self.container_started = container_started
 
 
-class _BoundedOutput:
-    """Thread-safe, combined-cap capture for two subprocess pipes."""
-
-    def __init__(self, limit: int | None = None) -> None:
-        self.limit = _MAX_SUBPROCESS_OUTPUT_BYTES if limit is None else limit
-        self._stdout = bytearray()
-        self._stderr = bytearray()
-        self._captured = 0
-        self._exceeded = False
-        self._lock = threading.Lock()
-
-    def append(self, stream: str, data: bytes) -> None:
-        with self._lock:
-            remaining = max(0, self.limit - self._captured)
-            accepted = data[:remaining]
-            if stream == "stdout":
-                self._stdout.extend(accepted)
-            else:
-                self._stderr.extend(accepted)
-            self._captured += len(accepted)
-            if len(accepted) != len(data):
-                self._exceeded = True
-
-    @property
-    def exceeded(self) -> bool:
-        with self._lock:
-            return self._exceeded
-
-    def text(self, stream: str) -> str:
-        with self._lock:
-            data = bytes(self._stdout if stream == "stdout" else self._stderr)
-        return data.decode("utf-8", errors="replace")
-
-
-def _drain_subprocess_pipe(
-    stream: Any, capture: _BoundedOutput, stream_name: str
-) -> None:
-    """Drain one pipe without retaining more than the global output cap."""
-    try:
-        while True:
-            chunk = stream.read(_SUBPROCESS_READ_CHUNK_BYTES)
-            if not chunk:
-                return
-            capture.append(stream_name, chunk)
-    except (OSError, ValueError):
-        # A containment path may close a reader that was still blocked in read().
-        return
-    finally:
-        try:
-            stream.close()
-        except OSError:
-            pass
-
-
 def _subprocess_group_kwargs() -> dict[str, Any]:
-    """Create an independently terminable process tree on each supported host."""
-    if os.name == "posix":
-        return {"start_new_session": True}
-    if os.name == "nt":
-        return {
-            "creationflags": int(
-                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-            )
-        }
-    return {}
+    """Compatibility facade for the extracted host process-group contract."""
 
-
-def _wait_for_exit(process: subprocess.Popen[Any], timeout: float) -> bool:
-    try:
-        process.wait(timeout=max(0.0, timeout))
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return True
-
-
-def _posix_group_exists(pid: int) -> bool:
-    try:
-        _kill_process_group(pid, 0)
-    except ProcessLookupError:
-        return False
-    except OSError:
-        # Permission / platform errors do not prove that the group is gone.
-        return True
-    return True
-
-
-def _kill_process_group(pid: int, signum: int) -> None:
-    """Call POSIX ``killpg`` without importing an unavailable Windows symbol."""
-    killpg = getattr(os, "killpg", None)
-    if not callable(killpg):
-        raise OSError("process-group cleanup is unavailable on this host")
-    killpg(pid, signum)
-
-
-def _terminate_process_tree(process: subprocess.Popen[Any]) -> bool:
-    """Terminate a launched command and prove its managed tree has gone away.
-
-    POSIX commands are session leaders, so their process group is a useful
-    containment boundary.  Windows uses ``taskkill /T`` because a console signal
-    is not reliable for arbitrary child processes.  A failure to issue or verify
-    cleanup returns ``False``; callers must report an ERROR rather than pretend a
-    normal timeout left no work behind.
-    """
-    if os.name == "posix":
-        try:
-            _kill_process_group(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            # No process remains in the dedicated group.  That proves cleanup
-            # of the tree the judge created and manages (a child that calls
-            # setsid deliberately escapes any process-group containment).
-            return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
-        except OSError:
-            return False
-
-        deadline = time.monotonic() + _PROCESS_TERM_GRACE_SECONDS
-        while time.monotonic() < deadline:
-            # Reap the root promptly.  A zombie keeps its process group visible
-            # to killpg(0), which otherwise turns a successful cleanup into a
-            # false containment failure.
-            process.poll()
-            if not _posix_group_exists(process.pid):
-                return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
-            time.sleep(0.02)
-        try:
-            _kill_process_group(
-                process.pid, getattr(signal, "SIGKILL", signal.SIGTERM)
-            )
-        except ProcessLookupError:
-            return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
-        except OSError:
-            return False
-        deadline = time.monotonic() + _PROCESS_KILL_GRACE_SECONDS
-        while time.monotonic() < deadline:
-            process.poll()
-            if not _posix_group_exists(process.pid):
-                return _wait_for_exit(process, _PROCESS_KILL_GRACE_SECONDS)
-            time.sleep(0.02)
-        return False
-
-    if os.name == "nt":
-        # /T follows descendants; /F avoids relying on a cooperative console
-        # handler.  If the root has already disappeared taskkill cannot prove
-        # whether an orphan remains, so fail closed instead of assuming success.
-        if process.poll() is not None:
-            return False
-        try:
-            killed = subprocess.run(
-                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=_PROCESS_KILL_GRACE_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        return killed.returncode == 0 and _wait_for_exit(
-            process, _PROCESS_KILL_GRACE_SECONDS
-        )
-
-    return False
-
-
-def _join_pipe_readers(
-    readers: list[threading.Thread], streams: list[Any]
-) -> bool:
-    """Wait for pipe drain; force-close stuck descriptors before giving up."""
-    for reader in readers:
-        reader.join(_READER_JOIN_SECONDS)
-    if not any(reader.is_alive() for reader in readers):
-        return True
-    for stream in streams:
-        try:
-            stream.close()
-        except OSError:
-            pass
-    for reader in readers:
-        reader.join(_READER_JOIN_SECONDS)
-    return not any(reader.is_alive() for reader in readers)
+    return process_group_popen_kwargs()
 
 
 def _run_bounded_subprocess(
@@ -608,110 +464,22 @@ def _run_bounded_subprocess(
     timeout: float,
     preexec_fn: Any = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a candidate command with bounded output and process-tree cleanup.
+    """Compatibility facade over the typed execution-kernel contract."""
 
-    This replaces ``subprocess.run(..., capture_output=True)`` for the native
-    judge.  Reader threads continuously drain both pipes, keeping at most
-    :data:`_MAX_SUBPROCESS_OUTPUT_BYTES` total; when the limit or deadline is
-    crossed, the complete managed process tree is stopped before an error is
-    returned. On POSIX a completed command also gets a final process-group
-    cleanup/proof, so a background descendant that closed stdio cannot outlive
-    a nominally successful run.
-    """
-    kwargs: dict[str, Any] = {
-        "cwd": cwd,
-        "env": env,
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.PIPE,
-        "stderr": subprocess.PIPE,
-        **_subprocess_group_kwargs(),
-    }
-    if preexec_fn is not None and os.name == "posix":
-        kwargs["preexec_fn"] = preexec_fn
-    process = subprocess.Popen(command, **kwargs)
-    assert process.stdout is not None and process.stderr is not None
-    capture = _BoundedOutput()
-    streams = [process.stdout, process.stderr]
-    readers = [
-        threading.Thread(
-            target=_drain_subprocess_pipe,
-            args=(process.stdout, capture, "stdout"),
-            daemon=True,
+    return run_bounded_subprocess(
+        command,
+        cwd=cwd,
+        env=env,
+        timeout=timeout,
+        preexec_fn=preexec_fn,
+        limits=ProcessLimits(
+            max_output_bytes=_MAX_SUBPROCESS_OUTPUT_BYTES,
+            read_chunk_bytes=_SUBPROCESS_READ_CHUNK_BYTES,
+            termination_grace_seconds=_PROCESS_TERM_GRACE_SECONDS,
+            kill_grace_seconds=_PROCESS_KILL_GRACE_SECONDS,
+            reader_join_seconds=_READER_JOIN_SECONDS,
         ),
-        threading.Thread(
-            target=_drain_subprocess_pipe,
-            args=(process.stderr, capture, "stderr"),
-            daemon=True,
-        ),
-    ]
-    for reader in readers:
-        reader.start()
-
-    def stop_and_prove(reason: str) -> None:
-        if not _terminate_process_tree(process):
-            raise _SubprocessContainmentError(
-                f"{reason}; could not prove subprocess-tree cleanup"
-            )
-        if not _join_pipe_readers(readers, streams):
-            raise _SubprocessContainmentError(
-                f"{reason}; subprocess output pipes did not close after cleanup"
-            )
-
-    try:
-        deadline = time.monotonic() + max(0.0, float(timeout))
-        while process.poll() is None:
-            if capture.exceeded:
-                stop_and_prove("subprocess output limit reached")
-                raise _SubprocessOutputLimitExceeded()
-            if time.monotonic() >= deadline:
-                stop_and_prove("subprocess timed out")
-                raise subprocess.TimeoutExpired(
-                    command,
-                    timeout,
-                    output=capture.text("stdout"),
-                    stderr=capture.text("stderr"),
-                )
-            time.sleep(0.02)
-
-        # A short-lived process can fill the pipe and exit before the polling
-        # loop observes it.  It is still an invalid run; kill any inherited
-        # descendants before reporting the bounded-capture error.
-        if capture.exceeded:
-            stop_and_prove("subprocess output limit reached")
-            raise _SubprocessOutputLimitExceeded()
-        if not _join_pipe_readers(readers, streams):
-            stop_and_prove("subprocess exited with live output pipes")
-            raise _SubprocessContainmentError(
-                "subprocess exited but its output pipes did not close"
-            )
-        if capture.exceeded:
-            stop_and_prove("subprocess output limit reached")
-            raise _SubprocessOutputLimitExceeded()
-        # On POSIX the launcher created a dedicated session.  A clean leader
-        # exit does not prove that a child which closed inherited stdio has
-        # gone away; it can still alter the host after a nominal PASS.  Probe
-        # and reap that PGID before treating the completed result as evidence.
-        # Windows can contain a live tree through ``taskkill /T`` on abort, but
-        # cannot reliably reconstruct a departed leader's descendants, so this
-        # post-completion proof is intentionally POSIX-only rather than turning
-        # every clean Windows result into a false cleanup failure.
-        if os.name == "posix" and not _terminate_process_tree(process):
-            raise _SubprocessContainmentError(
-                "subprocess completed but post-completion tree cleanup was not proven"
-            )
-        return subprocess.CompletedProcess(
-            command,
-            process.returncode,
-            stdout=capture.text("stdout"),
-            stderr=capture.text("stderr"),
-        )
-    except BaseException:
-        # Cancellation and unexpected reader errors must not leak the judge's
-        # own child tree.  The original exception stays authoritative.
-        if process.poll() is None:
-            _terminate_process_tree(process)
-        _join_pipe_readers(readers, streams)
-        raise
+    )
 
 
 def _read_text_or_none(path: str) -> str | None:
