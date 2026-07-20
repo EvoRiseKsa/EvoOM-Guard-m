@@ -24,16 +24,21 @@ discarded as a failed job.
 
 ## Deployment status
 
-The paired workflows in `examples/trusted-finalizer/` are reference templates.
-They are not enabled as a merge gate in the EvoOM Guard core repository, and this
-repository currently makes no claim that its own merges are enforced by a
-finalizer. A consumer installation needs its own protected branch, Environment
-secret and reviewer, protected Guard-artifact digest, and the Round 1 audit below.
+The paired workflows are available both as:
+
+- templates in `examples/trusted-finalizer/`
+- implementation-ready copies in `.github/workflows/evoguard-reverify.yml` and
+  `.github/workflows/evoguard-seal.yml`.
+
+They are not enforced as required merge gates by default in this repository.
+This project provides the split pattern; each consuming repository must apply its
+own branch protection, environment/reviewer controls, protected Guard-artifact
+digest, and the Round 1 audit below.
 The raw-Git derivation contract is specified in
 [`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md). A consumer
 must deploy a release that contains this command set and update the protected
-Guard zipapp SHA together with the templates; the frozen v3.6.1 release does
-not receive the new behavior merely because these source templates changed.
+Guard zipapp SHA together with the templates; a pinned implementation reference
+file change does not alter trust behavior by itself.
 
 ## The threat model this closes
 
@@ -270,6 +275,9 @@ policy-maintenance change:
 - [`examples/trusted-finalizer/reverify.yml`](../examples/trusted-finalizer/reverify.yml)
 - [`examples/trusted-finalizer/seal.yml`](../examples/trusted-finalizer/seal.yml)
 - [`examples/trusted-finalizer/README.md`](../examples/trusted-finalizer/README.md)
+- (This repository implementation copies):  
+  [`.github/workflows/evoguard-reverify.yml`](../.github/workflows/evoguard-reverify.yml),
+  [`.github/workflows/evoguard-seal.yml`](../.github/workflows/evoguard-seal.yml)
 
 They deliberately use a manual `workflow_dispatch` re-verification step first.
 This is a safety-first MVP: a maintainer chooses the PR, checks the resulting

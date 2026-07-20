@@ -4,18 +4,22 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REVERIFY = ROOT / "examples" / "trusted-finalizer" / "reverify.yml"
-SEAL = ROOT / "examples" / "trusted-finalizer" / "seal.yml"
+EXAMPLES_REVERIFY = ROOT / "examples" / "trusted-finalizer" / "reverify.yml"
+EXAMPLES_SEAL = ROOT / "examples" / "trusted-finalizer" / "seal.yml"
+WORKFLOW_REVERIFY = ROOT / ".github" / "workflows" / "evoguard-reverify.yml"
+WORKFLOW_SEAL = ROOT / ".github" / "workflows" / "evoguard-seal.yml"
+
+REFERENCE_PAIRS = (
+    ("examples", EXAMPLES_REVERIFY, EXAMPLES_SEAL),
+    ("repo-workflows", WORKFLOW_REVERIFY, WORKFLOW_SEAL),
+)
 
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_reference_finalizer_separates_candidate_execution_from_key() -> None:
-    reverify = _text(REVERIFY)
-    seal = _text(SEAL)
-
+def _assert_reverify_candidate_is_untrusted(reverify: str) -> None:
     assert "workflow_dispatch:" in reverify
     assert 'run-name: "EvoGuard Reverify PR #${{ inputs.pr_number }}"' in reverify
     assert "workflow_run:" not in reverify
@@ -39,6 +43,30 @@ def test_reference_finalizer_separates_candidate_execution_from_key() -> None:
     assert "--require-hashes" in candidate_job
     assert "--only-binary=:all:" in candidate_job
 
+
+def _assert_reverify_outputs_and_rigidity(reverify: str) -> None:
+    assert "name: evoguard-reverify-evidence-v1-${{ github.run_attempt }}" in reverify
+    assert "${{ runner.temp }}/verdict.json" in reverify
+    assert "${{ runner.temp }}/handoff.json" in reverify
+    assert "finalizer-handoff" in reverify
+    assert "seal-finalizer" not in reverify
+    assert "name: evoguard-reverify-control-v1-${{ github.run_attempt }}" in reverify
+    assert "finalizer-control.json" in reverify
+    assert "overwrite: false" in reverify
+    assert "Create an attempt-bound pending finalizer check" in reverify
+    assert "github.rest.checks.create" in reverify
+    assert "check_run_id" in reverify
+    assert "workflow must be dispatched from the default branch" in reverify
+    assert "Refuse a partial workflow re-run" in reverify
+    assert "Re-run all jobs or dispatch a new workflow" in reverify
+    assert "  reverify:\n    needs: metadata" in reverify
+    assert reverify.index("Upload immutable control-plane binding") < reverify.index(
+        "\n  reverify:"
+    )
+    assert "github.rest.checks.listForRef" not in reverify
+
+
+def _assert_seal_holds_privileged_boundary(seal: str) -> None:
     assert "workflow_run:" in seal
     assert "pull_request_target" not in seal
     assert "actions/checkout" not in seal
@@ -71,35 +99,11 @@ def test_reference_finalizer_separates_candidate_execution_from_key() -> None:
     assert "checks: write" in reconcile
 
 
-def test_reference_finalizer_pins_every_action_and_uploads_only_data_from_reverify() -> None:
-    combined = _text(REVERIFY) + "\n" + _text(SEAL)
-    actions = re.findall(r"uses:\s*(actions/[A-Za-z0-9_.-]+)@([^\s#]+)", combined)
-    assert actions
-    assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for _name, ref in actions)
-
-    reverify = _text(REVERIFY)
-    seal = _text(SEAL)
-    assert "name: evoguard-reverify-evidence-v1-${{ github.run_attempt }}" in reverify
-    assert "${{ runner.temp }}/verdict.json" in reverify
-    assert "${{ runner.temp }}/handoff.json" in reverify
-    assert "finalizer-handoff" in reverify
-    assert "seal-finalizer" not in reverify
-    assert "name: evoguard-reverify-control-v1-${{ github.run_attempt }}" in reverify
-    assert "finalizer-control.json" in reverify
-    assert "overwrite: false" in reverify
-    assert "Create an attempt-bound pending finalizer check" in reverify
-    assert "github.rest.checks.create" in reverify
-    assert "check_run_id" in reverify
-    assert "workflow must be dispatched from the default branch" in reverify
-    assert "Refuse a partial workflow re-run" in reverify
-    assert "Re-run all jobs or dispatch a new workflow" in reverify
-    assert "  reverify:\n    needs: metadata" in reverify
-    assert reverify.index("Upload immutable control-plane binding") < reverify.index(
-        "\n  reverify:"
-    )
+def _assert_pins_and_outputs(seal: str) -> None:
     assert "name: evoguard-reverify-control-v1-${{ github.event.workflow_run.run_attempt }}" in seal
     assert (
-        "name: evoguard-reverify-evidence-v1-${{ github.event.workflow_run.run_attempt }}" in seal
+        "name: evoguard-reverify-evidence-v1-${{ github.event.workflow_run.run_attempt }}"
+        in seal
     )
     assert "CONTROL_DIR" in seal
     assert "steps.control.outputs.pull_request_number" in seal
@@ -107,15 +111,9 @@ def test_reference_finalizer_pins_every_action_and_uploads_only_data_from_reveri
     assert "const rawSource" not in seal
     assert "  reconcile:" in seal
     assert "github.event.workflow_run.conclusion != 'success'" in seal
-    assert "github.rest.checks.listForRef" not in reverify
-    assert "github.rest.checks.listForRef" not in seal
 
 
-def test_reference_finalizer_documents_the_immutable_executable_root_and_current_head_check() -> (
-    None
-):
-    reverify = _text(REVERIFY)
-    seal = _text(SEAL)
+def _assert_guard_root_and_head_binding(reverify: str, seal: str) -> None:
     assert "EVOGUARD_GUARD_ARTIFACT_SHA256" in reverify
     assert "sha256sum --check" in reverify
     assert "EVOGUARD_GUARD_ARTIFACT_SHA256" in seal
@@ -131,4 +129,35 @@ def test_reference_finalizer_documents_the_immutable_executable_root_and_current
     assert "check_run_id: checkRunId" in seal
     assert "steps.derive.outputs.head_sha" in seal
     assert "github.rest.checks.update" in seal
+
+
+def _assert_full_pair(reverify_path: Path, seal_path: Path) -> None:
+    reverify = _text(reverify_path)
+    seal = _text(seal_path)
+
+    _assert_reverify_candidate_is_untrusted(reverify)
+    _assert_reverify_outputs_and_rigidity(reverify)
+    _assert_seal_holds_privileged_boundary(seal)
+    _assert_pins_and_outputs(seal)
+    _assert_guard_root_and_head_binding(reverify, seal)
+
+
+def test_reference_finalizer_security_invariants() -> None:
+    for _label, reverify, seal in REFERENCE_PAIRS:
+        _assert_full_pair(reverify, seal)
+
+
+def test_reference_finalizer_actions_are_pinned_and_actions_only() -> None:
+    for label, reverify, seal in REFERENCE_PAIRS:
+        reverify_text = _text(reverify)
+        seal_text = _text(seal)
+        combined = reverify_text + "\n" + seal_text
+        actions = re.findall(r"uses:\s*(actions/[A-Za-z0-9_.-]+)@([^\s#]+)", combined)
+        assert actions, f"{label}: no GitHub actions refs found"
+        assert all(
+            re.fullmatch(r"[0-9a-f]{40}", ref) for _name, ref in actions
+        ), f"{label}: unpinned action reference detected"
+
+
+def test_reference_finalizer_documents_the_immutable_executable_root() -> None:
     assert "Round 1 audit" in _text(ROOT / "docs" / "TRUSTED_FINALIZER.md")
