@@ -5,6 +5,12 @@ models a reviewed security regression, must apply exactly once, and is executed
 against one focused test in an isolated package overlay.  A mutant is killed
 only by a normal pytest assertion failure (exit 1); collection errors, timeouts,
 and infrastructure failures fail the gate instead of becoming false positives.
+
+The outer watchdog is a liveness guard, not a sandbox.  On POSIX it can stop
+only processes that remain in pytest's dedicated process group; a descendant
+that deliberately creates a new session escapes that boundary.  Real-process
+mutation contracts therefore terminate by themselves even when their target
+check is bypassed, and an outer timeout is always an infrastructure error.
 """
 
 from __future__ import annotations
@@ -12,11 +18,13 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -97,6 +105,124 @@ MUTATIONS = (
             "test_bounded_output_marks_any_truncated_bytes_as_exceeded"
         ),
     ),
+    Mutation(
+        name="subprocess-live-output-check-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        while process.poll() is None:\n"
+            "            if capture.exceeded:\n"
+            '                stop_and_prove("subprocess output limit reached")\n'
+        ),
+        after=(
+            "        while process.poll() is None:\n"
+            "            if False and capture.exceeded:\n"
+            '                stop_and_prove("subprocess output limit reached")\n'
+        ),
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_live_output_overflow_is_stopped_before_process_completion"
+        ),
+    ),
+    Mutation(
+        name="subprocess-post-poll-output-check-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        if capture.exceeded:\n"
+            '            stop_and_prove("subprocess output limit reached")\n'
+            "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
+            "        if not join_pipe_readers(\n"
+        ),
+        after=(
+            "        if False and capture.exceeded:\n"
+            '            stop_and_prove("subprocess output limit reached")\n'
+            "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
+            "        if not join_pipe_readers(\n"
+        ),
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_post_poll_overflow_stops_before_normal_reader_join"
+        ),
+    ),
+    Mutation(
+        name="subprocess-post-join-output-check-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        if capture.exceeded:\n"
+            '            stop_and_prove("subprocess output limit reached")\n'
+            "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
+            '        if os.name == "posix" and not _terminate_process_tree(process, limits):\n'
+        ),
+        after=(
+            "        if False and capture.exceeded:\n"
+            '            stop_and_prove("subprocess output limit reached")\n'
+            "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
+            '        if os.name == "posix" and not _terminate_process_tree(process, limits):\n'
+        ),
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_post_join_overflow_is_not_returned_as_success"
+        ),
+    ),
+    Mutation(
+        name="subprocess-deadline-check-bypass",
+        path="evoom_guard/execution/process.py",
+        before="            if time.monotonic() >= deadline:\n",
+        after="            if False and time.monotonic() >= deadline:\n",
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_deadline_interrupts_a_self_terminating_process"
+        ),
+    ),
+    Mutation(
+        name="subprocess-cleanup-proof-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        if not _terminate_process_tree(process, limits):\n"
+            "            raise ProcessContainmentError(\n"
+            '                f"{reason}; could not prove subprocess-tree cleanup"\n'
+            "            )\n"
+        ),
+        after=(
+            "        if False and not _terminate_process_tree(process, limits):\n"
+            "            raise ProcessContainmentError(\n"
+            '                f"{reason}; could not prove subprocess-tree cleanup"\n'
+            "            )\n"
+        ),
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_cleanup_failure_preempts_the_triggering_error"
+        ),
+    ),
+    Mutation(
+        name="subprocess-group-kwargs-use-bypass",
+        path="evoom_guard/execution/process.py",
+        before="        **process_group_popen_kwargs(),\n",
+        after="        **{},\n",
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_execute_passes_the_process_group_contract_to_popen"
+        ),
+    ),
+    Mutation(
+        name="subprocess-posix-group-contract-bypass",
+        path="evoom_guard/execution/process.py",
+        before='        return {"start_new_session": True}\n',
+        after='        return {"start_new_session": False}\n',
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_posix_process_group_contract"
+        ),
+    ),
+    Mutation(
+        name="subprocess-windows-group-contract-bypass",
+        path="evoom_guard/execution/process.py",
+        before='                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)\n',
+        after="                0\n",
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_windows_process_group_contract"
+        ),
+    ),
 )
 
 
@@ -126,6 +252,72 @@ def _apply_mutation(overlay: Path, mutation: Mutation) -> None:
     )
 
 
+def _watchdog_popen_kwargs() -> dict[str, Any]:
+    """Create a gate-owned process-tree boundary independent of mutated code."""
+
+    if os.name == "posix":
+        return {"start_new_session": True}
+    if os.name == "nt":
+        creation_flag = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        if creation_flag == 0:
+            raise RuntimeError("watchdog process-group support is unavailable on Windows")
+        return {"creationflags": creation_flag}
+    raise RuntimeError(f"watchdog containment is unsupported on host: {os.name}")
+
+
+def _stop_watchdog_tree(process: subprocess.Popen[str]) -> None:
+    """Stop a timed-out pytest process and members of its inherited boundary."""
+
+    cleanup_error: str | None = None
+    if os.name == "posix":
+        killpg = getattr(os, "killpg", None)
+        if not callable(killpg):
+            cleanup_error = "killpg is unavailable"
+        else:
+            try:
+                killpg(
+                    process.pid,
+                    getattr(signal, "SIGKILL", signal.SIGTERM),
+                )
+            except ProcessLookupError:
+                pass
+            except OSError as exc:
+                cleanup_error = f"killpg failed: {exc}"
+    elif os.name == "nt":
+        try:
+            killed = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            cleanup_error = f"taskkill failed: {exc}"
+        else:
+            # A departed Windows root does not prove that descendants are gone;
+            # taskkill must positively accept the /T cleanup request.
+            if killed.returncode != 0:
+                cleanup_error = f"taskkill exited {killed.returncode}"
+    else:  # pragma: no cover - rejected before launch
+        cleanup_error = f"unsupported watchdog host: {os.name}"
+
+    if process.poll() is None:
+        try:
+            process.kill()
+        except OSError as exc:
+            cleanup_error = cleanup_error or f"direct kill failed: {exc}"
+    try:
+        process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        cleanup_error = cleanup_error or "watchdog tree retained inherited pipes"
+    if process.poll() is None:
+        cleanup_error = cleanup_error or "watchdog root did not exit"
+    if cleanup_error is not None:
+        raise RuntimeError(cleanup_error)
+
+
 def _run_overlay_test(
     overlay: Path, mutation: Mutation, timeout: float
 ) -> subprocess.CompletedProcess[str]:
@@ -146,14 +338,26 @@ def _run_overlay_test(
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
     env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
-    return subprocess.run(
+    process = subprocess.Popen(
         [sys.executable, "-c", bootstrap],
         cwd=ROOT,
         env=env,
-        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
-        check=False,
+        **_watchdog_popen_kwargs(),
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _stop_watchdog_tree(process)
+        raise
+    return subprocess.CompletedProcess(
+        process.args,
+        process.returncode,
+        stdout=stdout,
+        stderr=stderr,
     )
 
 
