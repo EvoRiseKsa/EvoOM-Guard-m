@@ -1,0 +1,110 @@
+{
+  "blackbox_result": {
+    "field_defaults": {
+      "candidate_invocations": 0,
+      "candidate_launcher_invocation_observed": false,
+      "completed": false,
+      "deleted_applied": null,
+      "execution_phase": "preflight",
+      "execution_state": "not_started",
+      "isolation": null,
+      "junit_sha256": null,
+      "pack_manifest": null,
+      "pack_present": null,
+      "pack_sha256": null,
+      "started": false
+    },
+    "field_order": [
+      "passed",
+      "tests_passed",
+      "tests_total",
+      "diagnostics",
+      "ran",
+      "error",
+      "pack_sha256",
+      "pack_manifest",
+      "junit_sha256",
+      "isolation",
+      "deleted_applied",
+      "started",
+      "completed",
+      "execution_state",
+      "execution_phase",
+      "pack_present",
+      "candidate_invocations",
+      "candidate_launcher_invocation_observed"
+    ],
+    "kind": "NamedTuple",
+    "legacy_minimum_arity": 6
+  },
+  "normalization": [
+    "temporary_paths",
+    "invocation_tokens",
+    "container_ids",
+    "elapsed",
+    "current_python_executable"
+  ],
+  "run_blackbox_parameters": [
+    {
+      "default": "<REQUIRED>",
+      "kind": "POSITIONAL_OR_KEYWORD",
+      "name": "repo_path"
+    },
+    {
+      "default": "<REQUIRED>",
+      "kind": "POSITIONAL_OR_KEYWORD",
+      "name": "candidate"
+    },
+    {
+      "default": "<REQUIRED>",
+      "kind": "POSITIONAL_OR_KEYWORD",
+      "name": "pack_dir"
+    },
+    {
+      "default": "120",
+      "kind": "KEYWORD_ONLY",
+      "name": "timeout"
+    },
+    {
+      "default": "'subprocess'",
+      "kind": "KEYWORD_ONLY",
+      "name": "isolation"
+    },
+    {
+      "default": "None",
+      "kind": "KEYWORD_ONLY",
+      "name": "docker_image"
+    },
+    {
+      "default": "'none'",
+      "kind": "KEYWORD_ONLY",
+      "name": "docker_network"
+    },
+    {
+      "default": "None",
+      "kind": "KEYWORD_ONLY",
+      "name": "docker_runtime"
+    },
+    {
+      "default": "0",
+      "kind": "KEYWORD_ONLY",
+      "name": "mem_limit_mb"
+    },
+    {
+      "default": "()",
+      "kind": "KEYWORD_ONLY",
+      "name": "deleted_paths"
+    },
+    {
+      "default": "None",
+      "kind": "KEYWORD_ONLY",
+      "name": "file_blocks"
+    },
+    {
+      "default": "None",
+      "kind": "KEYWORD_ONLY",
+      "name": "expect_verifier_pack_sha256"
+    }
+  ],
+  "schema_version": "blackbox-characterization-v1"
+}
