@@ -49,10 +49,12 @@ The baseline is architectural debt, not permission to add equivalent debt:
 5. A new flat module or unknown first-level package is an unclassified violation;
    new implementation must enter a documented layer instead.
 
-The edge `finalizer_derivation -> cli` closes the current strongly connected
-component. Moving configuration loading behind a lower-level public interface is
-the first high-leverage cycle reduction; deleting or suppressing the import in the
-gate is not an acceptable substitute.
+Revision 2 extracts the trusted config loader into `policy.config`. Removing the
+real `finalizer_derivation -> cli` dependency reduces the graph from one
+eight-module strongly connected component and 17 cyclic edges to zero cycles;
+it also lowers cross-package private imports from 76 to 75. The CLI keeps exact
+aliases for its previous config names, so this improvement is not achieved by
+suppressing an import or breaking compatibility.
 
 ## Acceptance rules
 

@@ -32,6 +32,7 @@ from evoom_guard.guard import (
     serialize_candidate_blocks,
 )
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT, extract_manifest, manifest_problems
+from evoom_guard.policy.config import ConfigError, load_config
 from evoom_guard.strict_json import strict_json_loads
 from evoom_guard.verifiers.harness_policy import is_safe_relpath
 from evoom_guard.verifiers.repo_verifier import COPY_IGNORE
@@ -604,13 +605,11 @@ def _effective_policy_from_raw_config(
         policy_bytes.decode("utf-8", "strict")
     except UnicodeDecodeError as exc:
         raise FinalizerDerivationError("base .evoguard.json is not UTF-8") from exc
-    from evoom_guard.cli import ConfigError, _load_config
-
     with tempfile.TemporaryDirectory(prefix=".evoguard-finalizer-policy-") as directory:
         policy_path = os.path.join(directory, ".evoguard.json")
         Path(policy_path).write_bytes(policy_bytes)
         try:
-            cfg = _load_config(policy_path, required=True, out=lambda _message: None)
+            cfg = load_config(policy_path, required=True, out=lambda _message: None)
         except ConfigError as exc:
             raise FinalizerDerivationError(f"base .evoguard.json is invalid: {exc}") from exc
 
