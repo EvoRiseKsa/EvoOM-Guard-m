@@ -7,10 +7,10 @@
 
 ## Status and exact scope
 
-[`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0)
+[`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
 is the current published immutable GitHub Release at
-`301d62f2fd3e2e53b75e153201514f0f69e4ecf8`. Its `evo-guard.pyz` asset has
-SHA-256 `99f9d0ed5029e22e3e06c22b32e55cfe35ce8e97568e304d4cf88a7bd19e7332`.
+`5ed7e84017619496521b813f859a6a8bf0a2b1df`. Its `evo-guard.pyz` asset has
+SHA-256 `81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7`.
 The release has a GitHub release attestation, and this exact asset has a
 separate GitHub Actions build-artifact attestation. Verification against the
 published asset succeeds when constrained to the repository, the `Release`
@@ -37,13 +37,13 @@ of deployment.
 ## Consumer verification
 
 Download the asset you intend to consume and verify its checksum first. For the
-published v4.0.0 asset, the expected SHA-256 is
-`99f9d0ed5029e22e3e06c22b32e55cfe35ce8e97568e304d4cf88a7bd19e7332`.
+published v4.0.1 asset, the expected SHA-256 is
+`81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7`.
 Then use a current GitHub CLI in an online environment. First verify the
 release attestation and its assets:
 
 ```bash
-gh release verify v4.0.0 --repo EvoRiseKsa/EvoOM-Guard-m
+gh release verify v4.0.1 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
 Then verify the separate build-artifact attestation, supplying the exact
@@ -106,6 +106,6 @@ thereby prove:
 
 This is a concrete prerequisite for the provider-specific portion of issue
 [#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78), not a closure of
-that issue. The v4.0.0 attestation does not implement or exercise a protected,
+that issue. The v4.0.1 attestation does not implement or exercise a protected,
 end-to-end finalizer-to-artifact admission run; that separate work remains
 required before any such claim.

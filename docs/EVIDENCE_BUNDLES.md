@@ -13,11 +13,11 @@ reference workflow, which binds the PR control plane before candidate execution.
 
 ## Create in a trusted finalizer
 
-Install the signing extra and generate an Ed25519 key once. `v4.0.0` is the
+Install the signing extra and generate an Ed25519 key once. `v4.0.1` is the
 published immutable GitHub Release:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.0.0"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.0.1"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
 

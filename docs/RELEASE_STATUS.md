@@ -1,7 +1,7 @@
 ---
 source_version: 4.0.1
 latest_published_version: 4.0.1
-state: released
+state: published
 ---
 
 # Release status
