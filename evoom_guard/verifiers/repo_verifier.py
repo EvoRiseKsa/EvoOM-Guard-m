@@ -397,6 +397,15 @@ _PROCESS_KILL_GRACE_SECONDS = DEFAULT_KILL_GRACE_SECONDS
 _READER_JOIN_SECONDS = DEFAULT_READER_JOIN_SECONDS
 _DOCKER_CONTROL_TIMEOUT_SECONDS = 30.0
 _DOCKER_PULL_TIMEOUT_SECONDS = 600.0
+_DOCKER_CLEANUP_RECONCILE_ATTEMPTS = 10
+_DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS = 0.05
+_DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS = 3
+_DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS = 10.0
+_DOCKER_CONTAINER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
+
+
+def _valid_docker_container_name(name: str) -> bool:
+    return _DOCKER_CONTAINER_NAME.fullmatch(name) is not None
 
 
 class _BoundedOutput(BoundedOutput):
@@ -679,19 +688,52 @@ def _docker_container_started(name: str) -> bool:
     )
 
 
-def _docker_container_absent(name: str) -> bool:
-    """Return true only when Docker reports the named container no longer exists."""
+def _docker_container_absence_observation(
+    name: str,
+    *,
+    timeout: float = _DOCKER_CONTROL_TIMEOUT_SECONDS,
+) -> bool | None:
+    """Return one positive presence/absence observation, or ``None`` on doubt.
+
+    An ``inspect`` failure is ambiguous: a missing container, an unavailable
+    daemon, an authorization failure, and a broken client all produce a
+    non-zero status.  Cleanup therefore needs a positive control-plane proof:
+    Docker must successfully enumerate candidate matches and the exact,
+    validated name must be absent.  The server-side name filter bounds output;
+    the local exact-line comparison remains authoritative because Docker name
+    filters may use substring or regular-expression matching.
+    """
+    if not _valid_docker_container_name(name):
+        return None
     try:  # pragma: no cover - the real command requires a docker daemon
-        inspected = _run_docker_control(
-            ["docker", "inspect", name], timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS
+        listed = _run_docker_control(
+            [
+                "docker",
+                "container",
+                "ls",
+                "--all",
+                "--filter",
+                f"name={name}",
+                "--format",
+                "{{.Names}}",
+            ],
+            timeout=timeout,
         )
     except BaseException:
-        return False
-    return inspected.returncode != 0
+        return None
+    if listed.returncode != 0:
+        return None
+    return name not in listed.stdout.splitlines()
+
+
+def _docker_container_absent(name: str) -> bool:
+    """Return true only after one successful exact-name absence observation."""
+
+    return _docker_container_absence_observation(name) is True
 
 
 def _cleanup_docker_container(name: str) -> bool:
-    """Force-remove a named container and prove that its name is now absent.
+    """Force-remove a named container and establish bounded stable absence.
 
     ``docker run --rm`` normally removes a container when its client exits, but
     an interrupted client can leave the daemon-side workload alive.  A failed
@@ -699,13 +741,62 @@ def _cleanup_docker_container(name: str) -> bool:
     ``docker rm`` output is captured only through the shared bounded control
     channel.
     """
-    try:  # pragma: no cover - requires a docker daemon
-        _run_docker_control(
-            ["docker", "rm", "-f", name], timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS
-        )
-    except BaseException:
+    if not _valid_docker_container_name(name):
         return False
-    return _docker_container_absent(name)
+
+    deadline = time.monotonic() + _DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS
+
+    def remaining_timeout() -> float | None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        return min(_DOCKER_CONTROL_TIMEOUT_SECONDS, remaining)
+
+    def remove() -> bool:
+        timeout = remaining_timeout()
+        if timeout is None:
+            return False
+        try:  # pragma: no cover - requires a docker daemon
+            _run_docker_control(
+                ["docker", "rm", "-f", name],
+                timeout=timeout,
+            )
+        except BaseException:
+            return False
+        return True
+
+    if not remove():
+        return False
+
+    final_absent_observations = 0
+    for attempt in range(_DOCKER_CLEANUP_RECONCILE_ATTEMPTS):
+        timeout = remaining_timeout()
+        if timeout is None:
+            return False
+        observation = _docker_container_absence_observation(
+            name,
+            timeout=timeout,
+        )
+        if observation is None:
+            return False
+        if observation:
+            final_absent_observations += 1
+        else:
+            final_absent_observations = 0
+            if not remove():
+                return False
+        if attempt + 1 < _DOCKER_CLEANUP_RECONCILE_ATTEMPTS:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(
+                min(_DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS, remaining)
+            )
+
+    return (
+        final_absent_observations
+        >= _DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS
+    )
 
 
 class RepoVerifier:

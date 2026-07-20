@@ -40,6 +40,83 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="docker-absence-daemon-failure-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="    if listed.returncode != 0:\n        return None\n",
+        after="    if listed.returncode != 0:\n        return True\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_absence_query_rejects_daemon_failure"
+        ),
+    ),
+    Mutation(
+        name="docker-absence-present-name-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="    return name not in listed.stdout.splitlines()\n",
+        after="    return True\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_absence_query_rejects_exact_present_name"
+        ),
+    ),
+    Mutation(
+        name="docker-absence-stopped-container-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before='                "--all",\n                "--filter",\n',
+        after='                "--filter",\n',
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_absence_query_accepts_only_successful_exact_absence"
+        ),
+    ),
+    Mutation(
+        name="docker-absence-name-validation-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "    return _DOCKER_CONTAINER_NAME.fullmatch(name) is not None\n"
+        ),
+        after="    return True\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_absence_query_rejects_ambiguous_or_invalid_names"
+        ),
+    ),
+    Mutation(
+        name="docker-absence-stability-streak-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "    return (\n"
+            "        final_absent_observations\n"
+            "        >= _DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS\n"
+            "    )\n"
+        ),
+        after="    return final_absent_observations > 0\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_cleanup_rejects_absence_not_stable_at_window_end"
+        ),
+    ),
+    Mutation(
+        name="docker-cleanup-total-budget-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="        return min(_DOCKER_CONTROL_TIMEOUT_SECONDS, remaining)\n",
+        after="        return _DOCKER_CONTROL_TIMEOUT_SECONDS\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_cleanup_applies_one_total_control_plane_budget"
+        ),
+    ),
+    Mutation(
+        name="docker-cleanup-unverifiable-retry-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="        if observation is None:\n            return False\n",
+        after="        if False and observation is None:\n            return False\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_cleanup_stops_immediately_on_unverifiable_observation"
+        ),
+    ),
+    Mutation(
         name="protected-edit-preflight-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before="        if rejection is not None:\n            return rejection\n",

@@ -84,24 +84,236 @@ def test_docker_nonzero_exit_proves_named_container_is_gone(
     assert cleaned == ["evoguard_case"]
 
 
-def test_docker_cleanup_requires_the_container_name_to_be_absent(
+def test_docker_cleanup_requires_a_successful_exact_name_absence_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     commands: list[list[str]] = []
 
-    def fake_control(command: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+    def fake_control(
+        command: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
         commands.append(command)
         if command[:3] == ["docker", "rm", "-f"]:
             return subprocess.CompletedProcess(command, 0, "", "")
-        return subprocess.CompletedProcess(command, 0, "still-present", "")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            "evoguard_case2\nevoguard_case\n",
+            "",
+        )
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", fake_control)
+    monkeypatch.setattr(repo_verifier.time, "sleep", lambda _seconds: None)
+
+    assert not repo_verifier._cleanup_docker_container("evoguard_case")
+    removals = [command for command in commands if command[:3] == ["docker", "rm", "-f"]]
+    queries = [command for command in commands if command[:3] == ["docker", "container", "ls"]]
+    assert len(removals) == repo_verifier._DOCKER_CLEANUP_RECONCILE_ATTEMPTS + 1
+    assert len(queries) == repo_verifier._DOCKER_CLEANUP_RECONCILE_ATTEMPTS
+    assert all("--all" in command for command in queries)
+    assert all(
+        command[command.index("--filter") + 1] == "name=evoguard_case"
+        for command in queries
+    )
+
+
+def test_docker_absence_query_accepts_only_successful_exact_absence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command: list[str] = []
+
+    def fake_control(
+        received: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        command.extend(received)
+        return subprocess.CompletedProcess(
+            received,
+            0,
+            "evoguard_case-prefix\nprefix-evoguard_case\nevoguard_other\n",
+            "",
+        )
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", fake_control)
+
+    assert repo_verifier._docker_container_absent("evoguard_case")
+    assert command == [
+        "docker",
+        "container",
+        "ls",
+        "--all",
+        "--filter",
+        "name=evoguard_case",
+        "--format",
+        "{{.Names}}",
+    ]
+
+
+def test_docker_cleanup_reconciles_a_late_daemon_side_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observations = 0
+    removals = 0
+    present = False
+
+    def fake_control(
+        command: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal observations, present, removals
+        del timeout
+        if command[:3] == ["docker", "rm", "-f"]:
+            removals += 1
+            present = False
+            return subprocess.CompletedProcess(command, 0, "", "")
+        observations += 1
+        if observations == 4:
+            present = True
+        names = "evoguard_case\n" if present else ""
+        return subprocess.CompletedProcess(command, 0, names, "")
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", fake_control)
+    monkeypatch.setattr(repo_verifier.time, "sleep", lambda _seconds: None)
+
+    assert repo_verifier._cleanup_docker_container("evoguard_case")
+    assert observations == repo_verifier._DOCKER_CLEANUP_RECONCILE_ATTEMPTS
+    assert removals == 2
+
+
+def test_docker_cleanup_rejects_absence_not_stable_at_window_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observations = 0
+
+    def fake_control(
+        command: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal observations
+        del timeout
+        if command[:3] == ["docker", "rm", "-f"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        observations += 1
+        names = (
+            "evoguard_case\n"
+            if observations
+            == repo_verifier._DOCKER_CLEANUP_RECONCILE_ATTEMPTS - 1
+            else ""
+        )
+        return subprocess.CompletedProcess(command, 0, names, "")
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", fake_control)
+    monkeypatch.setattr(repo_verifier.time, "sleep", lambda _seconds: None)
+
+    assert not repo_verifier._cleanup_docker_container("evoguard_case")
+
+
+def test_docker_cleanup_applies_one_total_control_plane_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeouts: list[float] = []
+
+    def timeout_control(
+        command: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        timeouts.append(timeout)
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", timeout_control)
+    monkeypatch.setattr(repo_verifier.time, "monotonic", lambda: 100.0)
+
+    assert not repo_verifier._cleanup_docker_container("evoguard_case")
+    assert timeouts == [repo_verifier._DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS]
+
+
+def test_docker_cleanup_stops_immediately_on_unverifiable_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_control(
+        command: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        del timeout
+        commands.append(command)
+        if command[:3] == ["docker", "rm", "-f"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            "",
+            "Cannot connect to the Docker daemon",
+        )
 
     monkeypatch.setattr(repo_verifier, "_run_docker_control", fake_control)
 
     assert not repo_verifier._cleanup_docker_container("evoguard_case")
-    assert commands == [
-        ["docker", "rm", "-f", "evoguard_case"],
-        ["docker", "inspect", "evoguard_case"],
-    ]
+    assert len(commands) == 2
+    assert commands[0][:3] == ["docker", "rm", "-f"]
+    assert commands[1][:3] == ["docker", "container", "ls"]
+
+
+def test_docker_absence_query_rejects_exact_present_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    present = subprocess.CompletedProcess(
+        ["docker", "container", "ls"],
+        0,
+        "evoguard_other\nevoguard_case\n",
+        "",
+    )
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", lambda *_a, **_k: present)
+
+    assert not repo_verifier._docker_container_absent("evoguard_case")
+
+
+def test_docker_absence_query_rejects_daemon_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failed = subprocess.CompletedProcess(
+        ["docker", "container", "ls"],
+        1,
+        "",
+        "Cannot connect to the Docker daemon",
+    )
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", lambda *_a, **_k: failed)
+
+    assert not repo_verifier._docker_container_absent("evoguard_case")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        subprocess.TimeoutExpired(["docker", "container", "ls"], 30),
+        repo_verifier._SubprocessOutputLimitExceeded(123),
+    ],
+    ids=["timeout", "output-limit"],
+)
+def test_docker_absence_query_rejects_unbounded_or_incomplete_observation(
+    monkeypatch: pytest.MonkeyPatch,
+    error: BaseException,
+) -> None:
+    def fail_control(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", fail_control)
+
+    assert not repo_verifier._docker_container_absent("evoguard_case")
+
+
+@pytest.mark.parametrize("name", ["", "evoguard_.*", "evoguard_case\nother"])
+def test_docker_absence_query_rejects_ambiguous_or_invalid_names(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+) -> None:
+    called = False
+
+    def fake_control(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(repo_verifier, "_run_docker_control", fake_control)
+
+    assert not repo_verifier._docker_container_absent(name)
+    assert called is False
 
 
 def test_container_setup_output_limit_is_a_structured_setup_failure(

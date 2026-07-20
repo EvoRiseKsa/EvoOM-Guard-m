@@ -168,10 +168,14 @@ def test_docker_timeout_forcibly_removes_the_exact_named_container(
             return subprocess.CompletedProcess(command, 0, "", "")
         if command[:2] == ["docker", "inspect"]:
             return subprocess.CompletedProcess(command, 1 if removed else 0, "", "")
+        if command[:4] == ["docker", "container", "ls", "--all"]:
+            names = "" if removed else fixed_name + "\n"
+            return subprocess.CompletedProcess(command, 0, names, "")
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(repo_verifier_module, "_docker_container_name", lambda _stage: fixed_name)
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
+    monkeypatch.setattr(repo_verifier_module.time, "sleep", lambda _seconds: None)
     verifier = RepoVerifier(
         timeout=7,
         mem_limit_mb=0,
@@ -187,13 +191,18 @@ def test_docker_timeout_forcibly_removes_the_exact_named_container(
             str(tmp_path / "judge"),
         )
 
-    assert len(calls) == 4
     assert calls[0][:3] == ["docker", "run", "--rm"]
     assert calls[1] == [
         "docker", "inspect", "--format", "{{.State.StartedAt}}", fixed_name
     ]
     assert calls[2] == ["docker", "rm", "-f", fixed_name]
-    assert calls[3] == ["docker", "inspect", fixed_name]
+    queries = [call for call in calls if call[:3] == ["docker", "container", "ls"]]
+    assert len(queries) == repo_verifier_module._DOCKER_CLEANUP_RECONCILE_ATTEMPTS
+    assert all("--all" in call for call in queries)
+    assert all(
+        call[call.index("--filter") + 1] == f"name={fixed_name}"
+        for call in queries
+    )
 
 
 def test_limit_hook_sets_cpu_and_address_space_caps(monkeypatch: pytest.MonkeyPatch) -> None:
