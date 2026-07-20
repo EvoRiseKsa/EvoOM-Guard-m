@@ -69,6 +69,27 @@ from evoom_guard.candidate_runner import (
     CandidateRunner,
     IsolationUnavailable,
 )
+from evoom_guard.execution import (
+    DEFAULT_MAX_OUTPUT_BYTES as _MAX_SUBPROCESS_OUTPUT_BYTES,
+)
+from evoom_guard.execution import (
+    BoundedOutput as _BoundedOutput,
+)
+from evoom_guard.execution import (
+    ProcessContainmentError as _SubprocessContainmentError,
+)
+from evoom_guard.execution import (
+    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
+from evoom_guard.execution import (
+    drain_process_pipe as _drain_subprocess_pipe,
+)
+from evoom_guard.execution import (
+    join_pipe_readers as _join_pipe_readers,
+)
+from evoom_guard.execution import (
+    run_bounded_subprocess as _run_bounded_subprocess,
+)
 from evoom_guard.pack_manifest import (
     PackManifestError,
     digest_and_manifest,
@@ -77,12 +98,6 @@ from evoom_guard.pack_manifest import (
 )
 from evoom_guard.verifiers.junit_oracle import read_junit_xml
 from evoom_guard.verifiers.repo_verifier import (
-    _BoundedOutput,
-    _drain_subprocess_pipe,
-    _join_pipe_readers,
-    _run_bounded_subprocess,
-    _SubprocessContainmentError,
-    _SubprocessOutputLimitExceeded,
     apply_blocks_to_copy,
     copy_repo_tree,
     distill_diagnostics,
@@ -650,7 +665,7 @@ def _run_judge_process(
         start_new_session=True,
     )
     assert process.stdout is not None and process.stderr is not None
-    capture = _BoundedOutput()
+    capture = _BoundedOutput(_MAX_SUBPROCESS_OUTPUT_BYTES)
     streams = [process.stdout, process.stderr]
     readers = [
         threading.Thread(

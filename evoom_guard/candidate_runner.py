@@ -46,10 +46,14 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
-from evoom_guard.verifiers.repo_verifier import (
-    _run_bounded_subprocess,
-    _SubprocessContainmentError,
-    _SubprocessOutputLimitExceeded,
+from evoom_guard.execution import (
+    ProcessContainmentError as _SubprocessContainmentError,
+)
+from evoom_guard.execution import (
+    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
+from evoom_guard.execution import (
+    run_bounded_subprocess as _run_bounded_subprocess,
 )
 
 # Docker writes candidate container IDs here.  The directory is owned by the

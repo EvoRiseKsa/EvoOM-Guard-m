@@ -44,11 +44,17 @@ import sys
 import tempfile
 from typing import Any
 
+from evoom_guard.execution import (
+    ProcessContainmentError as _SubprocessContainmentError,
+)
+from evoom_guard.execution import (
+    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
+from evoom_guard.execution import (
+    run_bounded_subprocess as _run_bounded_subprocess,
+)
 from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.verifiers.repo_verifier import (
-    _run_bounded_subprocess,
-    _SubprocessContainmentError,
-    _SubprocessOutputLimitExceeded,
     apply_blocks_to_copy,
     copy_repo_tree,
     is_safe_relpath,
