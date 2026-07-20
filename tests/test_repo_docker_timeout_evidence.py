@@ -14,6 +14,11 @@ from evoom_guard.verifiers.repo_verifier import RepoVerifier
 _STARTED_AT = "2026-07-13T10:11:12.123456789Z"
 
 
+@pytest.fixture(autouse=True)
+def _skip_reconciliation_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(repo_verifier_module.time, "sleep", lambda _seconds: None)
+
+
 def _candidate() -> str:
     return "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>\n"
 
@@ -81,6 +86,8 @@ class _DockerFake:
             )
         if cmd[:3] == ["docker", "rm", "-f"]:
             self.removed_names.add(cmd[-1])
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        if cmd[:4] == ["docker", "container", "ls", "--all"]:
             return subprocess.CompletedProcess(cmd, 0, "", "")
         assert cmd[:3] == ["docker", "run", "--rm"]
         phase = self._phase(cmd)

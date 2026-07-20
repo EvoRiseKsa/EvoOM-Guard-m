@@ -28,6 +28,7 @@ import subprocess
 import tempfile
 import unittest
 
+import evoom_guard.verifiers.repo_verifier as repo_verifier_module
 from evoom_guard.guard import ERROR, FAIL, PASS, guard
 
 E2E_IMAGE = os.environ.get("EVOGUARD_E2E_IMAGE", "python:3.12-slim")
@@ -166,6 +167,36 @@ class BlackboxDockerE2E(unittest.TestCase):
         pack = os.path.join(tmp, "pack")
         _w(pack, "test_pack.py", PROBE_PACK)
         return repo, pack
+
+    def test_named_container_cleanup_proves_real_daemon_absence(self) -> None:
+        name = repo_verifier_module._docker_container_name("cleanup-e2e")
+        created = subprocess.run(
+            [
+                "docker",
+                "create",
+                "--name",
+                name,
+                E2E_IMAGE,
+                "python",
+                "-c",
+                "raise SystemExit(0)",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        try:
+            self.assertFalse(repo_verifier_module._docker_container_absent(name))
+            self.assertTrue(repo_verifier_module._cleanup_docker_container(name))
+            self.assertTrue(repo_verifier_module._docker_container_absent(name))
+        finally:
+            subprocess.run(
+                ["docker", "rm", "-f", name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
 
     # ---- the core proof: a malicious candidate cannot escape the container ---- #
     def test_candidate_is_actually_confined(self) -> None:
