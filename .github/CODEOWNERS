@@ -1,34 +1,35 @@
 # Copyright (c) 2026 Mana Alharbi. All rights reserved.
 # Source-available — see LICENSE for permitted use.
 #
-# @MANA-awam is operated by the same project owner as @EvoRiseKsa. This mapping
-# supports a separate GitHub identity for technical review workflow only; it is
-# not independent review, third-party validation, or a separate security
-# authority. It has effect only when a protected branch/ruleset requires Code
-# Owner review and this file remains protected.
+# @MANA-awam and @EvoRiseKsa are operated by the same project owner. Listing
+# both accounts permits reciprocal, non-self GitHub review for changes authored
+# by either account. This is a workflow control only; it is not independent
+# review, third-party validation, or a separate security authority. It has
+# effect only while branch protection requires Code Owner review and this file
+# remains protected.
 
 # GitHub configuration, release definition, and published security claims.
-/.github/ @MANA-awam
-/action.yml @MANA-awam
-/pyproject.toml @MANA-awam
-/LICENSE @MANA-awam
-/SECURITY.md @MANA-awam
-/GOVERNANCE.md @MANA-awam
-/CONTRIBUTING.md @MANA-awam
-/requirements/ @MANA-awam
-/tools/ci-vitest/ @MANA-awam
-/ops/ci/ @MANA-awam
-/tests/test_dependency_lock_policy.py @MANA-awam
+/.github/ @MANA-awam @EvoRiseKsa
+/action.yml @MANA-awam @EvoRiseKsa
+/pyproject.toml @MANA-awam @EvoRiseKsa
+/LICENSE @MANA-awam @EvoRiseKsa
+/SECURITY.md @MANA-awam @EvoRiseKsa
+/GOVERNANCE.md @MANA-awam @EvoRiseKsa
+/CONTRIBUTING.md @MANA-awam @EvoRiseKsa
+/requirements/ @MANA-awam @EvoRiseKsa
+/tools/ci-vitest/ @MANA-awam @EvoRiseKsa
+/ops/ci/ @MANA-awam @EvoRiseKsa
+/tests/test_dependency_lock_policy.py @MANA-awam @EvoRiseKsa
 
 # Core verification, finalizer, and artifact-admission implementation.
-/evoom_guard/ @MANA-awam
-/examples/trusted-finalizer/ @MANA-awam
+/evoom_guard/ @MANA-awam @EvoRiseKsa
+/examples/trusted-finalizer/ @MANA-awam @EvoRiseKsa
 
 # Documents that define a release's assurance and trusted-boundary claims.
-/docs/GOVERNANCE.md @MANA-awam
-/docs/ASSURANCE.md @MANA-awam
-/docs/ARTIFACT_ADMISSION.md @MANA-awam
-/docs/REPOSITORY_PROTECTION.md @MANA-awam
-/docs/TRUSTED_FINALIZER.md @MANA-awam
-/docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam
-/docs/DEPENDENCY_POLICY.md @MANA-awam
+/docs/GOVERNANCE.md @MANA-awam @EvoRiseKsa
+/docs/ASSURANCE.md @MANA-awam @EvoRiseKsa
+/docs/ARTIFACT_ADMISSION.md @MANA-awam @EvoRiseKsa
+/docs/REPOSITORY_PROTECTION.md @MANA-awam @EvoRiseKsa
+/docs/TRUSTED_FINALIZER.md @MANA-awam @EvoRiseKsa
+/docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam @EvoRiseKsa
+/docs/DEPENDENCY_POLICY.md @MANA-awam @EvoRiseKsa
