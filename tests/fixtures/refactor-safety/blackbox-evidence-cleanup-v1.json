@@ -1,0 +1,1392 @@
+{
+  "cases": {
+    "cleanup_failure_overrides_result": {
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": false,
+        "deleted_applied": [],
+        "diagnostics": "characterization candidate cleanup unproved",
+        "error": "candidate container cleanup failed",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 2,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "cleanup_keyboard_interrupt": {
+      "exception": {
+        "message": "characterization cleanup interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "cleanup_system_exit": {
+      "exception": {
+        "message": "characterization cleanup exit",
+        "type": "SystemExit"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "docker_cid_without_receipt": {
+      "result": {
+        "candidate_invocations": 0,
+        "candidate_launcher_invocation_observed": false,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 1,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 0,
+          "candidate_launcher_events": 0,
+          "candidate_launcher_invocation_observed": false,
+          "delivered": "not_run",
+          "note": "the boundary was prepared, but the required launcher/runtime invocation evidence was not observed; no candidate isolation is claimed",
+          "preparation_note": "characterization boundary",
+          "prepared": "docker",
+          "requested": "docker"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cid_scan_calls": 1,
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [
+          "<CID-1>"
+        ],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "docker_receipt_valid_cid": {
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 1,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "docker",
+          "note": "characterization boundary",
+          "requested": "docker"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cid_scan_calls": 1,
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [
+          "<CID-1>"
+        ],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "docker_receipt_without_cid": {
+      "result": {
+        "candidate_invocations": 0,
+        "candidate_launcher_invocation_observed": false,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 0,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": false,
+          "delivered": "not_run",
+          "note": "the boundary was prepared, but the required launcher/runtime invocation evidence was not observed; no candidate isolation is claimed",
+          "preparation_note": "characterization boundary",
+          "prepared": "docker",
+          "requested": "docker"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cid_scan_calls": 1,
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "monotonic_observed_cid": {
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 1,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "docker",
+          "note": "characterization boundary",
+          "requested": "docker"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cid_scan_calls": 2,
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [
+          "<CID-1>"
+        ],
+        "cleanup_rescan_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "normal_cleanup_contract": {
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "primary_exception_precedes_cleanup": {
+      "exception": {
+        "message": "characterization primary interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": false,
+        "cleanup_wait_for_late_cidfiles": true,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 0,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 1,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "primary_keyboard_interrupt_cleanup_system_exit": {
+      "exception": {
+        "message": "characterization primary interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": false,
+        "cleanup_wait_for_late_cidfiles": true,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 0,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 1,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "primary_keyboard_interrupt_recorder_close_system_exit": {
+      "exception": {
+        "message": "characterization primary interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": false,
+        "cleanup_wait_for_late_cidfiles": true,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 0,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 1,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "primary_system_exit_cleanup_keyboard_interrupt": {
+      "exception": {
+        "message": "characterization primary exit",
+        "type": "SystemExit"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": false,
+        "cleanup_wait_for_late_cidfiles": true,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 0,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 1,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "receipt_absent": {
+      "result": {
+        "candidate_invocations": 0,
+        "candidate_launcher_invocation_observed": false,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 0,
+          "candidate_launcher_events": 0,
+          "candidate_launcher_invocation_observed": false,
+          "delivered": "not_run",
+          "note": "the boundary was prepared, but the required launcher/runtime invocation evidence was not observed; no candidate isolation is claimed",
+          "preparation_note": "characterization boundary",
+          "prepared": "subprocess",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cleanup_calls": 0,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "receipt_present": {
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "judge stdout\njudge stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "trace": {
+        "cleanup_calls": 0,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "recorder_close_keyboard_interrupt": {
+      "exception": {
+        "message": "characterization recorder close interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": true,
+        "cleanup_wait_for_late_cidfiles": false,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 2,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          },
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    },
+    "timeout_cleanup_contract": {
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": false,
+        "deleted_applied": [],
+        "diagnostics": "black-box pack timed out after 7s",
+        "error": "timeout",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "trace": {
+        "cleanup_calls": 1,
+        "cleanup_known_cids": [],
+        "cleanup_strict": false,
+        "cleanup_wait_for_late_cidfiles": true,
+        "judge_calls": 1,
+        "judge_invocations": [
+          {
+            "argv": [
+              "<CURRENT_PYTHON>",
+              "-m",
+              "pytest",
+              "-q",
+              "--color=no",
+              "-p",
+              "no:cacheprovider",
+              "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+              "--junitxml=<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+              "-o",
+              "junit_family=xunit2"
+            ],
+            "cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "env": {
+              "EVOGUARD_EXEC": "characterization-launcher",
+              "EVOGUARD_TARGET": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+              "HOME": "<TEMP>/runtime-temp/evo_blackbox_1",
+              "LANG": "C.UTF-8",
+              "PYTHONDONTWRITEBYTECODE": "1",
+              "PYTHONNOUSERSITE": "1"
+            },
+            "timeout": 7
+          }
+        ],
+        "prepared_target": {
+          "app": "value = 2",
+          "obsolete_exists": true
+        },
+        "recorder": {
+          "close_calls": 1,
+          "closed": true,
+          "drain_calls": 1,
+          "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
+          "token": "<TOKEN>"
+        },
+        "snapshot_checks": 1,
+        "snapshot_verifications": [
+          {
+            "manifest": {
+              "id": "characterization",
+              "target_type": "cli",
+              "version": "1"
+            },
+            "path": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+            "sha256": "f54d1a5247164d86b9ef87b6b2fa2d1cd70f0da2345dec593bbfcf1e9e7a543a"
+          }
+        ]
+      }
+    }
+  },
+  "group": "evidence_cleanup",
+  "normalization": [
+    "temporary_paths",
+    "invocation_tokens",
+    "container_ids",
+    "elapsed",
+    "current_python_executable"
+  ],
+  "schema_version": "blackbox-characterization-v1"
+}

@@ -42,6 +42,11 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   any explicit `--write` update.
 - Differential seam between the compatibility facade and the frozen pre-refactor
   outcomes; wall-clock duration is the only normalized field.
+- Split, reviewable `BlackboxResult` contract/preflight/judge/evidence-cleanup
+  vectors, checked by `python tools/ci/capture_blackbox_characterization.py`.
+  Replacement is explicit through `--write`; only temporary paths, the current
+  interpreter path, invocation tokens, container IDs, and elapsed fields are
+  normalized.
 - Fuzz/property suites for malformed inputs and tamper vectors
 - A bounded deterministic mutation gate for assurance-sensitive logic:
   `python tools/ci/run_security_mutation_gate.py`. Every reviewed mutant must be
