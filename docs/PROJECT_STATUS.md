@@ -27,7 +27,7 @@ validated security service.
 
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
 | --- | --- | --- | --- |
-| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | Source declares unreleased `4.0.1`; [`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0) is the latest published immutable GitHub Release at `301d62f2fd3e2e53b75e153201514f0f69e4ecf8`; see [release status](RELEASE_STATUS.md). Consumers must inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
+| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | Source now publishes [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1), the latest immutable consumer release at commit `5ed7e84017619496521b813f859a6a8bf0a2b1df`; see [release status](RELEASE_STATUS.md). Consumers must inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
 | [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) *(public archive)* | Frozen reproducible demonstration of honest fixes, protected-harness tampering, stdout forgery, and black-box evidence. | Its public scenario is pinned to **v3.5.2** and frozen at [`proof-v3.5.2`](https://github.com/EvoRiseKsa/evoom-guard-demo/releases/tag/proof-v3.5.2). | Any capability added in v3.6 or v3.7, including the raw-Git Trusted Finalizer. |
 | [`evoom-guard-eval`](https://github.com/EvoRiseKsa/evoom-guard-eval) *(public archive)* | Historical evaluation protocol and reproducibility record. | Its public record is pinned to **v3.5.2**, frozen at [`historical-v3.5.2-evaluation`](https://github.com/EvoRiseKsa/evoom-guard-eval/releases/tag/historical-v3.5.2-evaluation), and explicitly records both conformance and infrastructure failures. | A general accuracy rate, an independent evaluation, or a v3.7 result. |
 | [`evoom-guard-finalizer-pilot`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot) | Controlled operational evidence for the v3.7 Trusted Finalizer reference. | It records a same-owner, cross-account v3.7.0 exercise and public verification inputs. | A deployed production merge gate, an independent audit, a hostile-runner boundary, or a software-release provenance claim. |
@@ -47,7 +47,7 @@ validation. See [governance](GOVERNANCE.md).
 | `--blackbox-only` | Adds a judge-owned external process/protocol report and can fail closed on delivered isolation. | It is a narrowly supported target model, not a universal sandbox or proof of artifact provenance. |
 | Trusted Finalizer reference | Separates untrusted re-verification from a signing job that re-derives specified raw-Git bindings before key access. | It is a reference template and pilot, not enabled as this repository's merge requirement or proof of an unbreakable runner boundary. |
 | Artifact admission V1 | Can bind one observed regular-file digest and size to a verified finalizer `ALLOW`. | It does not prove how that file was built, published, deployed, or secured. |
-| GitHub artifact attestations | [`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0) publishes `evo-guard.pyz` with SHA-256 `99f9d0ed5029e22e3e06c22b32e55cfe35ce8e97568e304d4cf88a7bd19e7332` and a GitHub Actions build-artifact attestation. | [`v3.7.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) predates that workflow and has no such GitHub Actions artifact attestation. An attestation is provenance evidence, not a correctness or security verdict. |
+| GitHub artifact attestations | [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1) publishes `evo-guard.pyz` with SHA-256 `81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7` and a GitHub Actions build-artifact attestation. | [`v3.7.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) predates that workflow and has no such GitHub Actions artifact attestation. An attestation is provenance evidence, not a correctness or security verdict. |
 | GitHub-attestation admission adapter | Released experimentally in `v3.8.0`; it constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. | It is limited to its documented same-repository model and is not a general supply-chain guarantee, an enabled production admission gate, or independent verification of arbitrary provenance data. |
 | Authenticated producer receipt pilot | In the documented Round 1, B created one bounded receipt and C freshly verified one GitHub Artifact Attestation for its exact bytes under explicit repository, workflow, commit, ref, and GitHub-hosted-runner constraints. | This is non-admitting evidence only. It does not independently prove A executed Guard and does not authorize a release, deployment, merge, artifact admission, or `ALLOW`. |
 
@@ -68,7 +68,7 @@ depending on them. The following boundary is intentional.
 
 The public source is not a trade secret. Historical releases through v3.8.0
 remain governed by the licenses shipped with those exact releases. The current
-immutable [`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0)
+immutable [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
 release ships the EvoRise Source-Available License 1.0. It does not prevent
 someone from studying the design or independently implementing the ideas.
 Long-term differentiation therefore has to come from independently validated
@@ -76,7 +76,7 @@ operational practice, high-quality private policy/packs and data, trustworthy
 service operation, and customer integrations—not from obscuring already
 published Python or workflow files.
 
-The source tree now declares an unreleased `4.0.1` correction. It cannot
+The source tree now declares and ships `4.0.1`. It cannot
 retract rights already granted with v3.8.0; see
 [LICENSE_HISTORY.md](../LICENSE_HISTORY.md). The v4 license applies only to
 material distributed with it. Commercial licensing is administered by EvoRise
