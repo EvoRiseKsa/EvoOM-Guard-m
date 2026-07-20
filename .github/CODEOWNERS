@@ -20,6 +20,7 @@
 /tools/ci-vitest/ @MANA-awam @EvoRiseKsa
 /ops/ci/ @MANA-awam @EvoRiseKsa
 /tests/test_dependency_lock_policy.py @MANA-awam @EvoRiseKsa
+/tests/architecture/ @MANA-awam @EvoRiseKsa
 
 # Core verification, finalizer, and artifact-admission implementation.
 /evoom_guard/ @MANA-awam @EvoRiseKsa
@@ -33,3 +34,4 @@
 /docs/TRUSTED_FINALIZER.md @MANA-awam @EvoRiseKsa
 /docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam @EvoRiseKsa
 /docs/DEPENDENCY_POLICY.md @MANA-awam @EvoRiseKsa
+/docs/architecture/ @MANA-awam @EvoRiseKsa

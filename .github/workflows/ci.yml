@@ -43,6 +43,9 @@ jobs:
       - name: Type-check (mypy)
         run: python -m mypy evoom_guard/
 
+      - name: Architecture import-boundary ratchet
+        run: python -m pytest tests/architecture/test_import_boundaries.py -q
+
       - name: Tests + coverage
         run: |
           python -m coverage run -m pytest tests/ -q

@@ -1,0 +1,194 @@
+{
+  "format": "evoom-guard-import-boundary-baseline-1",
+  "package": "evoom_guard",
+  "policy": {
+    "full_ast": true,
+    "include_local_imports": true,
+    "include_type_checking_imports": true,
+    "resolve_relative_imports": true,
+    "inspect_dynamic_imports": [
+      "__import__",
+      "importlib.import_module"
+    ],
+    "reject_internal_wildcards": true,
+    "reject_new_cross_package_private_imports": true,
+    "reject_new_cycle_edges": true,
+    "reject_new_unclassified_modules": true,
+    "layer_order": [
+      [
+        "domain"
+      ],
+      [
+        "policy",
+        "candidate",
+        "workspace"
+      ],
+      [
+        "execution",
+        "isolation"
+      ],
+      [
+        "verifiers"
+      ],
+      [
+        "application"
+      ],
+      [
+        "evidence"
+      ],
+      [
+        "finalizer",
+        "admission"
+      ],
+      [
+        "api",
+        "cli",
+        "integrations"
+      ]
+    ]
+  },
+  "ratchet_history": [
+    {
+      "revision": 1,
+      "ceilings": {
+        "cycle_edges": 17,
+        "cross_package_private_imports": 76,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 27
+      }
+    }
+  ],
+  "violations": {
+    "cycle_edges": [
+      "evoom_guard.artifact_admission -> evoom_guard.trusted_finalizer",
+      "evoom_guard.artifact_digest_admission -> evoom_guard.trusted_finalizer",
+      "evoom_guard.cli -> evoom_guard.artifact_admission",
+      "evoom_guard.cli -> evoom_guard.artifact_digest_admission",
+      "evoom_guard.cli -> evoom_guard.finalizer_derivation",
+      "evoom_guard.cli -> evoom_guard.github_attestation",
+      "evoom_guard.cli -> evoom_guard.release_source_finalizer",
+      "evoom_guard.cli -> evoom_guard.release_source_producer_receipt",
+      "evoom_guard.cli -> evoom_guard.trusted_finalizer",
+      "evoom_guard.finalizer_derivation -> evoom_guard.cli",
+      "evoom_guard.github_attestation -> evoom_guard.artifact_admission",
+      "evoom_guard.github_attestation -> evoom_guard.artifact_digest_admission",
+      "evoom_guard.release_source_finalizer -> evoom_guard.finalizer_derivation",
+      "evoom_guard.release_source_producer_receipt -> evoom_guard.finalizer_derivation",
+      "evoom_guard.release_source_producer_receipt -> evoom_guard.github_attestation",
+      "evoom_guard.release_source_producer_receipt -> evoom_guard.release_source_finalizer",
+      "evoom_guard.trusted_finalizer -> evoom_guard.finalizer_derivation"
+    ],
+    "cross_package_private_imports": [
+      "evoom_guard.artifact_admission | evoom_guard.evidence_bundle | _archive_bytes | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.evidence_bundle | _preflight_zip | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.evidence_bundle | _validate_member_metadata | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.signing | _load_private_key_snapshot | contexts=from:local:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.signing | _sign_bytes_with_key_id | contexts=from:local:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.trusted_finalizer | _validate_source | contexts=from:module:runtime",
+      "evoom_guard.artifact_admission | evoom_guard.trusted_finalizer | _validate_source_context | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.evidence_bundle | _archive_bytes | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.evidence_bundle | _preflight_zip | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.evidence_bundle | _validate_member_metadata | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.signing | _load_private_key_snapshot | contexts=from:local:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.signing | _sign_bytes_with_key_id | contexts=from:local:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.trusted_finalizer | _validate_source | contexts=from:module:runtime",
+      "evoom_guard.artifact_digest_admission | evoom_guard.trusted_finalizer | _validate_source_context | contexts=from:module:runtime",
+      "evoom_guard.blackbox | evoom_guard.verifiers.repo_verifier | _BoundedOutput | contexts=from:module:runtime",
+      "evoom_guard.blackbox | evoom_guard.verifiers.repo_verifier | _SubprocessContainmentError | contexts=from:module:runtime",
+      "evoom_guard.blackbox | evoom_guard.verifiers.repo_verifier | _SubprocessOutputLimitExceeded | contexts=from:module:runtime",
+      "evoom_guard.blackbox | evoom_guard.verifiers.repo_verifier | _drain_subprocess_pipe | contexts=from:module:runtime",
+      "evoom_guard.blackbox | evoom_guard.verifiers.repo_verifier | _join_pipe_readers | contexts=from:module:runtime",
+      "evoom_guard.blackbox | evoom_guard.verifiers.repo_verifier | _run_bounded_subprocess | contexts=from:module:runtime",
+      "evoom_guard.candidate_runner | evoom_guard.verifiers.repo_verifier | _SubprocessContainmentError | contexts=from:module:runtime",
+      "evoom_guard.candidate_runner | evoom_guard.verifiers.repo_verifier | _SubprocessOutputLimitExceeded | contexts=from:module:runtime",
+      "evoom_guard.candidate_runner | evoom_guard.verifiers.repo_verifier | _run_bounded_subprocess | contexts=from:module:runtime",
+      "evoom_guard.cli | evoom_guard.evidence_bundle | _canonical_json | contexts=from:local:runtime",
+      "evoom_guard.cli | evoom_guard.evidence_bundle | _load_json_object | contexts=from:local:runtime",
+      "evoom_guard.cli | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:local:runtime",
+      "evoom_guard.cli | evoom_guard.guard | _UnverifiableChangedPathsError | contexts=from:local:runtime",
+      "evoom_guard.cli | evoom_guard.release_source_finalizer | _publish_bytes | contexts=from:local:runtime",
+      "evoom_guard.cli | evoom_guard.release_source_finalizer | _record_snapshot | contexts=from:local:runtime",
+      "evoom_guard.evidence | evoom_guard.verifiers.repo_verifier | _SubprocessContainmentError | contexts=from:module:runtime",
+      "evoom_guard.evidence | evoom_guard.verifiers.repo_verifier | _SubprocessOutputLimitExceeded | contexts=from:module:runtime",
+      "evoom_guard.evidence | evoom_guard.verifiers.repo_verifier | _run_bounded_subprocess | contexts=from:module:runtime",
+      "evoom_guard.evidence_bundle | evoom_guard.signing | _load_private_key_snapshot | contexts=from:local:runtime",
+      "evoom_guard.evidence_bundle | evoom_guard.signing | _sign_bytes_with_key_id | contexts=from:local:runtime",
+      "evoom_guard.finalizer_derivation | evoom_guard.cli | _load_config | contexts=from:local:runtime",
+      "evoom_guard.finalizer_derivation | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.finalizer_derivation | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
+      "evoom_guard.finalizer_derivation | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.finalizer_derivation | evoom_guard.guard | _effective_policy | contexts=from:module:runtime",
+      "evoom_guard.github_attestation | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.github_attestation | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _SubprocessContainmentError | contexts=from:local:runtime,from:module:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _SubprocessOutputLimitExceeded | contexts=from:local:runtime,from:module:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _matches_globs | contexts=from:module:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _resolve_host_command | contexts=from:module:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _run_bounded_subprocess | contexts=from:local:runtime,from:module:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _setup_fidelity_changes | contexts=from:local:runtime",
+      "evoom_guard.guard | evoom_guard.verifiers.repo_verifier | _setup_fidelity_snapshot | contexts=from:local:runtime",
+      "evoom_guard.record_verifier | evoom_guard.record_verification.report | _Checks | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _archive_bytes | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _preflight_zip | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _read_archive_member | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _sha256 | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _validate_member_metadata | contexts=from:module:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.signing | _load_private_key_snapshot | contexts=from:local:runtime",
+      "evoom_guard.release_source_finalizer | evoom_guard.signing | _sign_bytes_with_key_id | contexts=from:local:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.evidence_bundle | _sha256 | contexts=from:module:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.finalizer_derivation | _GitReader | contexts=from:local:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.release_source_finalizer | _publish_bytes | contexts=from:module:runtime",
+      "evoom_guard.release_source_producer_receipt | evoom_guard.release_source_finalizer | _validate_source_context | contexts=from:module:runtime",
+      "evoom_guard.trusted_finalizer | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
+      "evoom_guard.trusted_finalizer | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
+      "evoom_guard.trusted_finalizer | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
+      "evoom_guard.trusted_finalizer | evoom_guard.evidence_bundle | _sha256 | contexts=from:module:runtime"
+    ],
+    "wildcard_imports": [],
+    "unresolved_dynamic_imports": [],
+    "layer_violations": [],
+    "unclassified_modules": [
+      "evoom_guard.adapters",
+      "evoom_guard.artifact_admission",
+      "evoom_guard.artifact_digest_admission",
+      "evoom_guard.blackbox",
+      "evoom_guard.candidate_runner",
+      "evoom_guard.cli",
+      "evoom_guard.contracts",
+      "evoom_guard.evidence",
+      "evoom_guard.evidence_bundle",
+      "evoom_guard.finalizer_derivation",
+      "evoom_guard.github_attestation",
+      "evoom_guard.guard",
+      "evoom_guard.pack_manifest",
+      "evoom_guard.patch_applier",
+      "evoom_guard.patchmin",
+      "evoom_guard.record_verification",
+      "evoom_guard.record_verification.isolation",
+      "evoom_guard.record_verification.report",
+      "evoom_guard.record_verifier",
+      "evoom_guard.release_source_finalizer",
+      "evoom_guard.release_source_producer_receipt",
+      "evoom_guard.runtime_identity",
+      "evoom_guard.signing",
+      "evoom_guard.strict_json",
+      "evoom_guard.trusted_finalizer",
+      "evoom_guard.verdict_contract_v1_11",
+      "evoom_guard.workspace"
+    ]
+  }
+}
