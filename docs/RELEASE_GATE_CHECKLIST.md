@@ -1,7 +1,7 @@
 ﻿# Release gate checklist (v4 baseline hardening)
 
-Use this checklist before tagging `v4.0.1` as immutable and before enforcing as a
-required CI merge gate.
+Use this checklist for the published `v4.0.1` baseline and as the minimum gate
+for later releases before enforcing EvoOM Guard as a required CI merge gate.
 
 ## Required repository controls
 
@@ -42,13 +42,29 @@ required CI merge gate.
    - `evo-guard.pyz` + `SHA256SUMS` exact and immutable.
    - Optional: GitHub release attestation present for uploaded action artifact.
 
-## One-time release releaseability pre-flight
+## Frozen baseline verification
 
-- `tests/baseline/v4.0.1/BASELINE_MANIFEST.json` exists and matches collected assets.
+- `tests/baseline/v4.0.1/BASELINE_MANIFEST.json` validates against the strict
+  `tests/baseline/schema/baseline-v2.schema.json` schema.
+- The manifest distinguishes the reference-capture commit from the published
+  release and asset-build commit; it does not reuse one ambiguous source SHA.
+- Every non-metadata file under the baseline is inventoried exactly once with a
+  byte size and SHA-256, and no unsafe path or symlink is accepted.
 - `tests/baseline/v4.0.1/SHA256SUMS_v4.0.1.txt` matches `pyz/evo-guard.pyz`.
-- Signed baseline sample verifies (`verify-verdict` against
-  `artifacts/baseline-sign-pub.pem`).
-- `pack-doctor` vector verifies for the in-repo verifier pack.
+- The frozen zipapp runs offline and reports `evo-guard 4.0.1`.
+- The signed baseline sample verifies cryptographically against
+  `artifacts/baseline-sign-pub.pem` using its exact committed CRLF bytes.
+- The verifier-pack digest is recomputed from the frozen pack rather than trusted
+  only from the recorded `pack-doctor` report.
+- The frozen `action.yml` exposes exactly the inventoried 25 inputs and 5 outputs.
+- The benchmark snapshot contains 16 expected rows; its timing is observational,
+  not a claim of byte- or time-deterministic reproduction.
+- `release-manifest.json` binds the release workflow and recorded provenance to
+  the release commit and zipapp digest.
+- External GitHub release, Marketplace, and attestation state is independently
+  re-queried when current online truth is required; the local manifest alone is
+  not treated as cryptographic proof of that external state.
+- `ERRATA.md` is reviewed and the immutable `v4.0.1` tag/assets remain untouched.
 
 Update this file with every major process change (workflow templates, policy schema,
 attestation format, or check ownership mapping).

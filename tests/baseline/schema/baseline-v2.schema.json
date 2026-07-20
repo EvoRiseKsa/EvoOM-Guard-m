@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvoOM Guard frozen baseline manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "capture_source",
+    "release",
+    "release_workflow",
+    "action_contract",
+    "evidence_formats",
+    "artifact_inventory",
+    "vectors",
+    "benchmark",
+    "corrected_utc"
+  ],
+  "properties": {
+    "schema_version": {"const": "baseline-v2"},
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "EvoOM Guard"},
+        "version": {"pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "capture_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit_sha", "tree_sha", "merged_as", "relationship", "branch", "generated_utc", "kind", "reproduction_scope"],
+      "properties": {
+        "commit_sha": {"$ref": "#/$defs/gitSha"},
+        "tree_sha": {"$ref": "#/$defs/gitSha"},
+        "merged_as": {"$ref": "#/$defs/gitSha"},
+        "relationship": {"const": "identical-tree"},
+        "branch": {"type": "string", "minLength": 1},
+        "generated_utc": {"type": "string", "format": "date-time"},
+        "kind": {"const": "frozen-reference-captures"},
+        "reproduction_scope": {"type": "string", "minLength": 1}
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "commit_sha", "tree_sha", "asset_build_commit_sha", "state", "immutable", "prerelease", "published_utc", "manifest_artifact_id", "pyz_artifact_id", "checksum_artifact_id"],
+      "properties": {
+        "repository": {"pattern": "^[^/]+/[^/]+$"},
+        "tag": {"pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "commit_sha": {"$ref": "#/$defs/gitSha"},
+        "tree_sha": {"$ref": "#/$defs/gitSha"},
+        "asset_build_commit_sha": {"$ref": "#/$defs/gitSha"},
+        "state": {"const": "published"},
+        "immutable": {"const": true},
+        "prerelease": {"const": false},
+        "published_utc": {"type": "string", "format": "date-time"},
+        "manifest_artifact_id": {"$ref": "#/$defs/artifactId"},
+        "pyz_artifact_id": {"$ref": "#/$defs/artifactId"},
+        "checksum_artifact_id": {"$ref": "#/$defs/artifactId"}
+      }
+    },
+    "release_workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "attempt", "head_sha", "conclusion", "pytest", "linux_e2e_passed", "windows_e2e_passed", "evidence_scope"],
+      "properties": {
+        "run_id": {"type": "integer", "minimum": 1},
+        "attempt": {"type": "integer", "minimum": 1},
+        "head_sha": {"$ref": "#/$defs/gitSha"},
+        "conclusion": {"const": "success"},
+        "pytest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["passed", "skipped", "subtests_passed"],
+          "properties": {
+            "passed": {"type": "integer", "minimum": 1},
+            "skipped": {"type": "integer", "minimum": 0},
+            "subtests_passed": {"type": "integer", "minimum": 0}
+          }
+        },
+        "linux_e2e_passed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "windows_e2e_passed": {"type": "integer", "minimum": 1},
+        "evidence_scope": {"const": "recorded-external-observation"}
+      }
+    },
+    "action_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_artifact_id", "inputs", "outputs"],
+      "properties": {
+        "snapshot_artifact_id": {"$ref": "#/$defs/artifactId"},
+        "inputs": {
+          "type": "object",
+          "minProperties": 25,
+          "maxProperties": 25,
+          "additionalProperties": {"$ref": "#/$defs/actionInput"}
+        },
+        "outputs": {
+          "type": "object",
+          "minProperties": 5,
+          "maxProperties": 5,
+          "additionalProperties": {"type": "string", "pattern": "^\\$\\{\\{ steps\\.guard\\.outputs\\.[a-z0-9-]+ \\}\\}$"}
+        }
+      }
+    },
+    "evidence_formats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_schema", "sarif", "evidence_signature", "pack_digest", "junit_digest_format"],
+      "properties": {
+        "record_schema": {"const": "1.11"},
+        "sarif": {"const": "2.1.0"},
+        "evidence_signature": {"const": "Ed25519 detached exact bytes"},
+        "pack_digest": {"const": "EVOGUARD_PACK_V2"},
+        "junit_digest_format": {"const": "JUNIT_XML_SHA256"}
+      }
+    },
+    "artifact_inventory": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "vectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "records", "reports", "sarif", "signed_record", "verifier_pack"],
+      "properties": {
+        "commands": {"$ref": "#/$defs/artifactIds"},
+        "records": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["PASS", "FAIL", "REJECTED"],
+          "properties": {
+            "PASS": {"$ref": "#/$defs/artifactId"},
+            "FAIL": {"$ref": "#/$defs/artifactId"},
+            "REJECTED": {"$ref": "#/$defs/artifactId"}
+          }
+        },
+        "reports": {"$ref": "#/$defs/artifactIds"},
+        "sarif": {"$ref": "#/$defs/artifactIds"},
+        "signed_record": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["record", "signature", "public_key"],
+          "properties": {
+            "record": {"$ref": "#/$defs/artifactId"},
+            "signature": {"$ref": "#/$defs/artifactId"},
+            "public_key": {"$ref": "#/$defs/artifactId"}
+          }
+        },
+        "verifier_pack": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["files", "doctor_report", "digest_format", "sha256"],
+          "properties": {
+            "files": {"$ref": "#/$defs/artifactIds"},
+            "doctor_report": {"$ref": "#/$defs/artifactId"},
+            "digest_format": {"const": "EVOGUARD_PACK_V2"},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_id", "schema_version", "rows", "timing_semantics"],
+      "properties": {
+        "artifact_id": {"$ref": "#/$defs/artifactId"},
+        "schema_version": {"const": "bench-v1"},
+        "rows": {"const": 16},
+        "timing_semantics": {"const": "observational-not-byte-reproducible"}
+      }
+    },
+    "corrected_utc": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "gitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifactId": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "artifactIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/artifactId"}
+    },
+    "actionInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "default"],
+      "properties": {
+        "required": {"const": false},
+        "default": {"type": "string"}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "size_bytes", "sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/artifactId"},
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[A-Za-z0-9._/-]+$"
+        },
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

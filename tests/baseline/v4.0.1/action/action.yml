@@ -1,0 +1,451 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+# Source-available — see LICENSE for permitted use.
+# ─────────────────────────────────────────────────────────────────────────────
+name: "EvoOM Guard"
+# Marketplace requires < 125 characters; the full story lives in the README.
+description: >-
+  Evidence-bound change verification: rejects test-harness edits;
+  judge-owned verdicts and optional black-box checks.
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  base-ref:
+    description: "Git ref to diff against (default: the PR base SHA, else HEAD^)."
+    required: false
+    default: ""
+  test-command:
+    description: "Test command run inside the repo copy (default: pytest -q)."
+    required: false
+    default: ""
+  protected:
+    description: "Extra space-separated globs the patch may not modify."
+    required: false
+    default: ""
+  comment:
+    description: "Post the report on same-repository PRs (needs pull-requests: write). Fork/Dependabot PRs keep the job summary and skip the API comment."
+    required: false
+    default: "true"
+  # PR runs enforce any-non-pass at runtime; rejected-only is only for trusted non-PR use.
+  fail-on:
+    description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'. PR runs require any-non-pass; rejected-only is accepted only for trusted non-PR invocations."
+    required: false
+    default: "any-non-pass"
+  isolation:
+    description: "Isolation: 'subprocess' (default), 'docker', or 'gvisor' (the latter two need docker-image + a docker daemon; 'gvisor' also needs the runsc runtime)."
+    required: false
+    default: ""
+  docker-image:
+    description: "Container image for isolation 'docker'/'gvisor' (must carry the test runner, e.g. node:22-slim)."
+    required: false
+    default: ""
+  docker-network:
+    description: "Container network for isolation 'docker'/'gvisor' (default: 'none' — no network, the safe choice; pass a docker network name only if the suite genuinely needs it)."
+    required: false
+    default: ""
+  strict-harness:
+    description: "Opt-in harness profile: make dependency/compiler manifests immutable and require a non-empty structured JUnit verdict. On pull_request this setting must come from the verified base .evoguard.json policy, not this workflow input."
+    required: false
+    default: ""
+  sarif:
+    description: "If set, write a SARIF 2.1.0 report to this workspace path (upload it with github/codeql-action/upload-sarif)."
+    required: false
+    default: ""
+  # Built-in judge-owned tests/config/CI/auto-exec remain non-exemptible.
+  allow:
+    description: "Baseline allowlist for adopter-defined extra protected globs only; built-in tests, config, CI, and auto-exec paths are never exemptible."
+    required: false
+    default: ""
+  allow-new-tests:
+    description: "Feature mode: 'true' allows brand-new test files (edits to existing tests/config/auto-exec stay rejected)."
+    required: false
+    default: "false"
+  timeout:
+    description: "Per-run suite timeout in seconds."
+    required: false
+    default: ""
+  mem-limit:
+    description: "Address-space cap (MB) for the test subprocess; 0 disables it (needed for Node/V8 suites)."
+    required: false
+    default: ""
+  verifier-pack:
+    description: "Repository-relative path to judge-owned pytest invariants. On a PR the Action materializes this directory from the verified base commit, never from the candidate checkout. Pair it with an EVOGUARD_PACK_V2 identity pin (input or trusted base policy)."
+    required: false
+    default: ""
+  expect-verifier-pack-sha256:
+    description: "Fail-closed EVOGUARD_PACK_V2 identity pin for verifier-pack (64 hex characters from pack-doctor). The accepted snapshot must match before candidate code runs."
+    required: false
+    default: ""
+  blackbox:
+    description: "'true' runs the external black-box judge (needs verifier-pack). The pack must reach the candidate through $EVOGUARD_EXEC; candidate isolation is claimed only after an observed launcher invocation (and container CID). By default the repo's own suite is also required, so overall report integrity is the weaker repo-native channel. See docs/BLACKBOX.md."
+    required: false
+    default: "false"
+  blackbox-only:
+    description: "With blackbox, judge ONLY the external pack and skip the repo's own suite (for pure-CLI/service targets with no in-repo tests). Otherwise a failing repo suite blocks the merge even if the pack passes."
+    required: false
+    default: "false"
+  require-report-integrity:
+    description: "For completed PASS verdicts, fail closed unless this end-to-end report_integrity level is delivered ('same_process_candidate_writable' or 'external_process_isolated'). Static/preflight/incomplete causes remain unchanged. 'external_process_isolated' requires blackbox-only; default blackbox is composite with the weaker repo-native channel."
+    required: false
+    default: ""
+  require-candidate-isolation:
+    description: "For completed PASS verdicts, fail closed unless this candidate isolation is observed ('subprocess'|'docker'|'gvisor'). Preparing a runner is insufficient: blackbox requires an EVOGUARD_EXEC receipt, plus a runtime CID for docker/gvisor. Static/preflight/incomplete causes remain unchanged."
+    required: false
+    default: ""
+  trust-setup-on-host:
+    description: "Optional tri-state override: 'true' runs setup_command on the host (weakens effective isolation to subprocess); 'false' forces container setup; blank respects .evoguard.json."
+    required: false
+    default: ""
+  diff-coverage:
+    description: "'true' measures which changed lines the suite actually executed (one extra suite run; installs the 'cov' extra). Evidence only unless min-diff-coverage is set."
+    required: false
+    default: "false"
+  min-diff-coverage:
+    description: "Gate: a PASS whose measured changed-line coverage is below this percentage becomes FAIL (diff_coverage_below_threshold). Implies diff-coverage."
+    required: false
+    default: ""
+  baseline-evidence:
+    description: "'true' adds before/after differential evidence: the suite ALSO runs on the pristine base, and the report shows repair_effect ('demonstrated' only when base FAILs and candidate PASSes under the same judge). One extra suite run; evidence only."
+    required: false
+    default: "false"
+  require-demonstrated-fix:
+    description: "Gate (implies baseline-evidence): a PASS whose repair effect is not demonstrated (base already green, or no clean baseline) becomes FAIL (fix_not_demonstrated). For agent 'fix' PRs only — ordinary feature PRs start from a green base and would fail this."
+    required: false
+    default: "false"
+
+outputs:
+  verdict:
+    description: "PASS | REJECTED | FAIL | TAMPERED | ERROR"
+    value: ${{ steps.guard.outputs.verdict }}
+  json-path:
+    description: "Path (on the runner) of the machine-readable verdict JSON — carries the full attestation (effective_policy, policy_sha256, base/head commit+tree SHAs). Upload or sign it in a follow-up step."
+    value: ${{ steps.guard.outputs.json-path }}
+  report-path:
+    description: "Path (on the runner) of the Markdown report."
+    value: ${{ steps.guard.outputs.report-path }}
+  head-sha:
+    description: "The head commit SHA the verdict was bound to."
+    value: ${{ steps.guard.outputs.head-sha }}
+  policy-sha:
+    description: "sha256 of the COMPLETE effective policy that shaped the judgment (attestation.policy_sha256) — pass to `evo-guard verify-verdict --expect-policy-sha`."
+    value: ${{ steps.guard.outputs.policy-sha }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      with:
+        python-version: "3.12"
+
+    - name: Install EvoGuard
+      shell: bash
+      env:
+        INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
+        INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        # A pull_request workflow is candidate-controlled. Install the optional
+        # coverage dependency there unconditionally: the trusted base policy may
+        # require it, while a candidate input must not decide the judge features.
+        if [ -n "$PR_BASE_SHA" ]; then
+          pip install -q "${{ github.action_path }}[cov]"
+        elif [ "$INPUT_DIFF_COVERAGE" = "true" ] || [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then
+          pip install -q "${{ github.action_path }}[cov]"
+        else
+          pip install -q "${{ github.action_path }}"
+        fi
+
+    - name: Run EvoGuard
+      id: guard
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_TEST_COMMAND: ${{ inputs.test-command }}
+        INPUT_PROTECTED: ${{ inputs.protected }}
+        INPUT_ALLOW: ${{ inputs.allow }}
+        INPUT_ALLOW_NEW_TESTS: ${{ inputs.allow-new-tests }}
+        INPUT_ISOLATION: ${{ inputs.isolation }}
+        INPUT_DOCKER_IMAGE: ${{ inputs.docker-image }}
+        INPUT_DOCKER_NETWORK: ${{ inputs.docker-network }}
+        INPUT_STRICT_HARNESS: ${{ inputs.strict-harness }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_MEM_LIMIT: ${{ inputs.mem-limit }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_VERIFIER_PACK: ${{ inputs.verifier-pack }}
+        INPUT_EXPECT_VERIFIER_PACK_SHA256: ${{ inputs.expect-verifier-pack-sha256 }}
+        INPUT_BLACKBOX: ${{ inputs.blackbox }}
+        INPUT_BLACKBOX_ONLY: ${{ inputs.blackbox-only }}
+        INPUT_REQUIRE_REPORT_INTEGRITY: ${{ inputs.require-report-integrity }}
+        INPUT_REQUIRE_CANDIDATE_ISOLATION: ${{ inputs.require-candidate-isolation }}
+        INPUT_TRUST_SETUP_ON_HOST: ${{ inputs.trust-setup-on-host }}
+        INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
+        INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
+        INPUT_BASELINE_EVIDENCE: ${{ inputs.baseline-evidence }}
+        INPUT_REQUIRE_DEMONSTRATED_FIX: ${{ inputs.require-demonstrated-fix }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set -e
+        # A diagnosable, fail-fast exit for setup problems (missing base, shallow
+        # history): name the cause, write it to the step summary, and stop BEFORE
+        # the guard runs — never let a broken diff surface as a confusing
+        # "empty diff" verdict downstream.
+        fail_setup() {
+          echo "::error::EvoGuard: $1 — $2"
+          { echo "## EvoGuard — ⚠️ ERROR (${1})"; echo; echo "**$2**"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "verdict=ERROR" >> "$GITHUB_OUTPUT"
+          exit 1
+        }
+        # On a PR, the event payload is the authority for the base and this
+        # action must not accept candidate-controlled workflow inputs that weaken
+        # the gate. Outside a PR, a maintainer may choose a base/ref and the
+        # narrow rejected-only reporting mode deliberately.
+        IS_PR=false
+        if [ -n "$PR_BASE_SHA" ]; then
+          IS_PR=true
+          if [ -n "$INPUT_BASE_REF" ] && [ "$INPUT_BASE_REF" != "$PR_BASE_SHA" ]; then
+            fail_setup "untrusted_base_ref_override" \
+              "pull_request runs must use the event base SHA; a workflow input may not replace it"
+          fi
+          if [ "$INPUT_FAIL_ON" != "any-non-pass" ]; then
+            fail_setup "untrusted_fail_on_override" \
+              "pull_request runs require fail-on=any-non-pass so ERROR/FAIL/TAMPERED cannot turn green"
+          fi
+          BASE="$PR_BASE_SHA"
+        else
+          BASE="$INPUT_BASE_REF"
+          if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
+        fi
+        echo "Diffing against base: $BASE"
+        # Best-effort deepen (the PR base SHA is usually absent from a default
+        # depth-1 checkout). Failure here is only a warning — the authoritative,
+        # fail-fast check is the rev-parse below.
+        git fetch --no-tags --depth=1 origin "$BASE" \
+          || echo "::warning::EvoGuard: could not fetch base '$BASE' from origin — trying to resolve it locally"
+        git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null \
+          || fail_setup "base_ref_unavailable" \
+               "cannot resolve the diff base '$BASE' in this checkout. Use actions/checkout with 'fetch-depth: 0', or pass a 'base-ref' that is reachable from this checkout."
+        # Policy is judge-owned input. Read it from the verified base commit, not
+        # from the candidate workspace. A missing base policy is a deterministic
+        # empty object; an unreadable or malformed present policy fails closed in
+        # the CLI below.
+        BASE_POLICY_CONFIG="$RUNNER_TEMP/evoguard-base-policy.json"
+        if git cat-file -e "${BASE}:.evoguard.json" 2>/dev/null; then
+          git show "${BASE}:.evoguard.json" > "$BASE_POLICY_CONFIG" \
+            || fail_setup "base_policy_config_unavailable" \
+                 "could not materialize .evoguard.json from the verified base commit"
+        else
+          printf '{}\n' > "$BASE_POLICY_CONFIG" \
+            || fail_setup "base_policy_config_unavailable" \
+                 "could not write the empty trusted base policy"
+        fi
+        # `with:` values in a pull_request workflow are read from the candidate
+        # merge result. They are therefore not judge policy. The only
+        # verifier-pack identity accepted in PR mode comes from this already
+        # materialized BASE policy, never from INPUT_*.
+        read_base_policy_string() {
+          python - "$BASE_POLICY_CONFIG" "$1" <<'PY'
+        import json
+        import sys
+
+        config_path, key = sys.argv[1], sys.argv[2]
+        try:
+            with open(config_path, encoding="utf-8") as handle:
+                config = json.load(handle)
+            if not isinstance(config, dict):
+                raise ValueError("policy root must be a JSON object")
+            value = config.get(key, "")
+            if not isinstance(value, str):
+                raise ValueError(f"{key} must be a string when present")
+            if "\x00" in value or "\n" in value or "\r" in value:
+                raise ValueError(f"{key} must not contain control characters")
+            print(value)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"invalid trusted base policy {key}: {error}", file=sys.stderr)
+            raise SystemExit(2)
+        PY
+        }
+        EFFECTIVE_VERIFIER_PACK="$INPUT_VERIFIER_PACK"
+        EFFECTIVE_EXPECT_VERIFIER_PACK_SHA256="$INPUT_EXPECT_VERIFIER_PACK_SHA256"
+        if [ "$IS_PR" = "true" ]; then
+          TRUSTED_POLICY_VERIFIER_PACK="$(read_base_policy_string verifier_pack)" \
+            || fail_setup "base_policy_verifier_settings_invalid" \
+                 "could not read verifier_pack from the verified base .evoguard.json"
+          TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256="$(read_base_policy_string expect_verifier_pack_sha256)" \
+            || fail_setup "base_policy_verifier_settings_invalid" \
+                 "could not read expect_verifier_pack_sha256 from the verified base .evoguard.json"
+          if [ -n "$TRUSTED_POLICY_VERIFIER_PACK" ] && [ -z "$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256" ]; then
+            fail_setup "base_policy_verifier_identity_missing" \
+              "a PR verifier_pack must have expect_verifier_pack_sha256 in the verified base .evoguard.json"
+          fi
+          if [ -z "$TRUSTED_POLICY_VERIFIER_PACK" ] && [ -n "$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256" ]; then
+            fail_setup "base_policy_verifier_settings_invalid" \
+              "expect_verifier_pack_sha256 requires verifier_pack in the verified base .evoguard.json"
+          fi
+          if [ -n "$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256" ] && ! [[ "$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            fail_setup "base_policy_verifier_settings_invalid" \
+              "expect_verifier_pack_sha256 in the verified base .evoguard.json must be 64 hexadecimal characters"
+          fi
+          if [ -n "$INPUT_VERIFIER_PACK" ] && [ "$INPUT_VERIFIER_PACK" != "$TRUSTED_POLICY_VERIFIER_PACK" ]; then
+            fail_setup "untrusted_verifier_pack_override" \
+              "pull_request verifier-pack input differs from the verified base policy and is not trusted"
+          fi
+          if [ -n "$INPUT_EXPECT_VERIFIER_PACK_SHA256" ] && [ "$INPUT_EXPECT_VERIFIER_PACK_SHA256" != "$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256" ]; then
+            fail_setup "untrusted_verifier_pack_override" \
+              "pull_request verifier-pack identity input differs from the verified base policy and is not trusted"
+          fi
+          EFFECTIVE_VERIFIER_PACK="$TRUSTED_POLICY_VERIFIER_PACK"
+          EFFECTIVE_EXPECT_VERIFIER_PACK_SHA256="$TRUSTED_POLICY_EXPECT_VERIFIER_PACK_SHA256"
+          if [ -n "$INPUT_TEST_COMMAND" ] || [ -n "$INPUT_PROTECTED" ] || [ -n "$INPUT_ALLOW" ] || \
+             [ "$INPUT_ALLOW_NEW_TESTS" = "true" ] || [ -n "$INPUT_ISOLATION" ] || \
+             [ -n "$INPUT_DOCKER_IMAGE" ] || [ -n "$INPUT_DOCKER_NETWORK" ] || \
+             [ -n "$INPUT_STRICT_HARNESS" ] || \
+             [ -n "$INPUT_TIMEOUT" ] || [ -n "$INPUT_MEM_LIMIT" ] || [ -n "$INPUT_SARIF" ] || \
+             [ "$INPUT_BLACKBOX" = "true" ] || [ "$INPUT_BLACKBOX_ONLY" = "true" ] || \
+             [ -n "$INPUT_REQUIRE_REPORT_INTEGRITY" ] || [ -n "$INPUT_REQUIRE_CANDIDATE_ISOLATION" ] || \
+             [ -n "$INPUT_TRUST_SETUP_ON_HOST" ] || [ "$INPUT_DIFF_COVERAGE" = "true" ] || \
+             [ -n "$INPUT_MIN_DIFF_COVERAGE" ] || [ "$INPUT_BASELINE_EVIDENCE" = "true" ] || \
+             [ "$INPUT_REQUIRE_DEMONSTRATED_FIX" = "true" ]; then
+            echo "::warning::EvoGuard: pull_request ignores workflow inputs that shape the judge; use the verified base .evoguard.json policy instead"
+            echo "- EvoGuard used only the verified base policy for judge settings; candidate workflow overrides were ignored." >> "$GITHUB_STEP_SUMMARY"
+          fi
+        fi
+        set +e
+        git diff "$BASE...HEAD" > "$RUNNER_TEMP/guard.diff" 2> "$RUNNER_TEMP/guard-diff.err"
+        DIFF_CODE=$?
+        set -e
+        if [ "$DIFF_CODE" -ne 0 ]; then
+          fail_setup "base_diff_failed" \
+            "'git diff ${BASE}...HEAD' failed ($(head -c 300 "$RUNNER_TEMP/guard-diff.err")). A shallow checkout with no merge base is the usual cause — use actions/checkout with 'fetch-depth: 0'."
+        fi
+        # A verifier pack is judge-owned input, not part of the candidate. On a
+        # PR, materialize a repository-relative pack from the verified BASE
+        # commit into RUNNER_TEMP before passing it to the diff judge. This
+        # prevents a candidate from changing a helper inside ./pack and having
+        # that helper become the supposedly independent snapshot.
+        TRUSTED_VERIFIER_PACK=""
+        if [ -n "$EFFECTIVE_VERIFIER_PACK" ]; then
+          case "$EFFECTIVE_VERIFIER_PACK" in
+            /*|*\\*|.|..|../*|*/../*|*/..)
+              fail_setup "untrusted_verifier_pack_path" \
+                "verifier-pack must be a safe repository-relative directory; the Action materializes it from the verified base commit"
+              ;;
+          esac
+          PACK_ROOT="$RUNNER_TEMP/evoguard-trusted-pack"
+          rm -rf "$PACK_ROOT"
+          mkdir -p "$PACK_ROOT" || fail_setup "trusted_verifier_pack_unavailable" \
+            "could not create the trusted verifier-pack staging directory"
+          git archive --format=tar "$BASE" -- "$EFFECTIVE_VERIFIER_PACK" | tar -x -C "$PACK_ROOT" \
+            || fail_setup "trusted_verifier_pack_unavailable" \
+              "could not materialize verifier-pack '$EFFECTIVE_VERIFIER_PACK' from the verified base commit"
+          TRUSTED_VERIFIER_PACK="$PACK_ROOT/$EFFECTIVE_VERIFIER_PACK"
+          [ -d "$TRUSTED_VERIFIER_PACK" ] \
+            || fail_setup "trusted_verifier_pack_unavailable" \
+                 "verifier-pack '$EFFECTIVE_VERIFIER_PACK' is not a directory in the verified base commit"
+        fi
+        # The recommended path: pipe the diff; EvoGuard reverse-applies it to the head
+        # checkout (this working dir) — no second checkout or worktree.
+        ARGS=(guard --diff - --config "$BASE_POLICY_CONFIG" --report "$RUNNER_TEMP/guard-report.md" --json "$RUNNER_TEMP/guard.json")
+        if [ -n "$TRUSTED_VERIFIER_PACK" ]; then ARGS+=(--verifier-pack "$TRUSTED_VERIFIER_PACK"); fi
+        if [ -n "$EFFECTIVE_EXPECT_VERIFIER_PACK_SHA256" ]; then ARGS+=(--expect-verifier-pack-sha256 "$EFFECTIVE_EXPECT_VERIFIER_PACK_SHA256"); fi
+        # BEGIN NON_PR_WORKFLOW_OVERRIDES
+        # Every entry in this block shapes the judge or writes a report path.
+        # It is deliberately unreachable on pull_request: the workflow itself
+        # is candidate-controlled, while --config above came from BASE.
+        if [ "$IS_PR" != "true" ]; then
+          if [ -n "$INPUT_TEST_COMMAND" ]; then ARGS+=(--test-command "$INPUT_TEST_COMMAND"); fi
+          if [ -n "$INPUT_PROTECTED" ]; then read -r -a PROTECTED <<< "$INPUT_PROTECTED"; ARGS+=(--protected "${PROTECTED[@]}"); fi
+          if [ -n "$INPUT_ALLOW" ]; then read -r -a ALLOW <<< "$INPUT_ALLOW"; ARGS+=(--allow "${ALLOW[@]}"); fi
+          if [ "$INPUT_ALLOW_NEW_TESTS" = "true" ]; then ARGS+=(--allow-new-tests); fi
+          if [ -n "$INPUT_ISOLATION" ]; then ARGS+=(--isolation "$INPUT_ISOLATION"); fi
+          if [ -n "$INPUT_DOCKER_IMAGE" ]; then ARGS+=(--docker-image "$INPUT_DOCKER_IMAGE"); fi
+          if [ -n "$INPUT_DOCKER_NETWORK" ]; then ARGS+=(--docker-network "$INPUT_DOCKER_NETWORK"); fi
+          if [ "$INPUT_STRICT_HARNESS" = "true" ]; then
+            ARGS+=(--strict-harness)
+          elif [ "$INPUT_STRICT_HARNESS" = "false" ]; then
+            ARGS+=(--no-strict-harness)
+          fi
+          if [ -n "$INPUT_TIMEOUT" ]; then ARGS+=(--timeout "$INPUT_TIMEOUT"); fi
+          if [ -n "$INPUT_MEM_LIMIT" ]; then ARGS+=(--mem-limit "$INPUT_MEM_LIMIT"); fi
+          if [ -n "$INPUT_SARIF" ]; then ARGS+=(--sarif "$INPUT_SARIF"); fi
+          if [ "$INPUT_BLACKBOX" = "true" ]; then ARGS+=(--blackbox); fi
+          if [ "$INPUT_BLACKBOX_ONLY" = "true" ]; then ARGS+=(--blackbox-only); fi
+          if [ -n "$INPUT_REQUIRE_REPORT_INTEGRITY" ]; then ARGS+=(--require-report-integrity "$INPUT_REQUIRE_REPORT_INTEGRITY"); fi
+          if [ -n "$INPUT_REQUIRE_CANDIDATE_ISOLATION" ]; then ARGS+=(--require-candidate-isolation "$INPUT_REQUIRE_CANDIDATE_ISOLATION"); fi
+          if [ "$INPUT_TRUST_SETUP_ON_HOST" = "true" ]; then
+            ARGS+=(--trust-setup-on-host)
+          elif [ "$INPUT_TRUST_SETUP_ON_HOST" = "false" ]; then
+            ARGS+=(--no-trust-setup-on-host)
+          fi
+          if [ "$INPUT_DIFF_COVERAGE" = "true" ]; then ARGS+=(--diff-coverage); fi
+          if [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then ARGS+=(--min-diff-coverage "$INPUT_MIN_DIFF_COVERAGE"); fi
+          if [ "$INPUT_BASELINE_EVIDENCE" = "true" ]; then ARGS+=(--baseline-evidence); fi
+          if [ "$INPUT_REQUIRE_DEMONSTRATED_FIX" = "true" ]; then ARGS+=(--require-demonstrated-fix); fi
+        fi
+        # END NON_PR_WORKFLOW_OVERRIDES
+        # Exact-revision binding: a plain `git diff` carries no commit identity,
+        # so the signed/attested verdict would float free of the commit being
+        # merged. Resolve and pass the real commit + tree SHAs.
+        BASE_COMMIT="$(git rev-parse --verify --quiet "${BASE}^{commit}" || true)"
+        HEAD_COMMIT="$(git rev-parse HEAD)"
+        if [ -n "$BASE_COMMIT" ]; then
+          ARGS+=(--base-sha "$BASE_COMMIT" --base-tree-sha "$(git rev-parse "${BASE_COMMIT}^{tree}")")
+        fi
+        ARGS+=(--head-sha "$HEAD_COMMIT" --head-tree-sha "$(git rev-parse "HEAD^{tree}")")
+        set +e
+        evo-guard "${ARGS[@]}" < "$RUNNER_TEMP/guard.diff"
+        GUARD_CODE=$?
+        set -e
+        # Tolerant reads: if the guard crashed before writing its JSON/report,
+        # surface ERROR + the exit code rather than a bash traceback.
+        VERDICT=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/guard.json'))['verdict'])" 2>/dev/null || echo "ERROR")
+        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+        # Surface the evidence (1.7): the attestation is the point of the newer
+        # releases — make it reachable without custom steps.
+        echo "json-path=$RUNNER_TEMP/guard.json" >> "$GITHUB_OUTPUT"
+        echo "report-path=$RUNNER_TEMP/guard-report.md" >> "$GITHUB_OUTPUT"
+        POLICY_SHA=$(python -c "import json;print((json.load(open('$RUNNER_TEMP/guard.json')).get('attestation') or {}).get('policy_sha256') or '')" 2>/dev/null || echo "")
+        echo "policy-sha=$POLICY_SHA" >> "$GITHUB_OUTPUT"
+        echo "head-sha=$HEAD_COMMIT" >> "$GITHUB_OUTPUT"
+        if [ -f "$RUNNER_TEMP/guard-report.md" ]; then
+          cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ "$INPUT_FAIL_ON" = "rejected-only" ]; then
+          [ "$VERDICT" = "REJECTED" ] && exit 1 || exit 0
+        fi
+        exit $GUARD_CODE
+
+    - name: Comment on the PR
+      # Fork and Dependabot PRs receive a read-only GITHUB_TOKEN. The report is
+      # already in GITHUB_STEP_SUMMARY, so skip the optional API write there and
+      # never let a comment-permission failure replace the Guard verdict.
+      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
+      continue-on-error: true
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        script: |
+          const fs = require('fs');
+          const p = process.env.RUNNER_TEMP + '/guard-report.md';
+          if (!fs.existsSync(p)) return;
+          // Stable hidden marker so re-runs UPDATE one sticky comment instead of
+          // appending a new one each push (see issue #16). Kept invisible (HTML
+          // comment) and unchanged across runs; the report content is unchanged.
+          const MARKER = '<!-- evoguard-report -->';
+          const body = MARKER + '\n' + fs.readFileSync(p, 'utf8');
+          const { owner, repo } = context.repo;
+          const issue_number = context.issue.number;
+          // Find a prior EvoGuard comment by our marker; update it if present,
+          // otherwise create a fresh one.
+          const comments = await github.paginate(github.rest.issues.listComments, {
+            owner, repo, issue_number, per_page: 100,
+          });
+          const existing = comments.find((c) => c.body && c.body.includes(MARKER));
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          }
