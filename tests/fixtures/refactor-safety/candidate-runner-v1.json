@@ -1,0 +1,595 @@
+{
+  "cases": {
+    "containment_error": {
+      "exception": {
+        "cause_message": "process-tree cleanup was not proven",
+        "cause_type": "ProcessContainmentError",
+        "message": "Docker control command could not be safely captured: process-tree cleanup was not proven",
+        "type": "IsolationUnavailable"
+      },
+      "workdir_entries": []
+    },
+    "contract_surface": {
+      "candidate_cid_dirname": "candidate-container-cids",
+      "dataclass_fields": {
+        "CandidateRunner": [
+          {
+            "compare": true,
+            "default": "subprocess",
+            "init": true,
+            "name": "isolation",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "docker_image",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": "none",
+            "init": true,
+            "name": "docker_network",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "docker_runtime",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": 0,
+            "init": true,
+            "name": "mem_limit_mb",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": "",
+            "init": true,
+            "name": "python",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "invocation_socket",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "invocation_token",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": "",
+            "init": false,
+            "name": "_launcher",
+            "repr": true
+          }
+        ],
+        "IsolationEvidence": [
+          {
+            "compare": true,
+            "default": "<required>",
+            "init": true,
+            "name": "requested",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": "<required>",
+            "init": true,
+            "name": "delivered",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "image",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "image_digest",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "network",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": null,
+            "init": true,
+            "name": "runtime",
+            "repr": true
+          },
+          {
+            "compare": true,
+            "default": "",
+            "init": true,
+            "name": "note",
+            "repr": true
+          }
+        ]
+      },
+      "isolation_evidence": {
+        "delivered": "gvisor",
+        "image": "image:tag",
+        "image_digest": "sha256:evidence",
+        "network": "none",
+        "note": "contract note",
+        "requested": "gvisor",
+        "runtime": "runsc"
+      },
+      "isolation_evidence_key_order": [
+        "requested",
+        "delivered",
+        "image",
+        "image_digest",
+        "network",
+        "runtime",
+        "note"
+      ],
+      "isolation_unavailable_base": "RuntimeError",
+      "module___all__": null,
+      "observed_exports": {
+        "CANDIDATE_CID_DIRNAME": "constant",
+        "CandidateRunner": "class",
+        "IsolationEvidence": "class",
+        "IsolationUnavailable": "class"
+      },
+      "required_exports": {
+        "CANDIDATE_CID_DIRNAME": "constant",
+        "CandidateRunner": "class",
+        "IsolationEvidence": "class",
+        "IsolationUnavailable": "class"
+      },
+      "signatures": {
+        "CandidateRunner": "(isolation: 'str' = 'subprocess', docker_image: 'str | None' = None, docker_network: 'str' = 'none', docker_runtime: 'str | None' = None, mem_limit_mb: 'int' = 0, python: 'str' = '', invocation_socket: 'str | None' = None, invocation_token: 'str | None' = None) -> None",
+        "CandidateRunner.prepare": "(self, workdir: 'str', target: 'str') -> 'tuple[str, dict[str, str], IsolationEvidence]'",
+        "IsolationEvidence": "(requested: 'str', delivered: 'str', image: 'str | None' = None, image_digest: 'str | None' = None, network: 'str | None' = None, runtime: 'str | None' = None, note: 'str' = '') -> None",
+        "IsolationEvidence.as_dict": "(self) -> 'dict[str, Any]'"
+      }
+    },
+    "daemon_unavailable": {
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "version",
+            "--format",
+            "{{.Server.Version}}"
+          ],
+          "timeout": 30.0
+        }
+      ],
+      "exception": {
+        "cause_message": null,
+        "cause_type": null,
+        "message": "docker isolation requested but the Docker daemon is not reachable: Cannot connect to the Docker daemon",
+        "type": "IsolationUnavailable"
+      },
+      "workdir_entries": []
+    },
+    "docker_plan": {
+      "cid_directory_exists": true,
+      "config": {
+        "cidfile_dir": "<WORKSPACE>/docker/candidate-container-cids",
+        "invocation_socket": "<WORKSPACE>/receipt.sock",
+        "invocation_token": "<TOKEN>",
+        "mode": "docker",
+        "prefix": [
+          "docker",
+          "run",
+          "--rm",
+          "--network",
+          "guard-contract-net",
+          "--read-only",
+          "--tmpfs",
+          "/tmp:rw,exec",
+          "--pids-limit",
+          "256",
+          "--cpus",
+          "1",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "--ulimit",
+          "nofile=1024:1024",
+          "-e",
+          "HOME=/tmp",
+          "-e",
+          "PYTHONDONTWRITEBYTECODE=1",
+          "-e",
+          "LANG=C.UTF-8",
+          "-v",
+          "<TARGET>:/candidate:ro",
+          "-w",
+          "/candidate",
+          "--user",
+          "1234:5678",
+          "--memory",
+          "384m",
+          "sha256:0123456789abcdef"
+        ]
+      },
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "version",
+            "--format",
+            "{{.Server.Version}}"
+          ],
+          "timeout": 30.0
+        },
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        }
+      ],
+      "env": {
+        "EVOGUARD_EXEC": "<WORKSPACE>/docker/evoguard_exec.py",
+        "EVOGUARD_PYTHON": "python3",
+        "EVOGUARD_TARGET": "<TARGET>"
+      },
+      "evidence": {
+        "delivered": "docker",
+        "image": "registry.example/guard:mutable",
+        "image_digest": "sha256:0123456789abcdef",
+        "network": "guard-contract-net",
+        "note": "candidate launcher prepared a network-less, read-only container; the repo copy is mounted read-only and the judge-owned pack is not mounted. A launcher receipt plus runtime-written CID is required before assurance can claim the container boundary was invoked.",
+        "requested": "docker",
+        "runtime": null
+      },
+      "launcher": "<WORKSPACE>/docker/evoguard_exec.py"
+    },
+    "empty_digest_after_pull": {
+      "digest": null,
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        },
+        {
+          "command": [
+            "docker",
+            "pull",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 600.0
+        },
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        }
+      ],
+      "exception": {
+        "cause_message": null,
+        "cause_type": null,
+        "message": "container image 'registry.example/guard:mutable' was pulled but has no resolvable image ID",
+        "type": "IsolationUnavailable"
+      }
+    },
+    "gvisor_plan": {
+      "cid_directory_exists": true,
+      "config": {
+        "cidfile_dir": "<WORKSPACE>/gvisor/candidate-container-cids",
+        "invocation_socket": "<WORKSPACE>/receipt.sock",
+        "invocation_token": "<TOKEN>",
+        "mode": "docker",
+        "prefix": [
+          "docker",
+          "run",
+          "--rm",
+          "--network",
+          "guard-contract-net",
+          "--read-only",
+          "--tmpfs",
+          "/tmp:rw,exec",
+          "--pids-limit",
+          "256",
+          "--cpus",
+          "1",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "--ulimit",
+          "nofile=1024:1024",
+          "-e",
+          "HOME=/tmp",
+          "-e",
+          "PYTHONDONTWRITEBYTECODE=1",
+          "-e",
+          "LANG=C.UTF-8",
+          "-v",
+          "<TARGET>:/candidate:ro",
+          "-w",
+          "/candidate",
+          "--user",
+          "1234:5678",
+          "--runtime",
+          "runsc",
+          "--memory",
+          "384m",
+          "sha256:0123456789abcdef"
+        ]
+      },
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "version",
+            "--format",
+            "{{.Server.Version}}"
+          ],
+          "timeout": 30.0
+        },
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        }
+      ],
+      "env": {
+        "EVOGUARD_EXEC": "<WORKSPACE>/gvisor/evoguard_exec.py",
+        "EVOGUARD_PYTHON": "python3",
+        "EVOGUARD_TARGET": "<TARGET>"
+      },
+      "evidence": {
+        "delivered": "gvisor",
+        "image": "registry.example/guard:mutable",
+        "image_digest": "sha256:0123456789abcdef",
+        "network": "guard-contract-net",
+        "note": "candidate launcher prepared a network-less, read-only container; the repo copy is mounted read-only and the judge-owned pack is not mounted. A launcher receipt plus runtime-written CID is required before assurance can claim the container boundary was invoked.",
+        "requested": "gvisor",
+        "runtime": "runsc"
+      },
+      "launcher": "<WORKSPACE>/gvisor/evoguard_exec.py"
+    },
+    "image_inspect_hit": {
+      "digest": "sha256:0123456789abcdef",
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        }
+      ],
+      "exception": null
+    },
+    "image_inspect_pull_inspect": {
+      "digest": "sha256:0123456789abcdef",
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        },
+        {
+          "command": [
+            "docker",
+            "pull",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 600.0
+        },
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        }
+      ],
+      "exception": null
+    },
+    "keyboard_interrupt": {
+      "exception": {
+        "cause_message": null,
+        "cause_type": null,
+        "message": "operator stop",
+        "type": "KeyboardInterrupt"
+      },
+      "workdir_entries": []
+    },
+    "launcher_files": {
+      "chmod_calls": [
+        {
+          "mode": "0o600",
+          "path": "<WORKSPACE>/launcher/evoguard_exec.py.json"
+        },
+        {
+          "mode": "0o740",
+          "path": "<WORKSPACE>/launcher/evoguard_exec.py"
+        }
+      ],
+      "config": {
+        "invocation_socket": "<WORKSPACE>/receipt.sock",
+        "invocation_token": "<TOKEN>",
+        "mode": "subprocess",
+        "target": "<TARGET>"
+      },
+      "config_key_order": [
+        "mode",
+        "target",
+        "invocation_socket",
+        "invocation_token"
+      ],
+      "expected_config_mode": "0o600",
+      "launcher": "<WORKSPACE>/launcher/evoguard_exec.py",
+      "source_contract": {
+        "allocates_unique_cidfile": true,
+        "execvp_calls": 2,
+        "loads_sidecar_json": true,
+        "sends_receipt_before_mode_branch": true,
+        "shebang": "#!/usr/bin/env python3",
+        "uses_shell": false
+      }
+    },
+    "os_error": {
+      "exception": {
+        "cause_message": "docker executable vanished",
+        "cause_type": "OSError",
+        "message": "docker isolation preflight failed: docker executable vanished",
+        "type": "IsolationUnavailable"
+      },
+      "workdir_entries": []
+    },
+    "output_limit": {
+      "exception": {
+        "cause_message": "candidate subprocess output exceeded the 128-byte judge capture limit",
+        "cause_type": "ProcessOutputLimitExceeded",
+        "message": "Docker control command could not be safely captured: candidate subprocess output exceeded the 128-byte judge capture limit",
+        "type": "IsolationUnavailable"
+      },
+      "workdir_entries": []
+    },
+    "pull_failure": {
+      "digest": null,
+      "docker_control_calls": [
+        {
+          "command": [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 30.0
+        },
+        {
+          "command": [
+            "docker",
+            "pull",
+            "registry.example/guard:mutable"
+          ],
+          "timeout": 600.0
+        }
+      ],
+      "exception": {
+        "cause_message": null,
+        "cause_type": null,
+        "message": "container image 'registry.example/guard:mutable' is not available and could not be pulled: registry unavailable",
+        "type": "IsolationUnavailable"
+      }
+    },
+    "subprocess_plan": {
+      "config": {
+        "mode": "subprocess",
+        "target": "<TARGET>"
+      },
+      "env": {
+        "EVOGUARD_EXEC": "<WORKSPACE>/subprocess/evoguard_exec.py",
+        "EVOGUARD_PYTHON": "python-contract",
+        "EVOGUARD_TARGET": "<TARGET>"
+      },
+      "evidence": {
+        "delivered": "subprocess",
+        "image": null,
+        "image_digest": null,
+        "network": null,
+        "note": "candidate launcher prepared for a host subprocess: same machine, filesystem and user as the judge. A launcher receipt is required before assurance can claim this boundary was invoked.",
+        "requested": "subprocess",
+        "runtime": null
+      },
+      "launcher": "<WORKSPACE>/subprocess/evoguard_exec.py",
+      "observed_exec": {
+        "argv": [
+          "python-contract",
+          "-m",
+          "tool",
+          "semi;colon"
+        ],
+        "cwd": "<TARGET>",
+        "executable": "python-contract"
+      }
+    },
+    "system_exit": {
+      "exception": {
+        "cause_message": null,
+        "cause_type": null,
+        "message": "operator exit",
+        "type": "SystemExit"
+      },
+      "workdir_entries": []
+    },
+    "timeout": {
+      "exception": {
+        "cause_message": "Command '['docker', 'version']' timed out after 30.0 seconds",
+        "cause_type": "TimeoutExpired",
+        "message": "docker isolation preflight failed: Command '['docker', 'version']' timed out after 30.0 seconds",
+        "type": "IsolationUnavailable"
+      },
+      "workdir_entries": []
+    }
+  },
+  "normalization": [
+    "temporary workspace paths",
+    "judge-owned invocation token"
+  ],
+  "schema_version": "candidate-runner-characterization-v1"
+}
