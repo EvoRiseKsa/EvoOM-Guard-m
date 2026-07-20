@@ -61,6 +61,8 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
 ## Stage 4+: Execution and verifier extraction
 
 - Extract bounded execution/process modules and process-tree cleanup.
+- Extract typed Docker control/image-identity and container-cleanup contracts,
+  retaining policy/evidence composition and compatibility facades in callers.
 - Extract `candidate/` and `workspace/` domains.
 - Split `repo_verifier.py` into phase modules.
 - Split `blackbox.py` into invocation/pack/CID/evidence modules.

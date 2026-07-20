@@ -52,7 +52,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import secrets
 import shutil
 import signal
@@ -75,12 +74,7 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     BoundedOutput as _BoundedOutput,
 )
-from evoom_guard.execution import (
-    ProcessContainmentError as _SubprocessContainmentError,
-)
-from evoom_guard.execution import (
-    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
-)
+from evoom_guard.execution import ProcessContainmentError, ProcessOutputLimitExceeded
 from evoom_guard.execution import (
     drain_process_pipe as _drain_subprocess_pipe,
 )
@@ -89,6 +83,16 @@ from evoom_guard.execution import (
 )
 from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
+)
+from evoom_guard.isolation import (
+    DockerCandidateCleanupRequest,
+    DockerCidScanResult,
+    DockerControlRequest,
+    execute_docker_control,
+    scan_candidate_container_ids,
+)
+from evoom_guard.isolation import (
+    cleanup_candidate_containers as _cleanup_candidate_containers_kernel,
 )
 from evoom_guard.pack_manifest import (
     PackManifestError,
@@ -108,6 +112,9 @@ from evoom_guard.verifiers.repo_verifier import (
     parse_patch_blocks,
 )
 from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
+
+_SubprocessContainmentError = ProcessContainmentError
+_SubprocessOutputLimitExceeded = ProcessOutputLimitExceeded
 
 
 class BlackboxResult(NamedTuple):
@@ -144,19 +151,20 @@ class BlackboxResult(NamedTuple):
     candidate_launcher_invocation_observed: bool = False
 
 
-_DOCKER_CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
-
-
 def _run_docker_control(
     command: list[str], *, timeout: float = 30.0
 ) -> subprocess.CompletedProcess[str]:
     """Bound Docker cleanup diagnostics before they reach judge memory."""
-    return _run_bounded_subprocess(
+    request = DockerControlRequest.from_command(
         command,
-        cwd=None,
-        env=os.environ.copy(),
         timeout=timeout,
+        environment=os.environ,
     )
+    return execute_docker_control(
+        request,
+        process_runner=_run_bounded_subprocess,
+        process_argv=command,
+    ).as_completed_process(args=command)
 
 
 class _InvocationRecorder:
@@ -270,40 +278,10 @@ def _candidate_container_ids(
     a malformed file from becoming a Docker option or an unrelated container
     name. Docker emits a 64-character lowercase hexadecimal container ID.
     """
-    try:
-        entries = sorted(os.scandir(cidfile_dir), key=lambda entry: entry.name)
-    except OSError as exc:
-        if strict:
-            raise CandidateContainerCleanupError(
-                f"could not scan candidate cidfile directory {cidfile_dir}: {exc}"
-            ) from exc
-        return []
-
-    container_ids: list[str] = []
-    seen: set[str] = set()
-    for entry in entries:
-        if not entry.name.endswith(".cid"):
-            continue
-        try:
-            if not entry.is_file(follow_symlinks=False):
-                continue
-            with open(entry.path, encoding="ascii") as cidfile:
-                raw = cidfile.read(129)
-        except (OSError, UnicodeError) as exc:
-            if strict:
-                raise CandidateContainerCleanupError(
-                    f"could not read candidate cidfile {entry.path}: {exc}"
-                ) from exc
-            continue
-        if len(raw) > 128:
-            continue
-        container_id = raw.strip()
-        if not _DOCKER_CONTAINER_ID.fullmatch(container_id):
-            continue
-        if container_id not in seen:
-            seen.add(container_id)
-            container_ids.append(container_id)
-    return container_ids
+    scanned = scan_candidate_container_ids(cidfile_dir)
+    if strict and scanned.failures:
+        raise CandidateContainerCleanupError(scanned.failures[0])
+    return list(scanned.container_ids)
 
 
 def _attach_candidate_execution_evidence(
@@ -409,79 +387,29 @@ def _cleanup_candidate_containers(
     containers. In ``strict`` mode any container whose absence cannot be proven
     becomes an explicit infrastructure failure rather than allowing PASS.
     """
-    known = set(known_container_ids or ())
-    if not os.path.lexists(cidfile_dir) and not known:
-        return
-
-    attempts = 10 if wait_for_late_cidfiles else 1
-    attempted: set[str] = set()
-    failures: list[str] = []
-
-    def container_present(container_id: str) -> bool:
-        probe = _run_docker_control(
-            [
-                "docker",
-                "ps",
-                "-aq",
-                "--no-trunc",
-                "--filter",
-                f"id={container_id}",
-            ],
-            timeout=30,
-        )
-        if probe.returncode != 0:
-            detail = (probe.stderr or probe.stdout).strip()[:200]
-            raise CandidateContainerCleanupError(
-                f"could not inspect candidate container {container_id}: {detail or 'docker ps failed'}"
-            )
-        return container_id in {line.strip() for line in probe.stdout.splitlines()}
-
-    for attempt in range(attempts):
+    def scan(path: str) -> DockerCidScanResult:
         try:
-            scanned = _candidate_container_ids(cidfile_dir, strict=strict)
+            return DockerCidScanResult(
+                tuple(_candidate_container_ids(path, strict=strict))
+            )
         except CandidateContainerCleanupError as exc:
-            # Still attempt every previously observed CID. The scan failure is
-            # independently fatal in strict mode because it could conceal a
-            # newly created candidate container.
-            failures.append(f"cidfile scan: {exc}")
-            scanned = []
-        for container_id in sorted(known | set(scanned)):
-            if container_id in attempted:
-                continue
-            attempted.add(container_id)
-            try:
-                # --rm often removed a normally completed container already.
-                # Probe first so "already absent" is success without relying on
-                # locale-specific Docker stderr text.
-                if not container_present(container_id):
-                    continue
-                removal = _run_docker_control(
-                    ["docker", "rm", "-f", container_id],
-                    timeout=30,
-                )
-                if removal.returncode != 0:
-                    detail = (removal.stderr or removal.stdout).strip()[:200]
-                    raise CandidateContainerCleanupError(
-                        f"docker rm -f failed for candidate container {container_id}: "
-                        f"{detail or f'exit {removal.returncode}'}"
-                    )
-                if container_present(container_id):
-                    raise CandidateContainerCleanupError(
-                        f"candidate container {container_id} remained after docker rm -f"
-                    )
-            except (
-                OSError,
-                subprocess.SubprocessError,
-                CandidateContainerCleanupError,
-                _SubprocessOutputLimitExceeded,
-                _SubprocessContainmentError,
-            ) as exc:
-                failures.append(f"{container_id}: {exc}")
-        if attempt + 1 < attempts:
-            time.sleep(0.05)
-    if strict and failures:
+            return DockerCidScanResult((), (str(exc),))
+
+    cleanup = _cleanup_candidate_containers_kernel(
+        DockerCandidateCleanupRequest(
+            cidfile_dir=cidfile_dir,
+            wait_for_late_cidfiles=wait_for_late_cidfiles,
+            known_container_ids=frozenset(known_container_ids or ()),
+        ),
+        scanner=scan,
+        control_runner=_run_docker_control,
+        sleeper=time.sleep,
+        path_exists=os.path.lexists,
+    )
+    if strict and cleanup.failures:
         raise CandidateContainerCleanupError(
-            "candidate container cleanup could not prove absence: " + "; ".join(failures)
+            "candidate container cleanup could not prove absence: "
+            + "; ".join(cleanup.failures)
         )
 
 

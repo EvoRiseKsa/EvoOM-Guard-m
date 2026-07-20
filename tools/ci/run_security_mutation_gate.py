@@ -41,79 +41,87 @@ class Mutation:
 MUTATIONS = (
     Mutation(
         name="docker-absence-daemon-failure-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="    if listed.returncode != 0:\n        return None\n",
-        after="    if listed.returncode != 0:\n        return True\n",
+        path="evoom_guard/isolation/docker.py",
+        before=(
+            "            absent=None,\n"
+            "            query=listed,\n"
+            '            error="docker_query_failed",\n'
+        ),
+        after=(
+            "            absent=True,\n"
+            "            query=listed,\n"
+            '            error="docker_query_failed",\n'
+        ),
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_absence_query_rejects_daemon_failure"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_absence_query_rejects_daemon_failure"
         ),
     ),
     Mutation(
         name="docker-absence-present-name-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="    return name not in listed.stdout.splitlines()\n",
-        after="    return True\n",
+        path="evoom_guard/isolation/docker.py",
+        before="        absent=name not in listed.stdout.splitlines(),\n",
+        after="        absent=True,\n",
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_absence_query_rejects_exact_present_name"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_absence_query_requires_success_and_exact_name"
         ),
     ),
     Mutation(
         name="docker-absence-stopped-container-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/isolation/docker.py",
         before='                "--all",\n                "--filter",\n',
         after='                "--filter",\n',
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_absence_query_accepts_only_successful_exact_absence"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_absence_query_requires_success_and_exact_name"
         ),
     ),
     Mutation(
         name="docker-absence-name-validation-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/isolation/docker.py",
         before=(
             "    return _DOCKER_CONTAINER_NAME.fullmatch(name) is not None\n"
         ),
         after="    return True\n",
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_absence_query_rejects_ambiguous_or_invalid_names"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_absence_query_rejects_invalid_name_without_docker"
         ),
     ),
     Mutation(
         name="docker-absence-stability-streak-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/isolation/docker.py",
         before=(
-            "    return (\n"
+            "    proven = (\n"
             "        final_absent_observations\n"
-            "        >= _DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS\n"
+            "        >= required_final_absent_observations\n"
             "    )\n"
         ),
-        after="    return final_absent_observations > 0\n",
+        after="    proven = final_absent_observations > 0\n",
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_cleanup_rejects_absence_not_stable_at_window_end"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_cleanup_rejects_absence_not_stable_at_window_end"
         ),
     ),
     Mutation(
         name="docker-cleanup-total-budget-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="        return min(_DOCKER_CONTROL_TIMEOUT_SECONDS, remaining)\n",
-        after="        return _DOCKER_CONTROL_TIMEOUT_SECONDS\n",
+        path="evoom_guard/isolation/docker.py",
+        before="        return min(control_timeout, remaining)\n",
+        after="        return control_timeout\n",
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_cleanup_applies_one_total_control_plane_budget"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_cleanup_uses_decreasing_single_total_budget"
         ),
     ),
     Mutation(
         name="docker-cleanup-unverifiable-retry-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="        if observation is None:\n            return False\n",
-        after="        if False and observation is None:\n            return False\n",
+        path="evoom_guard/isolation/docker.py",
+        before="        if not observation.observed:\n",
+        after="        if False and not observation.observed:\n",
         test=(
-            "tests/test_docker_containment.py::"
-            "test_docker_cleanup_stops_immediately_on_unverifiable_observation"
+            "tests/test_isolation_docker.py::"
+            "test_kernel_cleanup_stops_immediately_when_absence_is_unverifiable"
         ),
     ),
     Mutation(

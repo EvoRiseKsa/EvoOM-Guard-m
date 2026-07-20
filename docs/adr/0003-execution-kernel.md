@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted; phase 1 (bounded native process) implemented. Docker extraction is
-deferred to a separately characterized change.
+Accepted; phase 1 (bounded native process) and phase 2 (Docker control,
+identity, and cleanup) implemented behind typed contracts.
 
 ## Decision
 Create explicit execution backends (`process`, `environment`, `docker`) behind
@@ -25,6 +25,14 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
   absence evidence because daemon, authorization, and client failures are
   indistinguishable from not-found.
 - `repo_verifier.py` retains private compatibility names while delegating to
-  the typed `evoom_guard.execution` contract.
+  the typed `evoom_guard.execution` and `evoom_guard.isolation` contracts.
 - Candidate and black-box execution code no longer obtain process primitives
   from the concrete repository verifier.
+- `isolation/docker.py` owns bounded Docker control commands, image-identity
+  observations, named-container lifecycle cleanup, and candidate-CID cleanup.
+- Named repo-verifier containers and black-box candidate CID containers remain
+  distinct contracts: one proves cleanup of a known name, while the other
+  discovers only validated runtime-written IDs before proving absence.
+- Docker argv/mount construction, isolation policy, evidence composition, and
+  verdict wording remain with their existing callers. `CandidateRunner` itself
+  is not moved by this phase.

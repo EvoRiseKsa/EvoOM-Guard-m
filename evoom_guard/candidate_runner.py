@@ -55,15 +55,22 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
 )
+from evoom_guard.isolation import (
+    DOCKER_CONTROL_TIMEOUT_SECONDS as _DOCKER_CONTROL_TIMEOUT_SECONDS,
+)
+from evoom_guard.isolation import (
+    DOCKER_PULL_TIMEOUT_SECONDS as _DOCKER_PULL_TIMEOUT_SECONDS,
+)
+from evoom_guard.isolation import (
+    DockerControlRequest,
+    execute_docker_control,
+    inspect_docker_image,
+)
 
 # Docker writes candidate container IDs here.  The directory is owned by the
 # judge and deliberately lives beside (not inside) the disposable repo copy, so
 # candidate code cannot forge cleanup targets through its mounted source tree.
 CANDIDATE_CID_DIRNAME = "candidate-container-cids"
-
-_DOCKER_CONTROL_TIMEOUT_SECONDS = 30.0
-_DOCKER_PULL_TIMEOUT_SECONDS = 600.0
-
 
 class IsolationUnavailable(RuntimeError):
     """The requested candidate boundary could not be delivered honestly.
@@ -84,12 +91,16 @@ def _run_docker_control(
     tree contained before the preflight can be reported as unavailable.
     """
     try:
-        return _run_bounded_subprocess(
+        request = DockerControlRequest.from_command(
             command,
-            cwd=None,
-            env=os.environ.copy(),
             timeout=timeout,
+            environment=os.environ,
         )
+        return execute_docker_control(
+            request,
+            process_runner=_run_bounded_subprocess,
+            process_argv=command,
+        ).as_completed_process(args=command)
     except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
         raise IsolationUnavailable(
             f"Docker control command could not be safely captured: {exc}"
@@ -331,13 +342,14 @@ class CandidateRunner:
 
     @staticmethod
     def _image_digest(image: str) -> str | None:
-        r = _run_docker_control(
-            ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+        inspected = inspect_docker_image(
+            image,
+            control_runner=_run_docker_control,
             timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
         )
-        if r.returncode != 0:
+        if inspected.returncode != 0:
             return None
-        return r.stdout.strip() or None
+        return inspected.stdout.strip() or None
 
     @staticmethod
     def _write_launcher(workdir: str, cfg: dict[str, Any]) -> str:

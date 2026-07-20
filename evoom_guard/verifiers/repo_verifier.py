@@ -77,7 +77,6 @@ from __future__ import annotations
 import hashlib
 import ntpath
 import os
-import re
 import secrets
 import shutil
 import subprocess
@@ -106,6 +105,38 @@ from evoom_guard.execution import (
 )
 from evoom_guard.execution import (
     ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
+from evoom_guard.isolation import (
+    DOCKER_CLEANUP_RECONCILE_ATTEMPTS as _DOCKER_CLEANUP_RECONCILE_ATTEMPTS,
+)
+from evoom_guard.isolation import (
+    DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS as _DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS,
+)
+from evoom_guard.isolation import (
+    DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS as _DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS,
+)
+from evoom_guard.isolation import (
+    DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS as _DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS,
+)
+from evoom_guard.isolation import (
+    DOCKER_CONTROL_TIMEOUT_SECONDS as _DOCKER_CONTROL_TIMEOUT_SECONDS,
+)
+from evoom_guard.isolation import (
+    DOCKER_PULL_TIMEOUT_SECONDS as _DOCKER_PULL_TIMEOUT_SECONDS,
+)
+from evoom_guard.isolation import (
+    DockerControlRequest,
+    DockerRunContainmentError,
+    DockerRunOutputLimit,
+    DockerRunRequest,
+    DockerRunTimeout,
+    cleanup_named_container,
+    docker_container_name,
+    execute_docker_control,
+    probe_container_absent,
+    probe_container_started,
+    resolve_docker_image,
+    run_named_docker_client,
 )
 from evoom_guard.pack_manifest import (
     PackManifestError,
@@ -395,19 +426,6 @@ _SUBPROCESS_READ_CHUNK_BYTES = DEFAULT_READ_CHUNK_BYTES
 _PROCESS_TERM_GRACE_SECONDS = DEFAULT_TERMINATION_GRACE_SECONDS
 _PROCESS_KILL_GRACE_SECONDS = DEFAULT_KILL_GRACE_SECONDS
 _READER_JOIN_SECONDS = DEFAULT_READER_JOIN_SECONDS
-_DOCKER_CONTROL_TIMEOUT_SECONDS = 30.0
-_DOCKER_PULL_TIMEOUT_SECONDS = 600.0
-_DOCKER_CLEANUP_RECONCILE_ATTEMPTS = 10
-_DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS = 0.05
-_DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS = 3
-_DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS = 10.0
-_DOCKER_CONTAINER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
-
-
-def _valid_docker_container_name(name: str) -> bool:
-    return _DOCKER_CONTAINER_NAME.fullmatch(name) is not None
-
-
 class _BoundedOutput(BoundedOutput):
     """Compatibility capture using the verifier's current patched limit."""
 
@@ -438,25 +456,9 @@ def _join_pipe_readers(
     return join_pipe_readers(readers, streams, _READER_JOIN_SECONDS)
 
 
-class _DockerRunOutputLimit(_SubprocessOutputLimitExceeded):
-    """A bounded Docker client overflowed after optional container start."""
-
-    def __init__(
-        self,
-        output_error: _SubprocessOutputLimitExceeded,
-        *,
-        container_started: bool,
-    ) -> None:
-        super().__init__(output_error.limit)
-        self.container_started = container_started
-
-
-class _DockerRunContainmentError(_SubprocessContainmentError):
-    """Docker client/container cleanup could not be proven after a failure."""
-
-    def __init__(self, message: str, *, container_started: bool) -> None:
-        super().__init__(message)
-        self.container_started = container_started
+_DockerRunOutputLimit = DockerRunOutputLimit
+_DockerRunContainmentError = DockerRunContainmentError
+_DockerRunTimeout = DockerRunTimeout
 
 
 def _subprocess_group_kwargs() -> dict[str, Any]:
@@ -596,8 +598,7 @@ def apply_blocks_to_copy(
 
 def _docker_container_name(stage: str) -> str:
     """Collision-resistant name for concurrent setup/suite/pack containers."""
-    safe_stage = re.sub(r"[^a-zA-Z0-9_.-]+", "-", stage).strip("-.") or "run"
-    return f"evoguard_{safe_stage[:32]}_{secrets.token_hex(8)}"
+    return docker_container_name(stage, token_hex=secrets.token_hex)
 
 
 def _execution_trace() -> dict[str, Any]:
@@ -630,24 +631,6 @@ def _clean_verdict_source(
     return None
 
 
-class _DockerRunTimeout(subprocess.TimeoutExpired):
-    """A docker CLI timeout with independently observed container-start evidence."""
-
-    def __init__(
-        self,
-        timeout: subprocess.TimeoutExpired,
-        *,
-        container_started: bool,
-    ) -> None:
-        super().__init__(
-            timeout.cmd,
-            timeout.timeout,
-            output=timeout.output,
-            stderr=timeout.stderr,
-        )
-        self.container_started = container_started
-
-
 def _run_docker_control(
     command: list[str], *, timeout: float
 ) -> subprocess.CompletedProcess[str]:
@@ -658,12 +641,16 @@ def _run_docker_control(
     a candidate process directly, but their daemon responses are still external
     input and can be arbitrarily large on a compromised or misconfigured host.
     """
-    return _run_bounded_subprocess(
+    request = DockerControlRequest.from_command(
         command,
-        cwd=None,
-        env=os.environ.copy(),
         timeout=timeout,
+        environment=os.environ,
     )
+    return execute_docker_control(
+        request,
+        process_runner=_run_bounded_subprocess,
+        process_argv=command,
+    ).as_completed_process(args=command)
 
 
 def _docker_container_started(name: str) -> bool:
@@ -673,19 +660,11 @@ def _docker_container_started(name: str) -> bool:
     daemon created or started the container.  Inspect is deliberately
     fail-closed: any missing/empty/zero ``StartedAt`` value means not proven.
     """
-    try:  # pragma: no cover - the real command requires a docker daemon
-        inspected = _run_docker_control(
-            ["docker", "inspect", "--format", "{{.State.StartedAt}}", name],
-            timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
-        )
-    except BaseException:
-        return False
-    started_at = inspected.stdout.strip()
-    return bool(
-        inspected.returncode == 0
-        and started_at
-        and started_at not in {"<no value>", "0001-01-01T00:00:00Z"}
-    )
+    return probe_container_started(
+        name,
+        control_runner=_run_docker_control,
+        timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
+    ).proven
 
 
 def _docker_container_absence_observation(
@@ -695,35 +674,14 @@ def _docker_container_absence_observation(
 ) -> bool | None:
     """Return one positive presence/absence observation, or ``None`` on doubt.
 
-    An ``inspect`` failure is ambiguous: a missing container, an unavailable
-    daemon, an authorization failure, and a broken client all produce a
-    non-zero status.  Cleanup therefore needs a positive control-plane proof:
-    Docker must successfully enumerate candidate matches and the exact,
-    validated name must be absent.  The server-side name filter bounds output;
-    the local exact-line comparison remains authoritative because Docker name
-    filters may use substring or regular-expression matching.
+    The typed isolation kernel owns validation, exact-name enumeration, and the
+    fail-closed distinction between present and unverifiable observations.
     """
-    if not _valid_docker_container_name(name):
-        return None
-    try:  # pragma: no cover - the real command requires a docker daemon
-        listed = _run_docker_control(
-            [
-                "docker",
-                "container",
-                "ls",
-                "--all",
-                "--filter",
-                f"name={name}",
-                "--format",
-                "{{.Names}}",
-            ],
-            timeout=timeout,
-        )
-    except BaseException:
-        return None
-    if listed.returncode != 0:
-        return None
-    return name not in listed.stdout.splitlines()
+    return probe_container_absent(
+        name,
+        control_runner=_run_docker_control,
+        timeout=timeout,
+    ).absent
 
 
 def _docker_container_absent(name: str) -> bool:
@@ -741,62 +699,20 @@ def _cleanup_docker_container(name: str) -> bool:
     ``docker rm`` output is captured only through the shared bounded control
     channel.
     """
-    if not _valid_docker_container_name(name):
-        return False
-
-    deadline = time.monotonic() + _DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS
-
-    def remaining_timeout() -> float | None:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return None
-        return min(_DOCKER_CONTROL_TIMEOUT_SECONDS, remaining)
-
-    def remove() -> bool:
-        timeout = remaining_timeout()
-        if timeout is None:
-            return False
-        try:  # pragma: no cover - requires a docker daemon
-            _run_docker_control(
-                ["docker", "rm", "-f", name],
-                timeout=timeout,
-            )
-        except BaseException:
-            return False
-        return True
-
-    if not remove():
-        return False
-
-    final_absent_observations = 0
-    for attempt in range(_DOCKER_CLEANUP_RECONCILE_ATTEMPTS):
-        timeout = remaining_timeout()
-        if timeout is None:
-            return False
-        observation = _docker_container_absence_observation(
-            name,
-            timeout=timeout,
-        )
-        if observation is None:
-            return False
-        if observation:
-            final_absent_observations += 1
-        else:
-            final_absent_observations = 0
-            if not remove():
-                return False
-        if attempt + 1 < _DOCKER_CLEANUP_RECONCILE_ATTEMPTS:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return False
-            time.sleep(
-                min(_DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS, remaining)
-            )
-
-    return (
-        final_absent_observations
-        >= _DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS
+    cleanup = cleanup_named_container(
+        name,
+        control_runner=_run_docker_control,
+        control_timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
+        total_timeout=_DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS,
+        reconcile_attempts=_DOCKER_CLEANUP_RECONCILE_ATTEMPTS,
+        reconcile_interval=_DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS,
+        required_final_absent_observations=(
+            _DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS
+        ),
+        monotonic=time.monotonic,
+        sleeper=time.sleep,
     )
+    return cleanup.proven_absent
 
 
 class RepoVerifier:
@@ -929,43 +845,36 @@ class RepoVerifier:
         if self._resolved_docker_image:
             return self._resolved_docker_image
         image = str(self.docker_image or "")
-        try:
-            inspect = _run_docker_control(
-                ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-                timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
-            )
-        except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
+
+        def control(
+            command: list[str], *, timeout: float
+        ) -> subprocess.CompletedProcess[str]:
+            try:
+                return _run_docker_control(command, timeout=timeout)
+            except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
+                phase = "pull" if command[:2] == ["docker", "pull"] else "inspection"
+                raise RuntimeError(
+                    f"container image {image!r} {phase} could not be safely captured: {exc}"
+                ) from exc
+
+        resolution = resolve_docker_image(
+            image,
+            control_runner=control,
+            pull_when_inspection_empty=False,
+            control_timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
+            pull_timeout=_DOCKER_PULL_TIMEOUT_SECONDS,
+        )
+        if resolution.pull is not None and resolution.pull.returncode != 0:
             raise RuntimeError(
-                f"container image {image!r} inspection could not be safely captured: {exc}"
-            ) from exc
-        if inspect.returncode != 0:
-            try:
-                pull = _run_docker_control(
-                    ["docker", "pull", image], timeout=_DOCKER_PULL_TIMEOUT_SECONDS
+                f"container image {image!r} could not be resolved: "
+                + distill_diagnostics(
+                    resolution.pull.stdout + "\n" + resolution.pull.stderr
                 )
-            except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
-                raise RuntimeError(
-                    f"container image {image!r} pull could not be safely captured: {exc}"
-                ) from exc
-            if pull.returncode != 0:
-                raise RuntimeError(
-                    f"container image {image!r} could not be resolved: "
-                    + distill_diagnostics(pull.stdout + "\n" + pull.stderr)
-                )
-            try:
-                inspect = _run_docker_control(
-                    ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-                    timeout=_DOCKER_CONTROL_TIMEOUT_SECONDS,
-                )
-            except (_SubprocessOutputLimitExceeded, _SubprocessContainmentError) as exc:
-                raise RuntimeError(
-                    f"container image {image!r} inspection could not be safely captured: {exc}"
-                ) from exc
-        resolved = inspect.stdout.strip()
-        if inspect.returncode != 0 or not resolved:
+            )
+        if resolution.image_id is None:
             raise RuntimeError(f"container image {image!r} has no resolvable image ID")
-        self._resolved_docker_image = resolved
-        return resolved
+        self._resolved_docker_image = resolution.image_id
+        return resolution.image_id
 
     def _run_docker_client(
         self, docker_cmd: list[str], name: str
@@ -977,63 +886,19 @@ class RepoVerifier:
         then require a successful, observable cleanup before returning any
         timeout or output-limit result to the caller.
         """
-        try:
-            result = _run_bounded_subprocess(
-                docker_cmd,
-                cwd=None,
-                env=os.environ.copy(),
-                timeout=self.timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            container_started = _docker_container_started(name)
-            if not _cleanup_docker_container(name):
-                raise _DockerRunContainmentError(
-                    "docker client timed out and named container cleanup was not proven",
-                    container_started=container_started,
-                ) from exc
-            raise _DockerRunTimeout(
-                exc, container_started=container_started
-            ) from exc
-        except _SubprocessOutputLimitExceeded as exc:
-            container_started = _docker_container_started(name)
-            if not _cleanup_docker_container(name):
-                raise _DockerRunContainmentError(
-                    "docker client exceeded the output limit and named container "
-                    "cleanup was not proven",
-                    container_started=container_started,
-                ) from exc
-            raise _DockerRunOutputLimit(
-                exc, container_started=container_started
-            ) from exc
-        except _SubprocessContainmentError as exc:
-            container_started = _docker_container_started(name)
-            # The native runner already could not prove client-tree cleanup;
-            # still attempt daemon-side removal before reporting the combined
-            # containment failure to the caller.
-            cleaned = _cleanup_docker_container(name)
-            suffix = "was not proven" if not cleaned else "was attempted after client failure"
-            raise _DockerRunContainmentError(
-                f"{exc}; docker named-container cleanup {suffix}",
-                container_started=container_started,
-            ) from exc
-        except BaseException:
-            # Preserve cancellation and unexpected exceptions, but never leave a
-            # named daemon workload behind merely because the client aborted.
-            _cleanup_docker_container(name)
-            raise
-        # ``--rm`` is expected to remove a normally completed container.  A
-        # non-zero client result is precisely where Docker can have failed part
-        # way through that guarantee, so demand that the name is absent before
-        # allowing the ordinary test/setup failure path to interpret the exit.
-        if result.returncode != 0:
-            container_started = _docker_container_started(name)
-            if not _cleanup_docker_container(name):
-                raise _DockerRunContainmentError(
-                    "docker client returned a non-zero exit and named container "
-                    "cleanup was not proven",
-                    container_started=container_started,
-                )
-        return result
+        request = DockerRunRequest.from_command(
+            docker_cmd,
+            name=name,
+            timeout=self.timeout,
+            environment=os.environ,
+        )
+        return run_named_docker_client(
+            request,
+            process_runner=_run_bounded_subprocess,
+            container_started=_docker_container_started,
+            cleanup_container=_cleanup_docker_container,
+            process_argv=docker_cmd,
+        )
 
     def _run_docker(
         self, base_cmd, copy, workdir, *, pack_dir=None

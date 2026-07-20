@@ -56,6 +56,16 @@ it also lowers cross-package private imports from 76 to 75. The CLI keeps exact
 aliases for its previous config names, so this improvement is not achieved by
 suppressing an import or breaking compatibility.
 
+Revision 3 extracts native bounded-process execution into `execution.process`.
+Replacing cross-package imports of verifier-private process helpers with public
+typed contracts lowers cross-package private imports from 75 to 60 while the
+verifier retains exact local compatibility facades.
+
+The Docker isolation slice adds only public imports within the documented
+`execution/isolation` layer and does not remove any remaining baseline
+fingerprint. It therefore does not manufacture a ratchet revision or lower a
+ceiling without a measured architectural change.
+
 ## Acceptance rules
 
 - Any refactor PR must:
