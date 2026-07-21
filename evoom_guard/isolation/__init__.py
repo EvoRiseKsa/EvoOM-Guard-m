@@ -4,6 +4,12 @@ The package owns runtime-boundary mechanics while callers retain policy,
 diagnostic wording, and verdict composition.
 """
 
+from evoom_guard.isolation.candidate import (
+    CANDIDATE_CID_DIRNAME,
+    CandidateRunner,
+    IsolationEvidence,
+    IsolationUnavailable,
+)
 from evoom_guard.isolation.docker import (
     DOCKER_CLEANUP_RECONCILE_ATTEMPTS,
     DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS,
@@ -37,6 +43,7 @@ from evoom_guard.isolation.docker import (
 )
 
 __all__ = [
+    "CANDIDATE_CID_DIRNAME",
     "DOCKER_CLEANUP_RECONCILE_ATTEMPTS",
     "DOCKER_CLEANUP_RECONCILE_INTERVAL_SECONDS",
     "DOCKER_CLEANUP_REQUIRED_FINAL_ABSENT_OBSERVATIONS",
@@ -56,6 +63,9 @@ __all__ = [
     "DockerRunOutputLimit",
     "DockerRunRequest",
     "DockerRunTimeout",
+    "CandidateRunner",
+    "IsolationEvidence",
+    "IsolationUnavailable",
     "cleanup_candidate_containers",
     "cleanup_named_container",
     "docker_container_name",
