@@ -78,6 +78,14 @@ imports no verdict, evidence, verifier, or compatibility module. `blackbox`
 retains its private recorder name as an exact alias and remains solely
 responsible for combining receipts with validated container IDs.
 
+The judge-process slice moves the black-box process lifecycle into
+`execution.judge` behind public typed request, limits, result, and execution
+contracts. The extracted module imports no compatibility, verifier, verdict,
+or evidence module. `blackbox` remains the compatibility and orchestration
+surface for command construction, patch seams, report interpretation, and
+evidence composition. This move adds no import-boundary fingerprint and does
+not justify a new ratchet revision or a baseline-ceiling change.
+
 ## Acceptance rules
 
 - Any architecture-extraction PR must:

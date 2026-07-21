@@ -6,7 +6,7 @@ Lock the baseline and refactor incrementally from monolith modules into stable t
 domains without changing runtime behavior, so we can execute higher-confidence
 hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
 
-## Stage 0: Baseline hardening (current)
+## Stage 0: Baseline hardening (foundation)
 
 - Merge / continue PR #102 (`v4.0.1` immutable reference lock and `init --ref` behavior).
 - Create baseline artifact set under `tests/baseline/v4.0.1/` for command/help, verdicts,
@@ -67,9 +67,14 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   the characterized `candidate_runner.py` compatibility surface.
 - Extract the black-box invocation-receipt transport into
   `isolation/invocation.py`, retaining evidence composition in `blackbox.py`.
+- Extract the typed black-box judge-process lifecycle into
+  `execution/judge.py`, retaining command construction, compatibility seams,
+  report interpretation, evidence composition, and verdict policy in
+  `blackbox.py`.
 - Extract `candidate/` and `workspace/` domains.
 - Split `repo_verifier.py` into phase modules.
-- Split `blackbox.py` into invocation/pack/CID/evidence modules.
+- Continue splitting the remaining `blackbox.py` pack/CID/evidence
+  responsibilities behind characterized compatibility boundaries.
 - Build `application` pipeline (`VerificationPipeline`, `VerdictComposer`,
   `AssuranceEvaluator`, `AttestationBuilder`) and shadow-mode differential.
 

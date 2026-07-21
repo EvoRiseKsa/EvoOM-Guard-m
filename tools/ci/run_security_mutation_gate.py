@@ -84,10 +84,143 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="judge-reader-start-cleanup-bypass",
-        path="evoom_guard/blackbox.py",
+        name="judge-output-limit-validation-bypass",
+        path="evoom_guard/execution/judge.py",
         before=(
-            "                _terminate_judge_process_group(process)\n"
+            "        if type(self.max_output_bytes) is not int or "
+            "self.max_output_bytes < 0:\n"
+            "            raise ValueError("
+            '"max_output_bytes must be a non-negative integer")\n'
+        ),
+        after=(
+            "        if False and (type(self.max_output_bytes) is not int or "
+            "self.max_output_bytes < 0):\n"
+            "            raise ValueError("
+            '"max_output_bytes must be a non-negative integer")\n'
+        ),
+        test=(
+            "tests/test_judge_execution_kernel.py::"
+            "test_judge_limits_reject_unbounded_values"
+        ),
+    ),
+    Mutation(
+        name="judge-finite-cleanup-limit-validation-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "        ):\n"
+            "            if (\n"
+            "                isinstance(value, bool)\n"
+            "                or not isinstance(value, (int, float))\n"
+            "                or not math.isfinite(value)\n"
+            "                or value < 0\n"
+            "                or (not allow_zero and value == 0)\n"
+            "            ):\n"
+        ),
+        after=(
+            "        ):\n"
+            "            if False and (\n"
+            "                isinstance(value, bool)\n"
+            "                or not isinstance(value, (int, float))\n"
+            "                or not math.isfinite(value)\n"
+            "                or value < 0\n"
+            "                or (not allow_zero and value == 0)\n"
+            "            ):\n"
+        ),
+        test=(
+            "tests/test_judge_execution_kernel.py::"
+            "test_judge_limits_reject_unbounded_values"
+        ),
+    ),
+    Mutation(
+        name="judge-sigkill-validation-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "        if type(self.sigkill) is not int or self.sigkill <= 0:\n"
+            "            raise ValueError("
+            '"sigkill must be a positive integer signal number")\n'
+        ),
+        after=(
+            "        if False and (type(self.sigkill) is not int or "
+            "self.sigkill <= 0):\n"
+            "            raise ValueError("
+            '"sigkill must be a positive integer signal number")\n'
+        ),
+        test=(
+            "tests/test_judge_execution_kernel.py::"
+            "test_judge_limits_reject_unbounded_values"
+        ),
+    ),
+    Mutation(
+        name="judge-request-limits-type-validation-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "        if type(self.limits) is not JudgeProcessLimits:\n"
+            '            raise ValueError("limits must be a '
+            'JudgeProcessLimits instance")\n'
+        ),
+        after=(
+            "        if False and type(self.limits) is not JudgeProcessLimits:\n"
+            '            raise ValueError("limits must be a '
+            'JudgeProcessLimits instance")\n'
+        ),
+        test=(
+            "tests/test_judge_execution_kernel.py::"
+            "test_judge_request_rejects_unvalidated_limits_before_launch"
+        ),
+    ),
+    Mutation(
+        name="judge-request-timeout-validation-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "        if type(self.timeout_seconds) is not int or "
+            "self.timeout_seconds < 0:\n"
+            '            raise ValueError("timeout_seconds must be a '
+            'non-negative integer")\n'
+        ),
+        after=(
+            "        if False and (type(self.timeout_seconds) is not int or "
+            "self.timeout_seconds < 0):\n"
+            '            raise ValueError("timeout_seconds must be a '
+            'non-negative integer")\n'
+        ),
+        test=(
+            "tests/test_judge_execution_kernel.py::"
+            "test_judge_request_rejects_invalid_timeout_before_launch"
+        ),
+    ),
+    Mutation(
+        name="judge-default-group-proof-preflight-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            '        if os.name != "posix" or not callable('
+            'getattr(os, "killpg", None)):\n'
+            "            raise JudgeProcessCleanupError(\n"
+            '                "default judge execution requires POSIX '
+            'process-group cleanup; "\n'
+            '                "provide an explicit trusted '
+            'process_group_terminator"\n'
+            "            )\n"
+        ),
+        after=(
+            '        if False and (os.name != "posix" or not callable('
+            'getattr(os, "killpg", None))):\n'
+            "            raise JudgeProcessCleanupError(\n"
+            '                "default judge execution requires POSIX '
+            'process-group cleanup; "\n'
+            '                "provide an explicit trusted '
+            'process_group_terminator"\n'
+            "            )\n"
+        ),
+        test=(
+            "tests/test_judge_execution_kernel.py::"
+            "test_default_direct_executor_rejects_missing_group_proof_before_launch"
+        ),
+    ),
+    Mutation(
+        name="judge-reader-start-cleanup-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "                process_group_terminator(process)\n"
             "            except BaseException:\n"
             "                # An active primary exception must not be replaced by cleanup.\n"
         ),
@@ -103,7 +236,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-reader-start-tracking-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "            reader_start_attempts.append(reader)\n"
             "            reader.start()\n"
@@ -116,7 +249,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-reader-start-pipe-close-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before="        safe_to_close = index >= len(stopped) or stopped[index]\n",
         after="        safe_to_close = False\n",
         test=(
@@ -126,7 +259,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-live-reader-synchronous-close",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "        if not safe_to_close:\n"
             "            streams_closed = False\n"
@@ -144,13 +277,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-attempted-reader-ident-proof-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "        except RuntimeError as exc:\n"
             "            # An interrupted Thread.start() can create the native thread before\n"
             "            # ``ident`` or ``_started`` becomes observable. A failed join is\n"
-            "            # therefore never proof that the corresponding pipe is safe to\n"
-            "            # close, even when ``reader.ident is None``.\n"
+            "            # never proof that the corresponding pipe is safe to close.\n"
             "            if first_error is None:\n"
             "                first_error = exc\n"
         ),
@@ -168,14 +300,14 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-reader-start-primary-exception-mask",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
-            "                _join_judge_pipe_readers(reader_start_attempts, streams)\n"
+            "                pipe_join(reader_start_attempts, streams)\n"
             "            except BaseException:\n"
             "                pass\n"
         ),
         after=(
-            "                _join_judge_pipe_readers(reader_start_attempts, streams)\n"
+            "                pipe_join(reader_start_attempts, streams)\n"
             "            except BaseException:\n"
             "                raise\n"
         ),
@@ -186,14 +318,14 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-reader-start-terminator-baseexception-mask",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
-            "                _terminate_judge_process_group(process)\n"
+            "                process_group_terminator(process)\n"
             "            except BaseException:\n"
             "                # An active primary exception must not be replaced by cleanup.\n"
         ),
         after=(
-            "                _terminate_judge_process_group(process)\n"
+            "                process_group_terminator(process)\n"
             "            except Exception:\n"
             "                # An active primary exception must not be replaced by cleanup.\n"
         ),
@@ -204,7 +336,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-start-new-session-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before="            start_new_session=True,\n",
         after="            start_new_session=False,\n",
         test=(
@@ -214,14 +346,14 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-timeout-cleanup-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
-            "            if time.monotonic() >= deadline:\n"
+            "            if monotonic() >= deadline:\n"
             "                cleanup_and_prove(\"judge timed out\")\n"
             "                raise subprocess.TimeoutExpired(\n"
         ),
         after=(
-            "            if False and time.monotonic() >= deadline:\n"
+            "            if False and monotonic() >= deadline:\n"
             "                cleanup_and_prove(\"judge timed out\")\n"
             "                raise subprocess.TimeoutExpired(\n"
         ),
@@ -232,12 +364,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-post-completion-group-proof-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "        cleanup_and_prove(\"judge completed\")\n"
-            "        return subprocess.CompletedProcess(\n"
+            "        return JudgeProcessResult(\n"
         ),
-        after="        return subprocess.CompletedProcess(\n",
+        after="        return JudgeProcessResult(\n",
         test=(
             "tests/test_blackbox_judge_mutation_contract.py::"
             "test_completed_judge_still_proves_process_group_cleanup"
@@ -245,7 +377,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-live-output-checkpoint-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "        while process.poll() is None:\n"
             "            if capture.exceeded:\n"
@@ -263,18 +395,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-post-poll-output-checkpoint-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "        if capture.exceeded:\n"
             "            cleanup_and_prove(\"judge output limit reached\")\n"
             "            raise JudgeOutputLimitError(capture.limit)\n"
-            "        if not _join_judge_pipe_readers(readers, streams):\n"
+            "        if not pipe_join(readers, streams):\n"
         ),
         after=(
             "        if False and capture.exceeded:\n"
             "            cleanup_and_prove(\"judge output limit reached\")\n"
             "            raise JudgeOutputLimitError(capture.limit)\n"
-            "        if not _join_judge_pipe_readers(readers, streams):\n"
+            "        if not pipe_join(readers, streams):\n"
         ),
         test=(
             "tests/test_blackbox_judge_mutation_contract.py::"
@@ -283,18 +415,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-post-join-output-checkpoint-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "        if capture.exceeded:\n"
             "            cleanup_and_prove(\"judge output limit reached\")\n"
             "            raise JudgeOutputLimitError(capture.limit)\n"
-            "        # A clean pytest exit is not sufficient: a pack/candidate may have\n"
+            "        cleanup_and_prove(\"judge completed\")\n"
         ),
         after=(
             "        if False and capture.exceeded:\n"
             "            cleanup_and_prove(\"judge output limit reached\")\n"
             "            raise JudgeOutputLimitError(capture.limit)\n"
-            "        # A clean pytest exit is not sufficient: a pack/candidate may have\n"
+            "        cleanup_and_prove(\"judge completed\")\n"
         ),
         test=(
             "tests/test_blackbox_judge_mutation_contract.py::"
@@ -303,16 +435,16 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-reader-join-failure-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
-            "        if not _join_judge_pipe_readers(readers, streams):\n"
+            "        if not pipe_join(readers, streams):\n"
             "            cleanup_and_prove(\"judge exited with live output pipes\")\n"
             "            raise JudgeProcessCleanupError(\n"
             "                \"judge exited but its output pipes did not close\"\n"
             "            )\n"
         ),
         after=(
-            "        _join_judge_pipe_readers(readers, streams)\n"
+            "        pipe_join(readers, streams)\n"
         ),
         test=(
             "tests/test_blackbox_judge_mutation_contract.py::"
@@ -321,14 +453,14 @@ MUTATIONS = (
     ),
     Mutation(
         name="judge-runtime-baseexception-precedence-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/execution/judge.py",
         before=(
             "            except BaseException:\n"
             "                pass\n"
             "        raise\n"
             "\n"
             "\n"
-            "def _run_blackbox_impl(\n"
+            "__all__ = [\n"
         ),
         after=(
             "            except BaseException:\n"
@@ -336,7 +468,7 @@ MUTATIONS = (
             "        raise JudgeProcessCleanupError(\"mutant masked primary\")\n"
             "\n"
             "\n"
-            "def _run_blackbox_impl(\n"
+            "__all__ = [\n"
         ),
         test=(
             "tests/test_blackbox_judge_mutation_contract.py::"

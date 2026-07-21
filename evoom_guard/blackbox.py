@@ -72,7 +72,15 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     BoundedOutput as _BoundedOutput,
 )
-from evoom_guard.execution import ProcessContainmentError, ProcessOutputLimitExceeded
+from evoom_guard.execution import (
+    JudgeOutputLimitError,
+    JudgeProcessCleanupError,
+    JudgeProcessLimits,
+    JudgeProcessRequest,
+    ProcessContainmentError,
+    ProcessOutputLimitExceeded,
+    execute_judge_process,
+)
 from evoom_guard.execution import (
     drain_process_pipe as _drain_subprocess_pipe,
 )
@@ -81,6 +89,24 @@ from evoom_guard.execution import (
 )
 from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
+)
+from evoom_guard.execution.judge import (
+    join_judge_pipe_readers as _join_judge_pipe_readers_kernel,
+)
+from evoom_guard.execution.judge import (
+    judge_process_group_exists as _process_group_exists_kernel,
+)
+from evoom_guard.execution.judge import (
+    reap_judge_leader as _reap_judge_leader_kernel,
+)
+from evoom_guard.execution.judge import (
+    signal_judge_process_group as _signal_judge_process_group_kernel,
+)
+from evoom_guard.execution.judge import (
+    terminate_judge_process_group as _terminate_judge_process_group_kernel,
+)
+from evoom_guard.execution.judge import (
+    wait_for_judge_process_group_exit as _wait_for_process_group_exit_kernel,
 )
 from evoom_guard.isolation import (
     DockerCandidateCleanupRequest,
@@ -332,21 +358,6 @@ _JUDGE_GROUP_POLL_SECONDS = 0.02
 _SIGKILL = int(getattr(signal, "SIGKILL", 9))
 
 
-class JudgeProcessCleanupError(RuntimeError):
-    """The judge session could not be proven free of surviving descendants."""
-
-
-class JudgeOutputLimitError(RuntimeError):
-    """The judge-owned pack exceeded its bounded diagnostic channel."""
-
-    def __init__(self, limit: int) -> None:
-        self.limit = limit
-        super().__init__(
-            "black-box judge output exceeded the "
-            f"{limit}-byte judge capture limit"
-        )
-
-
 class CandidateContainerCleanupError(RuntimeError):
     """A candidate container could not be proven absent after execution."""
 
@@ -363,60 +374,33 @@ def _signal_judge_process_group(
     process: subprocess.Popen[Any], sig: int
 ) -> None:
     """Signal only the isolated judge session created by ``Popen`` below."""
-    killpg = getattr(os, "killpg", None)
-    if os.name == "posix" and callable(killpg):
-        killpg(process.pid, sig)
-    elif sig == int(signal.SIGTERM):
-        process.terminate()
-    else:
-        process.kill()
+    _signal_judge_process_group_kernel(process, sig)
 
 
 def _process_group_exists(process_group: int) -> bool:
     """Return whether a POSIX process group still has any member."""
-    killpg = getattr(os, "killpg", None)
-    if not callable(killpg):
-        raise JudgeProcessCleanupError("POSIX killpg is unavailable")
-    try:
-        killpg(process_group, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError as exc:
-        raise JudgeProcessCleanupError(
-            f"cannot inspect judge process group {process_group}: {exc}"
-        ) from exc
-    except OSError as exc:
-        raise JudgeProcessCleanupError(
-            f"judge process-group inspection failed for {process_group}: {exc}"
-        ) from exc
-    return True
+    return _process_group_exists_kernel(process_group)
 
 
 def _wait_for_process_group_exit(
     process: subprocess.Popen[Any], process_group: int, timeout: float
 ) -> bool:
-    deadline = time.monotonic() + max(timeout, 0.0)
-    while True:
-        # poll() also reaps the direct leader when it has exited. Do this on
-        # every iteration so a zombie leader cannot make killpg(..., 0) look
-        # like a live descendant forever.
-        process.poll()
-        if not _process_group_exists(process_group):
-            return True
-        if time.monotonic() >= deadline:
-            return False
-        time.sleep(min(_JUDGE_GROUP_POLL_SECONDS, max(deadline - time.monotonic(), 0.0)))
+    return _wait_for_process_group_exit_kernel(
+        process,
+        process_group,
+        timeout,
+        process_group_exists=_process_group_exists,
+        group_poll_seconds=_JUDGE_GROUP_POLL_SECONDS,
+        monotonic=time.monotonic,
+        sleeper=time.sleep,
+    )
 
 
 def _reap_judge_leader(process: subprocess.Popen[Any]) -> None:
-    if process.poll() is not None:
-        return
-    try:
-        process.wait(timeout=_JUDGE_TERMINATION_GRACE_SECONDS)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise JudgeProcessCleanupError(
-            f"judge leader {process.pid} could not be reaped after group cleanup"
-        ) from exc
+    _reap_judge_leader_kernel(
+        process,
+        termination_grace_seconds=_JUDGE_TERMINATION_GRACE_SECONDS,
+    )
 
 
 def _terminate_judge_process_group(process: subprocess.Popen[Any]) -> None:
@@ -426,46 +410,19 @@ def _terminate_judge_process_group(process: subprocess.Popen[Any]) -> None:
     PGID. Therefore neither ``poll()`` nor ``wait()`` is a group-cleanup proof;
     POSIX cleanup always probes/signals the PGID itself.
     """
-    if os.name != "posix" or not hasattr(os, "killpg"):
-        # Production black-box execution fails before this point on Windows.
-        # Keep the fallback bounded for embedding tests, but make no group claim.
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=_JUDGE_TERMINATION_GRACE_SECONDS)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                _reap_judge_leader(process)
-        return
-
-    process_group = process.pid  # start_new_session=True makes PGID == leader PID
-    if _process_group_exists(process_group):
-        try:
-            _signal_judge_process_group(process, int(signal.SIGTERM))
-        except ProcessLookupError:
-            pass
-        except OSError as exc:
-            raise JudgeProcessCleanupError(
-                f"could not terminate judge process group {process_group}: {exc}"
-            ) from exc
-        if not _wait_for_process_group_exit(
-            process, process_group, _JUDGE_TERMINATION_GRACE_SECONDS
-        ):
-            try:
-                _signal_judge_process_group(process, _SIGKILL)
-            except ProcessLookupError:
-                pass
-            except OSError as exc:
-                raise JudgeProcessCleanupError(
-                    f"could not kill judge process group {process_group}: {exc}"
-                ) from exc
-            if not _wait_for_process_group_exit(
-                process, process_group, _JUDGE_TERMINATION_GRACE_SECONDS
-            ):
-                raise JudgeProcessCleanupError(
-                    f"judge process group {process_group} survived SIGKILL"
-                )
-    _reap_judge_leader(process)
+    _terminate_judge_process_group_kernel(
+        process,
+        limits=JudgeProcessLimits(
+            max_output_bytes=_MAX_SUBPROCESS_OUTPUT_BYTES,
+            termination_grace_seconds=_JUDGE_TERMINATION_GRACE_SECONDS,
+            group_poll_seconds=_JUDGE_GROUP_POLL_SECONDS,
+            sigkill=_SIGKILL,
+        ),
+        process_group_exists=_process_group_exists,
+        signal_process_group=_signal_judge_process_group,
+        wait_for_group_exit=_wait_for_process_group_exit,
+        reap_leader=_reap_judge_leader,
+    )
 
 
 def _join_judge_pipe_readers(
@@ -478,42 +435,11 @@ def _join_judge_pipe_readers(
     therefore called with no streams here.  A stream is closed only after its
     reader is proven stopped, or when no startup attempt referenced that pipe.
     """
-    stopped: list[bool] = []
-    first_error: BaseException | None = None
-    for reader in readers:
-        reader_stopped = False
-        try:
-            reader_stopped = _join_pipe_readers([reader], [])
-        except RuntimeError as exc:
-            # An interrupted Thread.start() can create the native thread before
-            # ``ident`` or ``_started`` becomes observable. A failed join is
-            # therefore never proof that the corresponding pipe is safe to
-            # close, even when ``reader.ident is None``.
-            if first_error is None:
-                first_error = exc
-        except BaseException as exc:
-            if first_error is None:
-                first_error = exc
-        stopped.append(reader_stopped)
-
-    streams_closed = True
-    for index, stream in enumerate(streams):
-        safe_to_close = index >= len(stopped) or stopped[index]
-        if not safe_to_close:
-            streams_closed = False
-            continue
-        try:
-            stream.close()
-        except (OSError, ValueError):
-            streams_closed = False
-        except BaseException as exc:
-            streams_closed = False
-            if first_error is None:
-                first_error = exc
-
-    if first_error is not None:
-        raise first_error
-    return all(stopped) and streams_closed
+    return _join_judge_pipe_readers_kernel(
+        readers,
+        streams,
+        generic_joiner=_join_pipe_readers,
+    )
 
 
 def _run_judge_process(
@@ -530,115 +456,30 @@ def _run_judge_process(
     fresh session makes its process group an unambiguous cleanup target. The
     original TimeoutExpired/KeyboardInterrupt/BaseException is always preserved.
     """
-    process: subprocess.Popen[Any] | None = None
-    streams: list[Any] = []
-    reader_start_attempts: list[threading.Thread] = []
-    try:
-        process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-            start_new_session=True,
-        )
-        stdout = process.stdout
-        stderr = process.stderr
-        streams = [
-            stream for stream in (stdout, stderr) if stream is not None
-        ]
-        if stdout is None or stderr is None:
-            raise JudgeProcessCleanupError(
-                "judge output pipes were not created"
-            )
-        capture = _BoundedOutput(_MAX_SUBPROCESS_OUTPUT_BYTES)
-        readers: list[threading.Thread] = [
-            threading.Thread(
-                target=_drain_subprocess_pipe,
-                args=(stdout, capture, "stdout"),
-                daemon=True,
-            ),
-            threading.Thread(
-                target=_drain_subprocess_pipe,
-                args=(stderr, capture, "stderr"),
-                daemon=True,
-            ),
-        ]
-        for reader in readers:
-            # Record the attempt before start(): an asynchronous BaseException
-            # can arrive after the native thread exists but before start()
-            # returns to Python.
-            reader_start_attempts.append(reader)
-            reader.start()
-
-        def cleanup_and_prove(reason: str) -> None:
-            try:
-                _terminate_judge_process_group(process)
-            except JudgeProcessCleanupError:
-                raise
-            except Exception as exc:
-                raise JudgeProcessCleanupError(
-                    f"unexpected judge process-group cleanup failure: {exc}"
-                ) from exc
-            if not _join_judge_pipe_readers(readers, streams):
-                raise JudgeProcessCleanupError(
-                    f"{reason}; judge output pipes did not close after cleanup"
-                )
-
-        deadline = time.monotonic() + max(0.0, float(timeout))
-        while process.poll() is None:
-            if capture.exceeded:
-                cleanup_and_prove("judge output limit reached")
-                raise JudgeOutputLimitError(capture.limit)
-            if time.monotonic() >= deadline:
-                cleanup_and_prove("judge timed out")
-                raise subprocess.TimeoutExpired(
-                    command,
-                    timeout,
-                    output=capture.text("stdout"),
-                    stderr=capture.text("stderr"),
-                )
-            time.sleep(_JUDGE_GROUP_POLL_SECONDS)
-
-        # A short-lived process can flood a pipe and exit before the polling
-        # loop observes it. It is still not a gradeable judge run; first reap
-        # the complete process group before reporting the bounded-capture error.
-        if capture.exceeded:
-            cleanup_and_prove("judge output limit reached")
-            raise JudgeOutputLimitError(capture.limit)
-        if not _join_judge_pipe_readers(readers, streams):
-            cleanup_and_prove("judge exited with live output pipes")
-            raise JudgeProcessCleanupError(
-                "judge exited but its output pipes did not close"
-            )
-        if capture.exceeded:
-            cleanup_and_prove("judge output limit reached")
-            raise JudgeOutputLimitError(capture.limit)
-        # A clean pytest exit is not sufficient: a pack/candidate may have
-        # spawned a background descendant that closed inherited stdio. Remove
-        # and verify the whole PGID before any PASS can be returned.
-        cleanup_and_prove("judge completed")
-        return subprocess.CompletedProcess(
-            command,
-            int(process.returncode or 0),
-            capture.text("stdout"),
-            capture.text("stderr"),
-        )
-    except BaseException:
-        if process is not None:
-            try:
-                # A reaped leader is not proof that its process group has no
-                # surviving descendant, so abort cleanup is unconditional.
-                _terminate_judge_process_group(process)
-            except BaseException:
-                # An active primary exception must not be replaced by cleanup.
-                pass
-            try:
-                _join_judge_pipe_readers(reader_start_attempts, streams)
-            except BaseException:
-                pass
-        raise
+    limits = JudgeProcessLimits(
+        max_output_bytes=_MAX_SUBPROCESS_OUTPUT_BYTES,
+        termination_grace_seconds=_JUDGE_TERMINATION_GRACE_SECONDS,
+        group_poll_seconds=_JUDGE_GROUP_POLL_SECONDS,
+        sigkill=_SIGKILL,
+    )
+    request = JudgeProcessRequest(
+        command=command,
+        cwd=cwd,
+        env=env,
+        timeout_seconds=timeout,
+        limits=limits,
+    )
+    return execute_judge_process(
+        request,
+        popen_factory=subprocess.Popen,
+        thread_factory=threading.Thread,
+        output_factory=_BoundedOutput,
+        pipe_drain=_drain_subprocess_pipe,
+        pipe_join=_join_judge_pipe_readers,
+        process_group_terminator=_terminate_judge_process_group,
+        monotonic=time.monotonic,
+        sleeper=time.sleep,
+    ).as_completed_process()
 
 
 def _run_blackbox_impl(
