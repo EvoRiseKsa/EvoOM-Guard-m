@@ -40,6 +40,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import math
 import os
 import shutil
 import stat
@@ -474,9 +475,13 @@ def guard(
 
     ``diff_coverage=True`` adds **changed-line coverage evidence** (one extra
     suite run under ``coverage``): which changed lines the suite actually
-    executed. Evidence only, unless ``min_diff_coverage`` sets a gate: a ``PASS``
-    whose measured changed-line coverage is below the threshold becomes ``FAIL``
-    (``diff_coverage_below_threshold``). Executed is not asserted — see
+    executed. Evidence only, unless ``min_diff_coverage`` sets a gate (and
+    implies measurement): a ``PASS`` whose measured changed-line coverage is
+    below the threshold becomes ``FAIL`` (``diff_coverage_below_threshold``),
+    while unavailable measurement becomes ``ERROR``. This is a quality gate
+    for non-hostile candidate code, not an adversarial integrity control:
+    candidate imports share the collector process and can mutate its live
+    coverage state. Executed is also not asserted — see
     :mod:`evoom_guard.evidence`.
     """
     # Public API inputs must be able to produce a schema-valid record. Python's
@@ -489,6 +494,21 @@ def guard(
         raise ValueError("mem_limit_mb must be a non-negative integer")
     if type(strict_harness) is not bool:
         raise ValueError("strict_harness must be a boolean")
+    if (
+        min_diff_coverage is not None
+        and (
+            isinstance(min_diff_coverage, bool)
+            or not isinstance(min_diff_coverage, (int, float))
+            or not 0 <= min_diff_coverage <= 100
+            or not math.isfinite(min_diff_coverage)
+        )
+    ):
+        raise ValueError("min_diff_coverage must be a finite number between 0 and 100")
+    # Keep the Python API and CLI policy semantics identical: a floor cannot
+    # exist without the measurement that proves it. This assignment precedes
+    # every return path so even direct callers cannot create a producer PASS
+    # that the independent record verifier must reject.
+    diff_coverage = diff_coverage or min_diff_coverage is not None
     # The frozen 1.11 policy contract names these two combinations
     # contradictory ("blackbox_only requires blackbox"; "an expected pack
     # digest requires verifier_pack_required"), so any attestation echoing
@@ -1059,6 +1079,10 @@ def guard(
                     "verifier_pack_completed": bx_completed,
                     "verifier_pack_tests_passed": bx.tests_passed if bx_completed else None,
                     "verifier_pack_tests_total": bx.tests_total if bx_completed else None,
+                    "verifier_pack_junit_sha256": bx.junit_sha256,
+                    "verifier_pack_junit_digest_format": (
+                        "JUNIT_XML_SHA256" if bx.junit_sha256 else None
+                    ),
                     "junit_sha256": bx.junit_sha256,
                     "junit_digest_format": (
                         "JUNIT_XML_SHA256" if bx.junit_sha256 else None
@@ -1076,6 +1100,9 @@ def guard(
                     ),
                     "deleted_paths_applied": bx.deleted_applied,
                     "repo_suite_junit_sha256": repo_art.get("junit_sha256") if repo_art else None,
+                    "repo_suite_junit_digest_format": (
+                        repo_art.get("junit_digest_format") if repo_art else None
+                    ),
                     "repo_suite_passed": (
                         repo_verdict.passed
                         if repo_verdict is not None and repo_clean_source
@@ -1209,6 +1236,23 @@ def guard(
             "the test session produced no clean verdict (collection/usage error)"
         ), REASON_NO_TEST_VERDICT
 
+    # Preserve both layers before later evidence gates can demote the top-level
+    # verdict. Coverage gates the full core verdict. Baseline is narrower:
+    # ``scope=repo_suite_only`` compares the pristine suite with the candidate's
+    # repo phase, even when a separately composed verifier pack later fails.
+    core_verdict_completed = v in (PASS, FAIL)
+    core_verdict_passed = v == PASS
+    repo_suite_pass_value = art.get("repo_suite_passed")
+    repo_suite_completed = (
+        art.get("repo_suite_started") is True
+        and art.get("repo_suite_completed") is True
+        and isinstance(repo_suite_pass_value, bool)
+    )
+    candidate_suite_completed = repo_suite_completed or core_verdict_completed
+    candidate_suite_passed = (
+        repo_suite_pass_value is True if repo_suite_completed else core_verdict_passed
+    )
+
     # Changed-line coverage evidence (opt-in; one extra suite run). Only when the
     # suite actually ran — a REJECTED/ERROR verdict has nothing to measure. A
     # request the container judges cannot fulfil degrades EXPLICITLY (1.7).
@@ -1219,28 +1263,51 @@ def guard(
             "note": f"changed-line coverage runs under the subprocess judge "
                     f"only; isolation {isolation!r} did not measure it",
         }
-    if diff_coverage and v in (PASS, FAIL) and isolation == "subprocess":
+    if diff_coverage and core_verdict_completed and isolation == "subprocess":
         from evoom_guard.evidence import collect_diff_coverage
 
         coverage_evidence = collect_diff_coverage(
             repo_path, candidate,
-            deleted=tuple(safe_deleted), test_command=test_command, timeout=timeout,
+            deleted=tuple(safe_deleted), test_command=test_command,
+            setup_command=setup_command, setup_output_globs=setup_output_globs,
+            timeout=timeout, mem_limit_mb=mem_limit_mb,
             file_blocks=file_blocks,
+            require_passing_suite=(
+                core_verdict_passed and min_diff_coverage is not None
+            ),
         )
-        if (
-            v == PASS
-            and min_diff_coverage is not None
-            and coverage_evidence.get("measured")
-            and float(coverage_evidence.get("percent", 100.0)) < min_diff_coverage
-        ):
-            v, code = FAIL, REASON_DIFF_COVERAGE_BELOW_THRESHOLD
-            reason = (
-                "the suite passes but executed only "
-                f"{coverage_evidence['executed']}/{coverage_evidence['total']} of the "
-                f"changed lines ({coverage_evidence['percent']}% < the required "
-                f"{min_diff_coverage:g}%) — the change is largely unexercised by the "
-                "tests that judged it"
-            )
+        if core_verdict_passed and min_diff_coverage is not None:
+            coverage_below_floor = False
+            if coverage_evidence.get("measured") is not True:
+                v, code = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET
+                reason = (
+                    "required changed-line coverage could not be measured: "
+                    f"{coverage_evidence.get('note', 'the collector returned no reason')}"
+                )
+            else:
+                coverage_executed = int(coverage_evidence["executed"])
+                coverage_total = int(coverage_evidence["total"])
+                if isinstance(min_diff_coverage, int):
+                    floor_numerator, floor_denominator = min_diff_coverage, 1
+                else:
+                    floor_numerator, floor_denominator = (
+                        min_diff_coverage.as_integer_ratio()
+                    )
+                coverage_below_floor = (
+                    coverage_total > 0
+                    and 100 * coverage_executed * floor_denominator
+                    < floor_numerator * coverage_total
+                )
+            if coverage_below_floor:
+                v, code = FAIL, REASON_DIFF_COVERAGE_BELOW_THRESHOLD
+                reason = (
+                    "the suite passes but executed only "
+                    f"{coverage_evidence['executed']}/{coverage_evidence['total']} of the "
+                    "changed executable lines; the exact ratio is below the required "
+                    f"{min_diff_coverage:g}% (the evidence display rounds it to "
+                    f"{coverage_evidence['percent']}%) — the change is largely "
+                    "unexercised by the tests that judged it"
+                )
 
     # Baseline differential evidence (opt-in; one extra suite run on the
     # PRISTINE base — no candidate applied). "all tests pass on head" does not
@@ -1260,7 +1327,7 @@ def guard(
         }
     if (
         (baseline_evidence or require_demonstrated_fix)
-        and v in (PASS, FAIL)
+        and candidate_suite_completed
         and isolation == "subprocess"
     ):
         baseline_info = _run_baseline_suite(
@@ -1271,7 +1338,7 @@ def guard(
         )
         if baseline_info.get("verdict") == "NO_CLEAN_VERDICT":
             baseline_info["repair_effect"] = "unmeasured"
-        elif baseline_info.get("verdict") == "FAIL" and v == PASS:
+        elif baseline_info.get("verdict") == "FAIL" and candidate_suite_passed:
             baseline_info["repair_effect"] = "demonstrated"
         else:
             baseline_info["repair_effect"] = "not_demonstrated"
@@ -1698,6 +1765,10 @@ def _build_attestation(
         "verifier_pack_manifest": art.get("verifier_pack_manifest"),
         "verifier_pack_tests_passed": art.get("verifier_pack_tests_passed"),
         "verifier_pack_tests_total": art.get("verifier_pack_tests_total"),
+        "verifier_pack_junit_sha256": art.get("verifier_pack_junit_sha256"),
+        "verifier_pack_junit_digest_format": art.get(
+            "verifier_pack_junit_digest_format"
+        ),
         "verifier_pack_digest_format": PACK_DIGEST_FORMAT
         if art.get("verifier_pack_sha256") else None,
         # Black-box binding: the delivered isolation, the applied deletions, the
@@ -1717,6 +1788,13 @@ def _build_attestation(
         ),
         "deleted_paths_applied": art.get("deleted_paths_applied"),
         "repo_suite_junit_sha256": art.get("repo_suite_junit_sha256"),
+        "repo_suite_junit_digest_format": art.get(
+            "repo_suite_junit_digest_format"
+        ),
+        "repo_suite_tests_passed": art.get("repo_suite_tests_passed"),
+        "repo_suite_tests_total": art.get("repo_suite_tests_total"),
+        "repo_suite_verdict_source": art.get("repo_suite_verdict_source"),
+        "repo_suite_returncode": art.get("repo_suite_returncode"),
         "repo_suite_passed": art.get("repo_suite_passed"),
         "repo_suite_started": art.get("repo_suite_started"),
         "repo_suite_completed": art.get("repo_suite_completed"),

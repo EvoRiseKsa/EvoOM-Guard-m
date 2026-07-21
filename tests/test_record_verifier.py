@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
+import evoom_guard.evidence as evidence
 from evoom_guard import __version__
 from evoom_guard.cli import main as cli_main
 from evoom_guard.guard import SCHEMA_VERSION, guard
@@ -108,6 +109,8 @@ def _valid_composite_record() -> dict[str, object]:
             "policy_sha256": _policy_digest(policy),
             "policy_id": "strict-ci",
             "policy_version": "1",
+            "junit_sha256": "c" * 64,
+            "junit_digest_format": "JUNIT_XML_SHA256",
             "execution_state": "completed",
             "execution_phase": "repo_suite",
             "test_command_started": True,
@@ -119,6 +122,8 @@ def _valid_composite_record() -> dict[str, object]:
             "verifier_pack_digest_format": PACK_DIGEST_FORMAT,
             "verifier_pack_tests_passed": 1,
             "verifier_pack_tests_total": 1,
+            "verifier_pack_junit_sha256": "c" * 64,
+            "verifier_pack_junit_digest_format": "JUNIT_XML_SHA256",
             "verifier_pack_present": True,
             "verifier_pack_started": True,
             "verifier_pack_completed": True,
@@ -182,6 +187,10 @@ def _valid_preflight_record(reason_code: str) -> dict[str, object]:
             "verifier_pack_digest_format": None,
             "verifier_pack_tests_passed": None,
             "verifier_pack_tests_total": None,
+            "verifier_pack_junit_sha256": None,
+            "verifier_pack_junit_digest_format": None,
+            "junit_sha256": None,
+            "junit_digest_format": None,
             "verifier_pack_present": None,
             "verifier_pack_started": False,
             "verifier_pack_completed": False,
@@ -282,6 +291,12 @@ def test_schema_1_11_accepts_optional_strict_harness_without_rejecting_old_recor
     # Published 1.11 records omit this later additive policy fact and must stay
     # valid.  New producer records state it explicitly and are valid too.
     legacy = _valid_composite_record()
+    legacy["tool_version"] = "4.0.1"
+    legacy_attestation = legacy["attestation"]
+    assert isinstance(legacy_attestation, dict)
+    legacy_attestation["guard_version"] = "4.0.1"
+    legacy_attestation.pop("verifier_pack_junit_sha256")
+    legacy_attestation.pop("verifier_pack_junit_digest_format")
     assert verify_record(legacy)["ok"] is True
 
     strict = _valid_composite_record()
@@ -342,6 +357,162 @@ def test_real_completed_repo_records_are_semantically_valid(tmp_path, with_pack:
     assert record["verdict"] == "PASS"
     assert report["ok"] is True, report
     assert report["summary"]["failed"] == 0
+    if not with_pack:
+        forged = copy.deepcopy(record)
+        forged["attestation"]["junit_digest_format"] = (
+            "EVOGUARD_JUNIT_COMPOSITE_V2"
+        )
+        forged_report = verify_record(forged)
+        assert forged_report["ok"] is False
+        assert _check(forged_report, "source.mode_policy")["status"] == "fail"
+
+        missing_current_identity = copy.deepcopy(record)
+        missing_current_identity["attestation"]["junit_sha256"] = None
+        missing_current_identity["attestation"]["junit_digest_format"] = None
+        missing_current_report = verify_record(missing_current_identity)
+        assert missing_current_report["ok"] is False
+        assert (
+            _check(missing_current_report, "source.mode_policy")["status"]
+            == "fail"
+        )
+
+        # v4.0.1 Maven/Surefire records could carry clean structured counts but
+        # no top digest because the directory report set was not yet bound.
+        legacy_maven = copy.deepcopy(record)
+        legacy_maven["tool_version"] = "4.0.1"
+        legacy_attestation = legacy_maven["attestation"]
+        legacy_attestation["guard_version"] = "4.0.1"
+        legacy_attestation["junit_sha256"] = None
+        legacy_attestation["junit_digest_format"] = None
+        assert verify_record(legacy_maven)["ok"] is True
+
+
+def test_pack_failure_preserves_repo_suite_baseline_effect(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    tests = repo / "tests"
+    tests.mkdir(parents=True)
+    (repo / "app.py").write_text(
+        "def fixed():\n    return 0\n\ndef hidden():\n    return 1\n",
+        encoding="utf-8",
+    )
+    (tests / "test_app.py").write_text(
+        "from app import fixed\n\ndef test_fixed():\n    assert fixed() == 1\n",
+        encoding="utf-8",
+    )
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "test_contract.py").write_text(
+        "from app import hidden\n\ndef test_hidden():\n    assert hidden() == 1\n",
+        encoding="utf-8",
+    )
+    candidate = (
+        "<<<FILE: app.py>>>\n"
+        "def fixed():\n    return 1\n\ndef hidden():\n    return 2\n"
+        "<<<END FILE>>>\n"
+    )
+
+    record = guard(
+        str(repo),
+        candidate,
+        verifier_pack=str(pack),
+        baseline_evidence=True,
+    ).to_dict()
+
+    assert record["verdict"] == "FAIL"
+    assert record["reason_code"] == "tests_failed"
+    assert record["verdict_source"] == "composite:repo+verifier-pack"
+    assert (record["tests_passed"], record["tests_total"]) == (1, 2)
+    assert record["baseline"]["verdict"] == "FAIL"
+    assert record["baseline"]["repair_effect"] == "demonstrated"
+    attestation = record["attestation"]
+    assert attestation["repo_suite_state"] == "repo_phase_completed"
+    assert attestation["repo_suite_passed"] is True
+    assert attestation["repo_suite_tests_passed"] == 1
+    assert attestation["repo_suite_tests_total"] == 1
+    assert attestation["repo_suite_verdict_source"] == "junit+exit"
+    assert attestation["repo_suite_returncode"] == 0
+    assert isinstance(attestation["repo_suite_junit_sha256"], str)
+    assert len(attestation["repo_suite_junit_sha256"]) == 64
+    assert attestation["repo_suite_junit_digest_format"] == "JUNIT_XML_SHA256"
+    assert verify_record(record)["ok"] is True
+
+    forged = copy.deepcopy(record)
+    forged["attestation"]["repo_suite_passed"] = False
+    report = verify_record(forged)
+    assert report["ok"] is False
+    assert _check(report, "baseline.policy_semantics")["status"] == "fail"
+    assert _check(report, "composite.phase_semantics")["status"] == "fail"
+
+    forged_digest = copy.deepcopy(record)
+    forged_digest["attestation"]["repo_suite_junit_sha256"] = "garbage"
+    digest_report = verify_record(forged_digest)
+    assert digest_report["ok"] is False
+    assert _check(digest_report, "attestation.shape")["status"] == "fail"
+    assert _check(digest_report, "composite.phase_semantics")["status"] == "fail"
+
+    forged_valid_digest = copy.deepcopy(record)
+    forged_valid_digest["attestation"]["repo_suite_junit_sha256"] = "a" * 64
+    valid_digest_report = verify_record(forged_valid_digest)
+    assert valid_digest_report["ok"] is False
+    assert _check(valid_digest_report, "attestation.shape")["status"] == "pass"
+    assert (
+        _check(valid_digest_report, "composite.phase_semantics")["status"]
+        == "fail"
+    )
+
+    missing_phase = copy.deepcopy(record)
+    for field in (
+        "repo_suite_started",
+        "repo_suite_completed",
+        "repo_suite_state",
+        "repo_suite_passed",
+        "repo_suite_tests_passed",
+        "repo_suite_tests_total",
+        "repo_suite_verdict_source",
+        "repo_suite_returncode",
+        "repo_suite_junit_sha256",
+        "repo_suite_junit_digest_format",
+    ):
+        missing_phase["attestation"][field] = None
+    missing_report = verify_record(missing_phase)
+    assert missing_report["ok"] is False
+    assert _check(missing_report, "composite.phase_semantics")["status"] == "fail"
+
+
+def test_completed_zero_test_pack_is_a_valid_no_verdict_error(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    tests = repo / "tests"
+    tests.mkdir(parents=True)
+    (repo / "app.py").write_text("VALUE = 0\n", encoding="utf-8")
+    (tests / "test_app.py").write_text(
+        "import app\n\ndef test_value():\n    assert app.VALUE == 1\n",
+        encoding="utf-8",
+    )
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "test_contract.py").write_text(
+        "from app import VALUE\n",
+        encoding="utf-8",
+    )
+
+    record = guard(
+        str(repo),
+        "<<<FILE: app.py>>>\nVALUE = 1\n<<<END FILE>>>\n",
+        verifier_pack=str(pack),
+        baseline_evidence=True,
+    ).to_dict()
+    report = verify_record(record)
+
+    assert record["verdict"] == "ERROR"
+    assert record["reason_code"] == "no_test_verdict"
+    assert record["verdict_source"] is None
+    assert record["attestation"]["verifier_pack_completed"] is True
+    assert record["attestation"]["verifier_pack_tests_passed"] == 0
+    assert record["attestation"]["verifier_pack_tests_total"] == 0
+    assert record["baseline"]["repair_effect"] == "demonstrated"
+    assert report["ok"] is True, [
+        check for check in report["checks"] if check["status"] == "fail"
+    ]
 
 
 def test_tests_failed_cannot_claim_that_every_recorded_test_passed(tmp_path) -> None:
@@ -923,7 +1094,14 @@ def test_pack_assurance_requires_the_complete_nested_contract() -> None:
 
 @pytest.mark.parametrize(
     ("mutation", "value"),
-    [("missing", None), ("timeout", True), ("min_diff_coverage", float("inf"))],
+    [
+        ("missing", None),
+        ("timeout", True),
+        ("min_diff_coverage", float("inf")),
+        pytest.param(
+            "min_diff_coverage", 10**10000, id="min-diff-coverage-huge-int"
+        ),
+    ],
 )
 def test_effective_policy_requires_all_24_typed_fields(
     mutation: str, value: object
@@ -1052,6 +1230,44 @@ def test_real_coverage_gated_pass_requires_its_measured_evidence(tmp_path: Path)
 
     assert report["ok"] is False
     assert _check(report, "diff_coverage.policy_semantics")["status"] == "fail"
+
+
+def test_required_unmeasured_coverage_record_is_a_valid_assurance_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _coverage_repo(tmp_path)
+    candidate = (
+        "<<<FILE: app.py>>>\n"
+        "def covered(x):\n    return 1 + x\n\n"
+        "def uncovered(x):\n    return x - 1\n"
+        "<<<END FILE>>>\n"
+    )
+    monkeypatch.setattr(
+        evidence,
+        "collect_diff_coverage",
+        lambda *_args, **_kwargs: {
+            "measured": False,
+            "note": "coverage report was unavailable",
+            "unmeasured_files": [],
+            "caveat": evidence.EXECUTED_IS_NOT_ASSERTED,
+        },
+    )
+
+    record = guard(
+        str(tmp_path),
+        candidate,
+        diff_coverage=True,
+        min_diff_coverage=80.0,
+    ).to_dict()
+    report = verify_record(record)
+
+    assert record["verdict"] == "ERROR"
+    assert record["reason_code"] == "assurance_requirement_not_met"
+    assert report["ok"] is True, [
+        check for check in report["checks"] if check["status"] == "fail"
+    ]
+    assert _check(report, "diff_coverage.policy_semantics")["status"] == "pass"
+    assert _check(report, "policy.assurance_floors")["status"] == "pass"
 
 
 @pytest.mark.parametrize(

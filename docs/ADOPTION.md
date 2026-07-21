@@ -6,10 +6,11 @@
 
 # Adopting EvoGuard — a one-page runbook
 
-EvoGuard is a CI gate that evaluates whether an untrusted code change
-(with **AI-agent PRs** as the primary use case) satisfied the selected judge
-without gaming its evidence. It is a single verdict + exit code; drop it into any
-pipeline.
+EvoGuard is a CI gate that evaluates whether a code change (with **AI-agent
+PRs** as the primary use case) satisfied the selected judge under the recorded
+policy and assurance boundary. It blocks the explicitly modelled
+evidence-gaming paths; it is not a universal hostile-code proof. It is a single
+verdict + exit code for a pipeline.
 
 ## 1. Turn it on (one command)
 
@@ -175,6 +176,39 @@ requires the weaker repo-native report channel.
 >   "min_diff_coverage": 80
 > }
 > ```
+
+> **Version boundary:** the published `v4.0.1` supports the coverage options,
+> but the fail-closed unavailable-measurement behavior, isolated collector
+> startup, exact-ratio comparison, conservative physical-line denominator,
+> setup/resource forwarding, and explicit candidate-writable caveat below are
+> `v4.0.2` source changes and are not yet published. Do not attribute them to a
+> workflow pinned to `v4.0.1`.
+
+When `min_diff_coverage` is configured, measurement is mandatory: a missing
+collector, failed wrapped run, invalid report, or other explicit
+`measured: false` result becomes `ERROR assurance_requirement_not_met`. The installed
+collector is imported before the candidate repository enters `sys.path`, and
+repository coverage configuration is ignored. Evidence-only `diff_coverage`
+keeps its non-gating behavior. Trusted runner/interpreter prefixes are retained;
+the selected environment must provide `coverage`. A configured setup is replayed
+under the same output-fidelity policy, and the extra processes receive the main
+POSIX CPU/address-space limits plus the ordinary wall/output/cleanup bounds.
+This hardening does not turn repo-native tests
+into a separate-process trust boundary; candidate code and the collector still
+execute in the same judged Python process. Candidate code can obtain
+`Coverage.current()`, stop tracing, or mutate `CoverageData` to fabricate
+executed lines. Isolated startup protects collector selection/configuration,
+not the integrity of its live state. Consequently `min_diff_coverage` is a
+quality gate only when candidate code is non-hostile. Do not make it an
+admission authority for untrusted PRs; keep it advisory and require independent
+external verifier/finalizer evidence for that decision. Source exclusion
+pragmas and changed continuation/unknown executable lines cannot shrink a
+required denominator;
+they are conservatively recorded as missed. Lexer failure is also conservative,
+while docstring filtering retains other code on the same line. Thresholds use
+the exact executed/total ratio rather than the rounded display percentage.
+Direct Python API calls follow the same implication and finite `0..100`
+validation as CLI/config policy.
 
 The `policy_id`/`policy_version` land in the verdict's attestation, so a
 consumer knows exactly which policy produced a PASS (and

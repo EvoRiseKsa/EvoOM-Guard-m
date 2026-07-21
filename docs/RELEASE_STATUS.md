@@ -1,14 +1,14 @@
 ---
-source_version: 4.0.1
+source_version: 4.0.2
 latest_published_version: 4.0.1
-state: published
+state: pre-release
 ---
 
 # Release status
 
-The repository source now declares **v4.0.1** as the active release and it is
-published as an immutable GitHub Release. The latest immutable consumer release
-is [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1),
+The repository source now declares **v4.0.2** as the next patch version. It is
+not yet a published consumer release. The latest immutable consumer release is
+[`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1),
 published from commit
 [`5ed7e84017619496521b813f859a6a8bf0a2b1df`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/5ed7e84017619496521b813f859a6a8bf0a2b1df).
 Its `evo-guard.pyz` asset has SHA-256

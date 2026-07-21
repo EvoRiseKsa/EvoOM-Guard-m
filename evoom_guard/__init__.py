@@ -8,7 +8,7 @@
 AI-generated patches are the primary use case, but the mechanism does not depend
 on authorship. Given a base repo and a candidate change (an edit-block patch, a
 base/head pair, or a unified diff), it decides whether the change satisfies the
-selected judge **without gaming the evidence**:
+selected judge while blocking the explicitly modelled evidence-gaming paths:
 
   * the verdict is read from a *judge-owned* JUnit report plus the process exit
     code — never from stdout — so a forged ``"N passed"`` cannot fool it;
@@ -23,7 +23,7 @@ from evoom_guard.contracts import Problem, VerdictResult, Verifier
 
 __all__ = ["Problem", "VerdictResult", "Verifier"]
 
-__version__ = "4.0.1"
+__version__ = "4.0.2"
 
 # These schemas retain their v3.8.0 identities until their contracts change.
 # A schema identity denotes its stable shape, not the runtime version carrying it.

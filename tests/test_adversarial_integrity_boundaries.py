@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -16,9 +18,12 @@ import pytest
 import evoom_guard.verifiers.junit_oracle as junit_oracle_module
 import evoom_guard.verifiers.repo_verifier as repo_verifier_module
 from evoom_guard.verifiers.junit_oracle import (
+    JUNIT_COMPOSITE_DIGEST_FORMAT,
+    JUNIT_REPORT_SET_DIGEST_FORMAT,
     detect_tamper,
     grade_repo_run,
     parse_junit_dir,
+    parse_junit_dir_with_digest,
     parse_junit_xml,
 )
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
@@ -117,6 +122,136 @@ def test_junit_directory_rejects_an_oversized_xml_entry(tmp_path: Path) -> None:
     )
 
     assert parse_junit_dir(str(reports)) is None
+
+
+def test_junit_report_set_digest_is_deterministic_and_content_bound(
+    tmp_path: Path,
+) -> None:
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    second = reports / "TEST-z.xml"
+    first = reports / "TEST-a.xml"
+    second.write_text(
+        '<testsuite><testcase name="second"/></testsuite>', encoding="utf-8"
+    )
+    first.write_text(
+        '<testsuite><testcase name="first"/></testsuite>', encoding="utf-8"
+    )
+
+    initial = parse_junit_dir_with_digest(str(reports))
+    repeated = parse_junit_dir_with_digest(str(reports))
+
+    assert initial is not None and repeated is not None
+    counts, digest = initial
+    assert counts.passed == counts.total == 2
+    assert digest == repeated[1]
+    assert re.fullmatch(r"[0-9a-f]{64}", digest)
+
+    second.write_text(
+        '<testsuite><testcase name="alterd"/></testsuite>', encoding="utf-8"
+    )
+    changed = parse_junit_dir_with_digest(str(reports))
+    assert changed is not None
+    assert changed[1] != digest
+
+
+@pytest.mark.skipif(os.name != "posix", reason="surrogateescape filenames are POSIX-only")
+def test_junit_report_set_rejects_a_non_utf8_filename_without_raising(
+    tmp_path: Path,
+) -> None:
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    raw_path = os.path.join(os.fsencode(reports), b"TEST-\xff.xml")
+    descriptor = os.open(raw_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(
+            descriptor,
+            b'<testsuite><testcase name="valid-content"/></testsuite>',
+        )
+    finally:
+        os.close(descriptor)
+
+    assert parse_junit_dir_with_digest(str(reports)) is None
+
+
+def test_maven_report_set_and_pack_are_both_bound_into_composite_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    source = repo / "src" / "main" / "java"
+    source.mkdir(parents=True)
+    (source / "App.java").write_text("class App {}\n", encoding="utf-8")
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "test_contract.py").write_text(
+        "def test_contract():\n    assert True\n", encoding="utf-8"
+    )
+
+    pack_xml = '<testsuite><testcase name="pack"/></testsuite>'
+
+    def fake_run(
+        command: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        report_dir_arg = next(
+            (
+                arg
+                for arg in command
+                if arg.startswith("-Dsurefire.reportsDirectory=")
+            ),
+            None,
+        )
+        if report_dir_arg is not None:
+            report_dir = Path(report_dir_arg.split("=", 1)[1])
+            report_dir.mkdir(parents=True, exist_ok=True)
+            (report_dir / "TEST-a.xml").write_text(
+                '<testsuite><testcase name="repo-a"/></testsuite>',
+                encoding="utf-8",
+            )
+            (report_dir / "TEST-b.xml").write_text(
+                '<testsuite><testcase name="repo-b"/></testsuite>',
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(command, 0, "repo passed", "")
+        pack_report = next(
+            (arg.split("=", 1)[1] for arg in command if arg.startswith("--junitxml=")),
+            None,
+        )
+        if pack_report is not None:
+            Path(pack_report).write_text(pack_xml, encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, "pack passed", "")
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
+
+    result = RepoVerifier(test_command=["mvn", "test"], mem_limit_mb=0).verify(
+        "<<<FILE: src/main/java/App.java>>>\nclass App { int value = 1; }\n"
+        "<<<END FILE>>>",
+        {"repo_path": str(repo), "verifier_pack": str(pack)},
+    )
+
+    assert result.passed, result.diagnostics
+    artifact = result.artifact
+    assert artifact["repo_suite_tests_passed"] == 2
+    assert artifact["repo_suite_tests_total"] == 2
+    assert re.fullmatch(r"[0-9a-f]{64}", artifact["repo_suite_junit_sha256"])
+    assert artifact["repo_suite_junit_digest_format"] == JUNIT_REPORT_SET_DIGEST_FORMAT
+    assert artifact["verifier_pack_junit_sha256"] == hashlib.sha256(
+        pack_xml.encode("utf-8")
+    ).hexdigest()
+    assert re.fullmatch(r"[0-9a-f]{64}", artifact["junit_sha256"])
+    assert artifact["junit_digest_format"] == JUNIT_COMPOSITE_DIGEST_FORMAT
+    expected_identity = (
+        JUNIT_COMPOSITE_DIGEST_FORMAT
+        + "\0repo\0"
+        + JUNIT_REPORT_SET_DIGEST_FORMAT
+        + "\0"
+        + artifact["repo_suite_junit_sha256"]
+        + "\0verifier-pack\0JUNIT_XML_SHA256\0"
+        + artifact["verifier_pack_junit_sha256"]
+    )
+    assert artifact["junit_sha256"] == hashlib.sha256(
+        expected_identity.encode("utf-8")
+    ).hexdigest()
 
 
 def test_pack_self_mutation_during_real_execution_is_detected(tmp_path: Path) -> None:

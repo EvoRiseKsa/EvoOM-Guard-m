@@ -57,7 +57,7 @@ semantic checks that JSON Schema cannot express; see
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "4.0.1",
+  "tool_version": "4.0.2",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -279,12 +279,20 @@ Core context binding includes:
   `blackbox_pack_isolation_evidence` prevent a later phase failure from erasing
   or overstating an earlier phase. A Docker client timeout claims start only
   when `docker inspect` independently returns a non-zero `StartedAt`.
-- Black-box composition fields `deleted_paths_applied`,
-  `repo_suite_started`, `repo_suite_completed`, `repo_suite_state`,
-  `repo_suite_passed`, and `repo_suite_junit_sha256`. Lifecycle states include
+- Phase-composition fields `deleted_paths_applied`, `repo_suite_started`,
+  `repo_suite_completed`, `repo_suite_state`, `repo_suite_passed`,
+  `repo_suite_tests_passed`, `repo_suite_tests_total`,
+  `repo_suite_verdict_source`, `repo_suite_returncode`, and
+  `repo_suite_junit_sha256` / `repo_suite_junit_digest_format`. Black-box lifecycle states include
   `not_required_blackbox_only`, `required_not_run_short_circuit`,
   `required_not_started`, `required_started_incomplete`, and
-  `composed_completed`; `repo_suite_passed` is `null` without a clean source.
+  `composed_completed`. Repo-native pack composition uses
+  `repo_phase_completed`; `repo_suite_passed` is `null` without a clean source.
+  For a clean repo+pack composite produced by v4.0.2 or later, `verify-record`
+  requires the explicit repo counts to equal the top-level counts minus the pack
+  counts and requires the boolean to agree with those counts, the phase source,
+  return code, and JUnit component identity. Older records remain verifiable
+  under their shipped, less expressive contract.
 - For repo-native pack composition, `runtime_tree_sha256`,
   `runtime_tree_digest_format: EVOGUARD_RUNTIME_TREE_V1`,
   `runtime_tree_entries`, `runtime_tree_bytes`,
@@ -296,19 +304,35 @@ Core context binding includes:
 
 - `junit_sha256` is the report/content digest.
 - `junit_digest_format: JUNIT_XML_SHA256` means SHA-256 over one JUnit XML text.
+- `junit_digest_format: EVOGUARD_JUNIT_REPORT_SET_V1` means SHA-256 over the
+  accepted report set in sorted filename order. The UTF-8 domain label
+  `EVOGUARD_JUNIT_REPORT_SET_V1\0` is followed by each UTF-8 filename and XML
+  document, both prefixed by an unsigned 64-bit big-endian byte length.
 - `junit_digest_format: EVOGUARD_JUNIT_COMPOSITE_V1` means SHA-256 over the
-  unambiguous UTF-8 framing
-  `repo\0<repo XML>\0verifier-pack\0<pack XML>`.
+  raw-XML UTF-8 framing `repo\0<repo XML>\0verifier-pack\0<pack XML>`. It is
+  retained for pre-v4.0.2 structured records and current exit-only repo commands,
+  which have no repo JUnit component digest to place in V2.
+- `junit_digest_format: EVOGUARD_JUNIT_COMPOSITE_V2` means SHA-256 over the
+  labelled UTF-8 framing
+  `EVOGUARD_JUNIT_COMPOSITE_V2\0repo\0<repo format>\0<repo digest>`
+  `\0verifier-pack\0JUNIT_XML_SHA256\0<pack digest>`. From v4.0.2 it is used for
+  every structured repo+pack JUnit composite, whether the repo component is one
+  XML document or a Maven/Surefire report set. This lets `verify-record`
+  recompute the top identity from the two attested component identities.
+- `verifier_pack_junit_sha256` / `verifier_pack_junit_digest_format` bind the
+  pack-phase JUnit component used by V2. They are distinct from the verifier-pack
+  source snapshot identity (`verifier_pack_sha256` / `EVOGUARD_PACK_V2`).
 
 Do not compare `junit_sha256` values without also checking
 `junit_digest_format`.
 
-For a directory-producing adapter such as Maven/Surefire, `parse_junit_dir`
+For a directory-producing adapter such as Maven/Surefire, the report-set parser
 accepts the set only when every `*.xml` entry is a readable regular file and
 parses under the same size/DTD/entity rules as a single report. Any symlink,
 special, unreadable, malformed, oversized, or DTD/entity-bearing sibling makes
 the directory yield no clean JUnit verdict; valid siblings are not counted
-partially.
+partially. Accepted sets carry `EVOGUARD_JUNIT_REPORT_SET_V1`, so their identity
+is bound even when the runner emits multiple files.
 
 ### Runtime-tree identity
 
@@ -345,7 +369,26 @@ and `total` counts, per-Python-file `executed`/`missed` line arrays,
 `unmeasured_files` and `caveat`, while unsupported execution modes emit the
 minimal two-field form. `verify-record` reconciles per-file totals and the
 producer percentage and enforces `min_diff_coverage` against a `PASS` or
-`diff_coverage_below_threshold` reason.
+`diff_coverage_below_threshold` reason. If the threshold is configured but the
+collector reports `measured: false`, the producer emits `ERROR` with
+`assurance_requirement_not_met`; the verifier requires that explicit
+unmeasured evidence and completed all-pass suite evidence for that reason.
+Per-file arrays identify changed physical source lines. A line is `executed`
+only with direct physical-line coverage evidence. Source-excluded, continuation,
+and otherwise unknown executable lines are `missed`, while comments, blanks,
+and docstrings remain outside the denominator. Code sharing a physical line
+with a docstring remains measurable, and lexer failure is conservative. The
+producer's one-decimal `percent` is a display value; policy comparison and
+record verification use the exact `executed/total` ratio.
+
+The `caveat` is load-bearing: repo-native candidate code and `coverage.py`
+share one Python process. A candidate can stop tracing or mutate the live
+`CoverageData`, including fabricating executed lines. Isolated collector startup
+and an empty rcfile prevent repository module/config shadowing but do not
+authenticate runtime coverage state. `verify-record` proves the record's
+internal arithmetic and policy consistency; it cannot convert candidate-writable
+coverage data into adversarial integrity evidence. Treat the threshold as a
+non-hostile-code quality signal, not an admission authority for an untrusted PR.
 
 ## Baseline object
 
@@ -356,9 +399,15 @@ cannot be proven faithful it may also contain `setup_fidelity` and
 `setup_fidelity_changes`; this makes the baseline unclean rather than silently
 comparing a different tree. Its scope remains `repo_suite_only`: a pack is
 candidate-only and is not run on the pristine baseline.
-`verify-record` additionally binds `require_demonstrated_fix` and a `PASS` to
-the recorded repair effect; changing only the human-facing effect label cannot
-make a failed fix gate internally consistent.
+`repair_effect` is derived from the pristine baseline and candidate repo-suite
+results before later evidence gates change the composite verdict. Consequently,
+a baseline `FAIL` plus an all-pass candidate suite remains `demonstrated` even
+when the final verdict is demoted by a coverage requirement. `verify-record`
+enforces that ordering as well as binding `require_demonstrated_fix` to the
+recorded effect; changing only the human-facing label cannot make a failed gate
+internally consistent.
+For repo-native verifier-pack composition, the candidate side of this comparison
+is the separately recorded repo phase, not the combined repo+pack verdict.
 
 ## Verdict and `reason_code`
 
@@ -379,7 +428,7 @@ make a failed fix gate internally consistent.
 | `ERROR` | `runtime_cleanup_failed` | The judge process group or a candidate container could not be proven absent after execution; a pending PASS/FAIL is invalidated fail-closed. |
 | `ERROR` | `test_command_unavailable` | Required test/pack interpreter or executable is unavailable. |
 | `ERROR` | `policy_requirement_unsupported` | Selected judge cannot enforce a requested gate; it is not silently dropped. |
-| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor or unavailable. |
+| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor, or required changed-line coverage is explicitly unavailable. |
 | `ERROR` | `setup_timeout` | Setup timed out. |
 | `ERROR` | `setup_failed` | Setup failed or changed judged paths outside trusted output exceptions. |
 | `FAIL` / `ERROR` | `test_timeout` | A required test phase timed out; exact verdict reflects the judge path. |
@@ -468,7 +517,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,

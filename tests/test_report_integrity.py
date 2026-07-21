@@ -169,10 +169,18 @@ class AssuranceProfileTests(unittest.TestCase):
             int(digest, 16)
             self.assertEqual(
                 attestation["junit_digest_format"],
-                "EVOGUARD_JUNIT_COMPOSITE_V1",
+                "EVOGUARD_JUNIT_COMPOSITE_V2",
             )
             self.assertNotEqual(
                 attestation["junit_digest_format"], "JUNIT_XML_SHA256"
+            )
+            self.assertEqual(
+                attestation["repo_suite_junit_digest_format"],
+                "JUNIT_XML_SHA256",
+            )
+            self.assertEqual(
+                attestation["verifier_pack_junit_digest_format"],
+                "JUNIT_XML_SHA256",
             )
 
 

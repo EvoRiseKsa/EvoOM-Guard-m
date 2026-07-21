@@ -9,10 +9,14 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
-## [4.0.1] — unreleased
+## [4.0.2] — unreleased
 
 ### Security
 
+- Candidate and black-box execution now use bounded process-group lifecycle,
+  positive cleanup proof, bounded reader/receipt draining, and stricter Docker
+  absence verification. Repo-native verifier-pack pytest collection is confined
+  to the accepted pack snapshot.
 - Shared trusted-finalizer and release-source raw Git reads now ignore ambient
   `GIT_*` process state and replacement refs, so derivation is bound to the
   explicitly selected repository and literal immutable object graph.
@@ -22,6 +26,66 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   launches the CLI in a managed process group, bounds tree cleanup and reader
   joins independently from the verification timeout, and cannot accept
   plausible partial JSON after a failed read.
+- Changed-line coverage now launches the installed collector before exposing
+  the candidate import path and ignores candidate repository coverage config.
+  A configured `min_diff_coverage` fails closed with
+  `assurance_requirement_not_met` when measurement is unavailable; optional
+  `diff_coverage` evidence still degrades explicitly without changing verdicts.
+  This hardens collector selection/configuration only; it does not make live
+  same-process coverage state trustworthy against hostile candidate code.
+- Coverage denominators now use structured file content plus token/AST physical
+  line classification. Candidate `pragma: no cover` exclusions, multi-line
+  statement continuations, unknown executable lines, and literal edit-block
+  marker text can no longer erase changed code from the required floor. The
+  classifier retains code sharing a docstring line and fails conservatively on
+  malformed token streams. Policy compares exact executed/total counts rather
+  than the rounded display percentage. Coverage replays configured setup under
+  its fidelity policy, preserves trusted runner/interpreter prefixes, and
+  forwards the main POSIX CPU/address-space limits. The Python API now makes
+  `min_diff_coverage` imply measurement and rejects non-finite, out-of-range, or
+  arbitrarily large floors with a stable `ValueError`.
+
+### Fixed
+
+- Baseline `repair_effect` now describes the pristine-base to candidate-suite
+  transition even when a later coverage requirement demotes the composite
+  verdict; record verification enforces the same ordering.
+- Repo-native verifier-pack composition now preserves the candidate repo
+  suite's phase result, counts, source, return code, and JUnit digest separately.
+  A failing pack no longer mislabels a real base-FAIL to candidate-suite-PASS
+  transition, and `verify-record` binds the phase claim to composite remainders.
+- Coverage reports now ignore imported files outside the throwaway repository,
+  including absolute paths on another Windows drive, instead of aborting before
+  a verdict record can be emitted.
+- Completed verifier packs that collect zero tests now remain a valid explicit
+  `ERROR/no_test_verdict` record; semantic verification permits the tightly
+  bound `0/0` pack count only for that fail-closed state.
+- Maven/Surefire report sets now carry a deterministic, length-framed digest of
+  every accepted report name and XML document. Repo+pack composition binds that
+  report-set digest and the pack XML digest under
+  `EVOGUARD_JUNIT_COMPOSITE_V2`; record verification rejects malformed,
+  missing, or mismatched repo-phase digest claims from v4.0.2 producers.
+
+### Changed
+
+- Execution, candidate-boundary, Docker, invocation-receipt, and black-box judge
+  kernels were extracted behind characterization, architecture-ratchet, and
+  security-mutation gates without changing the published v4.0.1 artifact.
+- Regenerated the 16-case live benchmark with source version 4.0.2. All expected
+  verdict labels matched: 11 true positives, 3 true negatives, 2 documented
+  policy false positives, and 0 false negatives.
+
+### Known limitations
+
+- Repo-native changed-line coverage is candidate-writable at runtime. Candidate
+  code shares the `coverage.py` process and can stop tracing or mutate
+  `CoverageData`, including fabricating executed lines. The emitted caveat,
+  CLI/Action help, and adoption guidance now state that `min_diff_coverage` is a
+  quality gate for non-hostile code, not adversarial admission evidence. A
+  pinned boundary regression proves the current false-PASS condition until an
+  independently controlled coverage producer exists.
+
+## [4.0.1] — 2026-07-20
 
 ### Fixed
 
@@ -33,21 +97,25 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Changed
 
-- The source version declares `4.0.1` for this correction. It is not a
-  published consumer release; see [release status](docs/RELEASE_STATUS.md).
+- The source version declares `4.0.1`; the immutable consumer release is
+  published as described in [release status](docs/RELEASE_STATUS.md).
 - JSON-schema examples now identify the current source runtime while retaining
   the unchanged historical schema identities under v3.8.0.
 - Regenerated the 16-case live benchmark with source version 4.0.1: all
   expected verdict labels matched (11 true positives, 3 true negatives, 2
   documented policy false positives, and 0 false negatives).
 
-### Publication boundary
+### Published release
 
-- `v4.0.1` has no published tag, GitHub Release, consumer asset, checksum, or
-  release provenance yet. It must not be installed, pinned, or described as
-  released until its immutable GitHub Release exists.
-- [`v4.0.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.0)
-  remains the latest published immutable consumer release.
+- [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
+  is published from commit
+  `5ed7e84017619496521b813f859a6a8bf0a2b1df`. Its primary
+  `evo-guard.pyz` asset has SHA-256
+  `81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7`.
+- The release also publishes `SHA256SUMS`; GitHub records both assets as
+  immutable release artifacts and the build workflow supplies artifact
+  provenance. See [release status](docs/RELEASE_STATUS.md) for the frozen
+  baseline and verification boundary.
 
 ## [4.0.0] — 2026-07-19
 

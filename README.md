@@ -70,8 +70,9 @@ correctness or security.
 
 > **v4 licensing and release status.** [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
 > is the current published immutable consumer release, carrying the **EvoRise
-> Source-Available License 1.0**. The repository source now aligns with this
-> release. Commercial licensing is administered by EvoRise Company. See
+> Source-Available License 1.0**. The repository source now prepares `v4.0.2`
+> as an unreleased patch; consumers pinned to `v4.0.1` do not receive those
+> source changes yet. Commercial licensing is administered by EvoRise Company. See
 > [LICENSE](LICENSE),
 > [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
 > [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md).
@@ -464,12 +465,20 @@ turns it into a gate for agent "fix" PRs (an undemonstrated PASS becomes FAIL,
 `fix_not_demonstrated`); a gate the selected judge cannot enforce is an ERROR
 (`policy_requirement_unsupported`), never silently dropped.
 
-A green suite is one signal, not a proof. Guard can now attach two more
-independent pieces of evidence to every verdict:
+A green suite is one signal, not a proof. Guard can attach two additional
+pieces of evidence to every verdict:
+
+> **Version boundary:** the published `v4.0.1` already has the coverage options,
+> but the fail-closed unavailable-measurement behavior, isolated collector
+> startup, exact-ratio comparison, conservative physical-line denominator,
+> setup/resource forwarding, and explicit candidate-writable caveat described
+> below are `v4.0.2` source changes and are not published yet. A consumer pinned
+> to `v4.0.1` must not assume those hardenings.
 
 ```bash
-# Which changed lines did the suite actually EXECUTE? (one extra suite run,
-# needs the 'cov' extra). Evidence by default; --min-diff-coverage makes it a gate:
+# Which changed lines did the suite actually EXECUTE? (one extra suite run and,
+# when configured, one extra setup; needs the 'cov' extra). Evidence by default;
+# --min-diff-coverage makes it a gate:
 evo-guard guard . --diff - --no-config --diff-coverage --min-diff-coverage 80
 
 # Judge-owned tests the PATCH CANNOT MODIFY (org invariants, integration
@@ -482,9 +491,29 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 
 - A `PASS` whose changed lines were never executed is a **hollow pass** — the
   report shows exactly which lines the suite never reached, and the optional
-  threshold flips it to `FAIL` (`diff_coverage_below_threshold`). Honest limit,
-  stated in the output itself: *executed is not asserted* — coverage is a floor
-  of scrutiny, not proof of correctness.
+  threshold flips it to `FAIL` (`diff_coverage_below_threshold`). If a required
+  measurement cannot be produced, the result is `ERROR`
+  (`assurance_requirement_not_met`), never `PASS`. The collector is imported in
+  isolated Python mode and ignores repository `.coveragerc`/`pyproject.toml`
+  coverage settings, so repository modules/config cannot replace the selected
+  collector or reconfigure it at startup. Trusted runner prefixes/interpreters
+  are preserved, and a configured setup is replayed under the same
+  fidelity/output policy; POSIX
+  CPU/address-space limits are forwarded to the extra processes. A changed
+  physical code line needs direct coverage evidence to count as executed;
+  source `pragma: no cover` exclusions and unknown or continuation lines count
+  as missed instead of disappearing from the denominator. Lexer failure is
+  conservative, and docstring filtering removes the string expression—not
+  other code sharing its line. The threshold uses the exact `executed/total`
+  ratio; the one-decimal `percent` is display only. Structured base/head file
+  content—not serialized marker parsing—is the coverage diff ground truth.
+  Honest limits: *executed is not asserted*. More importantly, candidate imports
+  and the collector still share one Python process. Candidate code can call
+  `Coverage.current()`, stop tracing, or add fabricated executed lines directly
+  to `CoverageData`; isolated startup and the empty rcfile do not prevent that.
+  Therefore `diff_coverage` and `min_diff_coverage` are quality/scrutiny signals
+  for non-hostile code, not evidence that can authorize an adversarial PR. Use
+  independent external verifier/finalizer evidence for hostile-code admission.
 - A patch overfitted to the visible tests fails the **Independent Verifier
   Pack** — org-owned checks injected at judgment time that the **patch cannot
   include or modify**. In 3.4, Guard snapshots the pack outside the candidate

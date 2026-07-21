@@ -48,6 +48,7 @@ import base64
 import binascii
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -474,7 +475,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="measure which changed lines the suite actually executed (one extra "
         "suite run under coverage; needs the 'cov' extra). Evidence only unless "
-        "--min-diff-coverage is set. Executed is not asserted.",
+        "--min-diff-coverage is set. Executed is not asserted; same-process "
+        "candidate code can mutate coverage state.",
     )
     coverage_group.add_argument(
         "--no-diff-coverage", dest="diff_coverage", action="store_const", const=False,
@@ -482,9 +484,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     g_p.add_argument(
         "--min-diff-coverage", dest="min_diff_coverage", type=float, default=None,
-        help="gate: a PASS whose measured changed-line coverage is below this "
-        "percentage becomes FAIL (diff_coverage_below_threshold); implies "
-        "--diff-coverage",
+        help="quality gate for non-hostile code: a PASS whose measured "
+        "changed-line coverage is below this "
+        "percentage becomes FAIL (diff_coverage_below_threshold); unavailable "
+        "measurement becomes ERROR (assurance_requirement_not_met); implies "
+        "--diff-coverage and ignores repository coverage config, but candidate "
+        "code still shares and can mutate the collector process",
     )
     g_p.add_argument(
         "--timeout", type=int, default=None,
@@ -1600,6 +1605,12 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
         if args.min_diff_coverage is not None
         else (_cfg_mdc if isinstance(_cfg_mdc, float) else None)
     )
+    if min_diff_coverage is not None and (
+        not math.isfinite(min_diff_coverage)
+        or not 0 <= min_diff_coverage <= 100
+    ):
+        out("usage: --min-diff-coverage must be a finite number between 0 and 100")
+        return 2
     _cfg_pid = cfg.get("policy_id")
     policy_id: str | None = _cfg_pid if isinstance(_cfg_pid, str) else None
     _cfg_pv = cfg.get("policy_version")

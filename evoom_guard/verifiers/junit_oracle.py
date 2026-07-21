@@ -7,9 +7,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import stat
+import struct
 import xml.etree.ElementTree as ET
 from typing import NamedTuple
 
@@ -77,6 +79,10 @@ _MAX_REPORT_BYTES = 8 * 1024 * 1024
 _MAX_REPORT_CHARS = _MAX_REPORT_BYTES
 _MAX_REPORT_SET_BYTES = 16 * 1024 * 1024
 _MAX_REPORT_FILES = 2_048
+
+JUNIT_XML_DIGEST_FORMAT = "JUNIT_XML_SHA256"
+JUNIT_REPORT_SET_DIGEST_FORMAT = "EVOGUARD_JUNIT_REPORT_SET_V1"
+JUNIT_COMPOSITE_DIGEST_FORMAT = "EVOGUARD_JUNIT_COMPOSITE_V2"
 
 
 def parse_junit_xml(xml_text: str) -> JUnitCounts | None:
@@ -154,7 +160,9 @@ def read_junit_xml(path: str) -> str | None:
     return _read_text_or_none(path)
 
 
-def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
+def parse_junit_dir_with_digest(
+    dirpath: str,
+) -> tuple[JUnitCounts, str] | None:
     """Merge every ``*.xml`` JUnit report in a directory into one count.
 
     For runners (Maven Surefire, …) that emit **one report file per test class**
@@ -169,6 +177,8 @@ def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
     if not dirpath or not os.path.isdir(dirpath):
         return None
     passed = total = failures = errors = 0
+    digest = hashlib.sha256()
+    digest.update((JUNIT_REPORT_SET_DIGEST_FORMAT + "\0").encode("ascii"))
     report_bytes = 0
     report_files = 0
     seen = False
@@ -200,6 +210,18 @@ def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
         counts = parse_junit_xml(text)
         if counts is None:
             return None
+        try:
+            name_bytes = fn.encode("utf-8")
+        except UnicodeEncodeError:
+            # The digest contract is portable UTF-8, not an opaque host
+            # filesystem byte sequence. Refuse an unrepresentable filename
+            # instead of aborting the verdict process.
+            return None
+        text_bytes = text.encode("utf-8")
+        digest.update(struct.pack(">Q", len(name_bytes)))
+        digest.update(name_bytes)
+        digest.update(struct.pack(">Q", len(text_bytes)))
+        digest.update(text_bytes)
         seen = True
         passed += counts.passed
         total += counts.total
@@ -207,12 +229,21 @@ def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
         errors += counts.errors
     if not seen:
         return None
-    return JUnitCounts(
-        passed=passed,
-        total=total,
-        failures=failures,
-        errors=errors,
+    return (
+        JUnitCounts(
+            passed=passed,
+            total=total,
+            failures=failures,
+            errors=errors,
+        ),
+        digest.hexdigest(),
     )
+
+
+def parse_junit_dir(dirpath: str) -> JUnitCounts | None:
+    """Compatibility wrapper returning only counts for a JUnit report set."""
+    result = parse_junit_dir_with_digest(dirpath)
+    return result[0] if result is not None else None
 
 
 def grade_repo_run(
@@ -255,10 +286,14 @@ def detect_tamper(
 
 
 __all__ = [
+    "JUNIT_COMPOSITE_DIGEST_FORMAT",
+    "JUNIT_REPORT_SET_DIGEST_FORMAT",
+    "JUNIT_XML_DIGEST_FORMAT",
     "JUnitCounts",
     "detect_tamper",
     "grade_repo_run",
     "parse_junit_dir",
+    "parse_junit_dir_with_digest",
     "parse_junit_xml",
     "parse_pytest_counts",
     "read_junit_xml",

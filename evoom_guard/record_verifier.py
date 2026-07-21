@@ -29,6 +29,11 @@ from evoom_guard.record_verification.report import (
 )
 from evoom_guard.record_verification.report import _Checks as _Checks
 from evoom_guard.strict_json import strict_json_loads as strict_json_loads
+from evoom_guard.verifiers.junit_oracle import (
+    JUNIT_COMPOSITE_DIGEST_FORMAT,
+    JUNIT_REPORT_SET_DIGEST_FORMAT,
+    JUNIT_XML_DIGEST_FORMAT,
+)
 
 _VERDICTS = _contract.VERDICTS
 _EXECUTION_STATES = _contract.EXECUTION_STATES
@@ -48,6 +53,17 @@ _VERDICT_SOURCES = frozenset(
         "blackbox",
         "composite:repo+verifier-pack",
         "composite:blackbox+repo",
+    }
+)
+_JUNIT_PHASE_FORMATS = frozenset(
+    {JUNIT_XML_DIGEST_FORMAT, JUNIT_REPORT_SET_DIGEST_FORMAT}
+)
+_JUNIT_TOP_FORMATS = frozenset(
+    {
+        JUNIT_XML_DIGEST_FORMAT,
+        JUNIT_REPORT_SET_DIGEST_FORMAT,
+        "EVOGUARD_JUNIT_COMPOSITE_V1",
+        JUNIT_COMPOSITE_DIGEST_FORMAT,
     }
 )
 _ISOLATIONS = frozenset({"not_run", "subprocess", "docker", "gvisor"})
@@ -163,11 +179,27 @@ def _is_int(value: object) -> TypeGuard[int]:
 
 
 def _is_number(value: object) -> TypeGuard[int | float]:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return isinstance(value, int) or math.isfinite(value)
+
+
+def _coverage_meets_threshold(
+    coverage: dict[str, Any] | None,
+    threshold: object,
+) -> bool:
+    """Compare the exact executed/total ratio, never its rounded display field."""
+    if not isinstance(coverage, dict) or coverage.get("measured") is not True:
+        return False
+    executed = coverage.get("executed")
+    total = coverage.get("total")
+    if not (_is_int(executed) and _is_int(total) and _is_number(threshold)):
+        return False
+    if isinstance(threshold, int):
+        floor_numerator, floor_denominator = threshold, 1
+    else:
+        floor_numerator, floor_denominator = threshold.as_integer_ratio()
+    return 100 * executed * floor_denominator >= floor_numerator * total
 
 
 def _known_string(value: object, allowed: frozenset[str]) -> bool:
@@ -697,6 +729,28 @@ def _nested_type_checks(
     for field in ("verifier_pack_tests_passed", "verifier_pack_tests_total"):
         if field in attestation and not _is_nullable_int(attestation[field]):
             errors.append(f"{field} must be an integer or null")
+    for field in (
+        "repo_suite_tests_passed",
+        "repo_suite_tests_total",
+        "repo_suite_returncode",
+    ):
+        if field in attestation and not _is_nullable_int(attestation[field]):
+            errors.append(f"{field} must be an integer or null")
+    for field in ("repo_suite_started", "repo_suite_completed", "repo_suite_passed"):
+        if field in attestation and not _is_nullable_bool(attestation[field]):
+            errors.append(f"{field} must be a boolean or null")
+    for field in (
+        "junit_sha256",
+        "junit_digest_format",
+        "verifier_pack_junit_sha256",
+        "verifier_pack_junit_digest_format",
+        "repo_suite_state",
+        "repo_suite_junit_sha256",
+        "repo_suite_junit_digest_format",
+        "repo_suite_verdict_source",
+    ):
+        if field in attestation and not _is_nullable_string(attestation[field]):
+            errors.append(f"{field} must be a string or null")
     for field in ("verifier_pack_sha256", "verifier_pack_digest_format"):
         if field in attestation and not _is_nullable_string(attestation[field]):
             errors.append(f"{field} must be a string or null")
@@ -722,6 +776,45 @@ def _nested_type_checks(
     policy_sha = attestation.get("policy_sha256")
     if not (isinstance(policy_sha, str) and bool(_HEX_64.fullmatch(policy_sha))):
         shape_errors.append("policy_sha256 must be a lowercase SHA-256")
+    junit_digest = attestation.get("junit_sha256")
+    junit_format = attestation.get("junit_digest_format")
+    if not (
+        (junit_digest is None and junit_format is None)
+        or (
+            isinstance(junit_digest, str)
+            and bool(_HEX_64.fullmatch(junit_digest))
+            and _known_string(junit_format, _JUNIT_TOP_FORMATS)
+        )
+    ):
+        shape_errors.append("junit digest and format must form a recognized SHA-256 pair")
+    if "repo_suite_junit_digest_format" in attestation:
+        repo_digest = attestation.get("repo_suite_junit_sha256")
+        repo_format = attestation.get("repo_suite_junit_digest_format")
+        if not (
+            (repo_digest is None and repo_format is None)
+            or (
+                isinstance(repo_digest, str)
+                and bool(_HEX_64.fullmatch(repo_digest))
+                and _known_string(repo_format, _JUNIT_PHASE_FORMATS)
+            )
+        ):
+            shape_errors.append(
+                "repo-suite JUnit digest and format must form a recognized SHA-256 pair"
+            )
+    if "verifier_pack_junit_digest_format" in attestation:
+        pack_junit_digest = attestation.get("verifier_pack_junit_sha256")
+        pack_junit_format = attestation.get("verifier_pack_junit_digest_format")
+        if not (
+            (pack_junit_digest is None and pack_junit_format is None)
+            or (
+                isinstance(pack_junit_digest, str)
+                and bool(_HEX_64.fullmatch(pack_junit_digest))
+                and pack_junit_format == JUNIT_XML_DIGEST_FORMAT
+            )
+        ):
+            shape_errors.append(
+                "verifier-pack JUnit digest and format must form a recognized SHA-256 pair"
+            )
     if not _known_string(attestation.get("execution_state"), _EXECUTION_STATES):
         shape_errors.append("execution_state is invalid")
     if not (
@@ -998,10 +1091,125 @@ def _completed_all_pass_evidence(record: dict[str, Any]) -> bool:
     )
 
 
+def _producer_version_at_least(
+    attestation: dict[str, Any], minimum: tuple[int, int, int]
+) -> bool:
+    """Compare the producer's numeric semantic version prefix."""
+    version = attestation.get("guard_version")
+    if not isinstance(version, str):
+        return False
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[^0-9].*)?", version)
+    if match is None:
+        return False
+    return tuple(int(part) for part in match.groups()) >= minimum
+
+
+def _requires_repo_phase_evidence(attestation: dict[str, Any]) -> bool:
+    """Whether the producer version implements the explicit repo-phase contract."""
+    policy = attestation.get("effective_policy")
+    return bool(
+        isinstance(policy, dict)
+        and policy.get("mode") == "repo"
+        and policy.get("verifier_pack_required") is True
+        and _producer_version_at_least(attestation, (4, 0, 2))
+    )
+
+
+def _repo_suite_pass_evidence(
+    record: dict[str, Any],
+    attestation: dict[str, Any] | None,
+) -> bool:
+    """Prove candidate repo-suite PASS independently of a composed pack."""
+    if not isinstance(attestation, dict):
+        return _completed_all_pass_evidence(record)
+    suite_passed = attestation.get("repo_suite_passed")
+    suite_count = attestation.get("repo_suite_tests_passed")
+    suite_total = attestation.get("repo_suite_tests_total")
+    suite_source = attestation.get("repo_suite_verdict_source")
+    suite_returncode = attestation.get("repo_suite_returncode")
+    suite_digest = attestation.get("repo_suite_junit_sha256")
+    suite_digest_format = attestation.get("repo_suite_junit_digest_format")
+    suite_digest_valid = (
+        isinstance(suite_digest, str)
+        and bool(_HEX_64.fullmatch(suite_digest))
+        and _known_string(suite_digest_format, _JUNIT_PHASE_FORMATS)
+        if suite_source == "junit+exit"
+        else suite_digest is None and suite_digest_format is None
+    )
+    phase_complete = (
+        attestation.get("repo_suite_started") is True
+        and attestation.get("repo_suite_completed") is True
+        and attestation.get("repo_suite_state") == "repo_phase_completed"
+        and isinstance(suite_passed, bool)
+        and _is_int(suite_count)
+        and _is_int(suite_total)
+        and _is_int(suite_returncode)
+        and suite_returncode in (0, 1)
+        and suite_source in ("junit+exit", "exit")
+        and suite_digest_valid
+    )
+    if not phase_complete:
+        if _requires_repo_phase_evidence(attestation):
+            return False
+        return _completed_all_pass_evidence(record)
+    suite_count_i = cast(int, suite_count)
+    suite_total_i = cast(int, suite_total)
+    suite_returncode_i = cast(int, suite_returncode)
+    if suite_source == "exit":
+        count_pass = (
+            suite_returncode_i == 0 and suite_count_i == 0 and suite_total_i == 0
+        )
+    else:
+        count_pass = (
+            suite_returncode_i == 0
+            and suite_total_i > 0
+            and suite_count_i == suite_total_i
+        )
+
+    # A clean composite carries the same repo counts as the top-level remainder.
+    # Bind the explicit phase snapshot to that independently checkable arithmetic.
+    if record.get("verdict_source") == "composite:repo+verifier-pack":
+        top_passed = record.get("tests_passed")
+        top_total = record.get("tests_total")
+        pack_passed = attestation.get("verifier_pack_tests_passed")
+        pack_total = attestation.get("verifier_pack_tests_total")
+        if not all(
+            _is_int(value)
+            for value in (top_passed, top_total, pack_passed, pack_total)
+        ):
+            return False
+        top_passed_i = cast(int, top_passed)
+        top_total_i = cast(int, top_total)
+        pack_passed_i = cast(int, pack_passed)
+        pack_total_i = cast(int, pack_total)
+        if (
+            suite_count_i != top_passed_i - pack_passed_i
+            or suite_total_i != top_total_i - pack_total_i
+        ):
+            return False
+    return suite_passed is True and count_pass
+
+
+def _required_coverage_unmeasured(
+    record: dict[str, Any], policy: dict[str, Any]
+) -> bool:
+    """Whether an all-pass run truthfully reports a required coverage shortfall."""
+    coverage = record.get("diff_coverage")
+    return (
+        _is_number(policy.get("min_diff_coverage"))
+        and policy.get("mode") == "repo"
+        and policy.get("isolation") == "subprocess"
+        and isinstance(coverage, dict)
+        and coverage.get("measured") is False
+        and _completed_all_pass_evidence(record)
+    )
+
+
 def _check_evidence_contracts(
     checks: _Checks,
     record: dict[str, Any],
     policy: dict[str, Any] | None,
+    attestation: dict[str, Any] | None,
 ) -> None:
     coverage_value = record.get("diff_coverage")
     coverage = coverage_value if isinstance(coverage_value, dict) else None
@@ -1047,28 +1255,44 @@ def _check_evidence_contracts(
     threshold = policy.get("min_diff_coverage")
     reason = record.get("reason_code")
     verdict = record.get("verdict")
-    measured_percent = (
-        coverage.get("percent")
+    measured_coverage = (
+        coverage
         if coverage_shape_valid
         and isinstance(coverage, dict)
         and coverage.get("measured") is True
         else None
     )
+    measured_meets_threshold = _coverage_meets_threshold(
+        measured_coverage, threshold
+    )
     coverage_semantics = True
     if reason == "diff_coverage_below_threshold":
         coverage_semantics = (
             _is_number(threshold)
-            and _is_number(measured_percent)
-            and measured_percent < threshold
+            and measured_coverage is not None
+            and not measured_meets_threshold
             and policy.get("mode") == "repo"
             and policy.get("isolation") == "subprocess"
             and _completed_all_pass_evidence(record)
         )
+    elif (
+        reason == "assurance_requirement_not_met"
+        and verdict == "ERROR"
+        and threshold is not None
+        and _completed_all_pass_evidence(record)
+    ):
+        # The same reason also represents report/isolation floor shortfalls.
+        # With a coverage gate present, either the measured threshold was met
+        # before another assurance floor failed, or coverage itself was
+        # explicitly unavailable and therefore could not authorize PASS.
+        coverage_semantics = _required_coverage_unmeasured(record, policy) or (
+            measured_coverage is not None and measured_meets_threshold
+        )
     elif verdict == "PASS" and threshold is not None:
         coverage_semantics = (
             _is_number(threshold)
-            and _is_number(measured_percent)
-            and measured_percent >= threshold
+            and measured_coverage is not None
+            and measured_meets_threshold
             and policy.get("mode") == "repo"
             and policy.get("isolation") == "subprocess"
         )
@@ -1102,17 +1326,20 @@ def _check_evidence_contracts(
             )
     if verdict == "PASS" and requested_baseline:
         baseline_semantics = baseline_semantics and baseline is not None
+    if isinstance(baseline, dict) and baseline.get("scope") == "repo_suite_only":
+        baseline_verdict = baseline.get("verdict")
+        candidate_suite_passed = _repo_suite_pass_evidence(record, attestation)
+        expected_effect = (
+            "unmeasured"
+            if baseline_verdict == "NO_CLEAN_VERDICT"
+            else "demonstrated"
+            if baseline_verdict == "FAIL" and candidate_suite_passed
+            else "not_demonstrated"
+        )
+        baseline_semantics = baseline_semantics and (
+            baseline.get("repair_effect") == expected_effect
+        )
     if verdict == "PASS" and isinstance(baseline, dict):
-        if baseline.get("scope") == "repo_suite_only":
-            baseline_verdict = baseline.get("verdict")
-            expected_effect = {
-                "FAIL": "demonstrated",
-                "PASS": "not_demonstrated",
-                "NO_CLEAN_VERDICT": "unmeasured",
-            }.get(baseline_verdict if isinstance(baseline_verdict, str) else "")
-            baseline_semantics = baseline_semantics and (
-                baseline.get("repair_effect") == expected_effect
-            )
         if policy.get("require_demonstrated_fix") is True:
             baseline_semantics = baseline_semantics and (
                 baseline.get("scope") == "repo_suite_only"
@@ -1170,6 +1397,7 @@ def _check_policy_runtime_bindings(
             < _ISOLATION_RANK.get(isolation_floor, 99)
         )
         floor_shortfall = report_shortfall or isolation_shortfall
+        coverage_shortfall = _required_coverage_unmeasured(record, policy)
         floor_valid = True
         if record.get("verdict") == "PASS":
             floor_valid = not floor_shortfall
@@ -1177,7 +1405,10 @@ def _check_policy_runtime_bindings(
             record.get("reason_code") == "assurance_requirement_not_met"
             and record.get("execution_state") == "completed"
         ):
-            floor_valid = floor_shortfall and _completed_all_pass_evidence(record)
+            floor_valid = (
+                (floor_shortfall or coverage_shortfall)
+                and _completed_all_pass_evidence(record)
+            )
         checks.expect(
             "policy.assurance_floors",
             floor_valid,
@@ -1335,6 +1566,49 @@ def _check_source_contract(
         and isinstance(pack_required, bool)
         and (source is None or _known_string(source, _VERDICT_SOURCES))
     )
+    junit_digest = attestation.get("junit_sha256")
+    junit_format = attestation.get("junit_digest_format")
+    legacy_missing_junit_identity = (
+        not _producer_version_at_least(attestation, (4, 0, 2))
+        and junit_digest is None
+        and junit_format is None
+    )
+    if source == "junit+exit":
+        structured_junit_identity = (
+            isinstance(junit_digest, str)
+            and bool(_HEX_64.fullmatch(junit_digest))
+            and _known_string(junit_format, _JUNIT_PHASE_FORMATS)
+        )
+        valid = valid and (
+            structured_junit_identity or legacy_missing_junit_identity
+        )
+    elif source == "exit":
+        valid = valid and junit_digest is None and junit_format is None
+    elif source in ("blackbox", "composite:blackbox+repo"):
+        valid = valid and (
+            (
+                isinstance(junit_digest, str)
+                and bool(_HEX_64.fullmatch(junit_digest))
+                and junit_format == JUNIT_XML_DIGEST_FORMAT
+            )
+            or legacy_missing_junit_identity
+        )
+    elif source == "composite:repo+verifier-pack":
+        repo_source = attestation.get("repo_suite_verdict_source")
+        expected_composite_format = (
+            JUNIT_COMPOSITE_DIGEST_FORMAT
+            if _requires_repo_phase_evidence(attestation)
+            and repo_source == "junit+exit"
+            else "EVOGUARD_JUNIT_COMPOSITE_V1"
+        )
+        valid = valid and (
+            (
+                isinstance(junit_digest, str)
+                and bool(_HEX_64.fullmatch(junit_digest))
+                and junit_format == expected_composite_format
+            )
+            or legacy_missing_junit_identity
+        )
     if not valid:
         checks.fail("source.mode_policy", "source policy fields are malformed")
         return
@@ -1632,6 +1906,15 @@ def _check_pack(
         "verifier_pack_snapshot_changed",
         "candidate_tree_changed_during_run",
     )
+    completed_zero_test_error = (
+        pack_completed
+        and pack_passed == 0
+        and pack_total == 0
+        and record.get("execution_state") == "completed"
+        and record.get("verdict") == "ERROR"
+        and record.get("reason_code") == "no_test_verdict"
+        and record.get("verdict_source") is None
+    )
     counts_valid = (
         _valid_count_pair(pack_passed, pack_total)
         and (
@@ -1640,6 +1923,7 @@ def _check_pack(
                 _is_int(pack_passed)
                 and _is_int(pack_total)
                 and pack_total > 0
+                or completed_zero_test_error
                 or post_execution_tamper
                 and null_counts
             )
@@ -1760,6 +2044,21 @@ def _check_composite(
         and attestation.get("verifier_pack_started") is True
         and attestation.get("verifier_pack_completed") is True
     )
+    repo_phase_claimed = any(
+        attestation.get(field) is not None
+        for field in (
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+        )
+    )
     if source == "composite:blackbox+repo":
         phase_valid = phase_valid and (
             attestation.get("repo_suite_started") is True
@@ -1781,6 +2080,93 @@ def _check_composite(
                 phase_valid = phase_valid and repo_total > 0 and repo_passed == repo_total
             else:
                 phase_valid = phase_valid and repo_total > 0 and repo_passed < repo_total
+    elif _requires_repo_phase_evidence(attestation) and not repo_phase_claimed:
+        phase_valid = False
+    elif repo_phase_claimed:
+        suite_passed = attestation.get("repo_suite_tests_passed")
+        suite_total = attestation.get("repo_suite_tests_total")
+        suite_source = attestation.get("repo_suite_verdict_source")
+        suite_returncode = attestation.get("repo_suite_returncode")
+        suite_digest = attestation.get("repo_suite_junit_sha256")
+        suite_digest_format = attestation.get("repo_suite_junit_digest_format")
+        suite_digest_valid = (
+            isinstance(suite_digest, str)
+            and bool(_HEX_64.fullmatch(suite_digest))
+            and _known_string(suite_digest_format, _JUNIT_PHASE_FORMATS)
+            if suite_source == "junit+exit"
+            else suite_digest is None and suite_digest_format is None
+        )
+        composite_digest_valid = True
+        if attestation.get("junit_digest_format") == JUNIT_COMPOSITE_DIGEST_FORMAT:
+            pack_digest = attestation.get("verifier_pack_junit_sha256")
+            pack_digest_format = attestation.get(
+                "verifier_pack_junit_digest_format"
+            )
+            top_digest = attestation.get("junit_sha256")
+            top_digest_format = attestation.get("junit_digest_format")
+            composite_digest_valid = (
+                isinstance(suite_digest, str)
+                and bool(_HEX_64.fullmatch(suite_digest))
+                and _known_string(suite_digest_format, _JUNIT_PHASE_FORMATS)
+                and isinstance(pack_digest, str)
+                and bool(_HEX_64.fullmatch(pack_digest))
+                and pack_digest_format == JUNIT_XML_DIGEST_FORMAT
+                and isinstance(top_digest, str)
+                and bool(_HEX_64.fullmatch(top_digest))
+                and top_digest_format == JUNIT_COMPOSITE_DIGEST_FORMAT
+            )
+            if composite_digest_valid:
+                composite_identity = (
+                    JUNIT_COMPOSITE_DIGEST_FORMAT
+                    + "\0repo\0"
+                    + cast(str, suite_digest_format)
+                    + "\0"
+                    + cast(str, suite_digest)
+                    + "\0verifier-pack\0"
+                    + JUNIT_XML_DIGEST_FORMAT
+                    + "\0"
+                    + cast(str, pack_digest)
+                )
+                composite_digest_valid = hashlib.sha256(
+                    composite_identity.encode("utf-8")
+                ).hexdigest() == cast(str, top_digest)
+        elif (
+            suite_digest_format == JUNIT_REPORT_SET_DIGEST_FORMAT
+            or _requires_repo_phase_evidence(attestation)
+            and suite_source == "junit+exit"
+        ):
+            composite_digest_valid = False
+        phase_valid = phase_valid and (
+            attestation.get("repo_suite_started") is True
+            and attestation.get("repo_suite_completed") is True
+            and attestation.get("repo_suite_state") == "repo_phase_completed"
+            and isinstance(attestation.get("repo_suite_passed"), bool)
+            and _is_int(suite_passed)
+            and _is_int(suite_total)
+            and suite_source in ("junit+exit", "exit")
+            and _is_int(suite_returncode)
+            and suite_returncode in (0, 1)
+            and suite_digest_valid
+            and composite_digest_valid
+        )
+        if numeric_counts is not None and _is_int(suite_passed) and _is_int(suite_total):
+            top_passed_i, top_total_i, pack_passed_i, pack_total_i = numeric_counts
+            repo_passed = top_passed_i - pack_passed_i
+            repo_total = top_total_i - pack_total_i
+            clean_repo_pass = (
+                suite_returncode == 0
+                and (
+                    suite_passed == 0 and suite_total == 0
+                    if suite_source == "exit"
+                    else suite_total > 0 and suite_passed == suite_total
+                )
+            )
+            phase_valid = phase_valid and (
+                pack_total_i > 0
+                and suite_passed == repo_passed
+                and suite_total == repo_total
+                and attestation.get("repo_suite_passed") is clean_repo_pass
+            )
     checks.expect(
         "composite.phase_semantics",
         bool(phase_valid),
@@ -1893,7 +2279,7 @@ def _verify_record(record: object) -> dict[str, Any]:
     _check_lifecycle(checks, record, assurance, attestation)
     _check_verdict_and_counts(checks, record)
     policy = _check_policy(checks, record, attestation)
-    _check_evidence_contracts(checks, record, policy)
+    _check_evidence_contracts(checks, record, policy, attestation)
     _check_policy_runtime_bindings(checks, record, assurance, attestation, policy)
     _check_receipts(checks, record, assurance, attestation)
     _check_isolation(checks, record, assurance, attestation)

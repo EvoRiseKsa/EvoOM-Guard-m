@@ -64,6 +64,10 @@ context fields from one byte snapshot, but two separate commands over a writable
 path are not one atomic admission decision. If used together for diagnostics,
 compare the `input_sha256` printed by both commands:
 
+For the same reason, arithmetic consistency of `diff_coverage` does not prove
+its runtime truth. Repo-native candidate code shares the `coverage.py` process
+and can mutate its live data; the record's `caveat` names this boundary.
+
 ```bash
 evo-guard verify-verdict verdict.json --pub evoguard-signing.pub \
   --expect-head-sha "$GITHUB_SHA" --expect-policy-sha "$EXPECTED_POLICY_SHA"

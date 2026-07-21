@@ -1471,6 +1471,678 @@ MUTATIONS = (
             "test_windows_process_group_contract"
         ),
     ),
+    Mutation(
+        name="diff-coverage-isolated-launch-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-I",\n'
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "run",\n'
+        ),
+        after=(
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "run",\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_candidate_coverage_module_and_config_cannot_disable_measurement"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-repository-config-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            '        "run",\n'
+            '        f"--rcfile={os.devnull}",\n'
+        ),
+        after=(
+            '        "run",\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_candidate_coverage_module_and_config_cannot_disable_measurement"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-report-isolated-launch-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-I",\n'
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "json",\n'
+        ),
+        after=(
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "json",\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_commands_use_isolated_python_and_ignore_repo_config"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-report-config-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            '        "json",\n'
+            '        f"--rcfile={os.devnull}",\n'
+        ),
+        after='        "json",\n',
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_commands_use_isolated_python_and_ignore_repo_config"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-wrapper-prefix-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "    return [\n"
+            "        *prefix,\n"
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-I",\n'
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "run",\n'
+        ),
+        after=(
+            "    return [\n"
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-I",\n'
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "run",\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_command_preserves_trusted_interpreter_and_wrapper_prefixes"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-report-environment-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "    return [\n"
+            "        *prefix,\n"
+            "        interpreter,\n"
+            "        *interpreter_options,\n"
+            '        "-I",\n'
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "json",\n'
+        ),
+        after=(
+            "    return [\n"
+            "        sys.executable,\n"
+            '        "-I",\n'
+            '        "-c",\n'
+            "        _TRUSTED_COVERAGE_LAUNCHER,\n"
+            '        "json",\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_command_preserves_trusted_interpreter_and_wrapper_prefixes"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-required-unmeasured-pass-bypass",
+        path="evoom_guard/guard.py",
+        before='            if coverage_evidence.get("measured") is not True:\n',
+        after=(
+            '            if False and coverage_evidence.get("measured") '
+            'is not True:\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_required_coverage_fails_closed_when_measurement_is_unavailable"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-required-clean-run-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "            require_passing_suite=(\n"
+            "                core_verdict_passed and min_diff_coverage is not None\n"
+            "            ),\n"
+        ),
+        after="            require_passing_suite=False,\n",
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_required_coverage_rejects_a_wrapped_suite_that_does_not_pass"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-cross-drive-path-crash",
+        path="evoom_guard/evidence.py",
+        before=(
+            "    except (OSError, ValueError):\n"
+            "        return None\n"
+        ),
+        after=(
+            "    except OSError:\n"
+            "        return None\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_external_or_cross_drive_coverage_paths_are_ignored_fail_closed"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-external-path-acceptance",
+        path="evoom_guard/evidence.py",
+        before="    return normalized if is_safe_relpath(normalized) else None\n",
+        after="    return normalized\n",
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_path_normalization_accepts_only_repo_relative_paths"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-baseline-effect-ordering-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            '        elif baseline_info.get("verdict") == "FAIL" '
+            "and candidate_suite_passed:\n"
+        ),
+        after=(
+            '        elif baseline_info.get("verdict") == "FAIL" and v == PASS:\n'
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_baseline_effect_survives_a_later_coverage_gate_demotion"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-record-baseline-ordering-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "        candidate_suite_passed = "
+            "_repo_suite_pass_evidence(record, attestation)\n"
+        ),
+        after='        candidate_suite_passed = verdict == "PASS"\n',
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_baseline_effect_survives_a_later_coverage_gate_demotion"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-baseline-phase-selection-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "    candidate_suite_passed = (\n"
+            "        repo_suite_pass_value is True if repo_suite_completed "
+            "else core_verdict_passed\n"
+            "    )\n"
+        ),
+        after="    candidate_suite_passed = core_verdict_passed\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-phase-snapshot-pass-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    repo_suite_passed=(\n"
+            "                        passed if verdict_source is not None else None\n"
+            "                    ),\n"
+        ),
+        after="                    repo_suite_passed=False,\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-record-phase-selection-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "        candidate_suite_passed = "
+            "_repo_suite_pass_evidence(record, attestation)\n"
+        ),
+        after=(
+            "        candidate_suite_passed = _completed_all_pass_evidence(record)\n"
+        ),
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-composite-phase-parity-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            '                and attestation.get("repo_suite_passed") '
+            "is clean_repo_pass\n"
+        ),
+        after="                and True\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-zero-test-record-rejection",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "                and pack_total > 0\n"
+            "                or completed_zero_test_error\n"
+        ),
+        after="                and pack_total > 0\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_completed_zero_test_pack_is_a_valid_no_verdict_error"
+        ),
+    ),
+    Mutation(
+        name="junit-report-set-content-digest-bypass",
+        path="evoom_guard/verifiers/junit_oracle.py",
+        before="        digest.update(text_bytes)\n",
+        after="        digest.update(b\"\")\n",
+        test=(
+            "tests/test_adversarial_integrity_boundaries.py::"
+            "test_junit_report_set_digest_is_deterministic_and_content_bound"
+        ),
+    ),
+    Mutation(
+        name="junit-report-set-format-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    repo_junit_digest_format = "
+            "JUNIT_REPORT_SET_DIGEST_FORMAT\n"
+        ),
+        after="                    repo_junit_digest_format = None\n",
+        test=(
+            "tests/test_adversarial_integrity_boundaries.py::"
+            "test_maven_report_set_and_pack_are_both_bound_into_composite_evidence"
+        ),
+    ),
+    Mutation(
+        name="junit-composite-pack-digest-substitution",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                            + pack_junit_sha256\n",
+        after="                            + repo_junit_sha256\n",
+        test=(
+            "tests/test_adversarial_integrity_boundaries.py::"
+            "test_maven_report_set_and_pack_are_both_bound_into_composite_evidence"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-composite-digest-parity-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=").hexdigest() == cast(str, top_digest)\n",
+        after=").hexdigest() == cast(str, top_digest) or True\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="repo-junit-source-format-parity-bypass",
+        path="evoom_guard/record_verifier.py",
+        before="            and _known_string(junit_format, _JUNIT_PHASE_FORMATS)\n",
+        after="            and _known_string(junit_format, _JUNIT_TOP_FORMATS)\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_real_completed_repo_records_are_semantically_valid[False]"
+        ),
+    ),
+    Mutation(
+        name="repo-junit-current-missing-identity-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "        not _producer_version_at_least(attestation, (4, 0, 2))\n"
+        ),
+        after="        True\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_real_completed_repo_records_are_semantically_valid[False]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-required-phase-contract-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "    elif _requires_repo_phase_evidence(attestation) and not "
+            "repo_phase_claimed:\n"
+        ),
+        after=(
+            "    elif False and _requires_repo_phase_evidence(attestation) and not "
+            "repo_phase_claimed:\n"
+        ),
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-source-exclusion-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "        if line in excluded_known:\n"
+            "            missed.append(line)\n"
+            "            source_exclusion_seen = True\n"
+        ),
+        after=(
+            "        if line in excluded_known:\n"
+            "            continue\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_inline_no_cover_cannot_remove_changed_statements_from_the_floor"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-inline-docstring-code-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "            if any(\n"
+            "                start <= item.start and item.end <= end\n"
+            "                for start, end in docstring_spans\n"
+            "            ):\n"
+            "                continue\n"
+        ),
+        after=(
+            "            if any(\n"
+            "                start[0] <= item.start[0] <= end[0]\n"
+            "                for start, end in docstring_spans\n"
+            "            ):\n"
+            "                continue\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_code_after_docstring_on_the_same_line_remains_in_the_floor"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-tokenizer-failure-bypass",
+        path="evoom_guard/evidence.py",
+        before="        return set(range(1, len(source_lines) + 1))\n",
+        after="        return code_lines\n",
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_tokenizer_failure_counts_touched_lines_conservatively"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-unknown-executable-line-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "        else:\n"
+            "            # Missing and unknown executable lines both fail conservatively.\n"
+            "            # In particular, execution of a multi-line statement's first line\n"
+            "            # does not prove a short-circuited continuation was evaluated.\n"
+            "            missed.append(line)\n"
+        ),
+        after=(
+            "        else:\n"
+            "            continue\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_multiline_statement_continuation_cannot_disappear_from_the_floor"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-unimported-source-classification-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "            executed, missed, _ = _classify_touched_lines(\n"
+            "                new_contents.get(path), touched, {}\n"
+            "            )\n"
+        ),
+        after=(
+            "            executed, missed = [], sorted(touched)\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_comment_only_change_in_unimported_file_is_not_a_false_gap"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-structured-file-blocks-bypass",
+        path="evoom_guard/evidence.py",
+        before="        repo_path, candidate, file_blocks=file_blocks\n",
+        after="        repo_path, candidate, file_blocks=None\n",
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_structured_file_blocks_are_the_coverage_diff_ground_truth"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-setup-forwarding-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "            setup_command=setup_command, "
+            "setup_output_globs=setup_output_globs,\n"
+        ),
+        after=(
+            "            setup_command=None, "
+            "setup_output_globs=setup_output_globs,\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_replays_setup_with_the_main_fidelity_policy"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-setup-fidelity-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "    changes = setup_fidelity_changes(before, after)\n"
+            "    if changes:\n"
+        ),
+        after=(
+            "    changes = []\n"
+            "    if changes:\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_setup_cannot_rewrite_judged_source"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-setup-resource-limit-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "            timeout=timeout,\n"
+            "            preexec_fn=preexec_fn,\n"
+            "        )\n"
+            "        after = setup_fidelity_snapshot(\n"
+        ),
+        after=(
+            "            timeout=timeout,\n"
+            "            preexec_fn=None,\n"
+            "        )\n"
+            "        after = setup_fidelity_snapshot(\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_subprocesses_receive_the_main_resource_limits"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-suite-resource-limit-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "            coverage_run = _run_bounded_subprocess(\n"
+            "                wrapped,\n"
+            "                cwd=copy,\n"
+            "                env=env,\n"
+            "                timeout=timeout,\n"
+            "                preexec_fn=preexec_fn,\n"
+            "            )\n"
+        ),
+        after=(
+            "            coverage_run = _run_bounded_subprocess(\n"
+            "                wrapped,\n"
+            "                cwd=copy,\n"
+            "                env=env,\n"
+            "                timeout=timeout,\n"
+            "                preexec_fn=None,\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_subprocesses_receive_the_main_resource_limits"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-report-resource-limit-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "                timeout=60,\n"
+            "                preexec_fn=preexec_fn,\n"
+            "            )\n"
+        ),
+        after=(
+            "                timeout=60,\n"
+            "                preexec_fn=None,\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_coverage_subprocesses_receive_the_main_resource_limits"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-memory-policy-forwarding-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "            setup_command=setup_command, "
+            "setup_output_globs=setup_output_globs,\n"
+            "            timeout=timeout, mem_limit_mb=mem_limit_mb,\n"
+            "            file_blocks=file_blocks,\n"
+        ),
+        after=(
+            "            setup_command=setup_command, "
+            "setup_output_globs=setup_output_globs,\n"
+            "            timeout=timeout, mem_limit_mb=1024,\n"
+            "            file_blocks=file_blocks,\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_guard_forwards_the_configured_memory_limit_to_coverage"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-exact-ratio-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "                if isinstance(min_diff_coverage, int):\n"
+            "                    floor_numerator, floor_denominator = "
+            "min_diff_coverage, 1\n"
+            "                else:\n"
+            "                    floor_numerator, floor_denominator = (\n"
+            "                        min_diff_coverage.as_integer_ratio()\n"
+            "                    )\n"
+            "                coverage_below_floor = (\n"
+            "                    coverage_total > 0\n"
+            "                    and 100 * coverage_executed * floor_denominator\n"
+            "                    < floor_numerator * coverage_total\n"
+            "                )\n"
+        ),
+        after=(
+            "                coverage_below_floor = (\n"
+            "                    float(coverage_evidence['percent'])\n"
+            "                    < min_diff_coverage\n"
+            "                )\n"
+        ),
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_exact_ratio_not_rounded_display_controls_the_floor"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-record-exact-ratio-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "    if isinstance(threshold, int):\n"
+            "        floor_numerator, floor_denominator = threshold, 1\n"
+            "    else:\n"
+            "        floor_numerator, floor_denominator = threshold.as_integer_ratio()\n"
+            "    return 100 * executed * floor_denominator >= floor_numerator * total\n"
+        ),
+        after="    return coverage['percent'] >= threshold\n",
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_exact_ratio_not_rounded_display_controls_the_floor"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-record-huge-number-overflow",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "    if isinstance(value, bool) or not isinstance(value, (int, float)):\n"
+            "        return False\n"
+            "    return isinstance(value, int) or math.isfinite(value)\n"
+        ),
+        after=(
+            "    return (\n"
+            "        isinstance(value, (int, float))\n"
+            "        and not isinstance(value, bool)\n"
+            "        and math.isfinite(value)\n"
+            "    )\n"
+        ),
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_effective_policy_requires_all_24_typed_fields"
+            "[min-diff-coverage-huge-int]"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-api-floor-implication-bypass",
+        path="evoom_guard/guard.py",
+        before="    diff_coverage = diff_coverage or min_diff_coverage is not None\n",
+        after="    diff_coverage = diff_coverage\n",
+        test=(
+            "tests/test_diff_coverage_trust.py::"
+            "test_python_api_coverage_floor_implies_measurement"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-floor-validation-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "    if (\n"
+            "        min_diff_coverage is not None\n"
+            "        and (\n"
+        ),
+        after=(
+            "    if False and (\n"
+            "        min_diff_coverage is not None\n"
+            "        and (\n"
+        ),
+        test=(
+            "tests/test_guard.py::MemLimitOptionTests::"
+            "test_guard_api_rejects_values_that_cannot_form_a_valid_policy"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-required-shortfall-proof-bypass",
+        path="evoom_guard/record_verifier.py",
+        before="                (floor_shortfall or coverage_shortfall)\n",
+        after="                floor_shortfall\n",
+        test=(
+            "tests/test_record_verifier.py::"
+            "test_required_unmeasured_coverage_record_is_a_valid_assurance_error"
+        ),
+    ),
 )
 
 

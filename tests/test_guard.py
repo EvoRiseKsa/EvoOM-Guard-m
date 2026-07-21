@@ -722,6 +722,21 @@ class MemLimitOptionTests(unittest.TestCase):
                 ValueError, "mem_limit_mb must be a non-negative integer"
             ):
                 guard_mod.guard(self.root, candidate, mem_limit_mb=mem_limit)  # type: ignore[arg-type]
+        for coverage_floor in (
+            -1.0,
+            100.1,
+            float("nan"),
+            float("inf"),
+            True,
+            "80",
+            10**10000,
+        ):
+            with self.subTest(coverage_floor=coverage_floor), self.assertRaisesRegex(
+                ValueError, "min_diff_coverage must be a finite number between 0 and 100"
+            ):
+                guard_mod.guard(  # type: ignore[arg-type]
+                    self.root, candidate, min_diff_coverage=coverage_floor
+                )
 
     def test_guard_threads_mem_limit_to_verifier(self) -> None:
         import evoom_guard.guard as guard_mod

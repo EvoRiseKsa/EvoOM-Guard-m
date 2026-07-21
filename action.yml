@@ -99,11 +99,11 @@ inputs:
     required: false
     default: ""
   diff-coverage:
-    description: "'true' measures which changed lines the suite actually executed (one extra suite run; installs the 'cov' extra). Evidence only unless min-diff-coverage is set."
+    description: "'true' measures which changed lines the suite actually executed (one extra suite run plus configured setup replay; installs the 'cov' extra). Same-process candidate code can mutate coverage state; use as a non-hostile-code quality signal, not adversarial integrity evidence."
     required: false
     default: "false"
   min-diff-coverage:
-    description: "Gate: a PASS whose measured changed-line coverage is below this percentage becomes FAIL (diff_coverage_below_threshold). Implies diff-coverage."
+    description: "Quality gate for non-hostile code: the exact executed/total ratio below this percentage becomes FAIL; unavailable measurement becomes ERROR. Isolated startup blocks module/config shadowing, but candidate code shares and can mutate the collector process. Implies diff-coverage."
     required: false
     default: ""
   baseline-evidence:

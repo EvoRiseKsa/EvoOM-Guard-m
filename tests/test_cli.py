@@ -717,6 +717,26 @@ def test_cmd_guard_rejects_invalid_runtime_ranges(
     assert message in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("value", ["-1", "100.1", "nan", "inf"])
+def test_cmd_guard_rejects_invalid_coverage_floor(tmp_path, capsys, value) -> None:
+    patch = tmp_path / "candidate.patch"
+    patch.write_text("<<<FILE: app.py>>>\nx = 1\n<<<END FILE>>>", encoding="utf-8")
+
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(patch),
+            "--min-diff-coverage",
+            value,
+        ]
+    )
+
+    assert code == 2
+    assert "finite number between 0 and 100" in capsys.readouterr().out
+
+
 def test_load_config_reads_policy_contract_keys(tmp_path):
     p = tmp_path / ".evoguard.json"
     p.write_text(json.dumps({

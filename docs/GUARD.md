@@ -134,6 +134,60 @@ the verdict matches the real merge. `--json` writes the machine-readable verdict
 The report shows the `Input` (`diff` / `base/head` / `edit blocks`) and, for
 `--diff`, the `Base reconstruction` (`ok` / `failed`).
 
+### Changed-line coverage: `--diff-coverage` / `--min-diff-coverage`
+
+> **Version boundary:** `v4.0.1` is the latest published release and supports
+> these options. The fail-closed unavailable-measurement behavior, isolated
+> collector startup, exact-ratio comparison, conservative physical-line
+> denominator, setup/resource forwarding, and explicit candidate-writable
+> caveat below are `v4.0.2` source changes and are not yet published.
+
+Optional `--diff-coverage` runs the pytest suite once more (and replays a
+configured setup once) and records which changed Python statements executed. It
+remains evidence only. A configured
+`--min-diff-coverage` is a requirement: measured coverage below the threshold
+is `FAIL diff_coverage_below_threshold`; an unavailable measurement is `ERROR
+assurance_requirement_not_met`, never `PASS`.
+
+The coverage subprocess starts in Python isolated mode, imports the installed
+collector before adding the candidate root for project imports, and uses an
+explicit empty coverage rcfile. Candidate `coverage.py`/`coverage/` modules and
+repository `.coveragerc` or `pyproject.toml` coverage settings therefore do not
+select or configure the judge collector. Both the run and report commands use
+these protections. Trusted interpreter/wrapper prefixes are preserved (for
+example `venv/python -m pytest` or `uv run pytest`); `coverage` must be installed
+in that selected Python environment or required measurement fails closed.
+Configured setup is replayed under the same `setup_output_globs` fidelity
+policy. Wall/output/cleanup bounds apply to setup, run, and report, and the main
+suite's POSIX CPU/address-space limits are forwarded.
+
+Token/AST classification removes comments, blanks, and the docstring expression
+itself, but retains executable code sharing a docstring's physical line. Lexer
+failure treats affected physical lines as potentially executable/missed. Every
+remaining changed physical code line needs direct coverage evidence to count as
+executed; continuation/unknown lines and source `pragma: no cover` exclusions
+count as missed. The gate compares the exact `executed/total` ratio; `percent`
+is rounded to one decimal for display only. Structured
+`file_blocks` are the ground truth for base/head and diff inputs, including
+files containing literal edit-block marker text. This is hardening, not a new
+sandbox: repo-native
+candidate tests and coverage still execute inside the same judged Python
+process. Candidate code can call `Coverage.current()`, stop tracing, or mutate
+the live `CoverageData` to report unexecuted lines as executed. The isolated
+launcher and empty rcfile block repository module/config shadowing only; they do
+not authenticate runtime coverage state. `min_diff_coverage` is therefore a
+quality gate for non-hostile code, not an adversarial acceptance control. For
+untrusted PR admission, keep this signal advisory and require independently
+produced external verifier/finalizer evidence. “Executed” also does not mean
+“asserted”. Conservative physical-line
+classification can therefore create false negatives on continuations that
+coverage does not name directly. Use the stronger black-box/
+external verifier architecture for an external-process evidence boundary.
+Coverage entries for imports outside the throwaway repository are ignored;
+changed repository files still remain in the denominator as missed when no
+matching in-repository entry exists. This includes cross-drive absolute paths
+on Windows and prevents an external helper from aborting record production.
+
 ### Differential evidence: `--baseline-evidence` (opt-in)
 
 "All tests pass on head" does not by itself show the change **fixed** anything —
@@ -158,6 +212,15 @@ enforce is refused, never silently dropped; an evidence-only request in those
 modes attaches an explicit *unmeasured* record instead. The measured baseline
 also records `scope: repo_suite_only` — a verifier pack (if any) is exercised
 only on the candidate run.
+`repair_effect` describes the candidate suite transition itself. If that suite
+passes after a failing baseline, the effect remains `demonstrated` even when a
+separate later gate (for example required changed-line coverage) makes the final
+composite verdict non-PASS.
+With a repo-native verifier pack, Guard records the candidate repo phase before
+composing the pack result. A pack failure therefore still leaves an auditable
+base-FAIL to candidate-repo-PASS transition; the attestation carries the repo
+counts/source/return code and `verify-record` reconciles them with the composite
+totals. A detached verdict signature, when configured, covers that attestation.
 
 ### `--diff` safety (for untrusted PRs)
 
@@ -385,9 +448,13 @@ changed snapshot. A policy path alone proves only `configured: true`.
 
 The attestation identifies both digest algorithms. Pack content uses
 `verifier_pack_digest_format: EVOGUARD_PACK_V2`. A single JUnit document uses
-`junit_digest_format: JUNIT_XML_SHA256`; a repo-native repo+pack result uses
-`EVOGUARD_JUNIT_COMPOSITE_V1`, which frames and hashes both XML documents. Check
-the format field whenever comparing a stored digest.
+`junit_digest_format: JUNIT_XML_SHA256`. `EVOGUARD_JUNIT_COMPOSITE_V1` names the
+raw-XML framing used by legacy structured records and retained for exit-only repo
+commands. Structured repo+pack results from v4.0.2 use
+`EVOGUARD_JUNIT_COMPOSITE_V2`, which binds labelled component formats and digests
+and can be recomputed by `verify-record`. Maven/Surefire directories use
+`EVOGUARD_JUNIT_REPORT_SET_V1` as their repo component. Check the format field
+whenever comparing a stored digest.
 
 See [`START_HERE.md`](START_HERE.md) to pick a path, [`BLACKBOX.md`](BLACKBOX.md)
 for the judge, and [`ASSURANCE.md`](ASSURANCE.md) for what each level proves.
@@ -470,7 +537,9 @@ not be reproduced or differed.
 **Directory JUnit is all-or-nothing.** Maven/Surefire-style report directories
 are rejected as a whole if any `*.xml` entry is symlinked, special, unreadable,
 malformed, oversized, or contains a DTD/ENTITY. A clean sibling cannot mask a
-missing or hostile piece of the report set.
+missing or hostile piece of the report set. Every accepted filename and XML
+document is bound under `EVOGUARD_JUNIT_REPORT_SET_V1` in deterministic sorted
+order.
 
 For untrusted/public input prefer **`--isolation gvisor`** — the same judge
 through the gVisor `runsc` runtime (a

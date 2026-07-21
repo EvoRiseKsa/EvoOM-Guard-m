@@ -248,6 +248,15 @@ from evoom_guard.verifiers.harness_policy import (
     restore_judge_package_json as restore_judge_package_json,
 )
 from evoom_guard.verifiers.junit_oracle import (
+    JUNIT_COMPOSITE_DIGEST_FORMAT as JUNIT_COMPOSITE_DIGEST_FORMAT,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    JUNIT_REPORT_SET_DIGEST_FORMAT as JUNIT_REPORT_SET_DIGEST_FORMAT,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    JUNIT_XML_DIGEST_FORMAT as JUNIT_XML_DIGEST_FORMAT,
+)
+from evoom_guard.verifiers.junit_oracle import (
     JUnitCounts as JUnitCounts,
 )
 from evoom_guard.verifiers.junit_oracle import (
@@ -261,6 +270,9 @@ from evoom_guard.verifiers.junit_oracle import (
 )
 from evoom_guard.verifiers.junit_oracle import (
     parse_junit_dir as parse_junit_dir,
+)
+from evoom_guard.verifiers.junit_oracle import (
+    parse_junit_dir_with_digest as parse_junit_dir_with_digest,
 )
 from evoom_guard.verifiers.junit_oracle import (
     parse_junit_xml as parse_junit_xml,
@@ -277,6 +289,12 @@ from evoom_guard.workspace import (
     read_text_within_root,
     write_text_within_root,
 )
+
+# Stable intra-package facades for evidence/baseline phases. The leading-
+# underscore implementations remain local compatibility names, while callers
+# outside ``verifiers`` avoid private cross-package imports.
+setup_fidelity_changes = _setup_fidelity_changes
+setup_fidelity_snapshot = _setup_fidelity_snapshot
 
 try:  # POSIX-only; absent on Windows.
     import resource
@@ -376,6 +394,10 @@ def _resolve_host_command(
         if resolved:
             return [resolved, *command[1:]]
     return list(command)
+
+
+resolve_host_command = _resolve_host_command
+
 
 class RepoProblem(TypedDict, total=False):
     """A repo-level problem definition."""
@@ -1774,16 +1796,28 @@ class RepoVerifier:
 
             xml_text = _read_text_or_none(host_xml) or ""
             junit = parse_junit_xml(xml_text)
+            repo_junit_sha256 = (
+                hashlib.sha256(xml_text.encode("utf-8")).hexdigest()
+                if junit is not None and xml_text
+                else None
+            )
+            repo_junit_digest_format = (
+                JUNIT_XML_DIGEST_FORMAT if repo_junit_sha256 is not None else None
+            )
             if junit is None:
                 # Directory-based runners (Maven Surefire) write one report file per
                 # test class into a judge-owned dir derived as ``<report>.d``.
-                junit = parse_junit_dir(host_xml + ".d")
+                report_set = parse_junit_dir_with_digest(host_xml + ".d")
+                if report_set is not None:
+                    junit, repo_junit_sha256 = report_set
+                    repo_junit_digest_format = JUNIT_REPORT_SET_DIGEST_FORMAT
             passed, score, tests_passed, tests_total = grade_repo_run(
                 r.returncode, junit, report_expected=report_expected
             )
             tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
             output = r.stdout + "\n" + r.stderr
-            combined_junit = xml_text
+            junit_sha256 = repo_junit_sha256
+            junit_digest_format = repo_junit_digest_format
             verdict_source = _clean_verdict_source(
                 r.returncode, junit, report_expected=report_expected
             )
@@ -1799,8 +1833,31 @@ class RepoVerifier:
                     "\nstrict_harness requires a non-empty structured JUnit "
                     "test verdict; exit-only/zero-test success was rejected"
                 )
+            # Preserve the repo phase before a verifier pack is composed into
+            # the top-level result. Baseline evidence is explicitly scoped to
+            # this phase, so a later pack failure must not turn repo PASS into
+            # an apparent candidate-suite failure. These facts are copied into
+            # the attestation (and any configured detached signature) and bound
+            # to the composite count remainder.
+            if pack_dir:
+                trace.update(
+                    repo_suite_started=True,
+                    repo_suite_completed=True,
+                    repo_suite_state="repo_phase_completed",
+                    repo_suite_passed=(
+                        passed if verdict_source is not None else None
+                    ),
+                    repo_suite_tests_passed=tests_passed,
+                    repo_suite_tests_total=tests_total,
+                    repo_suite_verdict_source=verdict_source,
+                    repo_suite_returncode=r.returncode,
+                    repo_suite_junit_sha256=repo_junit_sha256,
+                    repo_suite_junit_digest_format=repo_junit_digest_format,
+                )
             pack_tests_passed: int | None = None
             pack_tests_total: int | None = None
+            pack_junit_sha256: str | None = None
+            pack_junit_digest_format: str | None = None
             outcome: str | None = (
                 None if verdict_source is not None else "no_test_verdict"
             )
@@ -2115,6 +2172,16 @@ class RepoVerifier:
                 runtime_continuity = runtime_delivery
                 pack_xml_text = _read_text_or_none(pack_xml) or ""
                 pack_junit = parse_junit_xml(pack_xml_text)
+                pack_junit_sha256 = (
+                    hashlib.sha256(pack_xml_text.encode("utf-8")).hexdigest()
+                    if pack_xml_text
+                    else None
+                )
+                pack_junit_digest_format = (
+                    JUNIT_XML_DIGEST_FORMAT
+                    if pack_junit_sha256 is not None
+                    else None
+                )
                 pack_passed, pack_score, pack_tests_passed, pack_tests_total = grade_repo_run(
                     pack_run.returncode,
                     pack_junit,
@@ -2149,9 +2216,39 @@ class RepoVerifier:
                 tests_passed += pack_tests_passed or 0
                 tests_total += pack_tests_total or 0
                 output += "\n" + pack_run.stdout + "\n" + pack_run.stderr
-                combined_junit = (
-                    "repo\0" + xml_text + "\0verifier-pack\0" + pack_xml_text
-                )
+                if repo_junit_digest_format in (
+                    JUNIT_XML_DIGEST_FORMAT,
+                    JUNIT_REPORT_SET_DIGEST_FORMAT,
+                ):
+                    if repo_junit_sha256 is not None and pack_junit_sha256 is not None:
+                        composite_identity = (
+                            JUNIT_COMPOSITE_DIGEST_FORMAT
+                            + "\0repo\0"
+                            + repo_junit_digest_format
+                            + "\0"
+                            + repo_junit_sha256
+                            + "\0verifier-pack\0"
+                            + JUNIT_XML_DIGEST_FORMAT
+                            + "\0"
+                            + pack_junit_sha256
+                        )
+                        junit_sha256 = hashlib.sha256(
+                            composite_identity.encode("utf-8")
+                        ).hexdigest()
+                        junit_digest_format = JUNIT_COMPOSITE_DIGEST_FORMAT
+                    else:
+                        junit_sha256 = None
+                        junit_digest_format = None
+                else:
+                    # Preserve the historical V1 raw-XML framing for existing
+                    # single-document and exit-only repo adapters.
+                    combined_junit = (
+                        "repo\0" + xml_text + "\0verifier-pack\0" + pack_xml_text
+                    )
+                    junit_sha256 = hashlib.sha256(
+                        combined_junit.encode("utf-8")
+                    ).hexdigest()
+                    junit_digest_format = "EVOGUARD_JUNIT_COMPOSITE_V1"
                 verdict_source = (
                     "composite:repo+verifier-pack"
                     if verdict_source is not None and pack_verdict_source is not None
@@ -2176,19 +2273,23 @@ class RepoVerifier:
                     "verdict_source": verdict_source,
                     "outcome": outcome,
                     "tamper": tampered,
-                    "junit_sha256": hashlib.sha256(
-                        combined_junit.encode("utf-8")
-                    ).hexdigest() if combined_junit else None,
-                    "junit_digest_format": (
-                        "EVOGUARD_JUNIT_COMPOSITE_V1"
-                        if pack_dir
-                        else "JUNIT_XML_SHA256"
-                    ) if combined_junit else None,
+                    "junit_sha256": junit_sha256,
+                    "junit_digest_format": junit_digest_format,
                     "verifier_pack_sha256": pack_sha256,
                     "expected_verifier_pack_sha256": expected_pack_sha256 or None,
                     "verifier_pack_manifest": pack_manifest,
                     "verifier_pack_tests_passed": pack_tests_passed,
                     "verifier_pack_tests_total": pack_tests_total,
+                    **(
+                        {
+                            "verifier_pack_junit_sha256": pack_junit_sha256,
+                            "verifier_pack_junit_digest_format": (
+                                pack_junit_digest_format
+                            ),
+                        }
+                        if pack_dir
+                        else {}
+                    ),
                     "setup_isolation": setup_isolation,
                     "setup_fidelity": "verified" if setup_cmd_raw else "not_applicable",
                     "candidate_fidelity": "verified" if pack_dir else "not_applicable",
