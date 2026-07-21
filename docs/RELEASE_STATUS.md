@@ -1,27 +1,31 @@
 ---
 source_version: 4.0.2
-latest_published_version: 4.0.1
-state: pre-release
+latest_published_version: 4.0.2
+state: published
 ---
 
 # Release status
 
-The repository source now declares **v4.0.2** as the next patch version. It is
-not yet a published consumer release. The latest immutable consumer release is
-[`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1),
+The repository source declares **v4.0.2** and it is published as the latest
+immutable consumer release:
+[`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2),
 published from commit
-[`5ed7e84017619496521b813f859a6a8bf0a2b1df`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/5ed7e84017619496521b813f859a6a8bf0a2b1df).
+[`3374164c65ad692049929fdc903eafb47c843a8e`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/3374164c65ad692049929fdc903eafb47c843a8e).
 Its `evo-guard.pyz` asset has SHA-256
-`81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7` and a
-GitHub Actions build-artifact attestation.
+`7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3`.
+GitHub verified the immutable release attestation, and the asset has a separate
+GitHub Actions build-artifact attestation bound to the release workflow,
+`refs/heads/main`, and the same source commit. Tag-triggered CI run
+[`29863741885`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29863741885)
+completed successfully, including `release-tag-guard` and `publish-pyz`.
 
-Consumer usage should pin to `v4.0.1` only when aligned with your acceptance
+Consumer usage should pin to `v4.0.2` only when aligned with your acceptance
 policy (typically strict SHA pinning in production). This release contains the
 source-available baseline and hardening changes intended for general evaluation
 and early adoption; it is not yet a third-party audited service.
 
 `evo-guard init` now requires `--ref` explicitly. Supply an independently
-inspected existing release tag such as `--ref v4.0.1`, or a full 40-hex commit
+inspected existing release tag such as `--ref v4.0.2`, or a full 40-hex commit
 SHA for the strictest pin. It deliberately refuses a moving branch name and
 does not guess a "latest" release.
 
@@ -30,6 +34,18 @@ EvoRise Source-Available License 1.0 applies only to material first
 distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
+
+The minimal `v4.0.2` release ledger records the published source identity,
+exact release asset bytes, release/build attestations, Marketplace observation,
+and successful tag CI:
+
+- `tests/baseline/v4.0.2/RELEASE_LEDGER.json`
+- `tests/baseline/v4.0.2/SHA256SUMS`
+- `tests/baseline/v4.0.2/pyz/evo-guard.pyz`
+
+It is deliberately not described as a full behavioral capture: no v4.0.2
+command, verdict, signed-evidence, verifier-pack, or benchmark fixtures were
+created merely by copying v4.0.1 evidence.
 
 For byte-exact offline verification of the frozen `v4.0.1` baseline, see:
 

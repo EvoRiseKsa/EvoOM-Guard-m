@@ -7,10 +7,10 @@
 
 ## Status and exact scope
 
-[`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
+[`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2)
 is the current published immutable GitHub Release at
-`5ed7e84017619496521b813f859a6a8bf0a2b1df`. Its `evo-guard.pyz` asset has
-SHA-256 `81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7`.
+`3374164c65ad692049929fdc903eafb47c843a8e`. Its `evo-guard.pyz` asset has
+SHA-256 `7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3`.
 The release has a GitHub release attestation, and this exact asset has a
 separate GitHub Actions build-artifact attestation. Verification against the
 published asset succeeds when constrained to the repository, the `Release`
@@ -37,13 +37,13 @@ of deployment.
 ## Consumer verification
 
 Download the asset you intend to consume and verify its checksum first. For the
-published v4.0.1 asset, the expected SHA-256 is
-`81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7`.
+published v4.0.2 asset, the expected SHA-256 is
+`7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3`.
 Then use a current GitHub CLI in an online environment. First verify the
 release attestation and its assets:
 
 ```bash
-gh release verify v4.0.1 --repo EvoRiseKsa/EvoOM-Guard-m
+gh release verify v4.0.2 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
 Then verify the separate build-artifact attestation, supplying the exact
@@ -55,6 +55,7 @@ gh attestation verify ./evo-guard.pyz \
   --repo EvoRiseKsa/EvoOM-Guard-m \
   --signer-workflow EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml \
   --source-ref refs/heads/main \
+  --source-digest 3374164c65ad692049929fdc903eafb47c843a8e \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --deny-self-hosted-runners \
   --format json
@@ -106,6 +107,6 @@ thereby prove:
 
 This is a concrete prerequisite for the provider-specific portion of issue
 [#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78), not a closure of
-that issue. The v4.0.1 attestation does not implement or exercise a protected,
+that issue. The v4.0.2 attestation does not implement or exercise a protected,
 end-to-end finalizer-to-artifact admission run; that separate work remains
 required before any such claim.

@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvoOM Guard immutable release ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "release",
+    "schema_contracts",
+    "marketplace",
+    "artifacts",
+    "checksum_manifest",
+    "release_workflow",
+    "tag_ci",
+    "build_provenance",
+    "release_attestation"
+  ],
+  "properties": {
+    "schema_version": {"const": "evoguard-release-ledger-v1"},
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "EvoOM Guard"},
+        "version": {"$ref": "#/$defs/version"}
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "tag",
+        "commit_sha",
+        "tree_sha",
+        "release_id",
+        "state",
+        "prerelease",
+        "immutable",
+        "created_utc",
+        "published_utc",
+        "release_url"
+      ],
+      "properties": {
+        "repository": {"pattern": "^[^/]+/[^/]+$"},
+        "tag": {"$ref": "#/$defs/tag"},
+        "commit_sha": {"$ref": "#/$defs/gitSha"},
+        "tree_sha": {"$ref": "#/$defs/gitSha"},
+        "release_id": {"type": "integer", "minimum": 1},
+        "state": {"const": "published"},
+        "prerelease": {"const": false},
+        "immutable": {"const": true},
+        "created_utc": {"type": "string", "format": "date-time"},
+        "published_utc": {"type": "string", "format": "date-time"},
+        "release_url": {"type": "string", "format": "uri"}
+      }
+    },
+    "schema_contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict_record", "sarif", "verifier_pack", "junit_digest_formats"],
+      "properties": {
+        "verdict_record": {"const": "1.11"},
+        "sarif": {"const": "2.1.0"},
+        "verifier_pack": {"const": "EVOGUARD_PACK_V2"},
+        "junit_digest_formats": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "JUNIT_XML_SHA256",
+              "EVOGUARD_JUNIT_REPORT_SET_V1",
+              "EVOGUARD_JUNIT_COMPOSITE_V1",
+              "EVOGUARD_JUNIT_COMPOSITE_V2"
+            ]
+          }
+        }
+      }
+    },
+    "marketplace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "version", "url", "observed_utc"],
+      "properties": {
+        "action": {"type": "string", "minLength": 1},
+        "version": {"$ref": "#/$defs/tag"},
+        "url": {"type": "string", "format": "uri"},
+        "observed_utc": {"type": "string", "format": "date-time"}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "checksum_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format", "target", "target_sha256", "manifest_sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "format": {"const": "sha256sum-two-space"},
+        "target": {"$ref": "#/$defs/relativePath"},
+        "target_sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "release_workflow": {"$ref": "#/$defs/releaseWorkflow"},
+    "tag_ci": {"$ref": "#/$defs/tagCi"},
+    "build_provenance": {"$ref": "#/$defs/buildProvenance"},
+    "release_attestation": {"$ref": "#/$defs/releaseAttestation"}
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "tag": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "gitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[A-Za-z0-9._/-]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "path",
+        "size_bytes",
+        "sha256",
+        "github_digest",
+        "download_url"
+      ],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "path": {"$ref": "#/$defs/relativePath"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "github_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "download_url": {"type": "string", "format": "uri"}
+      }
+    },
+    "pytestCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "skipped", "subtests_passed"],
+      "properties": {
+        "passed": {"type": "integer", "minimum": 1},
+        "skipped": {"type": "integer", "minimum": 0},
+        "subtests_passed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "releaseWorkflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "event",
+        "source_ref",
+        "run_id",
+        "attempt",
+        "head_sha",
+        "conclusion",
+        "run_url",
+        "pytest",
+        "linux_e2e_passed",
+        "windows_e2e_passed"
+      ],
+      "properties": {
+        "path": {"const": ".github/workflows/release.yml"},
+        "event": {"const": "workflow_dispatch"},
+        "source_ref": {"const": "refs/heads/main"},
+        "run_id": {"type": "integer", "minimum": 1},
+        "attempt": {"type": "integer", "minimum": 1},
+        "head_sha": {"$ref": "#/$defs/gitSha"},
+        "conclusion": {"const": "success"},
+        "run_url": {"type": "string", "format": "uri"},
+        "pytest": {"$ref": "#/$defs/pytestCounts"},
+        "linux_e2e_passed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "windows_e2e_passed": {"type": "integer", "minimum": 1}
+      }
+    },
+    "tagCi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "event",
+        "tag_ref",
+        "run_id",
+        "attempt",
+        "head_sha",
+        "conclusion",
+        "run_url",
+        "successful_jobs"
+      ],
+      "properties": {
+        "path": {"const": ".github/workflows/ci.yml"},
+        "event": {"const": "push"},
+        "tag_ref": {"type": "string", "pattern": "^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "run_id": {"type": "integer", "minimum": 1},
+        "attempt": {"type": "integer", "minimum": 1},
+        "head_sha": {"$ref": "#/$defs/gitSha"},
+        "conclusion": {"const": "success"},
+        "run_url": {"type": "string", "format": "uri"},
+        "successful_jobs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "buildProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate_type",
+        "subject_name",
+        "subject_sha256",
+        "source_repository",
+        "source_digest",
+        "source_ref",
+        "signer_identity",
+        "runner_environment",
+        "invocation_url",
+        "transparency_log_timestamp_utc",
+        "verification_scope"
+      ],
+      "properties": {
+        "predicate_type": {"const": "https://slsa.dev/provenance/v1"},
+        "subject_name": {"type": "string", "minLength": 1},
+        "subject_sha256": {"$ref": "#/$defs/sha256"},
+        "source_repository": {"type": "string", "format": "uri"},
+        "source_digest": {"$ref": "#/$defs/gitSha"},
+        "source_ref": {"const": "refs/heads/main"},
+        "signer_identity": {"type": "string", "format": "uri"},
+        "runner_environment": {"const": "github-hosted"},
+        "invocation_url": {"type": "string", "format": "uri"},
+        "transparency_log_timestamp_utc": {"type": "string", "format": "date-time"},
+        "verification_scope": {"const": "recorded-external-attestation"}
+      }
+    },
+    "releaseAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate_type",
+        "verified_timestamp_utc",
+        "identity",
+        "purl",
+        "tag",
+        "commit_sha",
+        "asset_subjects",
+        "verification_scope"
+      ],
+      "properties": {
+        "predicate_type": {"const": "https://in-toto.io/attestation/release/v0.2"},
+        "verified_timestamp_utc": {"type": "string", "format": "date-time"},
+        "identity": {"const": "https://dotcom.releases.github.com"},
+        "purl": {"type": "string", "pattern": "^pkg:github/[^/]+/[^@]+@v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "tag": {"$ref": "#/$defs/tag"},
+        "commit_sha": {"$ref": "#/$defs/gitSha"},
+        "asset_subjects": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "sha256"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        "verification_scope": {"const": "recorded-external-attestation"}
+      }
+    }
+  }
+}

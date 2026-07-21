@@ -13,11 +13,11 @@ emits a **detached signature** next to every verdict; anyone holding the public
 key can verify — offline, years later — that the verdict bytes are exactly what
 the judge wrote.
 
-Requires the `sign` extra (the core gate stays stdlib-only). `v4.0.1` is the
+Requires the `sign` extra (the core gate stays stdlib-only). `v4.0.2` is the
 published immutable GitHub Release:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.0.1"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.0.2"
 ```
 
 ## Usage

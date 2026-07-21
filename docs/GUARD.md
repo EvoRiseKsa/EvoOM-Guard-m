@@ -57,7 +57,7 @@ code.
 
 ## Install
 
-> **Release availability.** [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
+> **Release availability.** [`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2)
 > is the current published immutable GitHub Release. For strict CI, pin the
 > exact commit SHA resolved from that release rather than a mutable tag.
 
@@ -72,14 +72,14 @@ workflow adds is the `uses:` (plus a full-history checkout):
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.0.1   # published release; @<sha> is strictest, @main is latest
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.0.2   # published release; @<sha> is strictest, @main is latest
 ```
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.0.1"   # published release
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.0.2"   # published release
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
 evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
@@ -87,7 +87,7 @@ evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.d
 > **Pinning.** Guard is a verification *gate*, so pin the version you run rather
 > than tracking a moving branch — both for the `uses:` action ref and the `git+`
 > pip URL:
-> - **`@v4.0.1`** — the current published release tag. The recommended pin and the right choice for
+> - **`@v4.0.2`** — the current published release tag. The recommended pin and the right choice for
 >   trying Guard out: a real, named version rather than whatever is on `main`.
 > - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
 >   in principle be moved); best for CI, where the gate you run should be the exact
@@ -136,11 +136,10 @@ The report shows the `Input` (`diff` / `base/head` / `edit blocks`) and, for
 
 ### Changed-line coverage: `--diff-coverage` / `--min-diff-coverage`
 
-> **Version boundary:** `v4.0.1` is the latest published release and supports
-> these options. The fail-closed unavailable-measurement behavior, isolated
-> collector startup, exact-ratio comparison, conservative physical-line
-> denominator, setup/resource forwarding, and explicit candidate-writable
-> caveat below are `v4.0.2` source changes and are not yet published.
+> **Version boundary:** published `v4.0.2` includes these options together with
+> fail-closed unavailable-measurement behavior, isolated collector startup,
+> exact-ratio comparison, conservative physical-line denominator,
+> setup/resource forwarding, and the explicit candidate-writable caveat below.
 
 Optional `--diff-coverage` runs the pytest suite once more (and replays a
 configured setup once) and records which changed Python statements executed. It
@@ -251,13 +250,13 @@ patch from supplying the judge that is meant to evaluate it.
 ## GitHub Action
 
 A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-the published `EvoRiseKsa/EvoOM-Guard-m@v4.0.1` release. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
+the published `EvoRiseKsa/EvoOM-Guard-m@v4.0.2` release. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
 `.github/workflows/evoguard.yml` in the repo you want to protect:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.0.1   # published release (@<sha> strictest, @main latest)
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.0.2   # published release (@<sha> strictest, @main latest)
   with:
     comment: "true"                   # post the verdict as a PR comment
     fail-on: "any-non-pass"           # required on pull_request runs
@@ -355,7 +354,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.0.1"   # published release; @<sha> strictest for CI
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.0.2"   # published release; @<sha> strictest for CI
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
     git fetch --no-tags origin "$BASE"

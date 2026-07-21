@@ -68,11 +68,11 @@ correctness or security.
 > second account provides technical separation of roles only, not independent
 > review.
 
-> **v4 licensing and release status.** [`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
+> **v4 licensing and release status.** [`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2)
 > is the current published immutable consumer release, carrying the **EvoRise
-> Source-Available License 1.0**. The repository source now prepares `v4.0.2`
-> as an unreleased patch; consumers pinned to `v4.0.1` do not receive those
-> source changes yet. Commercial licensing is administered by EvoRise Company. See
+> Source-Available License 1.0**. The repository documentation now records that
+> release without implying that later documentation commits move its immutable
+> tag. Commercial licensing is administered by EvoRise Company. See
 > [LICENSE](LICENSE),
 > [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
 > [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md).
@@ -206,11 +206,11 @@ GitHub Release is published. **Before copying any versioned pin, confirm that
 exact tag exists in [GitHub Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases).**
 
 The current consumer release is
-[`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1),
+[`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2),
 published as an immutable GitHub Release from commit
-[`5ed7e84017619496521b813f859a6a8bf0a2b1df`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/5ed7e84017619496521b813f859a6a8bf0a2b1df).
+[`3374164c65ad692049929fdc903eafb47c843a8e`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/3374164c65ad692049929fdc903eafb47c843a8e).
 Its `evo-guard.pyz` asset has SHA-256
-`81a5139e1e0f3c5ce1f9180db85c699eec305474f9588f7d2831099defdce2f7` and a
+`7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3` and a
 GitHub Actions build-artifact attestation. Under the license shipped with that
 exact v4 release, commercial, production, required-CI/merge-gate,
 redistribution, hosted, and managed-service use require a separate commercial
@@ -221,7 +221,7 @@ merely to exercise artifact attestation.
 
 `v3.7.0` has a GitHub **release** attestation but no GitHub Actions
 build-artifact attestation for `evo-guard.pyz`. That distinction matters: a
-release attestation is not build provenance. Neither the v4.0.1 attestation nor
+release attestation is not build provenance. Neither the v4.0.2 attestation nor
 any historical attestation is an EvoGuard verdict, an artifact-admission
 decision, or proof of deployment. See
 [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md)
@@ -230,7 +230,7 @@ for exact verification commands and their scope.
 ## Try it in two minutes
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.0.1"   # published release; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.0.2"   # published release; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a throwaway
 # copy — your working tree is never modified):
@@ -267,7 +267,7 @@ SARIF 2.1.0 report (`--sarif`) for GitHub code scanning — see
 The fastest path — scaffold the workflow from inside your repo:
 
 ```bash
-evo-guard init --ref v4.0.1 --test-command "python -m pytest -q"
+evo-guard init --ref v4.0.2 --test-command "python -m pytest -q"
 ```
 
 This writes two files when they do not already exist: the workflow and the
@@ -285,7 +285,7 @@ permissions:
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
     with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.0.1   # published release; pin a SHA for strictest CI
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.0.2   # published release; pin a SHA for strictest CI
     with:
       comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
       fail-on: "any-non-pass"          # required on pull_request runs
@@ -381,7 +381,7 @@ evo-guard guard ./repo --patch candidate.txt
 
 # Environment checkup / workflow scaffolding / version:
 evo-guard doctor
-evo-guard init --ref v4.0.1 --test-command "npm test"
+evo-guard init --ref v4.0.2 --test-command "npm test"
 evo-guard version
 ```
 
@@ -472,12 +472,11 @@ turns it into a gate for agent "fix" PRs (an undemonstrated PASS becomes FAIL,
 A green suite is one signal, not a proof. Guard can attach two additional
 pieces of evidence to every verdict:
 
-> **Version boundary:** the published `v4.0.1` already has the coverage options,
-> but the fail-closed unavailable-measurement behavior, isolated collector
-> startup, exact-ratio comparison, conservative physical-line denominator,
-> setup/resource forwarding, and explicit candidate-writable caveat described
-> below are `v4.0.2` source changes and are not published yet. A consumer pinned
-> to `v4.0.1` must not assume those hardenings.
+> **Version boundary:** published `v4.0.2` includes the coverage options,
+> fail-closed unavailable-measurement behavior, isolated collector startup,
+> exact-ratio comparison, conservative physical-line denominator,
+> setup/resource forwarding, and the explicit candidate-writable caveat
+> described below.
 
 ```bash
 # Which changed lines did the suite actually EXECUTE? (one extra suite run and,
@@ -582,7 +581,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and threat-model review process for ordinary changes versus trust-boundary changes |
 | [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
 | [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
-| [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v4.0.1 build-artifact attestation and historical/future release runs |
+| [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v4.0.2 build-artifact attestation and historical/future release runs |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
 | [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |
@@ -623,16 +622,16 @@ remains governed by the license shipped with that exact release. In particular,
 the published v3.8.0 license permitted commercial internal use, including the
 user's own CI, subject to its terms.
 
-### Current published v4.0.1 release
+### Current published v4.0.2 release
 
-[`v4.0.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.1)
+[`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2)
 is published under the **EvoRise Source-Available License 1.0**. It permits
 non-commercial study and research, good-faith security research, and a limited
 internal non-production evaluation. Commercial, production, required-CI,
 merge-gate, redistribution, hosted, and managed-service use require a separate
 commercial agreement.
 
-This release is published at `v4.0.1`; adopt it from GitHub Releases with the
+This release is published at `v4.0.2`; adopt it from GitHub Releases with the
 exact tag and pin to the corresponding commit or SHA for production. See
 [LICENSE](LICENSE),
 [LICENSE_HISTORY.md](LICENSE_HISTORY.md),
