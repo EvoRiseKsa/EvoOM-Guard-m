@@ -78,6 +78,10 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Changed
 
+- Completed repository-suite and mandatory verifier-pack interpretation now
+  lives in a pure typed phase-contract module. Frozen composition vectors bind
+  verdicts, counts, diagnostics, phase snapshots, tamper state, and V1/V2 JUnit
+  identities while `RepoVerifier` retains execution and filesystem ownership.
 - Execution, candidate-boundary, Docker, invocation-receipt, and black-box judge
   kernels were extracted behind characterization, architecture-ratchet, and
   security-mutation gates without changing the published v4.0.1 artifact.

@@ -1153,9 +1153,15 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-harness-exit-only-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="            if strict_harness and (junit is None or junit.total <= 0):\n",
-        after="            if False and strict_harness and (junit is None or junit.total <= 0):\n",
+        path="evoom_guard/verifiers/repo_phase_contracts.py",
+        before=(
+            "    if strict_harness and (evidence.junit is None or "
+            "evidence.junit.total <= 0):\n"
+        ),
+        after=(
+            "    if False and strict_harness and (evidence.junit is None or "
+            "evidence.junit.total <= 0):\n"
+        ),
         test=(
             "tests/test_strict_harness.py::"
             "test_strict_harness_zero_test_guard_cannot_be_disabled"
@@ -1948,12 +1954,52 @@ MUTATIONS = (
     ),
     Mutation(
         name="junit-composite-pack-digest-substitution",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="                            + pack_junit_sha256\n",
-        after="                            + repo_junit_sha256\n",
+        path="evoom_guard/verifiers/repo_phase_contracts.py",
+        before="                + pack.junit_sha256\n",
+        after="                + repo.junit_sha256\n",
         test=(
             "tests/test_adversarial_integrity_boundaries.py::"
             "test_maven_report_set_and_pack_are_both_bound_into_composite_evidence"
+        ),
+    ),
+    Mutation(
+        name="repo-phase-pack-zero-test-bypass",
+        path="evoom_guard/verifiers/repo_phase_contracts.py",
+        before="    if not tests_total:\n",
+        after="    if False and not tests_total:\n",
+        test=(
+            "tests/test_repo_phase_characterization.py::"
+            "test_repo_phase_composition_is_frozen[pack_zero_tests_v2]"
+        ),
+    ),
+    Mutation(
+        name="repo-phase-pack-unclean-verdict-bypass",
+        path="evoom_guard/verifiers/repo_phase_contracts.py",
+        before="    elif verdict_source is None:\n",
+        after="    elif False and verdict_source is None:\n",
+        test=(
+            "tests/test_repo_phase_contracts.py::"
+            "test_pack_with_tests_but_no_clean_exit_pair_has_no_verdict"
+        ),
+    ),
+    Mutation(
+        name="repo-phase-strict-forwarding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    junit_digest_format=repo_junit_digest_format,\n"
+            "                ),\n"
+            "                strict_harness=strict_harness,\n"
+            "            )\n"
+        ),
+        after=(
+            "                    junit_digest_format=repo_junit_digest_format,\n"
+            "                ),\n"
+            "                strict_harness=False,\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_repo_phase_contracts.py::"
+            "test_repo_verifier_forwards_strict_harness_to_phase_contract"
         ),
     ),
     Mutation(
