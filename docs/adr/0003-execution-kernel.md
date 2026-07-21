@@ -52,3 +52,14 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
   exact-token observation. `blackbox.py` retains an exact compatibility alias
   and remains solely responsible for composing receipts with validated runtime
   CIDs, evidence, and verdicts.
+- Once the black-box judge process is launched, reader construction or partial
+  `Thread.start()` failure cannot escape lifecycle handling: on POSIX the
+  process-group cleanup is attempted even when its leader has already exited,
+  and it must be proven before a normal verdict; an abort retains its active
+  exception if cleanup proof itself fails. The bounded non-POSIX fallback
+  handles a live leader without making a descendant-group claim. Attempted
+  readers are joined boundedly and independently, only proven safe diagnostic
+  pipes receive a best-effort close, and cleanup failures do not replace the
+  original startup exception. Missing `Thread.ident` is not treated as
+  non-start proof, so a pipe is never synchronously closed while its reader may
+  remain blocked on that pipe.

@@ -468,6 +468,54 @@ def _terminate_judge_process_group(process: subprocess.Popen[Any]) -> None:
     _reap_judge_leader(process)
 
 
+def _join_judge_pipe_readers(
+    readers: list[threading.Thread], streams: list[Any]
+) -> bool:
+    """Boundedly join attempted readers without closing under a live read.
+
+    ``BufferedReader.close()`` can itself block on the reader's internal lock
+    while another thread is stuck in ``read()``.  The generic join primitive is
+    therefore called with no streams here.  A stream is closed only after its
+    reader is proven stopped, or when no startup attempt referenced that pipe.
+    """
+    stopped: list[bool] = []
+    first_error: BaseException | None = None
+    for reader in readers:
+        reader_stopped = False
+        try:
+            reader_stopped = _join_pipe_readers([reader], [])
+        except RuntimeError as exc:
+            # An interrupted Thread.start() can create the native thread before
+            # ``ident`` or ``_started`` becomes observable. A failed join is
+            # therefore never proof that the corresponding pipe is safe to
+            # close, even when ``reader.ident is None``.
+            if first_error is None:
+                first_error = exc
+        except BaseException as exc:
+            if first_error is None:
+                first_error = exc
+        stopped.append(reader_stopped)
+
+    streams_closed = True
+    for index, stream in enumerate(streams):
+        safe_to_close = index >= len(stopped) or stopped[index]
+        if not safe_to_close:
+            streams_closed = False
+            continue
+        try:
+            stream.close()
+        except (OSError, ValueError):
+            streams_closed = False
+        except BaseException as exc:
+            streams_closed = False
+            if first_error is None:
+                first_error = exc
+
+    if first_error is not None:
+        raise first_error
+    return all(stopped) and streams_closed
+
+
 def _run_judge_process(
     command: list[str],
     *,
@@ -482,48 +530,62 @@ def _run_judge_process(
     fresh session makes its process group an unambiguous cleanup target. The
     original TimeoutExpired/KeyboardInterrupt/BaseException is always preserved.
     """
-    process = subprocess.Popen(
-        command,
-        cwd=cwd,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-        start_new_session=True,
-    )
-    assert process.stdout is not None and process.stderr is not None
-    capture = _BoundedOutput(_MAX_SUBPROCESS_OUTPUT_BYTES)
-    streams = [process.stdout, process.stderr]
-    readers = [
-        threading.Thread(
-            target=_drain_subprocess_pipe,
-            args=(process.stdout, capture, "stdout"),
-            daemon=True,
-        ),
-        threading.Thread(
-            target=_drain_subprocess_pipe,
-            args=(process.stderr, capture, "stderr"),
-            daemon=True,
-        ),
-    ]
-    for reader in readers:
-        reader.start()
-
-    def cleanup_and_prove(reason: str) -> None:
-        try:
-            _terminate_judge_process_group(process)
-        except JudgeProcessCleanupError:
-            raise
-        except Exception as exc:
-            raise JudgeProcessCleanupError(
-                f"unexpected judge process-group cleanup failure: {exc}"
-            ) from exc
-        if not _join_pipe_readers(readers, streams):
-            raise JudgeProcessCleanupError(
-                f"{reason}; judge output pipes did not close after cleanup"
-            )
-
+    process: subprocess.Popen[Any] | None = None
+    streams: list[Any] = []
+    reader_start_attempts: list[threading.Thread] = []
     try:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            start_new_session=True,
+        )
+        stdout = process.stdout
+        stderr = process.stderr
+        streams = [
+            stream for stream in (stdout, stderr) if stream is not None
+        ]
+        if stdout is None or stderr is None:
+            raise JudgeProcessCleanupError(
+                "judge output pipes were not created"
+            )
+        capture = _BoundedOutput(_MAX_SUBPROCESS_OUTPUT_BYTES)
+        readers: list[threading.Thread] = [
+            threading.Thread(
+                target=_drain_subprocess_pipe,
+                args=(stdout, capture, "stdout"),
+                daemon=True,
+            ),
+            threading.Thread(
+                target=_drain_subprocess_pipe,
+                args=(stderr, capture, "stderr"),
+                daemon=True,
+            ),
+        ]
+        for reader in readers:
+            # Record the attempt before start(): an asynchronous BaseException
+            # can arrive after the native thread exists but before start()
+            # returns to Python.
+            reader_start_attempts.append(reader)
+            reader.start()
+
+        def cleanup_and_prove(reason: str) -> None:
+            try:
+                _terminate_judge_process_group(process)
+            except JudgeProcessCleanupError:
+                raise
+            except Exception as exc:
+                raise JudgeProcessCleanupError(
+                    f"unexpected judge process-group cleanup failure: {exc}"
+                ) from exc
+            if not _join_judge_pipe_readers(readers, streams):
+                raise JudgeProcessCleanupError(
+                    f"{reason}; judge output pipes did not close after cleanup"
+                )
+
         deadline = time.monotonic() + max(0.0, float(timeout))
         while process.poll() is None:
             if capture.exceeded:
@@ -545,7 +607,7 @@ def _run_judge_process(
         if capture.exceeded:
             cleanup_and_prove("judge output limit reached")
             raise JudgeOutputLimitError(capture.limit)
-        if not _join_pipe_readers(readers, streams):
+        if not _join_judge_pipe_readers(readers, streams):
             cleanup_and_prove("judge exited with live output pipes")
             raise JudgeProcessCleanupError(
                 "judge exited but its output pipes did not close"
@@ -564,13 +626,18 @@ def _run_judge_process(
             capture.text("stderr"),
         )
     except BaseException:
-        try:
-            if process.poll() is None:
+        if process is not None:
+            try:
+                # A reaped leader is not proof that its process group has no
+                # surviving descendant, so abort cleanup is unconditional.
                 _terminate_judge_process_group(process)
-        except BaseException:
-            # An active primary exception must not be replaced by cleanup.
-            pass
-        _join_pipe_readers(readers, streams)
+            except BaseException:
+                # An active primary exception must not be replaced by cleanup.
+                pass
+            try:
+                _join_judge_pipe_readers(reader_start_attempts, streams)
+            except BaseException:
+                pass
         raise
 
 

@@ -84,6 +84,125 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="judge-reader-start-cleanup-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                _terminate_judge_process_group(process)\n"
+            "            except BaseException:\n"
+            "                # An active primary exception must not be replaced by cleanup.\n"
+        ),
+        after=(
+            "                pass\n"
+            "            except BaseException:\n"
+            "                # An active primary exception must not be replaced by cleanup.\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_reader_start_failure_cleans_group_handles_pipes_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="judge-reader-start-tracking-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            reader_start_attempts.append(reader)\n"
+            "            reader.start()\n"
+        ),
+        after="            reader.start()\n",
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_reader_start_failure_cleans_group_handles_pipes_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="judge-reader-start-pipe-close-bypass",
+        path="evoom_guard/blackbox.py",
+        before="        safe_to_close = index >= len(stopped) or stopped[index]\n",
+        after="        safe_to_close = False\n",
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_reader_start_failure_cleans_group_handles_pipes_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="judge-live-reader-synchronous-close",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        if not safe_to_close:\n"
+            "            streams_closed = False\n"
+            "            continue\n"
+        ),
+        after=(
+            "        if False and not safe_to_close:\n"
+            "            streams_closed = False\n"
+            "            continue\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_live_reader_pipe_is_never_closed_synchronously"
+        ),
+    ),
+    Mutation(
+        name="judge-attempted-reader-ident-proof-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        except RuntimeError as exc:\n"
+            "            # An interrupted Thread.start() can create the native thread before\n"
+            "            # ``ident`` or ``_started`` becomes observable. A failed join is\n"
+            "            # therefore never proof that the corresponding pipe is safe to\n"
+            "            # close, even when ``reader.ident is None``.\n"
+            "            if first_error is None:\n"
+            "                first_error = exc\n"
+        ),
+        after=(
+            "        except RuntimeError as exc:\n"
+            "            # Mutant: treat missing ident as proof that no native reader exists.\n"
+            "            reader_stopped = reader.ident is None\n"
+            "            if not reader_stopped and first_error is None:\n"
+            "                first_error = exc\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_attempted_reader_without_ident_is_not_assumed_safe_to_close"
+        ),
+    ),
+    Mutation(
+        name="judge-reader-start-primary-exception-mask",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                _join_judge_pipe_readers(reader_start_attempts, streams)\n"
+            "            except BaseException:\n"
+            "                pass\n"
+        ),
+        after=(
+            "                _join_judge_pipe_readers(reader_start_attempts, streams)\n"
+            "            except BaseException:\n"
+            "                raise\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_reader_start_primary_survives_every_cleanup_baseexception"
+        ),
+    ),
+    Mutation(
+        name="judge-reader-start-terminator-baseexception-mask",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                _terminate_judge_process_group(process)\n"
+            "            except BaseException:\n"
+            "                # An active primary exception must not be replaced by cleanup.\n"
+        ),
+        after=(
+            "                _terminate_judge_process_group(process)\n"
+            "            except Exception:\n"
+            "                # An active primary exception must not be replaced by cleanup.\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_reader_start.py::"
+            "test_reader_start_primary_survives_every_cleanup_baseexception"
+        ),
+    ),
+    Mutation(
         name="docker-absence-daemon-failure-bypass",
         path="evoom_guard/isolation/docker.py",
         before=(
