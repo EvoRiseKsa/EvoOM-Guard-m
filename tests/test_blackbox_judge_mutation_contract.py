@@ -280,6 +280,9 @@ def test_reader_join_failure_cannot_be_returned_as_success(
     monkeypatch.setattr(
         blackbox_module,
         "_join_judge_pipe_readers",
+        # The normal proof fails and its cleanup proof succeeds. The reviewed
+        # mutant still consumes the first result but ignores it, so the final
+        # cleanup consumes True and can genuinely return CompletedProcess.
         lambda *_args: next(join_results, True),
     )
 

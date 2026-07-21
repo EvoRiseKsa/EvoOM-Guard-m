@@ -154,6 +154,25 @@
         "message": "cleanup sentinel"
       }
     },
+    "patch_seam_presence": {
+      "_BoundedOutput": true,
+      "_JUDGE_GROUP_POLL_SECONDS": true,
+      "_JUDGE_TERMINATION_GRACE_SECONDS": true,
+      "_MAX_SUBPROCESS_OUTPUT_BYTES": true,
+      "_SIGKILL": true,
+      "_drain_subprocess_pipe": true,
+      "_join_judge_pipe_readers": true,
+      "_join_pipe_readers": true,
+      "_process_group_exists": true,
+      "_reap_judge_leader": true,
+      "_signal_judge_process_group": true,
+      "_terminate_judge_process_group": true,
+      "_wait_for_process_group_exit": true,
+      "subprocess.Popen": true,
+      "threading.Thread": true,
+      "time.monotonic": true,
+      "time.sleep": true
+    },
     "required_patch_seams": [
       "subprocess.Popen",
       "threading.Thread",
@@ -234,6 +253,14 @@
     }
   },
   "termination": {
+    "event_trace": [
+      "probe",
+      "signal-term",
+      "wait",
+      "signal-kill",
+      "wait",
+      "reap"
+    ],
     "process_group_probes": [
       4321
     ],

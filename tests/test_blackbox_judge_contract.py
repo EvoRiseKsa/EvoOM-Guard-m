@@ -44,6 +44,7 @@ def test_blackbox_judge_process_contract_is_exact() -> None:
 def test_snapshot_exposes_the_security_critical_transfer_seams() -> None:
     snapshot = _frozen()
     assert snapshot["schema_version"] == SCHEMA_VERSION
+    assert all(snapshot["static"]["patch_seam_presence"].values())
     assert snapshot["completed_run"]["popen"] == {
         "command": ["judge-python", "-m", "pytest"],
         "command_identity": True,
@@ -64,9 +65,40 @@ def test_snapshot_exposes_the_security_critical_transfer_seams() -> None:
         "stdout_is_pipe": True,
     }
     assert snapshot["completed_run"]["completed_process"]["args_identity"] is True
+    assert snapshot["completed_run"]["reader_factory"]["targets_use_drain_patch"] == [
+        True,
+        True,
+    ]
+    assert snapshot["completed_run"]["runtime_seams"] == {
+        "join_calls": [
+            {
+                "reader_count": 2,
+                "readers_match_created": True,
+                "stream_labels": ["stdout", "stderr"],
+            },
+            {
+                "reader_count": 2,
+                "readers_match_created": True,
+                "stream_labels": ["stdout", "stderr"],
+            },
+        ],
+        "monotonic_calls": [100.0, 100.0],
+        "output_limits": [321],
+        "poll_calls": 2,
+        "sleep_calls": [0.125],
+        "terminate_process_identity": [True],
+    }
     assert snapshot["termination"]["signals"] == [
         [4321, snapshot["termination"]["sigterm"]],
         [4321, 99],
+    ]
+    assert snapshot["termination"]["event_trace"] == [
+        "probe",
+        "signal-term",
+        "wait",
+        "signal-kill",
+        "wait",
+        "reap",
     ]
     assert snapshot["join"]["live"]["result"] is False
     assert snapshot["join"]["live"]["close_calls"] == 0

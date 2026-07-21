@@ -14,6 +14,26 @@ import evoom_guard.blackbox as blackbox_module
 
 SCHEMA_VERSION = "blackbox-judge-process-contract-v1"
 
+REQUIRED_PATCH_SEAMS = (
+    "subprocess.Popen",
+    "threading.Thread",
+    "time.monotonic",
+    "time.sleep",
+    "_BoundedOutput",
+    "_drain_subprocess_pipe",
+    "_join_pipe_readers",
+    "_join_judge_pipe_readers",
+    "_terminate_judge_process_group",
+    "_process_group_exists",
+    "_signal_judge_process_group",
+    "_wait_for_process_group_exit",
+    "_reap_judge_leader",
+    "_MAX_SUBPROCESS_OUTPUT_BYTES",
+    "_JUDGE_TERMINATION_GRACE_SECONDS",
+    "_JUDGE_GROUP_POLL_SECONDS",
+    "_SIGKILL",
+)
+
 
 class _Pipe:
     def __init__(self, label: str) -> None:
@@ -97,6 +117,13 @@ def _parameter_contract(function: object) -> dict[str, object]:
     }
 
 
+def _resolve_patch_seam(path: str) -> object:
+    value: object = blackbox_module
+    for component in path.split("."):
+        value = getattr(value, component)
+    return value
+
+
 def capture_static_contract() -> dict[str, object]:
     cleanup_error = blackbox_module.JudgeProcessCleanupError("cleanup sentinel")
     output_error = blackbox_module.JudgeOutputLimitError(4096)
@@ -133,25 +160,10 @@ def capture_static_contract() -> dict[str, object]:
                 "message": str(output_error),
             },
         },
-        "required_patch_seams": [
-            "subprocess.Popen",
-            "threading.Thread",
-            "time.monotonic",
-            "time.sleep",
-            "_BoundedOutput",
-            "_drain_subprocess_pipe",
-            "_join_pipe_readers",
-            "_join_judge_pipe_readers",
-            "_terminate_judge_process_group",
-            "_process_group_exists",
-            "_signal_judge_process_group",
-            "_wait_for_process_group_exit",
-            "_reap_judge_leader",
-            "_MAX_SUBPROCESS_OUTPUT_BYTES",
-            "_JUDGE_TERMINATION_GRACE_SECONDS",
-            "_JUDGE_GROUP_POLL_SECONDS",
-            "_SIGKILL",
-        ],
+        "required_patch_seams": list(REQUIRED_PATCH_SEAMS),
+        "patch_seam_presence": {
+            seam: _resolve_patch_seam(seam) is not None for seam in REQUIRED_PATCH_SEAMS
+        },
     }
 
 
@@ -290,17 +302,23 @@ def capture_termination_contract() -> dict[str, object]:
     signals: list[list[int]] = []
     waits: list[dict[str, object]] = []
     reaps: list[bool] = []
+    event_trace: list[str] = []
 
     def group_exists(process_group: int) -> bool:
+        event_trace.append("probe")
         group_probes.append(process_group)
         return True
 
     def signal_group(candidate: _GroupProcess, sig: int) -> None:
+        event_trace.append(
+            "signal-term" if int(sig) == int(signal.SIGTERM) else "signal-kill"
+        )
         signals.append([int(candidate.pid), int(sig)])
 
     def wait_for_exit(
         candidate: _GroupProcess, process_group: int, timeout: float
     ) -> bool:
+        event_trace.append("wait")
         waits.append(
             {
                 "process_identity": candidate is process,
@@ -311,6 +329,7 @@ def capture_termination_contract() -> dict[str, object]:
         return len(waits) == 2
 
     def reap(candidate: _GroupProcess) -> None:
+        event_trace.append("reap")
         reaps.append(candidate is process)
 
     with ExitStack() as stack:
@@ -340,6 +359,7 @@ def capture_termination_contract() -> dict[str, object]:
         "sigterm": int(signal.SIGTERM),
         "waits": waits,
         "reaps": reaps,
+        "event_trace": event_trace,
     }
 
 

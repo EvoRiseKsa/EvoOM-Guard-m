@@ -312,11 +312,7 @@ MUTATIONS = (
             "            )\n"
         ),
         after=(
-            "        if False and not _join_judge_pipe_readers(readers, streams):\n"
-            "            cleanup_and_prove(\"judge exited with live output pipes\")\n"
-            "            raise JudgeProcessCleanupError(\n"
-            "                \"judge exited but its output pipes did not close\"\n"
-            "            )\n"
+            "        _join_judge_pipe_readers(readers, streams)\n"
         ),
         test=(
             "tests/test_blackbox_judge_mutation_contract.py::"
