@@ -313,6 +313,19 @@ def _terminate_process_tree(
     return False
 
 
+def terminate_process_tree(
+    process: subprocess.Popen[Any], limits: ProcessLimits
+) -> bool:
+    """Terminate a process in its managed launch group and prove cleanup.
+
+    The process must have been launched with ``process_group_popen_kwargs()``.
+    A return value from an arbitrary ``Popen`` instance is not a process-tree
+    cleanup proof.
+    """
+
+    return _terminate_process_tree(process, limits)
+
+
 def join_pipe_readers(
     readers: list[threading.Thread],
     streams: list[Any],

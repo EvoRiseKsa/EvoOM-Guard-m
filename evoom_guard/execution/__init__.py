@@ -23,6 +23,7 @@ from evoom_guard.execution.process import (
     join_pipe_readers,
     process_group_popen_kwargs,
     run_bounded_subprocess,
+    terminate_process_tree,
 )
 from evoom_guard.execution.judge import (
     JudgeOutputLimitError,
@@ -58,4 +59,5 @@ __all__ = [
     "join_pipe_readers",
     "process_group_popen_kwargs",
     "run_bounded_subprocess",
+    "terminate_process_tree",
 ]

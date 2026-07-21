@@ -16,6 +16,8 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 - Shared trusted-finalizer and release-source raw Git reads now ignore ambient
   `GIT_*` process state and replacement refs, so derivation is bound to the
   explicitly selected repository and literal immutable object graph.
+- Raw Git readers now propagate all worker read failures, bound kill/reap and
+  reader joins, and avoid closing a pipe while its reader may still be live.
 
 ### Fixed
 

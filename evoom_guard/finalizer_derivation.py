@@ -14,6 +14,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,11 @@ from evoom_guard.evidence_bundle import (
     _load_json_object,
     _read_regular_file,
     validate_evidence_context,
+)
+from evoom_guard.execution import (
+    ProcessLimits,
+    process_group_popen_kwargs,
+    terminate_process_tree,
 )
 from evoom_guard.guard import (
     _effective_policy,
@@ -48,6 +54,15 @@ MAX_PACK_BYTES = 32 * 1024 * 1024
 MAX_BINDINGS_BYTES = 512 * 1024
 MAX_GIT_STDERR_BYTES = 64 * 1024
 _GIT_STREAM_CHUNK_BYTES = 64 * 1024
+_GIT_QUERY_TIMEOUT_SECONDS = 30.0
+_GIT_PROCESS_POLL_SECONDS = 0.02
+_GIT_KILL_REAP_SECONDS = 3.0
+_GIT_READER_JOIN_SECONDS = 2.0
+_GIT_PROCESS_LIMITS = ProcessLimits(
+    termination_grace_seconds=1.0,
+    kill_grace_seconds=_GIT_KILL_REAP_SECONDS,
+    reader_join_seconds=_GIT_READER_JOIN_SECONDS,
+)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -171,6 +186,51 @@ def _valid_git_sha(value: str, *, label: str) -> str:
     return value
 
 
+def _terminate_git_process_tree(process: subprocess.Popen[Any]) -> bool:
+    """Terminate the dedicated Git process group and prove managed cleanup."""
+
+    return terminate_process_tree(process, _GIT_PROCESS_LIMITS)
+
+
+def _join_and_close_git_readers(
+    readers: list[threading.Thread],
+    streams: list[Any],
+) -> bool:
+    """Boundedly join attempted readers and close only streams proven safe."""
+
+    stopped: list[bool] = []
+    first_error: BaseException | None = None
+    deadline = time.monotonic() + _GIT_READER_JOIN_SECONDS
+    for reader in readers:
+        try:
+            reader.join(max(0.0, deadline - time.monotonic()))
+            stopped.append(not reader.is_alive())
+        except BaseException as exc:
+            # Thread.start() can raise after a native thread may exist. A join
+            # failure is therefore not proof that its stream is safe to close.
+            stopped.append(False)
+            if first_error is None:
+                first_error = exc
+
+    streams_closed = True
+    for index, stream in enumerate(streams):
+        safe_to_close = index >= len(stopped) or stopped[index]
+        if not safe_to_close:
+            streams_closed = False
+            continue
+        try:
+            stream.close()
+        except (OSError, ValueError):
+            streams_closed = False
+        except BaseException as exc:
+            streams_closed = False
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
+    return all(stopped) and streams_closed
+
+
 def _git_command(
     repo: str,
     args: list[str],
@@ -196,85 +256,156 @@ def _git_command(
         if not key.upper().startswith("GIT_")
     }
     environment["GIT_OPTIONAL_LOCKS"] = "0"
+    process: subprocess.Popen[Any] | None = None
+    streams: list[Any] = []
+    reader_start_attempts: list[threading.Thread] = []
+    cleanup_proven = False
+    readers_closed = False
     try:
-        process = subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=environment,
-        )
-    except OSError as exc:
-        raise FinalizerDerivationError(f"could not read immutable Git object: {exc}") from exc
-
-    assert process.stdout is not None
-    assert process.stderr is not None
-    stdout = bytearray()
-    stderr = bytearray()
-    overflow: list[str] = []
-    read_errors: list[OSError] = []
-
-    def stop_child() -> None:
         try:
-            process.kill()
-        except OSError:
-            # The process may have exited between the stream limit and kill.
-            pass
-
-    def drain(stream: Any, *, maximum: int, target: bytearray, label: str) -> None:
-        try:
-            while True:
-                chunk = stream.read(_GIT_STREAM_CHUNK_BYTES)
-                if not chunk:
-                    return
-                remaining = maximum + 1 - len(target)
-                if remaining > 0:
-                    target.extend(chunk[:remaining])
-                if len(target) > maximum:
-                    overflow.append(label)
-                    stop_child()
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=environment,
+                **process_group_popen_kwargs(),
+            )
         except OSError as exc:
-            read_errors.append(exc)
-            stop_child()
+            raise FinalizerDerivationError(
+                f"could not read immutable Git object: {exc}"
+            ) from exc
+        stdout_stream = process.stdout
+        stderr_stream = process.stderr
+        streams = [
+            stream for stream in (stdout_stream, stderr_stream) if stream is not None
+        ]
+        if stdout_stream is None or stderr_stream is None:
+            raise FinalizerDerivationError(
+                "could not read immutable Git object: Git output pipes were not created"
+            )
+        stdout = bytearray()
+        stderr = bytearray()
+        overflow: set[str] = set()
+        read_errors: list[BaseException] = []
+        reader_signal = threading.Event()
 
-    stdout_reader = threading.Thread(
-        target=drain,
-        args=(process.stdout,),
-        kwargs={"maximum": limit, "target": stdout, "label": "stdout"},
-        daemon=True,
-    )
-    stderr_reader = threading.Thread(
-        target=drain,
-        args=(process.stderr,),
-        kwargs={"maximum": MAX_GIT_STDERR_BYTES, "target": stderr, "label": "stderr"},
-        daemon=True,
-    )
-    stdout_reader.start()
-    stderr_reader.start()
-    timed_out = False
-    try:
-        process.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        stop_child()
-        process.wait()
-    stdout_reader.join()
-    stderr_reader.join()
+        def drain(stream: Any, *, maximum: int, target: bytearray, label: str) -> None:
+            try:
+                while True:
+                    chunk = stream.read(_GIT_STREAM_CHUNK_BYTES)
+                    if not chunk:
+                        return
+                    remaining = maximum + 1 - len(target)
+                    if remaining > 0:
+                        target.extend(chunk[:remaining])
+                    if len(target) > maximum:
+                        overflow.add(label)
+                        reader_signal.set()
+            except BaseException as exc:
+                read_errors.append(exc)
+                reader_signal.set()
 
-    if timed_out:
-        raise FinalizerDerivationError("could not read immutable Git object: Git query timed out")
-    if read_errors:
-        raise FinalizerDerivationError(
-            f"could not read immutable Git object: {read_errors[0]}"
-        ) from read_errors[0]
-    if "stdout" in overflow:
-        raise FinalizerDerivationError("Git object listing exceeds the finalizer limit")
-    if "stderr" in overflow:
-        raise FinalizerDerivationError("Git error output exceeds the finalizer limit")
-    if process.returncode != 0:
-        detail = bytes(stderr).decode("utf-8", "replace")[:512].strip()
-        raise FinalizerDerivationError(f"Git object lookup failed: {detail or process.returncode}")
-    return bytes(stdout)
+        readers = [
+            threading.Thread(
+                target=drain,
+                args=(stdout_stream,),
+                kwargs={"maximum": limit, "target": stdout, "label": "stdout"},
+                daemon=True,
+            ),
+            threading.Thread(
+                target=drain,
+                args=(stderr_stream,),
+                kwargs={
+                    "maximum": MAX_GIT_STDERR_BYTES,
+                    "target": stderr,
+                    "label": "stderr",
+                },
+                daemon=True,
+            ),
+        ]
+        for reader in readers:
+            # Record before start(): start may fail after a native thread exists.
+            reader_start_attempts.append(reader)
+            reader.start()
+        deadline = time.monotonic() + _GIT_QUERY_TIMEOUT_SECONDS
+        timed_out = False
+        while process.poll() is None:
+            if read_errors or overflow:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            reader_signal.wait(min(_GIT_PROCESS_POLL_SECONDS, remaining))
+
+        interrupted = timed_out or bool(read_errors) or bool(overflow)
+        if interrupted:
+            if not _terminate_git_process_tree(process):
+                raise FinalizerDerivationError(
+                    "could not read immutable Git object: Git query process "
+                    "cleanup could not be proven"
+                )
+            cleanup_proven = True
+        else:
+            try:
+                process.wait(timeout=_GIT_KILL_REAP_SECONDS)
+            except BaseException:
+                try:
+                    cleanup_proven = _terminate_git_process_tree(process)
+                except BaseException:
+                    pass
+                raise
+            if os.name == "posix":
+                if not _terminate_git_process_tree(process):
+                    raise FinalizerDerivationError(
+                        "could not read immutable Git object: Git query process "
+                        "cleanup could not be proven"
+                    )
+                cleanup_proven = True
+
+        if not _join_and_close_git_readers(reader_start_attempts, streams):
+            raise FinalizerDerivationError(
+                "could not read immutable Git object: Git query output readers "
+                "did not stop after cleanup"
+            )
+        readers_closed = True
+
+        if timed_out:
+            raise FinalizerDerivationError(
+                "could not read immutable Git object: Git query timed out"
+            )
+        if read_errors:
+            raise FinalizerDerivationError(
+                f"could not read immutable Git object: {read_errors[0]}"
+            ) from read_errors[0]
+        if "stdout" in overflow:
+            raise FinalizerDerivationError("Git object listing exceeds the finalizer limit")
+        if "stderr" in overflow:
+            raise FinalizerDerivationError("Git error output exceeds the finalizer limit")
+        if process.returncode != 0:
+            detail = bytes(stderr).decode("utf-8", "replace")[:512].strip()
+            raise FinalizerDerivationError(
+                f"Git object lookup failed: {detail or process.returncode}"
+            )
+        return bytes(stdout)
+    except BaseException:
+        # Preserve the active exception while attempting bounded cleanup.
+        if process is not None:
+            if not cleanup_proven:
+                try:
+                    cleanup_proven = _terminate_git_process_tree(process)
+                except BaseException:
+                    pass
+            if not readers_closed:
+                try:
+                    readers_closed = _join_and_close_git_readers(
+                        reader_start_attempts,
+                        streams,
+                    )
+                except BaseException:
+                    pass
+        raise
 
 
 class _GitReader:
