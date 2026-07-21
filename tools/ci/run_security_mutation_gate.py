@@ -617,6 +617,101 @@ MUTATIONS = (
         test="tests/test_junit_hardening.py::test_rejects_doctype_billion_laughs_without_expanding",
     ),
     Mutation(
+        name="subprocess-cleanup-requirement-validation-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        if type(self.require_process_group_cleanup_proof) is not bool:\n"
+        ),
+        after=(
+            "        if False and type(self.require_process_group_cleanup_proof) "
+            "is not bool:\n"
+        ),
+        test=(
+            "tests/test_execution_process.py::"
+            "test_typed_request_rejects_non_boolean_cleanup_requirement"
+        ),
+    ),
+    Mutation(
+        name="subprocess-process-group-cleanup-preflight-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "    if request.require_process_group_cleanup_proof and (\n"
+            '        os.name != "posix" or not callable(getattr(os, "killpg", None))\n'
+            "    ):\n"
+        ),
+        after=(
+            "    if False and request.require_process_group_cleanup_proof and (\n"
+            '        os.name != "posix" or not callable(getattr(os, "killpg", None))\n'
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_execution_process.py::"
+            "test_required_process_group_cleanup_proof_refuses_before_popen"
+        ),
+    ),
+    Mutation(
+        name="subprocess-process-group-platform-preflight-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "    if request.require_process_group_cleanup_proof and (\n"
+            '        os.name != "posix" or not callable(getattr(os, "killpg", None))\n'
+            "    ):\n"
+        ),
+        after=(
+            "    if request.require_process_group_cleanup_proof and (\n"
+            '        False or not callable(getattr(os, "killpg", None))\n'
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_execution_process.py::"
+            "test_required_process_group_cleanup_proof_refuses_before_popen"
+        ),
+    ),
+    Mutation(
+        name="subprocess-process-group-killpg-preflight-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "    if request.require_process_group_cleanup_proof and (\n"
+            '        os.name != "posix" or not callable(getattr(os, "killpg", None))\n'
+            "    ):\n"
+        ),
+        after=(
+            "    if request.require_process_group_cleanup_proof and (\n"
+            '        os.name != "posix" or False\n'
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_execution_process.py::"
+            "test_required_process_group_cleanup_proof_refuses_before_popen"
+        ),
+    ),
+    Mutation(
+        name="subprocess-process-group-cleanup-facade-forward-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        require_process_group_cleanup_proof="
+            "require_process_group_cleanup_proof,\n"
+        ),
+        after="        require_process_group_cleanup_proof=False,\n",
+        test=(
+            "tests/test_execution_process.py::"
+            "test_public_facade_forwards_process_group_cleanup_proof_requirement"
+        ),
+    ),
+    Mutation(
+        name="subprocess-required-process-group-launch-bypass",
+        path="evoom_guard/execution/process.py",
+        before="        **process_group_popen_kwargs(),\n",
+        after=(
+            "        **({} if request.require_process_group_cleanup_proof "
+            "else process_group_popen_kwargs()),\n"
+        ),
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_execute_passes_the_process_group_contract_to_popen"
+        ),
+    ),
+    Mutation(
         name="subprocess-reader-start-cleanup-bypass",
         path="evoom_guard/execution/process.py",
         before="        if process is not None:\n",

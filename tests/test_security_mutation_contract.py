@@ -88,13 +88,20 @@ class _NeverExceededCapture:
         return ""
 
 
-def _fake_request(*, timeout: float = 1.0) -> BoundedProcessRequest:
+def _fake_request(
+    *,
+    timeout: float = 1.0,
+    require_process_group_cleanup_proof: bool = False,
+) -> BoundedProcessRequest:
     return BoundedProcessRequest.from_command(
         ["self-terminating-fake"],
         cwd=None,
         env=None,
         timeout=timeout,
         limits=ProcessLimits(max_output_bytes=4),
+        require_process_group_cleanup_proof=(
+            require_process_group_cleanup_proof
+        ),
     )
 
 
@@ -246,8 +253,10 @@ def test_cleanup_failure_preempts_the_triggering_error(
         execute_bounded_process(_fake_request())
 
 
+@pytest.mark.parametrize("require_proof", [False, True])
 def test_execute_passes_the_process_group_contract_to_popen(
     monkeypatch: pytest.MonkeyPatch,
+    require_proof: bool,
 ) -> None:
     """The launcher must consume, not merely define, its containment kwargs."""
 
@@ -264,12 +273,19 @@ def test_execute_passes_the_process_group_contract_to_popen(
         "process_group_popen_kwargs",
         lambda: {"start_new_session": True},
     )
+    monkeypatch.setattr(
+        process_module,
+        "os",
+        SimpleNamespace(name="posix", killpg=lambda *_args: None),
+    )
     monkeypatch.setattr(process_module, "join_pipe_readers", lambda *_args: True)
     monkeypatch.setattr(process_module, "_terminate_process_tree", lambda *_args: True)
 
-    execute_bounded_process(_fake_request())
+    execute_bounded_process(
+        _fake_request(require_process_group_cleanup_proof=require_proof)
+    )
 
-    assert observed["start_new_session"] is True
+    assert observed.get("start_new_session") is True
 
 
 def test_posix_process_group_contract(monkeypatch: pytest.MonkeyPatch) -> None:

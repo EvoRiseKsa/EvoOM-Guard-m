@@ -78,6 +78,13 @@ class BoundedProcessRequest:
     timeout_seconds: float
     preexec_fn: Callable[[], object] | None = None
     limits: ProcessLimits = field(default_factory=ProcessLimits)
+    require_process_group_cleanup_proof: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.require_process_group_cleanup_proof) is not bool:
+            raise ValueError(
+                "require_process_group_cleanup_proof must be a bool"
+            )
 
     @classmethod
     def from_command(
@@ -89,6 +96,7 @@ class BoundedProcessRequest:
         timeout: float,
         preexec_fn: Callable[[], object] | None = None,
         limits: ProcessLimits | None = None,
+        require_process_group_cleanup_proof: bool = False,
     ) -> BoundedProcessRequest:
         """Freeze a caller command into the execution request contract."""
 
@@ -99,6 +107,9 @@ class BoundedProcessRequest:
             timeout_seconds=timeout,
             preexec_fn=preexec_fn,
             limits=ProcessLimits() if limits is None else limits,
+            require_process_group_cleanup_proof=(
+                require_process_group_cleanup_proof
+            ),
         )
 
 
@@ -135,6 +146,10 @@ class ProcessOutputLimitExceeded(RuntimeError):
 
 class ProcessContainmentError(RuntimeError):
     """The runner could not prove cleanup of its managed process tree."""
+
+
+class ProcessGroupCleanupUnavailable(ProcessContainmentError):
+    """The host cannot provide the requested process-group cleanup proof."""
 
 
 class BoundedOutput:
@@ -366,6 +381,13 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
 
     command = list(request.command)
     limits = request.limits
+    if request.require_process_group_cleanup_proof and (
+        os.name != "posix" or not callable(getattr(os, "killpg", None))
+    ):
+        raise ProcessGroupCleanupUnavailable(
+            "process-group cleanup proof requires POSIX process-group support "
+            "and is unavailable on this host"
+        )
     kwargs: dict[str, Any] = {
         "cwd": request.cwd,
         "env": request.env,
@@ -498,6 +520,7 @@ def run_bounded_subprocess(
     timeout: float,
     preexec_fn: Callable[[], object] | None = None,
     limits: ProcessLimits | None = None,
+    require_process_group_cleanup_proof: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Subprocess-compatible facade over the typed execution contract."""
 
@@ -508,6 +531,7 @@ def run_bounded_subprocess(
         timeout=timeout,
         preexec_fn=preexec_fn,
         limits=limits,
+        require_process_group_cleanup_proof=require_process_group_cleanup_proof,
     )
     completed = execute_bounded_process(request).as_completed_process()
     # Preserve the historical subprocess facade: callers that supplied a list

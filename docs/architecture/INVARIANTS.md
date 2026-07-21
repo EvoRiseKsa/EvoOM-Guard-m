@@ -27,6 +27,12 @@ The implementation must preserve these invariants across every refactor PR.
     startup was never attempted, and preserves the original active exception.
     Cleanup never infers safety from a missing `Thread.ident` and never
     synchronously closes a pipe while its reader may still be blocked.
+    A caller that requires cleanup proof for managed, non-detached descendants
+    must request that capability explicitly. Unsupported hosts reject such a
+    request before process launch; `CREATE_NEW_PROCESS_GROUP` and `taskkill`
+    alone are not treated as a durable Windows containment boundary. This
+    process-group contract is lifecycle containment, not filesystem, network,
+    credential, or `setsid()` isolation.
 15. Same-process and isolated execution modes must be explicit and named in state transitions.
 16. Record verifier is the trusted producer of lifecycle evidence checks.
 

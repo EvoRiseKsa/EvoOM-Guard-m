@@ -32,6 +32,14 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
   the typed `evoom_guard.execution` and `evoom_guard.isolation` contracts.
 - Candidate and black-box execution code no longer obtain process primitives
   from the concrete repository verifier.
+- Generic process requests can opt into a typed process-group cleanup-proof
+  requirement. The kernel rejects that requirement before `Popen` unless POSIX
+  process-group cleanup is available. This is a fail-closed capability
+  preflight, not a claim that a later cleanup attempt cannot fail. The default
+  remains off for trusted cross-platform control commands, and the runtime
+  proof covers only non-detached descendants in the managed group; it is not a
+  sandbox claim. An unexpected abort still preserves its active exception when
+  a secondary cleanup attempt fails.
 - `isolation/docker.py` owns bounded Docker control commands, image-identity
   observations, named-container lifecycle cleanup, and candidate-CID cleanup.
 - Named repo-verifier containers and black-box candidate CID containers remain

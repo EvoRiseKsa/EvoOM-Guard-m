@@ -7,13 +7,16 @@ import math
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from evoom_guard.execution import (
     BoundedProcessRequest,
     ProcessContainmentError,
+    ProcessGroupCleanupUnavailable,
     ProcessLimits,
     ProcessOutputLimitExceeded,
     execute_bounded_process,
@@ -40,6 +43,145 @@ def _command(source: str) -> list[str]:
 def test_process_limits_reject_unbounded_or_invalid_values(kwargs: dict) -> None:
     with pytest.raises(ValueError):
         ProcessLimits(**kwargs)
+
+
+@pytest.mark.parametrize("invalid", [0, 1, None, "true", object()])
+def test_typed_request_rejects_non_boolean_cleanup_requirement(
+    invalid: object,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="require_process_group_cleanup_proof must be a bool",
+    ):
+        BoundedProcessRequest.from_command(
+            ["candidate"],
+            cwd=None,
+            env=None,
+            timeout=1,
+            require_process_group_cleanup_proof=invalid,  # type: ignore[arg-type]
+        )
+
+
+def test_process_group_cleanup_proof_requirement_defaults_off() -> None:
+    request = BoundedProcessRequest.from_command(
+        ["trusted-tool"], cwd=None, env=None, timeout=1
+    )
+
+    assert request.require_process_group_cleanup_proof is False
+    assert issubclass(
+        ProcessGroupCleanupUnavailable, ProcessContainmentError
+    )
+
+
+@pytest.mark.parametrize(
+    ("host_name", "killpg"),
+    [
+        ("nt", lambda *_args: None),
+        ("posix", None),
+    ],
+)
+def test_required_process_group_cleanup_proof_refuses_before_popen(
+    monkeypatch: pytest.MonkeyPatch,
+    host_name: str,
+    killpg: object,
+) -> None:
+    launches: list[list[str]] = []
+    monkeypatch.setattr(
+        "evoom_guard.execution.process.os",
+        SimpleNamespace(name=host_name, killpg=killpg),
+    )
+
+    def unexpected_popen(command: list[str], **_kwargs: object) -> None:
+        launches.append(command)
+        raise AssertionError("Popen must not run before capability preflight")
+
+    monkeypatch.setattr(
+        "evoom_guard.execution.process.subprocess.Popen",
+        unexpected_popen,
+    )
+    request = BoundedProcessRequest.from_command(
+        ["candidate"],
+        cwd=None,
+        env=None,
+        timeout=1,
+        require_process_group_cleanup_proof=True,
+    )
+
+    with pytest.raises(
+        ProcessGroupCleanupUnavailable,
+        match="requires POSIX process-group support",
+    ):
+        execute_bounded_process(request)
+
+    assert launches == []
+
+
+def test_public_facade_forwards_process_group_cleanup_proof_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    launches: list[list[str]] = []
+    monkeypatch.setattr(
+        "evoom_guard.execution.process.os",
+        SimpleNamespace(name="nt", killpg=lambda *_args: None),
+    )
+
+    def unexpected_popen(command: list[str], **_kwargs: object) -> None:
+        launches.append(command)
+        raise AssertionError("Popen must not run before capability preflight")
+
+    monkeypatch.setattr(
+        "evoom_guard.execution.process.subprocess.Popen",
+        unexpected_popen,
+    )
+
+    with pytest.raises(ProcessGroupCleanupUnavailable):
+        run_bounded_subprocess(
+            ["candidate"],
+            cwd=None,
+            env=None,
+            timeout=1,
+            require_process_group_cleanup_proof=True,
+        )
+
+    assert launches == []
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX process groups")
+def test_required_process_group_cleanup_proof_runs_on_posix(tmp_path: Path) -> None:
+    ready = tmp_path / "strict-child-ready"
+    survived = tmp_path / "strict-child-survived"
+    child = (
+        "import signal, sys, time; from pathlib import Path; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "Path(sys.argv[1]).write_text('ready'); time.sleep(0.8); "
+        "Path(sys.argv[2]).write_text('survived')"
+    )
+    parent = (
+        "import subprocess, sys, time; from pathlib import Path; "
+        "subprocess.Popen([sys.executable, '-c', sys.argv[3], sys.argv[1], sys.argv[2]], "
+        "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+        "stderr=subprocess.DEVNULL, close_fds=True); "
+        "deadline=time.monotonic()+3; "
+        "\nwhile not Path(sys.argv[1]).exists() and time.monotonic()<deadline: time.sleep(0.01); "
+        "\nraise SystemExit(0 if Path(sys.argv[1]).exists() else 2)"
+    )
+    completed = run_bounded_subprocess(
+        [sys.executable, "-c", parent, str(ready), str(survived), child],
+        cwd=str(tmp_path),
+        env=os.environ.copy(),
+        timeout=5,
+        limits=ProcessLimits(
+            termination_grace_seconds=0.2,
+            kill_grace_seconds=2,
+            reader_join_seconds=1,
+        ),
+        require_process_group_cleanup_proof=True,
+    )
+
+    assert completed.returncode == 0
+    assert ready.exists()
+    time.sleep(0.9)
+    assert not survived.exists()
 
 
 def test_typed_request_preserves_exit_stdout_and_stderr(tmp_path: Path) -> None:
