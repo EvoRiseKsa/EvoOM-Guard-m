@@ -42,8 +42,14 @@ the exact collision-resistant container name before launch; black-box candidate
 cleanup learns one or more daemon-written 64-hex IDs from judge-owned cidfiles.
 Conflating them would weaken what each absence proof means.
 
-Docker argv and mount construction, image-resolution policy, isolation
-selection, evidence composition, and verdict/schema/CLI behavior remain in the
-existing callers. A later characterized phase may move the candidate runner to
-`isolation/candidate.py`; this slice does not move it or add a `candidate/`
-dependency.
+Repo-verifier Docker argv/mount construction, isolation selection, evidence
+composition, and verdict/schema/CLI behavior remain in their existing callers.
+The candidate-specific launch plan moves with candidate-boundary preparation.
+
+The third isolation slice lives in `evoom_guard/isolation/candidate.py`. It owns
+candidate-boundary preparation, launcher materialization, Docker/gVisor launch
+plans, and preparation evidence. `evoom_guard/candidate_runner.py` remains the
+compatibility surface: its public evidence/error identities are exact aliases,
+and its `CandidateRunner` subclass delegates to the typed implementation while
+preserving the historical bounded-Docker monkeypatch seam. Actual launcher/CID
+observation and verdict interpretation remain in `blackbox.py`.

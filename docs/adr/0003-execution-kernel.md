@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted; phase 1 (bounded native process) and phase 2 (Docker control,
-identity, and cleanup) implemented behind typed contracts.
+Accepted; phase 1 (bounded native process), phase 2 (Docker control, identity,
+and cleanup), and phase 3 (candidate-boundary preparation) are implemented
+behind typed contracts.
 
 ## Decision
 Create explicit execution backends (`process`, `environment`, `docker`) behind
@@ -33,6 +34,10 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
 - Named repo-verifier containers and black-box candidate CID containers remain
   distinct contracts: one proves cleanup of a known name, while the other
   discovers only validated runtime-written IDs before proving absence.
-- Docker argv/mount construction, isolation policy, evidence composition, and
-  verdict wording remain with their existing callers. `CandidateRunner` itself
-  is not moved by this phase.
+- Repo-verifier Docker argv/mount construction, isolation policy, evidence
+  composition, and verdict wording remain with their existing callers; the
+  candidate-specific launch plan moves with candidate-boundary preparation.
+- `isolation/candidate.py` owns launcher materialization and candidate-boundary
+  preparation. The legacy `candidate_runner.py` surface keeps its public
+  signatures and test seams while delegating implementation; runtime invocation
+  observation and verdict wording remain in `blackbox.py`.

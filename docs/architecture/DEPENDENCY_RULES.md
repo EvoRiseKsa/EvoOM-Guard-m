@@ -66,6 +66,12 @@ The Docker isolation slice adds only public imports within the documented
 fingerprint. It therefore does not manufacture a ratchet revision or lower a
 ceiling without a measured architectural change.
 
+The candidate-isolation slice moves launcher and boundary preparation into
+`isolation.candidate`. The legacy `candidate_runner` module imports only public
+typed isolation contracts and remains the compatibility surface; the extracted
+module imports `isolation.docker` directly and never imports the facade or
+`blackbox`, preventing a package-initialization cycle.
+
 ## Acceptance rules
 
 - Any refactor PR must:
