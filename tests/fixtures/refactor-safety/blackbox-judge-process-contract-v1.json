@@ -1,0 +1,294 @@
+{
+  "completed_run": {
+    "completed_process": {
+      "args": [
+        "judge-python",
+        "-m",
+        "pytest"
+      ],
+      "args_identity": true,
+      "returncode": 7,
+      "stderr": "captured-stderr",
+      "stdout": "captured-stdout",
+      "type": "CompletedProcess"
+    },
+    "popen": {
+      "command": [
+        "judge-python",
+        "-m",
+        "pytest"
+      ],
+      "command_identity": true,
+      "cwd": "/judge",
+      "env": {
+        "SAFE": "1"
+      },
+      "env_identity": true,
+      "keyword_names": [
+        "cwd",
+        "env",
+        "start_new_session",
+        "stderr",
+        "stdin",
+        "stdout"
+      ],
+      "start_new_session": true,
+      "stderr_is_pipe": true,
+      "stdin_is_devnull": true,
+      "stdout_is_pipe": true
+    },
+    "reader_factory": {
+      "capture_identity": [
+        true,
+        true
+      ],
+      "count": 2,
+      "daemon_values": [
+        true,
+        true
+      ],
+      "start_calls": [
+        1,
+        1
+      ],
+      "stream_args": [
+        "stdout",
+        "stderr"
+      ],
+      "stream_names": [
+        "stdout",
+        "stderr"
+      ],
+      "targets_use_drain_patch": [
+        true,
+        true
+      ]
+    },
+    "runtime_seams": {
+      "join_calls": [
+        {
+          "reader_count": 2,
+          "readers_match_created": true,
+          "stream_labels": [
+            "stdout",
+            "stderr"
+          ]
+        },
+        {
+          "reader_count": 2,
+          "readers_match_created": true,
+          "stream_labels": [
+            "stdout",
+            "stderr"
+          ]
+        }
+      ],
+      "monotonic_calls": [
+        100.0,
+        100.0
+      ],
+      "output_limits": [
+        321
+      ],
+      "poll_calls": 2,
+      "sleep_calls": [
+        0.125
+      ],
+      "terminate_process_identity": [
+        true
+      ]
+    }
+  },
+  "join": {
+    "join_error": {
+      "close_calls": 0,
+      "exception_type": "RuntimeError",
+      "message": "join sentinel"
+    },
+    "live": {
+      "close_calls": 0,
+      "generic_join_calls": [
+        {
+          "reader_identity": true,
+          "streams_are_empty": true
+        }
+      ],
+      "result": false
+    },
+    "stopped": {
+      "close_calls": 1,
+      "generic_join_calls": [
+        {
+          "reader_identity": true,
+          "streams_are_empty": true
+        }
+      ],
+      "result": true
+    }
+  },
+  "schema_version": "blackbox-judge-process-contract-v1",
+  "static": {
+    "constants": {
+      "_JUDGE_GROUP_POLL_SECONDS": 0.02,
+      "_JUDGE_TERMINATION_GRACE_SECONDS": 2.0,
+      "_MAX_SUBPROCESS_OUTPUT_BYTES": 1048576,
+      "_SIGKILL": 9
+    },
+    "errors": {
+      "JudgeOutputLimitError": {
+        "args": [
+          "black-box judge output exceeded the 4096-byte judge capture limit"
+        ],
+        "base": "RuntimeError",
+        "fields": {
+          "limit": 4096
+        },
+        "message": "black-box judge output exceeded the 4096-byte judge capture limit"
+      },
+      "JudgeProcessCleanupError": {
+        "args": [
+          "cleanup sentinel"
+        ],
+        "base": "RuntimeError",
+        "fields": {},
+        "message": "cleanup sentinel"
+      }
+    },
+    "patch_seam_presence": {
+      "_BoundedOutput": true,
+      "_JUDGE_GROUP_POLL_SECONDS": true,
+      "_JUDGE_TERMINATION_GRACE_SECONDS": true,
+      "_MAX_SUBPROCESS_OUTPUT_BYTES": true,
+      "_SIGKILL": true,
+      "_drain_subprocess_pipe": true,
+      "_join_judge_pipe_readers": true,
+      "_join_pipe_readers": true,
+      "_process_group_exists": true,
+      "_reap_judge_leader": true,
+      "_signal_judge_process_group": true,
+      "_terminate_judge_process_group": true,
+      "_wait_for_process_group_exit": true,
+      "subprocess.Popen": true,
+      "threading.Thread": true,
+      "time.monotonic": true,
+      "time.sleep": true
+    },
+    "required_patch_seams": [
+      "subprocess.Popen",
+      "threading.Thread",
+      "time.monotonic",
+      "time.sleep",
+      "_BoundedOutput",
+      "_drain_subprocess_pipe",
+      "_join_pipe_readers",
+      "_join_judge_pipe_readers",
+      "_terminate_judge_process_group",
+      "_process_group_exists",
+      "_signal_judge_process_group",
+      "_wait_for_process_group_exit",
+      "_reap_judge_leader",
+      "_MAX_SUBPROCESS_OUTPUT_BYTES",
+      "_JUDGE_TERMINATION_GRACE_SECONDS",
+      "_JUDGE_GROUP_POLL_SECONDS",
+      "_SIGKILL"
+    ],
+    "signatures": {
+      "_join_judge_pipe_readers": {
+        "parameters": [
+          {
+            "annotation": "list[threading.Thread]",
+            "default": "<REQUIRED>",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "readers"
+          },
+          {
+            "annotation": "list[Any]",
+            "default": "<REQUIRED>",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "streams"
+          }
+        ],
+        "return_annotation": "bool"
+      },
+      "_run_judge_process": {
+        "parameters": [
+          {
+            "annotation": "list[str]",
+            "default": "<REQUIRED>",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "command"
+          },
+          {
+            "annotation": "str",
+            "default": "<REQUIRED>",
+            "kind": "KEYWORD_ONLY",
+            "name": "cwd"
+          },
+          {
+            "annotation": "dict[str, str]",
+            "default": "<REQUIRED>",
+            "kind": "KEYWORD_ONLY",
+            "name": "env"
+          },
+          {
+            "annotation": "int",
+            "default": "<REQUIRED>",
+            "kind": "KEYWORD_ONLY",
+            "name": "timeout"
+          }
+        ],
+        "return_annotation": "subprocess.CompletedProcess[str]"
+      },
+      "_terminate_judge_process_group": {
+        "parameters": [
+          {
+            "annotation": "subprocess.Popen[Any]",
+            "default": "<REQUIRED>",
+            "kind": "POSITIONAL_OR_KEYWORD",
+            "name": "process"
+          }
+        ],
+        "return_annotation": "None"
+      }
+    }
+  },
+  "termination": {
+    "event_trace": [
+      "probe",
+      "signal-term",
+      "wait",
+      "signal-kill",
+      "wait",
+      "reap"
+    ],
+    "process_group_probes": [
+      4321
+    ],
+    "reaps": [
+      true
+    ],
+    "signals": [
+      [
+        4321,
+        15
+      ],
+      [
+        4321,
+        99
+      ]
+    ],
+    "sigterm": 15,
+    "waits": [
+      {
+        "process_group": 4321,
+        "process_identity": true,
+        "timeout": 0.75
+      },
+      {
+        "process_group": 4321,
+        "process_identity": true,
+        "timeout": 0.75
+      }
+    ]
+  }
+}
