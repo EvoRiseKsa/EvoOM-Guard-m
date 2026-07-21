@@ -203,6 +203,151 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="judge-start-new-session-bypass",
+        path="evoom_guard/blackbox.py",
+        before="            start_new_session=True,\n",
+        after="            start_new_session=False,\n",
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_judge_popen_starts_a_dedicated_session"
+        ),
+    ),
+    Mutation(
+        name="judge-timeout-cleanup-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            if time.monotonic() >= deadline:\n"
+            "                cleanup_and_prove(\"judge timed out\")\n"
+            "                raise subprocess.TimeoutExpired(\n"
+        ),
+        after=(
+            "            if False and time.monotonic() >= deadline:\n"
+            "                cleanup_and_prove(\"judge timed out\")\n"
+            "                raise subprocess.TimeoutExpired(\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_judge_timeout_is_not_bypassed_before_process_cleanup"
+        ),
+    ),
+    Mutation(
+        name="judge-post-completion-group-proof-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        cleanup_and_prove(\"judge completed\")\n"
+            "        return subprocess.CompletedProcess(\n"
+        ),
+        after="        return subprocess.CompletedProcess(\n",
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_completed_judge_still_proves_process_group_cleanup"
+        ),
+    ),
+    Mutation(
+        name="judge-live-output-checkpoint-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        while process.poll() is None:\n"
+            "            if capture.exceeded:\n"
+            "                cleanup_and_prove(\"judge output limit reached\")\n"
+        ),
+        after=(
+            "        while process.poll() is None:\n"
+            "            if False and capture.exceeded:\n"
+            "                cleanup_and_prove(\"judge output limit reached\")\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_live_output_checkpoint_runs_before_the_next_poll"
+        ),
+    ),
+    Mutation(
+        name="judge-post-poll-output-checkpoint-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        if capture.exceeded:\n"
+            "            cleanup_and_prove(\"judge output limit reached\")\n"
+            "            raise JudgeOutputLimitError(capture.limit)\n"
+            "        if not _join_judge_pipe_readers(readers, streams):\n"
+        ),
+        after=(
+            "        if False and capture.exceeded:\n"
+            "            cleanup_and_prove(\"judge output limit reached\")\n"
+            "            raise JudgeOutputLimitError(capture.limit)\n"
+            "        if not _join_judge_pipe_readers(readers, streams):\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_post_poll_output_checkpoint_precedes_normal_reader_join"
+        ),
+    ),
+    Mutation(
+        name="judge-post-join-output-checkpoint-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        if capture.exceeded:\n"
+            "            cleanup_and_prove(\"judge output limit reached\")\n"
+            "            raise JudgeOutputLimitError(capture.limit)\n"
+            "        # A clean pytest exit is not sufficient: a pack/candidate may have\n"
+        ),
+        after=(
+            "        if False and capture.exceeded:\n"
+            "            cleanup_and_prove(\"judge output limit reached\")\n"
+            "            raise JudgeOutputLimitError(capture.limit)\n"
+            "        # A clean pytest exit is not sufficient: a pack/candidate may have\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_post_join_output_checkpoint_cannot_return_success"
+        ),
+    ),
+    Mutation(
+        name="judge-reader-join-failure-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        if not _join_judge_pipe_readers(readers, streams):\n"
+            "            cleanup_and_prove(\"judge exited with live output pipes\")\n"
+            "            raise JudgeProcessCleanupError(\n"
+            "                \"judge exited but its output pipes did not close\"\n"
+            "            )\n"
+        ),
+        after=(
+            "        if False and not _join_judge_pipe_readers(readers, streams):\n"
+            "            cleanup_and_prove(\"judge exited with live output pipes\")\n"
+            "            raise JudgeProcessCleanupError(\n"
+            "                \"judge exited but its output pipes did not close\"\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_reader_join_failure_cannot_be_returned_as_success"
+        ),
+    ),
+    Mutation(
+        name="judge-runtime-baseexception-precedence-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            except BaseException:\n"
+            "                pass\n"
+            "        raise\n"
+            "\n"
+            "\n"
+            "def _run_blackbox_impl(\n"
+        ),
+        after=(
+            "            except BaseException:\n"
+            "                pass\n"
+            "        raise JudgeProcessCleanupError(\"mutant masked primary\")\n"
+            "\n"
+            "\n"
+            "def _run_blackbox_impl(\n"
+        ),
+        test=(
+            "tests/test_blackbox_judge_mutation_contract.py::"
+            "test_runtime_baseexception_remains_primary_after_cleanup_failures"
+        ),
+    ),
+    Mutation(
         name="docker-absence-daemon-failure-bypass",
         path="evoom_guard/isolation/docker.py",
         before=(
