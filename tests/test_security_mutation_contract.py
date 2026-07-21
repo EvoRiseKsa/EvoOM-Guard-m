@@ -181,7 +181,7 @@ def test_post_poll_overflow_stops_before_normal_reader_join(
     with pytest.raises(ProcessOutputLimitExceeded):
         execute_bounded_process(_fake_request())
 
-    assert events[:2] == ["terminate", "join"]
+    assert events == ["terminate", "join"]
 
 
 def test_post_join_overflow_is_not_returned_as_success(

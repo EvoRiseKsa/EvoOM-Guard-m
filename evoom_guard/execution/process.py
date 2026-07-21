@@ -303,20 +303,62 @@ def join_pipe_readers(
     streams: list[Any],
     timeout_seconds: float = DEFAULT_READER_JOIN_SECONDS,
 ) -> bool:
-    """Wait for pipe drain, force-closing stuck descriptors before failure."""
+    """Boundedly wait for pipe drain without closing under a live reader.
 
-    for reader in readers:
-        reader.join(timeout_seconds)
-    if not any(reader.is_alive() for reader in readers):
-        return True
-    for stream in streams:
-        try:
-            stream.close()
-        except OSError:
-            pass
+    Closing a buffered pipe while another thread is blocked in ``read()`` can
+    itself block on the stream lock.  The caller must terminate the managed
+    process tree before retrying a reader that remains alive.
+    """
+
+    del streams  # Retained for the historical compatibility signature.
     for reader in readers:
         reader.join(timeout_seconds)
     return not any(reader.is_alive() for reader in readers)
+
+
+def _join_attempted_pipe_readers(
+    readers: list[threading.Thread],
+    streams: list[Any],
+    timeout_seconds: float,
+) -> bool:
+    """Boundedly join startup-attempted readers before closing safe pipes.
+
+    ``Thread.start()`` may create a native thread and then raise before Python
+    exposes enough state for a caller to distinguish that case from a thread
+    that never started.  A failed join is therefore not proof that the
+    corresponding stream can be closed without blocking under a live read.
+    Streams with no attempted reader are safe to close after process cleanup.
+    """
+
+    stopped: list[bool] = []
+    first_error: BaseException | None = None
+    for reader in readers:
+        reader_stopped = False
+        try:
+            reader_stopped = join_pipe_readers([reader], [], timeout_seconds)
+        except BaseException as exc:
+            if first_error is None:
+                first_error = exc
+        stopped.append(reader_stopped)
+
+    streams_closed = True
+    for index, stream in enumerate(streams):
+        safe_to_close = index >= len(stopped) or stopped[index]
+        if not safe_to_close:
+            streams_closed = False
+            continue
+        try:
+            stream.close()
+        except (OSError, ValueError):
+            streams_closed = False
+        except BaseException as exc:
+            streams_closed = False
+            if first_error is None:
+                first_error = exc
+
+    if first_error is not None:
+        raise first_error
+    return all(stopped) and streams_closed
 
 
 def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessResult:
@@ -334,48 +376,54 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
     }
     if request.preexec_fn is not None and os.name == "posix":
         kwargs["preexec_fn"] = request.preexec_fn
-    process = subprocess.Popen(command, **kwargs)
-    assert process.stdout is not None and process.stderr is not None
-    capture = BoundedOutput(limits.max_output_bytes)
-    streams = [process.stdout, process.stderr]
-    readers = [
-        threading.Thread(
-            target=drain_process_pipe,
-            args=(
-                process.stdout,
-                capture,
-                "stdout",
-                limits.read_chunk_bytes,
-            ),
-            daemon=True,
-        ),
-        threading.Thread(
-            target=drain_process_pipe,
-            args=(
-                process.stderr,
-                capture,
-                "stderr",
-                limits.read_chunk_bytes,
-            ),
-            daemon=True,
-        ),
-    ]
-    for reader in readers:
-        reader.start()
-
-    def stop_and_prove(reason: str) -> None:
-        if not _terminate_process_tree(process, limits):
-            raise ProcessContainmentError(
-                f"{reason}; could not prove subprocess-tree cleanup"
-            )
-        if not join_pipe_readers(
-            readers, streams, limits.reader_join_seconds
-        ):
-            raise ProcessContainmentError(
-                f"{reason}; subprocess output pipes did not close after cleanup"
-            )
-
+    process: subprocess.Popen[Any] | None = None
+    streams: list[Any] = []
+    reader_start_attempts: list[threading.Thread] = []
+    tree_cleanup_proven = False
+    reader_cleanup_proven = False
     try:
+        process = subprocess.Popen(command, **kwargs)
+        stdout = process.stdout
+        stderr = process.stderr
+        streams = [stream for stream in (stdout, stderr) if stream is not None]
+        if stdout is None or stderr is None:
+            raise ProcessContainmentError(
+                "subprocess output pipes were not created"
+            )
+        capture = BoundedOutput(limits.max_output_bytes)
+        readers = [
+            threading.Thread(
+                target=drain_process_pipe,
+                args=(stdout, capture, "stdout", limits.read_chunk_bytes),
+                daemon=True,
+            ),
+            threading.Thread(
+                target=drain_process_pipe,
+                args=(stderr, capture, "stderr", limits.read_chunk_bytes),
+                daemon=True,
+            ),
+        ]
+        for reader in readers:
+            # Record before start(): an asynchronous BaseException can arrive
+            # after the native thread exists but before start() returns.
+            reader_start_attempts.append(reader)
+            reader.start()
+
+        def stop_and_prove(reason: str) -> None:
+            nonlocal reader_cleanup_proven, tree_cleanup_proven
+            if not _terminate_process_tree(process, limits):
+                raise ProcessContainmentError(
+                    f"{reason}; could not prove subprocess-tree cleanup"
+                )
+            tree_cleanup_proven = True
+            if not join_pipe_readers(
+                readers, streams, limits.reader_join_seconds
+            ):
+                raise ProcessContainmentError(
+                    f"{reason}; subprocess output pipes did not close after cleanup"
+                )
+            reader_cleanup_proven = True
+
         deadline = time.monotonic() + max(0.0, float(request.timeout_seconds))
         while process.poll() is None:
             if capture.exceeded:
@@ -401,13 +449,16 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
             raise ProcessContainmentError(
                 "subprocess exited but its output pipes did not close"
             )
+        reader_cleanup_proven = True
         if capture.exceeded:
             stop_and_prove("subprocess output limit reached")
             raise ProcessOutputLimitExceeded(limits.max_output_bytes)
-        if os.name == "posix" and not _terminate_process_tree(process, limits):
-            raise ProcessContainmentError(
-                "subprocess completed but post-completion tree cleanup was not proven"
-            )
+        if os.name == "posix":
+            if not _terminate_process_tree(process, limits):
+                raise ProcessContainmentError(
+                    "subprocess completed but post-completion tree cleanup was not proven"
+                )
+            tree_cleanup_proven = True
         assert process.returncode is not None
         return BoundedProcessResult(
             command=tuple(command),
@@ -418,9 +469,24 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
     except BaseException:
         # Cancellation and unexpected reader errors must not leak the runner's
         # own child tree.  The primary exception remains authoritative.
-        if process.poll() is None:
-            _terminate_process_tree(process, limits)
-        join_pipe_readers(readers, streams, limits.reader_join_seconds)
+        if process is not None:
+            if not tree_cleanup_proven:
+                try:
+                    # A reaped leader is not proof that its process group has no
+                    # surviving descendant, so abort cleanup is unconditional
+                    # until one successful proof has already been recorded.
+                    _terminate_process_tree(process, limits)
+                except BaseException:
+                    pass
+            if not reader_cleanup_proven:
+                try:
+                    _join_attempted_pipe_readers(
+                        reader_start_attempts,
+                        streams,
+                        limits.reader_join_seconds,
+                    )
+                except BaseException:
+                    pass
         raise
 
 

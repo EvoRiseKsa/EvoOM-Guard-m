@@ -617,6 +617,121 @@ MUTATIONS = (
         test="tests/test_junit_hardening.py::test_rejects_doctype_billion_laughs_without_expanding",
     ),
     Mutation(
+        name="subprocess-reader-start-cleanup-bypass",
+        path="evoom_guard/execution/process.py",
+        before="        if process is not None:\n",
+        after="        if False and process is not None:\n",
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_reader_start_failure_cleans_tree_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="subprocess-reader-start-tracking-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "            reader_start_attempts.append(reader)\n"
+            "            reader.start()\n"
+        ),
+        after="            reader.start()\n",
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_reader_start_failure_cleans_tree_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="subprocess-reader-safe-close-proof-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "        safe_to_close = index >= len(stopped) or stopped[index]\n"
+        ),
+        after="        safe_to_close = True\n",
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_attempted_reader_without_join_proof_never_closes_its_pipe"
+        ),
+    ),
+    Mutation(
+        name="subprocess-live-reader-synchronous-close",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "    del streams  # Retained for the historical compatibility signature.\n"
+            "    for reader in readers:\n"
+        ),
+        after=(
+            "    for stream in streams:\n"
+            "        stream.close()\n"
+            "    for reader in readers:\n"
+        ),
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_live_reader_pipe_is_never_closed_synchronously"
+        ),
+    ),
+    Mutation(
+        name="subprocess-reader-start-primary-exception-mask",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "                except BaseException:\n"
+            "                    pass\n"
+            "            if not reader_cleanup_proven:\n"
+        ),
+        after=(
+            "                except Exception:\n"
+            "                    pass\n"
+            "            if not reader_cleanup_proven:\n"
+        ),
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_reader_start_primary_survives_cleanup_baseexceptions"
+        ),
+    ),
+    Mutation(
+        name="subprocess-reader-join-primary-exception-mask",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "                except BaseException:\n"
+            "                    pass\n"
+            "        raise\n"
+        ),
+        after=(
+            "                except Exception:\n"
+            "                    pass\n"
+            "        raise\n"
+        ),
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_post_start_baseexception_cleans_even_completed_tree_without_masking"
+        ),
+    ),
+    Mutation(
+        name="subprocess-tree-cleanup-proof-state-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "            tree_cleanup_proven = True\n"
+            "            if not join_pipe_readers(\n"
+        ),
+        after="            if not join_pipe_readers(\n",
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_post_poll_overflow_stops_before_normal_reader_join"
+        ),
+    ),
+    Mutation(
+        name="subprocess-reader-cleanup-proof-state-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "            reader_cleanup_proven = True\n"
+            "\n"
+            "        deadline = time.monotonic()"
+        ),
+        after="\n        deadline = time.monotonic()",
+        test=(
+            "tests/test_security_mutation_contract.py::"
+            "test_post_poll_overflow_stops_before_normal_reader_join"
+        ),
+    ),
+    Mutation(
         name="subprocess-output-cap-bypass",
         path="evoom_guard/execution/process.py",
         before="                self._exceeded = True\n",
@@ -671,13 +786,13 @@ MUTATIONS = (
             "        if capture.exceeded:\n"
             '            stop_and_prove("subprocess output limit reached")\n'
             "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
-            '        if os.name == "posix" and not _terminate_process_tree(process, limits):\n'
+            '        if os.name == "posix":\n'
         ),
         after=(
             "        if False and capture.exceeded:\n"
             '            stop_and_prove("subprocess output limit reached")\n'
             "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
-            '        if os.name == "posix" and not _terminate_process_tree(process, limits):\n'
+            '        if os.name == "posix":\n'
         ),
         test=(
             "tests/test_security_mutation_contract.py::"
@@ -698,16 +813,16 @@ MUTATIONS = (
         name="subprocess-cleanup-proof-bypass",
         path="evoom_guard/execution/process.py",
         before=(
-            "        if not _terminate_process_tree(process, limits):\n"
-            "            raise ProcessContainmentError(\n"
-            '                f"{reason}; could not prove subprocess-tree cleanup"\n'
-            "            )\n"
+            "            if not _terminate_process_tree(process, limits):\n"
+            "                raise ProcessContainmentError(\n"
+            '                    f"{reason}; could not prove subprocess-tree cleanup"\n'
+            "                )\n"
         ),
         after=(
-            "        if False and not _terminate_process_tree(process, limits):\n"
-            "            raise ProcessContainmentError(\n"
-            '                f"{reason}; could not prove subprocess-tree cleanup"\n'
-            "            )\n"
+            "            if False and not _terminate_process_tree(process, limits):\n"
+            "                raise ProcessContainmentError(\n"
+            '                    f"{reason}; could not prove subprocess-tree cleanup"\n'
+            "                )\n"
         ),
         test=(
             "tests/test_security_mutation_contract.py::"
