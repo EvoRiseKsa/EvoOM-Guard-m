@@ -53,3 +53,12 @@ compatibility surface: its public evidence/error identities are exact aliases,
 and its `CandidateRunner` subclass delegates to the typed implementation while
 preserving the historical bounded-Docker monkeypatch seam. Actual launcher/CID
 observation and verdict interpretation remain in `blackbox.py`.
+
+The fourth isolation slice lives in `evoom_guard/isolation/invocation.py`. It
+owns the judge-side one-way AF_UNIX datagram receiver, exact-token filtering,
+cumulative receipt count, bounded receive-lock batches, and socket lifecycle.
+`blackbox._InvocationRecorder` is an exact compatibility alias. The black-box
+verifier still owns the policy that a host boundary needs a receipt and a
+container boundary needs both a receipt and a validated runtime-written CID;
+the transport cannot promote a prepared launcher into observed execution on
+its own.

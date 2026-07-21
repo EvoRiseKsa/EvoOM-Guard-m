@@ -65,6 +65,8 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   retaining policy/evidence composition and compatibility facades in callers.
 - Extract candidate-boundary preparation into `isolation/candidate.py` behind
   the characterized `candidate_runner.py` compatibility surface.
+- Extract the black-box invocation-receipt transport into
+  `isolation/invocation.py`, retaining evidence composition in `blackbox.py`.
 - Extract `candidate/` and `workspace/` domains.
 - Split `repo_verifier.py` into phase modules.
 - Split `blackbox.py` into invocation/pack/CID/evidence modules.

@@ -72,6 +72,12 @@ typed isolation contracts and remains the compatibility surface; the extracted
 module imports `isolation.docker` directly and never imports the facade or
 `blackbox`, preventing a package-initialization cycle.
 
+The invocation-transport slice moves the stdlib-only AF_UNIX receipt recorder
+into `isolation.invocation`. It records bounded exact-token observations but
+imports no verdict, evidence, verifier, or compatibility module. `blackbox`
+retains its private recorder name as an exact alias and remains solely
+responsible for combining receipts with validated container IDs.
+
 ## Acceptance rules
 
 - Any architecture-extraction PR must:

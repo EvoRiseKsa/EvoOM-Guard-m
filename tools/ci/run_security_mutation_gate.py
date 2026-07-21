@@ -41,7 +41,7 @@ class Mutation:
 MUTATIONS = (
     Mutation(
         name="invocation-drain-batch-limit-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/isolation/invocation.py",
         before=(
             "            for _ in range("
             "_MAX_INVOCATION_DATAGRAMS_PER_DRAIN):\n"
@@ -57,7 +57,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="invocation-drain-stop-check-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/isolation/invocation.py",
         before="                if self._stop.is_set() and not final:\n",
         after="                if False and self._stop.is_set() and not final:\n",
         test=(
@@ -67,7 +67,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="invocation-post-bind-unlink-bypass",
-        path="evoom_guard/blackbox.py",
+        path="evoom_guard/isolation/invocation.py",
         before=(
             "    if bound:\n"
             "        try:\n"

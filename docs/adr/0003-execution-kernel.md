@@ -3,8 +3,9 @@
 ## Status
 
 Accepted; phase 1 (bounded native process), phase 2 (Docker control, identity,
-and cleanup), and phase 3 (candidate-boundary preparation) are implemented
-behind typed contracts.
+and cleanup), phase 3 (candidate-boundary preparation), and phase 4
+(candidate-invocation receipt transport) are implemented behind typed
+contracts.
 
 ## Decision
 Create explicit execution backends (`process`, `environment`, `docker`) behind
@@ -47,3 +48,7 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
   cannot hold verdict or cleanup indefinitely by continuously flooding invalid
   datagrams. A setup failure after a successful bind also removes the socket
   pathname; a failed bind never deletes a pre-existing path.
+- `isolation/invocation.py` owns that judge-side receipt transport and cumulative
+  exact-token observation. `blackbox.py` retains an exact compatibility alias
+  and remains solely responsible for composing receipts with validated runtime
+  CIDs, evidence, and verdicts.

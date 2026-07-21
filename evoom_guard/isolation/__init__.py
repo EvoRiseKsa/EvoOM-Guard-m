@@ -41,6 +41,7 @@ from evoom_guard.isolation.docker import (
     run_named_docker_client,
     scan_candidate_container_ids,
 )
+from evoom_guard.isolation.invocation import InvocationRecorder
 
 __all__ = [
     "CANDIDATE_CID_DIRNAME",
@@ -66,6 +67,7 @@ __all__ = [
     "CandidateRunner",
     "IsolationEvidence",
     "IsolationUnavailable",
+    "InvocationRecorder",
     "cleanup_candidate_containers",
     "cleanup_named_container",
     "docker_container_name",
