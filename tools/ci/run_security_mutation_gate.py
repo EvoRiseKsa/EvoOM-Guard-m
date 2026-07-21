@@ -581,6 +581,195 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="finalizer-git-tree-cleanup-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="    return terminate_process_tree(process, _GIT_PROCESS_LIMITS)\n",
+        after="    return True\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_timeout_reports_unproven_cleanup_without_unbounded_wait"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-process-group-launch-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="                **process_group_popen_kwargs(),\n",
+        after="                **{},\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_git_launch_applies_the_managed_process_group_contract"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-reader-join-bound-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "            reader.join(max(0.0, deadline - time.monotonic()))\n"
+        ),
+        after="            reader.join()\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_git_bytes_remain_exact_and_reader_joins_are_bounded"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-live-reader-close-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="        safe_to_close = index >= len(stopped) or stopped[index]\n",
+        after="        safe_to_close = True\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_live_reader_stream_is_never_closed_synchronously"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-reader-start-tracking-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "            reader_start_attempts.append(reader)\n"
+            "            reader.start()\n"
+        ),
+        after="            reader.start()\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_reader_start_failure_kills_and_reaps_git_without_masking_primary"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-overflow-state-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                        overflow.add(label)\n"
+            "                        reader_signal.set()\n"
+        ),
+        after="                        reader_signal.set()\n",
+        test=(
+            "tests/test_finalizer_derivation.py::"
+            "test_raw_git_command_bounds_pipes_while_the_child_is_running"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-reader-error-record-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                read_errors.append(exc)\n"
+            "                reader_signal.set()\n"
+        ),
+        after="                reader_signal.set()\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_worker_read_failure_cannot_return_partial_git_output"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-reader-baseexception-narrowing",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "            except BaseException as exc:\n"
+            "                read_errors.append(exc)\n"
+        ),
+        after=(
+            "            except Exception as exc:\n"
+            "                read_errors.append(exc)\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_worker_read_failure_cannot_return_partial_git_output"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-live-reader-error-cleanup-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "        interrupted = timed_out or bool(read_errors) or bool(overflow)\n"
+        ),
+        after="        interrupted = timed_out or bool(overflow)\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_worker_read_failure_stops_a_still_live_git_child"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-interrupt-cleanup-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "        if interrupted:\n"
+            "            if not _terminate_git_process_tree(process):\n"
+        ),
+        after=(
+            "        if interrupted:\n"
+            "            if False and not _terminate_git_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_timeout_uses_bounded_kill_reap_and_reader_join"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-posix-post-completion-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            '            if os.name == "posix":\n'
+            "                if not _terminate_git_process_tree(process):\n"
+        ),
+        after=(
+            '            if False and os.name == "posix":\n'
+            "                if not _terminate_git_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_posix_success_proves_post_completion_group_cleanup"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-post-poll-primary-suppression",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                raise\n"
+            '            if os.name == "posix":\n'
+        ),
+        after=(
+            "                pass\n"
+            '            if os.name == "posix":\n'
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_post_poll_wait_baseexception_remains_authoritative"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-reader-join-primary-suppression",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "    if first_error is not None:\n"
+            "        raise first_error\n"
+        ),
+        after=(
+            "    if False and first_error is not None:\n"
+            "        raise first_error\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_reader_join_baseexception_remains_authoritative"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-cleanup-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "    except BaseException:\n"
+            "        # Preserve the active exception while attempting bounded cleanup.\n"
+        ),
+        after=(
+            "    except Exception:\n"
+            "        # Preserve the active exception while attempting bounded cleanup.\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_reader_start_failure_kills_and_reaps_git_without_masking_primary"
+        ),
+    ),
+    Mutation(
         name="protected-edit-preflight-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before="        if rejection is not None:\n            return rejection\n",

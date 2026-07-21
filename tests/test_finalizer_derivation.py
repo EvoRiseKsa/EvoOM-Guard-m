@@ -179,8 +179,15 @@ def test_raw_git_command_bounds_pipes_while_the_child_is_running(
         def returncode(self) -> int | None:
             return self._inner.returncode
 
+        @property
+        def pid(self) -> int:
+            return self._inner.pid
+
         def wait(self, *args: object, **kwargs: object) -> int:
             return self._inner.wait(*args, **kwargs)
+
+        def poll(self) -> int | None:
+            return self._inner.poll()
 
         def kill(self) -> None:
             killed.append(True)
@@ -190,6 +197,18 @@ def test_raw_git_command_bounds_pipes_while_the_child_is_running(
         return TrackingProcess(real_popen([sys.executable, "-c", script], **kwargs))
 
     monkeypatch.setattr(finalizer_derivation.subprocess, "Popen", noisy_git)
+
+    def terminate_noisy_git(process: TrackingProcess, _limits: object) -> bool:
+        killed.append(True)
+        process.kill()
+        process.wait(timeout=3)
+        return process.returncode is not None
+
+    monkeypatch.setattr(
+        finalizer_derivation,
+        "terminate_process_tree",
+        terminate_noisy_git,
+    )
 
     with pytest.raises(FinalizerDerivationError, match=message):
         _git_command(".", ["rev-parse", "HEAD"], bare=False, limit=maximum)
@@ -254,8 +273,11 @@ def test_raw_git_command_scrubs_all_ambient_git_environment(
         stderr = io.BytesIO()
         returncode = 0
 
+        def poll(self) -> int:
+            return 0
+
         def wait(self, *, timeout: float | None = None) -> int:
-            assert timeout == 30
+            assert timeout == finalizer_derivation._GIT_KILL_REAP_SECONDS
             return 0
 
         def kill(self) -> None:  # pragma: no cover - success path only
@@ -271,6 +293,11 @@ def test_raw_git_command_scrubs_all_ambient_git_environment(
     monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "ambient-value")
     monkeypatch.setenv("EVOGUARD_ENV_SENTINEL", "preserved")
     monkeypatch.setattr(finalizer_derivation.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        finalizer_derivation,
+        "terminate_process_tree",
+        lambda *_args: True,
+    )
 
     output = _git_command("explicit-repository", ["rev-parse", "HEAD"], bare=False)
 

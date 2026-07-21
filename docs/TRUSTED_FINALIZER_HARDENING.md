@@ -29,6 +29,11 @@ and compare them to the semantic verdict before it opens the signing key.
   repository's administrative metadata and object store, the resolved Git
   executable, and non-`GIT_*` runner configuration; this control does not make
   a hostile local object store trustworthy.
+- Git stdout and stderr must be drained concurrently within separate byte
+  limits. Reader construction/start failures, read failures, timeout, and
+  cancellation must trigger bounded child cleanup; a live reader's pipe must
+  never be closed synchronously. Partial output after a worker failure is not
+  an immutable-object result.
 - The deletion list must also be reconstructed from the two clean Git trees.
   The candidate text digest intentionally excludes deletions, while the Guard
   decision and its attestation do not.
@@ -72,6 +77,9 @@ not acceptable.
 - Ambient repository/object-directory variables cannot redirect a worktree or
   bare-object query, and worktree/bare replacement refs cannot substitute the
   literal tree read by the derivation.
+- Reader construction/start failures clean the child without masking the
+  original failure; worker errors cannot yield a successful partial object;
+  timeout cleanup and reader joins have finite tested bounds.
 - A partial rerun, failed run, and cancelled run preserve the attempt-bound
   `DENY` semantics.
 - The privileged job has no checkout or candidate execution path, including on
