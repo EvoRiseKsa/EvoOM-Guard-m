@@ -33,6 +33,9 @@ The implementation must preserve these invariants across every refactor PR.
     must request that capability explicitly. Unsupported hosts reject such a
     request before process launch; `CREATE_NEW_PROCESS_GROUP` and `taskkill`
     alone are not treated as a durable Windows containment boundary. This
+    explicit request is mandatory for every host command selected by the
+    `strict_harness` policy; container phases satisfy their distinct container
+    absence contract instead. This
     process-group contract is lifecycle containment, not filesystem, network,
     credential, or `setsid()` isolation.
 15. Same-process and isolated execution modes must be explicit and named in state transitions.

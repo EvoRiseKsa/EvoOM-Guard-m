@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,11 @@ def test_characterization_vector_metadata_is_exact() -> None:
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)
 def test_frozen_repo_verifier_behavior_and_evidence(case_name: str, tmp_path: Path) -> None:
+    if case_name == "strict_exit_only_rejected" and os.name != "posix":
+        pytest.skip(
+            "the frozen strict host-execution vector requires POSIX process-group "
+            "proof; unsupported-host fail-closed behavior has a dedicated contract"
+        )
     expected = _frozen()["cases"][case_name]
     actual = capture_case(case_name, tmp_path)
     if actual != expected:

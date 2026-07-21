@@ -496,6 +496,7 @@ def _run_bounded_subprocess(
     env: dict[str, str] | None,
     timeout: float,
     preexec_fn: Any = None,
+    require_process_group_cleanup_proof: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Compatibility facade over the typed execution-kernel contract."""
 
@@ -505,6 +506,9 @@ def _run_bounded_subprocess(
         env=env,
         timeout=timeout,
         preexec_fn=preexec_fn,
+        require_process_group_cleanup_proof=(
+            require_process_group_cleanup_proof
+        ),
         limits=ProcessLimits(
             max_output_bytes=_MAX_SUBPROCESS_OUTPUT_BYTES,
             read_chunk_bytes=_SUBPROCESS_READ_CHUNK_BYTES,
@@ -1343,6 +1347,7 @@ class RepoVerifier:
                             preexec_fn=(
                                 self._limits() if os.name == "posix" else None
                             ),
+                            require_process_group_cleanup_proof=self.strict_harness,
                         )
                 except _DockerRunTimeout as exc:
                     delivered = self.isolation if exc.container_started else "not_run"
@@ -1638,6 +1643,7 @@ class RepoVerifier:
                         env=run_env,
                         timeout=self.timeout,
                         preexec_fn=self._limits() if os.name == "posix" else None,
+                        require_process_group_cleanup_proof=self.strict_harness,
                     )
             except _DockerRunTimeout as exc:
                 delivered = self.isolation if exc.container_started else "not_run"
@@ -1995,6 +2001,7 @@ class RepoVerifier:
                             preexec_fn=(
                                 self._limits() if os.name == "posix" else None
                             ),
+                            require_process_group_cleanup_proof=self.strict_harness,
                         )
                 except _DockerRunTimeout as exc:
                     delivered = self.isolation if exc.container_started else "not_run"

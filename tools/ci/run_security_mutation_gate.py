@@ -1157,8 +1157,8 @@ MUTATIONS = (
         before="            if strict_harness and (junit is None or junit.total <= 0):\n",
         after="            if False and strict_harness and (junit is None or junit.total <= 0):\n",
         test=(
-            "tests/test_repo_verifier_characterization.py::"
-            "test_frozen_repo_verifier_behavior_and_evidence[strict_exit_only_rejected]"
+            "tests/test_strict_harness.py::"
+            "test_strict_harness_zero_test_guard_cannot_be_disabled"
         ),
     ),
     Mutation(
@@ -1261,6 +1261,132 @@ MUTATIONS = (
         test=(
             "tests/test_execution_process.py::"
             "test_public_facade_forwards_process_group_cleanup_proof_requirement"
+        ),
+    ),
+    Mutation(
+        name="repo-subprocess-group-proof-facade-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "        require_process_group_cleanup_proof=(\n"
+            "            require_process_group_cleanup_proof\n"
+            "        ),\n"
+        ),
+        after="        require_process_group_cleanup_proof=False,\n",
+        test=(
+            "tests/test_execution_process.py::"
+            "test_repo_verifier_facade_forwards_process_group_cleanup_proof_requirement"
+        ),
+    ),
+    Mutation(
+        name="strict-setup-process-group-proof-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                            cwd=setup_cwd,\n"
+            "                            env=setup_env,\n"
+            "                            timeout=self.timeout,\n"
+            "                            preexec_fn=(\n"
+            "                                self._limits() if os.name == \"posix\" else None\n"
+            "                            ),\n"
+            "                            require_process_group_cleanup_proof=self.strict_harness,\n"
+        ),
+        after=(
+            "                            cwd=setup_cwd,\n"
+            "                            env=setup_env,\n"
+            "                            timeout=self.timeout,\n"
+            "                            preexec_fn=(\n"
+            "                                self._limits() if os.name == \"posix\" else None\n"
+            "                            ),\n"
+            "                            require_process_group_cleanup_proof=False,\n"
+        ),
+        test=(
+            "tests/test_strict_harness.py::"
+            "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="strict-suite-process-group-proof-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        env=run_env,\n"
+            "                        timeout=self.timeout,\n"
+            "                        preexec_fn=self._limits() if os.name == \"posix\" else None,\n"
+            "                        require_process_group_cleanup_proof=self.strict_harness,\n"
+        ),
+        after=(
+            "                        env=run_env,\n"
+            "                        timeout=self.timeout,\n"
+            "                        preexec_fn=self._limits() if os.name == \"posix\" else None,\n"
+            "                        require_process_group_cleanup_proof=False,\n"
+        ),
+        test=(
+            "tests/test_strict_harness.py::"
+            "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="strict-pack-process-group-proof-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                            cwd=copy,\n"
+            "                            env=pack_env,\n"
+            "                            timeout=self.timeout,\n"
+            "                            preexec_fn=(\n"
+            "                                self._limits() if os.name == \"posix\" else None\n"
+            "                            ),\n"
+            "                            require_process_group_cleanup_proof=self.strict_harness,\n"
+        ),
+        after=(
+            "                            cwd=copy,\n"
+            "                            env=pack_env,\n"
+            "                            timeout=self.timeout,\n"
+            "                            preexec_fn=(\n"
+            "                                self._limits() if os.name == \"posix\" else None\n"
+            "                            ),\n"
+            "                            require_process_group_cleanup_proof=False,\n"
+        ),
+        test=(
+            "tests/test_strict_harness.py::"
+            "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="strict-baseline-setup-group-proof-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "                    env=setup_env,\n"
+            "                    timeout=timeout,\n"
+            "                    preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
+            "                    require_process_group_cleanup_proof=strict_harness,\n"
+        ),
+        after=(
+            "                    env=setup_env,\n"
+            "                    timeout=timeout,\n"
+            "                    preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
+            "                    require_process_group_cleanup_proof=False,\n"
+        ),
+        test=(
+            "tests/test_strict_harness.py::"
+            "test_strict_baseline_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="strict-baseline-suite-group-proof-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "                env=run_env,\n"
+            "                preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
+            "                timeout=timeout,\n"
+            "                require_process_group_cleanup_proof=strict_harness,\n"
+        ),
+        after=(
+            "                env=run_env,\n"
+            "                preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
+            "                timeout=timeout,\n"
+            "                require_process_group_cleanup_proof=False,\n"
+        ),
+        test=(
+            "tests/test_strict_harness.py::"
+            "test_strict_baseline_requires_group_proof_for_every_host_phase"
         ),
     ),
     Mutation(

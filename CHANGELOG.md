@@ -17,6 +17,11 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   positive cleanup proof, bounded reader/receipt draining, and stricter Docker
   absence verification. Repo-native verifier-pack pytest collection is confined
   to the accepted pack snapshot.
+- The opt-in `strict_harness` profile now explicitly requires positive POSIX
+  process-group cleanup capability for every host setup, repository-suite,
+  verifier-pack, and pristine-baseline subprocess. Unsupported hosts refuse the
+  strict request before candidate execution; Docker/gVisor phases continue to
+  rely on their separately verified container lifecycle.
 - Shared trusted-finalizer and release-source raw Git reads now ignore ambient
   `GIT_*` process state and replacement refs, so derivation is bound to the
   explicitly selected repository and literal immutable object graph.
