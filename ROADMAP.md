@@ -14,6 +14,11 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Shipped today
 
+- **Immutable `v4.0.2` consumer release** — the published zipapp is pinned by
+  its release ledger and SHA-256 and has a GitHub build-artifact attestation.
+  The `v4.0.2` ledger is an identity/provenance record, not a newly captured
+  behavioral baseline or an independent security review.
+
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
 - **Structured, judge-owned verdicts** across eight test runners (verdict read
@@ -55,6 +60,21 @@ evidence used to judge it. Guard still focuses on one narrow question:
   read-only candidate mounts. Setup fidelity permits conventional new outputs;
   additional `setup_output_globs` are explicit trusted policy.
 
+## Operational evidence completed
+
+- The v3.7.0 finalizer pilot completed one same-owner, cross-account raw-Git
+  `ALLOW` exercise and preserved its exact verification inputs in
+  [`ROUND2_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot/blob/main/ROUND2_RESULTS.md).
+  The bundle was recomputed with separately fetched source/context inputs. This
+  is operational evidence, not third-party review, and it does not establish
+  that an `ALLOW` → failed/cancelled attempt → fresh `ALLOW` sequence was
+  completed on one unchanged PR head.
+- The receipt pilot preserved one clean A-to-B-to-C evidence-chain round, two
+  failed-A controls, and a controlled moved-`main` rejection. In the last
+  control B rejected the changed protected branch before receipt creation and
+  C rejected the failed B predecessor before artifact download; both produced
+  zero artifacts. These are non-admitting observations.
+
 ## Current limits (stated plainly)
 
 - The default same-process judge can be forged by deliberate in-process source;
@@ -88,19 +108,25 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Operational pilot / Round 2.** Upgrade a protected consumer repository to
-   the v3.7.0 reference templates, record a raw-binding `ALLOW` → deliberately
-   failed or cancelled attempt → fresh `ALLOW` sequence on one unchanged PR
-   head, and independently verify the resulting `.evb` using saved external
-   source/context inputs. Confirm what GitHub actually treats as a merge
-   requirement. Same-owner cross-account operation is useful evidence of the
-   workflow, not independent review.
-2. **Trusted build and merge-candidate boundary.** Before using artifact
+1. **Finish the receipt-pilot negative matrix.** Preserve controlled
+   altered-artifact and wrong-workflow/run-attempt rejections. The clean chain,
+   moved-`main`, and failed-A cases are complete; none is an admission result.
+2. **Current-release operational pilot.** Exercise the `v4.0.2` reference in a
+   new disposable non-production consumer without rewriting the frozen v3.7.0
+   evidence. Do not describe same-owner cross-account approval as independent
+   review or make the check production-required without a genuinely independent
+   operator and protected trust roots.
+3. **Trusted build and merge-candidate boundary.** Before using artifact
    admission for a release, verify a provider-specific immutable build
    provenance statement and bind it to a protected build and merge-candidate
    identity. The current V1 file relation alone cannot support an OCI,
    package-release, registry, or deployment claim.
-3. **Only after external evidence.** Stronger fork/VM boundaries, organization
+4. **Release authorization only after authenticated production evidence.** A
+   release-source finalizer may issue `ALLOW` only after the producer execution,
+   run/attempt, source, workflow, provenance, and artifact relations are freshly
+   verified outside candidate authority. The current release-source path stays
+   non-admitting until those prerequisites exist.
+5. **Only after external evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and their onboarding failures. They are not assumed product needs.
 

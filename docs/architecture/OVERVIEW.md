@@ -37,12 +37,22 @@ strict behavior-preserving PR slices.
 - `application` owns pipeline and policy/assurance composition.
 - `api` / `cli` / `integrations` own compatibility boundaries.
 
-## Immediate next step
+## Current implementation position and next step
 
-The black-box extraction track is active within the Stage 4+ implementation
-section of `REFACTOR_PROGRAM.md`. The current slice moves the typed
-judge-process lifecycle to `execution/judge.py` while preserving `blackbox.py`
-as the compatibility, command-construction, report-interpretation, and
-evidence-composition surface. The next black-box slices may separate pack,
-CID, and evidence responsibilities only after the existing contract, mutation,
-and differential gates remain unchanged.
+The process, Docker, candidate-boundary, invocation-transport, and typed
+judge-process kernels have been extracted behind characterized compatibility
+surfaces. PR #123 completed the `execution/judge.py` slice; PR #133 extracted
+pure repository/pack phase contracts into
+`verifiers/repo_phase_contracts.py`.
+
+The planned `domain/` package and strict domain typing baseline are not yet
+implemented. `RepoVerifier` still owns effectful subprocess, container,
+filesystem, runtime-identity, and trace operations. `blackbox.py` still owns
+command construction, report interpretation, verdict/evidence composition,
+and remaining pack/CID responsibilities. Candidate/workspace domains and the
+`application` verification pipeline also remain pending.
+
+The immediate structural priority is Stage 3 domain models, followed by small
+characterized slices for those remaining RepoVerifier and black-box
+responsibilities. Each slice must retain the existing contract, mutation,
+differential, and architectural-boundary gates.

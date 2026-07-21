@@ -6,12 +6,12 @@ Lock the baseline and refactor incrementally from monolith modules into stable t
 domains without changing runtime behavior, so we can execute higher-confidence
 hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
 
-## Stage 0: Baseline hardening (foundation)
+## Stage 0: Baseline hardening (completed)
 
-- Merge / continue PR #102 (`v4.0.1` immutable reference lock and `init --ref` behavior).
-- Create baseline artifact set under `tests/baseline/v4.0.1/` for command/help, verdicts,
+- PR #102 merged the `v4.0.1` immutable reference lock and corrected `init --ref` behavior.
+- The baseline artifact set under `tests/baseline/v4.0.1/` covers command/help, verdicts,
   reports, sarif, bundles, signature-vectors, pack-digests, manifest.
-- Add `BASELINE_MANIFEST.json` with:
+- `BASELINE_MANIFEST.json` records:
   - commit SHA
   - release tag
   - `.pyz` SHA-256
@@ -21,7 +21,7 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   - evidence format versions
   - test count
   - benchmark digest
-- Add release gate checklist:
+- The release gate checklist covers:
   - branch ruleset
   - required checks
   - code-owner review
@@ -29,13 +29,17 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   - environment review rules
   - immutable release and attestation evidence
 
-## Stage 1: Architecture documents
+PR #134 added the bounded `v4.0.2` release ledger. That newer ledger records
+release identity and provenance only; it is deliberately not a copied or newly
+captured behavioral baseline.
+
+## Stage 1: Architecture documents (completed)
 
 - Add docs in `docs/architecture/*` and `docs/adr/*` (8 architecture ADRs minimum).
 - Add AST import boundary test.
 - Add PR workflow standard for no-behavior-change refactors.
 
-## Stage 2: Characterization and equivalence
+## Stage 2: Characterization and equivalence (completed)
 
 - Frozen `RepoVerifier` behavioral/evidence vectors, reproduced by
   `python tools/ci/capture_repo_verifier_characterization.py` and reviewed before
@@ -52,42 +56,58 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   `python tools/ci/run_security_mutation_gate.py`. Every reviewed mutant must be
   killed by an assertion; timeouts and test infrastructure errors fail closed.
 
-## Stage 3: Domain modeling
+The merged characterization and gate slices include PRs #109, #114, #115,
+#122, and #132. The capture tools require explicit `--write` for reviewed
+baseline replacement.
+
+## Stage 3: Domain modeling (pending)
 
 - Split core contracts (`GuardRequest`, `ExecutionPhaseResult`, `VerificationEvidence`,
   `GuardDecision`) into `domain/` models.
 - Add mypy strict baseline for `domain/`.
 
-## Stage 4+: Execution and verifier extraction
+There is no `evoom_guard/domain/` package or strict domain-only mypy baseline
+yet.
 
-- Extract bounded execution/process modules and process-tree cleanup.
-- Extract typed Docker control/image-identity and container-cleanup contracts,
+## Stage 4+: Execution and verifier extraction (partially completed)
+
+- Bounded process execution and cleanup were extracted in PR #112 and hardened
+  by later lifecycle changes.
+- Typed Docker control/image-identity and container-cleanup contracts were
+  extracted in PR #117,
   retaining policy/evidence composition and compatibility facades in callers.
-- Extract candidate-boundary preparation into `isolation/candidate.py` behind
+- Candidate-boundary preparation was extracted in PR #118 into
+  `isolation/candidate.py` behind
   the characterized `candidate_runner.py` compatibility surface.
-- Extract the black-box invocation-receipt transport into
+- The black-box invocation-receipt transport was extracted in PR #120 into
   `isolation/invocation.py`, retaining evidence composition in `blackbox.py`.
-- Extract the typed black-box judge-process lifecycle into
+- The typed black-box judge-process lifecycle was extracted in PR #123 into
   `execution/judge.py`, retaining command construction, compatibility seams,
   report interpretation, evidence composition, and verdict policy in
   `blackbox.py`.
-- Extract `candidate/` and `workspace/` domains.
-- Extract completed repository/pack interpretation and composition into the pure
+- Pure repository/pack interpretation and composition were extracted in PR
+  #133 into the
   typed `verifiers/repo_phase_contracts.py` module behind frozen vectors; keep
   subprocess, container, filesystem, runtime-identity, and trace effects in
   `RepoVerifier` until their own characterization slices exist.
-- Continue splitting the remaining `blackbox.py` pack/CID/evidence
+- Pending: extract `candidate/` and `workspace/` domains.
+- Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
-- Build `application` pipeline (`VerificationPipeline`, `VerdictComposer`,
+- Pending: split the remaining effectful RepoVerifier responsibilities.
+- Pending: build the `application` pipeline (`VerificationPipeline`, `VerdictComposer`,
   `AssuranceEvaluator`, `AttestationBuilder`) and shadow-mode differential.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 
 - Split CLI parser/registry and command modules while preserving entrypoint compatibility.
 - Extract evidence primitives and finalizer/admission domain packages.
-- Expand action scripts, offline mode, release ledger and SBOM assets.
+- Expand action scripts, offline mode, release ledger and SBOM assets. Release
+  ledgers exist; a general offline mode and SBOM asset are not complete.
 - Add strict type/architecture/mutation gates and external red-team stage.
-- Finalize artifact-bound admission after stable core + external evidence.
+  Architecture and bounded mutation gates exist; strict domain typing and an
+  external red-team result do not.
+- Finalize artifact-bound admission after stable core + external evidence. The
+  end-to-end protected build → attestation → admission chain is not complete.
 
 ## Completion criteria per stage
 
