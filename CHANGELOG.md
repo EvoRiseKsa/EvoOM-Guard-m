@@ -11,6 +11,12 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ## [4.0.1] — unreleased
 
+### Security
+
+- Shared trusted-finalizer and release-source raw Git reads now ignore ambient
+  `GIT_*` process state and replacement refs, so derivation is bound to the
+  explicitly selected repository and literal immutable object graph.
+
 ### Fixed
 
 - `evo-guard init` no longer guesses a stale “latest published” ref. It now

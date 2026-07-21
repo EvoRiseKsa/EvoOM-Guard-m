@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import subprocess
@@ -15,6 +16,7 @@ from evoom_guard.finalizer_derivation import (
     MAX_GIT_STDERR_BYTES,
     FinalizerDerivationError,
     _git_command,
+    _GitReader,
     context_from_verified_bindings,
     derive_finalizer_bindings,
     read_finalizer_bindings,
@@ -193,6 +195,143 @@ def test_raw_git_command_bounds_pipes_while_the_child_is_running(
         _git_command(".", ["rev-parse", "HEAD"], bare=False, limit=maximum)
 
     assert killed
+
+
+def test_raw_git_command_ignores_ambient_repository_selection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repos: list[tuple[Path, str]] = []
+    for name in ("expected", "ambient"):
+        repo = tmp_path / name
+        repo.mkdir()
+        _git(repo, "init", "--quiet")
+        (repo / "identity.txt").write_text(name + "\n", encoding="utf-8")
+        repos.append((repo, _commit(repo, name)))
+    expected_repo, expected_commit = repos[0]
+    ambient_repo, ambient_commit = repos[1]
+    assert expected_commit != ambient_commit
+    expected_bare = tmp_path / "expected.git"
+    ambient_bare = tmp_path / "ambient.git"
+    for source, destination in (
+        (expected_repo, expected_bare),
+        (ambient_repo, ambient_bare),
+    ):
+        subprocess.run(
+            ["git", "clone", "--bare", "--quiet", str(source), str(destination)],
+            check=True,
+        )
+    monkeypatch.setenv("GIT_DIR", str(ambient_repo / ".git"))
+
+    observed = _git_command(
+        str(expected_repo),
+        ["rev-parse", "HEAD"],
+        bare=False,
+        limit=256,
+    )
+
+    assert observed.decode("ascii").strip() == expected_commit
+    monkeypatch.delenv("GIT_DIR")
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(ambient_bare / "objects"))
+
+    bare_commit = _git_command(
+        str(expected_bare),
+        ["cat-file", "commit", expected_commit],
+        bare=True,
+        limit=4096,
+    )
+
+    assert bare_commit.endswith(b"\n\nexpected\n")
+
+
+def test_raw_git_command_scrubs_all_ambient_git_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    class FinishedGit:
+        stdout = io.BytesIO(b"literal-output\n")
+        stderr = io.BytesIO()
+        returncode = 0
+
+        def wait(self, *, timeout: float | None = None) -> int:
+            assert timeout == 30
+            return 0
+
+        def kill(self) -> None:  # pragma: no cover - success path only
+            raise AssertionError("successful fake Git must not be killed")
+
+    def fake_popen(command: list[str], **kwargs: object) -> FinishedGit:
+        observed["command"] = command
+        observed["environment"] = kwargs["env"]
+        return FinishedGit()
+
+    monkeypatch.setenv("GIT_DIR", "ambient-repository")
+    monkeypatch.setenv("gIt_Config_Count", "1")
+    monkeypatch.setenv("GIT_OPTIONAL_LOCKS", "ambient-value")
+    monkeypatch.setenv("EVOGUARD_ENV_SENTINEL", "preserved")
+    monkeypatch.setattr(finalizer_derivation.subprocess, "Popen", fake_popen)
+
+    output = _git_command("explicit-repository", ["rev-parse", "HEAD"], bare=False)
+
+    environment = observed["environment"]
+    assert isinstance(environment, dict)
+    assert {
+        key for key in environment if key.upper().startswith("GIT_")
+    } == {"GIT_OPTIONAL_LOCKS"}
+    assert environment["GIT_OPTIONAL_LOCKS"] == "0"
+    assert environment["EVOGUARD_ENV_SENTINEL"] == "preserved"
+    assert observed["command"] == [
+        "git",
+        "--no-replace-objects",
+        "-C",
+        "explicit-repository",
+        "rev-parse",
+        "HEAD",
+    ]
+    assert output == b"literal-output\n"
+
+
+@pytest.mark.parametrize("bare", [False, True])
+def test_raw_git_reader_ignores_replace_refs(tmp_path: Path, bare: bool) -> None:
+    repo = tmp_path / "source"
+    repo.mkdir()
+    _git(repo, "init", "--quiet")
+    (repo / "good.txt").write_text("trusted\n", encoding="utf-8")
+    expected_commit = _commit(repo, "expected tree")
+    expected_tree = _git(repo, "rev-parse", f"{expected_commit}^{{tree}}")
+    (repo / "good.txt").unlink()
+    (repo / "evil.txt").write_text("replacement\n", encoding="utf-8")
+    replacement_commit = _commit(repo, "replacement tree")
+    replacement_tree = _git(repo, "rev-parse", f"{replacement_commit}^{{tree}}")
+
+    if bare:
+        reader_repo = tmp_path / "objects.git"
+        subprocess.run(
+            ["git", "clone", "--bare", "--quiet", str(repo), str(reader_repo)],
+            check=True,
+        )
+        prefix = ["git", "--git-dir", str(reader_repo)]
+    else:
+        reader_repo = repo
+        prefix = ["git", "-C", str(reader_repo)]
+    subprocess.run(
+        [*prefix, "replace", expected_tree, replacement_tree],
+        check=True,
+        capture_output=True,
+    )
+    replaced_view = subprocess.run(
+        [*prefix, "ls-tree", "-r", "--name-only", expected_commit],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert replaced_view == ["evil.txt"]
+
+    reader = _GitReader(str(reader_repo), bare=bare)
+
+    assert reader.commit_tree(expected_commit) == expected_tree
+    assert set(reader.tree(expected_commit)) == {"good.txt"}
 
 
 def test_raw_git_derivation_matches_guard_candidate_and_policy(tmp_path: Path) -> None:

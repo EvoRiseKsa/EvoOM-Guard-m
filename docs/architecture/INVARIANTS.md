@@ -11,6 +11,8 @@ The implementation must preserve these invariants across every refactor PR.
 7. Verifier pack execution and validation must be non-empty for mandatory pathways.
 8. Digest and policy must be materialized in each decision lifecycle.
 9. Finalizer trust chain must include raw Git, handoff, and source identity.
+   Raw-Git derivation must select its repository explicitly, ignore ambient
+   `GIT_*` process state, and read literal object IDs without replacement refs.
 10. Byte-level evidence and canonical signing bytes must remain stable per format.
 11. External context must be pinned and validated.
 12. Verdicts, reason codes and exit codes must remain aligned.

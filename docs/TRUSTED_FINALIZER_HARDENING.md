@@ -23,6 +23,12 @@ and compare them to the semantic verdict before it opens the signing key.
 - Downloaded handoffs, verdicts, and workflow artifacts remain untrusted data.
 - Base policy and verifier-pack bytes must come from immutable base-commit blobs,
   not branch names or the candidate checkout.
+- Every raw-Git query must select its repository with an explicit `-C` or
+  `--git-dir`, remove ambient `GIT_*` process state, and pass
+  `--no-replace-objects`. The trusted boundary still includes the selected
+  repository's administrative metadata and object store, the resolved Git
+  executable, and non-`GIT_*` runner configuration; this control does not make
+  a hostile local object store trustworthy.
 - The deletion list must also be reconstructed from the two clean Git trees.
   The candidate text digest intentionally excludes deletions, while the Guard
   decision and its attestation do not.
@@ -63,6 +69,9 @@ not acceptable.
   or pack digest cannot obtain `ALLOW`.
 - A binary, mode-only, symlink/special, or EOL-transformed candidate difference
   cannot be silently converted into a matching raw-Git identity.
+- Ambient repository/object-directory variables cannot redirect a worktree or
+  bare-object query, and worktree/bare replacement refs cannot substitute the
+  literal tree read by the derivation.
 - A partial rerun, failed run, and cancelled run preserve the attempt-bound
   `DENY` semantics.
 - The privileged job has no checkout or candidate execution path, including on

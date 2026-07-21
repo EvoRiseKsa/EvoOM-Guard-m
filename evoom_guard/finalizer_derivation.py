@@ -187,10 +187,14 @@ def _git_command(
     child or bypass a resource bound.
     """
 
-    command = ["git"]
+    command = ["git", "--no-replace-objects"]
     command.extend(["--git-dir", repo] if bare else ["-C", repo])
     command.extend(args)
-    environment = os.environ.copy()
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("GIT_")
+    }
     environment["GIT_OPTIONAL_LOCKS"] = "0"
     try:
         process = subprocess.Popen(

@@ -561,6 +561,26 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="finalizer-git-env-scrub-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before='        if not key.upper().startswith("GIT_")\n',
+        after="        if True\n",
+        test=(
+            "tests/test_finalizer_derivation.py::"
+            "test_raw_git_command_scrubs_all_ambient_git_environment"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-no-replace-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before='    command = ["git", "--no-replace-objects"]\n',
+        after='    command = ["git"]\n',
+        test=(
+            "tests/test_finalizer_derivation.py::"
+            "test_raw_git_reader_ignores_replace_refs"
+        ),
+    ),
+    Mutation(
         name="protected-edit-preflight-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before="        if rejection is not None:\n            return rejection\n",
