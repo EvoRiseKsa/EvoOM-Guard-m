@@ -295,11 +295,18 @@ dependency manifests/locks and compiler/project configuration (for example
 `requirements*.txt`, `uv.lock`, `package.json`, `tsconfig*.json`, `go.mod`, and
 `Cargo.toml`) are non-exemptible protected paths. It also rejects a nominally
 successful command unless a non-empty structured JUnit verdict is available.
+For host-subprocess execution it additionally requires positive POSIX
+process-group cleanup capability for setup, repository-suite, verifier-pack,
+and pristine-baseline commands. An unsupported host refuses the strict request
+before candidate execution. Docker/gVisor execution instead relies on the
+separate container lifecycle and absence proof.
 
 This is deliberately **not** the default: dependency or build-system upgrades
 need a separately reviewed maintenance path. It strengthens harness integrity;
 it does not turn a same-process repo-native judge into an external isolation
-boundary. Use the black-box profile when that stronger boundary is required.
+boundary. A managed process group is lifecycle containment, not filesystem,
+network, credential, or report-integrity isolation. Use the black-box profile
+when that stronger boundary is required.
 
 Put the policy in the base branch, for example:
 

@@ -1575,6 +1575,7 @@ def _run_baseline_suite(
                     env=setup_env,
                     timeout=timeout,
                     preexec_fn=rv._limits() if os.name == "posix" else None,
+                    require_process_group_cleanup_proof=strict_harness,
                 )
                 setup_after = _setup_fidelity_snapshot(
                     copy, setup_output_globs, baseline=setup_before
@@ -1614,6 +1615,7 @@ def _run_baseline_suite(
                 env=run_env,
                 preexec_fn=rv._limits() if os.name == "posix" else None,
                 timeout=timeout,
+                require_process_group_cleanup_proof=strict_harness,
             )
         except (
             OSError,

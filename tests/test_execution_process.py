@@ -146,6 +146,31 @@ def test_public_facade_forwards_process_group_cleanup_proof_requirement(
     assert launches == []
 
 
+def test_repo_verifier_facade_forwards_process_group_cleanup_proof_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(repo_verifier, "run_bounded_subprocess", fake_run)
+
+    repo_verifier._run_bounded_subprocess(
+        ["candidate"],
+        cwd=None,
+        env=None,
+        timeout=1,
+        require_process_group_cleanup_proof=True,
+    )
+
+    assert observed["require_process_group_cleanup_proof"] is True
+
+
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX process groups")
 def test_required_process_group_cleanup_proof_runs_on_posix(tmp_path: Path) -> None:
     ready = tmp_path / "strict-child-ready"

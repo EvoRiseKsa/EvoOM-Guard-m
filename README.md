@@ -307,9 +307,13 @@ example:
 separate maintenance lane for toolchain changes. It makes dependency, lock, and
 compiler/project manifests immutable to an untrusted patch and refuses an
 exit-only or zero-test success: the judge must obtain a non-empty structured
-JUnit result. Leave it off when ordinary feature PRs are expected to update
-those manifests; it is intentionally not a claim of process isolation or
-report-forgery resistance.
+JUnit result. Every host command in that profile also requires positive POSIX
+process-group cleanup capability; an unsupported host-subprocess lane refuses
+the request before launching candidate code. Docker/gVisor lanes use their
+separate container-absence proof. Leave the profile off when ordinary feature
+PRs are expected to update those manifests. Process-group cleanup is lifecycle
+containment only: it is not filesystem/network isolation or report-forgery
+resistance.
 
 The PR workflow is candidate-controlled, so its `with:` values are **not** a
 trusted policy source. In PR mode the Action ignores judge-shaping overrides
