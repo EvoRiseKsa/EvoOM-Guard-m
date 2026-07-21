@@ -36,6 +36,10 @@ _DOC_FILES = (
     + sorted((ROOT / "examples").rglob("*.md"))
     + sorted((ROOT / "examples").rglob("*.yml"))
     + sorted((ROOT / "examples").rglob("*.yaml"))
+    + [
+        ROOT / ".github" / "workflows" / "evoguard-reverify.yml",
+        ROOT / ".github" / "workflows" / "evoguard-seal.yml",
+    ]
 )
 
 _PIN_PATTERNS = (

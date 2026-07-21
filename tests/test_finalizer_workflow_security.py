@@ -14,6 +14,10 @@ REFERENCE_PAIRS = (
     ("repo-workflows", WORKFLOW_REVERIFY, WORKFLOW_SEAL),
 )
 
+FROZEN_EXAMPLE_RELEASE = "v3.7.0"
+CURRENT_REFERENCE_RELEASE = "v4.0.2"
+CURRENT_REFERENCE_SHA256 = "7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3"
+
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -160,4 +164,26 @@ def test_reference_finalizer_actions_are_pinned_and_actions_only() -> None:
 
 
 def test_reference_finalizer_documents_the_immutable_executable_root() -> None:
-    assert "Round 1 audit" in _text(ROOT / "docs" / "TRUSTED_FINALIZER.md")
+    documentation = _text(ROOT / "docs" / "TRUSTED_FINALIZER.md")
+    assert "Round 1 audit" in documentation
+    assert CURRENT_REFERENCE_RELEASE in documentation
+    assert CURRENT_REFERENCE_SHA256 in documentation
+
+
+def test_reference_finalizer_release_downloads_are_explicit_and_versioned() -> None:
+    expected = {
+        EXAMPLES_REVERIFY: FROZEN_EXAMPLE_RELEASE,
+        EXAMPLES_SEAL: FROZEN_EXAMPLE_RELEASE,
+        WORKFLOW_REVERIFY: CURRENT_REFERENCE_RELEASE,
+        WORKFLOW_SEAL: CURRENT_REFERENCE_RELEASE,
+    }
+    pattern = re.compile(
+        r"https://github\.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/"
+        r"(?P<tag>v\d+\.\d+\.\d+)/evo-guard\.pyz"
+    )
+    for path, expected_release in expected.items():
+        releases = pattern.findall(_text(path))
+        assert releases == [expected_release], (
+            f"{path.relative_to(ROOT)} must download exactly "
+            f"{expected_release}, found {releases}"
+        )

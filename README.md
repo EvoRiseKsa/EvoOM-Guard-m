@@ -42,7 +42,9 @@ correctness or security.
 > candidate, deletion, policy, and verifier-pack bindings before key access. It is not
 > an enabled merge gate in this repository. Install it in a protected consumer
 > repository and complete the documented Round 1 operational audit before making
-> it a required check. Read
+> it a required check. The current implementation-ready workflow copies target
+> the immutable v4.0.2 zipapp; the example pair and completed pilot remain
+> frozen at v3.7.0. Read
 > [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) and
 > [`docs/ASSURANCE.md`](docs/ASSURANCE.md) before relying on it.
 
