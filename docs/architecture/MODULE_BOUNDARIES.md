@@ -62,3 +62,11 @@ verifier still owns the policy that a host boundary needs a receipt and a
 container boundary needs both a receipt and a validated runtime-written CID;
 the transport cannot promote a prepared launcher into observed execution on
 its own.
+
+The fifth execution-kernel slice lives in `evoom_guard/execution/judge.py`. It
+owns the typed judge-process request, limits, and result contracts together
+with bounded stdout/stderr capture, timeout handling, reader lifecycle, and
+process-group cleanup. It does not assemble the judge command, interpret its
+report, or compose evidence or verdicts. Those responsibilities remain in
+`blackbox.py`, which also retains its historical private patch seams through a
+compatibility facade.

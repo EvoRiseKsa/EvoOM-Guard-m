@@ -3,13 +3,15 @@
 ## Status
 
 Accepted; phase 1 (bounded native process), phase 2 (Docker control, identity,
-and cleanup), phase 3 (candidate-boundary preparation), and phase 4
-(candidate-invocation receipt transport) are implemented behind typed
-contracts.
+and cleanup), phase 3 (candidate-boundary preparation), phase 4
+(candidate-invocation receipt transport), and phase 5 (black-box judge-process
+lifecycle) are implemented behind typed contracts.
 
 ## Decision
-Create explicit execution backends (`process`, `environment`, `docker`) behind
-typed contracts, including cleanup and output limits.
+Create explicit execution and isolation backends behind typed contracts,
+including cleanup and output limits. The judge-process adapter belongs to the
+execution layer; command construction, report interpretation, and verdict
+policy remain in the black-box compatibility module.
 
 ## Rationale
 Current monolithic execution paths mix process launch, isolation policy, and verdict logic.
@@ -52,6 +54,12 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
   exact-token observation. `blackbox.py` retains an exact compatibility alias
   and remains solely responsible for composing receipts with validated runtime
   CIDs, evidence, and verdicts.
+- `execution/judge.py` owns `JudgeProcessRequest`, `JudgeProcessLimits`,
+  `JudgeProcessResult`, and the bounded judge-process execution lifecycle.
+  `blackbox.py` retains its established private patch seams and adapts the typed
+  result to its existing subprocess-facing contract. This is an internal,
+  behavior-preserving ownership change; command construction, report grading,
+  evidence, verdicts, and public CLI/API behavior are unchanged.
 - Once the black-box judge process is launched, reader construction or partial
   `Thread.start()` failure cannot escape lifecycle handling: on POSIX the
   process-group cleanup is attempted even when its leader has already exited,

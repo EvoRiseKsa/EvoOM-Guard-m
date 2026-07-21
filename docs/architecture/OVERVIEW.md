@@ -39,7 +39,10 @@ strict behavior-preserving PR slices.
 
 ## Immediate next step
 
-Stage 0 is active:
-- finalize `v4.0.1` baseline release assets and checksums,
-- create baseline manifest artifacts for command/API/reports,
-- add branch/release governance checks in docs and scripts.
+The black-box extraction track is active within the Stage 4+ implementation
+section of `REFACTOR_PROGRAM.md`. The current slice moves the typed
+judge-process lifecycle to `execution/judge.py` while preserving `blackbox.py`
+as the compatibility, command-construction, report-interpretation, and
+evidence-composition surface. The next black-box slices may separate pack,
+CID, and evidence responsibilities only after the existing contract, mutation,
+and differential gates remain unchanged.
