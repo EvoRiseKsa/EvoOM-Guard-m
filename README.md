@@ -57,8 +57,11 @@ correctness or security.
 > adds a non-admitting, provider-attestable receipt and reference workflow
 > topology; it still does not enable `ALLOW`, a key, a release, or publication.
 > The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
-> is deliberately sanitized and disabled at baseline; it has not yet recorded a
-> successful clean A-to-B-to-C round.
+> is deliberately sanitized and disabled at baseline. It has recorded one
+> clean A-to-B-to-C evidence-chain round plus failed-A and moved-`main`
+> fail-closed controls; altered-artifact and wrong-workflow/run-attempt live
+> controls remain. None of those observations is an admission or release
+> decision.
 
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation
