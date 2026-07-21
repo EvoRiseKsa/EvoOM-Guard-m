@@ -82,8 +82,9 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   `CoverageData`, including fabricating executed lines. The emitted caveat,
   CLI/Action help, and adoption guidance now state that `min_diff_coverage` is a
   quality gate for non-hostile code, not adversarial admission evidence. A
-  pinned boundary regression proves the current false-PASS condition until an
-  independently controlled coverage producer exists.
+  platform-neutral regression proves live coverage state is candidate-writable,
+  and a stable POSIX integration regression proves the current false-PASS
+  condition until an independently controlled coverage producer exists.
 
 ## [4.0.1] — 2026-07-20
 

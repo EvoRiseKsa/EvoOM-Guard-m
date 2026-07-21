@@ -67,6 +67,45 @@ def test_candidate_coverage_module_and_config_cannot_disable_measurement(
 
 
 @pytest.mark.skipif(not HAVE_COVERAGE, reason="needs the optional 'cov' extra")
+def test_same_process_candidate_can_mutate_live_coverage_data(
+    tmp_path: Path,
+) -> None:
+    """Prove the platform-neutral primitive behind the coverage boundary."""
+    from coverage import Coverage
+
+    candidate_path = tmp_path / "candidate.py"
+    collector = Coverage(
+        data_file=str(tmp_path / "coverage.db"), config_file=False, branch=False
+    )
+    namespace: dict[str, Any] = {"__file__": str(candidate_path)}
+    collector.start()
+    try:
+        exec(
+            compile(
+                "from coverage import Coverage\n"
+                "current = Coverage.current()\n"
+                "assert current is not None\n"
+                "current.get_data().add_lines({__file__: {777}})\n"
+                "forged = 777 in (current.get_data().lines(__file__) or [])\n",
+                str(candidate_path),
+                "exec",
+            ),
+            namespace,
+        )
+    finally:
+        collector.stop()
+
+    assert namespace["forged"] is True
+
+
+@pytest.mark.skipif(not HAVE_COVERAGE, reason="needs the optional 'cov' extra")
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason=(
+        "coverage.py flush ordering makes the end-to-end false-PASS outcome "
+        "platform-dependent on Windows; live data writability is pinned separately"
+    ),
+)
 def test_same_process_coverage_state_forgery_is_a_pinned_boundary(
     tmp_path: Path,
 ) -> None:
@@ -74,9 +113,10 @@ def test_same_process_coverage_state_forgery_is_a_pinned_boundary(
 
     Isolated startup prevents module/config shadowing, but imported candidate
     code still shares the live coverage object. This test deliberately asserts
-    today's false PASS so documentation cannot drift back to an adversarial
-    integrity claim. When an independently controlled producer lands, invert
-    this expectation and update the emitted caveat together.
+    today's stable POSIX false PASS so documentation cannot drift back to an
+    adversarial integrity claim. The platform-neutral primitive is pinned by the
+    preceding test. When an independently controlled producer lands, invert this
+    expectation and update the emitted caveat together.
     """
     repo = tmp_path / "repo"
     (repo / "tests").mkdir(parents=True)
