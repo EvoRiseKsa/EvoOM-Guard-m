@@ -60,6 +60,81 @@ def test_docker_timeout_with_unproven_cleanup_is_containment_error(
     assert "cleanup was not proven" in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    ("primary", "cleanup_error"),
+    [
+        (
+            KeyboardInterrupt("operator interrupted Docker client"),
+            SystemExit("cleanup exited"),
+        ),
+        (
+            SystemExit("operator stopped Docker client"),
+            KeyboardInterrupt("cleanup interrupted"),
+        ),
+    ],
+)
+def test_docker_cleanup_baseexception_cannot_mask_unexpected_primary(
+    monkeypatch: pytest.MonkeyPatch,
+    primary: BaseException,
+    cleanup_error: BaseException,
+) -> None:
+    verifier = RepoVerifier(
+        isolation="docker", docker_image="judge:latest", mem_limit_mb=0
+    )
+    monkeypatch.setattr(
+        repo_verifier,
+        "_run_bounded_subprocess",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(primary),
+    )
+    monkeypatch.setattr(
+        repo_verifier,
+        "_cleanup_docker_container",
+        lambda _name: (_ for _ in ()).throw(cleanup_error),
+    )
+
+    observed: BaseException | None = None
+    try:
+        verifier._run_docker_client(["docker", "run"], "evoguard_case")
+    except BaseException as exc:
+        # Catch KeyboardInterrupt/SystemExit inside the test so a precedence
+        # regression is a normal assertion failure, not a pytest infrastructure
+        # exit that the deterministic mutation gate could misclassify.
+        observed = exc
+
+    assert observed is primary
+    notes = getattr(observed, "__notes__", [])
+    assert any("cleanup raised" in note for note in notes)
+    assert any(type(cleanup_error).__name__ in note for note in notes)
+
+
+def test_unproven_docker_cleanup_is_not_hidden_by_unexpected_primary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verifier = RepoVerifier(
+        isolation="docker", docker_image="judge:latest", mem_limit_mb=0
+    )
+    primary = RuntimeError("unexpected Docker client failure")
+    monkeypatch.setattr(
+        repo_verifier,
+        "_run_bounded_subprocess",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(primary),
+    )
+    monkeypatch.setattr(
+        repo_verifier,
+        "_cleanup_docker_container",
+        lambda _name: False,
+    )
+
+    with pytest.raises(RuntimeError) as caught:
+        verifier._run_docker_client(["docker", "run"], "evoguard_case")
+
+    assert caught.value is primary
+    assert any(
+        "cleanup was not proven" in note
+        for note in getattr(caught.value, "__notes__", [])
+    )
+
+
 def test_docker_nonzero_exit_proves_named_container_is_gone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

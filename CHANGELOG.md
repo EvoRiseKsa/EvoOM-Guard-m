@@ -47,6 +47,11 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Fixed
 
+- RepoVerifier cleanup now preserves an active verification/operator exception
+  when candidate-workspace, verifier-pack snapshot, or named-container cleanup
+  also fails. Secondary cleanup failures remain observable as exception notes;
+  after a normal pending result, cleanup failures remain fail-closed and visible
+  instead of being silently ignored.
 - Baseline `repair_effect` now describes the pristine-base to candidate-suite
   transition even when a later coverage requirement demotes the composite
   verdict; record verification enforces the same ordering.

@@ -561,6 +561,54 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="docker-cleanup-baseexception-primary-mask",
+        path="evoom_guard/isolation/docker.py",
+        before="        except BaseException as cleanup_error:\n",
+        after="        except Exception as cleanup_error:\n",
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_docker_cleanup_baseexception_cannot_mask_unexpected_primary"
+        ),
+    ),
+    Mutation(
+        name="docker-unproven-cleanup-note-bypass",
+        path="evoom_guard/isolation/docker.py",
+        before=(
+            "        else:\n"
+            "            if not cleanup_proven:\n"
+            "                _note_secondary_cleanup_failure(\n"
+        ),
+        after=(
+            "        else:\n"
+            "            if False and not cleanup_proven:\n"
+            "                _note_secondary_cleanup_failure(\n"
+        ),
+        test=(
+            "tests/test_docker_containment.py::"
+            "test_unproven_docker_cleanup_is_not_hidden_by_unexpected_primary"
+        ),
+    ),
+    Mutation(
+        name="repo-workspace-cleanup-error-hiding",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="            shutil.rmtree(path)\n",
+        after="            shutil.rmtree(path, ignore_errors=True)\n",
+        test=(
+            "tests/test_repo_verifier_cleanup_priority.py::"
+            "test_workspace_cleanup_failure_is_visible_after_pending_result"
+        ),
+    ),
+    Mutation(
+        name="repo-workspace-cleanup-primary-mask",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                primary=sys.exc_info()[1],\n",
+        after="                primary=None,\n",
+        test=(
+            "tests/test_repo_verifier_cleanup_priority.py::"
+            "test_workspace_cleanup_baseexception_cannot_mask_primary"
+        ),
+    ),
+    Mutation(
         name="finalizer-git-env-scrub-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before='        if not key.upper().startswith("GIT_")\n',

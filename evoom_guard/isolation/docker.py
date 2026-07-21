@@ -70,6 +70,34 @@ class ContainerAbsenceProbe(Protocol):
     ) -> DockerContainerAbsenceObservation: ...
 
 
+def _note_secondary_cleanup_failure(
+    primary: BaseException,
+    message: str,
+) -> None:
+    """Make a cleanup failure observable without replacing ``primary``.
+
+    ``BaseException.add_note`` is available on Python 3.11+.  EvoOM Guard also
+    supports Python 3.10, where assigning ``__notes__`` preserves the same
+    machine-readable diagnostic even though that interpreter does not render
+    notes in its default traceback formatter.  Reporting is deliberately
+    best-effort: an exotic exception object must never let diagnostics replace
+    the exception that triggered cleanup.
+    """
+
+    try:
+        add_note = getattr(primary, "add_note", None)
+        if callable(add_note):
+            add_note(message)
+            return
+        notes = getattr(primary, "__notes__", None)
+        if isinstance(notes, list):
+            notes.append(message)
+        else:
+            primary.__dict__["__notes__"] = [message]
+    except BaseException:
+        pass
+
+
 class CidScanner(Protocol):
     def __call__(self, cidfile_dir: str, /) -> DockerCidScanResult: ...
 
@@ -686,8 +714,22 @@ def run_named_docker_client(
             f"{exc}; docker named-container cleanup {suffix}",
             container_started=started,
         ) from exc
-    except BaseException:
-        cleanup_container(request.name)
+    except BaseException as primary:
+        try:
+            cleanup_proven = cleanup_container(request.name)
+        except BaseException as cleanup_error:
+            _note_secondary_cleanup_failure(
+                primary,
+                "Docker named-container cleanup raised while preserving the "
+                f"primary exception: {type(cleanup_error).__name__}: {cleanup_error}",
+            )
+        else:
+            if not cleanup_proven:
+                _note_secondary_cleanup_failure(
+                    primary,
+                    "Docker named-container cleanup was not proven while "
+                    "preserving the primary exception",
+                )
         raise
 
     if result.returncode != 0:

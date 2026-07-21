@@ -737,6 +737,79 @@ def _cleanup_docker_container(name: str) -> bool:
     return cleanup.proven_absent
 
 
+def _note_repo_cleanup_failure(primary: BaseException, message: str) -> None:
+    """Attach cleanup diagnostics without ever replacing ``primary``."""
+
+    try:
+        add_note = getattr(primary, "add_note", None)
+        if callable(add_note):
+            add_note(message)
+            return
+        notes = getattr(primary, "__notes__", None)
+        if isinstance(notes, list):
+            notes.append(message)
+        else:
+            # Python 3.10 does not expose add_note(), but BaseException still
+            # permits a machine-readable notes attribute for callers/tests.
+            primary.__dict__["__notes__"] = [message]
+    except BaseException:
+        # Cleanup diagnostics are secondary by contract.  Even a hostile or
+        # unusually constrained exception object cannot replace the primary.
+        pass
+
+
+def _cleanup_repo_workspaces(
+    workspaces: tuple[tuple[str, str | None], ...],
+    *,
+    primary: BaseException | None,
+) -> None:
+    """Remove every judge-owned workspace with explicit exception precedence.
+
+    All paths are attempted.  With no active exception, the first cleanup
+    failure remains visible (and any later failures are attached as notes).
+    While another exception is unwinding, that exact exception remains primary
+    and receives one note per cleanup failure instead of being masked.
+    """
+
+    failures: list[tuple[str, BaseException]] = []
+    for label, path in workspaces:
+        if path is None:
+            continue
+        try:
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            # Absence is the cleanup postcondition, so a raced prior removal is
+            # a successful/idempotent outcome rather than a failure.
+            continue
+        except BaseException as exc:
+            failures.append((label, exc))
+
+    if not failures:
+        return
+
+    if primary is not None:
+        for label, cleanup_error in failures:
+            _note_repo_cleanup_failure(
+                primary,
+                f"RepoVerifier {label} cleanup failed while preserving the "
+                f"primary exception: {type(cleanup_error).__name__}: {cleanup_error}",
+            )
+        return
+
+    first_label, first_error = failures[0]
+    _note_repo_cleanup_failure(
+        first_error,
+        f"RepoVerifier {first_label} cleanup failed",
+    )
+    for label, cleanup_error in failures[1:]:
+        _note_repo_cleanup_failure(
+            first_error,
+            f"Additional RepoVerifier {label} cleanup failure: "
+            f"{type(cleanup_error).__name__}: {cleanup_error}",
+        )
+    raise first_error
+
+
 class RepoVerifier:
     """Apply the hypothesis to a copy of the repo and judge it with its tests."""
 
@@ -2301,6 +2374,10 @@ class RepoVerifier:
                 },
             )
         finally:
-            shutil.rmtree(workdir, ignore_errors=True)
-            if pack_workdir is not None:
-                shutil.rmtree(pack_workdir, ignore_errors=True)
+            _cleanup_repo_workspaces(
+                (
+                    ("candidate workspace", workdir),
+                    ("verifier-pack snapshot", pack_workdir),
+                ),
+                primary=sys.exc_info()[1],
+            )
