@@ -34,6 +34,20 @@ They are not enforced as required merge gates by default in this repository.
 This project provides the split pattern; each consuming repository must apply its
 own branch protection, environment/reviewer controls, protected Guard-artifact
 digest, and the Round 1 audit below.
+
+The implementation-ready `.github/workflows/` copies currently download the
+immutable `v4.0.2` zipapp. Its required protected
+`EVOGUARD_GUARD_ARTIFACT_SHA256` value is:
+
+```text
+7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3
+```
+
+The `examples/trusted-finalizer/` pair remains a frozen byte-pinned v3.7.0
+reference for the published v3.7 pilot and must not be silently rewritten.
+New current-release exercises should copy the implementation-ready workflow
+pair, review it as a protected change, set the exact v4.0.2 digest above, and
+complete the audit before enforcement.
 The raw-Git derivation contract is specified in
 [`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md). A consumer
 must deploy a release that contains this command set and update the protected

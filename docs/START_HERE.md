@@ -174,8 +174,12 @@ open same-repository PRs targeting the protected default branch and manual
 maintainer dispatch. These limits are intentional and fail closed rather than
 being hidden behind an automatic workflow.
 
-**Start here:** [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md) and the paired
-[`examples/trusted-finalizer/`](../examples/trusted-finalizer/) workflows.
+**Start here:** [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md) and the current
+implementation-ready
+[`evoguard-reverify.yml`](../.github/workflows/evoguard-reverify.yml) /
+[`evoguard-seal.yml`](../.github/workflows/evoguard-seal.yml) pair. The separate
+[`examples/trusted-finalizer/`](../examples/trusted-finalizer/) pair is the
+frozen v3.7.0 reference used by the historical pilot.
 
 ---
 
