@@ -283,6 +283,12 @@ from evoom_guard.verifiers.junit_oracle import (
 from evoom_guard.verifiers.junit_oracle import (
     read_junit_xml as read_junit_xml,
 )
+from evoom_guard.verifiers.repo_phase_contracts import (
+    CompletedRunEvidence,
+    compose_repo_and_pack,
+    evaluate_pack_phase,
+    evaluate_repo_phase,
+)
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
     delete_path_within_root,
@@ -641,20 +647,6 @@ def _execution_trace() -> dict[str, Any]:
         "repo_suite_isolation_evidence": None,
         "verifier_pack_isolation_evidence": None,
     }
-
-
-def _clean_verdict_source(
-    returncode: int,
-    junit: JUnitCounts | None,
-    *,
-    report_expected: bool,
-) -> str | None:
-    """Name a source only for a cleanly gradeable pass/fail evidence pair."""
-    if junit is not None:
-        return "junit+exit" if junit.total > 0 and returncode in (0, 1) else None
-    if not report_expected and returncode in (0, 1):
-        return "exit"
-    return None
 
 
 def _run_docker_control(
@@ -1890,28 +1882,28 @@ class RepoVerifier:
                 if report_set is not None:
                     junit, repo_junit_sha256 = report_set
                     repo_junit_digest_format = JUNIT_REPORT_SET_DIGEST_FORMAT
-            passed, score, tests_passed, tests_total = grade_repo_run(
-                r.returncode, junit, report_expected=report_expected
+            repo_phase = evaluate_repo_phase(
+                CompletedRunEvidence(
+                    returncode=r.returncode,
+                    junit=junit,
+                    report_expected=report_expected,
+                    stdout=r.stdout,
+                    stderr=r.stderr,
+                    junit_text=xml_text,
+                    junit_sha256=repo_junit_sha256,
+                    junit_digest_format=repo_junit_digest_format,
+                ),
+                strict_harness=strict_harness,
             )
-            tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
-            output = r.stdout + "\n" + r.stderr
-            junit_sha256 = repo_junit_sha256
-            junit_digest_format = repo_junit_digest_format
-            verdict_source = _clean_verdict_source(
-                r.returncode, junit, report_expected=report_expected
-            )
-            # The normal profile preserves compatibility with runners for which
-            # EvoGuard cannot inject JUnit.  The strict profile deliberately
-            # does not: exit code 0 with no report (or a report collecting zero
-            # cases) is not a test verdict and must never become PASS.
-            if strict_harness and (junit is None or junit.total <= 0):
-                passed = False
-                score = 0.0
-                verdict_source = None
-                output += (
-                    "\nstrict_harness requires a non-empty structured JUnit "
-                    "test verdict; exit-only/zero-test success was rejected"
-                )
+            passed = repo_phase.passed
+            score = repo_phase.score
+            tests_passed = repo_phase.tests_passed
+            tests_total = repo_phase.tests_total
+            tampered = repo_phase.tampered
+            output = repo_phase.output
+            junit_sha256 = repo_phase.junit_sha256
+            junit_digest_format = repo_phase.junit_digest_format
+            verdict_source = repo_phase.verdict_source
             # Preserve the repo phase before a verifier pack is composed into
             # the top-level result. Baseline evidence is explicitly scoped to
             # this phase, so a later pack failure must not turn repo PASS into
@@ -1937,9 +1929,7 @@ class RepoVerifier:
             pack_tests_total: int | None = None
             pack_junit_sha256: str | None = None
             pack_junit_digest_format: str | None = None
-            outcome: str | None = (
-                None if verdict_source is not None else "no_test_verdict"
-            )
+            outcome = repo_phase.outcome
 
             # A copied pack is not evidence that its checks ran. Execute it as a
             # separate mandatory phase, explicitly addressed by path, then
@@ -2262,78 +2252,36 @@ class RepoVerifier:
                     if pack_junit_sha256 is not None
                     else None
                 )
-                pack_passed, pack_score, pack_tests_passed, pack_tests_total = grade_repo_run(
-                    pack_run.returncode,
-                    pack_junit,
-                    report_expected=pack_report_expected,
-                )
-                pack_verdict_source = _clean_verdict_source(
-                    pack_run.returncode,
-                    pack_junit,
-                    report_expected=pack_report_expected,
-                )
-                if not pack_tests_total:
-                    pack_passed = False
-                    pack_score = 0.0
-                    if pack_junit is not None:
-                        outcome = "pack_no_tests"
-                        output += "\nverifier pack collected zero tests"
-                    else:
-                        outcome = "pack_no_verdict"
-                        output += "\nverifier pack produced no valid JUnit verdict"
-                elif pack_verdict_source is None:
-                    pack_passed = False
-                    pack_score = 0.0
-                    outcome = "pack_no_verdict"
-                    output += "\nverifier pack produced no clean pass/fail verdict"
-                passed = passed and pack_passed
-                score = min(score, pack_score)
-                tampered = tampered or detect_tamper(
-                    pack_run.returncode,
-                    pack_junit,
-                    report_expected=pack_report_expected,
-                )
-                tests_passed += pack_tests_passed or 0
-                tests_total += pack_tests_total or 0
-                output += "\n" + pack_run.stdout + "\n" + pack_run.stderr
-                if repo_junit_digest_format in (
-                    JUNIT_XML_DIGEST_FORMAT,
-                    JUNIT_REPORT_SET_DIGEST_FORMAT,
-                ):
-                    if repo_junit_sha256 is not None and pack_junit_sha256 is not None:
-                        composite_identity = (
-                            JUNIT_COMPOSITE_DIGEST_FORMAT
-                            + "\0repo\0"
-                            + repo_junit_digest_format
-                            + "\0"
-                            + repo_junit_sha256
-                            + "\0verifier-pack\0"
-                            + JUNIT_XML_DIGEST_FORMAT
-                            + "\0"
-                            + pack_junit_sha256
-                        )
-                        junit_sha256 = hashlib.sha256(
-                            composite_identity.encode("utf-8")
-                        ).hexdigest()
-                        junit_digest_format = JUNIT_COMPOSITE_DIGEST_FORMAT
-                    else:
-                        junit_sha256 = None
-                        junit_digest_format = None
-                else:
-                    # Preserve the historical V1 raw-XML framing for existing
-                    # single-document and exit-only repo adapters.
-                    combined_junit = (
-                        "repo\0" + xml_text + "\0verifier-pack\0" + pack_xml_text
+                pack_phase_result = evaluate_pack_phase(
+                    CompletedRunEvidence(
+                        returncode=pack_run.returncode,
+                        junit=pack_junit,
+                        report_expected=pack_report_expected,
+                        stdout=pack_run.stdout,
+                        stderr=pack_run.stderr,
+                        junit_text=pack_xml_text,
+                        junit_sha256=pack_junit_sha256,
+                        junit_digest_format=pack_junit_digest_format,
                     )
-                    junit_sha256 = hashlib.sha256(
-                        combined_junit.encode("utf-8")
-                    ).hexdigest()
-                    junit_digest_format = "EVOGUARD_JUNIT_COMPOSITE_V1"
-                verdict_source = (
-                    "composite:repo+verifier-pack"
-                    if verdict_source is not None and pack_verdict_source is not None
-                    else None
                 )
+                composite_phase = compose_repo_and_pack(
+                    repo_phase,
+                    pack_phase_result,
+                )
+                pack_tests_passed = pack_phase_result.tests_passed
+                pack_tests_total = pack_phase_result.tests_total
+                pack_junit_sha256 = pack_phase_result.junit_sha256
+                pack_junit_digest_format = pack_phase_result.junit_digest_format
+                passed = composite_phase.passed
+                score = composite_phase.score
+                tampered = composite_phase.tampered
+                tests_passed = composite_phase.tests_passed
+                tests_total = composite_phase.tests_total
+                output = composite_phase.output
+                outcome = composite_phase.outcome
+                junit_sha256 = composite_phase.junit_sha256
+                junit_digest_format = composite_phase.junit_digest_format
+                verdict_source = composite_phase.verdict_source
                 trace["execution_phase"] = "verifier_pack"
 
             if not pack_dir:

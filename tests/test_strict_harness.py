@@ -21,7 +21,7 @@ from evoom_guard.guard import (
     REJECTED,
     guard,
 )
-from evoom_guard.verifiers import repo_verifier
+from evoom_guard.verifiers import repo_phase_contracts, repo_verifier
 from evoom_guard.verifiers.harness_policy import (
     is_protected_config,
     reject_unsafe_or_protected,
@@ -186,13 +186,15 @@ def _assert_strict_cleanup_keyword(call: ast.Call, expected: str) -> None:
 def test_strict_harness_zero_test_guard_cannot_be_disabled() -> None:
     """Keep the no-verdict rejection contract testable on every platform."""
 
-    tree = ast.parse(textwrap.dedent(inspect.getsource(repo_verifier.RepoVerifier._verify)))
+    tree = ast.parse(
+        textwrap.dedent(inspect.getsource(repo_phase_contracts.evaluate_repo_phase))
+    )
     guards = [
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.If)
         and ast.unparse(node.test)
-        == "strict_harness and (junit is None or junit.total <= 0)"
+        == "strict_harness and (evidence.junit is None or evidence.junit.total <= 0)"
     ]
 
     assert len(guards) == 1

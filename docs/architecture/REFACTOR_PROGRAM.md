@@ -72,7 +72,10 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
   report interpretation, evidence composition, and verdict policy in
   `blackbox.py`.
 - Extract `candidate/` and `workspace/` domains.
-- Split `repo_verifier.py` into phase modules.
+- Extract completed repository/pack interpretation and composition into the pure
+  typed `verifiers/repo_phase_contracts.py` module behind frozen vectors; keep
+  subprocess, container, filesystem, runtime-identity, and trace effects in
+  `RepoVerifier` until their own characterization slices exist.
 - Continue splitting the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Build `application` pipeline (`VerificationPipeline`, `VerdictComposer`,

@@ -70,3 +70,10 @@ process-group cleanup. It does not assemble the judge command, interpret its
 report, or compose evidence or verdicts. Those responsibilities remain in
 `blackbox.py`, which also retains its historical private patch seams through a
 compatibility facade.
+
+The first repository-verifier phase slice lives in
+`evoom_guard/verifiers/repo_phase_contracts.py`. It owns only pure interpretation
+of completed repository-suite and mandatory verifier-pack evidence, including
+their composite JUnit identity. It must not perform filesystem, subprocess,
+container, or trace mutation. `RepoVerifier` still owns those effects and passes
+their completed evidence into the typed phase contracts.
