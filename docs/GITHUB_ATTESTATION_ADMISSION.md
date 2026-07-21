@@ -31,8 +31,14 @@ following fixed or externally supplied constraints:
 9. an attestation lookup limit of one, so the result cardinality is exact.
 
 The adapter independently caps live `gh` output while it is being read (4 MiB
-stdout and 64 KiB stderr) and terminates the child on overflow. `--limit 1`
-does not itself bound provider response bytes.
+stdout and 64 KiB stderr). It launches the CLI in a managed process group and
+uses bounded tree cleanup on timeout, overflow, reader failure, and unexpected
+cancellation. Reader construction/start failures are also inside that cleanup
+boundary; a worker read error invalidates every byte already retained, and a
+pipe is never closed synchronously while its reader may still be live. On
+POSIX, normal completion includes a post-completion group cleanup proof so an
+ordinary descendant cannot retain inherited pipes. `--limit 1` does not itself
+bound provider response bytes.
 
 The GitHub CLI performs the signature/certificate/identity verification. The
 adapter then writes two no-clobber regular files:
@@ -84,6 +90,11 @@ Do not widen the claim beyond what executes:
   required merge gate.
 - It does not turn a same-owner review into independent review. It also does
   not protect a key if candidate code can run in the same job after key access.
+- A managed process group is lifecycle containment, not a sandbox. A POSIX
+  descendant that creates a separate session can escape that group. Windows
+  cannot prove descendant absence after the root process has already exited
+  without a Job Object; a retained pipe therefore fails closed, but this
+  adapter does not claim the POSIX post-completion proof on Windows.
 
 ## Required protected workflow shape
 
