@@ -770,6 +770,314 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="github-attestation-tree-cleanup-proof-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "    return terminate_process_tree("
+            "process, _GITHUB_ATTESTATION_PROCESS_LIMITS)\n"
+        ),
+        after="    return True\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_unproven_tree_cleanup_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-process-group-launch-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="                **process_group_popen_kwargs(),\n",
+        after="                **{},\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_launch_uses_managed_group_and_preserves_exact_raw_bytes"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-reader-join-bound-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            reader.join(max(0.0, deadline - time.monotonic()))\n"
+        ),
+        after="            reader.join()\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_launch_uses_managed_group_and_preserves_exact_raw_bytes"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-reader-total-budget-reset",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "    deadline = time.monotonic() + "
+            "_GITHUB_ATTESTATION_READER_JOIN_SECONDS\n"
+            "    for reader in readers:\n"
+        ),
+        after=(
+            "    for reader in readers:\n"
+            "        deadline = time.monotonic() + "
+            "_GITHUB_ATTESTATION_READER_JOIN_SECONDS\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_reader_joins_share_one_total_budget"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-poll-wait-bound-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            reader_signal.wait("
+            "min(_GITHUB_ATTESTATION_PROCESS_POLL_SECONDS, remaining))\n"
+        ),
+        after="            reader_signal.wait()\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_process_poll_wait_is_bounded_and_wakes_for_recheck"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-live-reader-close-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="        safe_to_close = index >= len(stopped) or stopped[index]\n",
+        after="        safe_to_close = True\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_live_reader_stream_is_never_closed_synchronously"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-stream-close-proof-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "        except (OSError, ValueError):\n"
+            "            streams_closed = False\n"
+        ),
+        after=(
+            "        except (OSError, ValueError):\n"
+            "            streams_closed = True\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_stream_close_failure_cannot_be_a_successful_cleanup_proof"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-stream-close-primary-suppression",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "        except BaseException as exc:\n"
+            "            streams_closed = False\n"
+            "            if first_error is None:\n"
+            "                first_error = exc\n"
+        ),
+        after=(
+            "        except BaseException as exc:\n"
+            "            streams_closed = False\n"
+            "            if False and first_error is None:\n"
+            "                first_error = exc\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_stream_close_baseexception_remains_authoritative"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-unattempted-reader-pipe-close-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="        safe_to_close = index >= len(stopped) or stopped[index]\n",
+        after=(
+            "        safe_to_close = index < len(stopped) and stopped[index]\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_reader_start_failure_cleans_child_without_masking_primary"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-reader-start-tracking-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            reader_start_attempts.append(reader)\n"
+            "            reader.start()\n"
+        ),
+        after="            reader.start()\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_reader_start_failure_cleans_child_without_masking_primary"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-overflow-state-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                        overflow.add(label)\n"
+            "                        reader_signal.set()\n"
+        ),
+        after="                        reader_signal.set()\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_stdout_and_stderr_limits_are_independent_and_fail_closed"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-reader-error-record-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                read_errors.append(exc)\n"
+            "                reader_signal.set()\n"
+        ),
+        after="                reader_signal.set()\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_worker_failure_cannot_accept_plausible_partial_json"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-reader-baseexception-narrowing",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            except BaseException as exc:\n"
+            "                read_errors.append(exc)\n"
+        ),
+        after=(
+            "            except Exception as exc:\n"
+            "                read_errors.append(exc)\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_worker_failure_cannot_accept_plausible_partial_json"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-live-reader-error-cleanup-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "        interrupted = timed_out or bool(read_errors) or bool(overflow)\n"
+        ),
+        after="        interrupted = timed_out or bool(overflow)\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_worker_failure_stops_a_still_live_child"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-interrupt-cleanup-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            if not root_exited_on_windows:\n"
+            "                if not _terminate_gh_process_tree(process):\n"
+        ),
+        after=(
+            "            if not root_exited_on_windows:\n"
+            "                if False and not _terminate_gh_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_timeout_uses_tree_cleanup_and_independent_reader_budget"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-windows-departed-root-reason-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            '            root_exited_on_windows = os.name == "nt" and '
+            "process.poll() is not None\n"
+        ),
+        after="            root_exited_on_windows = False\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_windows_departed_root_preserves_original_failure_without_tree_claim"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-windows-cleanup-race-recheck-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                    root_exited_on_windows = (\n"
+            "                        os.name == \"nt\" and process.poll() is not None\n"
+            "                    )\n"
+        ),
+        after="                    root_exited_on_windows = False\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_windows_root_exit_during_cleanup_preserves_original_failure"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-deadline-check-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="            if remaining <= 0:\n",
+        after="            if False and remaining <= 0:\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_windows_departed_root_preserves_original_failure_without_tree_claim"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-posix-post-completion-proof-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            if os.name == \"posix\":\n"
+            "                if not _terminate_gh_process_tree(process):\n"
+        ),
+        after=(
+            "            if False and os.name == \"posix\":\n"
+            "                if not _terminate_gh_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_posix_success_proves_post_completion_group_cleanup"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-post-poll-primary-suppression",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                raise\n"
+            "            if os.name == \"posix\":\n"
+        ),
+        after=(
+            "                pass\n"
+            "            if os.name == \"posix\":\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_post_poll_wait_baseexception_remains_authoritative"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-reader-join-primary-suppression",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "    if first_error is not None:\n"
+            "        raise first_error\n"
+        ),
+        after=(
+            "    if False and first_error is not None:\n"
+            "        raise first_error\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_reader_join_baseexception_remains_authoritative_and_stream_stays_open"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-cleanup-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "    except BaseException:\n"
+            "        # Preserve the active exception while attempting bounded cleanup.\n"
+        ),
+        after=(
+            "    except Exception:\n"
+            "        # Preserve the active exception while attempting bounded cleanup.\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_reader_start_failure_cleans_child_without_masking_primary"
+        ),
+    ),
+    Mutation(
         name="protected-edit-preflight-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before="        if rejection is not None:\n            return rejection\n",

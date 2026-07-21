@@ -123,6 +123,9 @@ def _successful_gh(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
         def wait(self, timeout: int | None = None) -> int:
             return self.returncode
 
+        def poll(self) -> int:
+            return self.returncode
+
         def kill(self) -> None:
             self.returncode = -9
 
@@ -132,6 +135,11 @@ def _successful_gh(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
         return real_popen(command, **kwargs)
 
     monkeypatch.setattr(github_attestation.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda process: True,
+    )
     return calls
 
 
@@ -280,7 +288,7 @@ def test_receipt_can_be_freshly_reverified_without_reusing_historic_output(
 def test_verifier_output_is_capped_while_the_child_is_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    kills: list[bool] = []
+    cleanups: list[object] = []
 
     class OversizedPopen:
         def __init__(self, command: list[str], **kwargs: object) -> None:
@@ -294,18 +302,25 @@ def test_verifier_output_is_capped_while_the_child_is_running(
         def wait(self, timeout: float | None = None) -> int:
             return self.returncode
 
+        def poll(self) -> int:
+            return self.returncode
+
         def kill(self) -> None:
             self.killed = True
             self.returncode = -9
-            kills.append(True)
 
     monkeypatch.setattr(github_attestation.subprocess, "Popen", OversizedPopen)
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda process: cleanups.append(process) is None,
+    )
     artifact, receipt_path, raw_path = _receipt_inputs(tmp_path)
     with pytest.raises(github_attestation.GitHubAttestationError, match="bounded standard-output"):
         github_attestation.create_github_attestation_receipt(
             str(artifact), str(receipt_path), str(raw_path), **_policy_kwargs()
         )
-    assert kills == [True]
+    assert len(cleanups) == 1
     assert not receipt_path.exists()
     assert not raw_path.exists()
 
@@ -322,10 +337,18 @@ def test_nonzero_gh_exit_without_stderr_is_reported_not_a_name_error(
         def wait(self, timeout: float | None = None) -> int:
             return self.returncode
 
+        def poll(self) -> int:
+            return self.returncode
+
         def kill(self) -> None:
             self.returncode = -9
 
     monkeypatch.setattr(github_attestation.subprocess, "Popen", FailedPopen)
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda process: True,
+    )
     artifact, receipt_path, raw_path = _receipt_inputs(tmp_path)
     with pytest.raises(github_attestation.GitHubAttestationError, match=r"exit 7"):
         github_attestation.create_github_attestation_receipt(
@@ -336,16 +359,16 @@ def test_nonzero_gh_exit_without_stderr_is_reported_not_a_name_error(
 def test_verifier_fails_closed_when_a_descendant_holds_an_output_pipe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    class HeldPipe:
-        def __init__(self) -> None:
-            self.closed = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
 
+    class HeldPipe:
         def read(self, size: int) -> bytes:
-            self.closed.wait()
+            release.wait()
             return b""
 
         def close(self) -> None:
-            self.closed.set()
+            closed.set()
 
     class HeldPipePopen:
         def __init__(self, command: list[str], **kwargs: object) -> None:
@@ -356,19 +379,35 @@ def test_verifier_fails_closed_when_a_descendant_holds_an_output_pipe(
         def wait(self, timeout: float | None = None) -> int:
             return self.returncode
 
+        def poll(self) -> int:
+            return self.returncode
+
         def kill(self) -> None:
             self.returncode = -9
 
     monkeypatch.setattr(github_attestation.subprocess, "Popen", HeldPipePopen)
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda process: True,
+    )
+    monkeypatch.setattr(github_attestation, "_GITHUB_ATTESTATION_READER_JOIN_SECONDS", 0.01)
     artifact, receipt_path, raw_path = _receipt_inputs(tmp_path)
-    with pytest.raises(github_attestation.GitHubAttestationError, match="left output pipes open"):
-        github_attestation.create_github_attestation_receipt(
-            str(artifact),
-            str(receipt_path),
-            str(raw_path),
-            timeout_seconds=1,
-            **_policy_kwargs(),
-        )
+    try:
+        with pytest.raises(
+            github_attestation.GitHubAttestationError,
+            match="left output pipes open",
+        ):
+            github_attestation.create_github_attestation_receipt(
+                str(artifact),
+                str(receipt_path),
+                str(raw_path),
+                timeout_seconds=1,
+                **_policy_kwargs(),
+            )
+        assert not closed.is_set()
+    finally:
+        release.set()
 
 
 def test_receipt_rejects_noncanonical_or_weakened_policy(tmp_path: Path) -> None:

@@ -54,6 +54,11 @@ from evoom_guard.artifact_digest_admission import (
     verify_artifact_digest_admission,
 )
 from evoom_guard.evidence_bundle import EvidenceBundleError, _canonical_json, _read_regular_file
+from evoom_guard.execution import (
+    ProcessLimits,
+    process_group_popen_kwargs,
+    terminate_process_tree,
+)
 from evoom_guard.strict_json import strict_json_loads
 
 GITHUB_ATTESTATION_RECEIPT_FORMAT = "EVOGUARD_GITHUB_ATTESTATION_RECEIPT_V1"
@@ -66,6 +71,17 @@ MAX_GITHUB_ATTESTATION_OUTPUT_BYTES = 4 * 1024 * 1024
 MAX_GITHUB_ATTESTATION_TIMEOUT_SECONDS = 600
 DEFAULT_GITHUB_ATTESTATION_TIMEOUT_SECONDS = 120
 _STREAM_CHUNK_BYTES = 1024 * 1024
+_GITHUB_ATTESTATION_STDERR_BYTES = 64 * 1024
+_GITHUB_ATTESTATION_PROCESS_POLL_SECONDS = 0.02
+_GITHUB_ATTESTATION_KILL_REAP_SECONDS = 3.0
+_GITHUB_ATTESTATION_READER_JOIN_SECONDS = 2.0
+_GITHUB_ATTESTATION_PROCESS_LIMITS = ProcessLimits(
+    max_output_bytes=MAX_GITHUB_ATTESTATION_OUTPUT_BYTES,
+    read_chunk_bytes=_STREAM_CHUNK_BYTES,
+    termination_grace_seconds=1.0,
+    kill_grace_seconds=_GITHUB_ATTESTATION_KILL_REAP_SECONDS,
+    reader_join_seconds=_GITHUB_ATTESTATION_READER_JOIN_SECONDS,
+)
 
 _RECEIPT_KEYS = {
     "format",
@@ -566,60 +582,243 @@ def _gh_environment(directory: str) -> dict[str, str]:
     return environment
 
 
-def _drain_bounded_process_stream(
-    stream: Any,
-    *,
-    limit: int,
-    data: bytearray,
-    limit_exceeded: threading.Event,
-    process: subprocess.Popen[bytes],
-) -> None:
-    """Drain a child pipe while holding no more than its declared byte limit.
+def _terminate_gh_process_tree(process: subprocess.Popen[Any]) -> bool:
+    """Terminate the verifier's managed process group and prove cleanup."""
 
-    A child inherits an OS pipe, so sending stdout directly to a temporary file
-    would allow it to fill the filesystem before a post-run size check.  This
-    reader kills the child once its output exceeds the fixed bound, then keeps
-    draining to let the other pipe and process close cleanly.
-    """
+    return terminate_process_tree(process, _GITHUB_ATTESTATION_PROCESS_LIMITS)
 
-    try:
-        read = getattr(stream, "read1", stream.read)
-        while True:
-            try:
-                chunk = read(_STREAM_CHUNK_BYTES)
-            except (OSError, ValueError):
-                return
-            if not chunk:
-                return
-            remaining = limit - len(data)
-            if remaining <= 0 or len(chunk) > remaining:
-                if remaining > 0:
-                    data.extend(chunk[:remaining])
-                limit_exceeded.set()
-                try:
-                    process.kill()
-                except (OSError, ProcessLookupError):
-                    pass
-                # Do not retain anything further, but keep consuming the pipe
-                # so an already-running sibling stream cannot deadlock.
-                continue
-            data.extend(chunk)
-    finally:
+
+def _join_and_close_gh_readers(
+    readers: list[threading.Thread],
+    streams: list[Any],
+) -> bool:
+    """Boundedly join attempted readers and close only streams proven safe."""
+
+    stopped: list[bool] = []
+    first_error: BaseException | None = None
+    deadline = time.monotonic() + _GITHUB_ATTESTATION_READER_JOIN_SECONDS
+    for reader in readers:
+        try:
+            reader.join(max(0.0, deadline - time.monotonic()))
+            stopped.append(not reader.is_alive())
+        except BaseException as exc:
+            # start() can raise after a native thread exists. A failed join is
+            # therefore not proof that the corresponding pipe is safe to close.
+            stopped.append(False)
+            if first_error is None:
+                first_error = exc
+
+    streams_closed = True
+    for index, stream in enumerate(streams):
+        safe_to_close = index >= len(stopped) or stopped[index]
+        if not safe_to_close:
+            streams_closed = False
+            continue
         try:
             stream.close()
         except (OSError, ValueError):
-            pass
+            streams_closed = False
+        except BaseException as exc:
+            streams_closed = False
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
+    return all(stopped) and streams_closed
 
 
-def _close_process_pipes(process: subprocess.Popen[bytes]) -> None:
-    """Close inherited pipe endpoints without waiting on untrusted descendants."""
+def _execute_gh_attestation_command(
+    command: list[str],
+    *,
+    gh_executable: str,
+    timeout_seconds: int,
+    directory: str,
+) -> bytes:
+    """Execute the trusted CLI with raw, separately bounded output streams."""
 
-    for stream in (process.stdout, process.stderr):
-        if stream is not None:
+    process: subprocess.Popen[Any] | None = None
+    streams: list[Any] = []
+    reader_start_attempts: list[threading.Thread] = []
+    cleanup_proven = False
+    readers_closed = False
+    try:
+        try:
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=directory,
+                env=_gh_environment(directory),
+                shell=False,
+                **process_group_popen_kwargs(),
+            )
+        except FileNotFoundError as exc:
+            raise GitHubAttestationError(
+                f"GitHub CLI executable was not found: {gh_executable!r}"
+            ) from exc
+        except OSError as exc:
+            raise GitHubAttestationError(
+                f"cannot run GitHub attestation verifier: {exc}"
+            ) from exc
+
+        stdout_stream = process.stdout
+        stderr_stream = process.stderr
+        streams = [stream for stream in (stdout_stream, stderr_stream) if stream is not None]
+        if stdout_stream is None or stderr_stream is None:
+            raise GitHubAttestationError(
+                "GitHub attestation verifier did not provide output pipes"
+            )
+
+        stdout = bytearray()
+        stderr = bytearray()
+        overflow: set[str] = set()
+        read_errors: list[BaseException] = []
+        reader_signal = threading.Event()
+
+        def drain(stream: Any, *, maximum: int, target: bytearray, label: str) -> None:
             try:
-                stream.close()
-            except (OSError, ValueError):
-                pass
+                read = getattr(stream, "read1", None)
+                if not callable(read):
+                    read = stream.read
+                while True:
+                    chunk = read(_STREAM_CHUNK_BYTES)
+                    if not chunk:
+                        return
+                    remaining = maximum + 1 - len(target)
+                    if remaining > 0:
+                        target.extend(chunk[:remaining])
+                    if len(target) > maximum:
+                        overflow.add(label)
+                        reader_signal.set()
+            except BaseException as exc:
+                read_errors.append(exc)
+                reader_signal.set()
+
+        readers = [
+            threading.Thread(
+                target=drain,
+                args=(stdout_stream,),
+                kwargs={
+                    "maximum": MAX_GITHUB_ATTESTATION_OUTPUT_BYTES,
+                    "target": stdout,
+                    "label": "stdout",
+                },
+                daemon=True,
+            ),
+            threading.Thread(
+                target=drain,
+                args=(stderr_stream,),
+                kwargs={
+                    "maximum": _GITHUB_ATTESTATION_STDERR_BYTES,
+                    "target": stderr,
+                    "label": "stderr",
+                },
+                daemon=True,
+            ),
+        ]
+        for reader in readers:
+            # Record before start(): start can fail after a native thread exists.
+            reader_start_attempts.append(reader)
+            reader.start()
+
+        deadline = time.monotonic() + timeout_seconds
+        timed_out = False
+        while True:
+            if read_errors or overflow:
+                break
+            if process.poll() is not None:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            reader_signal.wait(min(_GITHUB_ATTESTATION_PROCESS_POLL_SECONDS, remaining))
+
+        interrupted = timed_out or bool(read_errors) or bool(overflow)
+        if interrupted:
+            root_exited_on_windows = os.name == "nt" and process.poll() is not None
+            if not root_exited_on_windows:
+                if not _terminate_gh_process_tree(process):
+                    root_exited_on_windows = (
+                        os.name == "nt" and process.poll() is not None
+                    )
+                    if not root_exited_on_windows:
+                        raise GitHubAttestationError(
+                            "GitHub attestation verifier process cleanup could not be proven"
+                        )
+                else:
+                    cleanup_proven = True
+            returncode = process.returncode
+        else:
+            try:
+                returncode = process.wait(timeout=_GITHUB_ATTESTATION_KILL_REAP_SECONDS)
+            except BaseException:
+                try:
+                    cleanup_proven = _terminate_gh_process_tree(process)
+                except BaseException:
+                    pass
+                raise
+            if os.name == "posix":
+                if not _terminate_gh_process_tree(process):
+                    raise GitHubAttestationError(
+                        "GitHub attestation verifier process cleanup could not be proven"
+                    )
+                cleanup_proven = True
+
+        if not _join_and_close_gh_readers(reader_start_attempts, streams):
+            raise GitHubAttestationError(
+                "GitHub attestation verifier left output pipes open past its bounded timeout"
+            )
+        readers_closed = True
+
+        if overflow:
+            raise GitHubAttestationError(
+                "GitHub attestation verifier exceeded its bounded standard-output or "
+                "standard-error limit"
+            )
+        if timed_out:
+            raise GitHubAttestationError(
+                f"GitHub attestation verification exceeded {timeout_seconds} seconds"
+            )
+        if read_errors:
+            raise GitHubAttestationError(
+                f"GitHub attestation verifier output could not be read: {read_errors[0]}"
+            ) from read_errors[0]
+        if returncode is None:  # pragma: no cover - defensive process-state invariant
+            raise GitHubAttestationError(
+                "GitHub attestation verifier has no terminal exit status"
+            )
+
+        stdout_bytes = bytes(stdout)
+        stderr_bytes = bytes(stderr)
+        if returncode != 0:
+            error = stderr_bytes.decode("utf-8", errors="backslashreplace").strip()
+            if len(error) > 2000:
+                error = error[:2000] + "…"
+            raise GitHubAttestationError(
+                "GitHub attestation verification failed"
+                + (f": {error}" if error else f" (exit {returncode})")
+            )
+        _load_attestation_output(stdout_bytes)
+        return stdout_bytes
+    except BaseException:
+        # Preserve the active exception while attempting bounded cleanup.
+        if process is not None:
+            if not cleanup_proven:
+                try:
+                    cleanup_proven = _terminate_gh_process_tree(process)
+                except BaseException:
+                    pass
+            if not readers_closed:
+                try:
+                    readers_closed = _join_and_close_gh_readers(
+                        reader_start_attempts,
+                        streams,
+                    )
+                except BaseException:
+                    pass
+        raise
 
 
 def _run_gh_attestation_verify(
@@ -662,108 +861,12 @@ def _run_gh_attestation_verify(
         "--format",
         "json",
     ]
-    stdout = bytearray()
-    stderr = bytearray()
-    output_limit_exceeded = threading.Event()
-    try:
-        process = subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd=directory,
-            env=_gh_environment(directory),
-            shell=False,
-        )
-    except FileNotFoundError as exc:
-        raise GitHubAttestationError(
-            f"GitHub CLI executable was not found: {gh_executable!r}"
-        ) from exc
-    except OSError as exc:
-        raise GitHubAttestationError(f"cannot run GitHub attestation verifier: {exc}") from exc
-
-    if process.stdout is None or process.stderr is None:  # pragma: no cover - subprocess invariant
-        raise GitHubAttestationError("GitHub attestation verifier did not provide output pipes")
-    readers = (
-        threading.Thread(
-            target=_drain_bounded_process_stream,
-            kwargs={
-                "stream": process.stdout,
-                "limit": MAX_GITHUB_ATTESTATION_OUTPUT_BYTES,
-                "data": stdout,
-                "limit_exceeded": output_limit_exceeded,
-                "process": process,
-            },
-            daemon=True,
-        ),
-        threading.Thread(
-            target=_drain_bounded_process_stream,
-            kwargs={
-                "stream": process.stderr,
-                "limit": 64 * 1024,
-                "data": stderr,
-                "limit_exceeded": output_limit_exceeded,
-                "process": process,
-            },
-            daemon=True,
-        ),
+    return _execute_gh_attestation_command(
+        command,
+        gh_executable=gh_executable,
+        timeout_seconds=timeout_seconds,
+        directory=directory,
     )
-    for reader in readers:
-        reader.start()
-    deadline = time.monotonic() + timeout_seconds
-    timed_out = False
-    returncode: int | None = None
-    pipes_left_open = False
-    try:
-        returncode = process.wait(timeout=max(0.001, deadline - time.monotonic()))
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        try:
-            process.kill()
-        except (OSError, ProcessLookupError):
-            pass
-        try:
-            process.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            pass
-    finally:
-        for reader in readers:
-            remaining = deadline - time.monotonic()
-            if remaining > 0:
-                reader.join(timeout=remaining)
-        pipes_left_open = any(reader.is_alive() for reader in readers)
-        if pipes_left_open:
-            _close_process_pipes(process)
-            for reader in readers:
-                reader.join(timeout=0.1)
-
-    if output_limit_exceeded.is_set():
-        raise GitHubAttestationError(
-            "GitHub attestation verifier exceeded its bounded standard-output or standard-error limit"
-        )
-    if timed_out:
-        raise GitHubAttestationError(
-            f"GitHub attestation verification exceeded {timeout_seconds} seconds"
-        )
-    if pipes_left_open:
-        raise GitHubAttestationError(
-            "GitHub attestation verifier left output pipes open past its bounded timeout"
-        )
-    if returncode is None:  # pragma: no cover - defensive process-state invariant
-        raise GitHubAttestationError("GitHub attestation verifier has no terminal exit status")
-    stdout_bytes = bytes(stdout)
-    stderr_bytes = bytes(stderr)
-    if returncode != 0:
-        error = stderr_bytes.decode("utf-8", errors="backslashreplace").strip()
-        if len(error) > 2000:
-            error = error[:2000] + "…"
-        raise GitHubAttestationError(
-            "GitHub attestation verification failed"
-            + (f": {error}" if error else f" (exit {returncode})")
-        )
-    _load_attestation_output(stdout_bytes)
-    return stdout_bytes
-
 
 def create_github_attestation_receipt(
     artifact_path: str,

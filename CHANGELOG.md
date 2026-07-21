@@ -18,6 +18,10 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   explicitly selected repository and literal immutable object graph.
 - Raw Git readers now propagate all worker read failures, bound kill/reap and
   reader joins, and avoid closing a pipe while its reader may still be live.
+- GitHub attestation verification now propagates every output-reader failure,
+  launches the CLI in a managed process group, bounds tree cleanup and reader
+  joins independently from the verification timeout, and cannot accept
+  plausible partial JSON after a failed read.
 
 ### Fixed
 
