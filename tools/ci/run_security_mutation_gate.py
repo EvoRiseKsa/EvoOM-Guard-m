@@ -40,6 +40,50 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="invocation-drain-batch-limit-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            for _ in range("
+            "_MAX_INVOCATION_DATAGRAMS_PER_DRAIN):\n"
+        ),
+        after=(
+            "            for _ in range("
+            "_MAX_INVOCATION_DATAGRAMS_PER_DRAIN + 1):\n"
+        ),
+        test=(
+            "tests/test_blackbox_invocation_recorder.py::"
+            "test_flooded_receiver_has_a_bounded_lock_hold_and_close_path"
+        ),
+    ),
+    Mutation(
+        name="invocation-drain-stop-check-bypass",
+        path="evoom_guard/blackbox.py",
+        before="                if self._stop.is_set() and not final:\n",
+        after="                if False and self._stop.is_set() and not final:\n",
+        test=(
+            "tests/test_blackbox_invocation_recorder.py::"
+            "test_stopped_background_drain_does_not_read_an_unbounded_source"
+        ),
+    ),
+    Mutation(
+        name="invocation-post-bind-unlink-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "    if bound:\n"
+            "        try:\n"
+            "            os.unlink(path)\n"
+        ),
+        after=(
+            "    if False and bound:\n"
+            "        try:\n"
+            "            os.unlink(path)\n"
+        ),
+        test=(
+            "tests/test_blackbox_invocation_recorder.py::"
+            "test_post_bind_failure_closes_and_unlinks_socket[chmod]"
+        ),
+    ),
+    Mutation(
         name="docker-absence-daemon-failure-bypass",
         path="evoom_guard/isolation/docker.py",
         before=(

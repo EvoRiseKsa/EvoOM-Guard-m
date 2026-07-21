@@ -7,7 +7,10 @@ strict behavior-preserving PR slices.
 ## Execution posture
 
 - The current public implementation and tests remain the source of record.
-- No behavior change is accepted outside explicit `no-behavior-change` refactor PRs.
+- Behavior-preserving `R1`/`R2` slices carry `no-behavior-change`. Any `R3`
+  semantic change is isolated from mechanical work and requires an explicit
+  invariant, threat model, adversarial coverage, compatibility note, and
+  rollback plan.
 - The work is split into explicit stages so each stage can be merged safely:
   0) stable baseline lock
   1) architectural documentation
@@ -40,4 +43,3 @@ Stage 0 is active:
 - finalize `v4.0.1` baseline release assets and checksums,
 - create baseline manifest artifacts for command/API/reports,
 - add branch/release governance checks in docs and scripts.
-

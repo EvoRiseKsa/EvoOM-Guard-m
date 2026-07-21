@@ -58,6 +58,11 @@ prepared launcher. The launcher sends a judge-owned invocation receipt;
 Docker/gVisor additionally requires a valid runtime-written container CID. This
 proves launcher/runtime invocation, not by itself the argv meaning or successful
 execution of candidate logic; the trusted pack must assert the intended outputs.
+In host-subprocess mode the candidate shares the judge's UID and can send noise
+to a discovered receipt socket, so each receiver-lock hold is stop-aware and
+bounded to 256 datagrams. Exact-token filtering prevents false evidence; under
+pathological flooding a receipt may be conservatively undercounted and the run
+fails closed instead of allowing verdict or cleanup to wait without bound.
 A pack that returns a constant PASS without
 invoking `$EVOGUARD_EXEC` is refused as `ERROR candidate_not_exercised`, even
 without an isolation floor. If the diff pre-gate rejects first, the
