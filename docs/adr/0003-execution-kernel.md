@@ -41,3 +41,9 @@ Current monolithic execution paths mix process launch, isolation policy, and ver
   preparation. The legacy `candidate_runner.py` surface keeps its public
   signatures and test seams while delegating implementation; runtime invocation
   observation and verdict wording remain in `blackbox.py`.
+- The black-box invocation receiver bounds every receive-lock hold to 256
+  datagrams and checks its stop signal within the batch. Host candidates that
+  share the judge UID can therefore cause conservative missing evidence, but
+  cannot hold verdict or cleanup indefinitely by continuously flooding invalid
+  datagrams. A setup failure after a successful bind also removes the socket
+  pathname; a failed bind never deletes a pre-existing path.

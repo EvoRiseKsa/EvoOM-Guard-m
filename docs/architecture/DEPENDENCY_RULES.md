@@ -74,8 +74,12 @@ module imports `isolation.docker` directly and never imports the facade or
 
 ## Acceptance rules
 
-- Any refactor PR must:
-  - be labeled `no-behavior-change`,
+- Any architecture-extraction PR must:
+  - select exactly one change class from the pull-request template,
+  - carry `no-behavior-change` only for `R1-mechanical` or a genuinely
+    behavior-preserving `R2-compatible` change,
+  - for `R3-semantic` or `R4-trust-root`, state the changed invariant, threat
+    model, positive/adversarial coverage, compatibility effect, and rollback,
   - include equivalent fixture results for verdict/lifecycle,
   - include at least one positive and one negative vector update for each touched contract,
   - preserve backward compatibility at the CLI/API compatibility facades.

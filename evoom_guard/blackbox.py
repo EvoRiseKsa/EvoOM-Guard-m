@@ -115,6 +115,7 @@ from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 
 _SubprocessContainmentError = ProcessContainmentError
 _SubprocessOutputLimitExceeded = ProcessOutputLimitExceeded
+_MAX_INVOCATION_DATAGRAMS_PER_DRAIN = 256
 
 
 class BlackboxResult(NamedTuple):
@@ -167,6 +168,22 @@ def _run_docker_control(
     ).as_completed_process(args=command)
 
 
+def _discard_invocation_receiver(
+    receiver: socket.socket, path: str, *, bound: bool
+) -> None:
+    """Best-effort cleanup for a recorder that failed during construction."""
+
+    try:
+        receiver.close()
+    except OSError:
+        pass
+    if bound:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 class _InvocationRecorder:
     """Judge-owned, one-way receipts proving that EVOGUARD_EXEC was invoked.
 
@@ -206,23 +223,21 @@ class _InvocationRecorder:
             return None
         path = os.path.join(workdir, ".evoguard-invocation.sock")
         receiver: socket.socket | None = None
+        bound = False
         try:
             receiver = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
             receiver.bind(path)
+            bound = True
             os.chmod(path, 0o600)
             receiver.setblocking(False)
         except OSError:
             if receiver is not None:
-                receiver.close()
+                _discard_invocation_receiver(receiver, path, bound=bound)
             return None
         try:
             return cls(path, secrets.token_hex(32), receiver)
         except (OSError, RuntimeError):
-            receiver.close()
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+            _discard_invocation_receiver(receiver, path, bound=True)
             return None
 
     def drain(self) -> int:
@@ -236,10 +251,14 @@ class _InvocationRecorder:
             self._drain_available()
             self._stop.wait(0.01)
 
-    def _drain_available(self) -> None:
+    def _drain_available(self, *, final: bool = False) -> None:
         valid = 0
         with self._receiver_lock:
-            while True:
+            # A same-UID host candidate can locate and flood the socket. Bound
+            # each lock hold so invalid traffic cannot starve drain()/close().
+            for _ in range(_MAX_INVOCATION_DATAGRAMS_PER_DRAIN):
+                if self._stop.is_set() and not final:
+                    break
                 try:
                     payload = self._receiver.recv(4096)
                 except (BlockingIOError, InterruptedError):
@@ -259,8 +278,9 @@ class _InvocationRecorder:
         self._stop.set()
         self._reader.join(timeout=1.0)
         # One final synchronous drain closes the small race between the last
-        # sender and the reader observing the stop event.
-        self._drain_available()
+        # sender and the reader observing the stop event. The final batch is
+        # still bounded, so a hostile flood cannot hold cleanup indefinitely.
+        self._drain_available(final=True)
         try:
             self._receiver.close()
         finally:

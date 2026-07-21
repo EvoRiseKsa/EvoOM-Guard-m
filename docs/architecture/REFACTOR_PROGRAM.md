@@ -84,4 +84,6 @@ hardening later (Artifact-Bound Admission, stronger organization policy, etc.).
 1. All new modules have unit + integration coverage.
 2. Golden/differential and mutation gates for the stage are green.
 3. No behavior regressions in existing verdict/reason/canonical outputs.
-4. PR labeled `no-behavior-change` unless migration scope is explicit and documented.
+4. `R1`/behavior-preserving `R2` PRs carry `no-behavior-change`; `R3`/`R4`
+   PRs instead document the changed invariant, threat model, compatibility,
+   adversarial coverage, and rollback.
