@@ -54,12 +54,15 @@ validation. See [governance](GOVERNANCE.md).
 | GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. Published `v4.1.0` additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. Release Source Admission V2 Round 1 exercised that stricter provider path for one authenticated producer receipt. | The adapter remains same-repository only. One source-pilot run is not proof for an arbitrary artifact, a general supply-chain guarantee, production gate, or independent provider implementation. |
 | Authenticated producer receipt pilot | In the clean round, B created one bounded receipt and C freshly verified one GitHub Artifact Attestation for its exact bytes. The moved-`main` control failed before receipt creation/download. The final matrix then rejected wrong-workflow, wrong-run-attempt, and altered-receipt substitutions; the altered-byte control included a positive provider baseline for the original bytes on the same runner. | These are non-admitting observations only. They do not independently prove A executed Guard and do not authorize a release, deployment, merge, artifact admission, or `ALLOW`. |
 | Release Source Admission V2 | Implements a signed protected-main source `ALLOW` binding A/B/C workflow blobs and run attempts, strong receipt evidence, semantic provider output, externally checked Git/`gh` digests and UID/GID pins, a provider-inaccessible signing-key path, and five distinct key domains. The separate V2 pilot completed one exact live source-only Round 1 and retained its fail-closed observations. | The observed `ALLOW` applies only to the recorded source and attempts. It does not bind a release artifact or publication, is not a production gate, and has no independent review. |
+| Release Artifact Admission V1 | The post-`v4.1.0` repository source implements a separately keyed `.raae` contract that re-verifies an exact `.rsae`, binds one external regular artifact to protected E/F workflow blobs and run identities, freshly constrains its GitHub Artifact Attestation, and supports detached offline verification. | It is not in immutable `v4.1.0` and has no live E/F/G pilot evidence. It does not authorize publication or deployment and does not prove reproducibility, OCI/registry provenance, production readiness, or independent review. |
 
 For exact threat models and non-guarantees, read [ASSURANCE.md](ASSURANCE.md),
 [TRUSTED_FINALIZER.md](TRUSTED_FINALIZER.md), and
 [GITHUB_ARTIFACT_ATTESTATIONS.md](GITHUB_ARTIFACT_ATTESTATIONS.md). The
 published V2 source contract is specified separately in
-[RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md).
+[RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md). The separate,
+not-yet-piloted artifact contract is specified in
+[RELEASE_ARTIFACT_ADMISSION_V1.md](RELEASE_ARTIFACT_ADMISSION_V1.md).
 
 ## Public code versus private operational assets
 
@@ -99,10 +102,12 @@ does **not** yet have evidence for any of the following:
 - a frozen, independently labelled held-out corpus;
 - a multi-tenant service, service-level support commitment, or central policy
   plane; or
+- a live protected-main E/F/G Release Artifact Admission V1 round; or
 - an end-to-end live chain from protected-main release-source authorization
   through the actual release artifact, publication, and deployment. The v4
-  pilot proves a narrower PR-head/regular-file/provider/finalizer relation and
-  must not be generalized to that missing chain.
+  finalizer pilot proves a narrower PR-head/regular-file/provider/finalizer
+  relation, while the new `.raae` implementation has no live pilot evidence;
+  neither may be generalized to that missing chain.
 
 Until that evidence exists, descriptions should remain limited to implemented
 behaviour, tested boundaries, and the exact version/evidence record linked

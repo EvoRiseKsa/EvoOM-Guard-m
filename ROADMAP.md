@@ -77,6 +77,19 @@ evidence used to judge it. Guard still focuses on one narrow question:
   exact source-only V2 round; this does not make the mechanism a production
   gate or authorize any artifact or publication.
 
+## Implemented contract awaiting operational evidence
+
+- **Release Artifact Admission V1** — the post-`v4.1.0` source implements a
+  sixth-key protected-main artifact `ALLOW`. It re-verifies one exact `.rsae`
+  source admission against external roots and nested tool pins; binds one
+  detached regular artifact, protected E/F workflow identities and raw-Git
+  blobs, exact builder run/attempt, and a fresh constrained GitHub Artifact
+  Attestation; then emits a canonical signed `.raae` that can be verified
+  offline. This implementation has no live E/F/G pilot evidence yet, is not
+  contained in immutable `v4.1.0`, and grants no publication, deployment, OCI,
+  registry, production, or reproducibility claim. See
+  [`docs/RELEASE_ARTIFACT_ADMISSION_V1.md`](docs/RELEASE_ARTIFACT_ADMISSION_V1.md).
+
 ## Operational evidence completed
 
 - The
@@ -150,14 +163,16 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Release-artifact boundary.** Extend the completed
-   regular-file/provider pilot with a distinct protected-main release-source
-   `ALLOW`, the actual release artifact digest, and its provider attestation.
-   The existing artifact commands consume a PR Finalizer `.evb`; they do not
-   consume a Release Source Admission `.rsae`, so a separately versioned
-   release-artifact adapter is required before any live claim. A draft-release
-   consumer, OCI, registry, deployment, and reproducibility remain separate
-   later contracts.
+1. **Release-artifact evidence.** Publish the implemented adapter through the
+   existing release workflow as a `v4.2.0` bootstrap; it cannot use itself to
+   authorize the release that first contains it. Then run one E/F/G pilot,
+   disabled by default, from a later protected-main source: E builds and attests
+   one exact artifact without the signing key, protected F re-verifies the
+   `.rsae`, raw-Git workflow blobs, run identity, and provider statement before
+   sealing `.raae`, and G verifies the retained bytes offline. Preserve live
+   negative controls and disable/delete the pilot secret afterward. Draft-
+   release consumption, publication, OCI, registry, deployment, and
+   reproducibility remain separate later contracts.
 2. **Independent evidence.** The active frozen request is
    [`v4.1.0` issue #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
    Completion requires an external reviewer and genuinely blind evaluation;

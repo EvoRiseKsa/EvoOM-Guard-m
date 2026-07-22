@@ -68,6 +68,14 @@ correctness or security.
 > runtime. Its `ALLOW` is bound only to the recorded source and workflow
 > attempts; it is same-owner operational evidence, not artifact/publication
 > authorization, a production gate, or independent review.
+> The post-`v4.1.0` repository source also implements the distinct
+> [`Release Artifact Admission V1`](docs/RELEASE_ARTIFACT_ADMISSION_V1.md)
+> contract. It binds one verified `.rsae` source `ALLOW`, one exact external
+> artifact, protected E/F workflow identities and raw-Git blobs, a freshly
+> constrained GitHub Artifact Attestation result, and a sixth signing-key
+> domain. It is not part of the immutable `v4.1.0` release and has no live
+> E/F/G pilot evidence yet. It does not authorize publication or deployment
+> and does not prove reproducible builds.
 > The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
 > is deliberately sanitized and disabled at baseline. It has recorded one
 > clean A-to-B-to-C evidence-chain round plus failed-A and moved-`main`
@@ -95,9 +103,10 @@ correctness or security.
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
 > version boundary of the core, demo, evaluation record, finalizer pilots,
-> receipt pilot, and Release Source V2 pilot; the distinction between public
-> code and private operational
-> assets; and the claims the current evidence does and does not support.
+> receipt pilot, Release Source V2 pilot, and the unreleased release-artifact
+> admission contract; the distinction between public code and private
+> operational assets; and the claims the current evidence does and does not
+> support.
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they
 "fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
