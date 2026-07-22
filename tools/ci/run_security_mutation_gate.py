@@ -621,8 +621,8 @@ MUTATIONS = (
     Mutation(
         name="finalizer-git-no-replace-bypass",
         path="evoom_guard/finalizer_derivation.py",
-        before='    command = ["git", "--no-replace-objects"]\n',
-        after='    command = ["git"]\n',
+        before='    command = [executable, "--no-replace-objects"]\n',
+        after='    command = [executable]\n',
         test=(
             "tests/test_finalizer_derivation.py::"
             "test_raw_git_reader_ignores_replace_refs"
@@ -833,8 +833,11 @@ MUTATIONS = (
     Mutation(
         name="github-attestation-process-group-launch-bypass",
         path="evoom_guard/github_attestation.py",
-        before="                **process_group_popen_kwargs(),\n",
-        after="                **{},\n",
+        before=(
+            "            launch_kwargs: dict[str, object] = "
+            "dict(process_group_popen_kwargs())\n"
+        ),
+        after="            launch_kwargs: dict[str, object] = {}\n",
         test=(
             "tests/test_github_attestation_lifecycle.py::"
             "test_launch_uses_managed_group_and_preserves_exact_raw_bytes"
