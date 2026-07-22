@@ -1,0 +1,130 @@
+{
+  "schema_version": "evoguard-release-ledger-v1",
+  "project": {
+    "name": "EvoOM Guard",
+    "version": "4.2.0"
+  },
+  "release": {
+    "repository": "EvoRiseKsa/EvoOM-Guard-m",
+    "tag": "v4.2.0",
+    "commit_sha": "db2d433aa8662ee4fca0957f9b917d8733f80596",
+    "tree_sha": "7dbb0df6cd1013c24373de302bab95738495117e",
+    "release_id": 357976954,
+    "state": "published",
+    "prerelease": false,
+    "immutable": true,
+    "created_utc": "2026-07-22T11:30:52Z",
+    "published_utc": "2026-07-22T19:36:43Z",
+    "release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.2.0"
+  },
+  "schema_contracts": {
+    "verdict_record": "1.11",
+    "sarif": "2.1.0",
+    "verifier_pack": "EVOGUARD_PACK_V2",
+    "junit_digest_formats": [
+      "JUNIT_XML_SHA256",
+      "EVOGUARD_JUNIT_REPORT_SET_V1",
+      "EVOGUARD_JUNIT_COMPOSITE_V1",
+      "EVOGUARD_JUNIT_COMPOSITE_V2"
+    ]
+  },
+  "marketplace": {
+    "action": "EvoOM Guard",
+    "version": "v4.2.0",
+    "url": "https://github.com/marketplace/actions/evoom-guard",
+    "observed_utc": "2026-07-22T19:42:46Z"
+  },
+  "artifacts": [
+    {
+      "name": "evo-guard.pyz",
+      "path": "pyz/evo-guard.pyz",
+      "size_bytes": 1497664,
+      "sha256": "789428de56c42808fadeed654fc3d9377d2456e15dadf53b8eb24e4287028c88",
+      "github_digest": "sha256:789428de56c42808fadeed654fc3d9377d2456e15dadf53b8eb24e4287028c88",
+      "download_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.2.0/evo-guard.pyz"
+    },
+    {
+      "name": "SHA256SUMS",
+      "path": "SHA256SUMS",
+      "size_bytes": 80,
+      "sha256": "04f270bbe64ab9e8a5c719ba2c5e4a88a1dea74cdbc0d52b8f1bb6f1e6794be0",
+      "github_digest": "sha256:04f270bbe64ab9e8a5c719ba2c5e4a88a1dea74cdbc0d52b8f1bb6f1e6794be0",
+      "download_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.2.0/SHA256SUMS"
+    }
+  ],
+  "checksum_manifest": {
+    "path": "SHA256SUMS",
+    "format": "sha256sum-two-space",
+    "target": "evo-guard.pyz",
+    "target_sha256": "789428de56c42808fadeed654fc3d9377d2456e15dadf53b8eb24e4287028c88",
+    "manifest_sha256": "04f270bbe64ab9e8a5c719ba2c5e4a88a1dea74cdbc0d52b8f1bb6f1e6794be0"
+  },
+  "release_workflow": {
+    "path": ".github/workflows/release.yml",
+    "event": "workflow_dispatch",
+    "source_ref": "refs/heads/main",
+    "run_id": 29916717885,
+    "attempt": 1,
+    "head_sha": "db2d433aa8662ee4fca0957f9b917d8733f80596",
+    "conclusion": "success",
+    "run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29916717885",
+    "pytest": {
+      "passed": 1722,
+      "skipped": 11,
+      "subtests_passed": 59
+    },
+    "linux_e2e_passed": [10, 8],
+    "windows_e2e_passed": 10
+  },
+  "tag_ci": {
+    "path": ".github/workflows/ci.yml",
+    "event": "push",
+    "tag_ref": "refs/tags/v4.2.0",
+    "run_id": 29951698966,
+    "attempt": 1,
+    "head_sha": "db2d433aa8662ee4fca0957f9b917d8733f80596",
+    "conclusion": "success",
+    "run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29951698966",
+    "successful_jobs": [
+      "blackbox-docker-e2e",
+      "release-tag-guard",
+      "e2e-runners",
+      "test (3.10)",
+      "test (3.11)",
+      "test (3.12)",
+      "publish-pyz"
+    ]
+  },
+  "build_provenance": {
+    "predicate_type": "https://slsa.dev/provenance/v1",
+    "subject_name": "evo-guard.pyz",
+    "subject_sha256": "789428de56c42808fadeed654fc3d9377d2456e15dadf53b8eb24e4287028c88",
+    "source_repository": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+    "source_digest": "db2d433aa8662ee4fca0957f9b917d8733f80596",
+    "source_ref": "refs/heads/main",
+    "signer_identity": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml@refs/heads/main",
+    "runner_environment": "github-hosted",
+    "invocation_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29916717885/attempts/1",
+    "transparency_log_timestamp_utc": "2026-07-22T11:47:16Z",
+    "verification_scope": "recorded-external-attestation"
+  },
+  "release_attestation": {
+    "predicate_type": "https://in-toto.io/attestation/release/v0.2",
+    "verified_timestamp_utc": "2026-07-22T19:36:44Z",
+    "identity": "https://dotcom.releases.github.com",
+    "purl": "pkg:github/EvoRiseKsa/EvoOM-Guard-m@v4.2.0",
+    "tag": "v4.2.0",
+    "commit_sha": "db2d433aa8662ee4fca0957f9b917d8733f80596",
+    "asset_subjects": [
+      {
+        "name": "evo-guard.pyz",
+        "sha256": "789428de56c42808fadeed654fc3d9377d2456e15dadf53b8eb24e4287028c88"
+      },
+      {
+        "name": "SHA256SUMS",
+        "sha256": "04f270bbe64ab9e8a5c719ba2c5e4a88a1dea74cdbc0d52b8f1bb6f1e6794be0"
+      }
+    ],
+    "verification_scope": "recorded-external-attestation"
+  }
+}

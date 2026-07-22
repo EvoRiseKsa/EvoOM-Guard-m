@@ -44,23 +44,26 @@ distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
 
-The latest committed minimal release ledger remains `v4.1.0` until the
-post-publication `v4.2.0` online facts can be observed and frozen. It records
-the published source identity, exact release asset bytes, release/build
+The latest committed minimal release ledger is `v4.2.0`. It records the
+post-publication source identity, exact release asset bytes, release/build
 attestations, the propagated Marketplace version, and successful tag CI:
+
+- `tests/baseline/v4.2.0/RELEASE_LEDGER.json`
+- `tests/baseline/v4.2.0/SHA256SUMS`
+- `tests/baseline/v4.2.0/pyz/evo-guard.pyz`
+
+It is deliberately not described as a full behavioral capture: no v4.2.0
+command, verdict, signed-evidence, verifier-pack, benchmark, or live Release
+Artifact Admission V1 fixture was created merely by copying historical
+evidence. Shipping the RAAE implementation does not make this release ledger a
+live E/F/G pilot, an artifact admission decision, or publication authorization.
+
+The same bounded identity/provenance records for earlier immutable releases
+remain available at:
 
 - `tests/baseline/v4.1.0/RELEASE_LEDGER.json`
 - `tests/baseline/v4.1.0/SHA256SUMS`
 - `tests/baseline/v4.1.0/pyz/evo-guard.pyz`
-
-It is deliberately not described as a full behavioral capture: no v4.1.0
-command, verdict, signed-evidence, verifier-pack, benchmark, or live Release
-Source Admission V2 fixture was created merely by copying historical evidence.
-Shipping the V2 implementation does not make this release ledger a live V2
-pilot or an admission decision.
-
-The same bounded identity/provenance record for an earlier immutable release
-remains available at:
 
 - `tests/baseline/v4.0.2/RELEASE_LEDGER.json`
 - `tests/baseline/v4.0.2/SHA256SUMS`
