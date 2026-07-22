@@ -68,7 +68,7 @@ correctness or security.
 > runtime. Its `ALLOW` is bound only to the recorded source and workflow
 > attempts; it is same-owner operational evidence, not artifact/publication
 > authorization, a production gate, or independent review.
-> The post-`v4.1.0` repository source also implements the distinct
+> The `v4.2.0` source candidate also implements the distinct
 > [`Release Artifact Admission V1`](docs/RELEASE_ARTIFACT_ADMISSION_V1.md)
 > contract. It binds one verified `.rsae` source `ALLOW`, one exact external
 > artifact, protected E/F workflow identities and raw-Git blobs, a freshly

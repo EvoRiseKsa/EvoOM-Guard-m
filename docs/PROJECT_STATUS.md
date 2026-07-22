@@ -54,7 +54,7 @@ validation. See [governance](GOVERNANCE.md).
 | GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. Published `v4.1.0` additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. Release Source Admission V2 Round 1 exercised that stricter provider path for one authenticated producer receipt. | The adapter remains same-repository only. One source-pilot run is not proof for an arbitrary artifact, a general supply-chain guarantee, production gate, or independent provider implementation. |
 | Authenticated producer receipt pilot | In the clean round, B created one bounded receipt and C freshly verified one GitHub Artifact Attestation for its exact bytes. The moved-`main` control failed before receipt creation/download. The final matrix then rejected wrong-workflow, wrong-run-attempt, and altered-receipt substitutions; the altered-byte control included a positive provider baseline for the original bytes on the same runner. | These are non-admitting observations only. They do not independently prove A executed Guard and do not authorize a release, deployment, merge, artifact admission, or `ALLOW`. |
 | Release Source Admission V2 | Implements a signed protected-main source `ALLOW` binding A/B/C workflow blobs and run attempts, strong receipt evidence, semantic provider output, externally checked Git/`gh` digests and UID/GID pins, a provider-inaccessible signing-key path, and five distinct key domains. The separate V2 pilot completed one exact live source-only Round 1 and retained its fail-closed observations. | The observed `ALLOW` applies only to the recorded source and attempts. It does not bind a release artifact or publication, is not a production gate, and has no independent review. |
-| Release Artifact Admission V1 | The post-`v4.1.0` repository source implements a separately keyed `.raae` contract that re-verifies an exact `.rsae`, binds one external regular artifact to protected E/F workflow blobs and run identities, freshly constrains its GitHub Artifact Attestation, and supports detached offline verification. | It is not in immutable `v4.1.0` and has no live E/F/G pilot evidence. It does not authorize publication or deployment and does not prove reproducibility, OCI/registry provenance, production readiness, or independent review. |
+| Release Artifact Admission V1 | The `v4.2.0` source candidate implements a separately keyed `.raae` contract that re-verifies an exact `.rsae`, binds one external regular artifact to protected E/F workflow blobs and run identities, freshly constrains its GitHub Artifact Attestation, and supports detached offline verification. | It is not in immutable `v4.1.0` and has no live E/F/G pilot evidence. It does not authorize publication or deployment and does not prove reproducibility, OCI/registry provenance, production readiness, or independent review. |
 
 For exact threat models and non-guarantees, read [ASSURANCE.md](ASSURANCE.md),
 [TRUSTED_FINALIZER.md](TRUSTED_FINALIZER.md), and
@@ -84,8 +84,8 @@ operational practice, high-quality private policy/packs and data, trustworthy
 service operation, and customer integrations—not from obscuring already
 published Python or workflow files.
 
-The source tree and latest published immutable consumer release are both
-version `4.1.0`. The project cannot
+The source tree declares the pre-release version `4.2.0`; the latest published
+immutable consumer release remains `4.1.0`. The project cannot
 retract rights already granted with v3.8.0; see
 [LICENSE_HISTORY.md](../LICENSE_HISTORY.md). The v4 license applies only to
 material distributed with it. Commercial licensing is administered by EvoRise

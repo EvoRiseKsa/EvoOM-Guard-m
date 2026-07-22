@@ -1,22 +1,30 @@
 ---
-source_version: 4.1.0
+source_version: 4.2.0
 latest_published_version: 4.1.0
-state: published
+state: pre-release
 ---
 
 # Release status
 
-The repository publishes **v4.1.0** as the current immutable consumer release:
+The repository source declares **v4.2.0**, which is not yet a published
+immutable consumer release. The latest published release remains:
 [`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0).
 The immutable tag identifies the exact protected-`main` source commit. The
 release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
 provides a release attestation for the immutable release and a separate GitHub
 Actions build-artifact attestation for those bytes.
 
-The `v4.1.0` source line adds Release Source Admission V2 and associated
-provider/Git hardening. This bootstrap release did not admit its own source.
-A later disposable consumer used the immutable `v4.1.0` runtime for one live
-source-only V2 round, preserved separately in the
+The `v4.2.0` source candidate adds Release Artifact Admission V1 and its sixth
+trust-key domain. It has not yet produced an immutable tag, release asset,
+checksum, build attestation, Marketplace observation, or live E/F/G pilot.
+The first release carrying this contract is a bootstrap and cannot use the new
+contract to authorize itself. Do not teach or consume `@v4.2.0` until the
+publication and verification steps finish.
+
+The published `v4.1.0` source line added Release Source Admission V2 and
+associated provider/Git hardening. That bootstrap release did not admit its own
+source. A later disposable consumer used the immutable `v4.1.0` runtime for one
+live source-only V2 round, preserved separately in the
 [`evoom-guard-release-source-v2-pilot`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot).
 That later evidence does not change the frozen release, bind a release artifact
 or publication, establish production readiness, or constitute independent

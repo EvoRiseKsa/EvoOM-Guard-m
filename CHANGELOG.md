@@ -9,6 +9,62 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [4.2.0] — 2026-07-22
+
+### Added
+
+- Added `EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1`, a separately keyed canonical
+  `.raae` envelope, JSON Schema, CLI sealer, and detached offline verifier for
+  one protected-main release artifact.
+- Added explicit builder E and key-bearing admitter F identities. Their exact
+  workflow blobs, source commit, numeric runs and attempts, and GitHub
+  `workflow_run` relation are bound to the admission record.
+- Added a narrow public raw-Git regular-blob resolver so admission code can
+  verify protected workflow blobs without importing the private Git reader.
+
+### Security
+
+- The sealer re-verifies the embedded Release Source Admission V2 `.rsae`
+  against every external source, context, producer, admitter, policy, tool,
+  isolation, and five-key expectation before it can inspect provider evidence
+  or read the sixth signing key.
+- E and F must be distinct from each other and from the earlier source roles.
+  Both workflow blobs are resolved from the immutable protected-main raw-Git
+  tree with the externally pinned Git executable.
+- A fresh GitHub Artifact Attestation verification is constrained to the exact
+  artifact, repository, builder workflow, source commit/ref, E run, and run
+  attempt. The provider process and its temporary evidence directory must be
+  cleaned up before the first private-key read.
+- The final envelope snapshots the detached artifact, retained provider
+  receipt/output, and nested `.rsae`, then signs canonical descriptors with a
+  sixth Ed25519 key that must differ from all five earlier trust roots.
+- CLI preflight rejects standard streams, path aliases, and an existing output
+  before provider access. Detached verification accepts no token, `gh`, Git
+  repository, provider runtime, or overwrite switch and performs no live
+  provider call.
+
+### Changed
+
+- Classified release-artifact admission under
+  `evoom_guard.admission.release_artifact`, prohibited cross-package private
+  imports, and froze its exact internal dependency surface in the architecture
+  ratchet.
+- Regenerated the 16-case live benchmark with source version 4.2.0. All
+  expected labels matched: 11 true positives, 3 true negatives, 2 documented
+  policy false positives, and 0 false negatives.
+
+### Known limitations
+
+- This first release carrying Release Artifact Admission V1 is a bootstrap and
+  cannot admit itself. A later protected-main E/F/G pilot and a fresh `.rsae`
+  are required before making any operational evidence claim.
+- A `.raae` does not authorize publication or deployment and does not prove
+  reproducible builds, OCI/registry provenance, production readiness, or
+  independent review.
+- Detached verification validates retained provider evidence offline; callers
+  that require current provider state must perform a separate live
+  re-verification.
+
 ## [4.1.0] — 2026-07-22
 
 ### Added

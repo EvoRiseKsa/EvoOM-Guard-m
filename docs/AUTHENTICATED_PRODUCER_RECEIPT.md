@@ -129,11 +129,12 @@ the consumer must bind its exact artifact and its trusted workflow identity.
 ## Current V2 boundary and remaining operational work
 
 Do not attach this receipt alone to `release.yml`, branch protection, a
-deployment, or a Marketplace publication. The current v4.1.0 source implements
-the distinct V2 envelope/key domain, protected C runtime capability, raw-Git
-A/B/C workflow bindings, replay handling, fresh isolated provider check, and
-detached verifier. Those implementation facts do not make this older data-only
-reference topology an admitting workflow.
+deployment, or a Marketplace publication. Published `v4.1.0` and the current
+`v4.2.0` source candidate implement the distinct V2 envelope/key domain,
+protected C runtime capability, raw-Git A/B/C workflow bindings, replay
+handling, fresh isolated provider check, and detached verifier. Those
+implementation facts do not make this older data-only reference topology an
+admitting workflow.
 
 Operational reliance still requires a published bootstrap runtime, a protected
 key-bearing C workflow, live positive and negative rounds, and a separately

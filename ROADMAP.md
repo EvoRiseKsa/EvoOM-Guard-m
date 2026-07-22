@@ -79,7 +79,7 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Implemented contract awaiting operational evidence
 
-- **Release Artifact Admission V1** — the post-`v4.1.0` source implements a
+- **Release Artifact Admission V1** — the `v4.2.0` source candidate implements a
   sixth-key protected-main artifact `ALLOW`. It re-verifies one exact `.rsae`
   source admission against external roots and nested tool pins; binds one
   detached regular artifact, protected E/F workflow identities and raw-Git
