@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -25,7 +26,7 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _receipt_inputs(tmp_path: Path):
+def _receipt_inputs(tmp_path: Path, *, include_admitter: bool = False):
     repo, _baseline, parent, _baseline_tree, parent_tree = _make_raw_git_repository(tmp_path)
     workflow = repo / ".github" / "workflows" / "evoguard-produce-release-source-receipt.yml"
     workflow.parent.mkdir(parents=True)
@@ -44,6 +45,17 @@ def _receipt_inputs(tmp_path: Path):
         encoding="utf-8",
         newline="\n",
     )
+    if include_admitter:
+        admitter_workflow = (
+            repo / ".github" / "workflows" / "evoguard-admit-release-source.yml"
+        )
+        admitter_workflow.write_text(
+            "name: EvoGuard Admit Release Source\n"
+            "on: workflow_run\n"
+            "jobs:\n  admit:\n    runs-on: ubuntu-latest\n    steps: []\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     target = _commit(repo, "add protected receipt producer")
     target_tree = _git(repo, "rev-parse", f"{target}^{{tree}}")
     raw = derive_raw_evaluation_bindings(
@@ -162,6 +174,30 @@ def test_canonical_producer_receipt_rechecks_raw_git_and_exact_bytes(tmp_path: P
             ),
             "workflow path must be distinct",
         ),
+        (
+            lambda producer: producer.__setitem__(
+                "workflow_path", ".github/workflows/nested/producer.yml"
+            ),
+            "directly under",
+        ),
+        (
+            lambda producer: producer.__setitem__(
+                "workflow_path", ".github/workflows/producer signer.yml"
+            ),
+            "ASCII workflow filename",
+        ),
+        (
+            lambda producer: producer.__setitem__(
+                "workflow_path", ".github/workflows/منتج.yml"
+            ),
+            "ASCII workflow filename",
+        ),
+        (
+            lambda producer: producer.__setitem__(
+                "workflow_path", ".github/workflows/-producer.yml"
+            ),
+            "ASCII workflow filename",
+        ),
         (lambda producer: producer.__setitem__("workflow_run_id", "987654321"), "distinct"),
         (lambda producer: producer.__setitem__("workflow_event", "workflow_dispatch"), "workflow_event"),
         (lambda producer: producer.__setitem__("runner_class", "self-hosted"), "runner_class"),
@@ -249,7 +285,7 @@ def test_fresh_provider_verification_is_after_local_and_raw_git_checks(
         artifact_path: str,
         receipt_path: str,
         raw_output_path: str,
-        **kwargs: str,
+        **kwargs: Any,
     ) -> github_attestation.CreatedGitHubAttestationReceipt:
         calls.append({"artifact": artifact_path, **kwargs})
         policy = github_attestation.github_attestation_policy(
@@ -281,6 +317,12 @@ def test_fresh_provider_verification_is_after_local_and_raw_git_checks(
         "source_digest": target,
         "cert_oidc_issuer": github_attestation.GITHUB_ATTESTATION_CERT_OIDC_ISSUER,
     }
+    provider_isolation = github_attestation.GitHubAttestationProviderIsolation(
+        executable_path=str((tmp_path / "trusted-gh").resolve()),
+        executable_sha256="d" * 64,
+        uid=2001,
+        gid=2002,
+    )
     attested = release_source_producer_receipt.reverify_attested_release_source_producer_receipt(
         str(receipt),
         str(handoff),
@@ -293,14 +335,19 @@ def test_fresh_provider_verification_is_after_local_and_raw_git_checks(
         git_repository=str(repo),
         github_receipt_path=str(tmp_path / "github-receipt.json"),
         github_raw_output_path=str(tmp_path / "github-raw.json"),
+        gh_executable=provider_isolation.executable_path,
+        provider_isolation=provider_isolation,
     )
     assert attested.github_receipt.verified_attestation_count == 1
     assert calls == [
         {
             "artifact": str(receipt),
             **policy,
-            "gh_executable": "gh",
+            "gh_executable": provider_isolation.executable_path,
             "timeout_seconds": 120,
+            "expected_workflow_run_id": producer["workflow_run_id"],
+            "expected_workflow_run_attempt": producer["workflow_run_attempt"],
+            "provider_isolation": provider_isolation,
         }
     ]
 

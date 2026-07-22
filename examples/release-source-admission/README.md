@@ -1,8 +1,9 @@
 # Authenticated producer receipt — reference topology
 
 This directory is deliberately **not an active release gate**.  It is a
-reviewable reference for the first safe stage of a future protected-main
-release-source admission design.
+reviewable historical precursor for the non-admitting receipt stage now
+consumed by the separate current-source
+[Release Source Admission V2](../../docs/RELEASE_SOURCE_ADMISSION_V2.md).
 
 The current `release_source_finalizer` V1 remains `DENY-only`.  These files do
 not change that fact, do not open a release or admission key, and must not be
@@ -27,8 +28,9 @@ C. EvoGuard Release Source Admission Preflight (workflow_run from B)
 
 The canonical receipt is still merely data until C performs a **fresh** GitHub
 Artifact Attestation verification for its exact bytes.  Even that is not an
-`ALLOW`: an independently designed V2 admission finalizer and a separate
-release consumer would be needed before any publication can use it.
+`ALLOW`: these example workflows do not invoke the implemented V2 sealer, hold
+its key, or authorize a release. A separate protected V2 workflow and release
+consumer are required before any publication can use the receipt.
 
 ## Required administrative trust anchors
 
@@ -37,9 +39,9 @@ They are not versioned or protected by a branch ruleset merely because the
 workflow file is. Treat every value below as an administrator-controlled trust
 anchor: record who changed it, restrict who can change Actions settings, and
 audit it out of band. Never take a value from workflow inputs, an artifact, or
-a candidate checkout. A future admission design should prefer an independently
-authenticated policy or immutable pins reviewed in a separately governed
-control repository.
+a candidate checkout. The V2 verifier likewise requires immutable pins and
+trust inputs from outside its signed bundle; a separately governed control
+repository remains the stronger operational source for them.
 
 | Variable | Purpose |
 | --- | --- |
@@ -69,8 +71,9 @@ name such as `EvoGuard Release Source Reverify` is not an authority by itself.
 - The receipt and its GitHub attestation prove that B processed/bound its input
   bytes. They do not independently prove that A really executed Guard or that
   the bootstrap runtime ran. A's workflow definition and runner boundary remain
-  explicitly trusted control-plane assumptions until a future V2 validates them
-  through an independent issuer/job-level API design.
+  explicit trust roots. Current V2 binds A/B/C raw workflow blobs and the C
+  runtime/event context, but it still does not independently prove GitHub's
+  control plane or A's execution honesty.
 - `workflow_run` chains are limited by GitHub. Do not append a V2 finalizer and
   release consumer as further chained `workflow_run` stages; replace C or use a
   separately designed trigger boundary.
@@ -86,7 +89,7 @@ The reference V1 derivation intentionally requires a protected-main commit with
 exactly one parent. Configure squash/rebase-compatible history for the active
 round, or expect the topology to fail closed on merge commits.
 
-## Activation sequence (future, not part of this change)
+## Historical precursor exercise sequence
 
 1. Release a runtime containing this code through the existing process,
    independently establish the URL/SHA's provenance and immutability, then make
@@ -98,4 +101,5 @@ round, or expect the topology to fail closed on merge commits.
 4. Set B's numerical workflow-ID and reviewed raw-Git blob-SHA anchors. Copy
    C, run a complete A-to-B-to-C chain and preserve the data-only evidence.
 5. Exercise negative cases (moved main, wrong run attempt, altered artifact,
-   same-name workflow, failed run) before designing a V2 `ALLOW` finalizer.
+   same-name workflow, failed run) before wiring this precursor into the
+   separate V2 `ALLOW` workflow.

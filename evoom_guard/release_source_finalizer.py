@@ -44,7 +44,10 @@ import zipfile
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from evoom_guard.finalizer_derivation import GitExecutablePin
 
 from evoom_guard.evidence_bundle import (
     MAX_ARCHIVE_BYTES,
@@ -401,6 +404,14 @@ def _validate_source_context(source: Mapping[str, Any], context: Mapping[str, An
         raise ReleaseSourceFinalizerError("context parent_commit_sha must differ from target_commit_sha")
 
 
+def validate_release_source_context_binding(
+    source: Mapping[str, Any], context: Mapping[str, Any]
+) -> None:
+    """Require one validated context to describe the exact release source."""
+
+    _validate_source_context(source, context)
+
+
 def _validate_record_descriptor(value: Mapping[str, Any]) -> dict[str, Any]:
     descriptor = dict(value)
     _require_exact_keys(descriptor, _RECORD_DESCRIPTOR_KEYS, "release-source handoff record")
@@ -486,6 +497,7 @@ def derive_release_source_bindings(
     git_repository: str,
     source: Mapping[str, Any],
     git_repository_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
 ) -> DerivedReleaseSourceBindings:
     """Derive the release source and Guard material from raw Git before signing.
 
@@ -508,6 +520,7 @@ def derive_release_source_bindings(
             repository=git_repository,
             ref="refs/heads/main",
             bare=git_repository_is_bare,
+            git_executable=git_executable,
         )
         if (
             verified_source["target_commit_sha"] != target
@@ -525,6 +538,7 @@ def derive_release_source_bindings(
             head_tree_sha=target_tree,
             base_is_bare=git_repository_is_bare,
             head_is_bare=git_repository_is_bare,
+            git_executable=git_executable,
         )
     except FinalizerDerivationError as exc:
         raise ReleaseSourceFinalizerError(
@@ -623,6 +637,19 @@ def _publish_bytes(path: str, data: bytes, *, force: bool, prefix: str, label: s
             pass
         raise
     return absolute
+
+
+def publish_release_source_output_bytes(
+    path: str,
+    data: bytes,
+    *,
+    force: bool,
+    prefix: str,
+    label: str,
+) -> str:
+    """Atomically publish bounded release-source/finalizer output bytes."""
+
+    return _publish_bytes(path, data, force=force, prefix=prefix, label=label)
 
 
 def create_release_source_handoff(

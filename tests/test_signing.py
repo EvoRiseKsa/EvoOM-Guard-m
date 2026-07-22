@@ -19,9 +19,12 @@ import json
 import os
 import unittest
 from contextlib import redirect_stdout
+from types import SimpleNamespace
+from unittest import mock
 
 try:
     import cryptography  # noqa: F401
+
     HAVE_CRYPTO = True
 except ImportError:  # pragma: no cover - environment dependent
     HAVE_CRYPTO = False
@@ -118,11 +121,215 @@ class SigningRoundtripTests(unittest.TestCase):
 
         payload = b"one key snapshot"
         signature, signing_key_id = sign_bytes_with_key_id(payload, self.key)
-        verified, verification_key_id = verify_bytes_with_key_id(
-            payload, signature, self.pub
-        )
+        verified, verification_key_id = verify_bytes_with_key_id(payload, signature, self.pub)
         self.assertTrue(verified)
         self.assertEqual(signing_key_id, verification_key_id)
+
+    def test_private_key_snapshot_rejects_oversized_file_before_parsing(self) -> None:
+        from evoom_guard import signing
+
+        oversized = os.path.join(self.tmp.name, "oversized.pem")
+        with open(oversized, "wb") as handle:
+            handle.write(b"x" * (signing._MAX_PRIVATE_KEY_BYTES + 1))
+
+        with self.assertRaisesRegex(ValueError, "private key exceeds.*byte limit"):
+            signing.load_signing_key_snapshot(oversized)
+
+    def test_private_key_snapshot_rejects_symlink(self) -> None:
+        from evoom_guard.signing import load_signing_key_snapshot
+
+        linked = os.path.join(self.tmp.name, "linked-private.pem")
+        try:
+            os.symlink(self.key, linked)
+        except (NotImplementedError, OSError) as exc:
+            self.skipTest(f"symlink creation is unavailable: {exc}")
+
+        with self.assertRaisesRegex(ValueError, "regular non-symlink"):
+            load_signing_key_snapshot(linked)
+
+    def test_private_key_snapshot_rejects_windows_reparse_metadata(self) -> None:
+        from evoom_guard import signing
+
+        current = os.lstat(self.key)
+        reparse = SimpleNamespace(
+            st_mode=current.st_mode,
+            st_size=current.st_size,
+            st_dev=current.st_dev,
+            st_ino=current.st_ino,
+            st_mtime_ns=current.st_mtime_ns,
+            st_ctime_ns=current.st_ctime_ns,
+            st_file_attributes=getattr(current, "st_file_attributes", 0)
+            | signing.stat.FILE_ATTRIBUTE_REPARSE_POINT,
+        )
+        with mock.patch.object(signing.os, "lstat", return_value=reparse):
+            with self.assertRaisesRegex(ValueError, "regular non-symlink"):
+                signing.load_signing_key_snapshot(self.key)
+
+    def test_private_key_snapshot_rejects_replacement_during_open(self) -> None:
+        from evoom_guard import signing
+
+        replacement = os.path.join(self.tmp.name, "replacement.pem")
+        replacement_public = os.path.join(self.tmp.name, "replacement.pub")
+        signing.generate_keypair(replacement, replacement_public)
+        real_open = os.open
+        replaced = False
+
+        def replace_then_open(path: str, flags: int, mode: int = 0o777) -> int:
+            nonlocal replaced
+            if path == self.key and not replaced:
+                os.replace(replacement, self.key)
+                replaced = True
+            return real_open(path, flags, mode)
+
+        with mock.patch.object(signing.os, "open", side_effect=replace_then_open):
+            with self.assertRaisesRegex(ValueError, "changed while it was being opened"):
+                signing.load_signing_key_snapshot(self.key)
+
+    def test_private_key_snapshot_rejects_descriptor_mutation_during_read(self) -> None:
+        from evoom_guard import signing
+
+        real_fstat = os.fstat
+        calls = 0
+
+        def changed_second_fstat(descriptor: int):
+            nonlocal calls
+            current = real_fstat(descriptor)
+            calls += 1
+            if calls != 2:
+                return current
+            return SimpleNamespace(
+                st_mode=current.st_mode,
+                st_size=current.st_size,
+                st_dev=current.st_dev,
+                st_ino=current.st_ino,
+                st_mtime_ns=current.st_mtime_ns + 1,
+                st_ctime_ns=current.st_ctime_ns,
+                st_file_attributes=getattr(current, "st_file_attributes", 0),
+            )
+
+        with mock.patch.object(signing.os, "fstat", side_effect=changed_second_fstat):
+            with self.assertRaisesRegex(ValueError, "changed while it was being read"):
+                signing.load_signing_key_snapshot(self.key)
+
+    @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "runtime has no O_NOFOLLOW")
+    def test_private_key_snapshot_open_uses_no_follow(self) -> None:
+        from evoom_guard import signing
+
+        real_open = os.open
+        observed_flags: list[int] = []
+
+        def record_open(path: str, flags: int, mode: int = 0o777) -> int:
+            observed_flags.append(flags)
+            return real_open(path, flags, mode)
+
+        with mock.patch.object(signing.os, "open", side_effect=record_open):
+            signing.load_signing_key_snapshot(self.key)
+        self.assertTrue(observed_flags)
+        self.assertTrue(observed_flags[0] & os.O_NOFOLLOW)
+
+    def test_public_key_snapshot_rejects_oversized_file_before_parsing(self) -> None:
+        from evoom_guard import signing
+
+        oversized = os.path.join(self.tmp.name, "oversized.pub")
+        with open(oversized, "wb") as handle:
+            handle.write(b"x" * (signing._MAX_PUBLIC_KEY_BYTES + 1))
+
+        with self.assertRaises(ValueError) as raised:
+            signing.public_key_id(oversized)
+        self.assertRegex(str(raised.exception), "public key exceeds.*byte limit")
+        self.assertNotIn("private key", str(raised.exception))
+
+    def test_public_key_snapshot_rejects_symlink(self) -> None:
+        from evoom_guard.signing import public_key_id
+
+        linked = os.path.join(self.tmp.name, "linked-public.pem")
+        try:
+            os.symlink(self.pub, linked)
+        except (NotImplementedError, OSError) as exc:
+            self.skipTest(f"symlink creation is unavailable: {exc}")
+
+        with self.assertRaisesRegex(ValueError, "public key must be a regular non-symlink"):
+            public_key_id(linked)
+
+    def test_public_key_snapshot_rejects_windows_reparse_metadata(self) -> None:
+        from evoom_guard import signing
+
+        current = os.lstat(self.pub)
+        reparse = SimpleNamespace(
+            st_mode=current.st_mode,
+            st_size=current.st_size,
+            st_dev=current.st_dev,
+            st_ino=current.st_ino,
+            st_mtime_ns=current.st_mtime_ns,
+            st_ctime_ns=current.st_ctime_ns,
+            st_file_attributes=getattr(current, "st_file_attributes", 0)
+            | signing.stat.FILE_ATTRIBUTE_REPARSE_POINT,
+        )
+        with mock.patch.object(signing.os, "lstat", return_value=reparse):
+            with self.assertRaisesRegex(ValueError, "public key must be a regular non-symlink"):
+                signing.public_key_id(self.pub)
+
+    def test_public_key_snapshot_rejects_replacement_during_open(self) -> None:
+        from evoom_guard import signing
+
+        replacement = os.path.join(self.tmp.name, "replacement-public-private.pem")
+        replacement_public = os.path.join(self.tmp.name, "replacement-public.pub")
+        signing.generate_keypair(replacement, replacement_public)
+        real_open = os.open
+        replaced = False
+
+        def replace_then_open(path: str, flags: int, mode: int = 0o777) -> int:
+            nonlocal replaced
+            if path == self.pub and not replaced:
+                os.replace(replacement_public, self.pub)
+                replaced = True
+            return real_open(path, flags, mode)
+
+        with mock.patch.object(signing.os, "open", side_effect=replace_then_open):
+            with self.assertRaisesRegex(ValueError, "public key changed while it was being opened"):
+                signing.public_key_id(self.pub)
+
+    def test_public_key_snapshot_rejects_descriptor_mutation_during_read(self) -> None:
+        from evoom_guard import signing
+
+        real_fstat = os.fstat
+        calls = 0
+
+        def changed_second_fstat(descriptor: int):
+            nonlocal calls
+            current = real_fstat(descriptor)
+            calls += 1
+            if calls != 2:
+                return current
+            return SimpleNamespace(
+                st_mode=current.st_mode,
+                st_size=current.st_size,
+                st_dev=current.st_dev,
+                st_ino=current.st_ino,
+                st_mtime_ns=current.st_mtime_ns + 1,
+                st_ctime_ns=current.st_ctime_ns,
+                st_file_attributes=getattr(current, "st_file_attributes", 0),
+            )
+
+        with mock.patch.object(signing.os, "fstat", side_effect=changed_second_fstat):
+            with self.assertRaisesRegex(ValueError, "public key changed while it was being read"):
+                signing.public_key_id(self.pub)
+
+    @unittest.skipUnless(hasattr(os, "O_NOFOLLOW"), "runtime has no O_NOFOLLOW")
+    def test_public_key_snapshot_open_uses_no_follow(self) -> None:
+        from evoom_guard import signing
+
+        real_open = os.open
+        observed_flags: list[int] = []
+
+        def record_open(path: str, flags: int, mode: int = 0o777) -> int:
+            observed_flags.append(flags)
+            return real_open(path, flags, mode)
+
+        with mock.patch.object(signing.os, "open", side_effect=record_open):
+            signing.public_key_id(self.pub)
+        self.assertTrue(observed_flags)
+        self.assertTrue(observed_flags[0] & os.O_NOFOLLOW)
 
     def test_malformed_or_non_ed25519_keys_raise_clear_errors(self) -> None:
         from cryptography.hazmat.primitives import serialization
@@ -210,11 +417,20 @@ class SigningRoundtripTests(unittest.TestCase):
         with open(patch, "w", encoding="utf-8") as f:
             f.write("<<<FILE: tests/test_x.py>>>\ndef test_x():\n    assert True\n<<<END FILE>>>\n")
         jout = os.path.join(self.tmp.name, "out.json")
-        rc = cli.main([
-            "guard", repo, "--patch", patch,
-            "--json", jout, "--sign-key", self.key,
-            "--report", os.path.join(self.tmp.name, "r.md"),
-        ])
+        rc = cli.main(
+            [
+                "guard",
+                repo,
+                "--patch",
+                patch,
+                "--json",
+                jout,
+                "--sign-key",
+                self.key,
+                "--report",
+                os.path.join(self.tmp.name, "r.md"),
+            ]
+        )
         self.assertEqual(rc, 1)  # REJECTED
         self.assertTrue(os.path.exists(jout + ".sig"))
         self.assertEqual(cli.main(["verify-verdict", jout, "--pub", self.pub]), 0)
@@ -228,10 +444,18 @@ class SignKeyUsageTests(unittest.TestCase):
             patch = os.path.join(tmp, "p.txt")
             with open(patch, "w", encoding="utf-8") as f:
                 f.write("<<<FILE: a.py>>>\nx = 1\n<<<END FILE>>>\n")
-            rc = cli.main([
-                "guard", repo, "--patch", patch, "--sign-key", "nonexistent.pem",
-                "--report", os.path.join(tmp, "r.md"),
-            ])
+            rc = cli.main(
+                [
+                    "guard",
+                    repo,
+                    "--patch",
+                    patch,
+                    "--sign-key",
+                    "nonexistent.pem",
+                    "--report",
+                    os.path.join(tmp, "r.md"),
+                ]
+            )
             self.assertEqual(rc, 2)
 
 

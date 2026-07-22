@@ -13,6 +13,8 @@ import pytest
 from evoom_guard import github_attestation
 from evoom_guard.github_attestation import GitHubAttestationError
 
+_STRUCTURAL_OUTPUT = b'[{"verificationResult":{"statement":{}}}]'
+
 
 class _PrimaryAbort(BaseException):
     pass
@@ -42,7 +44,11 @@ class _FakeProcess:
         kill_error: BaseException | None = None,
         poll_result: int | None = 0,
     ) -> None:
-        self.stdout = _TrackingStream(b"[{}]") if stdout is None else stdout
+        self.stdout = (
+            _TrackingStream(_STRUCTURAL_OUTPUT)
+            if stdout is None
+            else stdout
+        )
         self.stderr = _TrackingStream() if stderr is None else stderr
         self.returncode: int | None = None
         self.wait_actions = list(wait_actions or [])
@@ -288,7 +294,10 @@ def test_launch_uses_managed_group_and_preserves_exact_raw_bytes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    payload = b" \n[ {\"opaque\":\"\xe2\x98\x83\"} ]\t"
+    payload = (
+        b" \n[ {\"opaque\":\"\xe2\x98\x83\","
+        b'"verificationResult":{"statement":{}}} ]\t'
+    )
     process = _FakeProcess(stdout=_TrackingStream(payload))
     _install_process(monkeypatch, process)
     observed: dict[str, object] = {}
@@ -513,7 +522,7 @@ def test_posix_success_proves_post_completion_group_cleanup(
         ),
     )
 
-    assert _execute(tmp_path) == b"[{}]"
+    assert _execute(tmp_path) == _STRUCTURAL_OUTPUT
     assert cleanups == [process]
 
 
@@ -636,7 +645,7 @@ def test_process_poll_wait_is_bounded_and_wakes_for_recheck(
         SimpleNamespace(Event=ControlledEvent, Thread=real_thread),
     )
 
-    assert _execute(tmp_path) == b"[{}]"
+    assert _execute(tmp_path) == _STRUCTURAL_OUTPUT
     assert len(waits) == 1
     assert 0 < waits[0] <= github_attestation._GITHUB_ATTESTATION_PROCESS_POLL_SECONDS
 
@@ -805,7 +814,8 @@ def test_real_posix_cleanup_stops_inherited_pipe_descendant(
         "deadline=time.monotonic()+3; "
         "\nwhile not Path(sys.argv[1]).exists() and "
         "time.monotonic()<deadline: time.sleep(0.01); "
-        "\nsys.stdout.buffer.write(b'[{}]'); sys.stdout.flush(); "
+        "\nsys.stdout.buffer.write(b'[{\"verificationResult\":{\"statement\":{}}}]'); "
+        "sys.stdout.flush(); "
         "raise SystemExit(0 if Path(sys.argv[1]).exists() else 2)"
     )
     command = [
@@ -823,7 +833,7 @@ def test_real_posix_cleanup_stops_inherited_pipe_descendant(
         gh_executable=sys.executable,
         timeout_seconds=5,
         directory=str(tmp_path),
-    ) == b"[{}]"
+    ) == _STRUCTURAL_OUTPUT
     assert ready.exists()
     group_id = int(process_group.read_text(encoding="utf-8"))
     with pytest.raises(ProcessLookupError):

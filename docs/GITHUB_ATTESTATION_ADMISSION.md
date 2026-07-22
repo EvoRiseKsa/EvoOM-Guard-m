@@ -30,6 +30,22 @@ following fixed or externally supplied constraints:
 8. `--deny-self-hosted-runners`; and
 9. an attestation lookup limit of one, so the result cardinality is exact.
 
+After `gh` succeeds, EvoGuard also parses the signed
+`verificationResult.statement` and certificate identity instead of accepting a
+merely non-empty JSON object. It requires one exact SHA-256 subject, the SLSA
+v1 predicate, the expected repository, signer workflow/digest, source
+ref/digest, GitHub Actions OIDC issuer, and `github-hosted` runner identity.
+It cross-checks the statement's source dependency, builder identity, and
+invocation ID against those certificate fields. A canonical
+`runInvocationURI` is always required; callers may additionally pin its exact
+workflow run ID and attempt through
+`expected_workflow_run_id`/`expected_workflow_run_attempt`. The two pins must be
+supplied together.
+
+Required semantic fields are fail-closed. Unknown fields are ignored and
+retained byte-for-byte in the raw output, so compatible GitHub additions do not
+invalidate evidence solely because they add metadata.
+
 The adapter independently caps live `gh` output while it is being read (4 MiB
 stdout and 64 KiB stderr). It launches the CLI in a managed process group and
 uses bounded tree cleanup on timeout, overflow, reader failure, and unexpected
@@ -73,18 +89,21 @@ Do not widen the claim beyond what executes:
 - EvoGuard does not implement or independently reproduce GitHub/Sigstore/DSSE
   cryptographic verification; it trusts the protected `gh` execution for that
   operation.
-- A later `verify_github_attestation_receipt()` checks only retained artifact,
-  receipt, output bytes, and external policy. It does **not** contact GitHub,
-  re-check a signature, test revocation, or establish current registry state.
+- A later `verify_github_attestation_receipt()` checks the retained artifact,
+  receipt, output bytes, external policy, and the same narrow semantic bindings
+  inside the retained signed statement/certificate result. It does **not**
+  contact GitHub, re-check a signature, test revocation, or establish current
+  registry state.
   `reverify_github_attestation_receipt()` is the explicit fresh operation: it
   freezes the supplied artifact again and invokes the same constrained `gh`
   verification policy. Historic raw output is retained for audit and exact
   byte continuity, but fresh successful output need not be byte-identical to
   historic output.
-- The adapter does not treat `statement.predicate`, materials, builder fields,
-  invocation, annotations, or arbitrary attestation metadata as trusted
-  EvoGuard facts. GitHub CLI itself warns that predicate data can be influenced
-  by the originating workflow.
+- Outside the explicitly cross-checked repository/ref/digest dependency,
+  hosted-runner fact, builder identity, and invocation URI, the adapter does
+  not treat predicate parameters, materials, annotations, or arbitrary
+  attestation metadata as trusted EvoGuard facts. GitHub CLI itself warns that
+  predicate data can be influenced by the originating workflow.
 - It does not prove a release was published, an OCI digest exists, an image has
   the claimed media type, a deployment occurred, or the finalizer became a
   required merge gate.
@@ -113,9 +132,10 @@ content-addressed store, not from a pull-request workspace. Then:
    artifact-admission key and the separately verified finalizer bundle.
 
 Retain **both** receipt files and the final `.eab` in an immutable evidence
-store. A binding without the raw verifier output cannot be independently
-re-examined for the exact external verification event, even though its receipt
-digest remains signed.
+store. A binding without the raw verifier output cannot be re-examined for the
+exact retained provider output and its narrow semantic bindings, even though
+its receipt digest remains signed. Retained bytes alone do not independently
+re-establish the historic provider verification event.
 
 The adapter deliberately creates an empty per-run `GH_CONFIG_DIR` and therefore
 does **not** use an operator's local `gh auth login`, keyring, or persisted
@@ -123,13 +143,22 @@ configuration. The protected job must explicitly pass `GH_TOKEN` or
 `GITHUB_TOKEN` with scoped read access to GitHub attestations. Treat that token,
 the GitHub CLI executable, and the GitHub-hosted/provider service as explicit
 trust dependencies. It scrubs every inherited `GH_*` control except
-`GH_TOKEN`; `GITHUB_TOKEN` is also preserved. Provide a reviewed/pinned
-absolute CLI path or a trusted base-owned `PATH`—the adapter does not attest
-the executable it launches. In particular, the default bare `gh` is suitable
-only on a fresh/clean protected runner that has not executed candidate code.
-If candidate code has run on that machine/job, use a separate clean protected
-job or a reviewed absolute executable path established outside the candidate's
-control.
+`GH_TOKEN`; `GITHUB_TOKEN` is also preserved. Generic commands retain the
+historical non-isolated mode and can use `gh` from a trusted base-owned `PATH`.
+For stronger POSIX execution, supply all of `--gh-executable-sha256`,
+`--provider-isolation-uid`, and `--provider-isolation-gid` with a canonical
+absolute `--gh-executable`. That all-or-nothing mode verifies the executable
+digest, runs a private snapshot as a dedicated non-root UID/GID, clears
+supplementary groups, and inherits only the two token variables plus controlled
+HOME/config/temp/color settings. It fails closed unless the caller starts as
+root on POSIX.
+
+Generic GitHub-admission commands do not prove that the lowered provider could
+not read their signing-key path; the operator must enforce that filesystem
+separation. Release Source Admission V2 is stricter: it requires isolated mode
+and mechanically validates and binds the protected key path before provider
+execution. A bare `gh` remains suitable only on a clean protected runner whose
+PATH has not been influenced by candidate code.
 
 ## Python integration sketch
 
@@ -155,13 +184,24 @@ sealed = seal_github_attestation_admission(
 )
 ```
 
+The lower-level `create_github_attestation_receipt()`,
+`verify_github_attestation_receipt()`, and
+`reverify_github_attestation_receipt()` APIs accept the optional paired
+`expected_workflow_run_id` and `expected_workflow_run_attempt` arguments when a
+trusted control plane has an exact run selector. The CLI and the higher-level
+generic GitHub-admission bridge do not currently expose those optional
+selectors. Release Source Admission V2 is the explicit exception: it passes
+the authenticated producer B run ID and attempt to the semantic validator.
+
 The function rejects a source digest that differs from
 `expected_finalizer_context["head_sha"]`, a signer workflow belonging to
 another repository, uppercase or malformed signer/source digests, unsafe or
 ambiguous source references, every OIDC issuer other than GitHub Actions, a
 path swap while the artifact is being copied to the private verifier snapshot,
 non-regular inputs, verifier failure, empty or multiple result JSON, changed
-retained output, receipt substitution, and all the V2
+retained output, an empty `[{}]` result, missing or mismatched signed semantic
+fields, a non-canonical or mismatched workflow run/attempt URI, receipt
+substitution, and all the V2
 finalizer/admission-key/subject checks.
 
 ## CLI boundary commands
@@ -181,7 +221,11 @@ evo-guard github-attestation-receipt dist/product.whl \
   --signer-digest "$SIGNER_GIT_DIGEST" \
   --source-ref refs/heads/main \
   --source-digest "$TRUSTED_FINALIZER_HEAD_SHA" \
-  --cert-oidc-issuer https://token.actions.githubusercontent.com
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --gh-executable /trusted/bin/gh \
+  --gh-executable-sha256 "$GH_SHA256" \
+  --provider-isolation-uid 65534 \
+  --provider-isolation-gid 65534
 ```
 
 `verify-github-attestation-receipt` performs the retained-byte continuity
@@ -211,7 +255,10 @@ evo-guard seal-github-attestation-admission artifacts/product.json evidence/fina
   --expected-source evidence/expected-source.json \
   --expected-context evidence/expected-context.json \
   --sign-key "$EVOGUARD_ARTIFACT_ADMISSION_KEY" \
-  --gh-executable "$PINNED_GH"
+  --gh-executable "$PINNED_GH" \
+  --gh-executable-sha256 "$GH_SHA256" \
+  --provider-isolation-uid 65534 \
+  --provider-isolation-gid 65534
 
 evo-guard verify-github-attestation-admission \
   evidence/product.github-attestation.eab artifacts/product.json \

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 import subprocess
 import tempfile
 import threading
@@ -53,6 +54,7 @@ MAX_PACK_FILE_BYTES = 8 * 1024 * 1024
 MAX_PACK_BYTES = 32 * 1024 * 1024
 MAX_BINDINGS_BYTES = 512 * 1024
 MAX_GIT_STDERR_BYTES = 64 * 1024
+MAX_GIT_EXECUTABLE_BYTES = 256 * 1024 * 1024
 _GIT_STREAM_CHUNK_BYTES = 64 * 1024
 _GIT_QUERY_TIMEOUT_SECONDS = 30.0
 _GIT_PROCESS_POLL_SECONDS = 0.02
@@ -92,6 +94,221 @@ _SOURCE_KEYS = {
 
 class FinalizerDerivationError(ValueError):
     """A binding could not be derived or did not match a verdict."""
+
+
+def _is_reparse_point(metadata: os.stat_result) -> bool:
+    """Return whether Windows metadata names a link-like reparse point."""
+
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return bool(reparse_flag and attributes & reparse_flag)
+
+
+def _descriptor_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _path_descriptor_identity(metadata: os.stat_result) -> tuple[int, int, int, int]:
+    """Compare path/open identities without Windows' incompatible ctime views."""
+
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+    )
+
+
+def _validate_git_executable_pin_values(
+    executable_path: object,
+    executable_sha256: object,
+) -> tuple[str, str]:
+    if not _git_executable_pinning_supported():
+        raise FinalizerDerivationError(
+            "pinned Git executable execution requires POSIX stable-snapshot support"
+        )
+    if (
+        not isinstance(executable_path, str)
+        or not executable_path
+        or len(executable_path) > 4096
+        or "\x00" in executable_path
+        or not os.path.isabs(executable_path)
+    ):
+        raise FinalizerDerivationError("pinned Git executable must be an absolute path")
+    if os.path.normpath(executable_path) != executable_path:
+        raise FinalizerDerivationError("pinned Git executable path must be canonical")
+    if not isinstance(executable_sha256, str) or _SHA256.fullmatch(executable_sha256) is None:
+        raise FinalizerDerivationError(
+            "pinned Git executable SHA-256 must be lowercase 64-hex"
+        )
+    return executable_path, executable_sha256
+
+
+def _git_executable_pinning_supported() -> bool:
+    """Expose the POSIX snapshot requirement through one testable seam."""
+
+    return os.name == "posix"
+
+
+def _hash_git_descriptor(
+    descriptor: int,
+    *,
+    expected_identity: tuple[int, int, int, int, int],
+) -> str:
+    try:
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or _is_reparse_point(before)
+            or _descriptor_identity(before) != expected_identity
+            or before.st_size <= 0
+            or before.st_size > MAX_GIT_EXECUTABLE_BYTES
+        ):
+            raise FinalizerDerivationError(
+                "pinned Git executable changed while its stable binding was open"
+            )
+        digest = hashlib.sha256()
+        read = 0
+        while True:
+            chunk = os.read(descriptor, _GIT_STREAM_CHUNK_BYTES)
+            if not chunk:
+                break
+            read += len(chunk)
+            if read > MAX_GIT_EXECUTABLE_BYTES:
+                raise FinalizerDerivationError(
+                    "pinned Git executable exceeds its bounded size limit"
+                )
+            digest.update(chunk)
+        after = os.fstat(descriptor)
+        if _descriptor_identity(after) != expected_identity or read != before.st_size:
+            raise FinalizerDerivationError(
+                "pinned Git executable changed while its stable binding was read"
+            )
+        return digest.hexdigest()
+    except OSError as exc:
+        raise FinalizerDerivationError(
+            f"could not read pinned Git executable through a stable binding: {exc}"
+        ) from exc
+    finally:
+        try:
+            os.lseek(descriptor, 0, os.SEEK_SET)
+        except OSError:
+            pass
+
+
+def _open_pinned_git_executable(
+    executable_path: str,
+    executable_sha256: str,
+) -> tuple[int, os.stat_result, os.stat_result]:
+    executable_path, executable_sha256 = _validate_git_executable_pin_values(
+        executable_path,
+        executable_sha256,
+    )
+    if os.path.normcase(os.path.realpath(executable_path)) != os.path.normcase(executable_path):
+        raise FinalizerDerivationError(
+            "pinned Git executable path must not traverse symlinks"
+        )
+    try:
+        before_path = os.lstat(executable_path)
+    except OSError as exc:
+        raise FinalizerDerivationError(
+            f"could not inspect pinned Git executable {executable_path!r}: {exc}"
+        ) from exc
+    if (
+        stat.S_ISLNK(before_path.st_mode)
+        or _is_reparse_point(before_path)
+        or not stat.S_ISREG(before_path.st_mode)
+    ):
+        raise FinalizerDerivationError(
+            "pinned Git executable must be a regular non-symlink file"
+        )
+    if before_path.st_size <= 0 or before_path.st_size > MAX_GIT_EXECUTABLE_BYTES:
+        raise FinalizerDerivationError(
+            "pinned Git executable exceeds its bounded size limit"
+        )
+    executable = stat.S_IMODE(before_path.st_mode) & 0o111 != 0
+    if not executable:
+        raise FinalizerDerivationError("pinned Git executable is not executable")
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(executable_path, flags)
+    except OSError as exc:
+        raise FinalizerDerivationError(
+            f"could not open pinned Git executable {executable_path!r}: {exc}"
+        ) from exc
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or _is_reparse_point(opened)
+            or _path_descriptor_identity(opened) != _path_descriptor_identity(before_path)
+        ):
+            raise FinalizerDerivationError(
+                "pinned Git executable changed while its stable binding was opened"
+            )
+        actual_sha256 = _hash_git_descriptor(
+            descriptor,
+            expected_identity=_descriptor_identity(opened),
+        )
+        after_path = os.lstat(executable_path)
+        if (
+            stat.S_ISLNK(after_path.st_mode)
+            or _is_reparse_point(after_path)
+            or _descriptor_identity(after_path) != _descriptor_identity(before_path)
+        ):
+            raise FinalizerDerivationError(
+                "pinned Git executable path changed while its stable binding was read"
+            )
+        if actual_sha256 != executable_sha256:
+            raise FinalizerDerivationError(
+                "pinned Git executable SHA-256 does not match the configured digest"
+            )
+        return descriptor, opened, after_path
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+@dataclass(frozen=True)
+class GitExecutablePin:
+    """Immutable opt-in identity for the Git binary used by raw-object readers."""
+
+    executable_path: str
+    executable_sha256: str
+
+    def __post_init__(self) -> None:
+        descriptor, _opened, _path = _open_pinned_git_executable(
+            self.executable_path,
+            self.executable_sha256,
+        )
+        os.close(descriptor)
+
+
+def git_executable_pin(
+    executable_path: str,
+    executable_sha256: str,
+) -> GitExecutablePin:
+    """Construct a fail-closed Git executable pin after reading its exact bytes."""
+
+    return GitExecutablePin(
+        executable_path=executable_path,
+        executable_sha256=executable_sha256,
+    )
+
+
+def _require_git_executable_pin(value: GitExecutablePin) -> GitExecutablePin:
+    if type(value) is not GitExecutablePin:
+        raise FinalizerDerivationError("git_executable must be a GitExecutablePin")
+    _validate_git_executable_pin_values(value.executable_path, value.executable_sha256)
+    return value
 
 
 @dataclass(frozen=True)
@@ -186,6 +403,167 @@ def _valid_git_sha(value: str, *, label: str) -> str:
     return value
 
 
+def _snapshot_git_executable(
+    source_descriptor: int,
+    source_identity: tuple[int, int, int, int, int],
+    pin: GitExecutablePin,
+    directory: str,
+) -> tuple[str, int, os.stat_result, os.stat_result]:
+    """Copy the reviewed Git binary from a stable descriptor into a private path."""
+
+    suffix = Path(pin.executable_path).suffix if os.name == "nt" else ""
+    # Git dispatches on argv[0]; a name such as ``git-pinned`` is interpreted
+    # as the nonexistent ``pinned`` builtin. Keep the canonical executable name.
+    snapshot_path = os.path.join(directory, "git" + suffix)
+    snapshot_descriptor = -1
+    try:
+        snapshot_descriptor = os.open(
+            snapshot_path,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_BINARY", 0),
+            0o500,
+        )
+        os.lseek(source_descriptor, 0, os.SEEK_SET)
+        digest = hashlib.sha256()
+        copied = 0
+        while True:
+            chunk = os.read(source_descriptor, _GIT_STREAM_CHUNK_BYTES)
+            if not chunk:
+                break
+            copied += len(chunk)
+            if copied > MAX_GIT_EXECUTABLE_BYTES:
+                raise FinalizerDerivationError(
+                    "pinned Git executable exceeds its bounded size limit"
+                )
+            digest.update(chunk)
+            view = memoryview(chunk)
+            while view:
+                written = os.write(snapshot_descriptor, view)
+                if written <= 0:  # pragma: no cover - defensive OS contract
+                    raise OSError("short write while snapshotting Git executable")
+                view = view[written:]
+        os.fsync(snapshot_descriptor)
+        after_source = os.fstat(source_descriptor)
+        if (
+            _descriptor_identity(after_source) != source_identity
+            or copied != after_source.st_size
+        ):
+            raise FinalizerDerivationError(
+                "pinned Git executable changed while its snapshot was created"
+            )
+        if digest.hexdigest() != pin.executable_sha256:
+            raise FinalizerDerivationError(
+                "pinned Git executable SHA-256 does not match the configured digest"
+            )
+        os.close(snapshot_descriptor)
+        snapshot_descriptor = -1
+        os.chmod(snapshot_path, 0o500)
+        return (snapshot_path, *_open_pinned_git_executable(snapshot_path, pin.executable_sha256))
+    except OSError as exc:
+        raise FinalizerDerivationError(
+            f"could not create a stable pinned Git executable snapshot: {exc}"
+        ) from exc
+    except BaseException:
+        try:
+            os.unlink(snapshot_path)
+        except OSError:
+            pass
+        raise
+    finally:
+        if snapshot_descriptor >= 0:
+            os.close(snapshot_descriptor)
+        try:
+            os.lseek(source_descriptor, 0, os.SEEK_SET)
+        except OSError:
+            pass
+
+
+class _PinnedGitExecutableBinding:
+    """Own one stable executable binding for a raw-Git reader lifetime."""
+
+    def __init__(self, pin: GitExecutablePin) -> None:
+        self._pin = _require_git_executable_pin(pin)
+        self._temporary_directory: tempfile.TemporaryDirectory[str] | None = None
+        self._descriptor = -1
+        self._descriptor_identity: tuple[int, int, int, int, int] | None = None
+        self._path_identity: tuple[int, int, int, int, int] | None = None
+        self.executable = self._pin.executable_path
+
+        source_descriptor, source_opened, _source_path = _open_pinned_git_executable(
+            self._pin.executable_path,
+            self._pin.executable_sha256,
+        )
+        temporary = tempfile.TemporaryDirectory(prefix=".evoguard-finalizer-git-")
+        try:
+            snapshot, descriptor, opened, path = _snapshot_git_executable(
+                source_descriptor,
+                _descriptor_identity(source_opened),
+                self._pin,
+                temporary.name,
+            )
+        except BaseException:
+            temporary.cleanup()
+            raise
+        finally:
+            os.close(source_descriptor)
+        self._temporary_directory = temporary
+        self._descriptor = descriptor
+        self._descriptor_identity = _descriptor_identity(opened)
+        self._path_identity = _descriptor_identity(path)
+        self.executable = snapshot
+
+    def prove_stable(self) -> None:
+        if (
+            self._descriptor < 0
+            or self._descriptor_identity is None
+            or self._path_identity is None
+        ):
+            raise FinalizerDerivationError("pinned Git executable binding is closed")
+        actual_sha256 = _hash_git_descriptor(
+            self._descriptor,
+            expected_identity=self._descriptor_identity,
+        )
+        try:
+            current_path = os.lstat(self.executable)
+        except OSError as exc:
+            raise FinalizerDerivationError(
+                f"pinned Git executable path changed during execution: {exc}"
+            ) from exc
+        if (
+            stat.S_ISLNK(current_path.st_mode)
+            or _is_reparse_point(current_path)
+            or not stat.S_ISREG(current_path.st_mode)
+            or _descriptor_identity(current_path) != self._path_identity
+            or _path_descriptor_identity(current_path)
+            != _path_descriptor_identity(os.fstat(self._descriptor))
+        ):
+            raise FinalizerDerivationError(
+                "pinned Git executable path changed during execution"
+            )
+        if actual_sha256 != self._pin.executable_sha256:
+            raise FinalizerDerivationError(
+                "pinned Git executable changed during execution"
+            )
+
+    def close(self) -> None:
+        descriptor = self._descriptor
+        self._descriptor = -1
+        if descriptor >= 0:
+            os.close(descriptor)
+        temporary = self._temporary_directory
+        self._temporary_directory = None
+        if temporary is not None:
+            temporary.cleanup()
+
+    def __enter__(self) -> _PinnedGitExecutableBinding:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
 def _terminate_git_process_tree(process: subprocess.Popen[Any]) -> bool:
     """Terminate the dedicated Git process group and prove managed cleanup."""
 
@@ -231,12 +609,14 @@ def _join_and_close_git_readers(
     return all(stopped) and streams_closed
 
 
-def _git_command(
+def _run_git_command(
     repo: str,
     args: list[str],
     *,
     bare: bool,
+    executable: str,
     limit: int = MAX_GIT_TREE_BYTES,
+    isolated_environment: bool = False,
 ) -> bytes:
     """Run one read-only Git query with bounded streaming output.
 
@@ -247,15 +627,36 @@ def _git_command(
     child or bypass a resource bound.
     """
 
-    command = ["git", "--no-replace-objects"]
+    command = [executable, "--no-replace-objects"]
     command.extend(["--git-dir", repo] if bare else ["-C", repo])
     command.extend(args)
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.upper().startswith("GIT_")
-    }
-    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    if isolated_environment:
+        # A digest-pinned executable is not a meaningful code pin if the
+        # dynamic loader, HOME/XDG configuration, or executable search path can
+        # still be injected by the parent.  The high-trust pinned path therefore
+        # gets a closed environment.  The two Windows variables are retained
+        # only for platform process startup; pinned execution itself is POSIX-
+        # only and fails before this point on Windows.
+        environment = {
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_ATTR_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+            "LC_ALL": "C",
+            "LANG": "C",
+        }
+        if os.name == "nt":  # pragma: no cover - pinned mode rejects Windows
+            for name in ("SYSTEMROOT", "WINDIR"):
+                if name in os.environ:
+                    environment[name] = os.environ[name]
+    else:
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.upper().startswith("GIT_")
+        }
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
     process: subprocess.Popen[Any] | None = None
     streams: list[Any] = []
     reader_start_attempts: list[threading.Thread] = []
@@ -408,17 +809,87 @@ def _git_command(
         raise
 
 
+def _git_command(
+    repo: str,
+    args: list[str],
+    *,
+    bare: bool,
+    limit: int = MAX_GIT_TREE_BYTES,
+    git_executable: GitExecutablePin | None = None,
+) -> bytes:
+    """Run one raw Git query, optionally through a reviewed executable pin."""
+
+    if git_executable is None:
+        return _run_git_command(
+            repo,
+            args,
+            bare=bare,
+            executable="git",
+            limit=limit,
+        )
+    with _PinnedGitExecutableBinding(git_executable) as binding:
+        try:
+            return _run_git_command(
+                repo,
+                args,
+                bare=bare,
+                executable=binding.executable,
+                limit=limit,
+                isolated_environment=True,
+            )
+        finally:
+            binding.prove_stable()
+
+
 class _GitReader:
     """Read raw objects from a worktree or bare object store without checkout."""
 
-    def __init__(self, repo: str, *, bare: bool) -> None:
+    def __init__(
+        self,
+        repo: str,
+        *,
+        bare: bool,
+        git_executable: GitExecutablePin | None = None,
+    ) -> None:
         self.repo = os.path.abspath(repo)
         self.bare = bare
+        self._git_binding: _PinnedGitExecutableBinding | None = None
+        self._closed = False
         if not os.path.isdir(self.repo):
             raise FinalizerDerivationError(f"Git repository directory does not exist: {repo!r}")
+        if git_executable is not None:
+            self._git_binding = _PinnedGitExecutableBinding(git_executable)
 
     def command(self, args: list[str], *, limit: int = MAX_GIT_TREE_BYTES) -> bytes:
-        return _git_command(self.repo, args, bare=self.bare, limit=limit)
+        if self._closed:
+            raise FinalizerDerivationError("raw Git reader is closed")
+        binding = self._git_binding
+        if binding is None:
+            return _git_command(self.repo, args, bare=self.bare, limit=limit)
+        try:
+            return _run_git_command(
+                self.repo,
+                args,
+                bare=self.bare,
+                executable=binding.executable,
+                limit=limit,
+                isolated_environment=True,
+            )
+        finally:
+            binding.prove_stable()
+
+    def close(self) -> None:
+        self._closed = True
+        binding = self._git_binding
+        self._git_binding = None
+        if binding is not None:
+            binding.close()
+
+    def __enter__(self) -> _GitReader:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
 
     def commit_tree(self, sha: str) -> str:
         _valid_git_sha(sha, label="commit")
@@ -469,6 +940,7 @@ def derive_raw_ref_parent_pair(
     repository: str,
     ref: str,
     bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
 ) -> tuple[str, str, str, str]:
     """Resolve one exact ref and its single parent from raw immutable Git objects.
 
@@ -481,20 +953,33 @@ def derive_raw_ref_parent_pair(
 
     if not isinstance(ref, str) or not ref.startswith("refs/") or "\x00" in ref:
         raise FinalizerDerivationError("raw Git ref must be a canonical refs/* name")
-    reader = _GitReader(repository, bare=bare)
-    raw_commit = reader.command(["rev-parse", "--verify", f"{ref}^{{commit}}"], limit=256)
-    commit = _valid_git_sha(raw_commit.decode("ascii", "strict").strip(), label="derived ref")
-    raw_parents = reader.command(["rev-list", "--parents", "-n", "1", commit], limit=512)
-    try:
-        parents = raw_parents.decode("ascii", "strict").strip().split()
-    except UnicodeDecodeError as exc:  # pragma: no cover - defensive parity with Git reader
-        raise FinalizerDerivationError("raw Git parent listing is not ASCII") from exc
-    if len(parents) != 2 or parents[0] != commit:
-        raise FinalizerDerivationError(
-            "V1 protected-release source must be a non-merge commit with exactly one parent"
+    with _GitReader(
+        repository,
+        bare=bare,
+        git_executable=git_executable,
+    ) as reader:
+        raw_commit = reader.command(
+            ["rev-parse", "--verify", f"{ref}^{{commit}}"],
+            limit=256,
         )
-    parent = _valid_git_sha(parents[1], label="derived parent commit")
-    return commit, reader.commit_tree(commit), parent, reader.commit_tree(parent)
+        commit = _valid_git_sha(
+            raw_commit.decode("ascii", "strict").strip(),
+            label="derived ref",
+        )
+        raw_parents = reader.command(
+            ["rev-list", "--parents", "-n", "1", commit],
+            limit=512,
+        )
+        try:
+            parents = raw_parents.decode("ascii", "strict").strip().split()
+        except UnicodeDecodeError as exc:  # pragma: no cover - defensive parity with Git reader
+            raise FinalizerDerivationError("raw Git parent listing is not ASCII") from exc
+        if len(parents) != 2 or parents[0] != commit:
+            raise FinalizerDerivationError(
+                "V1 protected-release source must be a non-merge commit with exactly one parent"
+            )
+        parent = _valid_git_sha(parents[1], label="derived parent commit")
+        return commit, reader.commit_tree(commit), parent, reader.commit_tree(parent)
 
 
 def derive_raw_evaluation_bindings(
@@ -507,6 +992,7 @@ def derive_raw_evaluation_bindings(
     head_tree_sha: str,
     base_is_bare: bool = False,
     head_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
 ) -> dict[str, Any]:
     """Derive candidate, policy, and verifier-pack values from raw Git only.
 
@@ -522,8 +1008,43 @@ def derive_raw_evaluation_bindings(
         ("head_tree_sha", head_tree_sha),
     ):
         _valid_git_sha(value, label=label)
-    base = _GitReader(base_repo, bare=base_is_bare)
-    head = _GitReader(head_repo, bare=head_is_bare)
+    base = _GitReader(
+        base_repo,
+        bare=base_is_bare,
+        git_executable=git_executable,
+    )
+    try:
+        head = _GitReader(
+            head_repo,
+            bare=head_is_bare,
+            git_executable=git_executable,
+        )
+    except BaseException:
+        base.close()
+        raise
+    try:
+        return _derive_raw_evaluation_from_readers(
+            base,
+            head,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+        )
+    finally:
+        head.close()
+        base.close()
+
+
+def _derive_raw_evaluation_from_readers(
+    base: _GitReader,
+    head: _GitReader,
+    *,
+    base_sha: str,
+    head_sha: str,
+    base_tree_sha: str,
+    head_tree_sha: str,
+) -> dict[str, Any]:
     if base.commit_tree(base_sha) != base_tree_sha or head.commit_tree(head_sha) != head_tree_sha:
         raise FinalizerDerivationError("provided commit/tree binding is not immutable Git reality")
 
@@ -848,6 +1369,7 @@ def derive_finalizer_bindings(
     guard_artifact_sha256: str,
     base_is_bare: bool = False,
     head_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
 ) -> DerivedFinalizerBindings:
     """Derive candidate, policy, and pack bindings from raw immutable Git objects."""
 
@@ -873,6 +1395,7 @@ def derive_finalizer_bindings(
         head_tree_sha=head_tree_sha,
         base_is_bare=base_is_bare,
         head_is_bare=head_is_bare,
+        git_executable=git_executable,
     )
     payload = {
         "format": FINALIZER_DERIVATION_FORMAT,

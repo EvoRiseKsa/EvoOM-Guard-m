@@ -1,13 +1,13 @@
 ---
-source_version: 4.0.2
+source_version: 4.1.0
 latest_published_version: 4.0.2
-state: published
+state: pre-release
 ---
 
 # Release status
 
-The repository source declares **v4.0.2** and it is published as the latest
-immutable consumer release:
+The repository source declares **v4.1.0**, which is not yet a published
+immutable consumer release. The latest published release remains:
 [`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2),
 published from commit
 [`3374164c65ad692049929fdc903eafb47c843a8e`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/3374164c65ad692049929fdc903eafb47c843a8e).
@@ -18,6 +18,11 @@ GitHub Actions build-artifact attestation bound to the release workflow,
 `refs/heads/main`, and the same source commit. Tag-triggered CI run
 [`29863741885`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29863741885)
 completed successfully, including `release-tag-guard` and `publish-pyz`.
+
+The `v4.1.0` source line adds Release Source Admission V2 and associated
+provider/Git hardening. It has not yet produced an immutable tag, release asset,
+checksum, build attestation, Marketplace observation, or live V2 pilot. Do not
+teach or consume `@v4.1.0` until that publication and verification finish.
 
 Consumer usage should pin to `v4.0.2` only when aligned with your acceptance
 policy (typically strict SHA pinning in production). This release contains the

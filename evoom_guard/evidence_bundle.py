@@ -736,6 +736,63 @@ def _preflight_zip(snapshot: bytes) -> int:
     return total_entries
 
 
+# Public byte/archive primitives shared by the evidence, finalizer, and
+# admission layers.  The legacy flat modules retain their private spellings for
+# compatibility, while newly extracted packages depend only on this explicit
+# interface instead of reaching into another architectural component.
+def sha256_bytes(data: bytes) -> str:
+    """Return the lowercase SHA-256 digest of exact ``data`` bytes."""
+
+    return _sha256(data)
+
+
+def canonical_json_bytes(value: dict[str, Any]) -> bytes:
+    """Encode one object using EvoGuard's strict canonical JSON contract."""
+
+    return _canonical_json(value)
+
+
+def load_json_object_bytes(data: bytes, label: str) -> dict[str, Any]:
+    """Load one strict UTF-8 JSON object from retained evidence bytes."""
+
+    return _load_json_object(data, label)
+
+
+def read_regular_file_bytes(path: str, *, limit: int, label: str) -> bytes:
+    """Read a stable, bounded, regular non-symlink file snapshot."""
+
+    return _read_regular_file(path, limit=limit, label=label)
+
+
+def canonical_archive_bytes(members: Iterable[tuple[str, bytes]]) -> bytes:
+    """Encode ordered members using EvoGuard's canonical ZIP contract."""
+
+    return _archive_bytes(members)
+
+
+def validate_canonical_archive_member(info: zipfile.ZipInfo) -> None:
+    """Reject archive metadata outside EvoGuard's canonical ZIP contract."""
+
+    _validate_member_metadata(info)
+
+
+def read_archive_member_bytes(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    *,
+    limit: int,
+) -> bytes:
+    """Read one bounded canonical archive member."""
+
+    return _read_archive_member(archive, info, limit=limit)
+
+
+def preflight_canonical_zip(snapshot: bytes) -> int:
+    """Bound and validate a canonical ZIP central directory before parsing."""
+
+    return _preflight_zip(snapshot)
+
+
 def _validate_digest_row(value: dict[str, Any], label: str) -> None:
     digest = value.get("sha256")
     size = value.get("size")

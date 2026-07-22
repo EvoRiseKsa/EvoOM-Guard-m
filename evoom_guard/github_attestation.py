@@ -18,9 +18,11 @@ The important boundary is intentional:
 * the resulting receipt is an audit and admission input, not a replacement for
   GitHub/Sigstore verification; rechecking a retained receipt does not contact
   GitHub or independently revalidate a signature; and
-* data inside the attestation statement predicate is not interpreted as a
-  trusted EvoGuard fact.  Only the external verifier's success under the
-  recorded policy is carried forward.
+* EvoGuard independently binds a narrow set of signed ``verificationResult``
+  facts to the artifact and recorded policy: subject digest, predicate type,
+  repository, signer workflow/digest, source ref/digest, OIDC issuer, hosted
+  runner, and the canonical workflow-run URI.  Other predicate/metadata fields
+  remain untrusted and are ignored.
 
 Call this only in a protected post-build / post-merge-candidate workflow.  The
 caller still trusts the configured ``gh`` binary, the GitHub API and
@@ -68,6 +70,7 @@ GITHUB_ATTESTATION_PROVENANCE_IDENTITY_PREFIX = "github-attestation-receipt-v1:"
 
 MAX_GITHUB_ATTESTATION_RECEIPT_BYTES = 64 * 1024
 MAX_GITHUB_ATTESTATION_OUTPUT_BYTES = 4 * 1024 * 1024
+MAX_GITHUB_ATTESTATION_EXECUTABLE_BYTES = 256 * 1024 * 1024
 MAX_GITHUB_ATTESTATION_TIMEOUT_SECONDS = 600
 DEFAULT_GITHUB_ATTESTATION_TIMEOUT_SECONDS = 120
 _STREAM_CHUNK_BYTES = 1024 * 1024
@@ -115,10 +118,32 @@ _WORKFLOW_URL = re.compile(
     + _WORKFLOW_PATH_SUFFIX
 )
 _SOURCE_REF = re.compile(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
+_RUN_INVOCATION_URI = re.compile(
+    r"https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/"
+    r"actions/runs/(?P<run_id>[1-9][0-9]*)/attempts/(?P<run_attempt>[1-9][0-9]*)\Z"
+)
+_IN_TOTO_STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
+_GITHUB_HOSTED_RUNNER = "github-hosted"
 
 
 class GitHubAttestationError(ValueError):
     """A GitHub attestation boundary input, receipt, or verifier run is invalid."""
+
+
+@dataclass(frozen=True)
+class GitHubAttestationProviderIsolation:
+    """Enforceable POSIX identity and executable pins for one provider run.
+
+    Supplying this configuration is an explicit request for a stronger
+    provider boundary.  It never silently falls back to the historical
+    same-identity/PATH execution.  The caller must start EvoGuard as root and
+    choose a distinct, non-root UID and GID used only for the ``gh`` process.
+    """
+
+    executable_path: str
+    executable_sha256: str
+    uid: int
+    gid: int
 
 
 @dataclass(frozen=True)
@@ -155,6 +180,14 @@ class GitHubAttestationArtifact:
 
     def as_dict(self) -> dict[str, object]:
         return {"sha256": self.sha256, "size": self.size}
+
+
+@dataclass(frozen=True)
+class VerifiedGitHubAttestationOutput:
+    """Signed semantic identity extracted from one successful ``gh`` result."""
+
+    workflow_run_id: str
+    workflow_run_attempt: int
 
 
 @dataclass(frozen=True)
@@ -226,8 +259,8 @@ def _require_exact_keys(value: Mapping[str, Any], expected: set[str], label: str
 
 
 def _is_reparse_point(metadata: os.stat_result) -> bool:
-    attributes = getattr(metadata, "st_file_attributes", 0)
-    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    attributes = getattr(metadata, "st_file_attributes", 0) or 0
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0) or 0
     return bool(reparse_flag and attributes & reparse_flag)
 
 
@@ -239,6 +272,190 @@ def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
         metadata.st_mtime_ns,
         metadata.st_ctime_ns,
     )
+
+
+def github_attestation_provider_isolation(
+    executable_path: str,
+    executable_sha256: str,
+    *,
+    uid: int,
+    gid: int,
+) -> GitHubAttestationProviderIsolation:
+    """Build the opt-in fail-closed provider-isolation contract.
+
+    Filesystem identity and the executable digest are checked again from a
+    stable descriptor immediately before each launch.  This constructor keeps
+    the scalar contract usable by future high-trust CLI commands without
+    changing the default behavior of existing provider commands.
+    """
+
+    if (
+        not isinstance(executable_path, str)
+        or not executable_path
+        or len(executable_path) > 4096
+        or not os.path.isabs(executable_path)
+    ):
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable must be an absolute path"
+        )
+    if os.path.normpath(executable_path) != executable_path:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable path must be canonical"
+        )
+    if not isinstance(executable_sha256, str) or _SHA256.fullmatch(
+        executable_sha256
+    ) is None:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable SHA-256 must be lowercase 64-hex"
+        )
+    if type(uid) is not int or not 1 <= uid <= 2_147_483_647:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI UID must be a non-root integer from 1 through 2147483647"
+        )
+    if type(gid) is not int or not 1 <= gid <= 2_147_483_647:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI GID must be a non-root integer from 1 through 2147483647"
+        )
+    return GitHubAttestationProviderIsolation(
+        executable_path=executable_path,
+        executable_sha256=executable_sha256,
+        uid=uid,
+        gid=gid,
+    )
+
+
+def _provider_posix_identity() -> tuple[int, int]:
+    """Return the effective POSIX identity through one testable boundary."""
+
+    get_effective_uid = getattr(os, "geteuid", None)
+    get_effective_gid = getattr(os, "getegid", None)
+    if (
+        os.name != "posix"
+        or not callable(get_effective_uid)
+        or not callable(get_effective_gid)
+    ):
+        raise GitHubAttestationError(
+            "isolated GitHub provider execution requires POSIX UID/GID support"
+        )
+    return get_effective_uid(), get_effective_gid()
+
+
+def _validate_provider_isolation(
+    value: GitHubAttestationProviderIsolation,
+    *,
+    gh_executable: str,
+) -> GitHubAttestationProviderIsolation:
+    if type(value) is not GitHubAttestationProviderIsolation:
+        raise GitHubAttestationError(
+            "provider isolation must be GitHubAttestationProviderIsolation"
+        )
+    checked = github_attestation_provider_isolation(
+        value.executable_path,
+        value.executable_sha256,
+        uid=value.uid,
+        gid=value.gid,
+    )
+    if gh_executable not in {"gh", checked.executable_path}:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable conflicts with the configured executable path"
+        )
+    effective_uid, effective_gid = _provider_posix_identity()
+    if effective_uid != 0:
+        raise GitHubAttestationError(
+            "isolated GitHub provider execution must start with effective UID 0"
+        )
+    if checked.uid == effective_uid or checked.gid == effective_gid:
+        raise GitHubAttestationError(
+            "isolated GitHub provider UID and GID must both differ from the caller identity"
+        )
+    return checked
+
+
+def validate_provider_isolated_signing_key_path(
+    path: str,
+    isolation: GitHubAttestationProviderIsolation,
+) -> str:
+    """Prove that the lowered provider identity cannot reach the signing key.
+
+    This deliberately performs metadata-only inspection and never opens the
+    key contents.  The key must be a canonical absolute, regular, non-symlink
+    file owned by root/the caller with mode exactly ``0600``.  Every directory
+    from its parent through the filesystem root must also be non-symlink and
+    non-writable by the provider UID/GID.  Provider launches clear all
+    supplementary groups, so the proof needs only owner, primary-group, and
+    other mode bits.
+    """
+
+    checked = _validate_provider_isolation(
+        isolation,
+        gh_executable=isolation.executable_path,
+    )
+    if not isinstance(path, str) or not path or not os.path.isabs(path):
+        raise GitHubAttestationError(
+            "isolated provider signing-key path must be absolute"
+        )
+    absolute = os.path.normpath(path)
+    if absolute != path or os.path.realpath(absolute) != absolute:
+        raise GitHubAttestationError(
+            "isolated provider signing-key path must be canonical and must not traverse symlinks"
+        )
+    caller_uid, _caller_gid = _provider_posix_identity()
+    try:
+        key_metadata = os.lstat(absolute)
+    except OSError as exc:
+        raise GitHubAttestationError(
+            f"cannot inspect isolated provider signing key {absolute!r}: {exc}"
+        ) from exc
+    if (
+        stat.S_ISLNK(key_metadata.st_mode)
+        or _is_reparse_point(key_metadata)
+        or not stat.S_ISREG(key_metadata.st_mode)
+    ):
+        raise GitHubAttestationError(
+            "isolated provider signing key must be a regular non-symlink file"
+        )
+    if key_metadata.st_uid not in {0, caller_uid}:
+        raise GitHubAttestationError(
+            "isolated provider signing key must be owned by root/the caller"
+        )
+    if stat.S_IMODE(key_metadata.st_mode) != 0o600:
+        raise GitHubAttestationError(
+            "isolated provider signing key mode must be exactly 0600"
+        )
+
+    parent = os.path.dirname(absolute)
+    while True:
+        try:
+            metadata = os.lstat(parent)
+        except OSError as exc:
+            raise GitHubAttestationError(
+                f"cannot inspect signing-key parent {parent!r}: {exc}"
+            ) from exc
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or _is_reparse_point(metadata)
+            or not stat.S_ISDIR(metadata.st_mode)
+        ):
+            raise GitHubAttestationError(
+                "every isolated provider signing-key parent must be a non-symlink directory"
+            )
+        mode = stat.S_IMODE(metadata.st_mode)
+        if metadata.st_uid == checked.uid:
+            provider_writable = bool(mode & stat.S_IWUSR)
+        elif metadata.st_gid == checked.gid:
+            provider_writable = bool(mode & stat.S_IWGRP)
+        else:
+            provider_writable = bool(mode & stat.S_IWOTH)
+        if provider_writable:
+            raise GitHubAttestationError(
+                "isolated provider signing-key parent is writable by the lowered identity: "
+                f"{parent}"
+            )
+        next_parent = os.path.dirname(parent)
+        if next_parent == parent:
+            break
+        parent = next_parent
+    return absolute
 
 
 def _validate_repository(value: object) -> str:
@@ -505,7 +722,7 @@ def _read_bounded_file(path: str, *, limit: int, label: str) -> bytes:
         raise GitHubAttestationError(str(exc)) from exc
 
 
-def _load_attestation_output(data: bytes) -> list[object]:
+def _load_attestation_output(data: bytes) -> list[dict[str, Any]]:
     try:
         decoded = strict_json_loads(data.decode("utf-8"))
     except (UnicodeError, ValueError) as exc:
@@ -520,7 +737,267 @@ def _load_attestation_output(data: bytes) -> list[object]:
         raise GitHubAttestationError(
             "GitHub attestation verifier output entry must be an object"
         )
-    return decoded
+    entry = decoded[0]
+    verification_result = entry.get("verificationResult")
+    if not isinstance(verification_result, dict):
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output entry must contain verificationResult"
+        )
+    if not isinstance(verification_result.get("statement"), dict):
+        raise GitHubAttestationError(
+            "GitHub attestation verificationResult must contain a statement object"
+        )
+    return [entry]
+
+
+def _required_mapping(
+    value: Mapping[str, Any], key: str, *, label: str
+) -> dict[str, Any]:
+    child = value.get(key)
+    if not isinstance(child, dict):
+        raise GitHubAttestationError(f"{label}.{key} must be an object")
+    return child
+
+
+def _required_string(value: Mapping[str, Any], key: str, *, label: str) -> str:
+    child = value.get(key)
+    if not isinstance(child, str) or not child:
+        raise GitHubAttestationError(f"{label}.{key} must be a non-empty string")
+    return child
+
+
+def _require_semantic_match(actual: object, expected: object, *, label: str) -> None:
+    if actual != expected:
+        raise GitHubAttestationError(
+            f"GitHub attestation verifier output {label} does not match the expected policy"
+        )
+
+
+def _validate_expected_workflow_run(
+    run_id: str | None,
+    run_attempt: int | None,
+) -> tuple[str, int] | None:
+    if (run_id is None) != (run_attempt is None):
+        raise GitHubAttestationError(
+            "expected workflow run ID and attempt must be supplied together"
+        )
+    if run_id is None:
+        return None
+    if (
+        not isinstance(run_id, str)
+        or not run_id.isdecimal()
+        or run_id.startswith("0")
+        or len(run_id) > 256
+    ):
+        raise GitHubAttestationError(
+            "expected workflow run ID must be a non-zero decimal string"
+        )
+    if type(run_attempt) is not int or not 1 <= run_attempt <= 2_147_483_647:
+        raise GitHubAttestationError(
+            "expected workflow run attempt must be an integer from 1 through 2147483647"
+        )
+    return run_id, run_attempt
+
+
+def validate_github_attestation_verifier_output(
+    data: bytes,
+    *,
+    artifact: GitHubAttestationArtifact,
+    policy: GitHubAttestationPolicy,
+    expected_workflow_run_id: str | None = None,
+    expected_workflow_run_attempt: int | None = None,
+) -> VerifiedGitHubAttestationOutput:
+    """Bind one successful ``gh`` JSON result to exact external expectations.
+
+    GitHub CLI remains responsible for Sigstore/DSSE/certificate verification.
+    This function independently interprets only the narrow signed result fields
+    needed by EvoGuard.  Required fields fail closed; unknown fields at every
+    level are retained in raw evidence but ignored for forward compatibility.
+    """
+
+    if type(artifact) is not GitHubAttestationArtifact:
+        raise GitHubAttestationError(
+            "expected GitHub attestation artifact must be GitHubAttestationArtifact"
+        )
+    if type(policy) is not GitHubAttestationPolicy:
+        raise GitHubAttestationError(
+            "expected GitHub attestation policy must be GitHubAttestationPolicy"
+        )
+    checked_artifact = _validate_artifact(
+        artifact.as_dict(), label="expected GitHub attestation artifact"
+    )
+    checked_policy = _validate_policy(
+        policy.as_dict(), label="expected GitHub attestation policy"
+    )
+    expected_run = _validate_expected_workflow_run(
+        expected_workflow_run_id, expected_workflow_run_attempt
+    )
+
+    entry = _load_attestation_output(data)[0]
+    result = _required_mapping(entry, "verificationResult", label="verification result")
+    signature = _required_mapping(result, "signature", label="verification result")
+    certificate = _required_mapping(signature, "certificate", label="verification signature")
+    statement = _required_mapping(result, "statement", label="verification result")
+
+    repository_url = f"https://github.com/{checked_policy.repository}"
+    expected_signer_base = f"https://github.com/{checked_policy.signer_workflow}@"
+    allowed_signer_uris = {
+        expected_signer_base + checked_policy.signer_digest,
+        expected_signer_base + checked_policy.source_ref,
+    }
+    signer_uri = _required_string(
+        certificate, "buildSignerURI", label="verification certificate"
+    )
+    if signer_uri not in allowed_signer_uris:
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output signer workflow URI does not match "
+            "the expected workflow and signer digest/ref"
+        )
+    for key, expected in (
+        ("subjectAlternativeName", signer_uri),
+        ("issuer", checked_policy.cert_oidc_issuer),
+        ("githubWorkflowRepository", checked_policy.repository),
+        ("githubWorkflowSHA", checked_policy.source_digest),
+        ("githubWorkflowRef", checked_policy.source_ref),
+        ("buildSignerDigest", checked_policy.signer_digest),
+        ("runnerEnvironment", _GITHUB_HOSTED_RUNNER),
+        ("sourceRepositoryURI", repository_url),
+        ("sourceRepositoryDigest", checked_policy.source_digest),
+        ("sourceRepositoryRef", checked_policy.source_ref),
+    ):
+        _require_semantic_match(
+            _required_string(certificate, key, label="verification certificate"),
+            expected,
+            label=f"certificate.{key}",
+        )
+
+    run_uri = _required_string(
+        certificate, "runInvocationURI", label="verification certificate"
+    )
+    run_match = _RUN_INVOCATION_URI.fullmatch(run_uri)
+    if run_match is None or run_match.group("repository") != checked_policy.repository:
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output runInvocationURI is not a canonical "
+            "workflow run in the expected repository"
+        )
+    workflow_run_id = run_match.group("run_id")
+    workflow_run_attempt = int(run_match.group("run_attempt"))
+    if workflow_run_attempt > 2_147_483_647:
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output workflow run attempt is outside its range"
+        )
+    if expected_run is not None and (workflow_run_id, workflow_run_attempt) != expected_run:
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output workflow run ID/attempt does not match "
+            "the external expectation"
+        )
+
+    _require_semantic_match(
+        statement.get("_type"),
+        _IN_TOTO_STATEMENT_TYPE,
+        label="statement._type",
+    )
+    subjects = statement.get("subject")
+    if not isinstance(subjects, list) or len(subjects) != 1:
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output statement must contain exactly one subject"
+        )
+    subject = subjects[0]
+    if not isinstance(subject, dict):
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output statement subject must be an object"
+        )
+    subject_digest = _required_mapping(subject, "digest", label="statement subject")
+    _require_semantic_match(
+        _required_string(subject_digest, "sha256", label="statement subject digest"),
+        checked_artifact.sha256,
+        label="statement subject SHA-256",
+    )
+    _require_semantic_match(
+        statement.get("predicateType"),
+        GITHUB_ATTESTATION_PREDICATE_TYPE,
+        label="statement predicateType",
+    )
+
+    predicate = _required_mapping(statement, "predicate", label="statement")
+    build_definition = _required_mapping(predicate, "buildDefinition", label="predicate")
+    external_parameters = _required_mapping(
+        build_definition, "externalParameters", label="predicate buildDefinition"
+    )
+    external_workflow = _required_mapping(
+        external_parameters, "workflow", label="predicate externalParameters"
+    )
+    _require_semantic_match(
+        external_workflow.get("repository"),
+        repository_url,
+        label="predicate workflow repository",
+    )
+    _require_semantic_match(
+        external_workflow.get("ref"),
+        checked_policy.source_ref,
+        label="predicate workflow ref",
+    )
+    internal_parameters = _required_mapping(
+        build_definition, "internalParameters", label="predicate buildDefinition"
+    )
+    github_parameters = _required_mapping(
+        internal_parameters, "github", label="predicate internalParameters"
+    )
+    _require_semantic_match(
+        github_parameters.get("runner_environment"),
+        _GITHUB_HOSTED_RUNNER,
+        label="predicate runner environment",
+    )
+    resolved_dependencies = build_definition.get("resolvedDependencies")
+    expected_dependency = {
+        "uri": f"git+{repository_url}@{checked_policy.source_ref}",
+        "digest": {"gitCommit": checked_policy.source_digest},
+    }
+    if not isinstance(resolved_dependencies, list) or not any(
+        isinstance(dependency, dict)
+        and dependency.get("uri") == expected_dependency["uri"]
+        and isinstance(dependency.get("digest"), dict)
+        and dependency["digest"].get("gitCommit") == checked_policy.source_digest
+        for dependency in resolved_dependencies
+    ):
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output has no resolved dependency for the "
+            "expected source repository/ref/digest"
+        )
+
+    run_details = _required_mapping(predicate, "runDetails", label="predicate")
+    builder = _required_mapping(run_details, "builder", label="predicate runDetails")
+    metadata = _required_mapping(run_details, "metadata", label="predicate runDetails")
+    _require_semantic_match(
+        builder.get("id"), signer_uri, label="predicate builder identity"
+    )
+    _require_semantic_match(
+        metadata.get("invocationId"), run_uri, label="predicate invocation URI"
+    )
+    verified_identity = _required_mapping(
+        result, "verifiedIdentity", label="verification result"
+    )
+    _require_semantic_match(
+        verified_identity.get("runnerEnvironment"),
+        _GITHUB_HOSTED_RUNNER,
+        label="verified identity runner environment",
+    )
+    return VerifiedGitHubAttestationOutput(
+        workflow_run_id=workflow_run_id,
+        workflow_run_attempt=workflow_run_attempt,
+    )
+
+
+def validate_github_attestation_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the closed-world canonical provider-receipt object."""
+
+    return _validate_receipt(value)
+
+
+def load_github_attestation_verifier_output(data: bytes) -> list[dict[str, Any]]:
+    """Load one structurally recognizable ``gh attestation verify`` result."""
+
+    return _load_attestation_output(data)
 
 
 def _output_descriptor(data: bytes) -> dict[str, object]:
@@ -558,6 +1035,271 @@ def _write_new_file(path: str, data: bytes, *, label: str) -> str:
             pass
         raise
     return absolute
+
+
+def _set_provider_path_access(
+    path: str,
+    *,
+    uid: int,
+    gid: int,
+    mode: int,
+    label: str,
+) -> None:
+    """Set and prove one POSIX ownership/mode contract without following links."""
+
+    try:
+        before = os.lstat(path)
+        if stat.S_ISLNK(before.st_mode) or _is_reparse_point(before):
+            raise GitHubAttestationError(f"{label} must not be a symlink")
+        change_owner = getattr(os, "chown", None)
+        if not callable(change_owner):
+            raise GitHubAttestationError(
+                "isolated provider ownership changes are unavailable"
+            )
+        change_owner(path, uid, gid, follow_symlinks=False)
+        os.chmod(path, mode, follow_symlinks=False)
+        after = os.lstat(path)
+    except (NotImplementedError, OSError) as exc:
+        raise GitHubAttestationError(
+            f"cannot prepare isolated provider access for {label}: {exc}"
+        ) from exc
+    if (
+        stat.S_ISLNK(after.st_mode)
+        or _is_reparse_point(after)
+        or after.st_uid != uid
+        or after.st_gid != gid
+        or stat.S_IMODE(after.st_mode) != mode
+    ):
+        raise GitHubAttestationError(
+            f"isolated provider access contract was not established for {label}"
+        )
+
+
+def _remove_provider_snapshot(path: str) -> None:
+    """Best-effort removal that also handles Windows read-only mode mapping."""
+
+    try:
+        os.unlink(path)
+        return
+    except FileNotFoundError:
+        return
+    except PermissionError:
+        try:
+            os.chmod(path, 0o700, follow_symlinks=False)
+        except (NotImplementedError, TypeError):
+            try:
+                os.chmod(path, 0o700)
+            except OSError:
+                return
+        except OSError:
+            return
+    except OSError:
+        return
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _snapshot_pinned_provider_executable(
+    isolation: GitHubAttestationProviderIsolation,
+    directory: str,
+    *,
+    owner_uid: int,
+    owner_gid: int,
+) -> str:
+    """Copy the reviewed executable from one stable descriptor and pin its hash."""
+
+    source_path = isolation.executable_path
+    if os.path.realpath(source_path) != source_path:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable path must not traverse symlinks"
+        )
+    try:
+        before = os.lstat(source_path)
+    except OSError as exc:
+        raise GitHubAttestationError(
+            f"cannot inspect isolated GitHub CLI executable {source_path!r}: {exc}"
+        ) from exc
+    if (
+        stat.S_ISLNK(before.st_mode)
+        or _is_reparse_point(before)
+        or not stat.S_ISREG(before.st_mode)
+    ):
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable must be a regular non-symlink file"
+        )
+    if before.st_size > MAX_GITHUB_ATTESTATION_EXECUTABLE_BYTES:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable exceeds its bounded size limit"
+        )
+    if os.name == "posix" and stat.S_IMODE(before.st_mode) & 0o111 == 0:
+        raise GitHubAttestationError(
+            "isolated GitHub CLI executable must have an execute permission bit"
+        )
+
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        source_descriptor = os.open(source_path, flags)
+    except OSError as exc:
+        raise GitHubAttestationError(
+            f"cannot open isolated GitHub CLI executable {source_path!r}: {exc}"
+        ) from exc
+    snapshot_descriptor = -1
+    snapshot_path = os.path.join(directory, "gh-pinned")
+    completed = False
+    try:
+        opened = os.fstat(source_descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or _is_reparse_point(opened)
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise GitHubAttestationError(
+                "isolated GitHub CLI executable changed while it was being opened"
+            )
+        if opened.st_size > MAX_GITHUB_ATTESTATION_EXECUTABLE_BYTES:
+            raise GitHubAttestationError(
+                "isolated GitHub CLI executable exceeds its bounded size limit"
+            )
+        snapshot_flags = (
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_BINARY", 0)
+        )
+        snapshot_descriptor = os.open(snapshot_path, snapshot_flags, 0o500)
+        digest = hashlib.sha256()
+        copied = 0
+        with os.fdopen(source_descriptor, "rb", closefd=False) as source, os.fdopen(
+            snapshot_descriptor, "wb", closefd=False
+        ) as destination:
+            while True:
+                chunk = source.read(_STREAM_CHUNK_BYTES)
+                if not chunk:
+                    break
+                copied += len(chunk)
+                if copied > MAX_GITHUB_ATTESTATION_EXECUTABLE_BYTES:
+                    raise GitHubAttestationError(
+                        "isolated GitHub CLI executable exceeds its bounded size limit"
+                    )
+                digest.update(chunk)
+                destination.write(chunk)
+            destination.flush()
+            os.fsync(destination.fileno())
+        after = os.fstat(source_descriptor)
+        if _file_identity(after) != _file_identity(opened) or copied != opened.st_size:
+            raise GitHubAttestationError(
+                "isolated GitHub CLI executable changed while it was being copied"
+            )
+        if digest.hexdigest() != isolation.executable_sha256:
+            raise GitHubAttestationError(
+                "isolated GitHub CLI executable SHA-256 does not match the pinned digest"
+            )
+        _set_provider_path_access(
+            snapshot_path,
+            uid=owner_uid,
+            gid=owner_gid,
+            mode=0o555,
+            label="pinned GitHub CLI executable snapshot",
+        )
+        completed = True
+        return snapshot_path
+    finally:
+        if snapshot_descriptor >= 0:
+            try:
+                os.close(snapshot_descriptor)
+            except OSError:
+                pass
+        os.close(source_descriptor)
+        if not completed:
+            _remove_provider_snapshot(snapshot_path)
+
+
+def _isolated_gh_environment(
+    directory: str,
+    isolation: GitHubAttestationProviderIsolation,
+) -> dict[str, str]:
+    """Build a provider environment without inheriting ambient secrets."""
+
+    config_directory = os.path.join(directory, "gh-config")
+    try:
+        os.mkdir(config_directory, mode=0o700)
+    except OSError as exc:
+        raise GitHubAttestationError(
+            f"cannot create isolated GitHub CLI config directory: {exc}"
+        ) from exc
+    _set_provider_path_access(
+        config_directory,
+        uid=isolation.uid,
+        gid=isolation.gid,
+        mode=0o700,
+        label="isolated GitHub CLI config directory",
+    )
+    environment = {
+        name: os.environ[name]
+        for name in ("GH_TOKEN", "GITHUB_TOKEN")
+        if name in os.environ
+    }
+    environment.update(
+        {
+            "GH_CONFIG_DIR": config_directory,
+            "HOME": config_directory,
+            "TMPDIR": config_directory,
+            "NO_COLOR": "1",
+            "CLICOLOR": "0",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
+    return environment
+
+
+def _prepare_provider_isolation(
+    isolation: GitHubAttestationProviderIsolation,
+    *,
+    gh_executable: str,
+    snapshot_path: str,
+    directory: str,
+) -> tuple[str, dict[str, str], dict[str, object]]:
+    """Prepare a pinned executable, accessible inputs, and a dropped identity."""
+
+    checked = _validate_provider_isolation(isolation, gh_executable=gh_executable)
+    effective_uid, effective_gid = _provider_posix_identity()
+    pinned_executable = _snapshot_pinned_provider_executable(
+        checked,
+        directory,
+        owner_uid=effective_uid,
+        owner_gid=effective_gid,
+    )
+    try:
+        _set_provider_path_access(
+            snapshot_path,
+            uid=checked.uid,
+            gid=checked.gid,
+            mode=0o400,
+            label="GitHub attestation artifact snapshot",
+        )
+        environment = _isolated_gh_environment(directory, checked)
+        _set_provider_path_access(
+            directory,
+            uid=effective_uid,
+            gid=checked.gid,
+            mode=0o710,
+            label="isolated GitHub provider workspace",
+        )
+    except BaseException:
+        _remove_provider_snapshot(pinned_executable)
+        raise
+    return (
+        pinned_executable,
+        environment,
+        {
+            "user": checked.uid,
+            "group": checked.gid,
+            "extra_groups": (),
+            "umask": 0o077,
+        },
+    )
 
 
 def _gh_environment(directory: str) -> dict[str, str]:
@@ -633,6 +1375,8 @@ def _execute_gh_attestation_command(
     gh_executable: str,
     timeout_seconds: int,
     directory: str,
+    environment: Mapping[str, str] | None = None,
+    provider_launch_kwargs: Mapping[str, object] | None = None,
 ) -> bytes:
     """Execute the trusted CLI with raw, separately bounded output streams."""
 
@@ -643,15 +1387,22 @@ def _execute_gh_attestation_command(
     readers_closed = False
     try:
         try:
-            process = subprocess.Popen(
+            launch_kwargs: dict[str, object] = dict(process_group_popen_kwargs())
+            if provider_launch_kwargs is not None:
+                launch_kwargs.update(provider_launch_kwargs)
+            process = subprocess.Popen(  # type: ignore[call-overload]
                 command,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 cwd=directory,
-                env=_gh_environment(directory),
+                env=(
+                    dict(environment)
+                    if environment is not None
+                    else _gh_environment(directory)
+                ),
                 shell=False,
-                **process_group_popen_kwargs(),
+                **launch_kwargs,
             )
         except FileNotFoundError as exc:
             raise GitHubAttestationError(
@@ -828,6 +1579,7 @@ def _run_gh_attestation_verify(
     gh_executable: str,
     timeout_seconds: int,
     directory: str,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
 ) -> bytes:
     if not isinstance(gh_executable, str) or not gh_executable or len(gh_executable) > 4096:
         raise GitHubAttestationError("gh executable must be a non-empty path or command")
@@ -836,8 +1588,24 @@ def _run_gh_attestation_verify(
             f"GitHub attestation timeout must be an integer from 1 through "
             f"{MAX_GITHUB_ATTESTATION_TIMEOUT_SECONDS} seconds"
         )
+    effective_executable = gh_executable
+    environment: dict[str, str] | None = None
+    provider_launch_kwargs: dict[str, object] | None = None
+    pinned_executable = ""
+    if provider_isolation is not None:
+        (
+            pinned_executable,
+            environment,
+            provider_launch_kwargs,
+        ) = _prepare_provider_isolation(
+            provider_isolation,
+            gh_executable=gh_executable,
+            snapshot_path=snapshot_path,
+            directory=directory,
+        )
+        effective_executable = pinned_executable
     command = [
-        gh_executable,
+        effective_executable,
         "attestation",
         "verify",
         snapshot_path,
@@ -861,12 +1629,18 @@ def _run_gh_attestation_verify(
         "--format",
         "json",
     ]
-    return _execute_gh_attestation_command(
-        command,
-        gh_executable=gh_executable,
-        timeout_seconds=timeout_seconds,
-        directory=directory,
-    )
+    try:
+        return _execute_gh_attestation_command(
+            command,
+            gh_executable=gh_executable,
+            timeout_seconds=timeout_seconds,
+            directory=directory,
+            environment=environment,
+            provider_launch_kwargs=provider_launch_kwargs,
+        )
+    finally:
+        if pinned_executable:
+            _remove_provider_snapshot(pinned_executable)
 
 def create_github_attestation_receipt(
     artifact_path: str,
@@ -881,6 +1655,9 @@ def create_github_attestation_receipt(
     cert_oidc_issuer: str,
     gh_executable: str = "gh",
     timeout_seconds: int = DEFAULT_GITHUB_ATTESTATION_TIMEOUT_SECONDS,
+    expected_workflow_run_id: str | None = None,
+    expected_workflow_run_attempt: int | None = None,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
 ) -> CreatedGitHubAttestationReceipt:
     """Run a strict GitHub CLI attestation verification and retain its receipt.
 
@@ -913,6 +1690,14 @@ def create_github_attestation_receipt(
                 gh_executable=gh_executable,
                 timeout_seconds=timeout_seconds,
                 directory=directory,
+                provider_isolation=provider_isolation,
+            )
+            validate_github_attestation_verifier_output(
+                output,
+                artifact=artifact,
+                policy=policy,
+                expected_workflow_run_id=expected_workflow_run_id,
+                expected_workflow_run_attempt=expected_workflow_run_attempt,
             )
         finally:
             try:
@@ -994,6 +1779,8 @@ def verify_github_attestation_receipt(
     source_ref: str,
     source_digest: str,
     cert_oidc_issuer: str,
+    expected_workflow_run_id: str | None = None,
+    expected_workflow_run_attempt: int | None = None,
 ) -> VerifiedGitHubAttestationReceipt:
     """Check retained receipt/output bytes against external expected policy.
 
@@ -1029,6 +1816,13 @@ def verify_github_attestation_receipt(
         limit=MAX_GITHUB_ATTESTATION_OUTPUT_BYTES,
         label="GitHub attestation raw output",
     )
+    validate_github_attestation_verifier_output(
+        raw_output,
+        artifact=artifact,
+        policy=policy,
+        expected_workflow_run_id=expected_workflow_run_id,
+        expected_workflow_run_attempt=expected_workflow_run_attempt,
+    )
     output = _output_descriptor(raw_output)
     if output != _validate_output(
         receipt["verification_output"], label="GitHub attestation receipt verification_output"
@@ -1051,6 +1845,9 @@ def reverify_github_attestation_receipt(
     cert_oidc_issuer: str,
     gh_executable: str = "gh",
     timeout_seconds: int = DEFAULT_GITHUB_ATTESTATION_TIMEOUT_SECONDS,
+    expected_workflow_run_id: str | None = None,
+    expected_workflow_run_attempt: int | None = None,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
 ) -> FreshGitHubAttestationVerification:
     """Perform a fresh GitHub CLI cryptographic verification for a receipt.
 
@@ -1092,6 +1889,14 @@ def reverify_github_attestation_receipt(
                 gh_executable=gh_executable,
                 timeout_seconds=timeout_seconds,
                 directory=directory,
+                provider_isolation=provider_isolation,
+            )
+            validate_github_attestation_verifier_output(
+                output,
+                artifact=artifact,
+                policy=policy,
+                expected_workflow_run_id=expected_workflow_run_id,
+                expected_workflow_run_attempt=expected_workflow_run_attempt,
             )
         finally:
             try:
@@ -1146,6 +1951,7 @@ def seal_github_attestation_admission(
     private_key_path: str,
     gh_executable: str = "gh",
     timeout_seconds: int = DEFAULT_GITHUB_ATTESTATION_TIMEOUT_SECONDS,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
     force: bool = False,
 ) -> SealedGitHubAttestationAdmission:
     """Verify GitHub attestation now, then bind its receipt through V2 admission.
@@ -1177,6 +1983,7 @@ def seal_github_attestation_admission(
         cert_oidc_issuer=policy.cert_oidc_issuer,
         gh_executable=gh_executable,
         timeout_seconds=timeout_seconds,
+        provider_isolation=provider_isolation,
     )
     try:
         admission = seal_artifact_digest_admission(

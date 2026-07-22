@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:evoguard:release-source-producer-receipt:1",
   "title": "EvoGuard authenticated-producer receipt claim v1",
-  "description": "Canonical local claim for a protected workflow_run receipt producer. It is not signed by EvoGuard and cannot admit a release without a fresh provider attestation verification and a separately scoped future admission finalizer.",
+  "description": "Canonical local claim for a protected workflow_run receipt producer. It is not signed by EvoGuard and cannot admit a release without a fresh provider attestation verification and the separately scoped Release Source Admission V2 finalizer.",
   "type": "object",
   "required": ["format", "source", "context", "record", "handoff", "bootstrap", "execution", "producer"],
   "properties": {

@@ -36,8 +36,12 @@ import base64
 import binascii
 import hashlib
 import os
+import stat
 from dataclasses import dataclass
 from typing import Any
+
+_MAX_PRIVATE_KEY_BYTES = 64 * 1024
+_MAX_PUBLIC_KEY_BYTES = 64 * 1024
 
 
 class SigningUnavailableError(RuntimeError):
@@ -45,11 +49,21 @@ class SigningUnavailableError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class _PrivateKeySnapshot:
-    """One loaded private key and the identity derived from that same object."""
+class SigningKeySnapshot:
+    """Opaque loaded key plus the identity derived from that exact object.
 
-    key: Any
+    Callers may inspect ``key_id`` and pass the snapshot to
+    :func:`sign_bytes_with_snapshot`; the cryptographic key object itself is an
+    implementation detail and is intentionally excluded from representation.
+    """
+
+    _key: Any
     key_id: str
+
+
+# Private compatibility spelling retained for the existing flat envelope
+# implementations and their monkeypatch seams.
+_PrivateKeySnapshot = SigningKeySnapshot
 
 
 def _crypto():
@@ -60,7 +74,7 @@ def _crypto():
     except ImportError as exc:  # pragma: no cover - exercised via the CLI tests
         raise SigningUnavailableError(
             "verdict signing needs the 'cryptography' package — "
-            "install it with: python -m pip install \"cryptography>=41\""
+            'install it with: python -m pip install "cryptography>=41"'
         ) from exc
     return ed25519, serialization
 
@@ -72,11 +86,150 @@ def _require_bytes(value: object, *, name: str) -> bytes:
     return value
 
 
+def _is_reparse_point(metadata: os.stat_result) -> bool:
+    """Return whether Windows metadata names a link-like reparse point."""
+
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return bool(reparse_flag and attributes & reparse_flag)
+
+
+def _key_file_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    """Capture the metadata that must remain stable around one key read."""
+
+    return (
+        int(metadata.st_dev),
+        int(metadata.st_ino),
+        int(stat.S_IFMT(metadata.st_mode)),
+        int(metadata.st_size),
+        int(metadata.st_mtime_ns),
+        int(metadata.st_ctime_ns),
+    )
+
+
+def _key_path_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    """Capture path/descriptor fields with consistent cross-platform meaning.
+
+    Windows can report slightly different ``st_ctime_ns`` values for the same
+    object through path and descriptor APIs, so creation/change time is used
+    only for descriptor-before/after stability, not path binding.
+    """
+
+    return (
+        int(metadata.st_dev),
+        int(metadata.st_ino),
+        int(stat.S_IFMT(metadata.st_mode)),
+        int(metadata.st_size),
+        int(metadata.st_mtime_ns),
+    )
+
+
+def _read_key_snapshot(
+    key_path: str,
+    *,
+    key_label: str,
+    max_bytes: int,
+) -> bytes:
+    """Read one bounded, stable, regular non-link key snapshot.
+
+    The descriptor is opened once and retained through the read. Path and
+    descriptor metadata are compared before and after the bounded read so a
+    concurrent replacement, truncation, extension, or in-place rewrite fails
+    closed instead of being parsed as a trusted signing identity.
+    """
+
+    try:
+        before_path = os.lstat(key_path)
+    except OSError:
+        # Preserve the path-based API's historical FileNotFoundError and
+        # PermissionError behavior for an input that cannot be inspected.
+        raise
+    if (
+        stat.S_ISLNK(before_path.st_mode)
+        or _is_reparse_point(before_path)
+        or not stat.S_ISREG(before_path.st_mode)
+    ):
+        raise ValueError(f"{key_label} must be a regular non-symlink file: {key_path}")
+    if before_path.st_size > max_bytes:
+        raise ValueError(f"{key_label} exceeds the {max_bytes}-byte limit: {key_path}")
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_NONBLOCK", 0)
+    )
+    try:
+        descriptor = os.open(key_path, flags)
+    except OSError as exc:
+        raise ValueError(f"unable to open {key_label} safely: {key_path}") from exc
+
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or _is_reparse_point(opened)
+            or _key_path_identity(opened) != _key_path_identity(before_path)
+        ):
+            raise ValueError(f"{key_label} changed while it was being opened: {key_path}")
+        if opened.st_size > max_bytes:
+            raise ValueError(f"{key_label} exceeds the {max_bytes}-byte limit: {key_path}")
+
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            pem = handle.read(max_bytes + 1)
+
+        after_descriptor = os.fstat(descriptor)
+        if _key_file_identity(after_descriptor) != _key_file_identity(opened):
+            raise ValueError(f"{key_label} changed while it was being read: {key_path}")
+        if len(pem) > max_bytes:
+            raise ValueError(
+                f"{key_label} exceeded the {max_bytes}-byte limit while reading: {key_path}"
+            )
+        if len(pem) != opened.st_size:
+            raise ValueError(f"{key_label} size changed while it was being read: {key_path}")
+
+        try:
+            after_path = os.lstat(key_path)
+        except OSError as exc:
+            raise ValueError(
+                f"{key_label} path changed while it was being read: {key_path}"
+            ) from exc
+        if (
+            stat.S_ISLNK(after_path.st_mode)
+            or _is_reparse_point(after_path)
+            or _key_path_identity(after_path) != _key_path_identity(opened)
+        ):
+            raise ValueError(f"{key_label} path changed while it was being read: {key_path}")
+        return pem
+    finally:
+        os.close(descriptor)
+
+
+def _read_private_key_snapshot(private_key_path: str) -> bytes:
+    """Read one bounded, stable, regular non-link private-key snapshot."""
+
+    return _read_key_snapshot(
+        private_key_path,
+        key_label="private key",
+        max_bytes=_MAX_PRIVATE_KEY_BYTES,
+    )
+
+
+def _read_public_key_snapshot(public_key_path: str) -> bytes:
+    """Read one bounded, stable, regular non-link public-key snapshot."""
+
+    return _read_key_snapshot(
+        public_key_path,
+        key_label="public key",
+        max_bytes=_MAX_PUBLIC_KEY_BYTES,
+    )
+
+
 def _load_private_key(private_key_path: str):
     """Load an unencrypted PEM Ed25519 private key with stable diagnostics."""
     ed25519, serialization = _crypto()
-    with open(private_key_path, "rb") as f:
-        pem = f.read()
+    pem = _read_private_key_snapshot(private_key_path)
     try:
         key = serialization.load_pem_private_key(pem, password=None)
     except (TypeError, ValueError) as exc:
@@ -98,14 +251,19 @@ def _load_private_key_snapshot(private_key_path: str) -> _PrivateKeySnapshot:
     """
 
     key = _load_private_key(private_key_path)
-    return _PrivateKeySnapshot(key=key, key_id=_key_id(key.public_key()))
+    return _PrivateKeySnapshot(_key=key, key_id=_key_id(key.public_key()))
+
+
+def load_signing_key_snapshot(private_key_path: str) -> SigningKeySnapshot:
+    """Load one opaque key snapshot for an identity-bound signing operation."""
+
+    return _load_private_key_snapshot(private_key_path)
 
 
 def _load_public_key(public_key_path: str):
     """Load a PEM Ed25519 public key with stable diagnostics."""
     ed25519, serialization = _crypto()
-    with open(public_key_path, "rb") as f:
-        pem = f.read()
+    pem = _read_public_key_snapshot(public_key_path)
     try:
         key = serialization.load_pem_public_key(pem)
     except (TypeError, ValueError) as exc:
@@ -189,11 +347,20 @@ def _sign_bytes_with_key_id(
 
     payload = _require_bytes(payload, name="payload")
     snapshot = (
-        _load_private_key_snapshot(private_key)
-        if isinstance(private_key, str)
-        else private_key
+        _load_private_key_snapshot(private_key) if isinstance(private_key, str) else private_key
     )
-    return snapshot.key.sign(payload), snapshot.key_id
+    return snapshot._key.sign(payload), snapshot.key_id
+
+
+def sign_bytes_with_snapshot(
+    payload: bytes,
+    signing_key: SigningKeySnapshot,
+) -> tuple[bytes, str]:
+    """Sign exact bytes with a previously loaded identity-bound key snapshot."""
+
+    if type(signing_key) is not _PrivateKeySnapshot:
+        raise TypeError("signing_key must be a key snapshot returned by load_signing_key_snapshot")
+    return _sign_bytes_with_key_id(payload, signing_key)
 
 
 def verify_bytes(payload: bytes, signature: bytes, public_key_path: str) -> bool:
