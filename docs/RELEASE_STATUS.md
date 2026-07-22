@@ -34,17 +34,26 @@ distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
 
-The minimal `v4.0.2` release ledger records the published source identity,
-exact release asset bytes, release/build attestations, Marketplace observation,
-and successful tag CI:
+The current minimal `v4.1.0` release ledger records the published source
+identity, exact release asset bytes, release/build attestations, the propagated
+Marketplace version, and successful tag CI:
+
+- `tests/baseline/v4.1.0/RELEASE_LEDGER.json`
+- `tests/baseline/v4.1.0/SHA256SUMS`
+- `tests/baseline/v4.1.0/pyz/evo-guard.pyz`
+
+It is deliberately not described as a full behavioral capture: no v4.1.0
+command, verdict, signed-evidence, verifier-pack, benchmark, or live Release
+Source Admission V2 fixture was created merely by copying historical evidence.
+Shipping the V2 implementation does not make this release ledger a live V2
+pilot or an admission decision.
+
+The same bounded identity/provenance record for the previous immutable release
+remains available at:
 
 - `tests/baseline/v4.0.2/RELEASE_LEDGER.json`
 - `tests/baseline/v4.0.2/SHA256SUMS`
 - `tests/baseline/v4.0.2/pyz/evo-guard.pyz`
-
-It is deliberately not described as a full behavioral capture: no v4.0.2
-command, verdict, signed-evidence, verifier-pack, or benchmark fixtures were
-created merely by copying v4.0.1 evidence.
 
 For byte-exact offline verification of the frozen `v4.0.1` baseline, see:
 

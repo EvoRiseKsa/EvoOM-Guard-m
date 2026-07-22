@@ -1,8 +1,8 @@
 ﻿# Release gate checklist (v4 baseline hardening)
 
 Use this checklist for the published `v4.0.1` behavioral baseline, the minimal
-`v4.0.2` release ledger, and as the minimum gate for later releases before
-enforcing EvoOM Guard as a required CI merge gate.
+`v4.0.2` and `v4.1.0` release ledgers, and as the minimum gate for later releases
+before enforcing EvoOM Guard as a required CI merge gate.
 
 ## Required repository controls
 
@@ -67,19 +67,28 @@ enforcing EvoOM Guard as a required CI merge gate.
   not treated as cryptographic proof of that external state.
 - `ERRATA.md` is reviewed and the immutable `v4.0.1` tag/assets remain untouched.
 
-## v4.0.2 release-ledger verification
+## v4.0.2 and v4.1.0 release-ledger verification
 
-- `tests/baseline/v4.0.2/RELEASE_LEDGER.json` validates against
+- Each `RELEASE_LEDGER.json` under `tests/baseline/v4.0.2/` and
+  `tests/baseline/v4.1.0/` validates against
   `tests/baseline/schema/release-ledger-v1.schema.json`.
-- Its commit, tree, release/run identifiers, asset sizes/digests, attestation
+- Each ledger's commit, tree, release/run identifiers, asset sizes/digests,
+  attestation
   identities, Marketplace observation, and tag-CI result are the facts observed
   after publication; they are not inferred from source-tree version strings.
-- `SHA256SUMS` and `pyz/evo-guard.pyz` are the exact downloaded immutable release
-  assets. The checksum bytes, file sizes, SHA-256 values, and offline `version`
-  command are regression-tested.
+- Each `SHA256SUMS` and `pyz/evo-guard.pyz` pair contains the exact downloaded
+  immutable release assets. The checksum bytes, file sizes, SHA-256 values, and
+  offline `version` command are regression-tested.
+- Release and build attestations are verified against the exact tag, source SHA,
+  signer workflow, source ref, and GitHub-hosted runner boundary before their
+  externally observed identities are recorded.
+- Marketplace propagation and the tag-triggered CI result, including
+  `release-tag-guard` and `publish-pyz`, are observed after publication rather
+  than assumed from the release form.
 - This minimal ledger is not a behavioral baseline. It intentionally contains
-  no copied v4.0.1 command output, verdict, signature, verifier-pack, benchmark,
-  or erratum evidence.
+  no copied historical command output, verdict, signature, verifier-pack,
+  benchmark, or erratum evidence. The v4.1.0 ledger also does not claim a live
+  Release Source Admission V2 pilot merely because that implementation ships.
 
 Update this file with every major process change (workflow templates, policy schema,
 attestation format, or check ownership mapping).
