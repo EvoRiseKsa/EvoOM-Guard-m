@@ -62,6 +62,18 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Operational evidence completed
 
+- The current-runtime
+  [`v4.0.2` finalizer pilot](https://github.com/EvoRiseKsa/evoom-guard-v4-finalizer-pilot)
+  completed a fresh same-owner, cross-account Trusted Finalizer `ALLOW` and a
+  separately keyed Artifact Admission round for one exact regular file. The
+  protected admission job freshly verified the file's GitHub Artifact
+  Attestation, the exact finalizer source/head, and the retained evidence; it
+  also exercised 13 negative controls. Exact run IDs, artifact IDs, digests,
+  and downloaded bytes are preserved in
+  [`ARTIFACT_ADMISSION_ROUND1.md`](https://github.com/EvoRiseKsa/evoom-guard-v4-finalizer-pilot/blob/main/ARTIFACT_ADMISSION_ROUND1.md).
+  This establishes only the recorded regular-file/provider relation. It is not
+  build reproducibility, release, OCI, registry, deployment, production, or
+  independent-review evidence.
 - The v3.7.0 finalizer pilot completed one same-owner, cross-account raw-Git
   `ALLOW` exercise and preserved its exact verification inputs in
   [`ROUND2_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot/blob/main/ROUND2_RESULTS.md).
@@ -111,22 +123,17 @@ needs — not feature accumulation. The order matters:
 1. **Finish the receipt-pilot negative matrix.** Preserve controlled
    altered-artifact and wrong-workflow/run-attempt rejections. The clean chain,
    moved-`main`, and failed-A cases are complete; none is an admission result.
-2. **Current-release operational pilot.** Exercise the `v4.0.2` reference in a
-   new disposable non-production consumer without rewriting the frozen v3.7.0
-   evidence. Do not describe same-owner cross-account approval as independent
-   review or make the check production-required without a genuinely independent
-   operator and protected trust roots.
-3. **Trusted build and merge-candidate boundary.** Before using artifact
-   admission for a release, verify a provider-specific immutable build
-   provenance statement and bind it to a protected build and merge-candidate
-   identity. The current V1 file relation alone cannot support an OCI,
-   package-release, registry, or deployment claim.
-4. **Release authorization only after authenticated production evidence.** A
+2. **Release authorization only after authenticated production evidence.** A
    release-source finalizer may issue `ALLOW` only after the producer execution,
    run/attempt, source, workflow, provenance, and artifact relations are freshly
    verified outside candidate authority. The current release-source path stays
    non-admitting until those prerequisites exist.
-5. **Only after external evidence.** Stronger fork/VM boundaries, organization
+3. **Release-artifact and merge-candidate boundary.** Extend the completed
+   regular-file/provider pilot with a distinct protected-main release-source
+   `ALLOW`, the actual release artifact digest, its provider attestation, and a
+   separately privileged draft-release consumer. OCI, registry, deployment,
+   and reproducibility remain separate later contracts.
+4. **Only after external evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and their onboarding failures. They are not assumed product needs.
 
