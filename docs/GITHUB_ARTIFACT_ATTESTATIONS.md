@@ -7,10 +7,10 @@
 
 ## Status and exact scope
 
-[`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2)
-is the current published immutable GitHub Release at
-`3374164c65ad692049929fdc903eafb47c843a8e`. Its `evo-guard.pyz` asset has
-SHA-256 `7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3`.
+[`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0)
+is the current published immutable GitHub Release. Its immutable tag identifies
+the exact protected-`main` source commit, and the release's `SHA256SUMS` asset
+identifies the exact `evo-guard.pyz` bytes.
 The release has a GitHub release attestation, and this exact asset has a
 separate GitHub Actions build-artifact attestation. Verification against the
 published asset succeeds when constrained to the repository, the `Release`
@@ -36,14 +36,20 @@ of deployment.
 
 ## Consumer verification
 
-Download the asset you intend to consume and verify its checksum first. For the
-published v4.0.2 asset, the expected SHA-256 is
-`7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3`.
+Download the asset and checksum manifest, then verify the exact bytes before
+use:
+
+```bash
+gh release download v4.1.0 --repo EvoRiseKsa/EvoOM-Guard-m \
+  --pattern evo-guard.pyz --pattern SHA256SUMS
+sha256sum --check SHA256SUMS
+```
+
 Then use a current GitHub CLI in an online environment. First verify the
 release attestation and its assets:
 
 ```bash
-gh release verify v4.0.2 --repo EvoRiseKsa/EvoOM-Guard-m
+gh release verify v4.1.0 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
 Then verify the separate build-artifact attestation, supplying the exact
@@ -51,11 +57,12 @@ repository/workflow/source identity rather than relying on a broad owner-only
 lookup:
 
 ```bash
+SOURCE_DIGEST="$(gh api repos/EvoRiseKsa/EvoOM-Guard-m/commits/v4.1.0 --jq .sha)"
 gh attestation verify ./evo-guard.pyz \
   --repo EvoRiseKsa/EvoOM-Guard-m \
   --signer-workflow EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml \
   --source-ref refs/heads/main \
-  --source-digest 3374164c65ad692049929fdc903eafb47c843a8e \
+  --source-digest "$SOURCE_DIGEST" \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --deny-self-hosted-runners \
   --format json
@@ -107,6 +114,6 @@ thereby prove:
 
 This is a concrete prerequisite for the provider-specific portion of issue
 [#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78), not a closure of
-that issue. The v4.0.2 attestation does not implement or exercise a protected,
+that issue. The v4.1.0 attestation does not implement or exercise a protected,
 end-to-end finalizer-to-artifact admission run; that separate work remains
 required before any such claim.

@@ -1,36 +1,30 @@
 ---
 source_version: 4.1.0
-latest_published_version: 4.0.2
-state: pre-release
+latest_published_version: 4.1.0
+state: published
 ---
 
 # Release status
 
-The repository source declares **v4.1.0**, which is not yet a published
-immutable consumer release. The latest published release remains:
-[`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2),
-published from commit
-[`3374164c65ad692049929fdc903eafb47c843a8e`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/commit/3374164c65ad692049929fdc903eafb47c843a8e).
-Its `evo-guard.pyz` asset has SHA-256
-`7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3`.
-GitHub verified the immutable release attestation, and the asset has a separate
-GitHub Actions build-artifact attestation bound to the release workflow,
-`refs/heads/main`, and the same source commit. Tag-triggered CI run
-[`29863741885`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29863741885)
-completed successfully, including `release-tag-guard` and `publish-pyz`.
+The repository publishes **v4.1.0** as the current immutable consumer release:
+[`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0).
+The immutable tag identifies the exact protected-`main` source commit. The
+release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
+provides a release attestation for the immutable release and a separate GitHub
+Actions build-artifact attestation for those bytes.
 
 The `v4.1.0` source line adds Release Source Admission V2 and associated
-provider/Git hardening. It has not yet produced an immutable tag, release asset,
-checksum, build attestation, Marketplace observation, or live V2 pilot. Do not
-teach or consume `@v4.1.0` until that publication and verification finish.
+provider/Git hardening. This bootstrap release cannot admit its own source and
+does not by itself establish a live V2 pilot, release-artifact authorization,
+production readiness, or independent security review.
 
-Consumer usage should pin to `v4.0.2` only when aligned with your acceptance
+Consumer usage should pin to `v4.1.0` only when aligned with your acceptance
 policy (typically strict SHA pinning in production). This release contains the
 source-available baseline and hardening changes intended for general evaluation
 and early adoption; it is not yet a third-party audited service.
 
 `evo-guard init` now requires `--ref` explicitly. Supply an independently
-inspected existing release tag such as `--ref v4.0.2`, or a full 40-hex commit
+inspected existing release tag such as `--ref v4.1.0`, or a full 40-hex commit
 SHA for the strictest pin. It deliberately refuses a moving branch name and
 does not guess a "latest" release.
 

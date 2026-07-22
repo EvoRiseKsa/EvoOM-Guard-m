@@ -15,8 +15,7 @@ REFERENCE_PAIRS = (
 )
 
 FROZEN_EXAMPLE_RELEASE = "v3.7.0"
-CURRENT_REFERENCE_RELEASE = "v4.0.2"
-CURRENT_REFERENCE_SHA256 = "7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3"
+CURRENT_REFERENCE_RELEASE = "v4.1.0"
 
 
 def _text(path: Path) -> str:
@@ -167,7 +166,8 @@ def test_reference_finalizer_documents_the_immutable_executable_root() -> None:
     documentation = _text(ROOT / "docs" / "TRUSTED_FINALIZER.md")
     assert "Round 1 audit" in documentation
     assert CURRENT_REFERENCE_RELEASE in documentation
-    assert CURRENT_REFERENCE_SHA256 in documentation
+    assert "SHA256SUMS" in documentation
+    assert "EVOGUARD_GUARD_ARTIFACT_SHA256" in documentation
 
 
 def test_reference_finalizer_release_downloads_are_explicit_and_versioned() -> None:

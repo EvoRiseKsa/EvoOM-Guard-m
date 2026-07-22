@@ -262,7 +262,7 @@ jobs:
           printf '%s  %s\n' "$GUARD_ARTIFACT_SHA256" "$RUNNER_TEMP/evo-guard.pyz" > "$RUNNER_TEMP/guard.sha256"
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$RUNNER_TEMP/evo-guard.pyz" \
-            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.0.2/evo-guard.pyz"
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.1.0/evo-guard.pyz"
           sha256sum --check "$RUNNER_TEMP/guard.sha256"
           chmod 0755 "$RUNNER_TEMP/evo-guard.pyz"
 

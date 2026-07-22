@@ -27,7 +27,7 @@ validated security service.
 
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
 | --- | --- | --- | --- |
-| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | The repository publishes [`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2), the latest published immutable consumer release at commit `3374164c65ad692049929fdc903eafb47c843a8e`. See [release status](RELEASE_STATUS.md). Consumers must inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
+| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | The repository publishes [`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0), the latest published immutable consumer release. See [release status](RELEASE_STATUS.md). Consumers must inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
 | [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) *(public archive)* | Frozen reproducible demonstration of honest fixes, protected-harness tampering, stdout forgery, and black-box evidence. | Its public scenario is pinned to **v3.5.2** and frozen at [`proof-v3.5.2`](https://github.com/EvoRiseKsa/evoom-guard-demo/releases/tag/proof-v3.5.2). | Any capability added in v3.6 or v3.7, including the raw-Git Trusted Finalizer. |
 | [`evoom-guard-eval`](https://github.com/EvoRiseKsa/evoom-guard-eval) *(public archive)* | Historical evaluation protocol and reproducibility record. | Its public record is pinned to **v3.5.2**, frozen at [`historical-v3.5.2-evaluation`](https://github.com/EvoRiseKsa/evoom-guard-eval/releases/tag/historical-v3.5.2-evaluation), and explicitly records both conformance and infrastructure failures. | A general accuracy rate, an independent evaluation, or a v3.7 result. |
 | [`evoom-guard-finalizer-pilot`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot) *(historical v3.7 pilot)* | Frozen operational evidence for the v3.7 Trusted Finalizer reference. | It records a same-owner, cross-account v3.7.0 raw-Git `ALLOW` exercise and public verification inputs in [`ROUND2_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot/blob/main/ROUND2_RESULTS.md). | A v4 result, deployed production merge gate, independent audit, hostile-runner boundary, or software-release provenance claim. |
@@ -49,15 +49,15 @@ validation. See [governance](GOVERNANCE.md).
 | `--blackbox-only` | Adds a judge-owned external process/protocol report and can fail closed on delivered isolation. | It is a narrowly supported target model, not a universal sandbox or proof of artifact provenance. |
 | Trusted Finalizer reference | Separates untrusted re-verification from a signing job that re-derives specified raw-Git bindings before key access. | It is a reference template and pilot, not enabled as this repository's merge requirement or proof of an unbreakable runner boundary. |
 | Artifact admission V1 | Can bind one observed regular-file digest and size to a verified finalizer `ALLOW`. The v4 pilot exercised this with a fresh, identity-constrained GitHub provider check and retained evidence. | It does not prove how that file was built, published, deployed, or secured, and the completed round is PR-head-bound rather than protected-main release authorization. |
-| GitHub artifact attestations | [`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2) publishes `evo-guard.pyz` with SHA-256 `7813db5c99f27f780ec31bbaa124b5526405783d1f53caecc32f70aabfbc13c3` and a GitHub Actions build-artifact attestation. | [`v3.7.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) predates that workflow and has no such GitHub Actions artifact attestation. An attestation is provenance evidence, not a correctness or security verdict. |
-| GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. The current unshipped source additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. | Those new hardening changes are not evidence for the published `v4.0.2` artifact. The adapter remains same-repository only and is not a general supply-chain guarantee, production gate, or independent verification of arbitrary provenance data. |
+| GitHub artifact attestations | [`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0) publishes `evo-guard.pyz`, its exact `SHA256SUMS`, and a GitHub Actions build-artifact attestation. | [`v3.7.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) predates that workflow and has no such GitHub Actions artifact attestation. An attestation is provenance evidence, not a correctness or security verdict. |
+| GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. Published `v4.1.0` additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. | Shipping the hardening is not a live V2 pilot or proof for an arbitrary artifact. The adapter remains same-repository only and is not a general supply-chain guarantee, production gate, or independent verification of arbitrary provenance data. |
 | Authenticated producer receipt pilot | In the clean round, B created one bounded receipt and C freshly verified one GitHub Artifact Attestation for its exact bytes. The moved-`main` control failed before receipt creation/download. The final matrix then rejected wrong-workflow, wrong-run-attempt, and altered-receipt substitutions; the altered-byte control included a positive provider baseline for the original bytes on the same runner. | These are non-admitting observations only. They do not independently prove A executed Guard and do not authorize a release, deployment, merge, artifact admission, or `ALLOW`. |
-| Release Source Admission V2 *(current source; unshipped)* | Implements a signed protected-main source `ALLOW` binding A/B/C workflow blobs and run attempts, strong receipt evidence, semantic provider output, externally checked signed Git/`gh` digest and UID/GID pins, a provider-inaccessible signing-key path, and five distinct key domains. | It has not been published or exercised in a live V2 pilot. It does not bind a release artifact or publication, is not a production gate, and has no independent review. The historical receipt pilot is not V2 `ALLOW` evidence. |
+| Release Source Admission V2 *(published bootstrap; not yet exercised)* | Implements a signed protected-main source `ALLOW` binding A/B/C workflow blobs and run attempts, strong receipt evidence, semantic provider output, externally checked signed Git/`gh` digest and UID/GID pins, a provider-inaccessible signing-key path, and five distinct key domains. | Publishing the implementation is not a live V2 pilot. It does not bind a release artifact or publication, is not a production gate, and has no independent review. The historical receipt pilot is not V2 `ALLOW` evidence. |
 
 For exact threat models and non-guarantees, read [ASSURANCE.md](ASSURANCE.md),
 [TRUSTED_FINALIZER.md](TRUSTED_FINALIZER.md), and
 [GITHUB_ARTIFACT_ATTESTATIONS.md](GITHUB_ARTIFACT_ATTESTATIONS.md). The
-unshipped V2 source contract is specified separately in
+published V2 source contract is specified separately in
 [RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md).
 
 ## Public code versus private operational assets
@@ -72,7 +72,7 @@ depending on them. The following boundary is intentional.
 
 The public source is not a trade secret. Historical releases through v3.8.0
 remain governed by the licenses shipped with those exact releases. The current
-published immutable [`v4.0.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.0.2)
+published immutable [`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0)
 release ships the EvoRise Source-Available License 1.0. It does not prevent
 someone from studying the design or independently implementing the ideas.
 Long-term differentiation therefore has to come from independently validated
@@ -80,8 +80,8 @@ operational practice, high-quality private policy/packs and data, trustworthy
 service operation, and customer integrations—not from obscuring already
 published Python or workflow files.
 
-The source tree declares pre-release version `4.1.0`; the latest published immutable
-consumer release is the separate, fixed `v4.0.2` tag. The project cannot
+The source tree and latest published immutable consumer release are both
+version `4.1.0`. The project cannot
 retract rights already granted with v3.8.0; see
 [LICENSE_HISTORY.md](../LICENSE_HISTORY.md). The v4 license applies only to
 material distributed with it. Commercial licensing is administered by EvoRise

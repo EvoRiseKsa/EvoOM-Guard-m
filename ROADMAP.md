@@ -14,10 +14,10 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Shipped today
 
-- **Immutable `v4.0.2` consumer release** — the published zipapp is pinned by
-  its release ledger and SHA-256 and has a GitHub build-artifact attestation.
-  The `v4.0.2` ledger is an identity/provenance record, not a newly captured
-  behavioral baseline or an independent security review.
+- **Immutable `v4.1.0` consumer release** — the published zipapp is pinned by
+  its release `SHA256SUMS` and has a GitHub build-artifact attestation. This is
+  publication/provenance evidence, not a newly captured behavioral baseline or
+  an independent security review.
 
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
@@ -60,10 +60,10 @@ evidence used to judge it. Guard still focuses on one narrow question:
   read-only candidate mounts. Setup fidelity permits conventional new outputs;
   additional `setup_output_globs` are explicit trusted policy.
 
-## Implemented in the current source, not yet shipped
+## Shipped source contract awaiting operational evidence
 
-- **Release Source Admission V2** — a separately keyed protected-main source
-  `ALLOW` now binds A/B/C workflow blobs and run attempts, a canonical producer
+- **Release Source Admission V2** — published in `v4.1.0`, this separately keyed
+  protected-main source `ALLOW` binds A/B/C workflow blobs and run attempts, a canonical producer
   receipt, strong execution evidence, one semantically constrained GitHub
   attestation result, and an exact five-domain key-separation contract. The
   admission path requires a SHA-256-pinned Git snapshot plus POSIX root-to-
@@ -71,12 +71,12 @@ evidence used to judge it. Guard still focuses on one narrow question:
   provider identity cannot read the bound signing-key path before launch. The
   signed manifest exposes both tool digests and the provider UID/GID for
   detached comparison against external expectations.
-  V1 remains DENY-only. This source implementation is not a published consumer
-  release, has not completed a live V2 pilot, and is not a production gate.
+  V1 remains DENY-only. Publishing the implementation does not complete a live
+  V2 pilot and does not make it a production gate.
 
 ## Operational evidence completed
 
-- The current-runtime
+- The frozen
   [`v4.0.2` finalizer pilot](https://github.com/EvoRiseKsa/evoom-guard-v4-finalizer-pilot)
   completed a fresh same-owner, cross-account Trusted Finalizer `ALLOW` and a
   separately keyed Artifact Admission round for one exact regular file. The
@@ -137,23 +137,19 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Finish and bootstrap the source authorization.** Complete full-suite,
-   static, zipapp, architecture, and release review, then publish V2 through the
-   existing reviewed release process. The bootstrap release cannot admit
-   itself.
-2. **Exercise V2 before relying on it.** Run a disposable protected-main A/B/C
+1. **Exercise V2 before relying on it.** Run a disposable protected-main A/B/C
    pilot using the published bootstrap runtime, pinned Git/`gh`, mandatory
    provider isolation, five distinct key domains, and retained positive and
    negative evidence.
-3. **Release-artifact and publication boundary.** Extend the completed
+2. **Release-artifact and publication boundary.** Extend the completed
    regular-file/provider pilot with a distinct protected-main release-source
    `ALLOW`, the actual release artifact digest, its provider attestation, and a
    separately privileged draft-release consumer. OCI, registry, deployment,
    and reproducibility remain separate later contracts.
-4. **Independent evidence.** Request external security review and a genuinely
+3. **Independent evidence.** Request external security review and a genuinely
    blind evaluation; same-owner cross-account review remains operational
    separation, not independence.
-5. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
+4. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and onboarding failures. They are not assumed product needs.
 
