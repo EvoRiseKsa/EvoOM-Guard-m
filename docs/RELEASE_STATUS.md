@@ -1,25 +1,23 @@
 ---
 source_version: 4.2.0
-latest_published_version: 4.1.0
-state: pre-release
+latest_published_version: 4.2.0
+state: published
 ---
 
 # Release status
 
-The repository source declares **v4.2.0**, which is not yet a published
-immutable consumer release. The latest published release remains:
-[`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0).
+The repository publishes **v4.2.0** as the current immutable consumer release:
+[`v4.2.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.2.0).
 The immutable tag identifies the exact protected-`main` source commit. The
 release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
 provides a release attestation for the immutable release and a separate GitHub
 Actions build-artifact attestation for those bytes.
 
-The `v4.2.0` source candidate adds Release Artifact Admission V1 and its sixth
-trust-key domain. It has not yet produced an immutable tag, release asset,
-checksum, build attestation, Marketplace observation, or live E/F/G pilot.
-The first release carrying this contract is a bootstrap and cannot use the new
-contract to authorize itself. Do not teach or consume `@v4.2.0` until the
-publication and verification steps finish.
+The `v4.2.0` source line adds Release Artifact Admission V1 and its sixth
+trust-key domain. This first release carrying the contract is a bootstrap and
+did not use the new contract to authorize itself. Publication does not by
+itself establish a live E/F/G pilot, artifact-publication authorization,
+reproducible builds, production readiness, or independent security review.
 
 The published `v4.1.0` source line added Release Source Admission V2 and
 associated provider/Git hardening. That bootstrap release did not admit its own
@@ -30,13 +28,13 @@ That later evidence does not change the frozen release, bind a release artifact
 or publication, establish production readiness, or constitute independent
 security review.
 
-Consumer usage should pin to `v4.1.0` only when aligned with your acceptance
+Consumer usage should pin to `v4.2.0` only when aligned with your acceptance
 policy (typically strict SHA pinning in production). This release contains the
 source-available baseline and hardening changes intended for general evaluation
 and early adoption; it is not yet a third-party audited service.
 
 `evo-guard init` now requires `--ref` explicitly. Supply an independently
-inspected existing release tag such as `--ref v4.1.0`, or a full 40-hex commit
+inspected existing release tag such as `--ref v4.2.0`, or a full 40-hex commit
 SHA for the strictest pin. It deliberately refuses a moving branch name and
 does not guess a "latest" release.
 
@@ -46,9 +44,10 @@ distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
 
-The current minimal `v4.1.0` release ledger records the published source
-identity, exact release asset bytes, release/build attestations, the propagated
-Marketplace version, and successful tag CI:
+The latest committed minimal release ledger remains `v4.1.0` until the
+post-publication `v4.2.0` online facts can be observed and frozen. It records
+the published source identity, exact release asset bytes, release/build
+attestations, the propagated Marketplace version, and successful tag CI:
 
 - `tests/baseline/v4.1.0/RELEASE_LEDGER.json`
 - `tests/baseline/v4.1.0/SHA256SUMS`
@@ -60,7 +59,7 @@ Source Admission V2 fixture was created merely by copying historical evidence.
 Shipping the V2 implementation does not make this release ledger a live V2
 pilot or an admission decision.
 
-The same bounded identity/provenance record for the previous immutable release
+The same bounded identity/provenance record for an earlier immutable release
 remains available at:
 
 - `tests/baseline/v4.0.2/RELEASE_LEDGER.json`

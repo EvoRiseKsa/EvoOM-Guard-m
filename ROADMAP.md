@@ -14,12 +14,13 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Shipped today
 
-- **Immutable `v4.1.0` consumer release** — the published zipapp is pinned by
+- **Immutable `v4.2.0` consumer release** — the published zipapp is pinned by
   its release `SHA256SUMS` and has a GitHub build-artifact attestation. This is
   publication/provenance evidence, not a newly captured behavioral baseline or
   an independent security review. Its exact post-publication identity and
-  provenance facts are frozen in
-  [`tests/baseline/v4.1.0/`](tests/baseline/v4.1.0/).
+  provenance facts are frozen only after they can be observed; the prior
+  `v4.1.0` ledger remains in
+  [`tests/baseline/v4.1.0/`](tests/baseline/v4.1.0/) until that follow-up lands.
 
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
@@ -79,14 +80,15 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Implemented contract awaiting operational evidence
 
-- **Release Artifact Admission V1** — the `v4.2.0` source candidate implements a
+- **Release Artifact Admission V1** — published in the `v4.2.0` bootstrap, this
+  contract implements a
   sixth-key protected-main artifact `ALLOW`. It re-verifies one exact `.rsae`
   source admission against external roots and nested tool pins; binds one
   detached regular artifact, protected E/F workflow identities and raw-Git
   blobs, exact builder run/attempt, and a fresh constrained GitHub Artifact
   Attestation; then emits a canonical signed `.raae` that can be verified
-  offline. This implementation has no live E/F/G pilot evidence yet, is not
-  contained in immutable `v4.1.0`, and grants no publication, deployment, OCI,
+  offline. This implementation has no live E/F/G pilot evidence yet and grants
+  no publication, deployment, OCI,
   registry, production, or reproducibility claim. See
   [`docs/RELEASE_ARTIFACT_ADMISSION_V1.md`](docs/RELEASE_ARTIFACT_ADMISSION_V1.md).
 
@@ -163,9 +165,8 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Release-artifact evidence.** Publish the implemented adapter through the
-   existing release workflow as a `v4.2.0` bootstrap; it cannot use itself to
-   authorize the release that first contains it. Then run one E/F/G pilot,
+1. **Release-artifact evidence.** Use the published `v4.2.0` bootstrap—which did
+   not and could not authorize the release that first contained it—to run one E/F/G pilot,
    disabled by default, from a later protected-main source: E builds and attests
    one exact artifact without the signing key, protected F re-verifies the
    `.rsae`, raw-Git workflow blobs, run identity, and provider statement before

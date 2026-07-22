@@ -7,7 +7,7 @@
 
 ## Status and exact scope
 
-[`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0)
+[`v4.2.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.2.0)
 is the current published immutable GitHub Release. Its immutable tag identifies
 the exact protected-`main` source commit, and the release's `SHA256SUMS` asset
 identifies the exact `evo-guard.pyz` bytes.
@@ -40,7 +40,7 @@ Download the asset and checksum manifest, then verify the exact bytes before
 use:
 
 ```bash
-gh release download v4.1.0 --repo EvoRiseKsa/EvoOM-Guard-m \
+gh release download v4.2.0 --repo EvoRiseKsa/EvoOM-Guard-m \
   --pattern evo-guard.pyz --pattern SHA256SUMS
 sha256sum --check SHA256SUMS
 ```
@@ -49,7 +49,7 @@ Then use a current GitHub CLI in an online environment. First verify the
 release attestation and its assets:
 
 ```bash
-gh release verify v4.1.0 --repo EvoRiseKsa/EvoOM-Guard-m
+gh release verify v4.2.0 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
 Then verify the separate build-artifact attestation, supplying the exact
@@ -57,7 +57,7 @@ repository/workflow/source identity rather than relying on a broad owner-only
 lookup:
 
 ```bash
-SOURCE_DIGEST="$(gh api repos/EvoRiseKsa/EvoOM-Guard-m/commits/v4.1.0 --jq .sha)"
+SOURCE_DIGEST="$(gh api repos/EvoRiseKsa/EvoOM-Guard-m/commits/v4.2.0 --jq .sha)"
 gh attestation verify ./evo-guard.pyz \
   --repo EvoRiseKsa/EvoOM-Guard-m \
   --signer-workflow EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml \
@@ -114,6 +114,6 @@ thereby prove:
 
 This is a concrete prerequisite for the provider-specific portion of issue
 [#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78), not a closure of
-that issue. The v4.1.0 attestation does not implement or exercise a protected,
-end-to-end finalizer-to-artifact admission run; that separate work remains
-required before any such claim.
+that issue. The `v4.2.0` source contains Release Artifact Admission V1, but the
+release's build attestation alone does not exercise a protected end-to-end E/F/G
+admission run. A separate live pilot remains required before any such claim.

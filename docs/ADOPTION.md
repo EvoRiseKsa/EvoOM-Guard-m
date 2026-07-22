@@ -14,7 +14,7 @@ verdict + exit code for a pipeline.
 
 ## 1. Turn it on (one command)
 
-[`v4.1.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0)
+[`v4.2.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.2.0)
 is the current published immutable GitHub Release. For a stricter CI pin, use
 the full commit SHA resolved from that release tag.
 
@@ -22,8 +22,8 @@ From the repo you want to protect (EvoGuard is public; pin an immutable release
 tag):
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.1.0"  # published release
-evo-guard init --ref v4.1.0 --test-command "python -m pytest -q"  # writes workflow + .evoguard.json when absent
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.2.0"  # published release
+evo-guard init --ref v4.2.0 --test-command "python -m pytest -q"  # writes workflow + .evoguard.json when absent
 git add .github/workflows/evoguard.yml .evoguard.json
 git commit -m "ci: add EvoGuard policy" && git push
 ```
@@ -32,7 +32,7 @@ That's it. On the next PR, the Action diffs it against the base, runs your suite
 posts a verdict comment, and **fails the check on anything but `PASS`**.
 
 > No-action alternative — the two-line `git diff | evo-guard guard --diff -` form, or
-> `evo-guard init --ref v4.1.0 --stdout` to review the workflow first. See [`GUARD.md`](GUARD.md).
+> `evo-guard init --ref v4.2.0 --stdout` to review the workflow first. See [`GUARD.md`](GUARD.md).
 
 > **No repo access / no pip?** Download the single-file `evo-guard.pyz` from the
 > release assets and run `python evo-guard.pyz …` — the core is stdlib-only, so it
@@ -379,7 +379,7 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: the published `@v4.1.0` release tag,
+EvoGuard is a *gate*, so pin what you run: the published `@v4.2.0` release tag,
 or `@<sha>` (immutable, strictest for CI). Track `@main` only for a quick look.
 
 ## What it does not do

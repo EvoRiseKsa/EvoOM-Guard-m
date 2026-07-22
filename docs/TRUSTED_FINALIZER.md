@@ -36,7 +36,7 @@ own branch protection, environment/reviewer controls, protected Guard-artifact
 digest, and the Round 1 audit below.
 
 The implementation-ready `.github/workflows/` copies currently download the
-immutable `v4.1.0` zipapp. Before enabling them, download the release's
+immutable `v4.2.0` zipapp. Before enabling them, download the release's
 `evo-guard.pyz` and `SHA256SUMS`, verify the manifest and release attestation,
 and copy that exact digest into the protected
 `EVOGUARD_GUARD_ARTIFACT_SHA256` variable. The workflow must compare against
@@ -46,7 +46,7 @@ downloaded executable or a mutable URL during the job.
 The `examples/trusted-finalizer/` pair remains a frozen byte-pinned v3.7.0
 reference for the published v3.7 pilot and must not be silently rewritten.
 New current-release exercises should copy the implementation-ready workflow
-pair, review it as a protected change, set the exact v4.1.0 digest from the
+pair, review it as a protected change, set the exact v4.2.0 digest from the
 published `SHA256SUMS`, and
 complete the audit before enforcement.
 The raw-Git derivation contract is specified in

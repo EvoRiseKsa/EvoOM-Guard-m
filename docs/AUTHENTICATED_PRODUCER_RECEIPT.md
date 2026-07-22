@@ -129,8 +129,8 @@ the consumer must bind its exact artifact and its trusted workflow identity.
 ## Current V2 boundary and remaining operational work
 
 Do not attach this receipt alone to `release.yml`, branch protection, a
-deployment, or a Marketplace publication. Published `v4.1.0` and the current
-`v4.2.0` source candidate implement the distinct V2 envelope/key domain,
+deployment, or a Marketplace publication. `v4.1.0` introduced—and published
+`v4.2.0` retains—the distinct V2 envelope/key domain,
 protected C runtime capability, raw-Git A/B/C workflow bindings, replay
 handling, fresh isolated provider check, and detached verifier. Those
 implementation facts do not make this older data-only reference topology an
@@ -142,9 +142,9 @@ privileged release consumer that verifies the V2 `ALLOW` and independently
 binds the actual built artifact to its source. The current source is not a
 production gate and the bootstrap release cannot admit itself.
 
-The first release that contains these commands cannot safely use itself as the
-bootstrap runtime. Publish it through the existing process first; only a later
-reviewed run can use separately established runtime provenance and an
+The first release containing these commands could not safely use itself as the
+bootstrap runtime. It was published through the existing process; only a later
+reviewed run could use separately established runtime provenance and an
 administrator-audited URL/SHA control-plane pin.
 
 ## Commands
