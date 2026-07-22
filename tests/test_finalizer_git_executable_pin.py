@@ -23,12 +23,24 @@ from evoom_guard.finalizer_derivation import (
 )
 
 
-def _enable_posix_snapshot_seam(monkeypatch: pytest.MonkeyPatch) -> None:
+def _enable_posix_snapshot_seam(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    snapshot_root: Path | None = None,
+) -> None:
     monkeypatch.setattr(
         finalizer_derivation,
         "_git_executable_pinning_supported",
         lambda: True,
     )
+    if snapshot_root is not None:
+        temporary_directory = finalizer_derivation.tempfile.TemporaryDirectory
+        canonical_root = str(snapshot_root.resolve())
+        monkeypatch.setattr(
+            finalizer_derivation.tempfile,
+            "TemporaryDirectory",
+            lambda *, prefix: temporary_directory(prefix=prefix, dir=canonical_root),
+        )
 
 
 def _fake_executable(tmp_path: Path, payload: bytes = b"reviewed-git-executable\n") -> Path:
@@ -95,7 +107,7 @@ def test_git_executable_pin_validates_path_type_digest_and_frozen_contract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _enable_posix_snapshot_seam(monkeypatch)
+    _enable_posix_snapshot_seam(monkeypatch, snapshot_root=tmp_path)
     executable = _fake_executable(tmp_path)
     digest = hashlib.sha256(executable.read_bytes()).hexdigest()
 
@@ -120,7 +132,7 @@ def test_git_executable_pin_rejects_symlink_non_executable_and_oversize(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _enable_posix_snapshot_seam(monkeypatch)
+    _enable_posix_snapshot_seam(monkeypatch, snapshot_root=tmp_path)
     executable = _fake_executable(tmp_path)
     digest = hashlib.sha256(executable.read_bytes()).hexdigest()
     link = tmp_path / "git-link"
@@ -150,7 +162,7 @@ def test_raw_git_command_executes_private_pinned_snapshot(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _enable_posix_snapshot_seam(monkeypatch)
+    _enable_posix_snapshot_seam(monkeypatch, snapshot_root=tmp_path)
     executable = _fake_executable(tmp_path)
     pin = _pin(executable)
     observed: list[list[str]] = []
@@ -182,7 +194,7 @@ def test_pinned_git_uses_closed_loader_and_configuration_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _enable_posix_snapshot_seam(monkeypatch)
+    _enable_posix_snapshot_seam(monkeypatch, snapshot_root=tmp_path)
     executable = _fake_executable(tmp_path)
     pin = _pin(executable)
     for name in (
@@ -241,7 +253,7 @@ def test_raw_git_reader_reuses_one_snapshot_and_never_falls_back_after_close(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _enable_posix_snapshot_seam(monkeypatch)
+    _enable_posix_snapshot_seam(monkeypatch, snapshot_root=tmp_path)
     executable = _fake_executable(tmp_path)
     pin = _pin(executable)
     repository = tmp_path / "repository"
@@ -265,7 +277,7 @@ def test_mutation_after_pin_is_rejected_before_git_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _enable_posix_snapshot_seam(monkeypatch)
+    _enable_posix_snapshot_seam(monkeypatch, snapshot_root=tmp_path)
     executable = _fake_executable(tmp_path)
     pin = _pin(executable)
     executable.write_bytes(b"unreviewed-git-executable\n")
