@@ -9,6 +9,73 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [4.1.0] — 2026-07-21
+
+### Added
+
+- Added the separately keyed `EVOGUARD_RELEASE_SOURCE_ADMISSION_V2` envelope,
+  JSON Schema, detached verifier, and CLI commands for a protected-main source
+  `ALLOW`. V1 release-source evidence remains DENY-only.
+- Added a signed A/B/C workflow topology: exact workflow blobs and numeric
+  run/attempt replay bindings are checked against raw Git, the current C
+  GitHub Actions context, and the triggering B `workflow_run` event.
+- Classified the new admission implementation under
+  `evoom_guard.admission.release_source` and added an exact internal dependency
+  allowlist to the architecture ratchet.
+
+### Security
+
+- GitHub attestation output is now parsed semantically after live `gh`
+  verification. Empty placeholder results and mismatched subject, predicate,
+  repository, workflow, ref/digests, issuer, hosted-runner, builder,
+  dependency, invocation URI, or expected B run/attempt are rejected.
+- The V2 admitting path requires POSIX root-to-nonroot provider isolation. It
+  runs a SHA-256-pinned `gh` snapshot with cleared supplementary groups and an
+  allowlisted environment, and proves before launch that the provider identity
+  cannot read the exact mode-`0600` signing-key path.
+- Raw-Git verification can use a SHA-256-pinned, descriptor-validated private
+  Git executable snapshot. V2 requires that pin and binds it, the provider
+  isolation contract, and the protected signing-key path to the private
+  in-process admission capability; unisolated provider evidence cannot reach
+  the signing key.
+- Pinned Git now runs with a closed environment that excludes dynamic-loader,
+  PATH, HOME, XDG, and Python injection state. The signed V2 manifest carries
+  the Git/`gh` SHA-256 pins and provider UID/GID, and detached verification
+  requires those values from outside the bundle.
+- The C runtime check now mints an opaque producer-bound capability; the V2
+  sealer rejects a plain C selector before key access. Private/public key
+  loading uses bounded stable non-link snapshots. A same-directory staging
+  bundle must pass canonical and cryptographic verification before atomic
+  promotion; a failed forced replacement preserves the previous output.
+- Replaced arbitrary key exclusions with an exact four-entry registry for the
+  Trusted Finalizer, Artifact Admission V1, Artifact Digest Admission V2, and
+  Release Source Finalizer V1 domains. Those keys and the V2 admission key must
+  all be distinct.
+
+### Changed
+
+- Release-source provider output is preserved byte-for-byte while required
+  semantic fields are fail-closed; compatible unknown GitHub fields remain
+  retained but do not become trusted facts.
+- V2 output preflight rejects canonical path aliases across all evidence,
+  executable, policy, and key inputs. `--force` can replace only the final
+  `.rsae`; provider evidence remains no-clobber.
+- Regenerated the 16-case live benchmark with source version 4.1.0. All
+  expected labels matched: 11 true positives, 3 true negatives, 2 documented
+  policy false positives, and 0 false negatives.
+
+### Known limitations
+
+- The first published release carrying V2 is its bootstrap and therefore cannot
+  admit itself. A separate protected-main live pilot is required before
+  operational reliance.
+- Source admission does not bind the released artifact or authorize
+  publication/deployment. Those require a separate release-artifact contract
+  and privileged consumer.
+- Admission-capable provider isolation and pinned Git execution require a
+  reviewed POSIX/root workflow. Native Windows remains fail-closed for this
+  high-trust path.
+
 ## [4.0.2] — 2026-07-21
 
 ### Security

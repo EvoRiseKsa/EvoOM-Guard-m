@@ -60,6 +60,20 @@ evidence used to judge it. Guard still focuses on one narrow question:
   read-only candidate mounts. Setup fidelity permits conventional new outputs;
   additional `setup_output_globs` are explicit trusted policy.
 
+## Implemented in the current source, not yet shipped
+
+- **Release Source Admission V2** — a separately keyed protected-main source
+  `ALLOW` now binds A/B/C workflow blobs and run attempts, a canonical producer
+  receipt, strong execution evidence, one semantically constrained GitHub
+  attestation result, and an exact five-domain key-separation contract. The
+  admission path requires a SHA-256-pinned Git snapshot plus POSIX root-to-
+  nonroot isolation for a SHA-256-pinned `gh` process, and proves that the
+  provider identity cannot read the bound signing-key path before launch. The
+  signed manifest exposes both tool digests and the provider UID/GID for
+  detached comparison against external expectations.
+  V1 remains DENY-only. This source implementation is not a published consumer
+  release, has not completed a live V2 pilot, and is not a production gate.
+
 ## Operational evidence completed
 
 - The current-runtime
@@ -81,11 +95,14 @@ evidence used to judge it. Guard still focuses on one narrow question:
   is operational evidence, not third-party review, and it does not establish
   that an `ALLOW` → failed/cancelled attempt → fresh `ALLOW` sequence was
   completed on one unchanged PR head.
-- The receipt pilot preserved one clean A-to-B-to-C evidence-chain round, two
-  failed-A controls, and a controlled moved-`main` rejection. In the last
-  control B rejected the changed protected branch before receipt creation and
-  C rejected the failed B predecessor before artifact download; both produced
-  zero artifacts. These are non-admitting observations.
+- The now-archived receipt pilot preserved one clean A-to-B-to-C evidence-chain
+  round, two failed-A controls, a moved-`main` rejection, and a final live
+  negative matrix. On the same B receipt/head, C rejected the wrong workflow
+  (attempt 2), wrong run attempt (attempt 3), and altered receipt bytes
+  (attempt 4); the last control first verified the original bytes successfully
+  on the same runner. The exact 19-file evidence manifest is retained under
+  [`evidence/negative-receipt-matrix`](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot/tree/main/evidence/negative-receipt-matrix).
+  These are non-admitting observations, not a release authorization.
 
 ## Current limits (stated plainly)
 
@@ -120,22 +137,25 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Finish the receipt-pilot negative matrix.** Preserve controlled
-   altered-artifact and wrong-workflow/run-attempt rejections. The clean chain,
-   moved-`main`, and failed-A cases are complete; none is an admission result.
-2. **Release authorization only after authenticated production evidence.** A
-   release-source finalizer may issue `ALLOW` only after the producer execution,
-   run/attempt, source, workflow, provenance, and artifact relations are freshly
-   verified outside candidate authority. The current release-source path stays
-   non-admitting until those prerequisites exist.
-3. **Release-artifact and merge-candidate boundary.** Extend the completed
+1. **Finish and bootstrap the source authorization.** Complete full-suite,
+   static, zipapp, architecture, and release review, then publish V2 through the
+   existing reviewed release process. The bootstrap release cannot admit
+   itself.
+2. **Exercise V2 before relying on it.** Run a disposable protected-main A/B/C
+   pilot using the published bootstrap runtime, pinned Git/`gh`, mandatory
+   provider isolation, five distinct key domains, and retained positive and
+   negative evidence.
+3. **Release-artifact and publication boundary.** Extend the completed
    regular-file/provider pilot with a distinct protected-main release-source
    `ALLOW`, the actual release artifact digest, its provider attestation, and a
    separately privileged draft-release consumer. OCI, registry, deployment,
    and reproducibility remain separate later contracts.
-4. **Only after external evidence.** Stronger fork/VM boundaries, organization
+4. **Independent evidence.** Request external security review and a genuinely
+   blind evaluation; same-owner cross-account review remains operational
+   separation, not independence.
+5. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
-   adopters and their onboarding failures. They are not assumed product needs.
+   adopters and onboarding failures. They are not assumed product needs.
 
 Risk scoring and ML may become advisory research tools only after an independent,
 frozen labelled corpus exists. They must not decide `ALLOW`, `DENY`, or merge

@@ -57,13 +57,18 @@ correctness or security.
 > claim for this repository.  The follow-on
 > [`Authenticated Producer Receipt`](docs/AUTHENTICATED_PRODUCER_RECEIPT.md)
 > adds a non-admitting, provider-attestable receipt and reference workflow
-> topology; it still does not enable `ALLOW`, a key, a release, or publication.
+> topology. The current **v4.1.0 pre-release source** now implements the separate
+> [`Release Source Admission V2`](docs/RELEASE_SOURCE_ADMISSION_V2.md) `ALLOW`
+> contract with signed A/B/C bindings, signed externally verified Git/`gh`
+> digest pins, mandatory provider isolation, and five distinct key domains. It is not yet a published consumer
+> release or live operational gate; published `v4.0.2` remains non-admitting for
+> this source boundary.
 > The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
 > is deliberately sanitized and disabled at baseline. It has recorded one
 > clean A-to-B-to-C evidence-chain round plus failed-A and moved-`main`
-> fail-closed controls; altered-artifact and wrong-workflow/run-attempt live
-> controls remain. None of those observations is an admission or release
-> decision.
+> controls, followed by wrong-workflow, wrong-run-attempt, and altered-receipt
+> negative controls. None of those historical observations is V2 admission or
+> release evidence.
 
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation
