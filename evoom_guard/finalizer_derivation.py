@@ -935,6 +935,38 @@ class _GitReader:
         return data
 
 
+def resolve_raw_git_regular_blob(
+    *,
+    repository: str,
+    treeish: str,
+    path: str,
+    bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
+) -> str:
+    """Resolve one safe regular-file path to its raw Git blob object ID.
+
+    This is the narrow public raw-Git boundary for callers that need to bind a
+    reviewed workflow or other protected file without importing the private
+    reader or exposing its tree-entry representation.
+    """
+
+    if not isinstance(path, str) or not is_safe_relpath(path):
+        raise FinalizerDerivationError(
+            "raw Git regular-blob path must be a safe relative path"
+        )
+    with _GitReader(
+        repository,
+        bare=bare,
+        git_executable=git_executable,
+    ) as reader:
+        entry = reader.tree(treeish).get(path)
+    if entry is None or not entry.regular:
+        raise FinalizerDerivationError(
+            "raw Git regular-blob path is missing or is not a regular blob"
+        )
+    return _valid_git_sha(entry.object_id, label="regular blob")
+
+
 def derive_raw_ref_parent_pair(
     *,
     repository: str,

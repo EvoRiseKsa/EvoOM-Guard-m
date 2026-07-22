@@ -763,6 +763,43 @@ def test_release_source_admission_internal_dependencies_are_exactly_allowlisted(
     assert actual_dependencies == expected_dependencies
 
 
+def test_release_artifact_admission_is_classified_and_uses_public_dependencies() -> None:
+    """Keep the protected-main artifact admission slice out of flat-module debt."""
+
+    module = "evoom_guard.admission.release_artifact"
+    analysis = analyze_package(PACKAGE_ROOT)
+    assert module in analysis.modules
+    assert module not in analysis.violations["unclassified_modules"]
+    private_imports = tuple(
+        violation
+        for violation in analysis.violations["cross_package_private_imports"]
+        if violation.startswith(f"{module} | ")
+    )
+    assert private_imports == ()
+
+
+def test_release_artifact_admission_dependencies_are_exactly_allowlisted() -> None:
+    """Freeze the V1 release-artifact admission dependency surface."""
+
+    module = "evoom_guard.admission.release_artifact"
+    expected_dependencies = {
+        "evoom_guard.admission.release_source",
+        "evoom_guard.artifact_admission",
+        "evoom_guard.evidence_bundle",
+        "evoom_guard.finalizer_derivation",
+        "evoom_guard.github_attestation",
+        "evoom_guard.release_source_finalizer",
+        "evoom_guard.signing",
+    }
+    analysis = analyze_package(PACKAGE_ROOT)
+    actual_dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+    assert actual_dependencies == expected_dependencies
+
+
 def _write_package(tmp_path: Path, files: Mapping[str, str]) -> Path:
     package = tmp_path / INTERNAL_PACKAGE
     for relative, content in files.items():

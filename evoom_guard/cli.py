@@ -32,6 +32,10 @@ Subcommands:
     source ``ALLOW`` only after that fresh provider verification succeeds.
   * ``evo-guard verify-release-source-admission`` — verify the V2 source
     authorization against external source, producer, runtime, policy, and key roots.
+  * ``evo-guard seal-github-release-artifact-admission`` — freshly verify and
+    seal one protected-main release artifact rooted in a V2 source admission.
+  * ``evo-guard verify-github-release-artifact-admission`` — verify that release
+    artifact admission and its detached artifact entirely offline.
   * ``evo-guard seal-artifact-admission`` — bind one file to a verified finalizer ALLOW.
   * ``evo-guard verify-artifact-admission`` — verify that file/finalizer binding.
   * ``evo-guard seal-artifact-digest-admission`` — bind one immutable digest to a finalizer.
@@ -321,6 +325,100 @@ def _add_github_attestation_verifier_arguments(parser: argparse.ArgumentParser) 
         type=int,
         default=None,
         help="opt-in POSIX isolation: distinct non-root GID for the provider process",
+    )
+
+
+def _add_release_artifact_key_registry_arguments(
+    parser: argparse.ArgumentParser,
+) -> None:
+    """Add the five earlier public roots required by the RAAE key registry."""
+
+    parser.add_argument(
+        "--trusted-finalizer-pub",
+        required=True,
+        help="public key for the Trusted Finalizer domain",
+    )
+    parser.add_argument(
+        "--artifact-admission-v1-pub",
+        required=True,
+        help="public key for Artifact Admission V1",
+    )
+    parser.add_argument(
+        "--artifact-digest-admission-v2-pub",
+        required=True,
+        help="public key for Artifact Digest Admission V2 / GitHub bridge",
+    )
+    parser.add_argument(
+        "--release-source-finalizer-v1-pub",
+        required=True,
+        help="public key for the DENY-only Release Source Finalizer V1",
+    )
+    parser.add_argument(
+        "--release-source-admission-v2-pub",
+        required=True,
+        help=(
+            "trusted V2 release-source admission public key and fifth earlier "
+            "RAAE trust root"
+        ),
+    )
+
+
+def _add_nested_release_source_expectation_arguments(
+    parser: argparse.ArgumentParser,
+) -> None:
+    """Add exact external RSAE expectations without conflating outer RAAE pins."""
+
+    parser.add_argument(
+        "--expected-release-source",
+        required=True,
+        help="external protected-main release-source JSON",
+    )
+    parser.add_argument(
+        "--expected-release-source-context",
+        required=True,
+        help="external release-source context JSON",
+    )
+    parser.add_argument(
+        "--expected-release-source-producer",
+        required=True,
+        help="external release-source producer identity JSON",
+    )
+    parser.add_argument(
+        "--expected-release-source-admitter",
+        required=True,
+        help="external protected C workflow identity JSON",
+    )
+    parser.add_argument(
+        "--expected-release-source-bootstrap-guard-sha",
+        required=True,
+        help="external SHA-256 of the immutable Guard runtime embedded by the RSAE",
+    )
+    parser.add_argument(
+        "--expected-release-source-github-policy",
+        required=True,
+        help="external GitHub policy JSON for the embedded release-source admission",
+    )
+    parser.add_argument(
+        "--expected-release-source-git-executable-sha256",
+        required=True,
+        help="external RSAE Git executable SHA-256 pin",
+    )
+    parser.add_argument(
+        "--expected-release-source-gh-executable-sha256",
+        required=True,
+        help="external RSAE GitHub CLI executable SHA-256 pin",
+    )
+    parser.add_argument(
+        "--expected-release-source-provider-isolation-uid",
+        required=True,
+        type=int,
+        help="external RSAE provider-isolation POSIX UID",
+    )
+    parser.add_argument(
+        "--expected-release-source-provider-isolation-gid",
+        required=True,
+        type=int,
+        help="external RSAE provider-isolation POSIX GID",
     )
 
 
@@ -1232,6 +1330,144 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="public key for the DENY-only Release Source Finalizer V1",
     )
+
+    # ----- protected-main release-artifact admission V1 ----------------- #
+    sgraa_p = sub.add_parser(
+        "seal-github-release-artifact-admission",
+        help=(
+            "freshly verify one protected-main GitHub artifact attestation and "
+            "seal a distinct release-artifact ALLOW"
+        ),
+    )
+    sgraa_p.add_argument(
+        "release_source_admission",
+        help="signed V2 .rsae release-source admission prerequisite",
+    )
+    sgraa_p.add_argument(
+        "artifact",
+        help="external regular release artifact to attest and bind",
+    )
+    sgraa_p.add_argument(
+        "--out",
+        required=True,
+        help="new signed .raae output; an existing file is never overwritten",
+    )
+    sgraa_p.add_argument(
+        "--builder",
+        required=True,
+        help="exact protected E workflow builder identity JSON",
+    )
+    sgraa_p.add_argument(
+        "--admitter",
+        required=True,
+        help="exact key-bearing F workflow admitter identity JSON",
+    )
+    _add_nested_release_source_expectation_arguments(sgraa_p)
+    sgraa_p.add_argument(
+        "--git-repository",
+        required=True,
+        help="raw Git worktree or object store used to verify E/F workflow blobs",
+    )
+    sgraa_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    sgraa_p.add_argument(
+        "--git-executable",
+        required=True,
+        help="trusted absolute POSIX Git executable for outer RAAE verification",
+    )
+    sgraa_p.add_argument(
+        "--git-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the outer RAAE Git executable",
+    )
+    sgraa_p.add_argument(
+        "--gh-executable",
+        required=True,
+        help="trusted absolute GitHub CLI executable used for fresh verification",
+    )
+    sgraa_p.add_argument(
+        "--gh-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the outer RAAE GitHub CLI executable",
+    )
+    sgraa_p.add_argument(
+        "--provider-isolation-uid",
+        required=True,
+        type=int,
+        help="dedicated non-root POSIX UID for the outer provider process",
+    )
+    sgraa_p.add_argument(
+        "--provider-isolation-gid",
+        required=True,
+        type=int,
+        help="dedicated non-root POSIX GID for the outer provider process",
+    )
+    sgraa_p.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=120,
+        help="bounded fresh GitHub attestation verification timeout (default: 120)",
+    )
+    sgraa_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="distinct release-artifact-admission Ed25519 private key",
+    )
+    sgraa_p.add_argument(
+        "--sign-pub",
+        required=True,
+        help="external public key corresponding to --sign-key",
+    )
+    _add_release_artifact_key_registry_arguments(sgraa_p)
+
+    vgraa_p = sub.add_parser(
+        "verify-github-release-artifact-admission",
+        help="verify one .raae and its detached artifact entirely offline",
+    )
+    vgraa_p.add_argument("bundle", help="signed .raae release-artifact admission")
+    vgraa_p.add_argument("artifact", help="external regular artifact bound by the .raae")
+    vgraa_p.add_argument(
+        "--trusted-pub",
+        required=True,
+        help="externally trusted release-artifact-admission public key",
+    )
+    vgraa_p.add_argument(
+        "--expected-builder",
+        required=True,
+        help="external protected E workflow builder identity JSON",
+    )
+    vgraa_p.add_argument(
+        "--expected-admitter",
+        required=True,
+        help="external key-bearing F workflow admitter identity JSON",
+    )
+    _add_nested_release_source_expectation_arguments(vgraa_p)
+    vgraa_p.add_argument(
+        "--expected-git-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the outer RAAE Git executable",
+    )
+    vgraa_p.add_argument(
+        "--expected-gh-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the outer RAAE GitHub CLI executable",
+    )
+    vgraa_p.add_argument(
+        "--expected-provider-isolation-uid",
+        required=True,
+        type=int,
+        help="external expected non-root POSIX UID for the outer provider process",
+    )
+    vgraa_p.add_argument(
+        "--expected-provider-isolation-gid",
+        required=True,
+        type=int,
+        help="external expected non-root POSIX GID for the outer provider process",
+    )
+    _add_release_artifact_key_registry_arguments(vgraa_p)
 
     # ----- artifact admission --------------------------------------------- #
     saa_p = sub.add_parser(
@@ -3919,6 +4155,377 @@ def cmd_verify_release_source_admission(
     return 0
 
 
+def _release_artifact_key_separation(args: argparse.Namespace) -> dict[str, str]:
+    """Derive the exact five-root registry that precedes the RAAE signer."""
+
+    from evoom_guard.signing import public_key_id
+
+    return {
+        "trusted_finalizer": public_key_id(args.trusted_finalizer_pub),
+        "artifact_admission_v1": public_key_id(args.artifact_admission_v1_pub),
+        "artifact_digest_admission_v2": public_key_id(
+            args.artifact_digest_admission_v2_pub
+        ),
+        "release_source_finalizer_v1": public_key_id(
+            args.release_source_finalizer_v1_pub
+        ),
+        "release_source_admission_v2": public_key_id(
+            args.release_source_admission_v2_pub
+        ),
+    }
+
+
+def _release_artifact_nested_expectations(
+    args: argparse.Namespace,
+) -> tuple[
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+]:
+    """Read the externally controlled objects used to re-verify the nested RSAE."""
+
+    source = _read_external_finalizer_object(
+        args.expected_release_source,
+        label="expected protected-main release source",
+    )
+    context = _read_external_finalizer_object(
+        args.expected_release_source_context,
+        label="expected release-source context",
+    )
+    producer = _read_external_finalizer_object(
+        args.expected_release_source_producer,
+        label="expected release-source producer",
+    )
+    admitter = _read_external_finalizer_object(
+        args.expected_release_source_admitter,
+        label="expected release-source admitter",
+    )
+    github_policy = _read_external_finalizer_object(
+        args.expected_release_source_github_policy,
+        label="expected release-source GitHub policy",
+    )
+    return source, context, producer, admitter, github_policy
+
+
+def _preflight_release_artifact_admission_paths(
+    args: argparse.Namespace,
+    *,
+    event_path: str,
+) -> None:
+    """Reject destructive aliases and an existing RAAE before provider access."""
+
+    def resolved(path: str) -> str:
+        return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+    paths = {
+        "output": args.out,
+        "release-source admission": args.release_source_admission,
+        "artifact": args.artifact,
+        "builder identity": args.builder,
+        "admitter identity": args.admitter,
+        "release source": args.expected_release_source,
+        "release-source context": args.expected_release_source_context,
+        "release-source producer": args.expected_release_source_producer,
+        "release-source admitter": args.expected_release_source_admitter,
+        "release-source GitHub policy": args.expected_release_source_github_policy,
+        "GitHub event payload": event_path,
+        "Git executable": args.git_executable,
+        "GitHub CLI executable": args.gh_executable,
+        "private key": args.sign_key,
+        "public key": args.sign_pub,
+        "Trusted Finalizer public key": args.trusted_finalizer_pub,
+        "Artifact Admission V1 public key": args.artifact_admission_v1_pub,
+        "Artifact Digest Admission V2 public key": (
+            args.artifact_digest_admission_v2_pub
+        ),
+        "Release Source Finalizer V1 public key": (
+            args.release_source_finalizer_v1_pub
+        ),
+        "Release Source Admission V2 public key": (
+            args.release_source_admission_v2_pub
+        ),
+    }
+    identities: dict[str, str] = {}
+    for label, path in paths.items():
+        if path == "-":
+            raise ValueError(
+                f"release-artifact admission {label} must be a regular path, "
+                "not standard input/output"
+            )
+        identity = resolved(path)
+        if identity in identities:
+            raise ValueError(
+                f"release-artifact admission {label} path aliases "
+                f"{identities[identity]}"
+            )
+        identities[identity] = label
+    if os.path.lexists(args.out):
+        raise ValueError("release-artifact admission output already exists")
+
+
+def cmd_seal_github_release_artifact_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Bind the live F job to E, freshly verify GitHub, then seal one RAAE."""
+
+    from evoom_guard.admission.release_artifact import (
+        RELEASE_ARTIFACT_ADMISSION_FORMAT,
+        ReleaseArtifactAdmissionError,
+        bind_release_artifact_admitter_runtime,
+        seal_release_artifact_admission,
+    )
+    from evoom_guard.finalizer_derivation import (
+        FinalizerDerivationError,
+        git_executable_pin,
+    )
+    from evoom_guard.github_attestation import (
+        GitHubAttestationError,
+        github_attestation_provider_isolation,
+    )
+    from evoom_guard.signing import SigningUnavailableError, public_key_id
+
+    try:
+        event_path = os.environ.get("GITHUB_EVENT_PATH")
+        if not event_path:
+            raise ValueError(
+                "seal-github-release-artifact-admission requires GitHub Actions "
+                "GITHUB_EVENT_PATH"
+            )
+        _preflight_release_artifact_admission_paths(args, event_path=event_path)
+        source, context, producer, source_admitter, source_policy = (
+            _release_artifact_nested_expectations(args)
+        )
+        builder = _read_external_finalizer_object(
+            args.builder,
+            label="protected release-artifact builder identity",
+        )
+        admitter = _read_external_finalizer_object(
+            args.admitter,
+            label="protected release-artifact admitter identity",
+        )
+        event_payload = _read_external_finalizer_object(
+            event_path,
+            label="GitHub Actions release-artifact workflow_run event payload",
+        )
+        runtime_admitter = bind_release_artifact_admitter_runtime(
+            builder,
+            admitter,
+            source=source,
+            environment=os.environ,
+            event_payload=event_payload,
+        )
+        key_separation = _release_artifact_key_separation(args)
+        expected_signing_key_id = public_key_id(args.sign_pub)
+        if expected_signing_key_id in set(key_separation.values()):
+            raise ValueError(
+                "release-artifact admission public key belongs to an earlier "
+                "configured trust domain"
+            )
+        git_executable = git_executable_pin(
+            args.git_executable,
+            args.git_executable_sha256,
+        )
+        provider_isolation = github_attestation_provider_isolation(
+            args.gh_executable,
+            args.gh_executable_sha256,
+            uid=args.provider_isolation_uid,
+            gid=args.provider_isolation_gid,
+        )
+        sealed = seal_release_artifact_admission(
+            args.release_source_admission,
+            args.artifact,
+            args.out,
+            admitter=runtime_admitter,
+            trusted_release_source_public_key_path=(
+                args.release_source_admission_v2_pub
+            ),
+            expected_release_source=source,
+            expected_release_source_context=context,
+            expected_release_source_producer=producer,
+            expected_release_source_admitter=source_admitter,
+            expected_release_source_bootstrap_guard_sha256=(
+                args.expected_release_source_bootstrap_guard_sha
+            ),
+            expected_release_source_github_policy=source_policy,
+            expected_release_source_git_executable_sha256=(
+                args.expected_release_source_git_executable_sha256
+            ),
+            expected_release_source_github_cli_executable_sha256=(
+                args.expected_release_source_gh_executable_sha256
+            ),
+            expected_release_source_provider_isolation_uid=(
+                args.expected_release_source_provider_isolation_uid
+            ),
+            expected_release_source_provider_isolation_gid=(
+                args.expected_release_source_provider_isolation_gid
+            ),
+            key_separation=key_separation,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            git_executable=git_executable,
+            provider_isolation=provider_isolation,
+            private_key_path=args.sign_key,
+            signing_public_key_path=args.sign_pub,
+            expected_signing_key_id=expected_signing_key_id,
+            gh_executable=args.gh_executable,
+            timeout_seconds=args.timeout_seconds,
+        )
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        ReleaseArtifactAdmissionError,
+        GitHubAttestationError,
+        FinalizerDerivationError,
+        SigningUnavailableError,
+    ) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
+            "ok": True,
+            "sealed": True,
+            "verified": True,
+            "status": "SEALED",
+            "bundle": sealed.bundle_path,
+            "artifact": sealed.artifact.as_dict(),
+            "release_source": sealed.manifest["release_source"],
+            "builder": sealed.manifest["builder"],
+            "admitter": sealed.manifest["admitter"],
+            "key_id": sealed.manifest["authentication"]["key_id"],
+            "decision": sealed.decision,
+            "admission": True,
+            "provider_verified": True,
+            "live_provider_reverification": True,
+        },
+    )
+    return 0
+
+
+def cmd_verify_github_release_artifact_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify one RAAE, its artifact, nested RSAE, and all six roots offline."""
+
+    from evoom_guard.admission.release_artifact import (
+        RELEASE_ARTIFACT_ADMISSION_FORMAT,
+        ReleaseArtifactAdmissionError,
+        verify_release_artifact_admission,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    try:
+        if args.bundle == "-" or args.artifact == "-":
+            raise ValueError(
+                "release-artifact admission bundle and artifact must be regular "
+                "files, not standard input"
+            )
+        source, context, producer, source_admitter, source_policy = (
+            _release_artifact_nested_expectations(args)
+        )
+        builder = _read_external_finalizer_object(
+            args.expected_builder,
+            label="expected protected release-artifact builder identity",
+        )
+        admitter = _read_external_finalizer_object(
+            args.expected_admitter,
+            label="expected protected release-artifact admitter identity",
+        )
+        key_separation = _release_artifact_key_separation(args)
+        verified = verify_release_artifact_admission(
+            args.bundle,
+            args.artifact,
+            trusted_public_key_path=args.trusted_pub,
+            trusted_release_source_public_key_path=(
+                args.release_source_admission_v2_pub
+            ),
+            expected_release_source=source,
+            expected_release_source_context=context,
+            expected_release_source_producer=producer,
+            expected_release_source_admitter=source_admitter,
+            expected_release_source_bootstrap_guard_sha256=(
+                args.expected_release_source_bootstrap_guard_sha
+            ),
+            expected_release_source_github_policy=source_policy,
+            expected_release_source_git_executable_sha256=(
+                args.expected_release_source_git_executable_sha256
+            ),
+            expected_release_source_github_cli_executable_sha256=(
+                args.expected_release_source_gh_executable_sha256
+            ),
+            expected_release_source_provider_isolation_uid=(
+                args.expected_release_source_provider_isolation_uid
+            ),
+            expected_release_source_provider_isolation_gid=(
+                args.expected_release_source_provider_isolation_gid
+            ),
+            expected_builder=builder,
+            expected_admitter=admitter,
+            expected_key_separation=key_separation,
+            expected_git_executable_sha256=args.expected_git_executable_sha256,
+            expected_github_cli_executable_sha256=(
+                args.expected_gh_executable_sha256
+            ),
+            expected_provider_isolation_uid=args.expected_provider_isolation_uid,
+            expected_provider_isolation_gid=args.expected_provider_isolation_gid,
+        )
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        ReleaseArtifactAdmissionError,
+        SigningUnavailableError,
+    ) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    manifest = verified.bundle.manifest
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "VERIFIED",
+            "decision": verified.decision,
+            "admission": True,
+            "artifact": verified.artifact.as_dict(),
+            "release_source": manifest["release_source"],
+            "builder": manifest["builder"],
+            "admitter": manifest["admitter"],
+            "key_id": manifest["authentication"]["key_id"],
+            "verification_scope": "detached-offline-retained-provider-evidence",
+            "live_provider_reverification": False,
+        },
+    )
+    return 0
+
+
 def cmd_seal_artifact_admission(
     args: argparse.Namespace,
     *,
@@ -5060,6 +5667,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_release_source_admission(args)
     if args.command == "verify-release-source-admission":
         return cmd_verify_release_source_admission(args)
+    if args.command == "seal-github-release-artifact-admission":
+        return cmd_seal_github_release_artifact_admission(args)
+    if args.command == "verify-github-release-artifact-admission":
+        return cmd_verify_github_release_artifact_admission(args)
     if args.command == "seal-artifact-admission":
         return cmd_seal_artifact_admission(args)
     if args.command == "verify-artifact-admission":

@@ -20,6 +20,7 @@ from evoom_guard.finalizer_derivation import (
     context_from_verified_bindings,
     derive_finalizer_bindings,
     read_finalizer_bindings,
+    resolve_raw_git_regular_blob,
     write_finalizer_bindings,
 )
 from evoom_guard.guard import blocks_from_dirs, guard, serialize_candidate_blocks
@@ -359,6 +360,35 @@ def test_raw_git_reader_ignores_replace_refs(tmp_path: Path, bare: bool) -> None
 
     assert reader.commit_tree(expected_commit) == expected_tree
     assert set(reader.tree(expected_commit)) == {"good.txt"}
+
+
+def test_public_raw_git_regular_blob_boundary_returns_only_regular_blob_id(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "source"
+    repo.mkdir()
+    _git(repo, "init", "--quiet")
+    workflow = repo / ".github" / "workflows" / "admit.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("name: admit\n", encoding="utf-8")
+    commit = _commit(repo, "protected workflow")
+    tree = _git(repo, "rev-parse", f"{commit}^{{tree}}")
+    blob = _git(repo, "rev-parse", f"{commit}:.github/workflows/admit.yml")
+
+    assert (
+        resolve_raw_git_regular_blob(
+            repository=str(repo),
+            treeish=tree,
+            path=".github/workflows/admit.yml",
+        )
+        == blob
+    )
+    with pytest.raises(FinalizerDerivationError, match="missing or is not a regular"):
+        resolve_raw_git_regular_blob(
+            repository=str(repo),
+            treeish=tree,
+            path=".github/workflows/missing.yml",
+        )
 
 
 def test_raw_git_derivation_matches_guard_candidate_and_policy(tmp_path: Path) -> None:

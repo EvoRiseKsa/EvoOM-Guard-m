@@ -184,6 +184,55 @@ def test_pyz_exposes_release_source_admission_v2_cli_contract(tmp_path):
     assert "--must-differ-from-key-id" not in verified.stdout
 
 
+def test_pyz_exposes_github_release_artifact_admission_cli_contract(tmp_path):
+    out = _build(tmp_path)
+    sealed = subprocess.run(
+        [sys.executable, out, "seal-github-release-artifact-admission", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert sealed.returncode == 0, sealed.stdout + sealed.stderr
+    assert "--builder" in sealed.stdout
+    assert "--admitter" in sealed.stdout
+    assert "--expected-release-source" in sealed.stdout
+    assert "--expected-release-source-admitter" in sealed.stdout
+    assert "--expected-release-source-github-policy" in sealed.stdout
+    assert "--expected-release-source-git-executable-sha256" in sealed.stdout
+    assert "--git-executable-sha256" in sealed.stdout
+    assert "--expected-release-source-gh-executable-sha256" in sealed.stdout
+    assert "--gh-executable-sha256" in sealed.stdout
+    assert "--release-source-admission-v2-pub" in sealed.stdout
+    assert "--sign-key" in sealed.stdout
+    assert "--sign-pub" in sealed.stdout
+    assert "--force" not in sealed.stdout
+    assert "--receipt-out" not in sealed.stdout
+    assert "--raw-output-out" not in sealed.stdout
+    assert "--signer-workflow" not in sealed.stdout
+    assert "--source-digest" not in sealed.stdout
+
+    verified = subprocess.run(
+        [sys.executable, out, "verify-github-release-artifact-admission", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+    assert "--trusted-pub" in verified.stdout
+    assert "--expected-builder" in verified.stdout
+    assert "--expected-admitter" in verified.stdout
+    assert "--expected-release-source" in verified.stdout
+    assert "--expected-release-source-git-executable-sha256" in verified.stdout
+    assert "--expected-git-executable-sha256" in verified.stdout
+    assert "--expected-release-source-gh-executable-sha256" in verified.stdout
+    assert "--expected-gh-executable-sha256" in verified.stdout
+    assert "--release-source-admission-v2-pub" in verified.stdout
+    assert "--gh-executable" not in verified.stdout
+    assert "--git-repository" not in verified.stdout
+    assert "--sign-key" not in verified.stdout
+    assert "--force" not in verified.stdout
+
+
 def test_pyz_contains_the_offline_record_verifier(tmp_path):
     out = _build(tmp_path)
     record = tmp_path / "invalid-record.json"
@@ -222,10 +271,12 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             "evoom_guard/artifact_admission.py",
             "evoom_guard/artifact_digest_admission.py",
             "evoom_guard/github_attestation.py",
+            "evoom_guard/admission/release_artifact.py",
             "evoom_guard/release_source_producer_receipt.py",
             "evoom_guard/schemas/artifact-binding-1.schema.json",
             "evoom_guard/schemas/artifact-digest-binding-2.schema.json",
             "evoom_guard/schemas/github-attestation-receipt-1.schema.json",
+            "evoom_guard/schemas/release-artifact-admission-1.schema.json",
             "evoom_guard/schemas/release-source-context-1.schema.json",
             "evoom_guard/schemas/release-source-handoff-1.schema.json",
             "evoom_guard/schemas/release-source-producer-receipt-1.schema.json",

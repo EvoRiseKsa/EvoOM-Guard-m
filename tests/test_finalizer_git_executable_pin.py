@@ -20,6 +20,7 @@ from evoom_guard.finalizer_derivation import (
     derive_raw_evaluation_bindings,
     derive_raw_ref_parent_pair,
     git_executable_pin,
+    resolve_raw_git_regular_blob,
 )
 
 
@@ -352,6 +353,12 @@ def test_public_raw_derivation_functions_propagate_real_git_pin(tmp_path: Path) 
         ref=ref,
         git_executable=pin,
     )
+    workflow_blob = resolve_raw_git_regular_blob(
+        repository=str(repository),
+        treeish=head_tree,
+        path="app.py",
+        git_executable=pin,
+    )
     raw = derive_raw_evaluation_bindings(
         base_repo=str(repository),
         head_repo=str(repository),
@@ -382,4 +389,5 @@ def test_public_raw_derivation_functions_propagate_real_git_pin(tmp_path: Path) 
     )
 
     assert pair == (head, head_tree, base, base_tree)
+    assert workflow_blob == _git(repository, "rev-parse", f"{head}:app.py")
     assert bindings.candidate_sha256 == raw["candidate_sha256"]
