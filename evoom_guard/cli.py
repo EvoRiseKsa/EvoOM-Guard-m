@@ -28,6 +28,10 @@ Subcommands:
     raw-Git bindings, and its exact execution record without contacting a provider.
   * ``evo-guard reverify-attested-release-source-producer-receipt`` — perform
     those checks, then make one fresh constrained GitHub verification.
+  * ``evo-guard seal-release-source-admission`` — issue a separately keyed V2
+    source ``ALLOW`` only after that fresh provider verification succeeds.
+  * ``evo-guard verify-release-source-admission`` — verify the V2 source
+    authorization against external source, producer, runtime, policy, and key roots.
   * ``evo-guard seal-artifact-admission`` — bind one file to a verified finalizer ALLOW.
   * ``evo-guard verify-artifact-admission`` — verify that file/finalizer binding.
   * ``evo-guard seal-artifact-digest-admission`` — bind one immutable digest to a finalizer.
@@ -70,6 +74,7 @@ from evoom_guard.policy.config import load_config as _load_config
 
 if TYPE_CHECKING:
     from evoom_guard.evidence_bundle import EvidenceMaterial
+    from evoom_guard.github_attestation import GitHubAttestationProviderIsolation
 
 MAX_OFFLINE_RECORD_BYTES = 8 * 1024 * 1024
 MAX_CONTEXT_INPUT_BYTES = 1 * 1024 * 1024
@@ -296,6 +301,26 @@ def _add_github_attestation_verifier_arguments(parser: argparse.ArgumentParser) 
         type=int,
         default=120,
         help="bounded GitHub CLI verification timeout in seconds (default: 120)",
+    )
+    parser.add_argument(
+        "--gh-executable-sha256",
+        default=None,
+        help=(
+            "opt-in POSIX isolation: exact lowercase SHA-256 of the absolute "
+            "--gh-executable"
+        ),
+    )
+    parser.add_argument(
+        "--provider-isolation-uid",
+        type=int,
+        default=None,
+        help="opt-in POSIX isolation: distinct non-root UID for the provider process",
+    )
+    parser.add_argument(
+        "--provider-isolation-gid",
+        type=int,
+        default=None,
+        help="opt-in POSIX isolation: distinct non-root GID for the provider process",
     )
 
 
@@ -1043,6 +1068,169 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-nonadmitting-evidence",
         action="store_true",
         help="explicitly return zero after non-admitting verification; never use in a release, deployment, or merge gate",
+    )
+
+    srsa_p = sub.add_parser(
+        "seal-release-source-admission",
+        help="freshly verify a producer receipt, then seal a distinct V2 release-source ALLOW",
+    )
+    srsa_p.add_argument("receipt", help="canonical producer-receipt JSON")
+    srsa_p.add_argument("handoff", help="canonical release-source handoff JSON")
+    srsa_p.add_argument("verdict", help="regular semantic verdict JSON")
+    srsa_p.add_argument("--out", required=True, help="output signed .rsae release-source admission")
+    srsa_p.add_argument("--source", required=True, help="externally expected release-source JSON")
+    srsa_p.add_argument("--context", required=True, help="externally expected release-source context JSON")
+    srsa_p.add_argument("--producer", required=True, help="externally expected producer identity JSON")
+    srsa_p.add_argument("--admitter", required=True, help="externally expected protected C workflow identity JSON")
+    srsa_p.add_argument(
+        "--bootstrap-guard-sha",
+        required=True,
+        help="protected SHA-256 of the immutable prior Guard runtime",
+    )
+    srsa_p.add_argument(
+        "--github-policy",
+        required=True,
+        help="exact GitHub provider-policy JSON for the producer receipt",
+    )
+    srsa_p.add_argument("--git-repository", required=True, help="raw Git worktree or object store")
+    srsa_p.add_argument(
+        "--git-repository-bare",
+        action="store_true",
+        help="treat --git-repository as a bare Git directory",
+    )
+    srsa_p.add_argument(
+        "--git-executable",
+        required=True,
+        help="trusted absolute POSIX Git executable",
+    )
+    srsa_p.add_argument(
+        "--git-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the trusted Git executable",
+    )
+    srsa_p.add_argument("--github-receipt-out", required=True, help="fresh provider receipt output")
+    srsa_p.add_argument("--github-raw-output-out", required=True, help="fresh provider raw-output file")
+    srsa_p.add_argument("--gh-executable", required=True, help="trusted absolute gh executable")
+    srsa_p.add_argument(
+        "--gh-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the trusted gh executable",
+    )
+    srsa_p.add_argument(
+        "--provider-isolation-uid",
+        required=True,
+        type=int,
+        help="dedicated non-root POSIX UID used only for the GitHub provider process",
+    )
+    srsa_p.add_argument(
+        "--provider-isolation-gid",
+        required=True,
+        type=int,
+        help="dedicated non-root POSIX GID used only for the GitHub provider process",
+    )
+    srsa_p.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=120,
+        help="bounded GitHub attestation verification timeout",
+    )
+    srsa_p.add_argument(
+        "--sign-key",
+        required=True,
+        help="distinct release-source-admission Ed25519 private key",
+    )
+    srsa_p.add_argument(
+        "--sign-pub",
+        required=True,
+        help="external public key corresponding to --sign-key",
+    )
+    srsa_p.add_argument(
+        "--trusted-finalizer-pub",
+        required=True,
+        help="public key for the Trusted Finalizer domain",
+    )
+    srsa_p.add_argument(
+        "--artifact-admission-v1-pub",
+        required=True,
+        help="public key for Artifact Admission V1",
+    )
+    srsa_p.add_argument(
+        "--artifact-digest-admission-v2-pub",
+        required=True,
+        help="public key for Artifact Digest Admission V2 / GitHub bridge",
+    )
+    srsa_p.add_argument(
+        "--release-source-finalizer-v1-pub",
+        required=True,
+        help="public key for the DENY-only Release Source Finalizer V1",
+    )
+    srsa_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace only the final .rsae output; provider evidence remains no-clobber",
+    )
+
+    vrsa_p = sub.add_parser(
+        "verify-release-source-admission",
+        help="verify a V2 release-source ALLOW against external trust inputs",
+    )
+    vrsa_p.add_argument("bundle", help="signed .rsae release-source admission")
+    vrsa_p.add_argument("--trusted-pub", required=True, help="externally trusted V2 public key")
+    vrsa_p.add_argument("--expected-source", required=True, help="external release-source JSON")
+    vrsa_p.add_argument("--expected-context", required=True, help="external release-source context JSON")
+    vrsa_p.add_argument("--expected-producer", required=True, help="external producer identity JSON")
+    vrsa_p.add_argument("--expected-admitter", required=True, help="external protected C workflow identity JSON")
+    vrsa_p.add_argument(
+        "--expected-bootstrap-guard-sha",
+        required=True,
+        help="external SHA-256 of the immutable prior Guard runtime",
+    )
+    vrsa_p.add_argument(
+        "--expected-github-policy",
+        required=True,
+        help="external GitHub producer-attestation policy JSON",
+    )
+    vrsa_p.add_argument(
+        "--expected-git-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the Git executable used by the admitting run",
+    )
+    vrsa_p.add_argument(
+        "--expected-gh-executable-sha256",
+        required=True,
+        help="external SHA-256 pin for the GitHub CLI used by the admitting run",
+    )
+    vrsa_p.add_argument(
+        "--expected-provider-isolation-uid",
+        required=True,
+        type=int,
+        help="external expected non-root POSIX UID for provider verification",
+    )
+    vrsa_p.add_argument(
+        "--expected-provider-isolation-gid",
+        required=True,
+        type=int,
+        help="external expected non-root POSIX GID for provider verification",
+    )
+    vrsa_p.add_argument(
+        "--trusted-finalizer-pub",
+        required=True,
+        help="public key for the Trusted Finalizer domain",
+    )
+    vrsa_p.add_argument(
+        "--artifact-admission-v1-pub",
+        required=True,
+        help="public key for Artifact Admission V1",
+    )
+    vrsa_p.add_argument(
+        "--artifact-digest-admission-v2-pub",
+        required=True,
+        help="public key for Artifact Digest Admission V2 / GitHub bridge",
+    )
+    vrsa_p.add_argument(
+        "--release-source-finalizer-v1-pub",
+        required=True,
+        help="public key for the DENY-only Release Source Finalizer V1",
     )
 
     # ----- artifact admission --------------------------------------------- #
@@ -3411,6 +3599,326 @@ def cmd_reverify_attested_release_source_producer_receipt(
     return 0 if args.allow_nonadmitting_evidence else 1
 
 
+def _release_source_key_separation(args: argparse.Namespace) -> dict[str, str]:
+    """Derive the closed-world cross-domain key registry from public keys."""
+
+    from evoom_guard.signing import public_key_id
+
+    return {
+        "trusted_finalizer": public_key_id(args.trusted_finalizer_pub),
+        "artifact_admission_v1": public_key_id(args.artifact_admission_v1_pub),
+        "artifact_digest_admission_v2": public_key_id(
+            args.artifact_digest_admission_v2_pub
+        ),
+        "release_source_finalizer_v1": public_key_id(
+            args.release_source_finalizer_v1_pub
+        ),
+    }
+
+
+def _preflight_release_source_admission_paths(args: argparse.Namespace) -> None:
+    """Reject destructive aliases and no-clobber failures before provider I/O."""
+
+    def resolved(path: str) -> str:
+        return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+    paths = {
+        "output": args.out,
+        "source": args.source,
+        "context": args.context,
+        "producer identity": args.producer,
+        "admitter identity": args.admitter,
+        "GitHub policy": args.github_policy,
+        "producer receipt": args.receipt,
+        "handoff": args.handoff,
+        "verdict": args.verdict,
+        "Git executable": args.git_executable,
+        "GitHub CLI executable": args.gh_executable,
+        "private key": args.sign_key,
+        "public key": args.sign_pub,
+        "Trusted Finalizer public key": args.trusted_finalizer_pub,
+        "Artifact Admission V1 public key": args.artifact_admission_v1_pub,
+        "Artifact Digest Admission V2 public key": (
+            args.artifact_digest_admission_v2_pub
+        ),
+        "Release Source Finalizer V1 public key": (
+            args.release_source_finalizer_v1_pub
+        ),
+        "provider receipt": args.github_receipt_out,
+        "provider raw output": args.github_raw_output_out,
+    }
+    identities: dict[str, str] = {}
+    for label, path in paths.items():
+        identity = resolved(path)
+        if identity in identities:
+            raise ValueError(
+                f"release-source admission {label} path aliases {identities[identity]}"
+            )
+        identities[identity] = label
+    if os.path.lexists(args.out) and not args.force:
+        raise ValueError("release-source admission output already exists and --force was not set")
+    for label, path in (
+        ("provider receipt", args.github_receipt_out),
+        ("provider raw output", args.github_raw_output_out),
+    ):
+        if os.path.lexists(path):
+            raise ValueError(f"{label} output already exists; provider evidence is no-clobber")
+
+
+def cmd_seal_release_source_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Freshly verify the protected producer relation, then sign one V2 ALLOW."""
+
+    from evoom_guard.admission.release_source import (
+        RELEASE_SOURCE_ADMISSION_FORMAT,
+        ReleaseSourceAdmissionError,
+        seal_release_source_admission,
+    )
+    from evoom_guard.finalizer_derivation import (
+        FinalizerDerivationError,
+        git_executable_pin,
+    )
+    from evoom_guard.github_attestation import (
+        GitHubAttestationError,
+        github_attestation_provider_isolation,
+    )
+    from evoom_guard.release_source_producer_receipt import (
+        ReleaseSourceProducerReceiptError,
+        reverify_attested_release_source_producer_receipt,
+        validate_release_source_admitter_runtime_environment,
+        verify_release_source_admitter_workflow_blob,
+    )
+    from evoom_guard.signing import SigningUnavailableError, public_key_id
+
+    if any(value == "-" for value in (args.receipt, args.handoff, args.verdict)):
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "ERROR",
+                "error": "producer receipt, handoff, and verdict must be regular files, not standard input",
+            },
+        )
+        return 2
+    try:
+        source, context, producer = _producer_receipt_external_inputs(args)
+        admitter = _read_external_finalizer_object(
+            args.admitter,
+            label="expected release-source admitter",
+        )
+        github_policy = _read_external_finalizer_object(
+            args.github_policy, label="GitHub producer-attestation policy"
+        )
+        key_separation = _release_source_key_separation(args)
+        expected_signing_key_id = public_key_id(args.sign_pub)
+        if expected_signing_key_id in set(key_separation.values()):
+            raise ValueError(
+                "release-source admission public key belongs to another configured trust domain"
+            )
+        _preflight_release_source_admission_paths(args)
+        git_executable = git_executable_pin(
+            args.git_executable,
+            args.git_executable_sha256,
+        )
+        provider_isolation = github_attestation_provider_isolation(
+            args.gh_executable,
+            args.gh_executable_sha256,
+            uid=args.provider_isolation_uid,
+            gid=args.provider_isolation_gid,
+        )
+        admitter = verify_release_source_admitter_workflow_blob(
+            source=source,
+            producer=producer,
+            admitter=admitter,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            git_executable=git_executable,
+        )
+        event_path = os.environ.get("GITHUB_EVENT_PATH")
+        if not event_path:
+            raise ValueError(
+                "seal-release-source-admission requires GitHub Actions GITHUB_EVENT_PATH"
+            )
+        event_payload = _read_external_finalizer_object(
+            event_path,
+            label="GitHub Actions workflow_run event payload",
+        )
+        runtime_admitter = validate_release_source_admitter_runtime_environment(
+            admitter,
+            producer,
+            environment=os.environ,
+            event_payload=event_payload,
+        )
+        attested = reverify_attested_release_source_producer_receipt(
+            args.receipt,
+            args.handoff,
+            args.verdict,
+            expected_source=source,
+            expected_context=context,
+            expected_producer=producer,
+            expected_bootstrap_guard_sha256=args.bootstrap_guard_sha,
+            expected_github_policy=github_policy,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            github_receipt_path=args.github_receipt_out,
+            github_raw_output_path=args.github_raw_output_out,
+            gh_executable=args.gh_executable,
+            timeout_seconds=args.timeout_seconds,
+            provider_isolation=provider_isolation,
+            protected_signing_key_path=args.sign_key,
+            git_executable=git_executable,
+        )
+        sealed = seal_release_source_admission(
+            attested,
+            args.out,
+            admitter=runtime_admitter,
+            key_separation=key_separation,
+            git_repository=args.git_repository,
+            git_repository_is_bare=args.git_repository_bare,
+            git_executable=git_executable,
+            provider_isolation=provider_isolation,
+            private_key_path=args.sign_key,
+            signing_public_key_path=args.sign_pub,
+            expected_signing_key_id=expected_signing_key_id,
+            force=args.force,
+        )
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        ReleaseSourceAdmissionError,
+        ReleaseSourceProducerReceiptError,
+        GitHubAttestationError,
+        FinalizerDerivationError,
+        SigningUnavailableError,
+    ) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
+                "ok": False,
+                "sealed": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_ADMISSION_FORMAT,
+            "ok": True,
+            "sealed": True,
+            "verified": True,
+            "status": "SEALED",
+            "bundle": sealed.bundle_path,
+            "key_id": sealed.manifest["authentication"]["key_id"],
+            "record_sha256": sealed.manifest["record"]["sha256"],
+            "producer_receipt_sha256": sealed.manifest["producer_receipt"]["sha256"],
+            "decision": sealed.decision,
+            "admission": True,
+            "provider_verified": True,
+        },
+    )
+    return 0
+
+
+def cmd_verify_release_source_admission(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Verify a V2 source authorization using only external trust roots."""
+
+    from evoom_guard.admission.release_source import (
+        RELEASE_SOURCE_ADMISSION_FORMAT,
+        ReleaseSourceAdmissionError,
+        verify_release_source_admission,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    if args.bundle == "-":
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "ERROR",
+                "error": "release-source admission bundle must be a regular file, not standard input",
+            },
+        )
+        return 2
+    try:
+        source = _read_external_finalizer_object(args.expected_source, label="expected release source")
+        context = _read_external_finalizer_object(
+            args.expected_context, label="expected release-source context"
+        )
+        producer = _read_external_finalizer_object(
+            args.expected_producer, label="expected producer identity"
+        )
+        admitter = _read_external_finalizer_object(
+            args.expected_admitter, label="expected protected C workflow identity"
+        )
+        github_policy = _read_external_finalizer_object(
+            args.expected_github_policy, label="expected GitHub producer-attestation policy"
+        )
+        key_separation = _release_source_key_separation(args)
+        verified = verify_release_source_admission(
+            args.bundle,
+            trusted_public_key_path=args.trusted_pub,
+            expected_source=source,
+            expected_context=context,
+            expected_producer=producer,
+            expected_admitter=admitter,
+            expected_bootstrap_guard_sha256=args.expected_bootstrap_guard_sha,
+            expected_github_policy=github_policy,
+            expected_key_separation=key_separation,
+            expected_git_executable_sha256=args.expected_git_executable_sha256,
+            expected_github_cli_executable_sha256=args.expected_gh_executable_sha256,
+            expected_provider_isolation_uid=args.expected_provider_isolation_uid,
+            expected_provider_isolation_gid=args.expected_provider_isolation_gid,
+        )
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        ReleaseSourceAdmissionError,
+        SigningUnavailableError,
+    ) as exc:
+        _machine_report(
+            out,
+            {
+                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
+                "ok": False,
+                "verified": False,
+                "status": "REJECTED",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": RELEASE_SOURCE_ADMISSION_FORMAT,
+            "ok": True,
+            "verified": True,
+            "status": "VERIFIED",
+            "key_id": verified.bundle.manifest["authentication"]["key_id"],
+            "record_sha256": verified.bundle.manifest["record"]["sha256"],
+            "producer_receipt_sha256": verified.bundle.manifest["producer_receipt"]["sha256"],
+            "decision": verified.decision,
+            "admission": True,
+        },
+    )
+    return 0
+
+
 def cmd_seal_artifact_admission(
     args: argparse.Namespace,
     *,
@@ -3818,6 +4326,35 @@ def _github_attestation_policy_kwargs(
     }
 
 
+def _github_attestation_provider_isolation(
+    args: argparse.Namespace,
+) -> GitHubAttestationProviderIsolation | None:
+    """Build the optional all-or-nothing POSIX provider-isolation contract."""
+
+    from evoom_guard.github_attestation import (
+        GitHubAttestationError,
+        github_attestation_provider_isolation,
+    )
+
+    digest = args.gh_executable_sha256
+    uid = args.provider_isolation_uid
+    gid = args.provider_isolation_gid
+    supplied = (digest is not None, uid is not None, gid is not None)
+    if not any(supplied):
+        return None
+    if not all(supplied):
+        raise GitHubAttestationError(
+            "--gh-executable-sha256, --provider-isolation-uid, and "
+            "--provider-isolation-gid must be supplied together"
+        )
+    return github_attestation_provider_isolation(
+        args.gh_executable,
+        digest,
+        uid=uid,
+        gid=gid,
+    )
+
+
 def cmd_github_attestation_receipt(
     args: argparse.Namespace,
     *,
@@ -3839,6 +4376,7 @@ def cmd_github_attestation_receipt(
             **_github_attestation_policy_kwargs(args),
             gh_executable=args.gh_executable,
             timeout_seconds=args.timeout_seconds,
+            provider_isolation=_github_attestation_provider_isolation(args),
         )
     except GitHubAttestationError as exc:
         _machine_report(
@@ -3962,6 +4500,7 @@ def cmd_reverify_github_attestation_receipt(
             **_github_attestation_policy_kwargs(args),
             gh_executable=args.gh_executable,
             timeout_seconds=args.timeout_seconds,
+            provider_isolation=_github_attestation_provider_isolation(args),
         )
     except GitHubAttestationError as exc:
         _machine_report(
@@ -4081,6 +4620,7 @@ def cmd_seal_github_attestation_admission(
             private_key_path=args.sign_key,
             gh_executable=args.gh_executable,
             timeout_seconds=args.timeout_seconds,
+            provider_isolation=_github_attestation_provider_isolation(args),
         )
     except GitHubAttestationError as exc:
         _machine_report(
@@ -4516,6 +5056,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify_release_source_producer_receipt(args)
     if args.command == "reverify-attested-release-source-producer-receipt":
         return cmd_reverify_attested_release_source_producer_receipt(args)
+    if args.command == "seal-release-source-admission":
+        return cmd_seal_release_source_admission(args)
+    if args.command == "verify-release-source-admission":
+        return cmd_verify_release_source_admission(args)
     if args.command == "seal-artifact-admission":
         return cmd_seal_artifact_admission(args)
     if args.command == "verify-artifact-admission":

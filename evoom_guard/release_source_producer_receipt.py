@@ -10,23 +10,28 @@ only a claim until a separate, protected workflow obtains a *fresh* GitHub
 Artifact Attestation verification for its exact bytes.  The safe topology is:
 
 ``unprivileged reverify`` -> ``workflow_run receipt producer`` ->
-``provider attestation`` -> ``future separately-keyed admission finalizer``.
+``provider attestation`` -> ``separately-keyed admission finalizer``.
 
 The candidate-executing job never receives ``id-token: write``,
 ``attestations: write``, a producer key, or an admission key.  The producer
 workflow re-derives raw Git bindings and validates the record before it creates
-the canonical receipt.  A future admission finalizer must repeat those checks
+the canonical receipt.  The V2 admission finalizer repeats those checks
 and freshly reverify the provider attestation before it opens an admission key.
 
-The functions here implement the first two, non-admitting pieces.  They make a
-future ``ALLOW`` *possible* without making a local JSON file authority today.
+The functions here implement the first two, non-admitting pieces. They make a
+separate V2 ``ALLOW`` possible without making a local JSON file authority.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from dataclasses import field as dataclass_field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from evoom_guard.finalizer_derivation import GitExecutablePin
 
 from evoom_guard.evidence_bundle import (
     MAX_VERDICT_BYTES,
@@ -43,8 +48,10 @@ from evoom_guard.github_attestation import (
     CreatedGitHubAttestationReceipt,
     GitHubAttestationError,
     GitHubAttestationPolicy,
+    GitHubAttestationProviderIsolation,
     create_github_attestation_receipt,
     github_attestation_policy,
+    validate_provider_isolated_signing_key_path,
 )
 from evoom_guard.release_source_finalizer import (
     MAX_RELEASE_SOURCE_HANDOFF_BYTES,
@@ -65,6 +72,17 @@ RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT = "EVOGUARD_RELEASE_SOURCE_PRODUCER_RECEI
 RELEASE_SOURCE_PRODUCER_RUNTIME_FORMAT = "EVOGUARD_GUARD_ZIPAPP_SHA256_V1"
 
 MAX_RELEASE_SOURCE_PRODUCER_RECEIPT_BYTES = 512 * 1024
+
+_WORKFLOW_PATH = re.compile(
+    r"\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\.ya?ml\Z"
+)
+
+# An in-process sequencing capability, not a cryptographic trust root.  It
+# prevents callers from accidentally constructing the public result dataclass
+# and skipping ``reverify_attested_release_source_producer_receipt``.  The
+# protected workflow topology and provider verification remain the authority.
+_ATTESTED_RELEASE_SOURCE_CAPABILITY = object()
+_RUNTIME_BOUND_ADMITTER_CAPABILITY = object()
 
 _RECEIPT_KEYS = {
     "format",
@@ -150,6 +168,73 @@ class AttestedReleaseSourceProducerReceipt:
 
     verified: VerifiedReleaseSourceProducerReceipt
     github_receipt: CreatedGitHubAttestationReceipt
+    _capability: object = dataclass_field(default=None, init=False, repr=False, compare=False)
+
+
+@dataclass(frozen=True)
+class RuntimeBoundReleaseSourceAdmitter:
+    """Opaque proof that C matched one current GitHub Actions runtime/event."""
+
+    admitter: dict[str, Any]
+    _capability: object = dataclass_field(default=None, init=False, repr=False, compare=False)
+
+
+def _is_fresh_attested_release_source_producer_receipt(value: object) -> bool:
+    """Return whether ``value`` was minted by this module's fresh verifier."""
+
+    from evoom_guard.finalizer_derivation import GitExecutablePin
+
+    if type(value) is not AttestedReleaseSourceProducerReceipt:
+        return False
+    capability = value._capability
+    return (
+        isinstance(capability, tuple)
+        and len(capability) == 6
+        and capability[0] is _ATTESTED_RELEASE_SOURCE_CAPABILITY
+        and capability[1] is value.verified
+        and capability[2] is value.github_receipt
+        and (
+            capability[3] is None
+            or type(capability[3]) is GitHubAttestationProviderIsolation
+        )
+        and (capability[4] is None or type(capability[4]) is str)
+        and (capability[5] is None or type(capability[5]) is GitExecutablePin)
+    )
+
+
+def is_fresh_attested_release_source_producer_receipt(value: object) -> bool:
+    """Return whether the fresh provider verifier minted ``value`` in-process."""
+
+    return _is_fresh_attested_release_source_producer_receipt(value)
+
+
+def is_admission_capable_attested_release_source_producer_receipt(
+    value: object,
+    *,
+    private_key_path: str,
+    git_executable: GitExecutablePin,
+    provider_isolation: GitHubAttestationProviderIsolation,
+) -> bool:
+    """Return whether provider isolation protected this exact signing key.
+
+    A fresh provider result without this stronger private capability remains
+    useful as non-admitting evidence, but cannot be converted into ``ALLOW``.
+    The canonical key path is validated before the provider process starts and
+    is then bound to the in-process capability consumed by the V2 sealer.
+    """
+
+    if not _is_fresh_attested_release_source_producer_receipt(value):
+        return False
+    assert isinstance(value, AttestedReleaseSourceProducerReceipt)
+    capability = value._capability
+    assert isinstance(capability, tuple) and len(capability) == 6
+    return (
+        type(capability[3]) is GitHubAttestationProviderIsolation
+        and capability[3] == provider_isolation
+        and type(capability[4]) is str
+        and capability[4] == private_key_path
+        and capability[5] == git_executable
+    )
 
 
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str], label: str) -> None:
@@ -219,6 +304,16 @@ def _workflow_path(value: object, *, label: str) -> str:
         )
     if any(part in {"", ".", ".."} for part in path.split("/")):
         raise ReleaseSourceProducerReceiptError(f"{label} has an unsafe path segment")
+    workflow_name = path.removeprefix(".github/workflows/")
+    if "/" in workflow_name:
+        raise ReleaseSourceProducerReceiptError(
+            f"{label} must name a workflow file directly under .github/workflows"
+        )
+    if _WORKFLOW_PATH.fullmatch(path) is None:
+        raise ReleaseSourceProducerReceiptError(
+            f"{label} must use an ASCII workflow filename matching "
+            "[A-Za-z0-9][A-Za-z0-9_.-]*.yml or .yaml"
+        )
     return path
 
 
@@ -320,6 +415,185 @@ def validate_release_source_producer(value: Mapping[str, Any]) -> dict[str, Any]
     }
 
 
+def validate_release_source_admitter(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the protected C workflow identity used by source admission.
+
+    The closed-world shape intentionally matches the existing protected
+    producer identity.  Its relationship is different, however: the
+    admission workflow must be triggered by that exact producer run rather
+    than by the unprivileged evaluation run.
+    """
+
+    return validate_release_source_producer(value)
+
+
+def validate_release_source_admitter_binding(
+    source: Mapping[str, Any],
+    producer: Mapping[str, Any],
+    admitter: Mapping[str, Any],
+) -> None:
+    """Bind one protected C run to the exact B producer and source commit."""
+
+    checked_source = validate_release_source(source)
+    checked_producer = validate_release_source_producer(producer)
+    checked_admitter = validate_release_source_admitter(admitter)
+    pairs = {
+        "workflow_repository": "workflow_repository",
+        "workflow_repository_id": "workflow_repository_id",
+        "workflow_id": "trigger_workflow_id",
+        "workflow_path": "trigger_workflow_path",
+        "workflow_blob_sha": "trigger_workflow_blob_sha",
+        "workflow_run_id": "trigger_workflow_run_id",
+        "workflow_run_attempt": "trigger_workflow_run_attempt",
+    }
+    for producer_key, admitter_key in pairs.items():
+        if checked_producer[producer_key] != checked_admitter[admitter_key]:
+            raise ReleaseSourceProducerReceiptError(
+                f"producer.{producer_key} does not match admitter.{admitter_key}"
+            )
+    if checked_admitter["workflow_repository"] != checked_source["repository"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow repository does not match release source"
+        )
+    if checked_admitter["workflow_repository_id"] != checked_source["repository_id"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow repository ID does not match release source"
+        )
+    if checked_admitter["workflow_commit_sha"] != checked_source["target_commit_sha"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow commit does not match protected-main source"
+        )
+    for field in ("workflow_id", "workflow_path", "workflow_run_id"):
+        if checked_admitter[field] == checked_producer[field]:
+            raise ReleaseSourceProducerReceiptError(
+                f"admitter {field} must be distinct from the producer"
+            )
+    if checked_admitter["workflow_id"] == checked_producer["trigger_workflow_id"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow must be distinct from the evaluation workflow"
+        )
+    if checked_admitter["workflow_path"] == checked_producer["trigger_workflow_path"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow path must be distinct from the evaluation workflow"
+        )
+    if checked_admitter["workflow_run_id"] == checked_producer["trigger_workflow_run_id"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow run must be distinct from the evaluation run"
+        )
+
+
+def validate_release_source_admitter_runtime_environment(
+    admitter: Mapping[str, Any],
+    producer: Mapping[str, Any],
+    *,
+    environment: Mapping[str, str],
+    event_payload: Mapping[str, Any],
+) -> RuntimeBoundReleaseSourceAdmitter:
+    """Bind the C selector to the protected GitHub Actions runtime context.
+
+    This adapter is for the admitting CLI inside GitHub Actions.  It compares
+    the current C run to GitHub's default ``GITHUB_*`` and
+    ``RUNNER_ENVIRONMENT`` variables, then compares its ``workflow_run`` trigger
+    to the control-plane event payload. GitHub documents those default
+    variables as non-overridable. The reviewed C workflow and the GitHub-hosted
+    runner remain trust roots.
+    """
+
+    checked_admitter = validate_release_source_admitter(admitter)
+    checked_producer = validate_release_source_producer(producer)
+    expected_environment = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REPOSITORY": checked_admitter["workflow_repository"],
+        "GITHUB_REPOSITORY_ID": checked_admitter["workflow_repository_id"],
+        "GITHUB_RUN_ID": checked_admitter["workflow_run_id"],
+        "GITHUB_RUN_ATTEMPT": str(checked_admitter["workflow_run_attempt"]),
+        "GITHUB_EVENT_NAME": "workflow_run",
+        "GITHUB_REF": checked_admitter["workflow_ref"],
+        "GITHUB_SHA": checked_admitter["workflow_commit_sha"],
+        "GITHUB_WORKFLOW_REF": (
+            f"{checked_admitter['workflow_repository']}/"
+            f"{checked_admitter['workflow_path']}@{checked_admitter['workflow_ref']}"
+        ),
+        "GITHUB_WORKFLOW_SHA": checked_admitter["workflow_commit_sha"],
+        "RUNNER_ENVIRONMENT": "github-hosted",
+    }
+    for name, expected in expected_environment.items():
+        if environment.get(name) != expected:
+            raise ReleaseSourceProducerReceiptError(
+                f"protected admitter runtime {name} does not match its external identity"
+            )
+
+    repository = event_payload.get("repository")
+    workflow_run = event_payload.get("workflow_run")
+    if not isinstance(repository, dict) or not isinstance(workflow_run, dict):
+        raise ReleaseSourceProducerReceiptError(
+            "protected admitter workflow_run event payload is incomplete"
+        )
+    event_expectations: tuple[tuple[Mapping[str, Any], str, object], ...] = (
+        (repository, "full_name", checked_admitter["workflow_repository"]),
+        (repository, "id", int(checked_admitter["workflow_repository_id"])),
+        (workflow_run, "id", int(checked_producer["workflow_run_id"])),
+        (workflow_run, "run_attempt", checked_producer["workflow_run_attempt"]),
+        (workflow_run, "workflow_id", int(checked_producer["workflow_id"])),
+        (workflow_run, "path", checked_producer["workflow_path"]),
+        (workflow_run, "head_sha", checked_producer["workflow_commit_sha"]),
+        (workflow_run, "head_branch", "main"),
+        (workflow_run, "event", checked_producer["workflow_event"]),
+        (workflow_run, "status", "completed"),
+        (workflow_run, "conclusion", "success"),
+    )
+    for container, field, expected in event_expectations:
+        if container.get(field) != expected:
+            raise ReleaseSourceProducerReceiptError(
+                f"protected admitter workflow_run event {field} does not match the producer"
+            )
+    bound = RuntimeBoundReleaseSourceAdmitter(admitter=dict(checked_admitter))
+    object.__setattr__(
+        bound,
+        "_capability",
+        (
+            _RUNTIME_BOUND_ADMITTER_CAPABILITY,
+            _canonical_json(checked_admitter),
+            _canonical_json(checked_producer),
+        ),
+    )
+    return bound
+
+
+def require_runtime_bound_release_source_admitter(
+    value: object,
+    *,
+    expected_producer: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Consume a C runtime capability only for the producer it authenticated."""
+
+    if type(value) is not RuntimeBoundReleaseSourceAdmitter:
+        raise ReleaseSourceProducerReceiptError(
+            "release-source admission requires a runtime-bound admitter capability"
+        )
+    capability = value._capability
+    if (
+        not isinstance(capability, tuple)
+        or len(capability) != 3
+        or capability[0] is not _RUNTIME_BOUND_ADMITTER_CAPABILITY
+        or type(capability[1]) is not bytes
+        or type(capability[2]) is not bytes
+    ):
+        raise ReleaseSourceProducerReceiptError(
+            "release-source admitter runtime capability was not minted by this module"
+        )
+    checked_admitter = validate_release_source_admitter(value.admitter)
+    checked_producer = validate_release_source_producer(expected_producer)
+    if (
+        _canonical_json(checked_admitter) != capability[1]
+        or _canonical_json(checked_producer) != capability[2]
+    ):
+        raise ReleaseSourceProducerReceiptError(
+            "release-source admitter runtime capability does not match its C/B identity"
+        )
+    return checked_admitter
+
+
 def _validate_execution(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ReleaseSourceProducerReceiptError("producer receipt execution must be an object")
@@ -355,7 +629,7 @@ def _validate_execution(value: object) -> dict[str, Any]:
 
 
 def _validate_allow_record(record: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
-    """Require the strong execution profile that a future admission could use.
+    """Require the strong execution profile consumed by V2 admission.
 
     This checks the semantic record in addition to the receipt's own execution
     claim.  It still cannot authenticate who wrote the record; that is what the
@@ -429,6 +703,14 @@ def _validate_allow_record(record: Mapping[str, Any], context: Mapping[str, Any]
     }
 
 
+def validate_release_source_allow_record(
+    record: Mapping[str, Any], context: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Validate the strong semantic execution profile required for admission."""
+
+    return _validate_allow_record(record, context)
+
+
 def _validate_source_context_producer(
     source: Mapping[str, Any], context: Mapping[str, Any], producer: Mapping[str, Any]
 ) -> None:
@@ -459,12 +741,21 @@ def _validate_source_context_producer(
         )
 
 
+def validate_release_source_context_producer_binding(
+    source: Mapping[str, Any], context: Mapping[str, Any], producer: Mapping[str, Any]
+) -> None:
+    """Bind a protected producer identity to one exact source/context pair."""
+
+    _validate_source_context_producer(source, context, producer)
+
+
 def _verify_producer_workflow_blobs(
     *,
     source: Mapping[str, Any],
     producer: Mapping[str, Any],
     git_repository: str,
     git_repository_is_bare: bool,
+    git_executable: GitExecutablePin | None = None,
 ) -> None:
     """Bind both workflow definitions to the raw protected-main tree.
 
@@ -478,8 +769,12 @@ def _verify_producer_workflow_blobs(
     try:
         from evoom_guard.finalizer_derivation import FinalizerDerivationError, _GitReader
 
-        reader = _GitReader(git_repository, bare=git_repository_is_bare)
-        tree = reader.tree(str(source["target_tree_sha"]))
+        with _GitReader(
+            git_repository,
+            bare=git_repository_is_bare,
+            git_executable=git_executable,
+        ) as reader:
+            tree = reader.tree(str(source["target_tree_sha"]))
     except FinalizerDerivationError as exc:
         raise ReleaseSourceProducerReceiptError(
             f"could not resolve producer workflow from raw Git: {exc}"
@@ -497,6 +792,54 @@ def _verify_producer_workflow_blobs(
             raise ReleaseSourceProducerReceiptError(
                 f"{role} workflow blob does not match the protected-main raw Git tree"
             )
+
+
+def verify_release_source_admitter_workflow_blob(
+    *,
+    source: Mapping[str, Any],
+    producer: Mapping[str, Any],
+    admitter: Mapping[str, Any],
+    git_repository: str,
+    git_repository_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
+) -> dict[str, Any]:
+    """Verify the C workflow definition from the immutable raw-Git tree.
+
+    The producer-to-admitter run relationship is validated before the tree is
+    opened.  No checkout, import, or execution of the protected source occurs.
+    """
+
+    checked_source = validate_release_source(source)
+    checked_producer = validate_release_source_producer(producer)
+    checked_admitter = validate_release_source_admitter(admitter)
+    validate_release_source_admitter_binding(
+        checked_source,
+        checked_producer,
+        checked_admitter,
+    )
+    try:
+        from evoom_guard.finalizer_derivation import FinalizerDerivationError, _GitReader
+
+        with _GitReader(
+            git_repository,
+            bare=git_repository_is_bare,
+            git_executable=git_executable,
+        ) as reader:
+            tree = reader.tree(str(checked_source["target_tree_sha"]))
+    except FinalizerDerivationError as exc:
+        raise ReleaseSourceProducerReceiptError(
+            f"could not resolve admitter workflow from raw Git: {exc}"
+        ) from exc
+    entry = tree.get(str(checked_admitter["workflow_path"]))
+    if entry is None or not entry.regular:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow path is not a regular blob in the protected-main tree"
+        )
+    if entry.object_id != checked_admitter["workflow_blob_sha"]:
+        raise ReleaseSourceProducerReceiptError(
+            "admitter workflow blob does not match the protected-main raw Git tree"
+        )
+    return checked_admitter
 
 
 def validate_release_source_producer_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -576,14 +919,15 @@ def create_release_source_producer_receipt(
     producer: Mapping[str, Any],
     git_repository: str,
     git_repository_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
     """Create an unsigned canonical producer claim for a clean receipt job.
 
     The function intentionally has no signing-key parameter.  Calling it from a
     hostile context yields only data; the protected receipt workflow must later
-    attest its exact bytes with GitHub and a future finalizer must freshly verify
-    that provider assertion before any admission key is available.
+    attest its exact bytes with GitHub and the V2 finalizer must freshly verify
+    that provider assertion before any admission key is opened.
     """
 
     checked_source = validate_release_source(source)
@@ -595,6 +939,7 @@ def create_release_source_producer_receipt(
             git_repository=git_repository,
             source=checked_source,
             git_repository_is_bare=git_repository_is_bare,
+            git_executable=git_executable,
         )
         inspected_handoff = inspect_release_source_handoff(handoff_path)
         handoff = verify_release_source_handoff(
@@ -615,6 +960,7 @@ def create_release_source_producer_receipt(
         producer=checked_producer,
         git_repository=git_repository,
         git_repository_is_bare=git_repository_is_bare,
+        git_executable=git_executable,
     )
     profile = _validate_allow_record(handoff.verdict, checked_context)
     payload = {
@@ -670,6 +1016,7 @@ def verify_release_source_producer_receipt(
     expected_bootstrap_guard_sha256: str,
     git_repository: str,
     git_repository_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
 ) -> VerifiedReleaseSourceProducerReceipt:
     """Repeat all source/record/raw-Git checks before a provider or key boundary."""
 
@@ -682,6 +1029,7 @@ def verify_release_source_producer_receipt(
             git_repository=git_repository,
             source=source,
             git_repository_is_bare=git_repository_is_bare,
+            git_executable=git_executable,
         )
         inspected_handoff = inspect_release_source_handoff(handoff_path)
         handoff = verify_release_source_handoff(
@@ -702,6 +1050,7 @@ def verify_release_source_producer_receipt(
         producer=producer,
         git_repository=git_repository,
         git_repository_is_bare=git_repository_is_bare,
+        git_executable=git_executable,
     )
     receipt = inspect_release_source_producer_receipt(receipt_path)
     if receipt.source != source or receipt.context != context or receipt.producer != producer:
@@ -785,11 +1134,17 @@ def reverify_attested_release_source_producer_receipt(
     git_repository_is_bare: bool = False,
     gh_executable: str = "gh",
     timeout_seconds: int = 120,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
+    protected_signing_key_path: str | None = None,
+    git_executable: GitExecutablePin | None = None,
 ) -> AttestedReleaseSourceProducerReceipt:
     """Freshly verify the provider attestation only after exact local checks.
 
-    No signing key is accepted or opened here.  The caller can use the returned
-    object as a prerequisite for a future, separately scoped admission key.
+    The signing key is never opened here.  If ``protected_signing_key_path`` is
+    provided, its metadata is checked before the provider starts and the
+    resulting private capability is bound to that exact path, provider
+    isolation contract, and pinned Git executable.  Without all three, the
+    returned result remains non-admitting evidence.
     """
 
     verified = verify_release_source_producer_receipt(
@@ -802,7 +1157,25 @@ def reverify_attested_release_source_producer_receipt(
         expected_bootstrap_guard_sha256=expected_bootstrap_guard_sha256,
         git_repository=git_repository,
         git_repository_is_bare=git_repository_is_bare,
+        git_executable=git_executable,
     )
+    canonical_signing_key_path: str | None = None
+    if protected_signing_key_path is not None:
+        if provider_isolation is None:
+            raise ReleaseSourceProducerReceiptError(
+                "an admission signing key requires isolated provider execution"
+            )
+        if git_executable is None:
+            raise ReleaseSourceProducerReceiptError(
+                "an admission signing key requires a pinned Git executable"
+            )
+        try:
+            canonical_signing_key_path = validate_provider_isolated_signing_key_path(
+                protected_signing_key_path,
+                provider_isolation,
+            )
+        except GitHubAttestationError as exc:
+            raise ReleaseSourceProducerReceiptError(str(exc)) from exc
     policy = _github_policy_from_mapping(expected_github_policy)
     receipt = verified.receipt
     if policy.repository != receipt.source["repository"]:
@@ -841,7 +1214,26 @@ def reverify_attested_release_source_producer_receipt(
             cert_oidc_issuer=policy.cert_oidc_issuer,
             gh_executable=gh_executable,
             timeout_seconds=timeout_seconds,
+            expected_workflow_run_id=receipt.producer["workflow_run_id"],
+            expected_workflow_run_attempt=receipt.producer["workflow_run_attempt"],
+            provider_isolation=provider_isolation,
         )
     except GitHubAttestationError as exc:
         raise ReleaseSourceProducerReceiptError(str(exc)) from exc
-    return AttestedReleaseSourceProducerReceipt(verified=verified, github_receipt=github_receipt)
+    attested = AttestedReleaseSourceProducerReceipt(
+        verified=verified,
+        github_receipt=github_receipt,
+    )
+    object.__setattr__(
+        attested,
+        "_capability",
+        (
+            _ATTESTED_RELEASE_SOURCE_CAPABILITY,
+            verified,
+            github_receipt,
+            provider_isolation,
+            canonical_signing_key_path,
+            git_executable,
+        ),
+    )
+    return attested

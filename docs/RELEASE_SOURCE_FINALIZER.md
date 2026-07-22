@@ -79,8 +79,9 @@ The receipt producer can obtain a GitHub Artifact Attestation for those exact
 bytes; the final reference stage re-verifies that provider assertion freshly.
 
 This does **not** upgrade V1 to `ALLOW`, sign an `.rse`, open a key, or enable a
-release workflow.  It is a prerequisite for a later, separately designed V2
-admission finalizer.  In particular, a local receipt or a retained provider
+release workflow. It is the non-admitting prerequisite consumed by the
+separate current-source [V2 admission finalizer](RELEASE_SOURCE_ADMISSION_V2.md).
+In particular, a local receipt or a retained provider
 verification is never sufficient authority for a release decision.
 
 ## Commands

@@ -86,6 +86,14 @@ surface for command construction, patch seams, report interpretation, and
 evidence composition. This move adds no import-boundary fingerprint and does
 not justify a new ratchet revision or a baseline-ceiling change.
 
+Release Source Admission V2 enters the real `admission.release_source`
+package. The extracted module imports only explicit public contracts from the
+legacy evidence, finalizer-derivation pin, provider, release-source, receipt,
+and signing components.
+Those flat providers remain unclassified architectural debt until their atomic
+Stage 10 migrations; their shared public facades prevent that debt from
+spreading into the new admission layer.
+
 ## Acceptance rules
 
 - Any architecture-extraction PR must:

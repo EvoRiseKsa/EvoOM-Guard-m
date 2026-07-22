@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import subprocess
@@ -84,6 +85,104 @@ def _finalized_allow(tmp_path: Path):
     return bundle, finalizer_public, source, context
 
 
+def _verified_gh_output(
+    *,
+    artifact_sha256: str,
+    repository: str = "owner/project",
+    signer_workflow: str = "owner/project/.github/workflows/build.yml",
+    signer_digest: str = "c" * 40,
+    source_ref: str = "refs/heads/main",
+    source_digest: str = "b" * 40,
+    issuer: str = github_attestation.GITHUB_ATTESTATION_CERT_OIDC_ISSUER,
+    run_id: str = "987654321",
+    run_attempt: int = 2,
+) -> bytes:
+    repository_url = f"https://github.com/{repository}"
+    signer_uri = f"https://github.com/{signer_workflow}@{signer_digest}"
+    run_uri = f"{repository_url}/actions/runs/{run_id}/attempts/{run_attempt}"
+    return (
+        json.dumps(
+            [
+                {
+                    "attestation": {"opaque": "candidate-controlled"},
+                    "futureTopLevel": {"ignored": True},
+                    "verificationResult": {
+                        "futureVerificationField": [1, 2, 3],
+                        "signature": {
+                            "certificate": {
+                                "subjectAlternativeName": signer_uri,
+                                "issuer": issuer,
+                                "githubWorkflowRepository": repository,
+                                "githubWorkflowSHA": source_digest,
+                                "githubWorkflowRef": source_ref,
+                                "buildSignerURI": signer_uri,
+                                "buildSignerDigest": signer_digest,
+                                "runnerEnvironment": "github-hosted",
+                                "sourceRepositoryURI": repository_url,
+                                "sourceRepositoryDigest": source_digest,
+                                "sourceRepositoryRef": source_ref,
+                                "runInvocationURI": run_uri,
+                                "futureCertificateField": "ignored",
+                            }
+                        },
+                        "verifiedIdentity": {
+                            "runnerEnvironment": "github-hosted",
+                            "futureIdentityField": "ignored",
+                        },
+                        "statement": {
+                            "_type": "https://in-toto.io/Statement/v1",
+                            "subject": [
+                                {
+                                    "name": "artifact.bin",
+                                    "digest": {
+                                        "sha256": artifact_sha256,
+                                        "futureDigest": "ignored",
+                                    },
+                                    "futureSubjectField": "ignored",
+                                }
+                            ],
+                            "predicateType": github_attestation.GITHUB_ATTESTATION_PREDICATE_TYPE,
+                            "predicate": {
+                                "buildDefinition": {
+                                    "externalParameters": {
+                                        "workflow": {
+                                            "repository": repository_url,
+                                            "ref": source_ref,
+                                            "path": "/.github/workflows/build.yml",
+                                        }
+                                    },
+                                    "internalParameters": {
+                                        "github": {
+                                            "runner_environment": "github-hosted",
+                                            "futureGitHubField": "ignored",
+                                        }
+                                    },
+                                    "resolvedDependencies": [
+                                        {
+                                            "uri": f"git+{repository_url}@{source_ref}",
+                                            "digest": {"gitCommit": source_digest},
+                                        },
+                                        {"futureDependency": "ignored"},
+                                    ],
+                                },
+                                "runDetails": {
+                                    "builder": {"id": signer_uri},
+                                    "metadata": {"invocationId": run_uri},
+                                },
+                                "futurePredicateField": "ignored",
+                            },
+                            "futureStatementField": "ignored",
+                        },
+                    },
+                }
+            ],
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("ascii")
+
+
 def _successful_gh(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     calls: list[list[str]] = []
     real_popen = github_attestation.subprocess.Popen
@@ -96,10 +195,8 @@ def _successful_gh(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
             assert kwargs["stdout"] is subprocess.PIPE
             assert kwargs["stderr"] is subprocess.PIPE
             self.returncode = 0
-            self.stdout = io.BytesIO(
-                b'[{"attestation":{"opaque":"candidate-controlled"},'
-                b'"verificationResult":{"statement":{"predicate":{"untrusted":true}}}}]'
-            )
+            artifact_sha256 = hashlib.sha256(Path(command[3]).read_bytes()).hexdigest()
+            self.stdout = io.BytesIO(_verified_gh_output(artifact_sha256=artifact_sha256))
             self.stderr = io.BytesIO()
             assert "--repo" in command
             assert "--signer-workflow" in command
@@ -162,6 +259,182 @@ def _policy_kwargs(*, source_digest: str = "b" * 40, **overrides: str) -> dict[s
     return policy
 
 
+def _semantic_inputs() -> tuple[
+    github_attestation.GitHubAttestationArtifact,
+    github_attestation.GitHubAttestationPolicy,
+]:
+    artifact = github_attestation.GitHubAttestationArtifact(sha256="a" * 64, size=1)
+    kwargs = _policy_kwargs()
+    policy = github_attestation.github_attestation_policy(
+        kwargs["repository"],
+        kwargs["signer_workflow"],
+        kwargs["source_digest"],
+        signer_digest=kwargs["signer_digest"],
+        source_ref=kwargs["source_ref"],
+        cert_oidc_issuer=kwargs["cert_oidc_issuer"],
+    )
+    return artifact, policy
+
+
+def _mutated_output(
+    data: bytes,
+    path: tuple[str | int, ...],
+    value: object,
+) -> bytes:
+    decoded = json.loads(data)
+    cursor: object = decoded[0]
+    for component in path[:-1]:
+        assert isinstance(cursor, (dict, list))
+        cursor = cursor[component]  # type: ignore[index]
+    assert isinstance(cursor, (dict, list))
+    cursor[path[-1]] = value  # type: ignore[index]
+    return (json.dumps(decoded, sort_keys=True, separators=(",", ":")) + "\n").encode(
+        "ascii"
+    )
+
+
+def test_semantic_verifier_binds_signed_identity_and_allows_unknown_fields() -> None:
+    artifact, policy = _semantic_inputs()
+    output = _verified_gh_output(artifact_sha256=artifact.sha256)
+    verified = github_attestation.validate_github_attestation_verifier_output(
+        output,
+        artifact=artifact,
+        policy=policy,
+        expected_workflow_run_id="987654321",
+        expected_workflow_run_attempt=2,
+    )
+    assert verified.workflow_run_id == "987654321"
+    assert verified.workflow_run_attempt == 2
+
+
+def test_structural_loader_rejects_an_empty_result_object() -> None:
+    with pytest.raises(github_attestation.GitHubAttestationError, match="verificationResult"):
+        github_attestation.load_github_attestation_verifier_output(b"[{}]")
+
+
+def test_semantic_verifier_rejects_a_missing_required_certificate() -> None:
+    artifact, policy = _semantic_inputs()
+    output = _mutated_output(
+        _verified_gh_output(artifact_sha256=artifact.sha256),
+        ("verificationResult", "signature"),
+        {},
+    )
+    with pytest.raises(github_attestation.GitHubAttestationError, match="certificate"):
+        github_attestation.validate_github_attestation_verifier_output(
+            output,
+            artifact=artifact,
+            policy=policy,
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        (
+            ("verificationResult", "statement", "subject", 0, "digest", "sha256"),
+            "f" * 64,
+            "subject SHA-256",
+        ),
+        (
+            ("verificationResult", "statement", "predicateType"),
+            "https://example.invalid/predicate",
+            "predicateType",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "githubWorkflowRepository"),
+            "other/project",
+            "githubWorkflowRepository",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "buildSignerURI"),
+            "https://github.com/owner/project/.github/workflows/other.yml@" + "c" * 40,
+            "signer workflow URI",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "buildSignerDigest"),
+            "d" * 40,
+            "buildSignerDigest",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "sourceRepositoryDigest"),
+            "d" * 40,
+            "sourceRepositoryDigest",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "sourceRepositoryRef"),
+            "refs/heads/other",
+            "sourceRepositoryRef",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "issuer"),
+            "https://issuer.invalid",
+            "certificate.issuer",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "runnerEnvironment"),
+            "self-hosted",
+            "certificate.runnerEnvironment",
+        ),
+        (
+            ("verificationResult", "verifiedIdentity", "runnerEnvironment"),
+            "self-hosted",
+            "verified identity runner environment",
+        ),
+        (
+            (
+                "verificationResult",
+                "statement",
+                "predicate",
+                "buildDefinition",
+                "internalParameters",
+                "github",
+                "runner_environment",
+            ),
+            "self-hosted",
+            "predicate runner environment",
+        ),
+        (
+            ("verificationResult", "signature", "certificate", "runInvocationURI"),
+            "https://github.com/other/project/actions/runs/987654321/attempts/2",
+            "runInvocationURI",
+        ),
+    ],
+)
+def test_semantic_verifier_rejects_mismatched_signed_fields(
+    path: tuple[str | int, ...], value: object, message: str
+) -> None:
+    artifact, policy = _semantic_inputs()
+    output = _mutated_output(
+        _verified_gh_output(artifact_sha256=artifact.sha256), path, value
+    )
+    with pytest.raises(github_attestation.GitHubAttestationError, match=message):
+        github_attestation.validate_github_attestation_verifier_output(
+            output,
+            artifact=artifact,
+            policy=policy,
+        )
+
+
+def test_semantic_verifier_requires_complete_external_run_pin() -> None:
+    artifact, policy = _semantic_inputs()
+    output = _verified_gh_output(artifact_sha256=artifact.sha256)
+    with pytest.raises(github_attestation.GitHubAttestationError, match="supplied together"):
+        github_attestation.validate_github_attestation_verifier_output(
+            output,
+            artifact=artifact,
+            policy=policy,
+            expected_workflow_run_id="987654321",
+        )
+    with pytest.raises(github_attestation.GitHubAttestationError, match="run ID/attempt"):
+        github_attestation.validate_github_attestation_verifier_output(
+            output,
+            artifact=artifact,
+            policy=policy,
+            expected_workflow_run_id="987654322",
+            expected_workflow_run_attempt=2,
+        )
+
+
 def test_gh_environment_keeps_only_documented_authentication_variables(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -216,6 +489,23 @@ def test_create_receipt_runs_strict_gh_policy_and_preserves_exact_bytes(
     assert b"candidate-controlled" in raw_path.read_bytes()
 
 
+def test_create_receipt_rejects_success_output_with_the_wrong_signed_subject(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact, receipt_path, raw_path = _receipt_inputs(tmp_path)
+    monkeypatch.setattr(
+        github_attestation,
+        "_run_gh_attestation_verify",
+        lambda *_args, **_kwargs: _verified_gh_output(artifact_sha256="0" * 64),
+    )
+    with pytest.raises(github_attestation.GitHubAttestationError, match="subject SHA-256"):
+        github_attestation.create_github_attestation_receipt(
+            str(artifact), str(receipt_path), str(raw_path), **_policy_kwargs()
+        )
+    assert not receipt_path.exists()
+    assert not raw_path.exists()
+
+
 def test_receipt_recheck_requires_artifact_output_and_policy_to_match(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -240,6 +530,38 @@ def test_receipt_recheck_requires_artifact_output_and_policy_to_match(
     artifact.write_bytes(b"immutable-product-bytes\n")
     raw_path.write_bytes(b"[]")
     with pytest.raises(github_attestation.GitHubAttestationError, match="exactly one"):
+        github_attestation.verify_github_attestation_receipt(
+            str(receipt_path), str(artifact), str(raw_path), **kwargs
+        )
+
+
+def test_retained_recheck_revalidates_semantics_not_only_output_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _successful_gh(monkeypatch)
+    artifact, receipt_path, raw_path = _receipt_inputs(tmp_path)
+    kwargs = _policy_kwargs()
+    github_attestation.create_github_attestation_receipt(
+        str(artifact), str(receipt_path), str(raw_path), **kwargs
+    )
+    raw = _mutated_output(
+        raw_path.read_bytes(),
+        ("verificationResult", "statement", "subject", 0, "digest", "sha256"),
+        "f" * 64,
+    )
+    raw_path.write_bytes(raw)
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["verification_output"] = {
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "size": len(raw),
+        "verified_attestation_count": 1,
+    }
+    receipt_path.write_bytes(
+        (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode(
+            "ascii"
+        )
+    )
+    with pytest.raises(github_attestation.GitHubAttestationError, match="subject SHA-256"):
         github_attestation.verify_github_attestation_receipt(
             str(receipt_path), str(artifact), str(raw_path), **kwargs
         )

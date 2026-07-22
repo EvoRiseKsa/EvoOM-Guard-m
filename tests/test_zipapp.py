@@ -135,6 +135,55 @@ def test_pyz_exposes_non_admitting_producer_receipt_cli_contract(tmp_path):
     assert "--allow-nonadmitting-evidence" in reverified.stdout
 
 
+def test_pyz_exposes_release_source_admission_v2_cli_contract(tmp_path):
+    out = _build(tmp_path)
+    sealed = subprocess.run(
+        [sys.executable, out, "seal-release-source-admission", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert sealed.returncode == 0, sealed.stdout + sealed.stderr
+    assert "--github-policy" in sealed.stdout
+    assert "--github-receipt-out" in sealed.stdout
+    assert "--github-raw-output-out" in sealed.stdout
+    assert "--admitter" in sealed.stdout
+    assert "--git-executable-sha256" in sealed.stdout
+    assert "--gh-executable-sha256" in sealed.stdout
+    assert "--provider-isolation-uid" in sealed.stdout
+    assert "--provider-isolation-gid" in sealed.stdout
+    assert "--sign-key" in sealed.stdout
+    assert "--sign-pub" in sealed.stdout
+    assert "--trusted-finalizer-pub" in sealed.stdout
+    assert "--artifact-admission-v1-pub" in sealed.stdout
+    assert "--artifact-digest-admission-v2-pub" in sealed.stdout
+    assert "--release-source-finalizer-v1-pub" in sealed.stdout
+    assert "--must-differ-from-key-id" not in sealed.stdout
+
+    verified = subprocess.run(
+        [sys.executable, out, "verify-release-source-admission", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+    assert "--trusted-pub" in verified.stdout
+    assert "--expected-source" in verified.stdout
+    assert "--expected-producer" in verified.stdout
+    assert "--expected-admitter" in verified.stdout
+    assert "--expected-bootstrap-guard-sha" in verified.stdout
+    assert "--expected-github-policy" in verified.stdout
+    assert "--expected-git-executable-sha256" in verified.stdout
+    assert "--expected-gh-executable-sha256" in verified.stdout
+    assert "--expected-provider-isolation-uid" in verified.stdout
+    assert "--expected-provider-isolation-gid" in verified.stdout
+    assert "--trusted-finalizer-pub" in verified.stdout
+    assert "--artifact-admission-v1-pub" in verified.stdout
+    assert "--artifact-digest-admission-v2-pub" in verified.stdout
+    assert "--release-source-finalizer-v1-pub" in verified.stdout
+    assert "--must-differ-from-key-id" not in verified.stdout
+
+
 def test_pyz_contains_the_offline_record_verifier(tmp_path):
     out = _build(tmp_path)
     record = tmp_path / "invalid-record.json"

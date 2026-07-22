@@ -5,8 +5,9 @@
 
 # Authenticated producer receipt V1
 
-This document describes a **non-admitting prerequisite** for a future
-protected-`main` release-source admission design.  It does not change the
+This document describes the **non-admitting receipt prerequisite** consumed by
+the current-source [Release Source Admission V2](RELEASE_SOURCE_ADMISSION_V2.md).
+It does not change the
 meaning of [Release Source Finalizer V1](RELEASE_SOURCE_FINALIZER.md): V1 is
 still `DENY`-only, and this repository does not use the receipt to publish a
 tag, release, package, Marketplace action, or deployment.
@@ -29,7 +30,7 @@ closed set of fields.  It contains:
 | `source` / `context` | The exact protected `main` commit/tree, single parent/tree, repository ID, reverify run and attempt, candidate digest, policy digest, and verifier-pack digest. |
 | `record` / `handoff` | SHA-256 plus byte size of the exact Guard verdict and canonical release-source handoff. |
 | `bootstrap` | SHA-256 of the byte-pinned Guard zipapp selected for reverify. The digest alone proves neither release provenance nor that it actually ran. |
-| `execution` | The strong profile required for a future admission: completed black-box-only judgment, Docker or gVisor isolation, no network, and external-process report integrity. |
+| `execution` | The strong profile required by V2 admission: completed black-box-only judgment, Docker or gVisor isolation, no network, and external-process report integrity. |
 | `producer` | Numeric workflow IDs, distinct runs and attempts, repository IDs, protected ref, workflow path, immutable workflow blob, and the exact `main` commit used by the receipt workflow. |
 
 The implementation validates all cross-field equalities, re-derives source and
@@ -85,7 +86,7 @@ It re-derives the raw-Git controls, constructs the canonical receipt, and then
 requests GitHub Artifact Attestation solely for that receipt file.
 
 The workflow path and name are not treated as authority.  The receipt contains
-the B workflow's numeric ID and raw-Git blob identity, and a future consumer
+the B workflow's numeric ID and raw-Git blob identity, and the V2 consumer
 must pin both the workflow IDs and exact current protected-main commit.
 
 ### C — fresh verifier, still non-admitting
@@ -105,7 +106,7 @@ a release safe to publish.
 
 ## What this rejects
 
-The contract and reference topology reject, before any future key boundary:
+The contract and reference topology reject, before any V2 key boundary:
 
 - a receipt for a different repository, protected ref, commit/tree, policy,
   verifier pack, source run, or run attempt;
@@ -125,23 +126,20 @@ actually ran, or that an artifact was built from the source. A GitHub
 attestation also does not make arbitrary predicate data trustworthy by itself;
 the consumer must bind its exact artifact and its trusted workflow identity.
 
-## What remains before an ALLOW design
+## Current V2 boundary and remaining operational work
 
-Do not attach this receipt to `release.yml`, branch protection, a deployment,
-or a marketplace publication.  A safe future V2 admission design still needs:
+Do not attach this receipt alone to `release.yml`, branch protection, a
+deployment, or a Marketplace publication. The current v4.1.0 source implements
+the distinct V2 envelope/key domain, protected C runtime capability, raw-Git
+A/B/C workflow bindings, replay handling, fresh isolated provider check, and
+detached verifier. Those implementation facts do not make this older data-only
+reference topology an admitting workflow.
 
-1. a separate envelope format and admission signing key, distinct from the PR
-   finalizer, artifact-admission, V1 release-source, and any receipt identity;
-2. an Environment-protected key-bearing workflow that repeats every raw-Git,
-   workflow, run, receipt, and fresh-provider check before opening that key,
-   including job-level API validation of A and an independently governed raw
-   binding of both A and B workflow definitions;
-3. replay handling for the producer workflow/run/attempt tuple;
-4. a separately privileged release consumer which verifies the V2 `ALLOW` and
-   independently binds the built artifact to source; and
-5. live positive and negative rounds in a non-production repository, including
-   moved-main, altered-artifact, wrong-workflow, wrong-attempt, and failed-run
-   cases.
+Operational reliance still requires a published bootstrap runtime, a protected
+key-bearing C workflow, live positive and negative rounds, and a separately
+privileged release consumer that verifies the V2 `ALLOW` and independently
+binds the actual built artifact to its source. The current source is not a
+production gate and the bootstrap release cannot admit itself.
 
 The first release that contains these commands cannot safely use itself as the
 bootstrap runtime. Publish it through the existing process first; only a later
@@ -150,7 +148,7 @@ administrator-audited URL/SHA control-plane pin.
 
 ## Commands
 
-The zipapp exposes four non-admitting commands:
+The receipt layer exposes four non-admitting commands:
 
 ```text
 derive-release-source-controls
@@ -167,3 +165,8 @@ That switch must never be used as a release, deployment, merge, or branch-gate
 success condition. The supplied reference workflows show the required
 control-plane inputs; they are not an activation guide for an active production
 gate.
+
+The separate `seal-release-source-admission` and
+`verify-release-source-admission` commands implement V2 and are specified in
+[RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md); they do not
+change the four receipt commands into authorities.

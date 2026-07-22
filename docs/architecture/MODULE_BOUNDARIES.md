@@ -77,3 +77,16 @@ of completed repository-suite and mandatory verifier-pack evidence, including
 their composite JUnit identity. It must not perform filesystem, subprocess,
 container, or trace mutation. `RepoVerifier` still owns those effects and passes
 their completed evidence into the typed phase contracts.
+
+The first admission-layer slice lives in
+`evoom_guard/admission/release_source.py`. It owns the separately keyed V2
+release-source `ALLOW` envelope: closed-world manifest validation, replay
+binding, canonical archive inspection, signature verification, and the final
+composition of already verified source, producer, provider, and verdict
+relations. It may import only public contracts from the legacy evidence,
+finalizer-derivation pin, GitHub-attestation, release-source-finalizer,
+producer-receipt, record-verifier, and signing components. It must not execute
+candidate code, derive policy, or
+reinterpret the DENY-only V1 release-source decision. The package-wide schema
+remains under `evoom_guard/schemas/` until the evidence/finalizer Stage 10
+migration is performed atomically.
