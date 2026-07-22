@@ -62,7 +62,7 @@ evidence used to judge it. Guard still focuses on one narrow question:
   read-only candidate mounts. Setup fidelity permits conventional new outputs;
   additional `setup_output_globs` are explicit trusted policy.
 
-## Shipped source contract awaiting operational evidence
+## Shipped source contract with bounded operational evidence
 
 - **Release Source Admission V2** — published in `v4.1.0`, this separately keyed
   protected-main source `ALLOW` binds A/B/C workflow blobs and run attempts, a canonical producer
@@ -73,11 +73,22 @@ evidence used to judge it. Guard still focuses on one narrow question:
   provider identity cannot read the bound signing-key path before launch. The
   signed manifest exposes both tool digests and the provider UID/GID for
   detached comparison against external expectations.
-  V1 remains DENY-only. Publishing the implementation does not complete a live
-  V2 pilot and does not make it a production gate.
+  V1 remains DENY-only. A separate public pilot subsequently completed one
+  exact source-only V2 round; this does not make the mechanism a production
+  gate or authorize any artifact or publication.
 
 ## Operational evidence completed
 
+- The
+  [`Release Source Admission V2 pilot`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot)
+  completed one protected-main source-only round with the immutable `v4.1.0`
+  runtime. A/B/C attempts `29896945747/1`, `29896982146/1`, and
+  `29897001564/1` produced a Docker/network-none external-judge `PASS`, an
+  attested producer receipt, protected `SEALED/ALLOW`, and detached
+  `VERIFIED/ALLOW`. Its ledger separates live settings mutations and eleven D
+  mutations from cases not executed live. The result is bound only to source
+  `af8e4592ef5572acfe2ea295c435eed6a8e122fc`; it is not artifact, release,
+  publication, deployment, production, or independent-review evidence.
 - The frozen
   [`v4.0.2` finalizer pilot](https://github.com/EvoRiseKsa/evoom-guard-v4-finalizer-pilot)
   completed a fresh same-owner, cross-account Trusted Finalizer `ALLOW` and a
@@ -139,19 +150,20 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Exercise V2 before relying on it.** Run a disposable protected-main A/B/C
-   pilot using the published bootstrap runtime, pinned Git/`gh`, mandatory
-   provider isolation, five distinct key domains, and retained positive and
-   negative evidence.
-2. **Release-artifact and publication boundary.** Extend the completed
+1. **Release-artifact boundary.** Extend the completed
    regular-file/provider pilot with a distinct protected-main release-source
-   `ALLOW`, the actual release artifact digest, its provider attestation, and a
-   separately privileged draft-release consumer. OCI, registry, deployment,
-   and reproducibility remain separate later contracts.
-3. **Independent evidence.** Request external security review and a genuinely
-   blind evaluation; same-owner cross-account review remains operational
-   separation, not independence.
-4. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
+   `ALLOW`, the actual release artifact digest, and its provider attestation.
+   The existing artifact commands consume a PR Finalizer `.evb`; they do not
+   consume a Release Source Admission `.rsae`, so a separately versioned
+   release-artifact adapter is required before any live claim. A draft-release
+   consumer, OCI, registry, deployment, and reproducibility remain separate
+   later contracts.
+2. **Independent evidence.** The active frozen request is
+   [`v4.1.0` issue #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
+   Completion requires an external reviewer and genuinely blind evaluation;
+   same-owner cross-account review remains operational separation, not
+   independence.
+3. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and onboarding failures. They are not assumed product needs.
 

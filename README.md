@@ -61,8 +61,13 @@ correctness or security.
 > [`Release Source Admission V2`](docs/RELEASE_SOURCE_ADMISSION_V2.md) `ALLOW`
 > contract with signed A/B/C bindings, signed externally verified Git/`gh`
 > digest pins, mandatory provider isolation, and five distinct key domains. The
-> release is the bootstrap implementation and cannot admit its own source; no
-> live V2 pilot or production gate is claimed yet.
+> release is the bootstrap implementation and did not admit its own source. A
+> later disposable
+> [V2 pilot](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot)
+> completed one exact protected-main source-only round using that immutable
+> runtime. Its `ALLOW` is bound only to the recorded source and workflow
+> attempts; it is same-owner operational evidence, not artifact/publication
+> authorization, a production gate, or independent review.
 > The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
 > is deliberately sanitized and disabled at baseline. It has recorded one
 > clean A-to-B-to-C evidence-chain round plus failed-A and moved-`main`
@@ -89,8 +94,9 @@ correctness or security.
 
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
-> version boundary of the core, demo, evaluation record, finalizer pilot, and
-> receipt pilot; the distinction between public code and private operational
+> version boundary of the core, demo, evaluation record, finalizer pilots,
+> receipt pilot, and Release Source V2 pilot; the distinction between public
+> code and private operational
 > assets; and the claims the current evidence does and does not support.
 
 AI coding agents have learned an ugly trick: when they can't fix the code, they

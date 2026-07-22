@@ -14,9 +14,13 @@ provides a release attestation for the immutable release and a separate GitHub
 Actions build-artifact attestation for those bytes.
 
 The `v4.1.0` source line adds Release Source Admission V2 and associated
-provider/Git hardening. This bootstrap release cannot admit its own source and
-does not by itself establish a live V2 pilot, release-artifact authorization,
-production readiness, or independent security review.
+provider/Git hardening. This bootstrap release did not admit its own source.
+A later disposable consumer used the immutable `v4.1.0` runtime for one live
+source-only V2 round, preserved separately in the
+[`evoom-guard-release-source-v2-pilot`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot).
+That later evidence does not change the frozen release, bind a release artifact
+or publication, establish production readiness, or constitute independent
+security review.
 
 Consumer usage should pin to `v4.1.0` only when aligned with your acceptance
 policy (typically strict SHA pinning in production). This release contains the

@@ -1,0 +1,96 @@
+{
+  "format": "EVOGUARD_EXTERNAL_REVIEW_TARGET_V1",
+  "copyright": "Copyright (c) 2026 Mana Alharbi. Source-available — see LICENSE.",
+  "purpose": "Verification metadata and reviewer instructions for the frozen EvoOM Guard v4.1.0 release target and its separately preserved Release Source Admission V2 pilot evidence.",
+  "companion_status": {
+    "is_part_of_frozen_target": false,
+    "does_not_change_release_claims": true,
+    "does_not_establish_independent_review": true,
+    "is_frozen_separately": true,
+    "review_companion_tag": "review-v4.1.0-r1",
+    "review_companion_release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.1.0-r1"
+  },
+  "target": {
+    "repository": "EvoRiseKsa/EvoOM-Guard-m",
+    "release_tag": "v4.1.0",
+    "release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.1.0",
+    "resolved_commit": "16029f3e34237ed07b97649c5c9be35d0a356bf7",
+    "source_tree": "7c749ed298050840fdd52577e6364a6e63cd36a6",
+    "guard_version": "4.1.0",
+    "evidence_schema_version": "1.11",
+    "release_is_immutable": true,
+    "release_published_at": "2026-07-22T04:25:44Z",
+    "release_workflow_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29890414339",
+    "tag_ci_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/29891032932",
+    "review_issue": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141",
+    "marketplace_url": "https://github.com/marketplace/actions/evoom-guard"
+  },
+  "assets": [
+    {
+      "name": "evo-guard.pyz",
+      "size_bytes": 1388088,
+      "sha256": "d5ce7dbefa870307d6fe49ddec1e9847cad89d15f6afe2b74f4e7b8953fc62b2"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size_bytes": 80,
+      "sha256": "2e9839e838d9384a2f7200f9caddb336ffe043cd971f8151c9d3efb090fa4c3b",
+      "utf8_content": "d5ce7dbefa870307d6fe49ddec1e9847cad89d15f6afe2b74f4e7b8953fc62b2  evo-guard.pyz\n"
+    }
+  ],
+  "operational_evidence": {
+    "status": "same_owner_pilot_not_independent_review",
+    "repository": "EvoRiseKsa/evoom-guard-release-source-v2-pilot",
+    "ledger_url": "https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/blob/main/docs/ROUND1_EVIDENCE.md",
+    "target_commit": "af8e4592ef5572acfe2ea295c435eed6a8e122fc",
+    "target_tree": "4172083ab3b38c8d5793b69da422485294d1e9ae",
+    "parent_commit": "20f387e03aaed7c501ca837c2a8cc933ace838ef",
+    "positive_runs": {
+      "reverify": "29896945747/1",
+      "receipt": "29896982146/1",
+      "admit_and_detached_verify": "29897001564/1"
+    },
+    "retained_bundle_sha256": "99b1fb6252321466a14507903f6ec39eaa59ae0e9500a57e669a81a447983c6a"
+  },
+  "verification": {
+    "release_attestation_command": "gh release verify v4.1.0 --repo EvoRiseKsa/EvoOM-Guard-m",
+    "source_remote": "https://github.com/EvoRiseKsa/EvoOM-Guard-m.git",
+    "default_executes_released_zipapp": false,
+    "optional_smoke_command": "python -I evo-guard.pyz version"
+  },
+  "requested_properties": [
+    "base_owned_authority_and_protected_harness_refusal",
+    "verdict_record_and_evidence_integrity",
+    "assurance_and_runtime_boundary_truthfulness",
+    "verifier_pack_identity_and_candidate_execution",
+    "trusted_finalizer_raw_git_derivation",
+    "release_source_admission_v2",
+    "github_attestation_provider_adapter",
+    "artifact_admission_v1_v2",
+    "action_and_release_supply_chain",
+    "round1_evidence_claim_reconciliation"
+  ],
+  "known_reproducibility_gaps": [
+    {
+      "id": "unlocked_dev_dependencies",
+      "statement": "The source-tree dev extra uses version ranges, so a later source replay is not the historical dependency-locked release environment.",
+      "status": "known_gap"
+    },
+    {
+      "id": "incomplete_runner_and_container_capture",
+      "statement": "This companion does not freeze every runner image, Docker daemon, container image, or external provider service used by every historical test or pilot run.",
+      "status": "known_gap"
+    },
+    {
+      "id": "same_owner_pilot_roles",
+      "statement": "EvoRiseKsa and MANA-awam are controlled by the same owner; their approval and Environment roles are not independent review.",
+      "status": "known_limit"
+    }
+  ],
+  "disclosure": {
+    "security_policy": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/v4.1.0/SECURITY.md",
+    "private_advisory_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/security/advisories/new",
+    "public_issue_is_not_a_vulnerability_channel": true,
+    "no_credentials_requested": true
+  }
+}
