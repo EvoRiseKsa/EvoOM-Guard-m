@@ -33,8 +33,8 @@ The enforced layer order is explicit and matches `MODULE_BOUNDARIES.md`:
 `domain -> policy/candidate/workspace -> execution/isolation -> verifiers ->
 application -> evidence -> finalizer/admission -> api/cli/integrations`. A module
 is assigned to a layer only when its first-level name is a real Python package;
-same-named compatibility files such as `evidence.py` and `cli.py`
-remain declared legacy debt until their atomic file-to-package migrations.
+same-named compatibility files such as `evidence.py` remain declared legacy
+debt until their atomic file-to-package migrations.
 
 `record_verification` also remains unclassified debt. Its current `report` and
 `isolation` helpers do not form one justified target layer, so classifying the
@@ -116,7 +116,8 @@ policy payload from that request. The public
 33-parameter `guard()` signature remains frozen. This adds no baseline
 violation and therefore does not fabricate a ratchet revision.
 
-Revision 7 adds the dependency-free `domain.execution` lifecycle snapshot and
+The domain-execution slice adds the dependency-free `domain.execution`
+lifecycle snapshot and
 the one-way `verifiers.repo_execution -> domain.execution` adapter. Repository
 execution no longer mutates an untyped trace mapping. The adapter alone projects
 typed observations to the frozen artifact keys; pack identity and repository
@@ -155,6 +156,15 @@ and signing components.
 Those flat providers remain unclassified architectural debt until their atomic
 Stage 10 migrations; their shared public facades prevent that debt from
 spreading into the new admission layer.
+
+Import-boundary ratchet revision 7 performs the atomic `cli.py` to
+`cli/__init__.py` migration without changing the import path, implementation
+bytes, console entry point, or public/private compatibility surface. The now
+real `cli` package is classified at the integration layer, so the
+unclassified-module ceiling drops from 26 to 25. Cycles remain zero and the
+private-import ceiling remains 55. Parser and command extraction are separate
+later slices; this move does not claim that the CLI monolith has already been
+decomposed.
 
 ## Acceptance rules
 

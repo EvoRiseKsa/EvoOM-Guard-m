@@ -200,7 +200,9 @@ belong to their characterized legacy facades until Stage 8 slices move them.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 
-- Split CLI parser/registry and command modules while preserving entrypoint compatibility.
+- The flat CLI has been migrated byte-for-byte to the classified `cli/`
+  package while preserving `evoom_guard.cli:main`, imports, and command
+  behavior. Parser/registry and command-family extraction remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

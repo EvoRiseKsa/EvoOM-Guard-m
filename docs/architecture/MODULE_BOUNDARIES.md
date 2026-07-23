@@ -19,7 +19,8 @@
 ## Rule
 
 - Modules above must not import from downstream layers except via explicit interfaces.
-- The public API contract lives only in `evoom_guard/cli.py`, `evoom_guard/guard.py`,
+- The public API contract lives only in `evoom_guard/cli/__init__.py`,
+  `evoom_guard/guard.py`,
   `evoom_guard/record_verifier.py`, and `evoom_guard/trusted_finalizer.py`.
 
 ## Current extraction boundaries
@@ -71,6 +72,14 @@ splitting because TOCTOU tests and adopters patch module globals such as
 `os`, `tempfile`, and `_open_parent_dir_fd`. The package owns contained
 workspace reads, writes, and deletions; later submodule extraction must retain
 those dynamic seams or replace them with explicit injected contracts.
+
+The first CLI slice is the same kind of atomic compatibility migration:
+`evoom_guard/cli/__init__.py` contains the exact implementation bytes formerly
+stored in `cli.py`. The import path, `evoom_guard.cli:main` console entry point,
+parser behavior, command callables, and monkeypatch surface are unchanged.
+This classifies the public integration boundary and creates a real package for
+later parser/registry and command-family extraction; it does not by itself
+claim that the 6,082-line implementation has been decomposed.
 
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,

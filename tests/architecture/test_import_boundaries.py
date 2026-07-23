@@ -801,6 +801,26 @@ def test_workspace_package_is_classified_and_dependency_free() -> None:
     )
 
 
+def test_cli_package_is_classified_and_preserves_the_console_surface() -> None:
+    """The atomic CLI move must retain its public module and entry point."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.cli"
+    cli_path = PACKAGE_ROOT / "cli" / "__init__.py"
+
+    assert modules[module] == cli_path
+    assert module not in analysis.violations["unclassified_modules"]
+    tree = ast.parse(cli_path.read_text(encoding="utf-8"))
+    functions = {
+        node.name for node in tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {"build_parser", "main"} <= functions
+    assert 'evo-guard = "evoom_guard.cli:main"' in (
+        ROOT / "pyproject.toml"
+    ).read_text(encoding="utf-8")
+
+
 def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:
     """Policy construction may depend on domain values, never Guard internals."""
 

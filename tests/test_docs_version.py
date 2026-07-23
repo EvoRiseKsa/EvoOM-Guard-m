@@ -180,7 +180,7 @@ class DocsVersionDriftTests(unittest.TestCase):
         self.assertIn("EvoRiseKsa/EvoOM-Guard-m@", text)
 
     def test_user_facing_github_actions_are_commit_pinned(self) -> None:
-        paths = _DOC_FILES + [ROOT / "evoom_guard" / "cli.py"]
+        paths = _DOC_FILES + [ROOT / "evoom_guard" / "cli" / "__init__.py"]
         unpinned: list[str] = []
         for path in paths:
             text = path.read_text(encoding="utf-8")
@@ -195,7 +195,9 @@ class DocsVersionDriftTests(unittest.TestCase):
         self.assertEqual(unpinned, [])
 
     def test_runtime_guidance_does_not_claim_unavailable_pypi_extras(self) -> None:
-        paths = list((ROOT / "evoom_guard").glob("*.py")) + [ROOT / "ops" / "build_pyz.py"]
+        paths = list((ROOT / "evoom_guard").rglob("*.py")) + [
+            ROOT / "ops" / "build_pyz.py"
+        ]
         broken = re.compile(r'pip install\s+["\']evoom-guard\[[^]]+\]["\']')
         hits: list[str] = []
         for path in paths:
