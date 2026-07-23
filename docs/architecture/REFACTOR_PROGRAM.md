@@ -92,6 +92,14 @@ canonical policy payload from it for all result paths. Assurance, aggregate
 evidence, and decision models remain pending, so
 Stage 3 is still in progress.
 
+The fifth bounded slice adds immutable `ExecutionPhaseResult` and
+`IsolationObservation` domain values. `RepoVerifier` now records its setup,
+repository-suite, and verifier-pack lifecycle through a typed local builder;
+one adapter projects the snapshot to the unchanged artifact keys. Pack identity
+and repository-phase facts remain separate sticky verification evidence.
+Aggregate `VerificationEvidence`, assurance, and decision models remain pending,
+so Stage 3 is still in progress.
+
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
 - Bounded process execution and cleanup were extracted in PR #112 and hardened

@@ -843,6 +843,30 @@ def test_guard_request_is_a_dependency_closed_domain_contract() -> None:
     )
 
 
+def test_execution_evidence_contracts_follow_public_layer_boundaries() -> None:
+    """Execution snapshots are pure domain values projected by the verifier."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    domain_module = "evoom_guard.domain.execution"
+    adapter_module = "evoom_guard.verifiers.repo_execution"
+
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == domain_module and target != domain_module
+    } == set()
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == adapter_module and target != adapter_module
+    } == {"evoom_guard.domain.execution"}
+    assert not any(
+        violation.startswith(f"{module} |")
+        for module in (domain_module, adapter_module)
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

@@ -116,6 +116,13 @@ policy payload from that request. The public
 33-parameter `guard()` signature remains frozen. This adds no baseline
 violation and therefore does not fabricate a ratchet revision.
 
+Revision 7 adds the dependency-free `domain.execution` lifecycle snapshot and
+the one-way `verifiers.repo_execution -> domain.execution` adapter. Repository
+execution no longer mutates an untyped trace mapping. The adapter alone projects
+typed observations to the frozen artifact keys; pack identity and repository
+phase facts remain separate sticky verification evidence. No dependency
+violation is added or hidden, so the ratchet ceilings remain unchanged.
+
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline
 fingerprint. It therefore does not manufacture a ratchet revision or lower a

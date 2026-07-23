@@ -131,8 +131,19 @@ The first repository-verifier phase slice lives in
 `evoom_guard/verifiers/repo_phase_contracts.py`. It owns only pure interpretation
 of completed repository-suite and mandatory verifier-pack evidence, including
 their composite JUnit identity. It must not perform filesystem, subprocess,
-container, or trace mutation. `RepoVerifier` still owns those effects and passes
+container, or lifecycle mutation. `RepoVerifier` still owns those effects and passes
 their completed evidence into the typed phase contracts.
+
+The second repository-verifier phase slice adds immutable
+`domain.execution.ExecutionPhaseResult` and `IsolationObservation` values.
+`verifiers/repo_execution.py` owns the mutable verifier-local trace builder and
+the compatibility projection to the existing artifact keys. `RepoVerifier`
+mutates typed fields and freezes one snapshot on every return path. Verifier-pack
+identity, repository-phase results, runtime-tree facts, outcomes, and JUnit
+composition are deliberately not execution lifecycle and remain in their
+existing owners. The optional top-level `isolation_evidence` key is emitted only
+after its boundary is observed, preserving the published absence-versus-null
+semantics.
 
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2

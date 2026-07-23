@@ -30,12 +30,14 @@ canonical evidence envelope against external key and run-context inputs.
 | Module | Responsibility |
 |---|---|
 | `domain/verification.py` | Dependency-free authoritative JUnit counts and typed repository/pack phase evidence/results. Legacy verifier modules re-export the same class objects. |
+| `domain/execution.py` | Dependency-free immutable execution-lifecycle snapshots and per-phase isolation observations. It contains no process launch, verdict, or wire-serialization logic. |
 | `domain/verdict.py` | Dependency-free frozen verdict names, execution lifecycle, reason codes, and read-only reason compatibility semantics. Versioned policy/wire fields stay in their schema contract. |
 | `domain/policy.py` | Immutable, dependency-free `EffectivePolicy` value. It contains no validation, hashing, serialization, or schema logic. |
 | `domain/request.py` | Frozen composition of repository, candidate, source-identity, effective-policy, verifier-pack, and coverage inputs for one Guard judgment. The public `guard()` signature remains the compatibility boundary. |
 | `policy/effective.py` | Canonical construction, schema-1.11 payload projection, and frozen JSON digest for effective policy. Guard retains compatibility facades; the raw-Git finalizer consumes this public owner directly. |
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
+| `verifiers/repo_execution.py` | Typed mutable builder for repository-verifier lifecycle observations plus the sole projection back to the unchanged artifact keys. Pack identity and repository-phase results remain separate verification evidence. |
 | `execution/process.py` | Typed generic bounded-process requests/results, shared output capture, timeouts, and native process-tree cleanup. |
 | `execution/judge.py` | Typed black-box judge-process lifecycle: bounded stdout/stderr capture, timeout handling, reader lifecycle, and process-group cleanup. It does not build judge commands or interpret verdict evidence. |
 | `execution/command.py` | Shell-free host-command resolution. On Windows it resolves trusted `PATHEXT` shims while excluding candidate-controlled relative `PATH` entries for bare commands. |
