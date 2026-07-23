@@ -28,6 +28,18 @@ and did not use the new contract to authorize itself. Publication does not by
 itself establish a live E/F/G pilot, artifact-publication authorization,
 reproducible builds, production readiness, or independent security review.
 
+A later public same-owner pilot subsequently used the immutable v4.2.0 runtime
+to complete one exact protected-main A-through-G source-to-artifact round.
+Protected F returned `SEALED/ALLOW`; detached G returned `VERIFIED/ALLOW` over
+retained evidence without a fresh provider call; and five retained-evidence
+mutations were rejected. Its exact non-secret outputs and checksums are
+preserved in
+[`evidence/round2`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/tree/a1937ea599204751deebcbcadbd416092d8f46f9/evidence/round2).
+The admitted object was only a 290-byte JSON descriptor. The later pilot does
+not alter the bootstrap release, admit the v4.2.0 or v4.3.0 release assets,
+authorize publication/deployment, prove reproducibility or production
+readiness, or constitute independent review.
+
 The published `v4.1.0` source line added Release Source Admission V2 and
 associated provider/Git hardening. That bootstrap release did not admit its own
 source. A later disposable consumer used the immutable `v4.1.0` runtime for one
@@ -68,7 +80,8 @@ Admission pilot fixture, or live Release Artifact Admission V1 fixture was
 created merely by copying historical evidence. Shipping those implementations
 does not make this release ledger a required production gate, hostile-runner
 proof, live E/F/G pilot, artifact admission decision, or publication
-authorization.
+authorization. The separate later pilot evidence described above does not turn
+this release ledger into any of those things.
 
 The same bounded identity/provenance records for earlier immutable releases
 remain available at:

@@ -73,9 +73,16 @@ correctness or security.
 > contract. It binds one verified `.rsae` source `ALLOW`, one exact external
 > artifact, protected E/F workflow identities and raw-Git blobs, a freshly
 > constrained GitHub Artifact Attestation result, and a sixth signing-key
-> domain. It is part of the immutable `v4.2.0` bootstrap release but has no live
-> E/F/G pilot evidence yet. It does not authorize publication or deployment
-> and does not prove reproducible builds.
+> domain. The immutable `v4.2.0` bootstrap release did not exercise that
+> contract. A later public same-owner, non-production
+> [protected-main pilot](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/blob/a1937ea599204751deebcbcadbd416092d8f46f9/docs/ROUND2_EVIDENCE.md)
+> completed one exact E/F/G round with the v4.2.0 runtime: protected F returned
+> `SEALED/ALLOW`, detached G returned `VERIFIED/ALLOW` without a fresh provider
+> call, and five retained-evidence mutations were rejected. The admitted object
+> was only a 290-byte JSON descriptor—not an EvoOM release asset, package,
+> image, or deployed runtime. The result does not authorize publication or
+> deployment, prove reproducibility, establish a production gate, or constitute
+> independent review.
 > The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
 > is deliberately sanitized and disabled at baseline. It has recorded one
 > clean A-to-B-to-C evidence-chain round plus failed-A and moved-`main`

@@ -116,5 +116,14 @@ This is a concrete prerequisite for the provider-specific portion of issue
 [#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78), not a closure of
 that issue. The `v4.3.0` source retains Release Artifact Admission V1, first
 published in v4.2.0, but the release's build attestation alone does not exercise
-a protected end-to-end E/F/G admission run. A separate live pilot remains
-required before any such claim.
+a protected end-to-end E/F/G admission run. Separately, the later public
+same-owner
+[`Round 2 pilot`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/blob/a1937ea599204751deebcbcadbd416092d8f46f9/docs/ROUND2_EVIDENCE.md)
+used the immutable v4.2.0 runtime to complete one bounded E/F/G round for a
+290-byte JSON descriptor. Protected F freshly verified the provider evidence
+and returned `SEALED/ALLOW`; detached G returned `VERIFIED/ALLOW` over retained
+evidence without a fresh provider call. That does not make the v4.3.0 release
+asset admitted. Issue #78 remains open for the actual-release and OCI/registry
+work it tracks; separately, this bounded pilot proves no
+publication/deployment authority, reproducibility, production readiness, or
+independent review.
