@@ -162,7 +162,10 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   private-import ratchet first dropped from 60 to 56; the public effective-policy
   owner subsequently lowered it to 55.
 - Candidate parsing and pure patch transforms now live in `candidate/` behind
-  exact legacy aliases. Candidate materialization and snapshots remain pending.
+  exact legacy aliases. The contained FILE-then-PATCH transaction and
+  judge-manifest restoration now live in `verifiers/repo_materialization.py`
+  behind RepoVerifier's dynamic compatibility facade. Repository copying,
+  deletion, execution, and broader snapshots remain pending.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction

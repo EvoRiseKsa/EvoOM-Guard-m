@@ -89,7 +89,9 @@ from evoom_guard.candidate import (
     PatchBlock as PatchBlock,
 )
 from evoom_guard.candidate import (
-    PatchError,
+    PatchError as PatchError,
+)
+from evoom_guard.candidate import (
     apply_patch,
 )
 from evoom_guard.candidate import edits as _candidate_edits
@@ -274,6 +276,7 @@ from evoom_guard.verifiers.repo_execution import (
     execution_phase_payload,
     isolation_observation_payload,
 )
+from evoom_guard.verifiers.repo_materialization import materialize_candidate_edits
 from evoom_guard.verifiers.repo_phase_contracts import (
     CompletedRunEvidence,
     compose_repo_and_pack,
@@ -486,79 +489,21 @@ def copy_repo_tree(src: str, dst: str) -> None:
 def apply_blocks_to_copy(
     copy: str, file_blocks: dict[str, str], patch_blocks: list[PatchBlock]
 ) -> str | None:
-    """Materialize file blocks then patches into ``copy``."""
-    def safe_read(relative_path: str) -> tuple[str | None, str | None]:
-        try:
-            return read_text_within_root(copy, relative_path), None
-        except FileNotFoundError:
-            return None, None
-        except (UnicodeError, UnsafeWorkspacePath, OSError) as exc:
-            return None, (
-                "edit source could not be read safely — refusing to treat it "
-                f"as absent: {relative_path} ({exc})"
-            )
+    """Compatibility facade for ordered candidate edit materialization."""
 
-    def safe_write(relative_path: str, content: str) -> str | None:
-        try:
-            write_text_within_root(copy, relative_path, content)
-        except (OSError, UnsafeWorkspacePath) as exc:
-            return (
-                "edit target escapes the repo copy or changed inside it — "
-                f"refusing to write: {relative_path} ({exc})"
-            )
-        return None
-
-    pkg_paths = sorted(
-        {p for p in file_blocks if p.split("/")[-1] == "package.json"}
-        | {pb.path for pb in patch_blocks if pb.path.split("/")[-1] == "package.json"}
+    return materialize_candidate_edits(
+        copy,
+        file_blocks,
+        patch_blocks,
+        read_text=lambda root, path: read_text_within_root(root, path),
+        write_text=lambda root, path, content: write_text_within_root(
+            root, path, content
+        ),
+        patcher=lambda source, search, replace: apply_patch(source, search, replace),
+        restore_package_json=lambda original, candidate: restore_judge_package_json(
+            original, candidate
+        ),
     )
-    pkg_originals: dict[str, str | None] = {}
-    for rel in pkg_paths:
-        original, read_error = safe_read(rel)
-        if read_error is not None:
-            return read_error
-        pkg_originals[rel] = original
-
-    for path, content in file_blocks.items():
-        write_error = safe_write(path, content)
-        if write_error is not None:
-            return write_error
-
-    for pb in patch_blocks:
-        source, read_error = safe_read(pb.path)
-        if read_error is not None:
-            return read_error
-        if source is None:
-            return (
-                f"PATCH target not found: {pb.path} — "
-                "use a <<<FILE>>> block "
-                "to create new files"
-            )
-        try:
-            patched = apply_patch(source, pb.search, pb.replace)
-        except (PatchError, ValueError) as exc:
-            return (
-                f"PATCH did not apply to {pb.path}: "
-                f"{type(exc).__name__}: {exc} — "
-                ""
-                "copy a unique anchor verbatim from the shown file"
-            )
-        write_error = safe_write(pb.path, patched)
-        if write_error is not None:
-            return write_error
-
-    for rel in pkg_paths:
-        candidate_pkg, read_error = safe_read(rel)
-        if read_error is not None:
-            return read_error
-        if candidate_pkg is None:
-            return f"edited package manifest disappeared before verification: {rel}"
-        restored = restore_judge_package_json(pkg_originals.get(rel), candidate_pkg)
-        if restored != candidate_pkg:
-            write_error = safe_write(rel, restored)
-            if write_error is not None:
-                return write_error
-    return None
 
 
 def _docker_container_name(stage: str) -> str:

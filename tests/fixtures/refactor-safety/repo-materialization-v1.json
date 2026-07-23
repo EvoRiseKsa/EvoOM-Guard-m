@@ -1,0 +1,161 @@
+{
+  "cases": {
+    "file_then_patch_and_restore": {
+      "error": null,
+      "events": [
+        {
+          "op": "read",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "content": "candidate-package",
+          "op": "write",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "content": "new",
+          "op": "write",
+          "path": "src/new.py",
+          "root": "repo-copy"
+        },
+        {
+          "op": "read",
+          "path": "src/module.py",
+          "root": "repo-copy"
+        },
+        {
+          "op": "patch",
+          "replace": "after",
+          "search": "before",
+          "source": "before"
+        },
+        {
+          "content": "after",
+          "op": "write",
+          "path": "src/module.py",
+          "root": "repo-copy"
+        },
+        {
+          "op": "read",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "op": "patch",
+          "replace": "patched",
+          "search": "candidate",
+          "source": "candidate-package"
+        },
+        {
+          "content": "patched-package",
+          "op": "write",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "op": "read",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "candidate": "patched-package",
+          "op": "restore-package",
+          "original": "original-package"
+        },
+        {
+          "content": "patched-package|judge(original-package)",
+          "op": "write",
+          "path": "package.json",
+          "root": "repo-copy"
+        }
+      ],
+      "files": {
+        "package.json": "patched-package|judge(original-package)",
+        "src/module.py": "after",
+        "src/new.py": "new"
+      }
+    },
+    "manifest_disappears": {
+      "error": "edited package manifest disappeared before verification: package.json",
+      "events": [
+        {
+          "op": "read",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "content": "candidate-package",
+          "op": "write",
+          "path": "package.json",
+          "root": "repo-copy"
+        },
+        {
+          "op": "read",
+          "path": "package.json",
+          "root": "repo-copy"
+        }
+      ],
+      "files": {
+        "package.json": "candidate-package"
+      }
+    },
+    "missing_patch_target": {
+      "error": "PATCH target not found: src/missing.py — use a <<<FILE>>> block to create new files",
+      "events": [
+        {
+          "op": "read",
+          "path": "src/missing.py",
+          "root": "repo-copy"
+        }
+      ],
+      "files": {}
+    },
+    "patch_failure": {
+      "error": "PATCH did not apply to src/module.py: PatchError: controlled patch failure — copy a unique anchor verbatim from the shown file",
+      "events": [
+        {
+          "op": "read",
+          "path": "src/module.py",
+          "root": "repo-copy"
+        },
+        {
+          "op": "patch",
+          "replace": "after",
+          "search": "before",
+          "source": "before"
+        }
+      ],
+      "files": {
+        "src/module.py": "before"
+      }
+    },
+    "unsafe_manifest_read": {
+      "error": "edit source could not be read safely — refusing to treat it as absent: package.json (controlled unsafe read)",
+      "events": [
+        {
+          "op": "read",
+          "path": "package.json",
+          "root": "repo-copy"
+        }
+      ],
+      "files": {
+        "package.json": "original-package"
+      }
+    },
+    "write_failure": {
+      "error": "edit target escapes the repo copy or changed inside it — refusing to write: src/fail.py (controlled write failure)",
+      "events": [
+        {
+          "content": "candidate",
+          "op": "write",
+          "path": "src/fail.py",
+          "root": "repo-copy"
+        }
+      ],
+      "files": {}
+    }
+  },
+  "schema_version": "repo-materialization-characterization-v1"
+}
