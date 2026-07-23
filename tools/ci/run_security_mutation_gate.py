@@ -652,12 +652,24 @@ MUTATIONS = (
         name="finalizer-git-reader-join-bound-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
-            "            reader.join(max(0.0, deadline - time.monotonic()))\n"
+            "            reader.join(min(_GIT_READER_JOIN_SECONDS, remaining))\n"
         ),
         after="            reader.join()\n",
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
             "test_git_bytes_remain_exact_and_reader_joins_are_bounded"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-reader-join-cap-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "            reader.join(min(_GIT_READER_JOIN_SECONDS, remaining))\n"
+        ),
+        after="            reader.join(remaining)\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_reader_join_clamps_floating_point_deadline_overshoot"
         ),
     ),
     Mutation(
