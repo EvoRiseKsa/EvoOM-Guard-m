@@ -51,21 +51,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from evoom_guard import __version__
-from evoom_guard.execution import (
-    ProcessContainmentError as _SubprocessContainmentError,
-)
-from evoom_guard.execution import (
-    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
-)
-from evoom_guard.execution import (
-    resolve_host_command as _resolve_host_command,
-)
-from evoom_guard.execution import (
-    run_bounded_subprocess as _run_bounded_subprocess,
-)
-from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
-from evoom_guard.patchmin import risk_score
-from evoom_guard.verdict_contract_v1_11 import (
+from evoom_guard.domain.verdict import (
     ERROR,
     EXECUTION_COMPLETED,
     EXECUTION_NOT_STARTED,
@@ -102,9 +88,23 @@ from evoom_guard.verdict_contract_v1_11 import (
     REASON_VERIFIER_PACK_REQUIRED,
     REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
     REJECTED,
-    SCHEMA_VERSION,
     TAMPERED,
 )
+from evoom_guard.execution import (
+    ProcessContainmentError as _SubprocessContainmentError,
+)
+from evoom_guard.execution import (
+    ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
+)
+from evoom_guard.execution import (
+    resolve_host_command as _resolve_host_command,
+)
+from evoom_guard.execution import (
+    run_bounded_subprocess as _run_bounded_subprocess,
+)
+from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
+from evoom_guard.patchmin import risk_score
+from evoom_guard.verdict_contract_v1_11 import SCHEMA_VERSION
 from evoom_guard.verifiers.harness_policy import (
     discover_local_action_dirs,
     is_allowlist_exemptible,
