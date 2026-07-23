@@ -40,6 +40,211 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="guard-request-timeout-validation-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before="    if type(raw.timeout) is not int or raw.timeout < 1:\n",
+        after=(
+            "    if False and "
+            "(type(raw.timeout) is not int or raw.timeout < 1):\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_invalid_runtime_values_fail_before_any_request_provider[timeout-zero]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-memory-validation-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "    if type(raw.mem_limit_mb) is not int or "
+            "raw.mem_limit_mb < 0:\n"
+        ),
+        after=(
+            "    if False and "
+            "(type(raw.mem_limit_mb) is not int or raw.mem_limit_mb < 0):\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_invalid_runtime_values_fail_before_any_request_provider"
+            "[memory-negative]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-strict-boolean-validation-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before="    if type(raw.strict_harness) is not bool:\n",
+        after="    if False and type(raw.strict_harness) is not bool:\n",
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_invalid_runtime_values_fail_before_any_request_provider[strict-int]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-coverage-boolean-validation-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before="            isinstance(raw.min_diff_coverage, bool)\n",
+        after="            False\n",
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_invalid_runtime_values_fail_before_any_request_provider[coverage-bool]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-coverage-bounds-validation-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before="            or not 0 <= raw.min_diff_coverage <= 100\n",
+        after="            or False\n",
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_invalid_runtime_values_fail_before_any_request_provider"
+            "[coverage-negative]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-coverage-floor-collection-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "    collect_diff_coverage = (\n"
+            "        raw.collect_diff_coverage or raw.min_diff_coverage is not None\n"
+            "    )\n"
+        ),
+        after="    collect_diff_coverage = raw.collect_diff_coverage\n",
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_preparation_contracts_are_frozen_and_scoped_before_mode_support"
+        ),
+    ),
+    Mutation(
+        name="guard-request-blackbox-contradiction-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before="    if raw.blackbox_only and not raw.blackbox:\n",
+        after="    if False and raw.blackbox_only and not raw.blackbox:\n",
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_policy_contradictions_fail_before_any_request_provider"
+            "[blackbox-only-without-blackbox]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-pack-contradiction-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "    if raw.expect_verifier_pack_sha256 and "
+            "not raw.verifier_pack_path:\n"
+        ),
+        after=(
+            "    if False and raw.expect_verifier_pack_sha256 and "
+            "not raw.verifier_pack_path:\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_policy_contradictions_fail_before_any_request_provider"
+            "[pack-digest-without-pack]"
+        ),
+    ),
+    Mutation(
+        name="guard-request-owned-file-block-projection-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "            dict(request.candidate.file_blocks)\n"
+            "            if request.candidate.file_blocks is not None\n"
+        ),
+        after=(
+            "            dict(raw.file_blocks)\n"
+            "            if raw.file_blocks is not None\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_frozen_request_policy_projection_and_provider_order"
+        ),
+    ),
+    Mutation(
+        name="guard-request-owned-setup-command-projection-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "            list(request.policy.setup_command)\n"
+            "            if request.policy.setup_command is not None\n"
+        ),
+        after=(
+            "            list(raw.setup_command)\n"
+            "            if raw.setup_command is not None\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_projection_uses_owned_request_containers_not_caller_containers"
+        ),
+    ),
+    Mutation(
+        name="guard-request-live-candidate-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            candidate_input=lambda **values: "
+            "CandidateInput(**values),\n"
+        ),
+        after="            candidate_input=CandidateInput,\n",
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_guard_facade_resolves_providers_at_each_historical_call_position"
+        ),
+    ),
+    Mutation(
+        name="guard-request-live-source-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            source_identity=lambda **values: "
+            "SourceIdentity(**values),\n"
+        ),
+        after="            source_identity=SourceIdentity,\n",
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_guard_facade_resolves_providers_at_each_historical_call_position"
+        ),
+    ),
+    Mutation(
+        name="guard-request-live-policy-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            effective_policy=lambda **values: "
+            "_build_effective_policy_contract(\n"
+            "                **values\n"
+            "            ),\n"
+        ),
+        after=(
+            "            effective_policy="
+            "_build_effective_policy_contract,\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_guard_facade_resolves_providers_at_each_historical_call_position"
+        ),
+    ),
+    Mutation(
+        name="guard-request-live-payload-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            effective_policy_payload=lambda policy: "
+            "_effective_policy_payload(policy),\n"
+        ),
+        after="            effective_policy_payload=_effective_policy_payload,\n",
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_guard_facade_resolves_providers_at_each_historical_call_position"
+        ),
+    ),
+    Mutation(
+        name="guard-request-outer-provider-resolution-delay",
+        path="evoom_guard/guard.py",
+        before="            guard_request=GuardRequest,\n",
+        after=(
+            "            guard_request=lambda **values: "
+            "GuardRequest(**values),\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_outer_request_provider_is_resolved_before_nested_providers"
+        ),
+    ),
+    Mutation(
         name="invocation-drain-batch-limit-bypass",
         path="evoom_guard/isolation/invocation.py",
         before=(

@@ -35,6 +35,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `domain/policy.py` | Immutable, dependency-free `EffectivePolicy` value. It contains no validation, hashing, serialization, or schema logic. |
 | `domain/request.py` | Frozen composition of repository, candidate, source-identity, effective-policy, verifier-pack, and coverage inputs for one Guard judgment. The public `guard()` signature remains the compatibility boundary. |
 | `policy/effective.py` | Canonical construction, schema-1.11 payload projection, and frozen JSON digest for effective policy. Guard retains compatibility facades; the raw-Git finalizer consumes this public owner directly. |
+| `application/request_preparation.py` | Typed validation and preparation of one public `guard()` invocation: immutable `GuardRequest` capture, canonical policy construction/payload, and an owned projection back to the historical orchestrator values. Constructors and policy providers are injected by the `guard.py` facade at each use; path admission, unsupported-mode decisions, execution, and evidence remain outside this boundary. |
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, run the harness-edit **pre-gate**, copy + coordinate apply/delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
 | `verifiers/repo_execution.py` | Typed mutable builder for repository-verifier lifecycle observations plus the sole projection back to the unchanged artifact keys. Pack identity and repository-phase results remain separate verification evidence. |
@@ -111,6 +112,7 @@ git diff ─► guard_from_diff(head_dir, diff_text)
 candidate_from_dirs(base, head) ─► <<<FILE>>> blocks (add/modify) + deleted[]
   ▼
 guard(base, candidate, deleted=…)
+  │   validate runtime scalars; snapshot GuardRequest; construct canonical policy
   │   pre-gate: unsafe path → ERROR ; protected edit OR protected deletion → REJECTED
   ▼
 RepoVerifier.verify(candidate, problem)

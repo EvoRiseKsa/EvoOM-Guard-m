@@ -292,3 +292,40 @@ def test_frozen_request_policy_projection_and_provider_order(
     assert result.attestation["effective_policy"] == expected_policy
     assert result.attestation["test_command"] == ["python", "-m", "pytest"]
 
+
+def test_outer_request_provider_is_resolved_before_nested_providers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Freeze Python's historical outer-callable evaluation timing."""
+
+    guard_module = importlib.import_module("evoom_guard.guard")
+    original_repository = guard_module.RepositoryInput
+    original_request = guard_module.GuardRequest
+    calls: list[str] = []
+
+    def late_request(**values: object) -> GuardRequest:
+        calls.append("late-request")
+        return original_request(**values)
+
+    def initial_request(**values: object) -> GuardRequest:
+        calls.append("initial-request")
+        return original_request(**values)
+
+    def repository_provider(**values: object) -> RepositoryInput:
+        calls.append("repository")
+        monkeypatch.setattr(guard_module, "GuardRequest", late_request)
+        return original_repository(**values)
+
+    monkeypatch.setattr(guard_module, "GuardRequest", initial_request)
+    monkeypatch.setattr(guard_module, "RepositoryInput", repository_provider)
+
+    result = guard_module.guard(
+        "not-read-for-preflight",
+        "opaque candidate",
+        file_blocks={"app.py": "VALUE = 2\n"},
+        isolation="docker",
+        min_diff_coverage=80.0,
+    )
+
+    assert result.reason_code == "policy_requirement_unsupported"
+    assert calls == ["repository", "initial-request"]
