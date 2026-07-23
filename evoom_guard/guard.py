@@ -163,9 +163,19 @@ from evoom_guard.policy import (
     effective_policy_sha256 as _effective_policy_digest,
 )
 from evoom_guard.verdict_contract_v1_11 import SCHEMA_VERSION
+from evoom_guard.verifiers.candidate_preflight import (
+    VERIFIER_PACK_DIR as VERIFIER_PACK_DIR,
+)
+from evoom_guard.verifiers.candidate_preflight import (
+    CandidatePreflightRequest,
+    CandidatePreflightServices,
+    evaluate_candidate_preflight,
+)
 from evoom_guard.verifiers.harness_policy import (
-    discover_local_action_dirs,
-    is_allowlist_exemptible,
+    discover_local_action_dirs as discover_local_action_dirs,
+)
+from evoom_guard.verifiers.harness_policy import (
+    is_allowlist_exemptible as is_allowlist_exemptible,
 )
 from evoom_guard.verifiers.harness_policy import (
     matches_globs as _matches_globs,
@@ -264,11 +274,6 @@ _TAMPER_OUTCOME_REASON = TAMPER_OUTCOME_REASON_POLICY
 _REPORT_INTEGRITY_RANK = REPORT_INTEGRITY_RANK_POLICY
 _ISOLATION_RANK = ISOLATION_RANK_POLICY
 _pack_assurance = pack_assurance
-
-# Reserved namespace from the pre-3.4 in-tree pack mount. A candidate still may
-# not pre-plant it; accepted packs now live in a separate judge-owned snapshot.
-VERIFIER_PACK_DIR = "evoguard_verifier_pack"
-
 
 @dataclass
 class GuardResult:
@@ -683,64 +688,46 @@ def guard(
             ),
         )
 
-    changed = changed_paths(candidate, file_blocks)
-    # Deletions are gated too: deleting a protected harness file is as much a
-    # reward-hack as editing it (removing a failing test/check), and a deleted
-    # *source* file must be applied to the verified tree so the verdict matches the
-    # real merge. Both the safety and protected-path checks therefore span the
-    # added/modified *and* deleted paths.
-    deleted_touched = [d for d in deleted if d not in changed]
-    all_touched = changed + deleted_touched
-    unsafe = sorted(p for p in all_touched if not is_safe_relpath(p))
-    new_paths = frozenset(
-        p for p in changed
-        if is_safe_relpath(p) and not os.path.exists(os.path.join(repo_path, p))
+    # This is the historical pre-execution seam: parsing has completed, while
+    # no candidate file has been materialized and no candidate command started.
+    preflight = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=repo_path,
+            changed_paths=tuple(changed_paths(candidate, file_blocks)),
+            deleted_paths=tuple(deleted),
+            protected=tuple(protected),
+            allow=tuple(allow),
+            allow_new_tests=allow_new_tests,
+            strict_harness=strict_harness,
+        ),
+        services=CandidatePreflightServices(
+            path_exists=lambda path: os.path.exists(path),
+            discover_local_action_dirs=lambda repo: discover_local_action_dirs(repo),
+            is_safe_relpath=lambda path: is_safe_relpath(path),
+            is_judge_autoexec=lambda path: is_judge_autoexec(path),
+            is_protected_config=lambda path, *, strict_harness: (
+                is_protected_config(path, strict_harness=strict_harness)
+            ),
+            is_protected_ci=lambda path, *, local_action_dirs: is_protected_ci(
+                path, local_action_dirs=local_action_dirs
+            ),
+            is_protected=lambda path, protected: is_protected(path, protected),
+            is_addable_new_test=lambda path, extra, **kwargs: is_addable_new_test(
+                path, extra, **kwargs
+            ),
+            is_allowlist_exemptible=(
+                lambda path, **kwargs: is_allowlist_exemptible(path, **kwargs)
+            ),
+            matches_globs=lambda path, globs: _matches_globs(path, globs),
+            verifier_pack_dir=lambda: VERIFIER_PACK_DIR,
+        ),
     )
-    # A trusted workflow may invoke a local Action whose helper files live
-    # beside action.yml.  Discover those paths from the base tree before any
-    # candidate files are applied so the static gate—not only RepoVerifier—
-    # rejects edits to the Action implementation.
-    local_action_dirs = discover_local_action_dirs(repo_path)
-
-    def _is_violation(p: str) -> bool:
-        if p == VERIFIER_PACK_DIR or p.startswith(VERIFIER_PACK_DIR + "/"):
-            return True  # the judge-owned pack mount point — never writable
-        if is_judge_autoexec(p):
-            return True  # auto-exec runs in the judge process — never exempt
-        # Strict dependency/compiler manifests are checked before user-defined
-        # globs, so an ``allow`` entry cannot weaken this opt-in profile.
-        if is_protected_config(p, strict_harness=strict_harness) or is_protected_ci(
-            p, local_action_dirs=local_action_dirs
-        ):
-            return True
-        # Built-in judge-owned paths are never allowlist-exempt. A PR workflow is
-        # part of the candidate in GitHub Actions, so letting it configure an
-        # allowlist for tests/config/CI would let it rewrite its own judge.
-        if is_protected(p, protected):
-            if allow_new_tests and is_addable_new_test(
-                p,
-                protected,
-                is_new=p in new_paths,
-                local_action_dirs=local_action_dirs,
-                strict_harness=strict_harness,
-            ):
-                return False
-            if not is_allowlist_exemptible(
-                p,
-                local_action_dirs=local_action_dirs,
-                strict_harness=strict_harness,
-            ):
-                return True
-            return not _matches_globs(p, allow)
-        return False
-
-    # A deleted path is never "new", so a protected deletion is always a violation
-    # (feature mode lets you *add* a new test, never *remove* an existing check).
-    violations = sorted(p for p in all_touched if _is_violation(p))
-    # Safe, non-protected deletions are applied to the verified copy.
-    safe_deleted = sorted(
-        d for d in deleted if is_safe_relpath(d) and not _is_violation(d)
-    )
+    # Preserve the established mutable-list API at Guard's compatibility edge.
+    changed = list(preflight.changed_paths)
+    all_touched = list(preflight.all_touched_paths)
+    unsafe = list(preflight.unsafe_paths)
+    violations = list(preflight.protected_violations)
+    safe_deleted = list(preflight.safe_deleted_paths)
 
     problem: dict[str, Any] = {"name": "guard", "repo_path": repo_path}
     if test_command:
@@ -768,7 +755,7 @@ def guard(
     # judge-owned pack, which never imports the candidate — closing same-process
     # report forgery. Requires a pack (there is nothing to assert otherwise); the
     # harness-integrity checks above still apply.
-    if blackbox and not (unsafe or violations or not all_touched):
+    if blackbox and preflight.may_execute:
         from evoom_guard.blackbox import run_blackbox
 
         if not verifier_pack:
@@ -1214,7 +1201,7 @@ def guard(
     # before the mapping below flipped the verdict to REJECTED) — leaving
     # ``test_command_ran: true`` on a verdict documented as pre-execution. Skip
     # the run entirely whenever the outcome is already decided by the diff alone.
-    run_suite = bool(all_touched) and not unsafe and not violations
+    run_suite = preflight.may_execute
     if run_suite:
         verdict = RepoVerifier(
             timeout=timeout, mem_limit_mb=mem_limit_mb,

@@ -1,0 +1,191 @@
+{
+  "cases": {
+    "adopter_allowlist_exemption": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "repo_suite",
+      "execution_state": "completed",
+      "files_changed": [
+        "src/secret.py"
+      ],
+      "protected_violations": [],
+      "reason_code": "tests_passed",
+      "test_command_ran": true,
+      "verdict": "PASS"
+    },
+    "empty_change": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [],
+      "protected_violations": [],
+      "reason_code": "no_parseable_edits",
+      "test_command_ran": false,
+      "verdict": "ERROR"
+    },
+    "local_action_helper": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        ".ci/guard/check.py"
+      ],
+      "protected_violations": [
+        ".ci/guard/check.py"
+      ],
+      "reason_code": "protected_harness_edit",
+      "test_command_ran": false,
+      "verdict": "REJECTED"
+    },
+    "mixed_deletions": {
+      "deleted_paths": [
+        "src/old.py"
+      ],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "src/app.py"
+      ],
+      "protected_violations": [
+        "tests/test_base.py"
+      ],
+      "reason_code": "unsafe_path",
+      "test_command_ran": false,
+      "verdict": "ERROR"
+    },
+    "new_test_default": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "tests/test_new.py"
+      ],
+      "protected_violations": [
+        "tests/test_new.py"
+      ],
+      "reason_code": "protected_harness_edit",
+      "test_command_ran": false,
+      "verdict": "REJECTED"
+    },
+    "new_test_feature_mode": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "repo_suite",
+      "execution_state": "completed",
+      "files_changed": [
+        "tests/test_new.py"
+      ],
+      "protected_violations": [],
+      "reason_code": "tests_passed",
+      "test_command_ran": true,
+      "verdict": "PASS"
+    },
+    "protected_autoexec": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "sitecustomize.py"
+      ],
+      "protected_violations": [
+        "sitecustomize.py"
+      ],
+      "reason_code": "protected_harness_edit",
+      "test_command_ran": false,
+      "verdict": "REJECTED"
+    },
+    "protected_existing_test": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "tests/test_base.py"
+      ],
+      "protected_violations": [
+        "tests/test_base.py"
+      ],
+      "reason_code": "protected_harness_edit",
+      "test_command_ran": false,
+      "verdict": "REJECTED"
+    },
+    "reserved_pack_namespace": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "evoguard_verifier_pack/conftest.py"
+      ],
+      "protected_violations": [
+        "evoguard_verifier_pack/conftest.py"
+      ],
+      "reason_code": "protected_harness_edit",
+      "test_command_ran": false,
+      "verdict": "REJECTED"
+    },
+    "safe_deletion": {
+      "deleted_paths": [
+        "src/old.py"
+      ],
+      "deleted_paths_applied": null,
+      "execution_phase": "repo_suite",
+      "execution_state": "completed",
+      "files_changed": [
+        "src/app.py"
+      ],
+      "protected_violations": [],
+      "reason_code": "tests_passed",
+      "test_command_ran": true,
+      "verdict": "PASS"
+    },
+    "safe_existing_edit": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "repo_suite",
+      "execution_state": "completed",
+      "files_changed": [
+        "src/app.py"
+      ],
+      "protected_violations": [],
+      "reason_code": "tests_passed",
+      "test_command_ran": true,
+      "verdict": "PASS"
+    },
+    "strict_dependency_manifest": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "requirements-dev.txt"
+      ],
+      "protected_violations": [
+        "requirements-dev.txt"
+      ],
+      "reason_code": "protected_harness_edit",
+      "test_command_ran": false,
+      "verdict": "REJECTED"
+    },
+    "unsafe_parent_path": {
+      "deleted_paths": [],
+      "deleted_paths_applied": null,
+      "execution_phase": "pre_gate",
+      "execution_state": "static_gate",
+      "files_changed": [
+        "../escape.py"
+      ],
+      "protected_violations": [],
+      "reason_code": "unsafe_path",
+      "test_command_ran": false,
+      "verdict": "ERROR"
+    }
+  },
+  "normalization": [],
+  "schema_version": "candidate-preflight-characterization-v1"
+}
