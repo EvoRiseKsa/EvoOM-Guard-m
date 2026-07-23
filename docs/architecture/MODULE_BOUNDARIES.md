@@ -31,6 +31,14 @@ result contracts. `verifiers.junit_oracle` and
 compatibility. Parsing, grading, composition, filesystem, process, container,
 trace, and serialization behavior remain outside the domain package.
 
+The second domain slice lives in `evoom_guard/domain/verdict.py`. It owns
+frozen verdict names, execution lifecycle states, reason codes, and the
+read-only reason compatibility table. Version-specific schema identity, policy
+keys, and required record sections remain in
+`verdict_contract_v1_11.py`; that module re-exports the same semantic objects.
+Guard consumes generic semantics from the domain and only the schema version
+from the versioned wire contract.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain

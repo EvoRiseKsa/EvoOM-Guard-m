@@ -75,6 +75,13 @@ legacy class aliases preserve identity. CI and release additionally run
 `python -m mypy --strict evoom_guard/domain/`; no artificial ratchet revision is
 recorded because no baseline violation is added or removed.
 
+The verdict-semantics slice follows the same rule. `domain.verdict` is
+dependency-free and owns only version-neutral lifecycle/verdict/reason data.
+The schema-1.11 compatibility module retains its policy and wire-shape
+constants and re-exports exact domain objects. Guard imports semantics directly
+from the domain while retaining only its versioned `SCHEMA_VERSION` dependency.
+No baseline count changes, so no ratchet revision is fabricated.
+
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline
 fingerprint. It therefore does not manufacture a ratchet revision or lower a

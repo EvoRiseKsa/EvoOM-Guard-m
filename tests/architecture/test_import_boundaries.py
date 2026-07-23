@@ -745,6 +745,7 @@ def test_domain_verification_contracts_are_classified_and_dependency_free() -> N
     analysis = analyze_package(PACKAGE_ROOT)
     domain_modules = {
         "evoom_guard.domain",
+        "evoom_guard.domain.verdict",
         "evoom_guard.domain.verification",
     }
     assert domain_modules.issubset(analysis.modules)
@@ -755,11 +756,32 @@ def test_domain_verification_contracts_are_classified_and_dependency_free() -> N
         violation.startswith("evoom_guard.domain")
         for violation in analysis.violations["cross_package_private_imports"]
     )
-    assert {
-        target
-        for source, target in analysis.internal_edges
-        if source == "evoom_guard.domain.verification"
-    } == set()
+    for module in (
+        "evoom_guard.domain.verdict",
+        "evoom_guard.domain.verification",
+    ):
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == module
+        } == set()
+
+
+def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contract() -> None:
+    """Keep generic semantics separate from schema-1.11 wire ownership."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    legacy_facts = tuple(
+        fact
+        for fact in analysis.facts
+        if fact.source == "evoom_guard.guard"
+        and fact.target == "evoom_guard.verdict_contract_v1_11"
+    )
+    assert tuple(fact.symbol for fact in legacy_facts) == ("SCHEMA_VERSION",)
+    assert (
+        "evoom_guard.guard",
+        "evoom_guard.domain.verdict",
+    ) in analysis.internal_edges
 
 
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:

@@ -30,6 +30,7 @@ canonical evidence envelope against external key and run-context inputs.
 | Module | Responsibility |
 |---|---|
 | `domain/verification.py` | Dependency-free authoritative JUnit counts and typed repository/pack phase evidence/results. Legacy verifier modules re-export the same class objects. |
+| `domain/verdict.py` | Dependency-free frozen verdict names, execution lifecycle, reason codes, and read-only reason compatibility semantics. Versioned policy/wire fields stay in their schema contract. |
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
 | `execution/process.py` | Typed generic bounded-process requests/results, shared output capture, timeouts, and native process-tree cleanup. |
@@ -45,7 +46,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `candidate_runner.py` | The shell-free `$EVOGUARD_EXEC` launcher and delivered-isolation evidence for black-box candidates. |
 | `verifiers/grading.py` | The pure score gradient (`fraction_score`). |
 | `adapters.py` | Per-runner report wiring (`RunnerAdapter` + `instrument_command`). One class per runner; the engine stays runner-agnostic. |
-| `verdict_contract_v1_11.py` | Frozen, stdlib-only schema-1.11 vocabulary: verdicts, lifecycle states, reason compatibility, policy keys, and required record sections. It contains no producer or verifier algorithm. |
+| `verdict_contract_v1_11.py` | Frozen schema-1.11 compatibility facade: it re-exports the dependency-free domain verdict vocabulary and owns the versioned policy keys and required record sections. It contains no producer or verifier algorithm and is loaded through the installed `evoom_guard` package. |
 | `guard.py` | **Producer orchestration.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, independent outcome selection, assurance/attestation construction, and report renderers (Markdown / JSON / SARIF). It re-exports the established schema-1.11 constants for compatibility. |
 | `patch_applier.py` | `apply_patch` — unique-anchor search/replace for `<<<PATCH>>>` blocks. |
 | `patchmin.py` | Pure, model-free helpers: delta-debugging (`minimize_patch`) + blast-radius `risk_score`. |

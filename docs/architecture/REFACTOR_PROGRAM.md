@@ -70,8 +70,13 @@ The first bounded slice moves the existing `JUnitCounts` and repository/pack
 phase evidence/result models into `domain/verification.py`. Legacy verifier
 paths re-export the same class objects, and CI/release run a dedicated
 `mypy --strict` gate for `domain/`. Broader request, verdict, assurance, and
-evidence contracts remain pending; this first slice does not claim Stage 3 is
-complete.
+evidence contracts remain pending.
+
+The second bounded slice moves frozen verdict, execution-lifecycle, and reason
+semantics into `domain/verdict.py`. The versioned
+`verdict_contract_v1_11.py` retains schema version, policy keys, and required
+wire-record fields while re-exporting the exact semantic objects. These slices
+do not claim Stage 3 is complete.
 
 ## Stage 4+: Execution and verifier extraction (partially completed)
 

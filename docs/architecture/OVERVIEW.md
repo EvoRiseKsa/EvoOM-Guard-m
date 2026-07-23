@@ -49,9 +49,11 @@ policy contracts directly instead of verifier-private compatibility seams.
 
 The first `domain/verification.py` slice owns dependency-free JUnit and
 repository/pack phase contracts behind exact legacy aliases. A dedicated
-strict-Mypy gate protects that package. Broader request, verdict, assurance,
-and evidence domain models remain pending. `RepoVerifier` still owns effectful
-subprocess, container, filesystem, runtime-identity, and trace operations.
+strict-Mypy gate protects that package. `domain/verdict.py` separately owns
+generic verdict/lifecycle/reason semantics; schema-1.11 policy and wire fields
+remain in their versioned contract. Broader request, assurance, and evidence
+domain models remain pending. `RepoVerifier` still owns effectful subprocess,
+container, filesystem, runtime-identity, and trace operations.
 `blackbox.py` still owns command construction, report interpretation,
 verdict/evidence composition, and remaining pack/CID responsibilities.
 Candidate/workspace domains and the `application` verification pipeline also
