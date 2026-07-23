@@ -72,6 +72,7 @@ from evoom_guard.application.attestation import (
     build_attestation as _build_attestation_payload,
 )
 from evoom_guard.application.decision_gates import (
+    apply_assurance_gate,
     apply_demonstrated_fix_gate,
     apply_diff_coverage_gate,
 )
@@ -87,6 +88,7 @@ from evoom_guard.domain import (
     RepositoryInput,
     SourceIdentity,
 )
+from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.verdict import (
     ERROR,
     EXECUTION_COMPLETED,
@@ -1092,19 +1094,23 @@ def guard(
             test_command_started=test_started_bx,
             pack_evidence=pack_evidence_bx,
         )
-        # Enforceable assurance policy (fail-closed): refuse to ship a verdict whose
-        # ACTUAL (delivered) assurance is below what the caller required.
-        shortfall_bx = _assurance_shortfall(
-            assurance_bx,
+        current_decision_bx = apply_assurance_gate(
+            GuardDecision(
+                verdict=v_bx,
+                reason_code=code_bx,
+                reason=reason_bx,
+            ),
+            assurance=assurance_bx,
+            execution_state=execution_state_bx,
+            execution_requested=True,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
+            shortfall_evaluator=_assurance_shortfall,
+            eager_shortfall=True,
         )
-        if (
-            shortfall_bx is not None
-            and execution_state_bx == EXECUTION_COMPLETED
-            and v_bx == PASS
-        ):
-            v_bx, code_bx, reason_bx = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall_bx
+        v_bx = current_decision_bx.verdict
+        code_bx = current_decision_bx.reason_code
+        reason_bx = current_decision_bx.reason
         # Evidence-only requests the black-box judge cannot fulfil degrade
         # EXPLICITLY (an unmeasured record with a note), never silently (1.7).
         baseline_bx = None
@@ -1464,18 +1470,19 @@ def guard(
         if run_suite
         else _static_assurance_profile(verifier_pack)
     )
-    # Enforceable assurance policy (fail-closed): the default judge is
-    # same_process_candidate_writable, so a --require-report-integrity of
-    # external_process_isolated here correctly refuses rather than overclaims.
-    shortfall = None
-    if run_suite and execution_state == EXECUTION_COMPLETED and v == PASS:
-        shortfall = _assurance_shortfall(
-            assurance,
-            require_report_integrity=require_report_integrity,
-            require_candidate_isolation=require_candidate_isolation,
-        )
-    if shortfall is not None:
-        v, code, reason = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET, shortfall
+    current_decision = apply_assurance_gate(
+        current_decision,
+        assurance=assurance,
+        execution_state=execution_state,
+        execution_requested=run_suite,
+        require_report_integrity=require_report_integrity,
+        require_candidate_isolation=require_candidate_isolation,
+        shortfall_evaluator=_assurance_shortfall,
+        eager_shortfall=False,
+    )
+    v = current_decision.verdict
+    code = current_decision.reason_code
+    reason = current_decision.reason
 
     return GuardResult(
         verdict=v,

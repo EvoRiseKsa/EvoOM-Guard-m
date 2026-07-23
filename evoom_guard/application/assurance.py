@@ -46,7 +46,7 @@ def _profile_payload(
 
 
 def assurance_shortfall(
-    assurance: dict[str, Any],
+    assurance: Mapping[str, Any],
     *,
     require_report_integrity: str | None,
     require_candidate_isolation: str | None,

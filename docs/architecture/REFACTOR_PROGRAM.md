@@ -185,9 +185,14 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   baseline execution, repo-suite scope, repair-effect classification, and
   evidence annotation. The current post-coverage decision is passed through so
   an earlier failure remains authoritative.
-- Pending: extend the application composers into a complete
-  `VerificationPipeline` by extracting assurance demotion plus effect
-  sequencing with shadow-mode differential coverage.
+- Delivered-assurance demotion is owned by
+  `application.decision_gates.apply_assurance_gate`; Guard retains profile and
+  attestation placement and supplies the shortfall evaluator. Its explicit
+  eager/lazy mode freezes the different black-box and repo-native access and
+  exception order instead of silently normalizing them.
+- Pending: extend the application composers into a bounded
+  `VerificationPipeline` facade, then move effect sequencing only behind
+  separately characterized boundaries with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

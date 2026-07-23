@@ -1,0 +1,1857 @@
+{
+  "cases": {
+    "blackbox_attestation_exception_after_shortfall": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "blackbox_pack",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": null,
+      "exception": {
+        "message": "synthetic attestation failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "attestation": "raise",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": null
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": null,
+      "result_attestation_is_source": null,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": null
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_completed_fail_eager_preserves_prior": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "blackbox_pack",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason": "the black-box pack failed (0/1)",
+        "reason_code": "tests_failed",
+        "verdict": "FAIL",
+        "verdict_source": "blackbox"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_fail",
+        "shortfall": "synthetic assurance shortfall"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": "synthetic assurance shortfall"
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_completed_pass_empty_shortfall": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "blackbox_pack",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason": "",
+        "reason_code": "assurance_requirement_not_met",
+        "verdict": "ERROR",
+        "verdict_source": "blackbox"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": ""
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": ""
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_completed_pass_none": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "blackbox_pack",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": true,
+        "reason": "the black-box pack passed (1/1) — the candidate satisfied the judge-owned protocol tests, judged from outside its own process",
+        "reason_code": "tests_passed",
+        "verdict": "PASS",
+        "verdict_source": "blackbox"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": null
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": null
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_composite_external_floor": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:report_integrity"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason": "required report_integrity ≥ 'external_process_isolated' but the run delivered 'same_process_candidate_writable' (use --blackbox for external_process_isolated)",
+        "reason_code": "assurance_requirement_not_met",
+        "verdict": "ERROR",
+        "verdict_source": "composite:blackbox+repo"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": "external_process_isolated",
+        "runtime": "completed_pass",
+        "shortfall": "real"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": true,
+            "execution_phase": "repo_suite",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": true,
+            "repo_suite_state": "composed_completed",
+            "runtime_continuity": "continuous",
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The required repo-native phase has same_process_candidate_writable report integrity, so the composite reports that weaker level; use --blackbox-only when an external_process_isolated floor is required. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "composite_blackbox_repo_native",
+        "repo_native_suite": "composed_completed",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "continuous",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": "external_process_isolated"
+          },
+          "returned": "required report_integrity ≥ 'external_process_isolated' but the run delivered 'same_process_candidate_writable' (use --blackbox for external_process_isolated)"
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "verifier:init",
+        "verifier:verify",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "blackbox_incomplete_error_eager_preserves_prior": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "blackbox_pack",
+          "execution_state": "started_incomplete",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason": "synthetic black-box timeout",
+        "reason_code": "test_timeout",
+        "verdict": "ERROR",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "incomplete_error",
+        "shortfall": "synthetic assurance shortfall"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "started_incomplete",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": false,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. Execution did not complete, so no clean verdict source is claimed. See docs/BLACKBOX.md.",
+        "overall_profile": "execution_incomplete",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "started_incomplete",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_execution",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": "synthetic assurance shortfall"
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_not_started_error_eager_preserves_prior": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": false
+        }
+      ],
+      "decision": {
+        "execution_phase": "preflight",
+        "execution_state": "not_started",
+        "isolation": "not_run",
+        "passed": false,
+        "reason": "synthetic verifier pack invalid",
+        "reason_code": "verifier_pack_invalid",
+        "verdict": "ERROR",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "not_started_error",
+        "shortfall": "synthetic assurance shortfall"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "not_run",
+            "composed_repo_suite": false,
+            "execution_phase": "preflight",
+            "execution_state": "not_started",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": false,
+              "completed": false,
+              "outcome": "pack_invalid",
+              "present": true,
+              "snapshot_sha256": null,
+              "started": false
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": false
+          },
+          "kind": "runtime",
+          "positional": [
+            "not_run",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "preflight",
+        "execution_state": "not_started",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "runtime verification did not start a test command (furthest phase: preflight); no candidate isolation or report-integrity boundary is claimed. Requested policy remains in attestation.effective_policy.",
+        "overall_profile": "preflight",
+        "report_integrity": "not_applicable_not_run",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "not_started",
+          "identity_verified": null,
+          "integrity": "invalid",
+          "present": true,
+          "secrecy": "not_evaluated_no_execution",
+          "snapshot_sha256": null
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": "synthetic assurance shortfall"
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_only_external_floor": {
+      "assurance_access_trace": [
+        "get:report_integrity"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "blackbox_pack",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "blackbox",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": true,
+        "reason": "the black-box pack passed (1/1) — the candidate satisfied the judge-owned protocol tests, judged from outside its own process",
+        "reason_code": "tests_passed",
+        "verdict": "PASS",
+        "verdict_source": "blackbox"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": "external_process_isolated",
+        "runtime": "completed_pass",
+        "shortfall": "real"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": "external_process_isolated"
+          },
+          "returned": null
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call",
+        "attestation:build"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_profile_exception_precedes_shortfall_attestation": {
+      "assurance_access_trace": [],
+      "attestation_calls": [],
+      "decision": null,
+      "exception": {
+        "message": "synthetic profile failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "raise",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": null
+      },
+      "profile_calls": [],
+      "profile_snapshot": null,
+      "result_assurance_is_profile_source": null,
+      "result_attestation_is_source": null,
+      "shortfall_calls": [],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime"
+      ],
+      "verifier_calls": []
+    },
+    "blackbox_shortfall_exception_precedes_attestation": {
+      "assurance_access_trace": [],
+      "attestation_calls": [],
+      "decision": null,
+      "exception": {
+        "message": "synthetic shortfall failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": true,
+        "mode": "blackbox",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": "raise"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "blackbox",
+            "composed_repo_suite",
+            "repo_suite_required",
+            "repo_suite_state",
+            "candidate_isolation",
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "blackbox": true,
+            "candidate_isolation": "subprocess",
+            "composed_repo_suite": false,
+            "execution_phase": "blackbox_pack",
+            "execution_state": "completed",
+            "pack_evidence": {
+              "candidate_launcher_invocation_observed": true,
+              "completed": true,
+              "outcome": null,
+              "present": true,
+              "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "started": true
+            },
+            "repo_suite_required": false,
+            "repo_suite_state": "not_required_blackbox_only",
+            "runtime_continuity": null,
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            "<VERIFIER_PACK>"
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "result_assurance_is_profile_source": null,
+      "result_attestation_is_source": null,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          }
+        }
+      ],
+      "timeline": [
+        "blackbox:run",
+        "profile:runtime",
+        "shortfall:call"
+      ],
+      "verifier_calls": []
+    },
+    "repo_attestation_exception_precedes_profile": {
+      "assurance_access_trace": [],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": null,
+      "exception": {
+        "message": "synthetic attestation failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "attestation": "raise",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": null
+      },
+      "profile_calls": [],
+      "profile_snapshot": null,
+      "result_assurance_is_profile_source": null,
+      "result_attestation_is_source": null,
+      "shortfall_calls": [],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_completed_fail_preserves_prior_without_shortfall": {
+      "assurance_access_trace": [],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason": "the repo's tests fail on this patch (1/2 passed)",
+        "reason_code": "tests_failed",
+        "verdict": "FAIL",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_fail",
+        "shortfall": "raise"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "execution_phase": "repo_suite",
+            "execution_state": "completed",
+            "pack_evidence": null,
+            "runtime_continuity": "continuous",
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            null
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "repo_native_same_process",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "continuous",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": null
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_completed_pass_empty_shortfall": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason": "",
+        "reason_code": "assurance_requirement_not_met",
+        "verdict": "ERROR",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": ""
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "execution_phase": "repo_suite",
+            "execution_state": "completed",
+            "pack_evidence": null,
+            "runtime_continuity": "continuous",
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            null
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "repo_native_same_process",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "continuous",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": null
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": ""
+        }
+      ],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime",
+        "shortfall:call"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_completed_pass_none": {
+      "assurance_access_trace": [
+        "get:report_integrity",
+        "get:candidate_isolation"
+      ],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": true,
+        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason_code": "tests_passed",
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": null
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "execution_phase": "repo_suite",
+            "execution_state": "completed",
+            "pack_evidence": null,
+            "runtime_continuity": "continuous",
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            null
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "repo_native_same_process",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "continuous",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": null
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          },
+          "returned": null
+        }
+      ],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime",
+        "shortfall:call"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_incomplete_error_skips_shortfall": {
+      "assurance_access_trace": [],
+      "attestation_calls": [
+        {
+          "execution_phase": "setup",
+          "execution_state": "started_incomplete",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": false
+        }
+      ],
+      "decision": {
+        "execution_phase": "setup",
+        "execution_state": "started_incomplete",
+        "isolation": "not_run",
+        "passed": false,
+        "reason": "synthetic setup failure",
+        "reason_code": "setup_failed",
+        "verdict": "ERROR",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "incomplete_error",
+        "shortfall": "raise"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "execution_phase": "setup",
+            "execution_state": "started_incomplete",
+            "pack_evidence": null,
+            "runtime_continuity": "not_established",
+            "setup_isolation": "subprocess",
+            "test_command_started": false
+          },
+          "kind": "runtime",
+          "positional": [
+            "not_run",
+            null
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "setup",
+        "execution_state": "started_incomplete",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "runtime verification did not start a test command (furthest phase: setup); no candidate isolation or report-integrity boundary is claimed. Requested policy remains in attestation.effective_policy.",
+        "overall_profile": "execution_incomplete_before_tests",
+        "report_integrity": "not_applicable_not_run",
+        "runtime_continuity": "not_established",
+        "setup_isolation": "subprocess",
+        "suite_isolation": "not_run",
+        "verifier_pack": null
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_profile_exception_after_attestation": {
+      "assurance_access_trace": [],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": null,
+      "exception": {
+        "message": "synthetic profile failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "raise",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": null
+      },
+      "profile_calls": [],
+      "profile_snapshot": null,
+      "result_assurance_is_profile_source": null,
+      "result_attestation_is_source": null,
+      "shortfall_calls": [],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_shortfall_exception_after_attestation_profile": {
+      "assurance_access_trace": [],
+      "attestation_calls": [
+        {
+          "execution_phase": "repo_suite",
+          "execution_state": "completed",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": true
+        }
+      ],
+      "decision": null,
+      "exception": {
+        "message": "synthetic shortfall failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": null,
+        "runtime": "completed_pass",
+        "shortfall": "raise"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "keywords": {
+            "execution_phase": "repo_suite",
+            "execution_state": "completed",
+            "pack_evidence": null,
+            "runtime_continuity": "continuous",
+            "setup_isolation": null,
+            "test_command_started": true
+          },
+          "kind": "runtime",
+          "positional": [
+            "subprocess",
+            null
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "repo_native_same_process",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "continuous",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": null
+      },
+      "result_assurance_is_profile_source": null,
+      "result_attestation_is_source": null,
+      "shortfall_calls": [
+        {
+          "assurance_is_profile_source": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "keywords": {
+            "require_candidate_isolation": null,
+            "require_report_integrity": null
+          }
+        }
+      ],
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime",
+        "shortfall:call"
+      ],
+      "verifier_calls": [
+        "init",
+        "verify"
+      ]
+    },
+    "repo_static_rejection_skips_runtime_gate": {
+      "assurance_access_trace": [],
+      "attestation_calls": [
+        {
+          "execution_phase": "pre_gate",
+          "execution_state": "static_gate",
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "mode": "repo",
+          "positional_count": 1,
+          "test_command_started": false
+        }
+      ],
+      "decision": {
+        "execution_phase": "pre_gate",
+        "execution_state": "static_gate",
+        "isolation": "not_run",
+        "passed": false,
+        "reason": "reward-hack guard: the patch edits or deletes the judging tests, their configuration, the gate's CI/config, or an auto-executed file — fix the source under test, not the harness (tests/test_app.py)",
+        "reason_code": "protected_harness_edit",
+        "verdict": "REJECTED",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "attestation": "normal",
+        "blackbox_only": false,
+        "mode": "repo",
+        "profile": "normal",
+        "require_candidate_isolation": null,
+        "require_report_integrity": "external_process_isolated",
+        "runtime": "static_rejected",
+        "shortfall": "raise"
+      },
+      "profile_calls": [
+        {
+          "keyword_order": [],
+          "keywords": {},
+          "kind": "static",
+          "positional": [
+            null
+          ],
+          "profile_source_created": true
+        }
+      ],
+      "profile_snapshot": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "pre_gate",
+        "execution_state": "static_gate",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "the diff pre-gate decided this result before candidate execution; no test command, runtime boundary, report channel, setup, or verifier pack was exercised. Requested runtime policy is recorded only in attestation.effective_policy.",
+        "overall_profile": "static_gate",
+        "report_integrity": "not_applicable_static_gate",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": null
+      },
+      "result_assurance_is_profile_source": true,
+      "result_attestation_is_source": true,
+      "shortfall_calls": [],
+      "timeline": [
+        "attestation:build",
+        "profile:static"
+      ],
+      "verifier_calls": []
+    }
+  },
+  "normalization": [
+    "profile_calls[].positional verifier-pack path -> <VERIFIER_PACK>"
+  ],
+  "schema_version": "assurance-decision-gate-characterization-v1"
+}

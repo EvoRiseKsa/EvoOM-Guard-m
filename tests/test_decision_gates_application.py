@@ -11,12 +11,15 @@ import pytest
 
 import evoom_guard.application as application
 from evoom_guard.application.decision_gates import (
+    apply_assurance_gate,
     apply_demonstrated_fix_gate,
     apply_diff_coverage_gate,
 )
 from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.verdict import (
     ERROR,
+    EXECUTION_COMPLETED,
+    EXECUTION_STARTED_INCOMPLETE,
     FAIL,
     PASS,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
@@ -77,6 +80,36 @@ class _IndependentComparison:
         return self._not_equal
 
 
+class _TrackingShortfall:
+    def __init__(
+        self,
+        result: str | None,
+        *,
+        error: Exception | None = None,
+    ) -> None:
+        self._result = result
+        self._error = error
+        self.calls: list[tuple[Mapping[str, Any], str | None, str | None]] = []
+
+    def __call__(
+        self,
+        assurance: Mapping[str, Any],
+        *,
+        require_report_integrity: str | None,
+        require_candidate_isolation: str | None,
+    ) -> str | None:
+        self.calls.append(
+            (
+                assurance,
+                require_report_integrity,
+                require_candidate_isolation,
+            )
+        )
+        if self._error is not None:
+            raise self._error
+        return self._result
+
+
 PASS_DECISION = GuardDecision(
     verdict=PASS,
     reason_code=REASON_TESTS_PASSED,
@@ -90,6 +123,248 @@ def test_application_exports_diff_coverage_gate() -> None:
 
 def test_application_exports_demonstrated_fix_gate() -> None:
     assert application.apply_demonstrated_fix_gate is apply_demonstrated_fix_gate
+
+
+def test_application_exports_assurance_gate() -> None:
+    assert application.apply_assurance_gate is apply_assurance_gate
+
+
+def test_repo_assurance_gate_is_lazy_until_requested_completed_pass() -> None:
+    assurance: Mapping[str, Any] = {"report_integrity": "synthetic"}
+    evaluator = _TrackingShortfall("must not be evaluated")
+
+    for execution_requested, execution_state, decision in (
+        (False, EXECUTION_COMPLETED, PASS_DECISION),
+        (True, EXECUTION_STARTED_INCOMPLETE, PASS_DECISION),
+        (
+            True,
+            EXECUTION_COMPLETED,
+            GuardDecision(
+                verdict=FAIL,
+                reason_code=REASON_TESTS_FAILED,
+                reason="prior failure",
+            ),
+        ),
+    ):
+        result = apply_assurance_gate(
+            decision,
+            assurance=assurance,
+            execution_state=execution_state,
+            execution_requested=execution_requested,
+            require_report_integrity="external_process_isolated",
+            require_candidate_isolation="docker",
+            shortfall_evaluator=evaluator,
+            eager_shortfall=False,
+        )
+        assert result is decision
+
+    assert evaluator.calls == []
+
+
+def test_repo_assurance_gate_demotes_completed_pass_and_forwards_exact_inputs() -> None:
+    assurance: Mapping[str, Any] = {"report_integrity": "synthetic"}
+    evaluator = _TrackingShortfall("synthetic shortfall")
+
+    result = apply_assurance_gate(
+        PASS_DECISION,
+        assurance=assurance,
+        execution_state=EXECUTION_COMPLETED,
+        execution_requested=True,
+        require_report_integrity="external_process_isolated",
+        require_candidate_isolation="docker",
+        shortfall_evaluator=evaluator,
+        eager_shortfall=False,
+    )
+
+    assert result == GuardDecision(
+        verdict=ERROR,
+        reason_code=REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+        reason="synthetic shortfall",
+    )
+    assert evaluator.calls == [
+        (
+            assurance,
+            "external_process_isolated",
+            "docker",
+        )
+    ]
+    assert evaluator.calls[0][0] is assurance
+
+
+@pytest.mark.parametrize("eager_shortfall", (False, True))
+def test_empty_assurance_shortfall_is_still_a_demotion(
+    eager_shortfall: bool,
+) -> None:
+    evaluator = _TrackingShortfall("")
+
+    result = apply_assurance_gate(
+        PASS_DECISION,
+        assurance={},
+        execution_state=EXECUTION_COMPLETED,
+        execution_requested=True,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        shortfall_evaluator=evaluator,
+        eager_shortfall=eager_shortfall,
+    )
+
+    assert result == GuardDecision(
+        verdict=ERROR,
+        reason_code=REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+        reason="",
+    )
+
+
+def test_satisfied_assurance_floor_preserves_decision_identity() -> None:
+    evaluator = _TrackingShortfall(None)
+
+    result = apply_assurance_gate(
+        PASS_DECISION,
+        assurance={},
+        execution_state=EXECUTION_COMPLETED,
+        execution_requested=True,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        shortfall_evaluator=evaluator,
+        eager_shortfall=False,
+    )
+
+    assert result is PASS_DECISION
+    assert len(evaluator.calls) == 1
+
+
+def test_blackbox_assurance_gate_evaluates_eagerly_but_preserves_prior_decision() -> None:
+    prior = GuardDecision(
+        verdict=FAIL,
+        reason_code=REASON_TESTS_FAILED,
+        reason="prior failure",
+    )
+    assurance: Mapping[str, Any] = {"candidate_isolation": "subprocess"}
+    evaluator = _TrackingShortfall("synthetic shortfall")
+
+    result = apply_assurance_gate(
+        prior,
+        assurance=assurance,
+        execution_state=EXECUTION_STARTED_INCOMPLETE,
+        execution_requested=False,
+        require_report_integrity=None,
+        require_candidate_isolation="docker",
+        shortfall_evaluator=evaluator,
+        eager_shortfall=True,
+    )
+
+    assert result is prior
+    assert evaluator.calls == [(assurance, None, "docker")]
+
+
+def test_blackbox_assurance_gate_preserves_completed_prior_failure() -> None:
+    prior = GuardDecision(
+        verdict=FAIL,
+        reason_code=REASON_TESTS_FAILED,
+        reason="prior failure",
+    )
+    evaluator = _TrackingShortfall("synthetic shortfall")
+
+    result = apply_assurance_gate(
+        prior,
+        assurance={},
+        execution_state=EXECUTION_COMPLETED,
+        execution_requested=True,
+        require_report_integrity=None,
+        require_candidate_isolation="docker",
+        shortfall_evaluator=evaluator,
+        eager_shortfall=True,
+    )
+
+    assert result is prior
+    assert len(evaluator.calls) == 1
+
+
+def test_blackbox_assurance_gate_does_not_demote_incomplete_pass() -> None:
+    evaluator = _TrackingShortfall("synthetic shortfall")
+
+    result = apply_assurance_gate(
+        PASS_DECISION,
+        assurance={},
+        execution_state=EXECUTION_STARTED_INCOMPLETE,
+        execution_requested=True,
+        require_report_integrity=None,
+        require_candidate_isolation="docker",
+        shortfall_evaluator=evaluator,
+        eager_shortfall=True,
+    )
+
+    assert result is PASS_DECISION
+    assert len(evaluator.calls) == 1
+
+
+def test_assurance_evaluator_exception_propagates_in_both_timing_modes() -> None:
+    for eager_shortfall in (False, True):
+        evaluator = _TrackingShortfall(
+            None,
+            error=RuntimeError("synthetic evaluator failure"),
+        )
+        with pytest.raises(RuntimeError, match="synthetic evaluator failure"):
+            apply_assurance_gate(
+                PASS_DECISION,
+                assurance={},
+                execution_state=EXECUTION_COMPLETED,
+                execution_requested=True,
+                require_report_integrity=None,
+                require_candidate_isolation=None,
+                shortfall_evaluator=evaluator,
+                eager_shortfall=eager_shortfall,
+            )
+        assert len(evaluator.calls) == 1
+
+
+def test_repo_assurance_gate_preserves_historical_verdict_equality_protocol() -> None:
+    verdict = _IndependentComparison(equal=False, raise_not_equal=True)
+    decision = GuardDecision(
+        verdict=cast(str, verdict),
+        reason_code=REASON_TESTS_FAILED,
+        reason="synthetic prior decision",
+    )
+    evaluator = _TrackingShortfall("must not be evaluated")
+
+    result = apply_assurance_gate(
+        decision,
+        assurance={},
+        execution_state=EXECUTION_COMPLETED,
+        execution_requested=True,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        shortfall_evaluator=evaluator,
+        eager_shortfall=False,
+    )
+
+    assert result is decision
+    assert verdict.events == [f"eq:{PASS}"]
+    assert evaluator.calls == []
+
+
+def test_blackbox_assurance_gate_does_not_compare_decision_without_shortfall() -> None:
+    verdict = _IndependentComparison(raise_equal=True)
+    decision = GuardDecision(
+        verdict=cast(str, verdict),
+        reason_code=REASON_TESTS_FAILED,
+        reason="synthetic prior decision",
+    )
+    evaluator = _TrackingShortfall(None)
+
+    result = apply_assurance_gate(
+        decision,
+        assurance={},
+        execution_state=EXECUTION_COMPLETED,
+        execution_requested=True,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        shortfall_evaluator=evaluator,
+        eager_shortfall=True,
+    )
+
+    assert result is decision
+    assert verdict.events == []
 
 
 @pytest.mark.parametrize(

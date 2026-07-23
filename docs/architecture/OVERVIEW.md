@@ -74,7 +74,10 @@ changed-line coverage evaluation. Guard still owns collection and invokes the
 pure gate at the historical point before demonstrated-fix and assurance. The
 same application module owns demonstrated-fix demotion from already prepared
 baseline evidence; Guard retains baseline execution, repair-effect
-classification, and repo-suite scope.
+classification, and repo-suite scope. It also owns final delivered-assurance
+demotion. Guard supplies the already constructed profile and preserves the
+historical black-box eager versus repo-native lazy evaluation modes, including
+their different access and exception order.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
@@ -103,9 +106,10 @@ The flat workspace module has been migrated atomically into the classified
 Internal workspace decomposition and the complete `application` verification
 pipeline remain pending.
 
-The immediate structural priority is Stage 8 in bounded characterized slices:
-extract the assurance decision demotion before introducing a pipeline facade.
-Small RepoVerifier and black-box responsibility slices can continue
-independently where their effect boundaries are already characterized. Every
-slice must retain the existing contract, mutation, differential, and
+The immediate structural priority is the next Stage 8 slice: introduce a
+bounded `VerificationPipeline` facade over the extracted decision composers
+without moving effect, profile, or attestation timing. Small RepoVerifier and
+black-box responsibility slices can continue independently where their effect
+boundaries are already characterized. Every slice must retain the existing
+contract, mutation, differential, and
 architectural-boundary gates.
