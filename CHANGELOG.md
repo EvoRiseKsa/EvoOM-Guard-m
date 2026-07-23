@@ -9,6 +9,45 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [Unreleased]
+
+### Added
+
+- Added the experimental
+  [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) candidate: a
+  canonical untrusted proposal, separately signed `.aca` authorization,
+  independently derived raw-Git bindings, and an offline-verifiable Trusted
+  Finalizer evidence profile.
+- Added a compact
+  [`command-order reference`](examples/agent-change-admission/) and JSON Schema
+  contracts for proposals, authorizations, and raw-Git bindings.
+
+### Security
+
+- The agent cannot authorize its own paths. Exact literal or `directory/**`
+  scope, deletion/size/path-count limits, policy and verifier-pack digests, and
+  source/run identities come from a separate signed control plane.
+- Judge-owned tests, config, CI/Action, and auto-exec paths remain forbidden
+  even when a signed scope attempts to include them. Authorization and Trusted
+  Finalizer signing keys must be distinct.
+- Sealing requires exact proposal/authorization/raw-Git/finalizer agreement and
+  a verified Trusted Finalizer `ALLOW`; detached verification performs no
+  candidate checkout or execution.
+- The sealer re-derives complete tracked-path truth internally with a pinned
+  Git executable, including paths excluded from Guard's candidate-copy layer,
+  and verifies a staged signature before atomic publication.
+
+### Known limitations
+
+- This is an unpublished feature-branch candidate, not part of immutable
+  v4.2.0 and not an enabled merge gate. It has implementation tests but no live
+  protected consumer pilot or independent validation yet.
+- The profile is an admission contract, not ML, risk prediction, policy
+  selection, or a code-healing engine. It does not prove correctness beyond
+  the configured Guard judge and evidence boundary.
+- V1 authorization is idempotent for one exact commit/tree and is not a
+  single-use grant; single-use enforcement requires external state.
+
 ## [4.2.0] — 2026-07-22
 
 ### Added

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v4.3.0/evoom_guard/schemas/agent-change-authorization-1.schema.json",
+  "title": "EvoOM Guard Agent Change Authorization V1",
+  "description": "Canonical control-plane authorization manifest signed in the agent-change-authorization-v1 key domain.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "source", "scope", "required", "authentication"],
+  "properties": {
+    "format": {"const": "EVOGUARD_AGENT_CHANGE_AUTHORIZATION_V1"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "repository_id", "pull_request_number", "authorization_run_id", "authorization_run_attempt", "base_sha", "head_sha", "base_tree_sha", "head_tree_sha"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1, "maxLength": 512},
+        "repository_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "pull_request_number": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "authorization_run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "authorization_run_attempt": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "base_sha": {"$ref": "#/$defs/gitDigest"},
+        "head_sha": {"$ref": "#/$defs/gitDigest"},
+        "base_tree_sha": {"$ref": "#/$defs/gitDigest"},
+        "head_tree_sha": {"$ref": "#/$defs/gitDigest"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_patterns", "maximum_touched_paths", "maximum_candidate_bytes", "allow_deletions"],
+      "properties": {
+        "allowed_patterns": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "maximum_touched_paths": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "maximum_candidate_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+        "allow_deletions": {"type": "boolean"}
+      }
+    },
+    "required": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_sha256", "verifier_pack_sha256"],
+      "properties": {
+        "policy_sha256": {"$ref": "#/$defs/sha256"},
+        "verifier_pack_sha256": {"$ref": "#/$defs/nullableSha256"}
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "purpose", "key_domain", "signature_path"],
+      "properties": {
+        "algorithm": {"const": "Ed25519"},
+        "key_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "purpose": {"const": "evoguard-agent-change-authorization-v1"},
+        "key_domain": {"const": "agent-change-authorization-v1"},
+        "signature_path": {"const": "authorization.sig"}
+      }
+    }
+  },
+  "$defs": {
+    "gitDigest": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableSha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+  }
+}

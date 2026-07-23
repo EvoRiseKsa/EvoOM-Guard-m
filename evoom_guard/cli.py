@@ -942,6 +942,77 @@ def build_parser() -> argparse.ArgumentParser:
         help="also act as a gate: exit 0 only for a verified semantic PASS",
     )
 
+    # ----- Agent Change admission profile ---------------------------------- #
+    acp_p = sub.add_parser(
+        "validate-agent-change-proposal",
+        help="validate one canonical untrusted Agent Change proposal",
+    )
+    acp_p.add_argument("proposal", help="canonical proposal JSON")
+
+    dacb_p = sub.add_parser(
+        "derive-agent-change-bindings",
+        help="derive changed paths and identities from immutable raw Git",
+    )
+    dacb_p.add_argument("--base-repo", required=True, help="trusted base Git worktree/object store")
+    dacb_p.add_argument("--head-repo", required=True, help="trusted head Git worktree/object store")
+    dacb_p.add_argument("--git-executable", required=True, help="trusted absolute POSIX Git executable")
+    dacb_p.add_argument("--git-executable-sha256", required=True, help="external SHA-256 pin for Git")
+    dacb_p.add_argument("--base-bare", action="store_true", help="base-repo is a bare Git dir")
+    dacb_p.add_argument("--head-bare", action="store_true", help="head-repo is a bare Git dir")
+    dacb_p.add_argument("--base-sha", required=True, help="immutable base commit SHA")
+    dacb_p.add_argument("--head-sha", required=True, help="immutable head commit SHA")
+    dacb_p.add_argument("--base-tree-sha", required=True, help="expected base tree SHA")
+    dacb_p.add_argument("--head-tree-sha", required=True, help="expected head tree SHA")
+    dacb_p.add_argument("--out", required=True, help="canonical Agent Change binding JSON")
+    dacb_p.add_argument("--force", action="store_true", help="replace an existing output")
+
+    saca_p = sub.add_parser(
+        "seal-agent-change-authorization",
+        help="sign a trusted control-plane scope for one exact agent change",
+    )
+    saca_p.add_argument("--source", required=True, help="trusted authorization source JSON")
+    saca_p.add_argument("--scope", required=True, help="trusted authorization scope JSON")
+    saca_p.add_argument("--required", required=True, help="trusted policy/pack requirements JSON")
+    saca_p.add_argument("--sign-key", required=True, help="authorization-domain Ed25519 private key")
+    saca_p.add_argument("--out", required=True, help="signed canonical .aca authorization")
+    saca_p.add_argument("--force", action="store_true", help="replace an existing output")
+
+    sacf_p = sub.add_parser(
+        "seal-agent-change-finalized",
+        help="seal Trusted Finalizer ALLOW with proposal, authorization, and raw-Git bindings",
+    )
+    sacf_p.add_argument("proposal", help="canonical untrusted proposal JSON")
+    sacf_p.add_argument("authorization", help="signed .aca authorization archive")
+    sacf_p.add_argument("handoff", help="canonical Trusted Finalizer handoff")
+    sacf_p.add_argument("verdict", help="semantic Guard verdict referenced by the handoff")
+    sacf_p.add_argument("--base-repo", required=True, help="trusted base Git worktree/object store")
+    sacf_p.add_argument("--head-repo", required=True, help="trusted head Git worktree/object store")
+    sacf_p.add_argument("--git-executable", required=True, help="trusted absolute POSIX Git executable")
+    sacf_p.add_argument("--git-executable-sha256", required=True, help="external SHA-256 pin for Git")
+    sacf_p.add_argument("--base-bare", action="store_true", help="base-repo is a bare Git dir")
+    sacf_p.add_argument("--head-bare", action="store_true", help="head-repo is a bare Git dir")
+    sacf_p.add_argument("--finalizer-bindings", required=True, help="canonical Trusted Finalizer raw-Git bindings")
+    sacf_p.add_argument("--authorization-source", required=True, help="external authorization source JSON")
+    sacf_p.add_argument("--authorization-pub", required=True, help="trusted authorization public key")
+    sacf_p.add_argument("--expected-source", required=True, help="external finalizer source JSON")
+    sacf_p.add_argument("--expected-context", required=True, help="external finalizer context JSON")
+    sacf_p.add_argument("--sign-key", required=True, help="Trusted Finalizer private key")
+    sacf_p.add_argument("--trusted-pub", required=True, help="matching Trusted Finalizer public key")
+    sacf_p.add_argument("--out", required=True, help="signed Agent Change finalizer .evb")
+    sacf_p.add_argument("--force", action="store_true", help="replace an existing output")
+
+    vacf_p = sub.add_parser(
+        "verify-agent-change-finalized",
+        help="offline-verify the complete Agent Change finalizer profile",
+    )
+    vacf_p.add_argument("bundle", help="signed Agent Change finalizer .evb")
+    vacf_p.add_argument("--agent-bindings", required=True, help="external raw-Git Agent Change bindings")
+    vacf_p.add_argument("--authorization-source", required=True, help="external authorization source JSON")
+    vacf_p.add_argument("--authorization-pub", required=True, help="trusted authorization public key")
+    vacf_p.add_argument("--expected-source", required=True, help="external finalizer source JSON")
+    vacf_p.add_argument("--expected-context", required=True, help="external finalizer context JSON")
+    vacf_p.add_argument("--trusted-pub", required=True, help="trusted finalizer public key")
+
     # ----- release-source finalizer V1 ----------------------------------- #
     rsfh_p = sub.add_parser(
         "release-source-handoff",
@@ -2951,6 +3022,305 @@ def cmd_derive_finalizer_bindings(
             "candidate_sha256": bindings.candidate_sha256,
             "policy_sha256": bindings.policy_sha256,
             "verifier_pack_sha256": bindings.verifier_pack_sha256,
+        },
+    )
+    return 0
+
+
+def cmd_validate_agent_change_proposal(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    from evoom_guard.admission.agent_change import (
+        AGENT_CHANGE_PROPOSAL_FORMAT,
+        AgentChangeAdmissionError,
+        inspect_agent_change_proposal,
+    )
+
+    try:
+        proposal = inspect_agent_change_proposal(args.proposal)
+    except (AgentChangeAdmissionError, OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+            "ok": True,
+            "status": "VALID",
+            "source": proposal.payload["source"],
+            "producer": proposal.payload["producer"],
+            "candidate_sha256": proposal.payload["change"]["candidate_sha256"],
+            "touched_paths": proposal.payload["change"]["touched_paths"],
+        },
+    )
+    return 0
+
+
+def cmd_derive_agent_change_bindings(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    from evoom_guard.finalizer_derivation import (
+        AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+        FinalizerDerivationError,
+        derive_agent_change_bindings,
+        git_executable_pin,
+        write_agent_change_bindings,
+    )
+
+    try:
+        git_executable = git_executable_pin(
+            args.git_executable,
+            args.git_executable_sha256,
+        )
+        bindings = derive_agent_change_bindings(
+            base_repo=args.base_repo,
+            head_repo=args.head_repo,
+            base_sha=args.base_sha,
+            head_sha=args.head_sha,
+            base_tree_sha=args.base_tree_sha,
+            head_tree_sha=args.head_tree_sha,
+            base_is_bare=args.base_bare,
+            head_is_bare=args.head_bare,
+            git_executable=git_executable,
+        )
+        output = write_agent_change_bindings(
+            bindings, bindings_path=args.out, force=args.force
+        )
+    except (FinalizerDerivationError, OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+            "ok": True,
+            "status": "DERIVED",
+            "bindings": output,
+            "candidate_sha256": bindings.candidate_sha256,
+            "touched_paths": list(bindings.touched_paths),
+            "policy_sha256": bindings.policy_sha256,
+            "verifier_pack_sha256": bindings.verifier_pack_sha256,
+        },
+    )
+    return 0
+
+
+def cmd_seal_agent_change_authorization(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    from evoom_guard.admission.agent_change import (
+        AGENT_CHANGE_AUTHORIZATION_FORMAT,
+        AgentChangeAdmissionError,
+        seal_agent_change_authorization,
+    )
+
+    try:
+        source = _read_external_finalizer_object(args.source, label="authorization source")
+        scope = _read_external_finalizer_object(args.scope, label="authorization scope")
+        required = _read_external_finalizer_object(
+            args.required, label="authorization requirements"
+        )
+        sealed = seal_agent_change_authorization(
+            args.out,
+            source=source,
+            scope=scope,
+            required=required,
+            private_key_path=args.sign_key,
+            force=args.force,
+        )
+    except (AgentChangeAdmissionError, OSError, UnicodeError, ValueError) as exc:
+        _machine_report(
+            out,
+            {
+                "format": AGENT_CHANGE_AUTHORIZATION_FORMAT,
+                "ok": False,
+                "status": "ERROR",
+                "error": str(exc),
+            },
+        )
+        return 2
+    _machine_report(
+        out,
+        {
+            "format": AGENT_CHANGE_AUTHORIZATION_FORMAT,
+            "ok": True,
+            "status": "SEALED",
+            "authorization": os.path.abspath(args.out),
+            "key_id": sealed.payload["authentication"]["key_id"],
+            "source": sealed.payload["source"],
+            "scope": sealed.payload["scope"],
+        },
+    )
+    return 0
+
+
+def cmd_seal_agent_change_finalized(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    from evoom_guard.admission.agent_change import (
+        AGENT_CHANGE_PROPOSAL_FORMAT,
+        AgentChangeAdmissionError,
+        seal_agent_change_finalizer_bundle,
+    )
+    from evoom_guard.finalizer_derivation import (
+        FinalizerDerivationError,
+        git_executable_pin,
+        read_finalizer_bindings,
+    )
+
+    try:
+        git_executable = git_executable_pin(
+            args.git_executable,
+            args.git_executable_sha256,
+        )
+        finalizer_bindings = read_finalizer_bindings(args.finalizer_bindings)
+        authorization_source = _read_external_finalizer_object(
+            args.authorization_source, label="authorization source"
+        )
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+        sealed = seal_agent_change_finalizer_bundle(
+            args.proposal,
+            args.authorization,
+            args.handoff,
+            args.verdict,
+            args.out,
+            base_repo=args.base_repo,
+            head_repo=args.head_repo,
+            git_executable=git_executable,
+            base_is_bare=args.base_bare,
+            head_is_bare=args.head_bare,
+            expected_authorization_source=authorization_source,
+            authorization_public_key_path=args.authorization_pub,
+            expected_finalizer_source=expected_source,
+            expected_context=expected_context,
+            finalizer_private_key_path=args.sign_key,
+            finalizer_public_key_path=args.trusted_pub,
+            expected_derivation=finalizer_bindings.payload,
+            force=args.force,
+        )
+    except (
+        AgentChangeAdmissionError,
+        FinalizerDerivationError,
+        OSError,
+        UnicodeError,
+        ValueError,
+    ) as exc:
+        _machine_report(
+            out,
+            {
+                "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+                "ok": False,
+                "status": "DENY",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+            "ok": True,
+            "status": "ALLOW",
+            "decision": sealed.decision,
+            "bundle": sealed.finalized.finalized.bundle_path,
+            "candidate_sha256": sealed.contract.bindings.candidate_sha256,
+            "touched_paths": list(sealed.contract.bindings.touched_paths),
+        },
+    )
+    return 0
+
+
+def cmd_verify_agent_change_finalized(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    from evoom_guard.admission.agent_change import (
+        AGENT_CHANGE_PROPOSAL_FORMAT,
+        AgentChangeAdmissionError,
+        verify_agent_change_finalized_bundle,
+    )
+    from evoom_guard.finalizer_derivation import (
+        FinalizerDerivationError,
+        read_agent_change_bindings,
+    )
+
+    try:
+        bindings = read_agent_change_bindings(args.agent_bindings)
+        authorization_source = _read_external_finalizer_object(
+            args.authorization_source, label="authorization source"
+        )
+        expected_source = _read_external_finalizer_object(
+            args.expected_source, label="expected source"
+        )
+        expected_context = _read_external_finalizer_object(
+            args.expected_context, label="expected context"
+        )
+        verified = verify_agent_change_finalized_bundle(
+            args.bundle,
+            trusted_finalizer_public_key_path=args.trusted_pub,
+            authorization_public_key_path=args.authorization_pub,
+            expected_authorization_source=authorization_source,
+            expected_finalizer_source=expected_source,
+            expected_context=expected_context,
+            expected_bindings=bindings,
+        )
+    except (
+        AgentChangeAdmissionError,
+        FinalizerDerivationError,
+        OSError,
+        UnicodeError,
+        ValueError,
+    ) as exc:
+        _machine_report(
+            out,
+            {
+                "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+                "ok": False,
+                "status": "DENY",
+                "error": str(exc),
+            },
+        )
+        return 1
+    _machine_report(
+        out,
+        {
+            "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+            "ok": True,
+            "status": "ALLOW",
+            "decision": verified.decision,
+            "candidate_sha256": verified.contract.bindings.candidate_sha256,
+            "touched_paths": list(verified.contract.bindings.touched_paths),
+            "claimed_producer": verified.contract.proposal.payload["producer"],
         },
     )
     return 0
@@ -5649,6 +6019,16 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_finalizer(args)
     if args.command == "verify-finalized":
         return cmd_verify_finalized(args)
+    if args.command == "validate-agent-change-proposal":
+        return cmd_validate_agent_change_proposal(args)
+    if args.command == "derive-agent-change-bindings":
+        return cmd_derive_agent_change_bindings(args)
+    if args.command == "seal-agent-change-authorization":
+        return cmd_seal_agent_change_authorization(args)
+    if args.command == "seal-agent-change-finalized":
+        return cmd_seal_agent_change_finalized(args)
+    if args.command == "verify-agent-change-finalized":
+        return cmd_verify_agent_change_finalized(args)
     if args.command == "release-source-handoff":
         return cmd_release_source_handoff(args)
     if args.command == "seal-release-source-finalizer":

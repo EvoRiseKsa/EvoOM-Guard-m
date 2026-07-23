@@ -605,6 +605,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`GOVERNANCE.md`](GOVERNANCE.md) | Current ownership and trust-boundary governance, including the explicit limit of same-owner cross-account review |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and threat-model review process for ordinary changes versus trust-boundary changes |
 | [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
+| [`docs/AGENT_CHANGE_ADMISSION.md`](docs/AGENT_CHANGE_ADMISSION.md) | Experimental v4.3 candidate: bind an untrusted agent proposal to separate signed scope, raw-Git facts, and a Trusted Finalizer `ALLOW` without executing candidate code during offline verification |
 | [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
 | [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v4.2.0 build-artifact attestation and historical/future release runs |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
