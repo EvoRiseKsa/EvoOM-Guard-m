@@ -7,7 +7,10 @@
 - No circular imports.
 - No `dict[str, Any]` in core domain contracts (`domain`, `application`, `policy`,
   `execution`); prefer typed dataclasses and protocol interfaces.
-- `candidate`, `workspace`, `execution`, and `isolation` may only export typed request/response contracts.
+- `candidate` may export typed value objects plus dependency-free parsing and
+  patch transforms; it must not perform filesystem, process, or container effects.
+- `workspace`, `execution`, and `isolation` may only export typed contracts and
+  the bounded effects those contracts explicitly describe.
 
 ## CI gate expectations
 
@@ -81,6 +84,16 @@ The schema-1.11 compatibility module retains its policy and wire-shape
 constants and re-exports exact domain objects. Guard imports semantics directly
 from the domain while retaining only its versioned `SCHEMA_VERSION` dependency.
 No baseline count changes, so no ratchet revision is fabricated.
+
+The first Stage-5 candidate slice moves edit parsing and the unique-anchor
+patch transform into `candidate.edits` and `candidate.patch`. Guard, black-box,
+evidence, and repository verification consume the public candidate contracts.
+The historical `verifiers.candidate_edits` and `patch_applier` paths remain
+exact compatibility facades, including the parser regex identities used by
+the characterized repository verifier. Candidate materialization and all
+filesystem effects remain pending. The measured baseline remains at zero
+cycles, 56 cross-package private imports, and 27 unclassified legacy modules,
+so this move does not fabricate a ratchet revision.
 
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline

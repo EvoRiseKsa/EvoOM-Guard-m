@@ -39,6 +39,15 @@ keys, and required record sections remain in
 Guard consumes generic semantics from the domain and only the schema version
 from the versioned wire contract.
 
+The first candidate slice lives in `evoom_guard/candidate/`. `edits.py` owns
+the dependency-free FILE/PATCH block grammar and `PatchBlock`; `patch.py` owns
+the pure unique-anchor search/replace transform and its exception hierarchy.
+The package performs no path validation, filesystem writes, process launch,
+or verdict interpretation. Historical imports through
+`verifiers.candidate_edits`, `patch_applier`, and `repo_verifier` remain exact
+aliases. Candidate tree copying and edit materialization remain effectful
+repository-verifier responsibilities until their own characterized slice.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain

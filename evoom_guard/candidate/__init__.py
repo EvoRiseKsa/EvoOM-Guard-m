@@ -3,14 +3,8 @@
 # Source-available — see LICENSE for permitted use.
 # Original creator: Mana Alharbi (مانع الحربي).
 # ------------------------------------------------------------------------------
-"""Compatibility facade for the historical candidate-edit parser path."""
+"""Dependency-free candidate parsing and patch transforms."""
 
-from __future__ import annotations
-
-import re as re
-from typing import NamedTuple as NamedTuple
-
-from evoom_guard.candidate import edits as _edits
 from evoom_guard.candidate.edits import (
     PatchBlock as PatchBlock,
 )
@@ -23,8 +17,26 @@ from evoom_guard.candidate.edits import (
 from evoom_guard.candidate.edits import (
     parse_patch_blocks as parse_patch_blocks,
 )
+from evoom_guard.candidate.patch import (
+    AmbiguousMatchError as AmbiguousMatchError,
+)
+from evoom_guard.candidate.patch import (
+    NoMatchError as NoMatchError,
+)
+from evoom_guard.candidate.patch import (
+    PatchError as PatchError,
+)
+from evoom_guard.candidate.patch import (
+    apply_patch as apply_patch,
+)
 
-_BLOCK_RE = _edits._BLOCK_RE
-_LENIENT_FILE_RE = _edits._LENIENT_FILE_RE
-_LENIENT_PATCH_RE = _edits._LENIENT_PATCH_RE
-_PATCH_BLOCK_RE = _edits._PATCH_BLOCK_RE
+__all__ = (
+    "AmbiguousMatchError",
+    "NoMatchError",
+    "PatchBlock",
+    "PatchError",
+    "apply_patch",
+    "parse_blocks_lenient",
+    "parse_file_blocks",
+    "parse_patch_blocks",
+)

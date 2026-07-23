@@ -51,6 +51,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from evoom_guard import __version__
+from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
 from evoom_guard.domain.verdict import (
     ERROR,
     EXECUTION_COMPLETED,
@@ -123,8 +124,6 @@ from evoom_guard.verifiers.repo_verifier import (
     is_protected_config,
     is_safe_relpath,
     judge_subprocess_env,
-    parse_file_blocks,
-    parse_patch_blocks,
 )
 
 # Globs the risk scorer treats as "protected" so a protected hit is visible in the

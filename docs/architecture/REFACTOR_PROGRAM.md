@@ -103,7 +103,10 @@ do not claim Stage 3 is complete.
   public setup-fidelity and harness-policy contracts from their owning modules.
   Exact `repo_verifier` aliases preserve the compatibility surface while the
   private-import ratchet drops from 60 to 56.
-- Pending: extract `candidate/` and `workspace/` domains.
+- Candidate parsing and pure patch transforms now live in `candidate/` behind
+  exact legacy aliases. Candidate materialization and snapshots remain pending.
+- Pending: convert the flat `workspace.py` compatibility surface into the
+  `workspace/` domain without breaking descriptor/TOCTOU monkeypatch seams.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining effectful RepoVerifier responsibilities.

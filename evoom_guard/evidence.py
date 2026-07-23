@@ -58,6 +58,12 @@ import tempfile
 import tokenize
 from typing import Any
 
+from evoom_guard.candidate import (
+    PatchError,
+    apply_patch,
+    parse_file_blocks,
+    parse_patch_blocks,
+)
 from evoom_guard.execution import (
     ProcessContainmentError as _SubprocessContainmentError,
 )
@@ -67,7 +73,6 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
 )
-from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.verifiers.repo_verifier import (
     RepoVerifier,
     SetupFidelityError,
@@ -75,8 +80,6 @@ from evoom_guard.verifiers.repo_verifier import (
     copy_repo_tree,
     is_safe_relpath,
     judge_subprocess_env,
-    parse_file_blocks,
-    parse_patch_blocks,
     resolve_host_command,
     setup_fidelity_changes,
     setup_fidelity_snapshot,
