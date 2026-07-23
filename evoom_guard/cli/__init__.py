@@ -427,18 +427,18 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the public parser through the extracted declarative owner."""
 
     return _parser_owner.build_parser(
-        immutable_release_ref=_immutable_release_ref,
-        add_github_attestation_policy_arguments=(
-            _add_github_attestation_policy_arguments
+        immutable_release_ref_provider=lambda: _immutable_release_ref,
+        add_github_attestation_policy_arguments=lambda parser: (
+            _add_github_attestation_policy_arguments(parser)
         ),
-        add_github_attestation_verifier_arguments=(
-            _add_github_attestation_verifier_arguments
+        add_github_attestation_verifier_arguments=lambda parser: (
+            _add_github_attestation_verifier_arguments(parser)
         ),
-        add_release_artifact_key_registry_arguments=(
-            _add_release_artifact_key_registry_arguments
+        add_release_artifact_key_registry_arguments=lambda parser: (
+            _add_release_artifact_key_registry_arguments(parser)
         ),
-        add_nested_release_source_expectation_arguments=(
-            _add_nested_release_source_expectation_arguments
+        add_nested_release_source_expectation_arguments=lambda parser: (
+            _add_nested_release_source_expectation_arguments(parser)
         ),
     )
 

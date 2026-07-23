@@ -12,11 +12,12 @@ from collections.abc import Callable
 
 ParserArgumentAdder = Callable[[argparse.ArgumentParser], None]
 ImmutableReleaseRef = Callable[[object], str]
+ImmutableReleaseRefProvider = Callable[[], ImmutableReleaseRef]
 
 
 def build_parser(
     *,
-    immutable_release_ref: ImmutableReleaseRef,
+    immutable_release_ref_provider: ImmutableReleaseRefProvider,
     add_github_attestation_policy_arguments: ParserArgumentAdder,
     add_github_attestation_verifier_arguments: ParserArgumentAdder,
     add_release_artifact_key_registry_arguments: ParserArgumentAdder,
@@ -1501,7 +1502,7 @@ def build_parser(
     i_p.add_argument(
         "--ref",
         required=True,
-        type=immutable_release_ref,
+        type=immutable_release_ref_provider(),
         help="exact EvoGuard SemVer tag (vX.Y.Z) or full 40-hex commit SHA; branches are refused",
     )
     i_p.add_argument("--force", action="store_true", help="overwrite an existing workflow file")
