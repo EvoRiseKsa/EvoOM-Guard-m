@@ -6,7 +6,7 @@ state: published
 
 # Release status
 
-The repository source declares **v4.3.0**, the current published immutable
+The repository source declares **v4.3.0**, the current published, immutable
 consumer release:
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0).
 The immutable tag identifies the exact protected-`main` source commit. The
