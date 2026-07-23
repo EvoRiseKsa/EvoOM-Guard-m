@@ -68,6 +68,13 @@ contracts from `execution.command`, `verifiers.fidelity`, and
 compatibility facade. Exact legacy aliases remain available, while the measured
 cross-package private-import ceiling falls from 60 to 56.
 
+The first Stage-3 domain slice adds `domain.verification` without changing a
+ratchet count: the package is classified, imports no EvoOM implementation
+module, and existing verifiers depend on it through public symbols. Exact
+legacy class aliases preserve identity. CI and release additionally run
+`python -m mypy --strict evoom_guard/domain/`; no artificial ratchet revision is
+recorded because no baseline violation is added or removed.
+
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline
 fingerprint. It therefore does not manufacture a ratchet revision or lower a

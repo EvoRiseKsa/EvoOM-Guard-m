@@ -4,7 +4,10 @@ The implementation must preserve these invariants across every refactor PR.
 
 1. `PASS` means static and runtime checks reported by trusted signal sources passed.
 2. `REJECTED` means a policy violation is confirmed.
-3. `FAIL` means environment/runtime failure that blocks trust.
+3. `FAIL` means an executed verification condition was not satisfied, such as
+   failing tests or the absence of a clean test verdict. Infrastructure,
+   configuration, unsupported-policy, and incomplete-runtime failures use
+   `ERROR` unless a versioned contract states otherwise.
 4. `TAMPERED` means evidence/report mismatch or integrity failure.
 5. `ERROR` paths must remain fail-closed.
 6. Docker isolation must preserve process cleanup evidence and terminate non-delivered artifacts.
@@ -39,7 +42,9 @@ The implementation must preserve these invariants across every refactor PR.
     process-group contract is lifecycle containment, not filesystem, network,
     credential, or `setsid()` isolation.
 15. Same-process and isolated execution modes must be explicit and named in state transitions.
-16. Record verifier is the trusted producer of lifecycle evidence checks.
+16. Record verifier is an independent semantic consumer of a recorded verdict.
+    It checks lifecycle and cross-field consistency but does not produce the
+    execution evidence and does not prove that the recorded execution occurred.
 
 Violations of these invariants are treated as security regressions and block release
 except with explicit emergency exception process.

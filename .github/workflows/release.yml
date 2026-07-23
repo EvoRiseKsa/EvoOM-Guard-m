@@ -87,6 +87,9 @@ jobs:
       - name: Type-check (Mypy)
         run: python -m mypy evoom_guard/
 
+      - name: Type-check domain contracts (Mypy strict)
+        run: python -m mypy --strict evoom_guard/domain/
+
       - name: Tests must be green before a release
         run: python -m pytest tests/ -q
 

@@ -47,14 +47,18 @@ pure repository/pack phase contracts into
 `execution/command.py`, while Guard consumes public setup-fidelity and harness
 policy contracts directly instead of verifier-private compatibility seams.
 
-The planned `domain/` package and strict domain typing baseline are not yet
-implemented. `RepoVerifier` still owns effectful subprocess, container,
-filesystem, runtime-identity, and trace operations. `blackbox.py` still owns
-command construction, report interpretation, verdict/evidence composition,
-and remaining pack/CID responsibilities. Candidate/workspace domains and the
-`application` verification pipeline also remain pending.
+The first `domain/verification.py` slice owns dependency-free JUnit and
+repository/pack phase contracts behind exact legacy aliases. A dedicated
+strict-Mypy gate protects that package. Broader request, verdict, assurance,
+and evidence domain models remain pending. `RepoVerifier` still owns effectful
+subprocess, container, filesystem, runtime-identity, and trace operations.
+`blackbox.py` still owns command construction, report interpretation,
+verdict/evidence composition, and remaining pack/CID responsibilities.
+Candidate/workspace domains and the `application` verification pipeline also
+remain pending.
 
-The immediate structural priority is Stage 3 domain models, followed by small
-characterized slices for those remaining RepoVerifier and black-box
-responsibilities. Each slice must retain the existing contract, mutation,
-differential, and architectural-boundary gates.
+The immediate structural priority is to continue Stage 3 only with
+dependency-closed contracts, followed by small characterized slices for those
+remaining RepoVerifier and black-box responsibilities. Each slice must retain
+the existing contract, mutation, differential, and architectural-boundary
+gates.

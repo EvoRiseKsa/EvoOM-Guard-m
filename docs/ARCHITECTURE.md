@@ -29,6 +29,7 @@ canonical evidence envelope against external key and run-context inputs.
 
 | Module | Responsibility |
 |---|---|
+| `domain/verification.py` | Dependency-free authoritative JUnit counts and typed repository/pack phase evidence/results. Legacy verifier modules re-export the same class objects. |
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
 | `execution/process.py` | Typed generic bounded-process requests/results, shared output capture, timeouts, and native process-tree cleanup. |

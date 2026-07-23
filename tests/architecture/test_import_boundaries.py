@@ -739,6 +739,29 @@ def test_guard_uses_only_public_cross_package_contracts() -> None:
     assert private_imports == ()
 
 
+def test_domain_verification_contracts_are_classified_and_dependency_free() -> None:
+    """Keep the first Stage-3 slice independent of every higher layer."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    domain_modules = {
+        "evoom_guard.domain",
+        "evoom_guard.domain.verification",
+    }
+    assert domain_modules.issubset(analysis.modules)
+    assert domain_modules.isdisjoint(
+        analysis.violations["unclassified_modules"]
+    )
+    assert not any(
+        violation.startswith("evoom_guard.domain")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == "evoom_guard.domain.verification"
+    } == set()
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

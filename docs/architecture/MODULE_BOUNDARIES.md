@@ -24,6 +24,13 @@
 
 ## Current extraction boundaries
 
+The first domain slice lives in `evoom_guard/domain/verification.py`. It owns
+only dependency-free JUnit counts plus completed-run and repository/pack phase
+result contracts. `verifiers.junit_oracle` and
+`verifiers.repo_phase_contracts` re-export the exact same class objects for
+compatibility. Parsing, grading, composition, filesystem, process, container,
+trace, and serialization behavior remain outside the domain package.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain
