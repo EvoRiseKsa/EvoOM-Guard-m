@@ -2655,6 +2655,126 @@ MUTATIONS = (
             "test_required_unmeasured_coverage_record_is_a_valid_assurance_error"
         ),
     ),
+    Mutation(
+        name="candidate-preflight-unsafe-path-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before=(
+            "        sorted(\n"
+            "            path\n"
+            "            for path in all_touched\n"
+            "            if not services.is_safe_relpath(path)\n"
+            "        )\n"
+        ),
+        after=(
+            "        sorted(\n"
+            "            path\n"
+            "            for path in all_touched\n"
+            "            if False and not services.is_safe_relpath(path)\n"
+            "        )\n"
+        ),
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_unsafe_paths_fail_closed_and_never_become_safe_deletions"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-unsafe-execution-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before="            and not self.unsafe_paths\n",
+        after="            and True\n",
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_unsafe_paths_fail_closed_and_never_become_safe_deletions"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-reserved-pack-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before=(
+            "        if path == verifier_pack_dir or "
+            "path.startswith(verifier_pack_dir + \"/\"):\n"
+        ),
+        after=(
+            "        if False and (path == verifier_pack_dir or "
+            "path.startswith(verifier_pack_dir + \"/\")):\n"
+        ),
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_reserved_pack_namespace_is_never_candidate_writable"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-builtin-allowlist-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before=(
+            "            if not services.is_allowlist_exemptible(\n"
+            "                path,\n"
+        ),
+        after=(
+            "            if False and not services.is_allowlist_exemptible(\n"
+            "                path,\n"
+        ),
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_builtin_harness_path_cannot_be_allowlisted"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-existing-test-as-new",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before="                is_new=path in new_paths,\n",
+        after="                is_new=True,\n",
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_feature_mode_relaxes_only_a_new_plain_test"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-local-action-discovery-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before=(
+            "    local_action_dirs = "
+            "services.discover_local_action_dirs(request.repo_path)\n"
+        ),
+        after="    local_action_dirs: tuple[str, ...] = ()\n",
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_local_action_helper_is_bound_from_the_base_tree"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-protected-deletion-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before=(
+            "            if services.is_safe_relpath(path) and "
+            "not is_violation(path)\n"
+        ),
+        after="            if services.is_safe_relpath(path)\n",
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_protected_deletion_is_not_in_safe_deletion_set"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-live-policy-seam-snapshot",
+        path="evoom_guard/guard.py",
+        before="            is_judge_autoexec=lambda path: is_judge_autoexec(path),\n",
+        after="            is_judge_autoexec=is_judge_autoexec,\n",
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_guard_adapter_resolves_later_policy_seams_after_discovery"
+        ),
+    ),
+    Mutation(
+        name="candidate-preflight-live-pack-namespace-bypass",
+        path="evoom_guard/guard.py",
+        before="            verifier_pack_dir=lambda: VERIFIER_PACK_DIR,\n",
+        after='            verifier_pack_dir=lambda: "evoguard_verifier_pack",\n',
+        test=(
+            "tests/test_candidate_preflight.py::"
+            "test_guard_adapter_reads_reserved_namespace_after_discovery"
+        ),
+    ),
 )
 
 

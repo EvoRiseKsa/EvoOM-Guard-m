@@ -163,6 +163,15 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   owner subsequently lowered it to 55.
 - Candidate parsing and pure patch transforms now live in `candidate/` behind
   exact legacy aliases. Candidate materialization and snapshots remain pending.
+- Candidate path admission now lives in the immutable
+  `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
+  but before candidate materialization or process launch; a pre-extraction
+  public vector freezes classification and execution/no-execution outcomes.
+  Focused mutations cover unsafe paths, the reserved pack namespace,
+  non-exemptible built-in harness paths, existing-test feature-mode bypass,
+  local-Action helper discovery, and protected deletion filtering.
+  Parsing, materialization, risk scoring, process execution, and verdict
+  composition remain in their existing owners.
 - The flat `workspace.py` surface is now the classified
   `workspace/__init__.py` package with identical implementation bytes,
   preserving descriptor/TOCTOU monkeypatch seams. Internal containment
@@ -195,8 +204,9 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   demotions. It does not sequence runtime effects: coverage collection,
   baseline execution, profile and attestation placement remain in Guard so the
   existing effect and exception order is unchanged.
-- Pending: move effect sequencing only behind separately characterized
-  boundaries with shadow-mode differential coverage.
+- Pending: move the remaining effect sequencing only behind separately
+  characterized boundaries with shadow-mode differential coverage. Candidate
+  preflight is no longer part of that effectful remainder.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

@@ -136,6 +136,20 @@ matching is public in `evoom_guard/verifiers/harness_policy.py`.
 `repo_verifier.py` retains exact legacy aliases, but higher-level orchestration
 must import these public owners directly.
 
+Candidate path admission lives in
+`evoom_guard/verifiers/candidate_preflight.py`. Its immutable request/result
+contract classifies changed and deleted paths, binds base-tree local-Action
+directories, enforces the reserved verifier-pack namespace and judge-owned
+harness policy, and derives the exact safe-deletion set before execution.
+Guard remains the compatibility adapter: it parses the candidate first, calls
+preflight at the historical no-materialization/no-process seam, then projects
+the tuples back to the established mutable-list result/problem surfaces.
+Candidate parsing, repository materialization, risk scoring, verifier
+execution, decision composition, and attestation remain outside this module.
+A frozen public Guard vector plus focused security mutations protect the
+pre-execution boundary and the new-test, allowlist, local-Action, unsafe-path,
+and protected-deletion invariants.
+
 The first repository-verifier phase slice lives in
 `evoom_guard/verifiers/repo_phase_contracts.py`. It owns only pure interpretation
 of completed repository-suite and mandatory verifier-pack evidence, including

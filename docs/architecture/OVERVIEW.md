@@ -100,6 +100,12 @@ The first
 dependency-free edit grammar and pure patch transform behind exact legacy
 aliases; candidate materialization remains pending while existing contained
 workspace effects retain their established implementation.
+`verifiers/candidate_preflight.py` now owns the immutable, pre-execution
+classification of changed/deleted paths. It binds local Actions from the base
+tree, preserves the reserved verifier-pack and non-exemptible harness rules,
+and returns the exact safe-deletion set. Guard calls it at the characterized
+post-parse/pre-materialization seam and retains risk, execution, decision, and
+serialization responsibilities.
 `RepoVerifier` still owns effectful subprocess, container, filesystem, and
 runtime-identity operations; it records lifecycle changes through the typed
 builder rather than mutating an untyped trace dictionary.
@@ -110,11 +116,12 @@ The flat workspace module has been migrated atomically into the classified
 The flat CLI module has likewise been migrated byte-for-byte into the
 classified `cli/` package. Its parser and command families remain together in
 the compatibility `__init__` pending separately characterized extraction.
-Internal workspace decomposition and migration of effect sequencing out of
-Guard remain pending; the pure application decision pipeline is complete.
+Internal workspace decomposition and the remaining runtime-effect sequencing
+in Guard remain pending; candidate path admission and the pure application
+decision pipeline are complete.
 
 The immediate structural priority is the next bounded slice: extract the CLI
-parser/registry or reduce a separately characterized Guard, RepoVerifier, or
-black-box effect responsibility without changing trust boundaries. Every slice
-must retain the existing contract, mutation, differential, and
-architectural-boundary gates.
+parser/registry or reduce a separately characterized RepoVerifier/black-box
+effect responsibility without changing trust boundaries. Every slice must
+retain the existing contract, mutation, differential, and architectural-boundary
+gates.
