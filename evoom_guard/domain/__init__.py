@@ -1,5 +1,6 @@
 """Public dependency-free domain contracts."""
 
+from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.evidence import (
     IsolationPayloadEvidence,
     RepositorySuiteEvidence,
@@ -30,6 +31,7 @@ __all__ = [
     "EffectivePolicy",
     "ExecutionPhaseResult",
     "GuardRequest",
+    "GuardDecision",
     "IsolationObservation",
     "IsolationPayloadEvidence",
     "JUnitCounts",
