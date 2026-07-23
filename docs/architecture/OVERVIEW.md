@@ -61,8 +61,12 @@ public `guard()` signature; operational values are derived from that request.
 while `verifiers/repo_execution.py` owns the mutable verifier-local builder
 and exact projection to the existing artifact keys. Pack identity and
 repository-phase evidence stay separate instead of being mislabeled as
-lifecycle state. Broader assurance and aggregate evidence domain models remain
-pending. The first
+lifecycle state. `domain/evidence.py` now owns the immutable repo-native
+verification aggregate, and `verifiers/repo_evidence.py` is the sole adapter
+from verifier artifact facts to that aggregate and back to the unchanged
+attestation fields. The repo-native decision, lifecycle, assurance, and result
+paths no longer inspect the raw artifact mapping. Broader assurance and
+decision domain models remain pending. The first
 `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
 aliases; candidate materialization remains pending while existing contained

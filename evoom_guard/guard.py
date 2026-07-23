@@ -128,6 +128,10 @@ from evoom_guard.verifiers.harness_policy import (
 from evoom_guard.verifiers.harness_policy import (
     matches_globs as _matches_globs,
 )
+from evoom_guard.verifiers.repo_evidence import (
+    repo_attestation_evidence_payload,
+    repo_verification_evidence_from_artifact,
+)
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
@@ -1204,10 +1208,15 @@ def guard(
             strict_harness=strict_harness,
         ).verify(candidate, problem)
         art = verdict.artifact or {}
+        verification_evidence = repo_verification_evidence_from_artifact(
+            art,
+            default_isolation=isolation,
+        )
         diagnostics = verdict.diagnostics or ""
     else:
         verdict = None
         art = {}
+        verification_evidence = None
         diagnostics = ""
     # Deletions count toward the blast radius too: a change that removes source
     # files should not read as *lower* risk than one that edits them. Each deleted
@@ -1238,48 +1247,63 @@ def guard(
             "configuration, the gate's CI/config, or an auto-executed file — fix the "
             f"source under test, not the harness ({', '.join(violations)})"
         ), REASON_PROTECTED_HARNESS_EDIT
-    elif art.get("outcome") in _TAMPER_OUTCOME_REASON:
-        code, summary = _TAMPER_OUTCOME_REASON[art["outcome"]]
+    elif (
+        verification_evidence is not None
+        and verification_evidence.outcome in _TAMPER_OUTCOME_REASON
+    ):
+        assert verification_evidence.outcome is not None
+        code, summary = _TAMPER_OUTCOME_REASON[verification_evidence.outcome]
         v, reason = TAMPERED, f"{summary}: {diagnostics}"
-    elif art.get("tamper"):
+    elif verification_evidence is not None and verification_evidence.tamper:
         # The two trustworthy signals (process exit code and the judge-owned JUnit
         # report) disagree — a forced exit / rewritten ``$?``. Never read as a pass.
         v, reason, code = TAMPERED, (
             "tamper signature: the suite's exit code and its judge-owned JUnit report "
-            f"disagree ({art.get('tests_passed', 0)}/{art.get('tests_total', 0)} in the "
+            f"disagree ("
+            f"{verification_evidence.tests_passed if verification_evidence.tests_passed_present else 0}/"
+            f"{verification_evidence.tests_total if verification_evidence.tests_total_present else 0} "
+            "in the "
             "report) — refusing to read this as a pass"
         ), REASON_JUNIT_EXIT_MISMATCH
     elif (
-        art.get("outcome") == "pack_invalid"
-        and art.get("verifier_pack_present") is False
+        verification_evidence is not None
+        and verification_evidence.outcome == "pack_invalid"
+        and verification_evidence.verifier_pack.present is False
     ):
         v, code = ERROR, REASON_VERIFIER_PACK_NOT_FOUND
         reason = diagnostics or "the configured verifier-pack path does not exist"
     elif (
-        art.get("outcome") in _OUTCOME_REASON
-        and art.get("outcome") != "no_test_verdict"
+        verification_evidence is not None
+        and verification_evidence.outcome in _OUTCOME_REASON
+        and verification_evidence.outcome != "no_test_verdict"
     ):
         # The patch applied and the session started, but timed out or its setup
         # step/mandatory pack failed — never mislabel these as "the patch did
         # not apply" or let already-positive repo counts mask a pack failure.
-        v, code = _OUTCOME_REASON[art["outcome"]]
-        reason = diagnostics or f"run ended: {art['outcome']}"
+        assert verification_evidence.outcome is not None
+        v, code = _OUTCOME_REASON[verification_evidence.outcome]
+        reason = diagnostics or f"run ended: {verification_evidence.outcome}"
     elif verdict is not None and verdict.passed:
         v, reason, code = PASS, (
             "all repo tests pass and the patch leaves the test harness untouched"
         ), REASON_TESTS_PASSED
-    elif art.get("tests_total"):
+    elif verification_evidence is not None and verification_evidence.tests_total:
         v, reason, code = FAIL, (
             f"the repo's tests fail on this patch "
-            f"({art.get('tests_passed', 0)}/{art.get('tests_total')} passed)"
+            f"({verification_evidence.tests_passed if verification_evidence.tests_passed_present else 0}/"
+            f"{verification_evidence.tests_total} passed)"
         ), REASON_TESTS_FAILED
-    elif art.get("outcome") in _OUTCOME_REASON:
+    elif (
+        verification_evidence is not None
+        and verification_evidence.outcome in _OUTCOME_REASON
+    ):
         # Preserve the historical treatment of a positive JUnit error count as
         # a test failure. ``no_test_verdict`` reaches this branch only when no
         # test count exists; pack-specific no-verdict outcomes were handled
         # above because a passing repo count must never mask them.
-        v, code = _OUTCOME_REASON[art["outcome"]]
-        reason = diagnostics or f"run ended: {art['outcome']}"
+        assert verification_evidence.outcome is not None
+        v, code = _OUTCOME_REASON[verification_evidence.outcome]
+        reason = diagnostics or f"run ended: {verification_evidence.outcome}"
     elif verdict is not None and verdict.score <= 0.08:
         v, reason, code = ERROR, (
             "the patch did not apply cleanly (a PATCH anchor did not match)"
@@ -1295,10 +1319,15 @@ def guard(
     # repo phase, even when a separately composed verifier pack later fails.
     core_verdict_completed = v in (PASS, FAIL)
     core_verdict_passed = v == PASS
-    repo_suite_pass_value = art.get("repo_suite_passed")
+    repo_suite_pass_value = (
+        verification_evidence.repo_suite.passed
+        if verification_evidence is not None
+        else None
+    )
     repo_suite_completed = (
-        art.get("repo_suite_started") is True
-        and art.get("repo_suite_completed") is True
+        verification_evidence is not None
+        and verification_evidence.repo_suite.started is True
+        and verification_evidence.repo_suite.completed is True
         and isinstance(repo_suite_pass_value, bool)
     )
     candidate_suite_completed = repo_suite_completed or core_verdict_completed
@@ -1423,38 +1452,15 @@ def guard(
             )
 
     if run_suite:
-        incomplete_outcomes = {
-            "test_timeout",
-            "test_output_limit",
-            "setup_timeout",
-            "setup_output_limit",
-            "runtime_containment_error",
-        }
-        execution_state = str(
-            art.get(
-                "execution_state",
-                EXECUTION_COMPLETED
-                if art.get("verdict_source")
-                else EXECUTION_STARTED_INCOMPLETE
-                if art.get("outcome") in incomplete_outcomes
-                else EXECUTION_NOT_STARTED,
-            )
+        assert verification_evidence is not None
+        execution_state = verification_evidence.execution.execution_state
+        execution_phase = verification_evidence.execution.execution_phase
+        test_command_started = (
+            verification_evidence.execution.test_command_started
         )
-        execution_phase = str(art.get("execution_phase", "repo_suite"))
-        test_command_started = bool(
-            art.get(
-                "test_command_started",
-                art.get("verdict_source") is not None
-                or art.get("outcome") in {"test_timeout", "test_output_limit"},
-            )
+        delivered_isolation = (
+            verification_evidence.execution.delivered_isolation
         )
-        recorded_isolation = str(
-            art.get(
-                "delivered_isolation",
-                isolation if test_command_started else "not_run",
-            )
-        )
-        delivered_isolation = recorded_isolation if test_command_started else "not_run"
     else:
         execution_state = EXECUTION_STATIC_GATE
         execution_phase = "pre_gate"
@@ -1463,30 +1469,45 @@ def guard(
 
     effective_candidate_isolation = (
         "subprocess"
-        if art.get("setup_isolation") == "subprocess_host_opt_in"
+        if (
+            verification_evidence is not None
+            and verification_evidence.setup_isolation == "subprocess_host_opt_in"
+        )
         else delivered_isolation
     )
 
-    pack_evidence = None
+    pack_evidence: dict[str, Any] | None = None
     if verifier_pack:
-        present = art.get("verifier_pack_present")
-        if present is None and art.get("verifier_pack_sha256"):
-            present = True
-        if present is None and art.get("outcome") == "pack_invalid":
-            present = os.path.isdir(verifier_pack)
-        pack_evidence = {
-            "present": present,
-            "snapshot_sha256": art.get("verifier_pack_sha256"),
-            "started": bool(art.get("verifier_pack_started")),
-            "completed": bool(art.get("verifier_pack_completed")),
-            "outcome": art.get("outcome"),
-        }
+        if verification_evidence is None:
+            pack_evidence = {
+                "present": None,
+                "snapshot_sha256": None,
+                "started": False,
+                "completed": False,
+                "outcome": None,
+            }
+        else:
+            present = verification_evidence.verifier_pack.present
+            if present is None and verification_evidence.verifier_pack.sha256:
+                present = True
+            if present is None and verification_evidence.outcome == "pack_invalid":
+                present = os.path.isdir(verifier_pack)
+            pack_evidence = {
+                "present": present,
+                "snapshot_sha256": verification_evidence.verifier_pack.sha256,
+                "started": verification_evidence.execution.verifier_pack_started,
+                "completed": verification_evidence.execution.verifier_pack_completed,
+                "outcome": verification_evidence.outcome,
+            }
 
     judgment_mode = "blackbox" if blackbox else "repo"
-    attestation = _build_attestation(
-        candidate, safe_deleted=safe_deleted, test_command=test_command,
-        effective_policy=effective_policy, art={
-            **art,
+    attestation_art = dict(art)
+    if verification_evidence is not None:
+        attestation_art.update(
+            repo_attestation_evidence_payload(verification_evidence)
+        )
+    attestation_art.update(
+        {
             "execution_state": execution_state,
             "execution_phase": execution_phase,
             "test_command_started": test_command_started,
@@ -1495,18 +1516,34 @@ def guard(
             # Repo-native verdicts are revision-bound too (1.6): black-box was
             # the only mode carrying base/head before, which left the common
             # Action path's signed verdicts unbound from the commit they judged.
-            "base_sha": base_sha, "head_sha": head_sha,
-            "base_tree_sha": base_tree_sha, "head_tree_sha": head_tree_sha,
-            "policy_id": policy_id, "policy_version": policy_version,
-        }, mode=judgment_mode,
+            "base_sha": base_sha,
+            "head_sha": head_sha,
+            "base_tree_sha": base_tree_sha,
+            "head_tree_sha": head_tree_sha,
+            "policy_id": policy_id,
+            "policy_version": policy_version,
+        }
+    )
+    attestation = _build_attestation(
+        candidate, safe_deleted=safe_deleted, test_command=test_command,
+        effective_policy=effective_policy, art=attestation_art,
+        mode=judgment_mode,
     )
 
     assurance = (
         _assurance_profile(
             delivered_isolation,
             verifier_pack,
-            setup_isolation=art.get("setup_isolation"),
-            runtime_continuity=art.get("runtime_continuity"),
+            setup_isolation=(
+                verification_evidence.setup_isolation
+                if verification_evidence is not None
+                else None
+            ),
+            runtime_continuity=(
+                verification_evidence.runtime.continuity
+                if verification_evidence is not None
+                else None
+            ),
             execution_state=execution_state,
             execution_phase=execution_phase,
             test_command_started=test_command_started,
@@ -1536,12 +1573,24 @@ def guard(
         protected_violations=violations,
         risk_level=risk.level,
         risk_score=risk.score,
-        tests_passed=art.get("tests_passed"),
-        tests_total=art.get("tests_total"),
+        tests_passed=(
+            verification_evidence.tests_passed
+            if verification_evidence is not None
+            else None
+        ),
+        tests_total=(
+            verification_evidence.tests_total
+            if verification_evidence is not None
+            else None
+        ),
         test_command_ran=test_command_started,
         execution_state=execution_state,
         execution_phase=execution_phase,
-        verdict_source=art.get("verdict_source"),
+        verdict_source=(
+            verification_evidence.verdict_source
+            if verification_evidence is not None
+            else None
+        ),
         diagnostics=diagnostics,
         reason_code=code,
         isolation=effective_candidate_isolation,

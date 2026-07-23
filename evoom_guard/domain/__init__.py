@@ -1,5 +1,12 @@
 """Public dependency-free domain contracts."""
 
+from evoom_guard.domain.evidence import (
+    IsolationPayloadEvidence,
+    RepositorySuiteEvidence,
+    RuntimeIdentityEvidence,
+    VerificationEvidence,
+    VerifierPackEvidence,
+)
 from evoom_guard.domain.execution import ExecutionPhaseResult, IsolationObservation
 from evoom_guard.domain.policy import EffectivePolicy
 from evoom_guard.domain.request import (
@@ -24,9 +31,14 @@ __all__ = [
     "ExecutionPhaseResult",
     "GuardRequest",
     "IsolationObservation",
+    "IsolationPayloadEvidence",
     "JUnitCounts",
     "PackPhaseResult",
     "RepositoryInput",
+    "RepositorySuiteEvidence",
     "RepoPhaseResult",
+    "RuntimeIdentityEvidence",
     "SourceIdentity",
+    "VerificationEvidence",
+    "VerifierPackEvidence",
 ]

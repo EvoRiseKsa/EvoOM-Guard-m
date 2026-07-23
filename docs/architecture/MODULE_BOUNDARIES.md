@@ -145,6 +145,18 @@ existing owners. The optional top-level `isolation_evidence` key is emitted only
 after its boundary is observed, preserving the published absence-versus-null
 semantics.
 
+The third repository-verifier phase slice adds immutable
+`domain.evidence.VerificationEvidence`, `VerifierPackEvidence`,
+`RepositorySuiteEvidence`, and `RuntimeIdentityEvidence` values.
+`verifiers/repo_evidence.py` owns the only conversion from a repo-native
+verifier artifact into that aggregate and the projection back to the unchanged
+schema-1.11 attestation fields. Guard's repo-native decision, lifecycle,
+assurance, and result construction consume typed evidence instead of repeatedly
+reading the raw mapping. Exact isolation payloads and count-presence bits are a
+temporary compatibility bridge for valid legacy partial artifacts; they are
+not the final transport-independent domain shape. Black-box composition,
+assurance evaluation, and decision composition remain outside this slice.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

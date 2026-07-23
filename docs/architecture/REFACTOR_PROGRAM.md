@@ -100,6 +100,19 @@ and repository-phase facts remain separate sticky verification evidence.
 Aggregate `VerificationEvidence`, assurance, and decision models remain pending,
 so Stage 3 is still in progress.
 
+The sixth bounded slice adds immutable `VerificationEvidence`,
+`VerifierPackEvidence`, `RepositorySuiteEvidence`, and
+`RuntimeIdentityEvidence` domain values. A repository-evidence adapter owns the
+verifier artifact facts once, preserves the pre-1.11 partial-artifact lifecycle
+fallbacks, and projects plain JSON onto the unchanged schema-1.11 attestation.
+The repo-native decision, lifecycle, assurance, and `GuardResult` no longer read
+the raw artifact mapping. Black-box composition remains outside this slice.
+Exact isolation payloads and count-presence flags are an explicit compatibility
+bridge for legacy partial artifacts, not the final transport-independent domain
+shape; they remain until a future schema boundary can remove that compatibility.
+Assurance and `GuardDecision` models remain pending, so Stage 3 is still in
+progress.
+
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
 - Bounded process execution and cleanup were extracted in PR #112 and hardened
