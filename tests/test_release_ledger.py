@@ -85,6 +85,25 @@ RELEASE_CASES: tuple[dict[str, Any], ...] = (
         "build_timestamp_utc": "2026-07-22T11:47:16Z",
         "release_attestation_timestamp_utc": "2026-07-22T19:36:44Z",
     },
+    {
+        "version": "4.3.0",
+        "tag": "v4.3.0",
+        "commit": "b8c61315a22741415c75e4e8828feb60c0ad5149",
+        "tree": "3d7ef4b89f9c44a7312bece0fb1958debbd53d46",
+        "release_id": 358543270,
+        "created_utc": "2026-07-23T08:11:06Z",
+        "published_utc": "2026-07-23T08:44:41Z",
+        "marketplace_observed_utc": "2026-07-23T08:52:27Z",
+        "pyz_sha256": "cb4b98cd1835cf3be5f92d25ad406fe504b43cc210a92201fd4eae8c6e61a70f",
+        "checksum_sha256": (
+            "d07039c2c8170218ed9ddda4273cbbbed7319a5b55b2d6334d1512d61061683b"
+        ),
+        "release_run_id": 29990890954,
+        "tag_ci_run_id": 29992130625,
+        "pytest": {"passed": 1745, "skipped": 11, "subtests_passed": 59},
+        "build_timestamp_utc": "2026-07-23T08:25:44Z",
+        "release_attestation_timestamp_utc": "2026-07-23T08:44:42Z",
+    },
 )
 
 

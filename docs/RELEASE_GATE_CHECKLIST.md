@@ -1,8 +1,9 @@
 ﻿# Release gate checklist (v4 baseline hardening)
 
 Use this checklist for the published `v4.0.1` behavioral baseline, the minimal
-`v4.0.2`, `v4.1.0`, and `v4.2.0` release ledgers, and as the minimum gate for
-later releases before enforcing EvoOM Guard as a required CI merge gate.
+`v4.0.2`, `v4.1.0`, `v4.2.0`, and `v4.3.0` release ledgers, and as the minimum
+gate for later releases before enforcing EvoOM Guard as a required CI merge
+gate.
 
 ## Required repository controls
 
@@ -67,10 +68,11 @@ later releases before enforcing EvoOM Guard as a required CI merge gate.
   not treated as cryptographic proof of that external state.
 - `ERRATA.md` is reviewed and the immutable `v4.0.1` tag/assets remain untouched.
 
-## v4.0.2 through v4.2.0 release-ledger verification
+## v4.0.2 through v4.3.0 release-ledger verification
 
 - Each `RELEASE_LEDGER.json` under `tests/baseline/v4.0.2/`,
-  `tests/baseline/v4.1.0/`, and `tests/baseline/v4.2.0/` validates against
+  `tests/baseline/v4.1.0/`, `tests/baseline/v4.2.0/`, and
+  `tests/baseline/v4.3.0/` validates against
   `tests/baseline/schema/release-ledger-v1.schema.json`.
 - Each ledger's commit, tree, release/run identifiers, asset sizes/digests,
   attestation
@@ -91,7 +93,10 @@ later releases before enforcing EvoOM Guard as a required CI merge gate.
   Release Source Admission V2 pilot merely because that implementation ships.
   Likewise, the v4.2.0 bootstrap ledger does not claim a live Release Artifact
   Admission V1 E/F/G pilot, artifact-publication authorization, reproducible
-  build, production readiness, or independent security review.
+  build, production readiness, or independent security review. The v4.3.0
+  ledger does not copy its separate same-owner Agent Change Admission pilot or
+  claim a required production gate, hostile-runner proof, single-use
+  authorization, or independent validation.
 
 Update this file with every major process change (workflow templates, policy schema,
 attestation format, or check ownership mapping).

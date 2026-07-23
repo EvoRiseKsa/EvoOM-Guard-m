@@ -53,25 +53,29 @@ distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
 
-The latest committed minimal release ledger remains `v4.2.0` until the
-published `v4.3.0` identity, assets, attestations, Marketplace propagation, and
-tag CI are observed after publication and committed in a follow-up change. The
-v4.2.0 ledger records its own post-publication source identity, exact release
-asset bytes, release/build attestations, propagated Marketplace version, and
-successful tag CI:
+The latest committed minimal release ledger is `v4.3.0`. It records the
+post-publication source identity, exact downloaded release asset bytes,
+release/build attestations, propagated Marketplace version, and successful tag
+CI:
+
+- `tests/baseline/v4.3.0/RELEASE_LEDGER.json`
+- `tests/baseline/v4.3.0/SHA256SUMS`
+- `tests/baseline/v4.3.0/pyz/evo-guard.pyz`
+
+It is deliberately not described as a full behavioral capture: no v4.3.0
+command, verdict, signed-evidence, verifier-pack, benchmark, Agent Change
+Admission pilot fixture, or live Release Artifact Admission V1 fixture was
+created merely by copying historical evidence. Shipping those implementations
+does not make this release ledger a required production gate, hostile-runner
+proof, live E/F/G pilot, artifact admission decision, or publication
+authorization.
+
+The same bounded identity/provenance records for earlier immutable releases
+remain available at:
 
 - `tests/baseline/v4.2.0/RELEASE_LEDGER.json`
 - `tests/baseline/v4.2.0/SHA256SUMS`
 - `tests/baseline/v4.2.0/pyz/evo-guard.pyz`
-
-It is deliberately not described as a full behavioral capture: no v4.2.0
-command, verdict, signed-evidence, verifier-pack, benchmark, or live Release
-Artifact Admission V1 fixture was created merely by copying historical
-evidence. Shipping the RAAE implementation does not make this release ledger a
-live E/F/G pilot, an artifact admission decision, or publication authorization.
-
-The same bounded identity/provenance records for earlier immutable releases
-remain available at:
 
 - `tests/baseline/v4.1.0/RELEASE_LEDGER.json`
 - `tests/baseline/v4.1.0/SHA256SUMS`
