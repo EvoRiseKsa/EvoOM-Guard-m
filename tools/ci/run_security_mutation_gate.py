@@ -1288,7 +1288,10 @@ MUTATIONS = (
     Mutation(
         name="repo-materialization-dynamic-patcher-seam-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
-        before="        patcher=apply_patch,\n",
+        before=(
+            "        patcher=lambda source, search, replace: "
+            "apply_patch(source, search, replace),\n"
+        ),
         after=(
             "        patcher=lambda source, search, replace: "
             "source.replace(search, replace),\n"
@@ -1296,6 +1299,21 @@ MUTATIONS = (
         test=(
             "tests/test_repo_materialization_characterization.py::"
             "test_frozen_repo_materialization_behavior[patch_failure]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-live-operation-seams-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "        write_text=lambda root, path, content: "
+            "write_text_within_root(\n"
+            "            root, path, content\n"
+            "        ),\n"
+        ),
+        after="        write_text=write_text_within_root,\n",
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_repo_verifier_facade_resolves_operation_seams_at_each_use"
         ),
     ),
     Mutation(

@@ -495,10 +495,14 @@ def apply_blocks_to_copy(
         copy,
         file_blocks,
         patch_blocks,
-        read_text=read_text_within_root,
-        write_text=write_text_within_root,
-        patcher=apply_patch,
-        restore_package_json=restore_judge_package_json,
+        read_text=lambda root, path: read_text_within_root(root, path),
+        write_text=lambda root, path, content: write_text_within_root(
+            root, path, content
+        ),
+        patcher=lambda source, search, replace: apply_patch(source, search, replace),
+        restore_package_json=lambda original, candidate: restore_judge_package_json(
+            original, candidate
+        ),
     )
 
 
