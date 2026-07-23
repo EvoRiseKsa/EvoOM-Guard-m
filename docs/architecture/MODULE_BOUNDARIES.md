@@ -47,6 +47,14 @@ does not import policy. Guard's existing `_effective_policy` and
 finalizer uses the public policy API. Validation and schema evolution remain in
 their existing owners so exception timing and published hashes do not change.
 
+The fourth domain slice adds `RepositoryInput`, `CandidateInput`,
+`SourceIdentity`, and `GuardRequest` in `domain/request.py`. Guard validates its
+historical public scalar arguments first, then creates exactly one owned typed
+request and derives its operational values plus one canonical policy payload
+from that snapshot. The request
+contract performs no I/O, validation, serialization, or verdict composition;
+the existing 33-parameter `guard()` callable remains unchanged for adopters.
+
 The first candidate slice lives in `evoom_guard/candidate/`. `edits.py` owns
 the dependency-free FILE/PATCH block grammar and `PatchBlock`; `patch.py` owns
 the pure unique-anchor search/replace transform and its exception hierarchy.
