@@ -282,6 +282,23 @@ def test_guard_copy_ignore_cannot_hide_tracked_path_from_authorization(tmp_path:
     assert not output.exists()
 
 
+def test_guard_copy_ignore_cannot_hide_tracked_deletion(tmp_path: Path) -> None:
+    repo, _initial_base, _initial_head = _create_repository(tmp_path)
+    hidden = repo / "dist" / "generated.txt"
+    hidden.parent.mkdir(parents=True, exist_ok=True)
+    hidden.write_text("tracked baseline artifact\n", encoding="utf-8", newline="\n")
+    base = _commit(repo, "track ignored-path baseline")
+
+    hidden.unlink()
+    (repo / "app.py").write_text("VALUE = 4\n", encoding="utf-8", newline="\n")
+    head = _commit(repo, "agent deletes ignored tracked path")
+
+    bindings = _agent_bindings(repo, base, head)
+    assert bindings.changed_paths == ("app.py",)
+    assert bindings.deleted_paths == ("dist/generated.txt",)
+    assert bindings.touched_paths == ("app.py", "dist/generated.txt")
+
+
 def test_nonaccepting_agent_decision_cannot_produce_admission_side_effect(
     tmp_path: Path,
 ) -> None:
