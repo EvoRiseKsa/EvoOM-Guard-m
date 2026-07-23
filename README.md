@@ -83,7 +83,7 @@ correctness or security.
 > negative controls. None of those historical observations is V2 admission or
 > release evidence.
 
-> **Agent Change Admission candidate.** Unreleased
+> **Agent Change Admission v4.3.0 source candidate.** The pre-release
 > [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) separates an
 > untrusted agent proposal from signed scope, independently re-derived raw-Git
 > facts, and a Trusted Finalizer `ALLOW`. The public
@@ -92,8 +92,8 @@ correctness or security.
 > `dist/hidden.txt` path before signing, and replayed the unchanged permitted
 > base/head pair with fresh run-bound signatures. The exact evidence is in
 > [`PILOT_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/blob/main/PILOT_RESULTS.md).
-> This is not part of v4.2.0, a required or production gate, hostile-runner
-> proof, single-use authorization, independent review, or a v4.3 release.
+> It is not yet a published v4.3.0 release, required or production gate,
+> hostile-runner proof, single-use authorization, or independent review.
 
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation

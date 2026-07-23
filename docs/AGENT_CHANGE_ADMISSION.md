@@ -10,9 +10,9 @@ Agent Change Admission is an experimental admission profile for one exact
 change proposed by an automated agent. It does not trust the agent to define
 the scope it may change, and it does not turn an agent's claims into facts.
 
-This implementation is an **unreleased v4.3 candidate in
-[#147](https://github.com/EvoRiseKsa/EvoOM-Guard-m/pull/147)**. It is not in
-the immutable v4.2.0 release and is not enabled as a required check in this
+This implementation is included in the **v4.3.0 source candidate** after
+[#147](https://github.com/EvoRiseKsa/EvoOM-Guard-m/pull/147). It is not in the
+immutable v4.2.0 release and is not enabled as a required check in this
 repository. A bounded public same-owner pilot has completed; that evidence is
 not a production or independent-validation claim.
 
@@ -193,6 +193,6 @@ negative, and exact-change replay evidence. Before production enforcement, the
 profile still needs an independently controlled consumer, a reviewed
 hostile-code isolation boundary, explicit authorization revocation/single-use
 requirements where needed, and validation of the exact production ruleset and
-failure-recovery behavior. A future release must use a new immutable tag and
-regenerated release evidence; this document does not move or redefine
-v4.2.0.
+failure-recovery behavior. The source candidate requires a new immutable
+v4.3.0 tag and regenerated release evidence before it becomes a consumer
+release; this document does not move or redefine v4.2.0.
