@@ -1,5 +1,6 @@
 """Public dependency-free domain contracts."""
 
+from evoom_guard.domain.execution import ExecutionPhaseResult, IsolationObservation
 from evoom_guard.domain.policy import EffectivePolicy
 from evoom_guard.domain.request import (
     CandidateInput,
@@ -20,7 +21,9 @@ __all__ = [
     "CompositePhaseResult",
     "CandidateInput",
     "EffectivePolicy",
+    "ExecutionPhaseResult",
     "GuardRequest",
+    "IsolationObservation",
     "JUnitCounts",
     "PackPhaseResult",
     "RepositoryInput",

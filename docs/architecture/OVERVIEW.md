@@ -57,13 +57,19 @@ payload projection, and digesting; the finalizer no longer imports Guard's
 private policy builder. `domain/request.py` now captures an owned repository,
 candidate, source, policy, pack, and coverage snapshot behind the unchanged
 public `guard()` signature; operational values are derived from that request.
-Broader assurance and evidence domain models remain pending. The first
+`domain/execution.py` now owns immutable execution and isolation snapshots,
+while `verifiers/repo_execution.py` owns the mutable verifier-local builder
+and exact projection to the existing artifact keys. Pack identity and
+repository-phase evidence stay separate instead of being mislabeled as
+lifecycle state. Broader assurance and aggregate evidence domain models remain
+pending. The first
 `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
 aliases; candidate materialization remains pending while existing contained
 workspace effects retain their established implementation.
-`RepoVerifier` still owns effectful subprocess,
-container, filesystem, runtime-identity, and trace operations.
+`RepoVerifier` still owns effectful subprocess, container, filesystem, and
+runtime-identity operations; it records lifecycle changes through the typed
+builder rather than mutating an untyped trace dictionary.
 `blackbox.py` still owns command construction, report interpretation,
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
