@@ -105,8 +105,10 @@ do not claim Stage 3 is complete.
   private-import ratchet drops from 60 to 56.
 - Candidate parsing and pure patch transforms now live in `candidate/` behind
   exact legacy aliases. Candidate materialization and snapshots remain pending.
-- Pending: convert the flat `workspace.py` compatibility surface into the
-  `workspace/` domain without breaking descriptor/TOCTOU monkeypatch seams.
+- The flat `workspace.py` surface is now the classified
+  `workspace/__init__.py` package with identical implementation bytes,
+  preserving descriptor/TOCTOU monkeypatch seams. Internal containment
+  submodules remain pending.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining effectful RepoVerifier responsibilities.
