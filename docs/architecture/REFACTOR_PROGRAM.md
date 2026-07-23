@@ -132,7 +132,7 @@ Stage 3 is complete at the domain-contract boundary: request, policy,
 verification/evidence, execution, decision, and assurance values are now
 dependency-closed and strict-typed. This does **not** mean the orchestration
 refactor is complete. Diff-coverage and demonstrated-fix demotions,
-black-box composition, attestation assembly, and effect sequencing still
+black-box composition, final result orchestration, and effect sequencing still
 belong to their characterized legacy facades until Stage 8 slices move them.
 
 ## Stage 4+: Execution and verifier extraction (partially completed)
@@ -170,10 +170,14 @@ belong to their characterized legacy facades until Stage 8 slices move them.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining effectful RepoVerifier responsibilities.
-- Assurance evaluation is now owned by `application.assurance`; pending:
-  extend the application composers into a complete pipeline
-  (`VerificationPipeline`, remaining decision demotions, and
-  `AttestationBuilder`) with shadow-mode differential coverage.
+- Delivered-assurance evaluation is owned by `application.assurance`.
+  Exact 57-key attestation assembly is now owned by the pure
+  `application.attestation` builder behind Guard's unchanged private facade.
+  A pre-extraction vector freezes payload order, null presence, clock count,
+  and copy/reference semantics.
+- Pending: extend the application composers into a complete
+  `VerificationPipeline` by extracting the remaining decision demotions and
+  effect sequencing with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

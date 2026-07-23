@@ -68,6 +68,9 @@ from evoom_guard.application.assurance import (
 from evoom_guard.application.assurance import (
     static_assurance_profile as _static_assurance_profile,
 )
+from evoom_guard.application.attestation import (
+    build_attestation as _build_attestation_payload,
+)
 from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
     TAMPER_OUTCOME_REASON_POLICY,
@@ -1767,87 +1770,21 @@ def _build_attestation(
     ``policy_sha256`` covers the COMPLETE effective policy (see
     :func:`_effective_policy`), and the policy itself ships in the attestation
     so a consumer can audit exactly what the fingerprint commits to."""
-    return {
-        "created_utc": _utc_now(),
-        "guard_version": __version__,
-        "mode": mode,  # "repo" | "blackbox"
-        "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
-        "deleted_paths": list(safe_deleted),
-        "test_command": list(test_command) if test_command else "default:python -m pytest",
-        "effective_policy": effective_policy,
-        "policy_sha256": effective_policy_sha256(effective_policy),
-        "junit_sha256": art.get("junit_sha256"),
-        "junit_digest_format": art.get("junit_digest_format"),
-        "verifier_pack_sha256": art.get("verifier_pack_sha256"),
-        "verifier_pack_manifest": art.get("verifier_pack_manifest"),
-        "verifier_pack_tests_passed": art.get("verifier_pack_tests_passed"),
-        "verifier_pack_tests_total": art.get("verifier_pack_tests_total"),
-        "verifier_pack_junit_sha256": art.get("verifier_pack_junit_sha256"),
-        "verifier_pack_junit_digest_format": art.get(
-            "verifier_pack_junit_digest_format"
-        ),
-        "verifier_pack_digest_format": PACK_DIGEST_FORMAT
-        if art.get("verifier_pack_sha256") else None,
-        # Black-box binding: the delivered isolation, the applied deletions, the
-        # composed repo-native suite result, and the base→head commits — so a
-        # signed black-box verdict is bound to the tree and boundary it judged,
-        # not just the candidate text.
-        "isolation_evidence": art.get("isolation_evidence"),
-        "setup_isolation_evidence": art.get("setup_isolation_evidence"),
-        "repo_suite_isolation_evidence": art.get(
-            "repo_suite_isolation_evidence"
-        ),
-        "verifier_pack_isolation_evidence": art.get(
-            "verifier_pack_isolation_evidence"
-        ),
-        "blackbox_pack_isolation_evidence": art.get(
-            "blackbox_pack_isolation_evidence"
-        ),
-        "deleted_paths_applied": art.get("deleted_paths_applied"),
-        "repo_suite_junit_sha256": art.get("repo_suite_junit_sha256"),
-        "repo_suite_junit_digest_format": art.get(
-            "repo_suite_junit_digest_format"
-        ),
-        "repo_suite_tests_passed": art.get("repo_suite_tests_passed"),
-        "repo_suite_tests_total": art.get("repo_suite_tests_total"),
-        "repo_suite_verdict_source": art.get("repo_suite_verdict_source"),
-        "repo_suite_returncode": art.get("repo_suite_returncode"),
-        "repo_suite_passed": art.get("repo_suite_passed"),
-        "repo_suite_started": art.get("repo_suite_started"),
-        "repo_suite_completed": art.get("repo_suite_completed"),
-        "repo_suite_state": art.get("repo_suite_state"),
-        "repo_suite_image_digest": art.get("repo_suite_image_digest"),
-        "base_sha": art.get("base_sha"),
-        "head_sha": art.get("head_sha"),
-        # Exact-revision binding (1.6): tree hashes pin the CONTENT judged even
-        # when a commit SHA is unavailable (a plain `git diff` carries neither).
-        "base_tree_sha": art.get("base_tree_sha"),
-        "head_tree_sha": art.get("head_tree_sha"),
-        # Which repo policy produced this verdict (from .evoguard.json).
-        "policy_id": art.get("policy_id"),
-        "policy_version": art.get("policy_version"),
-        "execution_state": art.get("execution_state"),
-        "execution_phase": art.get("execution_phase"),
-        "test_command_started": art.get("test_command_started"),
-        "delivered_isolation": art.get("delivered_isolation"),
-        "effective_candidate_isolation": art.get(
-            "effective_candidate_isolation"
-        ),
-        "candidate_invocations": art.get("candidate_invocations"),
-        "candidate_launcher_invocation_observed": art.get(
-            "candidate_launcher_invocation_observed"
-        ),
-        "verifier_pack_present": art.get("verifier_pack_present"),
-        "verifier_pack_started": art.get("verifier_pack_started"),
-        "verifier_pack_completed": art.get("verifier_pack_completed"),
-        "setup_isolation": art.get("setup_isolation"),
-        "runtime_tree_sha256": art.get("runtime_tree_sha256"),
-        "runtime_tree_digest_format": art.get("runtime_tree_digest_format"),
-        "runtime_tree_entries": art.get("runtime_tree_entries"),
-        "runtime_tree_bytes": art.get("runtime_tree_bytes"),
-        "runtime_identity_elapsed_ms": art.get("runtime_identity_elapsed_ms"),
-        "runtime_continuity": art.get("runtime_continuity"),
-    }
+    return _build_attestation_payload(
+        candidate,
+        safe_deleted=safe_deleted,
+        test_command=test_command,
+        effective_policy=effective_policy,
+        artifacts=art,
+        mode=mode,
+        now=lambda: _utc_now(),
+        guard_version=lambda: __version__,
+        candidate_digest=lambda value: hashlib.sha256(
+            value.encode("utf-8")
+        ).hexdigest(),
+        policy_digest=lambda policy: effective_policy_sha256(policy),
+        pack_digest_format=lambda: PACK_DIGEST_FORMAT,
+    )
 
 
 @dataclass(frozen=True)
