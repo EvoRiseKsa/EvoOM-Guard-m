@@ -2945,6 +2945,33 @@ MUTATIONS = (
             "test_guard_adapter_reads_reserved_namespace_after_discovery"
         ),
     ),
+    Mutation(
+        name="cli-parser-live-ref-injection-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before="        immutable_release_ref=_immutable_release_ref,\n",
+        after="        immutable_release_ref=lambda value: str(value),\n",
+        test=(
+            "tests/test_cli_parser_characterization.py::"
+            "test_cli_parser_matches_frozen_characterization"
+        ),
+    ),
+    Mutation(
+        name="cli-parser-live-helper-injection-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "        add_github_attestation_policy_arguments=(\n"
+            "            _add_github_attestation_policy_arguments\n"
+            "        ),\n"
+        ),
+        after=(
+            "        add_github_attestation_policy_arguments="
+            "lambda _parser: None,\n"
+        ),
+        test=(
+            "tests/test_cli_parser_characterization.py::"
+            "test_cli_parser_matches_frozen_characterization"
+        ),
+    ),
 )
 
 
