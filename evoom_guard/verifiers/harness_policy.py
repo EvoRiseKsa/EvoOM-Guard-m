@@ -261,9 +261,12 @@ def is_protected_ci(
     )
 
 
-def _matches_globs(path: str, globs: tuple[str, ...]) -> bool:
+def matches_globs(path: str, globs: tuple[str, ...]) -> bool:
     """Does ``path`` match any of ``globs`` (case-insensitive)?"""
     return any(fnmatch(path.lower(), glob.lower()) for glob in globs)
+
+
+_matches_globs = matches_globs
 
 
 def is_addable_new_test(

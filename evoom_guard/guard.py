@@ -58,6 +58,9 @@ from evoom_guard.execution import (
     ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
 )
 from evoom_guard.execution import (
+    resolve_host_command as _resolve_host_command,
+)
+from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
 )
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
@@ -106,11 +109,12 @@ from evoom_guard.verifiers.harness_policy import (
     discover_local_action_dirs,
     is_allowlist_exemptible,
 )
+from evoom_guard.verifiers.harness_policy import (
+    matches_globs as _matches_globs,
+)
 from evoom_guard.verifiers.repo_verifier import (
     COPY_IGNORE,
     RepoVerifier,
-    _matches_globs,
-    _resolve_host_command,
     copy_repo_tree,
     is_addable_new_test,
     is_judge_autoexec,
@@ -1537,11 +1541,15 @@ def _run_baseline_suite(
     import tempfile as _tempfile
 
     from evoom_guard.adapters import instrument_command
+    from evoom_guard.verifiers.fidelity import (
+        setup_fidelity_changes as _setup_fidelity_changes,
+    )
+    from evoom_guard.verifiers.fidelity import (
+        setup_fidelity_snapshot as _setup_fidelity_snapshot,
+    )
     from evoom_guard.verifiers.repo_verifier import (
         RepoVerifier,
         SetupFidelityError,
-        _setup_fidelity_changes,
-        _setup_fidelity_snapshot,
         detect_tamper,
         grade_repo_run,
         parse_junit_dir,

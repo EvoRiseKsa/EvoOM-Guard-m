@@ -17,6 +17,7 @@ import subprocess
 import sys
 from unittest.mock import Mock
 
+import evoom_guard.execution.command as execution_command
 import evoom_guard.verifiers as verifiers
 import evoom_guard.verifiers.candidate_edits as candidate_edits
 import evoom_guard.verifiers.diagnostics as diagnostics
@@ -116,6 +117,31 @@ def test_split_helpers_are_legacy_reexports() -> None:
     for module, names in module_names.items():
         for name in names:
             assert getattr(repo_verifier, name) is getattr(module, name)
+
+
+def test_public_owner_contracts_keep_exact_legacy_aliases() -> None:
+    assert (
+        repo_verifier._resolve_host_command
+        is repo_verifier.resolve_host_command
+        is execution_command.resolve_host_command
+    )
+    assert (
+        repo_verifier._setup_fidelity_snapshot
+        is repo_verifier.setup_fidelity_snapshot
+        is fidelity._setup_fidelity_snapshot
+        is fidelity.setup_fidelity_snapshot
+    )
+    assert (
+        repo_verifier._setup_fidelity_changes
+        is repo_verifier.setup_fidelity_changes
+        is fidelity._setup_fidelity_changes
+        is fidelity.setup_fidelity_changes
+    )
+    assert (
+        repo_verifier._matches_globs
+        is harness_policy._matches_globs
+        is harness_policy.matches_globs
+    )
 
 
 def test_fidelity_import_order_has_no_cycle() -> None:

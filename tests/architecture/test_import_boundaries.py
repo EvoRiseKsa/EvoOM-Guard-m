@@ -726,6 +726,19 @@ def test_repository_import_boundaries_match_ratcheted_baseline() -> None:
     assert not problems, "\n\n".join(problems)
 
 
+def test_guard_uses_only_public_cross_package_contracts() -> None:
+    """Prevent Guard from coupling back to private verifier implementation."""
+
+    module = "evoom_guard.guard"
+    analysis = analyze_package(PACKAGE_ROOT)
+    private_imports = tuple(
+        violation
+        for violation in analysis.violations["cross_package_private_imports"]
+        if violation.startswith(f"{module} | ")
+    )
+    assert private_imports == ()
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

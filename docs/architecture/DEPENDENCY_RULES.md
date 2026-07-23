@@ -61,6 +61,13 @@ Replacing cross-package imports of verifier-private process helpers with public
 typed contracts lowers cross-package private imports from 75 to 60 while the
 verifier retains exact local compatibility facades.
 
+Revision 4 gives host-command resolution, setup-fidelity inspection, and
+harness glob matching public owning contracts. `guard.py` now imports those
+contracts from `execution.command`, `verifiers.fidelity`, and
+`verifiers.harness_policy` rather than reaching through the `RepoVerifier`
+compatibility facade. Exact legacy aliases remain available, while the measured
+cross-package private-import ceiling falls from 60 to 56.
+
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline
 fingerprint. It therefore does not manufacture a ratchet revision or lower a
