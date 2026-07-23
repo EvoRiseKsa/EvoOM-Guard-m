@@ -190,9 +190,13 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   attestation placement and supplies the shortfall evaluator. Its explicit
   eager/lazy mode freezes the different black-box and repo-native access and
   exception order instead of silently normalizing them.
-- Pending: extend the application composers into a bounded
-  `VerificationPipeline` facade, then move effect sequencing only behind
-  separately characterized boundaries with shadow-mode differential coverage.
+- The immutable `application.pipeline.VerificationPipeline` cursor is Guard's
+  single facade for repo-native decision composition and the three pure
+  demotions. It does not sequence runtime effects: coverage collection,
+  baseline execution, profile and attestation placement remain in Guard so the
+  existing effect and exception order is unchanged.
+- Pending: move effect sequencing only behind separately characterized
+  boundaries with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

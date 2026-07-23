@@ -225,6 +225,18 @@ completed, currently passing execution. This difference is observable through
 mapping access and exception order, so a future unification requires a
 versioned contract rather than an incidental refactor.
 
+The seventh application slice adds the immutable
+`application.pipeline.VerificationPipeline` cursor. It is the single Guard
+facade for the repo-native composer and the three extracted decision gates, but
+it deliberately does not offer a monolithic `run()` method. Guard still owns
+candidate execution, changed-line coverage collection, baseline execution,
+attestation placement, assurance-profile construction, and when each pure
+method is called. This keeps baseline evidence running after a coverage
+demotion, preserves black-box eager versus repo-native lazy assurance timing,
+and prevents a structural refactor from introducing new short-circuit or
+exception behavior. The underlying composer and gates remain public,
+independently testable application services.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

@@ -78,6 +78,10 @@ classification, and repo-suite scope. It also owns final delivered-assurance
 demotion. Guard supplies the already constructed profile and preserves the
 historical black-box eager versus repo-native lazy evaluation modes, including
 their different access and exception order.
+`application/pipeline.py` now provides the immutable decision cursor used by
+Guard for the repo composer and all three gates. It is intentionally
+effect-free: execution, coverage and baseline collection, profile construction,
+and attestation assembly remain at their characterized Guard boundaries.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
@@ -103,13 +107,11 @@ builder rather than mutating an untyped trace dictionary.
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package without splitting its security-sensitive globals.
-Internal workspace decomposition and the complete `application` verification
-pipeline remain pending.
+Internal workspace decomposition and migration of effect sequencing out of
+Guard remain pending; the pure application decision pipeline is complete.
 
-The immediate structural priority is the next Stage 8 slice: introduce a
-bounded `VerificationPipeline` facade over the extracted decision composers
-without moving effect, profile, or attestation timing. Small RepoVerifier and
-black-box responsibility slices can continue independently where their effect
-boundaries are already characterized. Every slice must retain the existing
-contract, mutation, differential, and
+The immediate structural priority is the next bounded Stage 8 slice: reduce a
+separately characterized Guard, RepoVerifier, black-box, or CLI effect
+responsibility without changing trust boundaries. Every slice must retain the
+existing contract, mutation, differential, and
 architectural-boundary gates.

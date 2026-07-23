@@ -11,6 +11,7 @@ from evoom_guard.application.decision_gates import (
     apply_demonstrated_fix_gate,
     apply_diff_coverage_gate,
 )
+from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.application.repo_decision import compose_repo_decision
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "apply_diff_coverage_gate",
     "build_attestation",
     "compose_repo_decision",
+    "VerificationPipeline",
 ]

@@ -2032,6 +2032,75 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="verification-pipeline-repo-composer-bypass",
+        path="evoom_guard/application/pipeline.py",
+        before="                has_changes=has_changes,\n",
+        after="                has_changes=True,\n",
+        test=(
+            "tests/test_verification_pipeline.py::"
+            "test_no_changes_factory_retains_the_frozen_reason"
+        ),
+    ),
+    Mutation(
+        name="verification-pipeline-diff-gate-bypass",
+        path="evoom_guard/application/pipeline.py",
+        before=(
+            "        return VerificationPipeline(\n"
+            "            apply_diff_coverage_gate(\n"
+            "                self.decision,\n"
+            "                coverage_evidence=coverage_evidence,\n"
+            "                min_diff_coverage=min_diff_coverage,\n"
+            "            )\n"
+            "        )\n"
+        ),
+        after="        return VerificationPipeline(self.decision)\n",
+        test=(
+            "tests/test_verification_pipeline.py::"
+            "test_coverage_failure_remains_authoritative_through_later_lazy_gates"
+        ),
+    ),
+    Mutation(
+        name="verification-pipeline-demonstrated-fix-gate-bypass",
+        path="evoom_guard/application/pipeline.py",
+        before=(
+            "        return VerificationPipeline(\n"
+            "            apply_demonstrated_fix_gate(\n"
+            "                self.decision,\n"
+            "                baseline_evidence=baseline_evidence,\n"
+            "                require_demonstrated_fix=require_demonstrated_fix,\n"
+            "            )\n"
+            "        )\n"
+        ),
+        after="        return VerificationPipeline(self.decision)\n",
+        test=(
+            "tests/test_verification_pipeline.py::"
+            "test_demonstrated_fix_failure_precedes_lazy_assurance"
+        ),
+    ),
+    Mutation(
+        name="verification-pipeline-assurance-gate-bypass",
+        path="evoom_guard/application/pipeline.py",
+        before=(
+            "        return VerificationPipeline(\n"
+            "            apply_assurance_gate(\n"
+            "                self.decision,\n"
+            "                assurance=assurance,\n"
+            "                execution_state=execution_state,\n"
+            "                execution_requested=execution_requested,\n"
+            "                require_report_integrity=require_report_integrity,\n"
+            "                require_candidate_isolation=require_candidate_isolation,\n"
+            "                shortfall_evaluator=shortfall_evaluator,\n"
+            "                eager_shortfall=eager_shortfall,\n"
+            "            )\n"
+            "        )\n"
+        ),
+        after="        return VerificationPipeline(self.decision)\n",
+        test=(
+            "tests/test_verification_pipeline.py::"
+            "test_assurance_is_the_final_demotion_after_prior_gates_pass"
+        ),
+    ),
+    Mutation(
         name="diff-coverage-cross-drive-path-crash",
         path="evoom_guard/evidence.py",
         before=(
