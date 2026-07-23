@@ -79,6 +79,18 @@ evidence used to judge it. Guard still focuses on one narrow question:
   exact source-only V2 round; this does not make the mechanism a production
   gate or authorize any artifact or publication.
 
+## Source candidate with bounded operational evidence
+
+- **Agent Change Admission V1** — the `v4.3.0` source candidate separates an
+  untrusted automated-agent proposal from a distinct signed authorization,
+  independently re-derived raw-Git facts, and a Trusted Finalizer `ALLOW`.
+  The public same-owner pilot admitted one exact bounded change, rejected an
+  additional ignored tracked path before signing, and replayed the unchanged
+  base/head pair with identical Git binding bytes and fresh run-bound
+  signatures. It is not yet a published consumer release, production merge
+  gate, hostile-code isolation proof, single-use grant, code healer, or
+  independent validation.
+
 ## Implemented contract awaiting operational evidence
 
 - **Release Artifact Admission V1** — published in the `v4.2.0` bootstrap, this
@@ -95,6 +107,15 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Operational evidence completed
 
+- The
+  [`Agent Change Admission pilot`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
+  retained permitted run `29983466826`, ignored tracked-path rejection
+  `29983731021`, and exact-change replay `29983835620`. The positive and replay
+  bundles verified offline; the negative exposed `dist/hidden.txt` through raw
+  Git, failed before authorization signing, skipped finalization, and produced
+  no `.aca` or `.evb`. Both accounts have the same owner, so this is bounded
+  operational evidence rather than independent review or production
+  enforcement.
 - The
   [`Release Source Admission V2 pilot`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot)
   completed one protected-main source-only round with the immutable `v4.1.0`

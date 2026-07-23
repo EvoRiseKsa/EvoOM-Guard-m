@@ -1,21 +1,30 @@
 ---
-source_version: 4.2.0
+source_version: 4.3.0
 latest_published_version: 4.2.0
-state: published
+state: pre-release
 ---
 
 # Release status
 
-The repository publishes **v4.2.0** as the current immutable consumer release:
+The repository source declares **v4.3.0**, which is not yet a published
+immutable consumer release. The latest published release remains:
 [`v4.2.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.2.0).
 The immutable tag identifies the exact protected-`main` source commit. The
 release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
 provides a release attestation for the immutable release and a separate GitHub
 Actions build-artifact attestation for those bytes.
 
-The `v4.2.0` source line adds Release Artifact Admission V1 and its sixth
-trust-key domain. This first release carrying the contract is a bootstrap and
-did not use the new contract to authorize itself. Publication does not by
+The `v4.3.0` source candidate adds Agent Change Admission V1. Its public
+same-owner pilot retained one permitted run, one ignored tracked-path
+rejection before signing, and one exact-change replay with detached offline
+verification. The candidate has not produced a v4.3.0 immutable tag, release
+asset, checksum, attestation, Marketplace observation, or release ledger. Do
+not teach or consume `@v4.3.0` until publication and external verification
+finish.
+
+The published `v4.2.0` source line adds Release Artifact Admission V1 and its
+sixth trust-key domain. This first release carrying the contract is a bootstrap
+and did not use the new contract to authorize itself. Publication does not by
 itself establish a live E/F/G pilot, artifact-publication authorization,
 reproducible builds, production readiness, or independent security review.
 

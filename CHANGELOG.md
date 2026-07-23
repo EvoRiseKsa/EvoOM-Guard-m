@@ -9,12 +9,12 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
-## [Unreleased]
+## [4.3.0] — 2026-07-23
 
 ### Added
 
 - Added the experimental
-  [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) candidate: a
+  [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) profile: a
   canonical untrusted proposal, separately signed `.aca` authorization,
   independently derived raw-Git bindings, and an offline-verifiable Trusted
   Finalizer evidence profile.
@@ -37,13 +37,22 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   Git executable, including paths excluded from Guard's candidate-copy layer,
   and verifies a staged signature before atomic publication.
 
+### Changed
+
+- Regenerated the 16-case live benchmark with source version 4.3.0. All
+  expected labels matched: 11 true positives, 3 true negatives, 2 documented
+  policy false positives, and 0 false negatives.
+- Recorded the bounded public same-owner pilot with immutable positive,
+  ignored tracked-path negative, and exact-change replay run identities plus
+  detached offline verification.
+
 ### Known limitations
 
-- This is an unpublished candidate, not part of immutable v4.2.0 and not an
-  enabled merge gate. A bounded public same-owner pilot completed one
-  permitted change, one ignored tracked-path rejection before signing, and one
-  exact-change replay with independent offline bundle verification. It is not
-  independent validation or production evidence.
+- Agent Change Admission V1 is experimental and is not an enabled merge gate.
+  Its bounded public same-owner pilot completed one permitted change, one
+  ignored tracked-path rejection before signing, and one exact-change replay
+  with detached offline bundle verification. It is not independent validation
+  or production evidence.
 - The profile is an admission contract, not ML, risk prediction, policy
   selection, or a code-healing engine. It does not prove correctness beyond
   the configured Guard judge and evidence boundary.
