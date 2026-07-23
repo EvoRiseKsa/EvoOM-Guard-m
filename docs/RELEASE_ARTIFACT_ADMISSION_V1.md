@@ -6,7 +6,7 @@
 
 # Release Artifact Admission V1
 
-Release Artifact Admission V1 is the missing protected-main adapter between a
+Release Artifact Admission V1 is a narrow protected-main adapter between a
 verified source authorization and one exact built file. Its signed format is
 `EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1`; its canonical extension is `.raae`.
 
@@ -28,6 +28,28 @@ contract is
 Artifact Admission V1/V2 formats remain PR-head contracts and are not changed
 or accepted as substitutes for `.rsae` or `.raae`.
 
+## Observed public pilot
+
+A later public, same-owner, non-production pilot used the immutable v4.2.0
+runtime to complete one exact protected-main E/F/G round:
+
+- E [`29963621119/1`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/actions/runs/29963621119/attempts/1)
+  built and attested one canonical 290-byte JSON descriptor with SHA-256
+  `c2e573ad7556ec15db102e6e92c4197d2b413970e37f8d12f823ac4b7aefe64e`;
+- protected F [`29963656590/1`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/actions/runs/29963656590/attempts/1)
+  freshly re-verified the provider evidence and returned `SEALED/ALLOW`; and
+- detached G [`29963877837/1`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/actions/runs/29963877837/attempts/1)
+  returned `VERIFIED/ALLOW` over retained evidence without a fresh provider
+  call, while five retained-evidence mutations returned `REJECTED`.
+
+The exact ledger and limits are in
+[`ROUND2_EVIDENCE.md`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/blob/a1937ea599204751deebcbcadbd416092d8f46f9/docs/ROUND2_EVIDENCE.md).
+The exact non-secret outputs, public attestation bundles, six external public
+roots, and `SHA256SUMS` are retained in its
+[`evidence/round2`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/tree/a1937ea599204751deebcbcadbd416092d8f46f9/evidence/round2)
+snapshot. The descriptor is not a package, binary, image, published release, or
+deployed runtime; unexecuted negative-matrix rows remain unproven.
+
 ## Trust topology
 
 The intended integration has three roles after Release Source Admission A/B/C:
@@ -45,8 +67,10 @@ The intended integration has three roles after Release Source Admission A/B/C:
    the release-artifact key last and emits `.raae`.
 3. **G — detached verifier.** A no-secret workflow verifies `.raae`, the
    embedded `.rsae`, retained provider evidence, and the external artifact
-   entirely offline. It has no Environment, private key, OIDC permission, or
-   provider invocation.
+   without an Environment, private key, OIDC permission, or fresh
+   attestation-provider call. Its core verifier consumes retained evidence,
+   while the reference workflow still uses Actions metadata/artifact transport
+   and downloads its pinned runtime and dependencies.
 
 E and F must differ in workflow ID, path, and run. Both must also differ from
 all Release Source Admission evaluation, producer, and admitter roles. Their
@@ -145,13 +169,15 @@ authorized publication step.
 
 The first EvoOM Guard release containing this adapter cannot use the adapter to
 authorize itself. It must be published through the existing reviewed release
-process with its immutable runtime checksum established independently. Only a
-later protected-main pilot may use that published runtime to exercise E/F/G.
+process with its immutable runtime checksum established independently. The
+later pilot described above used that published runtime to exercise E/F/G; it
+did not retroactively authorize the bootstrap release.
 
-The first live round must remain disabled by default, use one disposable regular
-file, preserve positive and negative evidence, then disable the feature and
-remove the private key. It must not create a tag, release, Marketplace update,
-package publication, or deployment.
+That first live round remained disabled by default outside the explicit window,
+used one disposable regular file, preserved positive and negative evidence,
+then disabled both chains and removed both Environment signing secrets. It did
+not create a tag, release, Marketplace update, package publication, or
+deployment.
 
 ## Explicit non-claims
 

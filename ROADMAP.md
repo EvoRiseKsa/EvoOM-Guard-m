@@ -21,8 +21,9 @@ evidence used to judge it. Guard still focuses on one narrow question:
   post-publication identity, exact asset bytes, provenance, Marketplace
   propagation, and successful tag CI are frozen in
   [`tests/baseline/v4.3.0/`](tests/baseline/v4.3.0/). This minimal ledger is not
-  Agent Change Admission pilot evidence and does not substitute for the
-  still-pending live Release Artifact Admission V1 E/F/G pilot.
+  Agent Change Admission or Release Artifact Admission pilot evidence. The
+  later bounded pilot records are preserved separately and do not turn this
+  release ledger into an admission or publication decision.
 
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
@@ -90,7 +91,7 @@ evidence used to judge it. Guard still focuses on one narrow question:
   hostile-code isolation proof, single-use grant, code healer, or independent
   validation.
 
-## Implemented contract awaiting operational evidence
+## Implemented contract with bounded operational evidence
 
 - **Release Artifact Admission V1** — published in the `v4.2.0` bootstrap, this
   contract implements a
@@ -99,9 +100,14 @@ evidence used to judge it. Guard still focuses on one narrow question:
   detached regular artifact, protected E/F workflow identities and raw-Git
   blobs, exact builder run/attempt, and a fresh constrained GitHub Artifact
   Attestation; then emits a canonical signed `.raae` that can be verified
-  offline. This implementation has no live E/F/G pilot evidence yet and grants
-  no publication, deployment, OCI,
-  registry, production, or reproducibility claim. See
+  over retained evidence without a fresh provider call. A later public,
+  same-owner protected-main pilot used the immutable v4.2.0 runtime for one
+  exact E/F/G round. Protected F returned `SEALED/ALLOW`; detached G returned
+  `VERIFIED/ALLOW`; and all five retained-evidence mutations exercised by G
+  returned `REJECTED`. The admitted object was a 290-byte JSON descriptor, not
+  a package, binary, image, release asset, or deployed runtime. The round
+  grants no publication, deployment, OCI, registry, production,
+  reproducibility, or independent-review claim. See
   [`docs/RELEASE_ARTIFACT_ADMISSION_V1.md`](docs/RELEASE_ARTIFACT_ADMISSION_V1.md).
 
 ## Operational evidence completed
@@ -126,6 +132,20 @@ evidence used to judge it. Guard still focuses on one narrow question:
   mutations from cases not executed live. The result is bound only to source
   `af8e4592ef5572acfe2ea295c435eed6a8e122fc`; it is not artifact, release,
   publication, deployment, production, or independent-review evidence.
+- The same public pilot later used the immutable `v4.2.0` runtime to complete a
+  separate A-through-G source-to-artifact round for protected-main target
+  `382a24774e2da7d1117f8969455816bd7b941af2`. E/F/G attempts
+  `29963621119/1`, `29963656590/1`, and `29963877837/1` built and admitted the
+  exact 290-byte descriptor with SHA-256
+  `c2e573ad7556ec15db102e6e92c4197d2b413970e37f8d12f823ac4b7aefe64e`,
+  then verified the retained RAAE without a fresh provider call. Five G
+  mutations returned `REJECTED`; unexecuted matrix rows remain explicit. The
+  exact non-secret outputs, public attestation bundles, six public roots, and
+  `SHA256SUMS` are retained in its
+  [`evidence/round2`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/tree/a1937ea599204751deebcbcadbd416092d8f46f9/evidence/round2)
+  snapshot. This still is not evidence for a distributable artifact,
+  publication/deployment authority, reproducibility, production, or independent
+  review.
 - The frozen
   [`v4.0.2` finalizer pilot](https://github.com/EvoRiseKsa/evoom-guard-v4-finalizer-pilot)
   completed a fresh same-owner, cross-account Trusted Finalizer `ALLOW` and a
@@ -187,15 +207,15 @@ evidence used to judge it. Guard still focuses on one narrow question:
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Release-artifact evidence.** Use the published `v4.2.0` bootstrap—which did
-   not and could not authorize the release that first contained it—to run one E/F/G pilot,
-   disabled by default, from a later protected-main source: E builds and attests
-   one exact artifact without the signing key, protected F re-verifies the
-   `.rsae`, raw-Git workflow blobs, run identity, and provider statement before
-   sealing `.raae`, and G verifies the retained bytes offline. Preserve live
-   negative controls and disable/delete the pilot secret afterward. Draft-
-   release consumption, publication, OCI, registry, deployment, and
-   reproducibility remain separate later contracts.
+1. **Next artifact boundary.** The first E/F/G round is complete, but its
+   admitted object is only a JSON descriptor. The next V1 experiment must bind
+   an actual regular-file release candidate, such as the exact zipapp or package
+   bytes, while exercising the remaining unobserved artifact negative-matrix
+   rows. Native OCI manifest/index admission requires a separate versioned
+   contract before any OCI pilot. A later, separate contract would still be
+   required for draft-release consumption or any publication/deployment
+   decision; the existing `.raae` must never be interpreted as publisher
+   authority or reproducibility evidence.
 2. **Independent evidence.** The active frozen request is
    [`v4.1.0` issue #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
    Completion requires an external reviewer and genuinely blind evaluation;
