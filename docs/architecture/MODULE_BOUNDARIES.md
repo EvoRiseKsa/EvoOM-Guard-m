@@ -212,6 +212,19 @@ gate receives the current post-coverage decision so an earlier failure cannot
 be overwritten. Characterization freezes mapping access and exception order,
 the two established reason variants, and precedence before assurance.
 
+The sixth application slice adds
+`application.decision_gates.apply_assurance_gate`. It owns only the final
+demotion of a completed `PASS` when the delivered assurance profile is below
+the caller's floor. Profile construction and the shortfall evaluator remain
+separate application services; Guard still decides when effects and
+attestation assembly occur. The explicit `eager_shortfall` compatibility mode
+preserves an established orchestration difference: black-box runs evaluate the
+shortfall before their attestation even for a prior non-`PASS`, while
+repo-native runs evaluate it only after attestation and only for a requested,
+completed, currently passing execution. This difference is observable through
+mapping access and exception order, so a future unification requires a
+versioned contract rather than an incidental refactor.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

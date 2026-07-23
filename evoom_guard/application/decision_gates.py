@@ -8,17 +8,87 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Protocol
 
 from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.verdict import (
     ERROR,
+    EXECUTION_COMPLETED,
     FAIL,
     PASS,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
     REASON_FIX_NOT_DEMONSTRATED,
 )
+
+
+class AssuranceShortfallEvaluator(Protocol):
+    """Callable compatibility seam for evaluating delivered assurance."""
+
+    def __call__(
+        self,
+        assurance: Mapping[str, Any],
+        *,
+        require_report_integrity: str | None,
+        require_candidate_isolation: str | None,
+    ) -> str | None: ...
+
+
+def apply_assurance_gate(
+    decision: GuardDecision,
+    *,
+    assurance: Mapping[str, Any],
+    execution_state: str,
+    execution_requested: bool,
+    require_report_integrity: str | None,
+    require_candidate_isolation: str | None,
+    shortfall_evaluator: AssuranceShortfallEvaluator,
+    eager_shortfall: bool,
+) -> GuardDecision:
+    """Apply the delivered-assurance floor without changing historical timing.
+
+    Black-box orchestration has always evaluated the floor eagerly and then
+    decided whether a completed PASS could be demoted. Repository-native
+    orchestration has always skipped evaluation unless execution was requested,
+    completed, and currently passing. The explicit mode retains those observable
+    access and exception-order contracts while moving only the pure demotion.
+    """
+
+    if eager_shortfall:
+        shortfall = shortfall_evaluator(
+            assurance,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+        )
+        if (
+            shortfall is not None
+            and execution_state == EXECUTION_COMPLETED
+            and decision.verdict == PASS
+        ):
+            return GuardDecision(
+                verdict=ERROR,
+                reason_code=REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+                reason=shortfall,
+            )
+        return decision
+
+    if (
+        execution_requested
+        and execution_state == EXECUTION_COMPLETED
+        and decision.verdict == PASS
+    ):
+        shortfall = shortfall_evaluator(
+            assurance,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+        )
+        if shortfall is not None:
+            return GuardDecision(
+                verdict=ERROR,
+                reason_code=REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+                reason=shortfall,
+            )
+    return decision
 
 
 def apply_diff_coverage_gate(
@@ -108,6 +178,8 @@ def apply_demonstrated_fix_gate(
 
 
 __all__ = [
+    "AssuranceShortfallEvaluator",
+    "apply_assurance_gate",
     "apply_demonstrated_fix_gate",
     "apply_diff_coverage_gate",
 ]

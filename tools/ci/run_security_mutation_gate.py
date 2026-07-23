@@ -1878,6 +1878,160 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="assurance-eager-falsey-shortfall-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "        if (\n"
+            "            shortfall is not None\n"
+            "            and execution_state == EXECUTION_COMPLETED\n"
+            "            and decision.verdict == PASS\n"
+            "        ):\n"
+        ),
+        after=(
+            "        if (\n"
+            "            shortfall\n"
+            "            and execution_state == EXECUTION_COMPLETED\n"
+            "            and decision.verdict == PASS\n"
+            "        ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_empty_assurance_shortfall_is_still_a_demotion"
+        ),
+    ),
+    Mutation(
+        name="assurance-lazy-falsey-shortfall-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "        if shortfall is not None:\n"
+            "            return GuardDecision(\n"
+        ),
+        after=(
+            "        if shortfall:\n"
+            "            return GuardDecision(\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_empty_assurance_shortfall_is_still_a_demotion"
+        ),
+    ),
+    Mutation(
+        name="assurance-eager-prior-decision-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "        if (\n"
+            "            shortfall is not None\n"
+            "            and execution_state == EXECUTION_COMPLETED\n"
+            "            and decision.verdict == PASS\n"
+            "        ):\n"
+        ),
+        after=(
+            "        if (\n"
+            "            shortfall is not None\n"
+            "            and execution_state == EXECUTION_COMPLETED\n"
+            "        ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_blackbox_assurance_gate_preserves_completed_prior_failure"
+        ),
+    ),
+    Mutation(
+        name="assurance-lazy-prior-decision-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "    if (\n"
+            "        execution_requested\n"
+            "        and execution_state == EXECUTION_COMPLETED\n"
+            "        and decision.verdict == PASS\n"
+            "    ):\n"
+        ),
+        after=(
+            "    if (\n"
+            "        execution_requested\n"
+            "        and execution_state == EXECUTION_COMPLETED\n"
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_repo_assurance_gate_is_lazy_until_requested_completed_pass"
+        ),
+    ),
+    Mutation(
+        name="assurance-eager-completion-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "        if (\n"
+            "            shortfall is not None\n"
+            "            and execution_state == EXECUTION_COMPLETED\n"
+            "            and decision.verdict == PASS\n"
+            "        ):\n"
+        ),
+        after=(
+            "        if (\n"
+            "            shortfall is not None\n"
+            "            and decision.verdict == PASS\n"
+            "        ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_blackbox_assurance_gate_does_not_demote_incomplete_pass"
+        ),
+    ),
+    Mutation(
+        name="assurance-lazy-completion-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "    if (\n"
+            "        execution_requested\n"
+            "        and execution_state == EXECUTION_COMPLETED\n"
+            "        and decision.verdict == PASS\n"
+            "    ):\n"
+        ),
+        after=(
+            "    if (\n"
+            "        execution_requested\n"
+            "        and decision.verdict == PASS\n"
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_repo_assurance_gate_is_lazy_until_requested_completed_pass"
+        ),
+    ),
+    Mutation(
+        name="assurance-repo-lazy-mode-inversion",
+        path="evoom_guard/guard.py",
+        before=(
+            "        shortfall_evaluator=_assurance_shortfall,\n"
+            "        eager_shortfall=False,\n"
+        ),
+        after=(
+            "        shortfall_evaluator=_assurance_shortfall,\n"
+            "        eager_shortfall=True,\n"
+        ),
+        test=(
+            "tests/test_assurance_decision_gate_characterization.py::"
+            "test_repo_gate_is_lazy_and_follows_attestation_and_profile"
+        ),
+    ),
+    Mutation(
+        name="assurance-blackbox-eager-mode-inversion",
+        path="evoom_guard/guard.py",
+        before=(
+            "            shortfall_evaluator=_assurance_shortfall,\n"
+            "            eager_shortfall=True,\n"
+        ),
+        after=(
+            "            shortfall_evaluator=_assurance_shortfall,\n"
+            "            eager_shortfall=False,\n"
+        ),
+        test=(
+            "tests/test_assurance_decision_gate_characterization.py::"
+            "test_blackbox_gate_is_eager_but_preserves_prior_decisions"
+        ),
+    ),
+    Mutation(
         name="diff-coverage-cross-drive-path-crash",
         path="evoom_guard/evidence.py",
         before=(
