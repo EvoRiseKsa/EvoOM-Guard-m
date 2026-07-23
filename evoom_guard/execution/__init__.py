@@ -33,6 +33,7 @@ from evoom_guard.execution.judge import (
     JudgeProcessResult,
     execute_judge_process,
 )
+from evoom_guard.execution.command import resolve_host_command
 # isort: on
 
 __all__ = [
@@ -59,5 +60,6 @@ __all__ = [
     "join_pipe_readers",
     "process_group_popen_kwargs",
     "run_bounded_subprocess",
+    "resolve_host_command",
     "terminate_process_tree",
 ]

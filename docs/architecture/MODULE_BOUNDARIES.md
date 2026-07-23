@@ -71,6 +71,14 @@ report, or compose evidence or verdicts. Those responsibilities remain in
 `blackbox.py`, which also retains its historical private patch seams through a
 compatibility facade.
 
+Host-command ownership lives in `evoom_guard/execution/command.py`. It resolves
+Windows `PATHEXT` shims without a shell and refuses candidate-controlled
+relative `PATH` entries for bare judge commands. Setup-fidelity snapshot/change
+contracts are public in `evoom_guard/verifiers/fidelity.py`, and harness glob
+matching is public in `evoom_guard/verifiers/harness_policy.py`.
+`repo_verifier.py` retains exact legacy aliases, but higher-level orchestration
+must import these public owners directly.
+
 The first repository-verifier phase slice lives in
 `evoom_guard/verifiers/repo_phase_contracts.py`. It owns only pure interpretation
 of completed repository-suite and mandatory verifier-pack evidence, including

@@ -75,7 +75,6 @@ trust boundary in ``docs/GUARD.md``).
 from __future__ import annotations
 
 import hashlib
-import ntpath
 import os
 import secrets
 import shutil
@@ -98,6 +97,7 @@ from evoom_guard.execution import (
     drain_process_pipe,
     join_pipe_readers,
     process_group_popen_kwargs,
+    resolve_host_command,
     run_bounded_subprocess,
 )
 from evoom_guard.execution import (
@@ -187,12 +187,7 @@ from evoom_guard.verifiers.fidelity import (
 from evoom_guard.verifiers.fidelity import (
     _is_default_setup_output as _is_default_setup_output,
 )
-from evoom_guard.verifiers.fidelity import (
-    _setup_fidelity_changes as _setup_fidelity_changes,
-)
-from evoom_guard.verifiers.fidelity import (
-    _setup_fidelity_snapshot as _setup_fidelity_snapshot,
-)
+from evoom_guard.verifiers.fidelity import setup_fidelity_changes, setup_fidelity_snapshot
 from evoom_guard.verifiers.harness_policy import (
     _AUTOEXEC_TESTLIKE as _AUTOEXEC_TESTLIKE,
 )
@@ -213,9 +208,6 @@ from evoom_guard.verifiers.harness_policy import (
 )
 from evoom_guard.verifiers.harness_policy import (
     _is_judge_script as _is_judge_script,
-)
-from evoom_guard.verifiers.harness_policy import (
-    _matches_globs as _matches_globs,
 )
 from evoom_guard.verifiers.harness_policy import (
     discover_local_action_dirs as discover_local_action_dirs,
@@ -241,6 +233,7 @@ from evoom_guard.verifiers.harness_policy import (
 from evoom_guard.verifiers.harness_policy import (
     is_safe_relpath as is_safe_relpath,
 )
+from evoom_guard.verifiers.harness_policy import matches_globs
 from evoom_guard.verifiers.harness_policy import (
     reject_unsafe_or_protected as reject_unsafe_or_protected,
 )
@@ -296,11 +289,13 @@ from evoom_guard.workspace import (
     write_text_within_root,
 )
 
-# Stable intra-package facades for evidence/baseline phases. The leading-
-# underscore implementations remain local compatibility names, while callers
-# outside ``verifiers`` avoid private cross-package imports.
-setup_fidelity_changes = _setup_fidelity_changes
-setup_fidelity_snapshot = _setup_fidelity_snapshot
+# Stable compatibility facades. Internal call sites retain their historical
+# names so monkeypatch-based adopters keep controlling RepoVerifier, while new
+# callers can import the public contracts from their owning modules.
+_matches_globs = matches_globs
+_resolve_host_command = resolve_host_command
+_setup_fidelity_changes = setup_fidelity_changes
+_setup_fidelity_snapshot = setup_fidelity_snapshot
 
 try:  # POSIX-only; absent on Windows.
     import resource
@@ -338,71 +333,6 @@ def judge_subprocess_env(workdir: str) -> dict[str, str]:
         env["TEMP"] = workdir
         env["TMP"] = workdir
     return env
-
-
-def _resolve_host_command(
-    command: list[str],
-    *,
-    cwd: str | None = None,
-    env: dict[str, str] | None = None,
-    platform: str | None = None,
-) -> list[str]:
-    """Resolve Windows ``.cmd``/``.bat`` shims before ``subprocess.run``.
-
-    Windows command prompts consult ``PATHEXT`` for a bare command such as
-    ``vitest`` or ``npm``; ``CreateProcess`` (used by ``subprocess`` without a
-    shell) does not. Resolve the concrete shim without enabling ``shell=True``.
-
-    The search is intentionally implemented here instead of with
-    :func:`shutil.which`: recent Python versions may implicitly prepend the
-    process working directory on Windows. A candidate-controlled checkout must
-    not shadow a judge command unless the adopter explicitly supplied a relative
-    command path or put that directory in ``PATH``. Bare commands therefore use
-    absolute ``PATH`` entries only. POSIX behavior is unchanged.
-
-    ``platform`` is an internal test seam; production callers use ``os.name``.
-    """
-    if (os.name if platform is None else platform) != "nt" or not command:
-        return list(command)
-
-    executable = command[0]
-    search_env = os.environ if env is None else env
-    raw_extensions = search_env.get("PATHEXT", ".COM;.EXE;.BAT;.CMD")
-    extensions = tuple(
-        ext if ext.startswith(".") else f".{ext}"
-        for item in raw_extensions.split(";")
-        if (ext := item.strip())
-    )
-
-    def existing_candidate(base: str) -> str | None:
-        direct = (
-            (base,)
-            if any(base.lower().endswith(ext.lower()) for ext in extensions)
-            else ()
-        )
-        for candidate in (*direct, *(f"{base}{ext}" for ext in extensions)):
-            if os.path.isfile(candidate):
-                return candidate
-        return None
-
-    if "/" in executable or "\\" in executable:
-        explicit = executable
-        if cwd and not ntpath.isabs(explicit):
-            explicit = ntpath.join(cwd, explicit)
-        resolved = existing_candidate(explicit)
-        return [resolved, *command[1:]] if resolved else list(command)
-
-    for item in search_env.get("PATH", "").split(";"):
-        directory = os.path.expandvars(item.strip().strip('"'))
-        if not directory or not ntpath.isabs(directory):
-            continue
-        resolved = existing_candidate(ntpath.join(directory, executable))
-        if resolved:
-            return [resolved, *command[1:]]
-    return list(command)
-
-
-resolve_host_command = _resolve_host_command
 
 
 class RepoProblem(TypedDict, total=False):

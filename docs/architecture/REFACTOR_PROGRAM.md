@@ -90,6 +90,10 @@ yet.
   typed `verifiers/repo_phase_contracts.py` module behind frozen vectors; keep
   subprocess, container, filesystem, runtime-identity, and trace effects in
   `RepoVerifier` until their own characterization slices exist.
+- Host-command resolution now belongs to `execution/command.py`; Guard consumes
+  public setup-fidelity and harness-policy contracts from their owning modules.
+  Exact `repo_verifier` aliases preserve the compatibility surface while the
+  private-import ratchet drops from 60 to 56.
 - Pending: extract `candidate/` and `workspace/` domains.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.

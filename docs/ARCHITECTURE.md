@@ -33,10 +33,12 @@ canonical evidence envelope against external key and run-context inputs.
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
 | `execution/process.py` | Typed generic bounded-process requests/results, shared output capture, timeouts, and native process-tree cleanup. |
 | `execution/judge.py` | Typed black-box judge-process lifecycle: bounded stdout/stderr capture, timeout handling, reader lifecycle, and process-group cleanup. It does not build judge commands or interpret verdict evidence. |
+| `execution/command.py` | Shell-free host-command resolution. On Windows it resolves trusted `PATHEXT` shims while excluding candidate-controlled relative `PATH` entries for bare commands. |
 | `blackbox.py` | Black-box orchestration and compatibility surface: judge-command construction, candidate/pack coordination, report interpretation, evidence composition, and verdict policy. Historical private process seams delegate to `execution/judge.py`. |
 | `workspace.py` | Contained workspace I/O: atomic descriptor-relative/no-follow operations on POSIX; reparse rejection plus pre/post parent/object identity checks as a non-atomic Windows fallback. |
 | `runtime_identity.py` | Canonical post-setup runtime-tree identity (`EVOGUARD_RUNTIME_TREE_V1`), including setup-created outputs. |
-| `verifiers/fidelity.py` | Setup-fidelity snapshots and drift details; setup output exceptions are scoped to this validation step. |
+| `verifiers/fidelity.py` | Public setup-fidelity snapshot/change contracts and drift details; setup output exceptions are scoped to this validation step. |
+| `verifiers/harness_policy.py` | Public deterministic protected-harness and glob policy contracts used before candidate execution. |
 | `verifiers/junit_oracle.py` | Hardened JUnit parsing/grading. Directory report sets fail closed if any XML sibling is untrusted or invalid. |
 | `pack_manifest.py` | The canonical pack contract: strict `pack.json`, regular-file-only inventory, framed `EVOGUARD_PACK_V2` digest, verified snapshots, and pack test discovery. |
 | `candidate_runner.py` | The shell-free `$EVOGUARD_EXEC` launcher and delivered-isolation evidence for black-box candidates. |

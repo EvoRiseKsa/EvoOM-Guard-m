@@ -360,7 +360,7 @@ def _scan_fidelity_best_effort(
     scan_directory(root, "")
 
 
-def _setup_fidelity_snapshot(
+def setup_fidelity_snapshot(
     root: str,
     extra_output_globs: tuple[str, ...] = (),
     *,
@@ -402,8 +402,14 @@ def _setup_fidelity_snapshot(
     return snapshot
 
 
-def _setup_fidelity_changes(
+def setup_fidelity_changes(
     before: dict[str, tuple[str, int, str]],
     after: dict[str, tuple[str, int, str]],
 ) -> list[str]:
     return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+
+
+# Exact compatibility aliases. Existing import, monkeypatch, and introspection
+# surfaces continue to resolve to the same function objects.
+_setup_fidelity_snapshot = setup_fidelity_snapshot
+_setup_fidelity_changes = setup_fidelity_changes

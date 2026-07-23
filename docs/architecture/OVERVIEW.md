@@ -43,7 +43,9 @@ The process, Docker, candidate-boundary, invocation-transport, and typed
 judge-process kernels have been extracted behind characterized compatibility
 surfaces. PR #123 completed the `execution/judge.py` slice; PR #133 extracted
 pure repository/pack phase contracts into
-`verifiers/repo_phase_contracts.py`.
+`verifiers/repo_phase_contracts.py`. Host-command resolution now belongs to
+`execution/command.py`, while Guard consumes public setup-fidelity and harness
+policy contracts directly instead of verifier-private compatibility seams.
 
 The planned `domain/` package and strict domain typing baseline are not yet
 implemented. `RepoVerifier` still owns effectful subprocess, container,
