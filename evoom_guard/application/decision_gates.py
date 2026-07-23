@@ -17,6 +17,7 @@ from evoom_guard.domain.verdict import (
     PASS,
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
+    REASON_FIX_NOT_DEMONSTRATED,
 )
 
 
@@ -74,4 +75,39 @@ def apply_diff_coverage_gate(
     return decision
 
 
-__all__ = ["apply_diff_coverage_gate"]
+def apply_demonstrated_fix_gate(
+    decision: GuardDecision,
+    *,
+    baseline_evidence: Mapping[str, Any],
+    require_demonstrated_fix: bool,
+) -> GuardDecision:
+    """Demote a PASS unless the prepared baseline shows the required transition."""
+
+    if (
+        require_demonstrated_fix
+        and decision.verdict == PASS
+        and baseline_evidence["repair_effect"] != "demonstrated"
+    ):
+        baseline_state = (
+            "already passes the same suite"
+            if baseline_evidence.get("verdict") == PASS
+            else "produced no clean baseline verdict"
+        )
+        return GuardDecision(
+            verdict=FAIL,
+            reason_code=REASON_FIX_NOT_DEMONSTRATED,
+            reason=(
+                "the suite passes on the candidate, but the fix is not "
+                "demonstrated: the pristine base "
+                f"{baseline_state}"
+                " — --require-demonstrated-fix demands baseline FAIL → "
+                "candidate PASS under an unchanged harness"
+            ),
+        )
+    return decision
+
+
+__all__ = [
+    "apply_demonstrated_fix_gate",
+    "apply_diff_coverage_gate",
+]

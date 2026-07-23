@@ -180,9 +180,14 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   effectful collector and invokes the pure gate in its historical order.
   A pre-extraction vector freezes the ratio, evidence access and exception
   behavior, and priority over later decision gates.
+- Demonstrated-fix demotion is owned by
+  `application.decision_gates.apply_demonstrated_fix_gate`; Guard retains
+  baseline execution, repo-suite scope, repair-effect classification, and
+  evidence annotation. The current post-coverage decision is passed through so
+  an earlier failure remains authoritative.
 - Pending: extend the application composers into a complete
-  `VerificationPipeline` by extracting demonstrated-fix and assurance
-  demotions plus effect sequencing with shadow-mode differential coverage.
+  `VerificationPipeline` by extracting assurance demotion plus effect
+  sequencing with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

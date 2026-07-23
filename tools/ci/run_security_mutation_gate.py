@@ -1821,6 +1821,63 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="demonstrated-fix-gate-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "    if (\n"
+            "        require_demonstrated_fix\n"
+            "        and decision.verdict == PASS\n"
+            '        and baseline_evidence["repair_effect"] != "demonstrated"\n'
+            "    ):\n"
+        ),
+        after=(
+            "    if False and (\n"
+            "        require_demonstrated_fix\n"
+            "        and decision.verdict == PASS\n"
+            '        and baseline_evidence["repair_effect"] != "demonstrated"\n'
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_green_baseline_demotes_with_exact_read_order_and_reason"
+        ),
+    ),
+    Mutation(
+        name="demonstrated-fix-prior-decision-bypass",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            "    if (\n"
+            "        require_demonstrated_fix\n"
+            "        and decision.verdict == PASS\n"
+            '        and baseline_evidence["repair_effect"] != "demonstrated"\n'
+            "    ):\n"
+        ),
+        after=(
+            "    if (\n"
+            "        require_demonstrated_fix\n"
+            '        and baseline_evidence["repair_effect"] != "demonstrated"\n'
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_demonstrated_fix_optional_or_non_pass_returns_identity_without_reads"
+        ),
+    ),
+    Mutation(
+        name="demonstrated-fix-effect-comparison-inversion",
+        path="evoom_guard/application/decision_gates.py",
+        before=(
+            '        and baseline_evidence["repair_effect"] != "demonstrated"\n'
+        ),
+        after=(
+            '        and baseline_evidence["repair_effect"] == "demonstrated"\n'
+        ),
+        test=(
+            "tests/test_decision_gates_application.py::"
+            "test_demonstrated_repair_effect_preserves_pass_without_verdict_read"
+        ),
+    ),
+    Mutation(
         name="diff-coverage-cross-drive-path-crash",
         path="evoom_guard/evidence.py",
         before=(

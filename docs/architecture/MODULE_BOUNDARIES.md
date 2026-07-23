@@ -202,6 +202,16 @@ evidence for an optional floor or an earlier non-`PASS`. A pre-extraction
 characterization vector freezes decision text, access and exception order, and
 priority over the later demonstrated-fix and assurance gates.
 
+The fifth application slice adds
+`application.decision_gates.apply_demonstrated_fix_gate`. It owns only the
+demotion of the current decision when policy requires a demonstrated
+counterfactual repair and prepared baseline evidence does not report
+`repair_effect == "demonstrated"`. Baseline execution, repo-suite scope,
+repair-effect classification, and evidence annotation remain in Guard. The
+gate receives the current post-coverage decision so an earlier failure cannot
+be overwritten. Characterization freezes mapping access and exception order,
+the two established reason variants, and precedence before assurance.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

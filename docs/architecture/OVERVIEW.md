@@ -71,7 +71,10 @@ pure repo-native twelve-branch composer. Guard delegates that initial decision
 while retaining later demotions in their characterized order.
 `application/decision_gates.py` now owns the first post-decision gate: exact
 changed-line coverage evaluation. Guard still owns collection and invokes the
-pure gate at the historical point before demonstrated-fix and assurance.
+pure gate at the historical point before demonstrated-fix and assurance. The
+same application module owns demonstrated-fix demotion from already prepared
+baseline evidence; Guard retains baseline execution, repair-effect
+classification, and repo-suite scope.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
@@ -101,8 +104,7 @@ Internal workspace decomposition and the complete `application` verification
 pipeline remain pending.
 
 The immediate structural priority is Stage 8 in bounded characterized slices:
-extract the demonstrated-fix and assurance decision demotions before
-introducing a pipeline facade.
+extract the assurance decision demotion before introducing a pipeline facade.
 Small RepoVerifier and black-box responsibility slices can continue
 independently where their effect boundaries are already characterized. Every
 slice must retain the existing contract, mutation, differential, and
