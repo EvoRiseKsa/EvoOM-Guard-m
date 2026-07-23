@@ -13,8 +13,8 @@ import re
 import stat
 import struct
 import xml.etree.ElementTree as ET
-from typing import NamedTuple
 
+from evoom_guard.domain.verification import JUnitCounts
 from evoom_guard.verifiers.grading import fraction_score
 
 # pytest's summary line, e.g. "2 failed, 3 passed in 0.12s" / "1 error in 0.05s".
@@ -35,15 +35,6 @@ def parse_pytest_counts(output: str) -> tuple[int, int]:
     failed = sum(int(n) for n in _FAILED_RE.findall(text))
     errors = sum(int(n) for n in _ERROR_RE.findall(text))
     return passed, passed + failed + errors
-
-
-class JUnitCounts(NamedTuple):
-    """Authoritative test counts read from a pytest JUnit-XML report."""
-
-    passed: int
-    total: int
-    failures: int
-    errors: int
 
 
 def _count_testcases(root: ET.Element) -> JUnitCounts | None:

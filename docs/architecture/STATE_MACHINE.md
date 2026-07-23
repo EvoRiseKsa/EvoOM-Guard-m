@@ -19,6 +19,7 @@
 
 ## Result and reason states in refactor scope
 
+- `static_gate`
 - `not_started`
 - `started_incomplete`
 - `completed`
@@ -33,4 +34,3 @@
 
 State transitions are part of evidence and must remain serializable and
 backward-compatible with the existing schema versions.
-

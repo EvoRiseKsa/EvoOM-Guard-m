@@ -13,82 +13,21 @@ compose it so phase semantics can be tested independently of execution effects.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
 
+from evoom_guard.domain.verification import (
+    CompletedRunEvidence,
+    CompositePhaseResult,
+    JUnitCounts,
+    PackPhaseResult,
+    RepoPhaseResult,
+)
 from evoom_guard.verifiers.junit_oracle import (
     JUNIT_COMPOSITE_DIGEST_FORMAT,
     JUNIT_REPORT_SET_DIGEST_FORMAT,
     JUNIT_XML_DIGEST_FORMAT,
-    JUnitCounts,
     detect_tamper,
     grade_repo_run,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class CompletedRunEvidence:
-    """Evidence already collected for one completed judge command."""
-
-    returncode: int
-    junit: JUnitCounts | None
-    report_expected: bool
-    stdout: str
-    stderr: str
-    junit_text: str
-    junit_sha256: str | None
-    junit_digest_format: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class RepoPhaseResult:
-    """Interpreted repository-suite result before optional pack composition."""
-
-    passed: bool
-    score: float
-    tests_passed: int
-    tests_total: int
-    tampered: bool
-    output: str
-    verdict_source: str | None
-    outcome: str | None
-    returncode: int
-    junit_text: str
-    junit_sha256: str | None
-    junit_digest_format: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class PackPhaseResult:
-    """Interpreted mandatory verifier-pack result and output contribution."""
-
-    passed: bool
-    score: float
-    tests_passed: int
-    tests_total: int
-    tampered: bool
-    output_suffix: str
-    verdict_source: str | None
-    outcome: str | None
-    junit_text: str
-    junit_sha256: str | None
-    junit_digest_format: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class CompositePhaseResult:
-    """Top-level repository-plus-pack result with bound evidence identity."""
-
-    passed: bool
-    score: float
-    tests_passed: int
-    tests_total: int
-    tampered: bool
-    output: str
-    verdict_source: str | None
-    outcome: str | None
-    returncode: int
-    junit_sha256: str | None
-    junit_digest_format: str | None
 
 
 def clean_verdict_source(

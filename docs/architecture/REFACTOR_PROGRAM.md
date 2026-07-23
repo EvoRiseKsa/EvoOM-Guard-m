@@ -60,14 +60,18 @@ The merged characterization and gate slices include PRs #109, #114, #115,
 #122, and #132. The capture tools require explicit `--write` for reviewed
 baseline replacement.
 
-## Stage 3: Domain modeling (pending)
+## Stage 3: Domain modeling (in progress)
 
 - Split core contracts (`GuardRequest`, `ExecutionPhaseResult`, `VerificationEvidence`,
   `GuardDecision`) into `domain/` models.
 - Add mypy strict baseline for `domain/`.
 
-There is no `evoom_guard/domain/` package or strict domain-only mypy baseline
-yet.
+The first bounded slice moves the existing `JUnitCounts` and repository/pack
+phase evidence/result models into `domain/verification.py`. Legacy verifier
+paths re-export the same class objects, and CI/release run a dedicated
+`mypy --strict` gate for `domain/`. Broader request, verdict, assurance, and
+evidence contracts remain pending; this first slice does not claim Stage 3 is
+complete.
 
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
