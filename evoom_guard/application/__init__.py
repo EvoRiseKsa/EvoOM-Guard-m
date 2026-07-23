@@ -5,11 +5,13 @@ from evoom_guard.application.assurance import (
     assurance_shortfall,
 )
 from evoom_guard.application.attestation import build_attestation
+from evoom_guard.application.decision_gates import apply_diff_coverage_gate
 from evoom_guard.application.repo_decision import compose_repo_decision
 
 __all__ = [
     "assurance_profile",
     "assurance_shortfall",
+    "apply_diff_coverage_gate",
     "build_attestation",
     "compose_repo_decision",
 ]

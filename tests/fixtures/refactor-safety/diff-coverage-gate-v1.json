@@ -1,0 +1,957 @@
+{
+  "cases": {
+    "above_integer_floor": {
+      "assurance_shortfall_calls": 1,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total"
+      ],
+      "decision": {
+        "passed": true,
+        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason_code": "tests_passed",
+        "verdict": "PASS"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 81,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 81.0,
+          "total": 100
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "below_exact_float_ratio": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total",
+        "getitem:executed",
+        "getitem:total",
+        "getitem:percent"
+      ],
+      "decision": {
+        "passed": false,
+        "reason": "the suite passes but executed only 2/3 of the changed executable lines; the exact ratio is below the required 66.6667% (the evidence display rounds it to 66.7%) — the change is largely unexercised by the tests that judged it",
+        "reason_code": "diff_coverage_below_threshold",
+        "verdict": "FAIL"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 2,
+          "measured": true,
+          "note": "rounded display must not control the floor",
+          "percent": 66.7,
+          "total": 3
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 66.66666666666667,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "below_floor_precedes_later_gates": {
+      "assurance_shortfall_calls": 0,
+      "baseline": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "not_demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 1,
+        "tests_total": 1,
+        "verdict": "PASS"
+      },
+      "baseline_calls": 1,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total",
+        "getitem:executed",
+        "getitem:total",
+        "getitem:percent"
+      ],
+      "decision": {
+        "passed": false,
+        "reason": "the suite passes but executed only 0/1 of the changed executable lines; the exact ratio is below the required 100% (the evidence display rounds it to 0.0%) — the change is largely unexercised by the tests that judged it",
+        "reason_code": "diff_coverage_below_threshold",
+        "verdict": "FAIL"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 0,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 0.0,
+          "total": 1
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 100,
+        "require_demonstrated_fix": true,
+        "require_report_integrity": "external_process_isolated"
+      },
+      "result_coverage_is_source": true
+    },
+    "below_integer_floor": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total",
+        "getitem:executed",
+        "getitem:total",
+        "getitem:percent"
+      ],
+      "decision": {
+        "passed": false,
+        "reason": "the suite passes but executed only 79/100 of the changed executable lines; the exact ratio is below the required 80% (the evidence display rounds it to 79.0%) — the change is largely unexercised by the tests that judged it",
+        "reason_code": "diff_coverage_below_threshold",
+        "verdict": "FAIL"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 79,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 79.0,
+          "total": 100
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "equal_float_ratio": {
+      "assurance_shortfall_calls": 1,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total"
+      ],
+      "decision": {
+        "passed": true,
+        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason_code": "tests_passed",
+        "verdict": "PASS"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 1,
+          "measured": true,
+          "note": "exact binary float ratio",
+          "percent": 12.5,
+          "total": 8
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 12.5,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "equal_floor_allows_later_assurance_gate": {
+      "assurance_shortfall_calls": 1,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total"
+      ],
+      "decision": {
+        "passed": false,
+        "reason": "required report_integrity ≥ 'external_process_isolated' but the run delivered 'same_process_candidate_writable' (use --blackbox for external_process_isolated)",
+        "reason_code": "assurance_requirement_not_met",
+        "verdict": "ERROR"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 1,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 100.0,
+          "total": 1
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 100,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": "external_process_isolated"
+      },
+      "result_coverage_is_source": true
+    },
+    "equal_floor_allows_later_baseline_gate": {
+      "assurance_shortfall_calls": 0,
+      "baseline": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "not_demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 1,
+        "tests_total": 1,
+        "verdict": "PASS"
+      },
+      "baseline_calls": 1,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total"
+      ],
+      "decision": {
+        "passed": false,
+        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base already passes the same suite — --require-demonstrated-fix demands baseline FAIL → candidate PASS under an unchanged harness",
+        "reason_code": "fix_not_demonstrated",
+        "verdict": "FAIL"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 1,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 100.0,
+          "total": 1
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 100,
+        "require_demonstrated_fix": true,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "equal_integer_floor": {
+      "assurance_shortfall_calls": 1,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total"
+      ],
+      "decision": {
+        "passed": true,
+        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason_code": "tests_passed",
+        "verdict": "PASS"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 80,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 80.0,
+          "total": 100
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "malformed_executed_value": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed"
+      ],
+      "decision": null,
+      "exception": {
+        "message": "invalid literal for int() with base 10: 'not-an-integer'",
+        "type": "ValueError"
+      },
+      "inputs": {
+        "coverage": {
+          "executed": "not-an-integer",
+          "measured": true,
+          "percent": 0.0,
+          "total": 1
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": null
+    },
+    "malformed_measured_access": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured"
+      ],
+      "decision": null,
+      "exception": {
+        "message": "synthetic get failure: measured",
+        "type": "RuntimeError"
+      },
+      "inputs": {
+        "coverage": {
+          "executed": 80,
+          "measured": true,
+          "note": "synthetic measured coverage",
+          "percent": 80.0,
+          "total": 100
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": null
+    },
+    "malformed_missing_executed": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed"
+      ],
+      "decision": null,
+      "exception": {
+        "message": "'executed'",
+        "type": "KeyError"
+      },
+      "inputs": {
+        "coverage": {
+          "measured": true,
+          "percent": 0.0,
+          "total": 1
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": null
+    },
+    "optional_no_floor": {
+      "assurance_shortfall_calls": 1,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": false,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [],
+      "decision": {
+        "passed": true,
+        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason_code": "tests_passed",
+        "verdict": "PASS"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "measured": false,
+          "note": "optional measurement unavailable"
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": null,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "prior_error_does_not_collect_or_access": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [],
+      "coverage_access_trace": [],
+      "decision": {
+        "passed": false,
+        "reason": "synthetic setup failure",
+        "reason_code": "setup_failed",
+        "verdict": "ERROR"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": "must-not-be-read",
+          "measured": true,
+          "percent": "must-not-be-read",
+          "total": "must-not-be-read"
+        },
+        "initial_verdict": "ERROR",
+        "min_diff_coverage": 100,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": false
+    },
+    "prior_fail_collects_without_access": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": false,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [],
+      "decision": {
+        "passed": false,
+        "reason": "the repo's tests fail on this patch (0/1 passed)",
+        "reason_code": "tests_failed",
+        "verdict": "FAIL"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": "must-not-be-read",
+          "measured": true,
+          "percent": "must-not-be-read",
+          "total": "must-not-be-read"
+        },
+        "initial_verdict": "FAIL",
+        "min_diff_coverage": 100,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "required_unmeasured": {
+      "assurance_shortfall_calls": 0,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "get:note"
+      ],
+      "decision": {
+        "passed": false,
+        "reason": "required changed-line coverage could not be measured: required measurement unavailable",
+        "reason_code": "assurance_requirement_not_met",
+        "verdict": "ERROR"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "measured": false,
+          "note": "required measurement unavailable"
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 80.0,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    },
+    "total_zero": {
+      "assurance_shortfall_calls": 1,
+      "baseline": null,
+      "baseline_calls": 0,
+      "collector_calls": [
+        {
+          "candidate_argument_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "keywords": {
+            "deleted": [],
+            "file_blocks": null,
+            "mem_limit_mb": 1024,
+            "require_passing_suite": true,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "test_command": [
+              "python",
+              "-c",
+              "raise SystemExit(0)"
+            ],
+            "timeout": 120
+          },
+          "positional_count": 2,
+          "repo_argument_is_case_root": true
+        }
+      ],
+      "coverage_access_trace": [
+        "get:measured",
+        "getitem:executed",
+        "getitem:total"
+      ],
+      "decision": {
+        "passed": true,
+        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason_code": "tests_passed",
+        "verdict": "PASS"
+      },
+      "exception": null,
+      "inputs": {
+        "coverage": {
+          "executed": 0,
+          "measured": true,
+          "note": "no changed executable lines",
+          "percent": 100.0,
+          "total": 0
+        },
+        "initial_verdict": "PASS",
+        "min_diff_coverage": 100,
+        "require_demonstrated_fix": false,
+        "require_report_integrity": null
+      },
+      "result_coverage_is_source": true
+    }
+  },
+  "normalization": [],
+  "schema_version": "diff-coverage-gate-characterization-v1"
+}
