@@ -113,6 +113,17 @@
         "layer_violations": 0,
         "unclassified_modules": 26
       }
+    },
+    {
+      "revision": 7,
+      "ceilings": {
+        "cycle_edges": 0,
+        "cross_package_private_imports": 55,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 25
+      }
     }
   ],
   "violations": {
@@ -183,7 +194,6 @@
       "evoom_guard.artifact_digest_admission",
       "evoom_guard.blackbox",
       "evoom_guard.candidate_runner",
-      "evoom_guard.cli",
       "evoom_guard.contracts",
       "evoom_guard.evidence",
       "evoom_guard.evidence_bundle",

@@ -107,11 +107,14 @@ builder rather than mutating an untyped trace dictionary.
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package without splitting its security-sensitive globals.
+The flat CLI module has likewise been migrated byte-for-byte into the
+classified `cli/` package. Its parser and command families remain together in
+the compatibility `__init__` pending separately characterized extraction.
 Internal workspace decomposition and migration of effect sequencing out of
 Guard remain pending; the pure application decision pipeline is complete.
 
-The immediate structural priority is the next bounded Stage 8 slice: reduce a
-separately characterized Guard, RepoVerifier, black-box, or CLI effect
-responsibility without changing trust boundaries. Every slice must retain the
-existing contract, mutation, differential, and
+The immediate structural priority is the next bounded slice: extract the CLI
+parser/registry or reduce a separately characterized Guard, RepoVerifier, or
+black-box effect responsibility without changing trust boundaries. Every slice
+must retain the existing contract, mutation, differential, and
 architectural-boundary gates.

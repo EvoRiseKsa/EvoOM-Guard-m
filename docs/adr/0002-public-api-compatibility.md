@@ -1,7 +1,7 @@
 # ADR-0002 Public API compatibility first
 
 ## Decision
-Keep compatibility facades (`evoom_guard/cli.py`, `guard.py`, `record_verifier.py`,
+Keep compatibility facades (`evoom_guard/cli/__init__.py`, `guard.py`, `record_verifier.py`,
 `trusted_finalizer.py`) as stable export points during refactor.
 
 ## Rationale
