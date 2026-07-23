@@ -10,9 +10,11 @@ Agent Change Admission is an experimental admission profile for one exact
 change proposed by an automated agent. It does not trust the agent to define
 the scope it may change, and it does not turn an agent's claims into facts.
 
-This implementation is a **v4.3 candidate on a feature branch**. It is not in
-the immutable v4.2.0 release, is not enabled as a required check in this
-repository, and has no production or independent-pilot claim.
+This implementation is an **unreleased v4.3 candidate in
+[#147](https://github.com/EvoRiseKsa/EvoOM-Guard-m/pull/147)**. It is not in
+the immutable v4.2.0 release and is not enabled as a required check in this
+repository. A bounded public same-owner pilot has completed; that evidence is
+not a production or independent-validation claim.
 
 ## The decision being made
 
@@ -117,9 +119,39 @@ reviewer policy, and signing key with the same care as a merge gate. Existing
 Trusted Finalizer deployment requirements still apply; see
 [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md).
 
+## Observed public pilot
+
+The public
+[`evoom-guard-agent-change-pilot`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
+exercised this candidate through protected GitHub Environments and two
+same-owner accounts. The exact inputs, retained digests, local offline checks,
+and limitations are recorded in
+[`PILOT_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/blob/main/PILOT_RESULTS.md).
+
+Three observations are fixed in that record:
+
+1. [run 29983466826](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/actions/runs/29983466826)
+   admitted one exact `calc/ops.py` change after separate authorization and
+   finalizer approvals. Its retained `.evb` independently verified as
+   `ALLOW`.
+2. [run 29983731021](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/actions/runs/29983731021)
+   rejected a candidate that also tracked `dist/hidden.txt`. Guard's
+   candidate-copy optimization ignored that path, but authoritative raw-Git
+   derivation retained it. Authorization failed before signing, finalization
+   was skipped, and no `.aca` or `.evb` artifact was published.
+3. [run 29983835620](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/actions/runs/29983835620)
+   replayed the unchanged permitted base/head pair. The raw-Git binding bytes
+   remained identical while the signed artifacts were bound to the new run
+   identity, confirming V1 idempotency rather than single-use semantics.
+
+Both GitHub accounts are controlled by the same owner. The result tests
+permissions, approvals, artifact flow, fail-closed path derivation, and
+detached verification. It is not independent review, proof of arbitrary
+hostile-code isolation, or a production merge gate.
+
 ## CLI surface
 
-The candidate branch exposes five profile commands:
+The unreleased candidate exposes five profile commands:
 
 - `validate-agent-change-proposal`
 - `derive-agent-change-bindings`
@@ -156,9 +188,11 @@ configured SHA-256 pin. Stable executable snapshotting is currently a POSIX
 finalizer requirement; Windows remains suitable for development tests, not
 for the protected sealing boundary.
 
-The current repository evidence is implementation and test evidence for a
-candidate contract. Before enforcement, the profile still needs a protected
-consumer workflow, positive and negative two-account pilot rounds, operational
-replay testing, and a review of the exact GitHub ruleset behavior. A future
-release must use a new immutable tag and regenerated release evidence; this
-document does not move or redefine v4.2.0.
+The public pilot supplies bounded protected-workflow, positive, ignored-path
+negative, and exact-change replay evidence. Before production enforcement, the
+profile still needs an independently controlled consumer, a reviewed
+hostile-code isolation boundary, explicit authorization revocation/single-use
+requirements where needed, and validation of the exact production ruleset and
+failure-recovery behavior. A future release must use a new immutable tag and
+regenerated release evidence; this document does not move or redefine
+v4.2.0.

@@ -39,9 +39,11 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Known limitations
 
-- This is an unpublished feature-branch candidate, not part of immutable
-  v4.2.0 and not an enabled merge gate. It has implementation tests but no live
-  protected consumer pilot or independent validation yet.
+- This is an unpublished candidate, not part of immutable v4.2.0 and not an
+  enabled merge gate. A bounded public same-owner pilot completed one
+  permitted change, one ignored tracked-path rejection before signing, and one
+  exact-change replay with independent offline bundle verification. It is not
+  independent validation or production evidence.
 - The profile is an admission contract, not ML, risk prediction, policy
   selection, or a code-healing engine. It does not prove correctness beyond
   the configured Guard judge and evidence boundary.
