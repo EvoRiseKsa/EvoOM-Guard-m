@@ -17,13 +17,12 @@ evidence used to judge it. Guard still focuses on one narrow question:
 - **Immutable `v4.3.0` consumer release** — the published zipapp is pinned by
   its release `SHA256SUMS` and has a GitHub build-artifact attestation. This is
   publication/provenance evidence, not a newly captured behavioral baseline or
-  an independent security review. Its exact observed post-publication identity,
-  asset bytes, provenance, Marketplace version, and successful tag CI are
-  not yet frozen in a post-publication ledger. The latest committed exact
-  release ledger remains the historical
-  [`tests/baseline/v4.2.0/`](tests/baseline/v4.2.0/) record until the v4.3.0
-  release is independently re-queried and committed. Neither ledger substitutes
-  for the still-pending live Release Artifact Admission V1 E/F/G pilot.
+  an independent security review. Its independently re-queried
+  post-publication identity, exact asset bytes, provenance, Marketplace
+  propagation, and successful tag CI are frozen in
+  [`tests/baseline/v4.3.0/`](tests/baseline/v4.3.0/). This minimal ledger is not
+  Agent Change Admission pilot evidence and does not substitute for the
+  still-pending live Release Artifact Admission V1 E/F/G pilot.
 
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
