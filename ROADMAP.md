@@ -14,14 +14,16 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Shipped today
 
-- **Immutable `v4.2.0` consumer release** — the published zipapp is pinned by
+- **Immutable `v4.3.0` consumer release** — the published zipapp is pinned by
   its release `SHA256SUMS` and has a GitHub build-artifact attestation. This is
   publication/provenance evidence, not a newly captured behavioral baseline or
   an independent security review. Its exact observed post-publication identity,
   asset bytes, provenance, Marketplace version, and successful tag CI are
-  frozen in [`tests/baseline/v4.2.0/`](tests/baseline/v4.2.0/). This ledger does
-  not substitute for the still-pending live Release Artifact Admission V1 E/F/G
-  pilot.
+  not yet frozen in a post-publication ledger. The latest committed exact
+  release ledger remains the historical
+  [`tests/baseline/v4.2.0/`](tests/baseline/v4.2.0/) record until the v4.3.0
+  release is independently re-queried and committed. Neither ledger substitutes
+  for the still-pending live Release Artifact Admission V1 E/F/G pilot.
 
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
@@ -79,17 +81,15 @@ evidence used to judge it. Guard still focuses on one narrow question:
   exact source-only V2 round; this does not make the mechanism a production
   gate or authorize any artifact or publication.
 
-## Source candidate with bounded operational evidence
-
-- **Agent Change Admission V1** — the `v4.3.0` source candidate separates an
+- **Agent Change Admission V1** — published in `v4.3.0`, this profile separates an
   untrusted automated-agent proposal from a distinct signed authorization,
   independently re-derived raw-Git facts, and a Trusted Finalizer `ALLOW`.
   The public same-owner pilot admitted one exact bounded change, rejected an
   additional ignored tracked path before signing, and replayed the unchanged
   base/head pair with identical Git binding bytes and fresh run-bound
-  signatures. It is not yet a published consumer release, production merge
-  gate, hostile-code isolation proof, single-use grant, code healer, or
-  independent validation.
+  signatures. Publication does not make it a production merge gate,
+  hostile-code isolation proof, single-use grant, code healer, or independent
+  validation.
 
 ## Implemented contract awaiting operational evidence
 
