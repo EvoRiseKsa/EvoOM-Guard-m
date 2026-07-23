@@ -149,6 +149,43 @@ def test_reader_start_failure_kills_and_reaps_git_without_masking_primary(
     assert failed_stream.close_calls == 0
 
 
+def test_reader_join_clamps_floating_point_deadline_overshoot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monotonic_value = 127.99045836929314
+    assert (
+        monotonic_value
+        + finalizer_derivation._GIT_READER_JOIN_SECONDS
+        - monotonic_value
+        > finalizer_derivation._GIT_READER_JOIN_SECONDS
+    )
+
+    class ControlledThread:
+        def __init__(self) -> None:
+            self.join_timeouts: list[float] = []
+
+        def join(self, timeout: float) -> None:
+            self.join_timeouts.append(timeout)
+
+        def is_alive(self) -> bool:
+            return False
+
+    reader = ControlledThread()
+    stream = _TrackingStream()
+    monkeypatch.setattr(
+        finalizer_derivation.time,
+        "monotonic",
+        lambda: monotonic_value,
+    )
+
+    assert finalizer_derivation._join_and_close_git_readers(  # type: ignore[arg-type]
+        [reader],
+        [stream],
+    )
+    assert reader.join_timeouts == [finalizer_derivation._GIT_READER_JOIN_SECONDS]
+    assert stream.close_calls == 1
+
+
 def test_reader_constructor_failure_cleans_git_child(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

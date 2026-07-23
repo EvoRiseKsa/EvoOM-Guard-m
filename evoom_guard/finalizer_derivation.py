@@ -636,7 +636,8 @@ def _join_and_close_git_readers(
     deadline = time.monotonic() + _GIT_READER_JOIN_SECONDS
     for reader in readers:
         try:
-            reader.join(max(0.0, deadline - time.monotonic()))
+            remaining = max(0.0, deadline - time.monotonic())
+            reader.join(min(_GIT_READER_JOIN_SECONDS, remaining))
             stopped.append(not reader.is_alive())
         except BaseException as exc:
             # Thread.start() can raise after a native thread may exist. A join
