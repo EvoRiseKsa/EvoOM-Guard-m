@@ -83,9 +83,9 @@ evidence used to judge it. Guard still focuses on one narrow question:
 - **Agent Change Admission V1** — published in `v4.3.0`, this profile separates an
   untrusted automated-agent proposal from a distinct signed authorization,
   independently re-derived raw-Git facts, and a Trusted Finalizer `ALLOW`.
-  The public same-owner pilot admitted one exact bounded change, rejected an
-  additional ignored tracked path before signing, and replayed the unchanged
-  base/head pair with identical Git binding bytes and fresh run-bound
+  The archived public same-owner pilot admitted one exact bounded change,
+  rejected an additional ignored tracked path before signing, and replayed the
+  unchanged base/head pair with identical Git binding bytes and fresh run-bound
   signatures. Publication does not make it a production merge gate,
   hostile-code isolation proof, single-use grant, code healer, or independent
   validation.
@@ -107,6 +107,7 @@ evidence used to judge it. Guard still focuses on one narrow question:
 ## Operational evidence completed
 
 - The
+  archived
   [`Agent Change Admission pilot`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
   retained permitted run `29983466826`, ignored tracked-path rejection
   `29983731021`, and exact-change replay `29983835620`. The positive and replay

@@ -14,7 +14,7 @@ release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
 provides a release attestation for the immutable release and a separate GitHub
 Actions build-artifact attestation for those bytes.
 
-The `v4.3.0` release adds Agent Change Admission V1. Its public
+The `v4.3.0` release adds Agent Change Admission V1. Its archived public
 same-owner pilot retained one permitted run, one ignored tracked-path
 rejection before signing, and one exact-change replay with detached offline
 verification. This release is the bootstrap publication of that profile: it

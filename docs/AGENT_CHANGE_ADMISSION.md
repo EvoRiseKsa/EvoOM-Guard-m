@@ -13,8 +13,8 @@ the scope it may change, and it does not turn an agent's claims into facts.
 This implementation is published in the immutable **v4.3.0** release after
 [#147](https://github.com/EvoRiseKsa/EvoOM-Guard-m/pull/147). It was not part
 of the historical v4.2.0 release and is not enabled as a required check in
-this repository. A bounded public same-owner pilot has completed; that
-evidence is not a production or independent-validation claim.
+this repository. A bounded public same-owner pilot has completed and is
+archived; that evidence is not a production or independent-validation claim.
 
 ## The decision being made
 
@@ -121,7 +121,7 @@ Trusted Finalizer deployment requirements still apply; see
 
 ## Observed public pilot
 
-The public
+The archived public
 [`evoom-guard-agent-change-pilot`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
 exercised this candidate through protected GitHub Environments and two
 same-owner accounts. The exact inputs, retained digests, local offline checks,
