@@ -71,15 +71,10 @@ from evoom_guard.application.assurance import (
 from evoom_guard.application.attestation import (
     build_attestation as _build_attestation_payload,
 )
-from evoom_guard.application.decision_gates import (
-    apply_assurance_gate,
-    apply_demonstrated_fix_gate,
-    apply_diff_coverage_gate,
-)
+from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
     TAMPER_OUTCOME_REASON_POLICY,
-    compose_repo_decision,
 )
 from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
 from evoom_guard.domain import (
@@ -1094,12 +1089,13 @@ def guard(
             test_command_started=test_started_bx,
             pack_evidence=pack_evidence_bx,
         )
-        current_decision_bx = apply_assurance_gate(
+        decision_pipeline_bx = VerificationPipeline.from_decision(
             GuardDecision(
                 verdict=v_bx,
                 reason_code=code_bx,
                 reason=reason_bx,
-            ),
+            )
+        ).apply_assurance(
             assurance=assurance_bx,
             execution_state=execution_state_bx,
             execution_requested=True,
@@ -1108,6 +1104,7 @@ def guard(
             shortfall_evaluator=_assurance_shortfall,
             eager_shortfall=True,
         )
+        current_decision_bx = decision_pipeline_bx.decision
         v_bx = current_decision_bx.verdict
         code_bx = current_decision_bx.reason_code
         reason_bx = current_decision_bx.reason
@@ -1247,7 +1244,7 @@ def guard(
             rmap[d] = (0, len(base.splitlines()))
     risk = risk_score(rmap, protected=_PROTECTED_GLOBS + tuple(protected))
 
-    initial_decision = compose_repo_decision(
+    decision_pipeline = VerificationPipeline.from_repo_facts(
         has_changes=bool(all_touched),
         unsafe_paths=unsafe,
         protected_violations=violations,
@@ -1257,6 +1254,7 @@ def guard(
         diagnostics=diagnostics,
         evidence=verification_evidence,
     )
+    initial_decision = decision_pipeline.decision
     current_decision = initial_decision
     v = current_decision.verdict
     code = current_decision.reason_code
@@ -1307,11 +1305,11 @@ def guard(
                 core_verdict_passed and min_diff_coverage is not None
             ),
         )
-        current_decision = apply_diff_coverage_gate(
-            current_decision,
+        decision_pipeline = decision_pipeline.apply_diff_coverage(
             coverage_evidence=coverage_evidence,
             min_diff_coverage=min_diff_coverage,
         )
+        current_decision = decision_pipeline.decision
         v = current_decision.verdict
         code = current_decision.reason_code
         reason = current_decision.reason
@@ -1360,11 +1358,11 @@ def guard(
             "candidate passed. A verifier pack (if any) is exercised only on "
             "the candidate run — see scope."
         )
-        current_decision = apply_demonstrated_fix_gate(
-            current_decision,
+        decision_pipeline = decision_pipeline.apply_demonstrated_fix(
             baseline_evidence=baseline_info,
             require_demonstrated_fix=require_demonstrated_fix,
         )
+        current_decision = decision_pipeline.decision
         v = current_decision.verdict
         code = current_decision.reason_code
         reason = current_decision.reason
@@ -1470,8 +1468,7 @@ def guard(
         if run_suite
         else _static_assurance_profile(verifier_pack)
     )
-    current_decision = apply_assurance_gate(
-        current_decision,
+    decision_pipeline = decision_pipeline.apply_assurance(
         assurance=assurance,
         execution_state=execution_state,
         execution_requested=run_suite,
@@ -1480,6 +1477,7 @@ def guard(
         shortfall_evaluator=_assurance_shortfall,
         eager_shortfall=False,
     )
+    current_decision = decision_pipeline.decision
     v = current_decision.verdict
     code = current_decision.reason_code
     reason = current_decision.reason
