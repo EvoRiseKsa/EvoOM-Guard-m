@@ -166,6 +166,18 @@ demonstrated-fix, assurance demotions, black-box decisions, evidence
 serialization, and effects remain in their existing owners until separately
 characterized slices.
 
+The second application slice adds immutable
+`domain.assurance.AssuranceProfile` and `VerifierPackAssurance` values.
+`application.assurance` is the pure owner of delivered profile construction,
+verifier-pack assurance interpretation, and minimum-assurance comparison. It
+imports only the domain package and the standard library. Guard retains exact
+aliases for `_assurance_profile`, `_preflight_assurance_profile`,
+`_static_assurance_profile`, `_pack_assurance`, and `_assurance_shortfall`.
+The established dictionary wire shape is projected only at this compatibility
+boundary; black-box versus repo-native key presence is frozen by a
+pre-extraction characterization vector. Attestation assembly, later decision
+demotions, and all runtime effects remain outside this slice.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

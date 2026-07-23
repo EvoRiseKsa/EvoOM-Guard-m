@@ -1,5 +1,6 @@
 """Public dependency-free domain contracts."""
 
+from evoom_guard.domain.assurance import AssuranceProfile, VerifierPackAssurance
 from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.evidence import (
     IsolationPayloadEvidence,
@@ -25,6 +26,7 @@ from evoom_guard.domain.verification import (
 )
 
 __all__ = [
+    "AssuranceProfile",
     "CompletedRunEvidence",
     "CompositePhaseResult",
     "CandidateInput",
@@ -42,5 +44,6 @@ __all__ = [
     "RuntimeIdentityEvidence",
     "SourceIdentity",
     "VerificationEvidence",
+    "VerifierPackAssurance",
     "VerifierPackEvidence",
 ]

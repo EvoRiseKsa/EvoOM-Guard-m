@@ -69,7 +69,13 @@ paths no longer inspect the raw artifact mapping. `domain/decision.py` now owns
 the immutable core `GuardDecision`, and `application/repo_decision.py` owns the
 pure repo-native twelve-branch composer. Guard delegates that initial decision
 while retaining later diff-coverage, demonstrated-fix, and assurance demotions
-in their characterized order. Broader assurance domain models remain pending.
+in their characterized order. `domain/assurance.py` now owns immutable
+delivered-assurance and verifier-pack values, while
+`application/assurance.py` owns pure profile construction and floor
+evaluation. Guard keeps exact private compatibility aliases and the frozen
+pre-extraction assurance vector proves unchanged schema-1.11 payloads and
+diagnostics. This completes the dependency-closed Stage 3 contracts; it does
+not complete Stage 8 orchestration.
 The first
 `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
@@ -85,8 +91,9 @@ The flat workspace module has been migrated atomically into the classified
 Internal workspace decomposition and the complete `application` verification
 pipeline remain pending.
 
-The immediate structural priority is to continue Stage 3 only with
-dependency-closed contracts, followed by small characterized slices for those
-remaining RepoVerifier and black-box responsibilities. Each slice must retain
-the existing contract, mutation, differential, and architectural-boundary
-gates.
+The immediate structural priority is Stage 8 in bounded characterized slices:
+extract attestation assembly and the remaining decision demotions before
+introducing a pipeline facade. Small RepoVerifier and black-box responsibility
+slices can continue independently where their effect boundaries are already
+characterized. Every slice must retain the existing contract, mutation,
+differential, and architectural-boundary gates.

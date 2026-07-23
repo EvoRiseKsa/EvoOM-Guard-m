@@ -60,17 +60,16 @@ The merged characterization and gate slices include PRs #109, #114, #115,
 #122, and #132. The capture tools require explicit `--write` for reviewed
 baseline replacement.
 
-## Stage 3: Domain modeling (in progress)
+## Stage 3: Domain modeling (completed)
 
 - Split core contracts (`GuardRequest`, `ExecutionPhaseResult`, `VerificationEvidence`,
   `GuardDecision`) into `domain/` models.
 - Add mypy strict baseline for `domain/`.
 
-The first bounded slice moves the existing `JUnitCounts` and repository/pack
+The first bounded slice moved the existing `JUnitCounts` and repository/pack
 phase evidence/result models into `domain/verification.py`. Legacy verifier
 paths re-export the same class objects, and CI/release run a dedicated
-`mypy --strict` gate for `domain/`. Broader request, verdict, assurance, and
-evidence contracts remain pending.
+`mypy --strict` gate for `domain/`.
 
 The second bounded slice moves frozen verdict, execution-lifecycle, and reason
 semantics into `domain/verdict.py`. The versioned
@@ -119,7 +118,22 @@ freezes the existing twelve-branch priority, including partial-artifact
 presence semantics, score boundaries, and exact reason text. Guard delegates
 that initial decision without moving later diff-coverage, demonstrated-fix,
 or assurance demotions. Black-box composition remains on its characterized
-compatibility path. Assurance remains pending, so Stage 3 is still in progress.
+compatibility path.
+
+The eighth bounded slice adds immutable `AssuranceProfile` and
+`VerifierPackAssurance` values plus the pure `application.assurance` owner for
+delivered-assurance construction and floor evaluation. The historical Guard
+private names remain exact aliases. A frozen vector captured from the
+pre-extraction implementation compares every established payload key, note,
+pack lifecycle state, and shortfall diagnostic:
+`python tools/ci/capture_assurance_characterization.py`.
+
+Stage 3 is complete at the domain-contract boundary: request, policy,
+verification/evidence, execution, decision, and assurance values are now
+dependency-closed and strict-typed. This does **not** mean the orchestration
+refactor is complete. Diff-coverage and demonstrated-fix demotions,
+black-box composition, attestation assembly, and effect sequencing still
+belong to their characterized legacy facades until Stage 8 slices move them.
 
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
@@ -156,9 +170,10 @@ compatibility path. Assurance remains pending, so Stage 3 is still in progress.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining effectful RepoVerifier responsibilities.
-- Pending: extend the first application decision composer into a complete
-  pipeline (`VerificationPipeline`, `AssuranceEvaluator`, `AttestationBuilder`)
-  with shadow-mode differential coverage.
+- Assurance evaluation is now owned by `application.assurance`; pending:
+  extend the application composers into a complete pipeline
+  (`VerificationPipeline`, remaining decision demotions, and
+  `AttestationBuilder`) with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 
@@ -167,7 +182,8 @@ compatibility path. Assurance remains pending, so Stage 3 is still in progress.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.
 - Add strict type/architecture/mutation gates and external red-team stage.
-  Architecture and bounded mutation gates exist; strict domain typing and an
+  Architecture, bounded mutation, and strict `domain/` plus `application/`
+  typing gates exist; strict typing of the entire package and an independent
   external red-team result do not.
 - Finalize artifact-bound admission after stable core + external evidence. The
   end-to-end protected build → attestation → admission chain is not complete.

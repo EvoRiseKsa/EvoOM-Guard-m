@@ -1,0 +1,389 @@
+{
+  "cases": {
+    "pack": {
+      "blackbox_same_host": {
+        "configured": true,
+        "execution_state": "started_incomplete",
+        "identity_verified": true,
+        "integrity": "verified_snapshot_pre_execution",
+        "present": true,
+        "secrecy": "reachable_same_host",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "blackbox_without_candidate_invocation": {
+        "configured": true,
+        "execution_state": "started_incomplete",
+        "identity_verified": true,
+        "integrity": "verified_snapshot_pre_execution",
+        "present": true,
+        "secrecy": "not_evaluated_no_candidate_execution",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "completed_blackbox_gvisor": {
+        "configured": true,
+        "execution_state": "completed",
+        "identity_verified": true,
+        "integrity": "verified_snapshot_pre_post",
+        "present": true,
+        "secrecy": "unmounted_from_candidate",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "completed_repo_docker": {
+        "configured": true,
+        "execution_state": "completed",
+        "identity_verified": true,
+        "integrity": "verified_snapshot_read_only",
+        "present": true,
+        "secrecy": "readable_in_judge_process",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "configured_without_evidence": {
+        "configured": true,
+        "execution_state": "not_started",
+        "identity_verified": null,
+        "integrity": "not_evaluated",
+        "present": null,
+        "secrecy": "not_evaluated_no_execution",
+        "snapshot_sha256": null
+      },
+      "identity_mismatch": {
+        "configured": true,
+        "execution_state": "not_started",
+        "identity_verified": false,
+        "integrity": "snapshot_identity_mismatch",
+        "present": true,
+        "secrecy": "not_evaluated_no_execution",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "invalid": {
+        "configured": true,
+        "execution_state": "not_started",
+        "identity_verified": null,
+        "integrity": "invalid",
+        "present": true,
+        "secrecy": "not_evaluated_no_execution",
+        "snapshot_sha256": null
+      },
+      "missing": {
+        "configured": true,
+        "execution_state": "not_started",
+        "identity_verified": null,
+        "integrity": "not_evaluated_missing",
+        "present": false,
+        "secrecy": "not_evaluated_no_execution",
+        "snapshot_sha256": null
+      },
+      "not_configured": null,
+      "snapshot_accepted_not_started": {
+        "configured": true,
+        "execution_state": "not_started",
+        "identity_verified": true,
+        "integrity": "verified_snapshot_pre_execution",
+        "present": true,
+        "secrecy": "not_evaluated_no_execution",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "snapshot_changed": {
+        "configured": true,
+        "execution_state": "not_started",
+        "identity_verified": false,
+        "integrity": "snapshot_changed",
+        "present": true,
+        "secrecy": "not_evaluated_no_execution",
+        "snapshot_sha256": "sha256:pack"
+      },
+      "started_incomplete": {
+        "configured": true,
+        "execution_state": "started_incomplete",
+        "identity_verified": true,
+        "integrity": "verified_snapshot_pre_execution",
+        "present": true,
+        "secrecy": "readable_in_judge_process",
+        "snapshot_sha256": null
+      }
+    },
+    "preflight": {
+      "default": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "preflight",
+        "execution_state": "not_started",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "runtime verification did not start a test command (furthest phase: preflight); no candidate isolation or report-integrity boundary is claimed. Requested policy remains in attestation.effective_policy.",
+        "overall_profile": "preflight",
+        "report_integrity": "not_applicable_not_run",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": null
+      },
+      "incomplete_setup": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "setup",
+        "execution_state": "started_incomplete",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "runtime verification did not start a test command (furthest phase: setup); no candidate isolation or report-integrity boundary is claimed. Requested policy remains in attestation.effective_policy.",
+        "overall_profile": "execution_incomplete_before_tests",
+        "report_integrity": "not_applicable_not_run",
+        "runtime_continuity": "same_runtime",
+        "setup_isolation": "subprocess_host_opt_in",
+        "suite_isolation": "not_run",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "not_started",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_execution",
+          "present": true,
+          "secrecy": "not_evaluated_no_execution",
+          "snapshot_sha256": "sha256:pack"
+        }
+      }
+    },
+    "profile": {
+      "blackbox_composed": {
+        "candidate_isolation": "docker",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The required repo-native phase has same_process_candidate_writable report integrity, so the composite reports that weaker level; use --blackbox-only when an external_process_isolated floor is required. candidate_isolation is what was OBSERVED during a launcher invocation ('docker'); preparing 'docker' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "composite_blackbox_repo_native",
+        "repo_native_suite": "composed_completed",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "docker",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "unmounted_from_candidate",
+          "snapshot_sha256": null
+        }
+      },
+      "blackbox_docker_observed": {
+        "candidate_isolation": "docker",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('docker'); preparing 'docker' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "docker",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "unmounted_from_candidate",
+          "snapshot_sha256": null
+        }
+      },
+      "blackbox_incomplete": {
+        "candidate_isolation": "docker",
+        "execution_phase": "blackbox_judge",
+        "execution_state": "started_incomplete",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('docker'); preparing 'docker' alone is not evidence. A container boundary also removes the pack from the candidate's reach. Execution did not complete, so no clean verdict source is claimed. See docs/BLACKBOX.md.",
+        "overall_profile": "execution_incomplete",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "docker",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "started_incomplete",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_execution",
+          "present": true,
+          "secrecy": "unmounted_from_candidate",
+          "snapshot_sha256": "sha256:pack"
+        }
+      },
+      "blackbox_required_short_circuit": {
+        "candidate_isolation": "gvisor",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The repo-native phase remained required by policy but did not become an executed report channel; the required pipeline stopped in state 'required_not_run_pack_failure'. candidate_isolation is what was OBSERVED during a launcher invocation ('gvisor'); preparing 'gvisor' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "blackbox_composite_short_circuit",
+        "repo_native_suite": "required_not_run_pack_failure",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "gvisor",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "unmounted_from_candidate",
+          "snapshot_sha256": null
+        }
+      },
+      "blackbox_subprocess": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "The black-box phase has external_process_isolated report integrity: its judge-owned pytest does not import the candidate, so candidate report/exit forgery cannot reach that phase. The black-box phase is the only required report channel. candidate_isolation is what was OBSERVED during a launcher invocation ('subprocess'); preparing 'subprocess' alone is not evidence. A container boundary also removes the pack from the candidate's reach. See docs/BLACKBOX.md.",
+        "overall_profile": "black_box_external_judge",
+        "repo_native_suite": "not_required_blackbox_only",
+        "report_integrity": "external_process_isolated",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_pre_post",
+          "present": true,
+          "secrecy": "reachable_same_host",
+          "snapshot_sha256": null
+        }
+      },
+      "not_started": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "candidate_prepare",
+        "execution_state": "not_started",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "runtime verification did not start a test command (furthest phase: candidate_prepare); no candidate isolation or report-integrity boundary is claimed. Requested policy remains in attestation.effective_policy.",
+        "overall_profile": "preflight",
+        "report_integrity": "not_applicable_not_run",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "not_started",
+          "identity_verified": null,
+          "integrity": "not_evaluated",
+          "present": null,
+          "secrecy": "not_evaluated_no_execution",
+          "snapshot_sha256": null
+        }
+      },
+      "repo_docker": {
+        "candidate_isolation": "docker",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "isolated_repo_native",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "docker",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "completed",
+          "identity_verified": true,
+          "integrity": "verified_snapshot_read_only",
+          "present": true,
+          "secrecy": "readable_in_judge_process",
+          "snapshot_sha256": null
+        }
+      },
+      "repo_host_setup": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "mixed_host_setup_repo_native",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "same_runtime",
+        "setup_isolation": "subprocess_host_opt_in",
+        "suite_isolation": "docker",
+        "verifier_pack": null
+      },
+      "repo_subprocess": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "complete",
+        "execution_state": "completed",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "report_integrity is same_process_candidate_writable: a determined in-process patch can forge the JUnit report and exit code together. Guard blocks the harness edits/deletions and stdout forgery agents do in practice; it does not stop deliberate process-level forgery in source. The container modes isolate the host, not the report. Use --blackbox for external_process_isolated. See docs/ASSURANCE.md.",
+        "overall_profile": "repo_native_same_process",
+        "report_integrity": "same_process_candidate_writable",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "subprocess",
+        "verifier_pack": null
+      },
+      "test_command_not_started": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "setup",
+        "execution_state": "started_incomplete",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "runtime verification did not start a test command (furthest phase: setup); no candidate isolation or report-integrity boundary is claimed. Requested policy remains in attestation.effective_policy.",
+        "overall_profile": "execution_incomplete_before_tests",
+        "report_integrity": "not_applicable_not_run",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "not_started",
+          "identity_verified": null,
+          "integrity": "not_evaluated",
+          "present": null,
+          "secrecy": "not_evaluated_no_execution",
+          "snapshot_sha256": null
+        }
+      }
+    },
+    "shortfall": {
+      "blackbox_meets_floors": null,
+      "isolation_below_floor": "required candidate_isolation ≥ 'docker' but the run used 'subprocess'",
+      "none_required": null,
+      "report_below_floor": "required report_integrity ≥ 'external_process_isolated' but the run delivered 'same_process_candidate_writable' (use --blackbox for external_process_isolated)",
+      "unknown_isolation": "unknown --require-candidate-isolation value: 'unknown'",
+      "unknown_report": "unknown --require-report-integrity value: 'unknown'"
+    },
+    "static": {
+      "with_pack": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "pre_gate",
+        "execution_state": "static_gate",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "the diff pre-gate decided this result before candidate execution; no test command, runtime boundary, report channel, setup, or verifier pack was exercised. Requested runtime policy is recorded only in attestation.effective_policy.",
+        "overall_profile": "static_gate",
+        "report_integrity": "not_applicable_static_gate",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": {
+          "configured": true,
+          "execution_state": "static_gate",
+          "identity_verified": null,
+          "integrity": "not_evaluated_static_gate",
+          "present": null,
+          "secrecy": "not_evaluated_static_gate",
+          "snapshot_sha256": null
+        }
+      },
+      "without_pack": {
+        "candidate_isolation": "not_run",
+        "execution_phase": "pre_gate",
+        "execution_state": "static_gate",
+        "harness_integrity": "pre_gate_enforced",
+        "note": "the diff pre-gate decided this result before candidate execution; no test command, runtime boundary, report channel, setup, or verifier pack was exercised. Requested runtime policy is recorded only in attestation.effective_policy.",
+        "overall_profile": "static_gate",
+        "report_integrity": "not_applicable_static_gate",
+        "runtime_continuity": "not_applicable",
+        "setup_isolation": null,
+        "suite_isolation": "not_run",
+        "verifier_pack": null
+      }
+    }
+  },
+  "normalization": [],
+  "schema_version": "assurance-characterization-v1"
+}
