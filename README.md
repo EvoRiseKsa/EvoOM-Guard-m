@@ -86,7 +86,7 @@ correctness or security.
 > **Agent Change Admission v4.3.0.** The published
 > [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) separates an
 > untrusted agent proposal from signed scope, independently re-derived raw-Git
-> facts, and a Trusted Finalizer `ALLOW`. The public
+> facts, and a Trusted Finalizer `ALLOW`. The archived public
 > [same-owner pilot](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
 > completed one permitted round, rejected an additional tracked
 > `dist/hidden.txt` path before signing, and replayed the unchanged permitted
