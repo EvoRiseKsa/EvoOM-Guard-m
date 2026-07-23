@@ -71,7 +71,10 @@ from evoom_guard.application.assurance import (
 from evoom_guard.application.attestation import (
     build_attestation as _build_attestation_payload,
 )
-from evoom_guard.application.decision_gates import apply_diff_coverage_gate
+from evoom_guard.application.decision_gates import (
+    apply_demonstrated_fix_gate,
+    apply_diff_coverage_gate,
+)
 from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
     TAMPER_OUTCOME_REASON_POLICY,
@@ -96,7 +99,6 @@ from evoom_guard.domain.verdict import (
     REASON_BINARY_PATCH,
     REASON_CANDIDATE_NOT_EXERCISED,
     REASON_EMPTY_DIFF,
-    REASON_FIX_NOT_DEMONSTRATED,
     REASON_JUNIT_EXIT_MISMATCH,
     REASON_NO_TEST_VERDICT,
     REASON_NO_VERIFIABLE_CHANGES,
@@ -121,6 +123,9 @@ from evoom_guard.domain.verdict import (
 )
 from evoom_guard.domain.verdict import (
     REASON_DIFF_COVERAGE_BELOW_THRESHOLD as REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
+)
+from evoom_guard.domain.verdict import (
+    REASON_FIX_NOT_DEMONSTRATED as REASON_FIX_NOT_DEMONSTRATED,
 )
 from evoom_guard.domain.verdict import (
     REASON_NO_PARSEABLE_EDITS as REASON_NO_PARSEABLE_EDITS,
@@ -1246,9 +1251,10 @@ def guard(
         diagnostics=diagnostics,
         evidence=verification_evidence,
     )
-    v = initial_decision.verdict
-    code = initial_decision.reason_code
-    reason = initial_decision.reason
+    current_decision = initial_decision
+    v = current_decision.verdict
+    code = current_decision.reason_code
+    reason = current_decision.reason
 
     # Preserve both layers before later evidence gates can demote the top-level
     # verdict. Coverage gates the full core verdict. Baseline is narrower:
@@ -1295,14 +1301,14 @@ def guard(
                 core_verdict_passed and min_diff_coverage is not None
             ),
         )
-        coverage_decision = apply_diff_coverage_gate(
-            initial_decision,
+        current_decision = apply_diff_coverage_gate(
+            current_decision,
             coverage_evidence=coverage_evidence,
             min_diff_coverage=min_diff_coverage,
         )
-        v = coverage_decision.verdict
-        code = coverage_decision.reason_code
-        reason = coverage_decision.reason
+        v = current_decision.verdict
+        code = current_decision.reason_code
+        reason = current_decision.reason
 
     # Baseline differential evidence (opt-in; one extra suite run on the
     # PRISTINE base — no candidate applied). "all tests pass on head" does not
@@ -1348,21 +1354,14 @@ def guard(
             "candidate passed. A verifier pack (if any) is exercised only on "
             "the candidate run — see scope."
         )
-        if (
-            require_demonstrated_fix
-            and v == PASS
-            and baseline_info["repair_effect"] != "demonstrated"
-        ):
-            v, code = FAIL, REASON_FIX_NOT_DEMONSTRATED
-            reason = (
-                "the suite passes on the candidate, but the fix is not "
-                "demonstrated: the pristine base "
-                + ("already passes the same suite"
-                   if baseline_info.get("verdict") == "PASS"
-                   else "produced no clean baseline verdict")
-                + " — --require-demonstrated-fix demands baseline FAIL → "
-                "candidate PASS under an unchanged harness"
-            )
+        current_decision = apply_demonstrated_fix_gate(
+            current_decision,
+            baseline_evidence=baseline_info,
+            require_demonstrated_fix=require_demonstrated_fix,
+        )
+        v = current_decision.verdict
+        code = current_decision.reason_code
+        reason = current_decision.reason
 
     if run_suite:
         assert verification_evidence is not None
