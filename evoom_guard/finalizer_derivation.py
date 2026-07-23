@@ -33,13 +33,15 @@ from evoom_guard.execution import (
     process_group_popen_kwargs,
     terminate_process_tree,
 )
-from evoom_guard.guard import (
-    _effective_policy,
-    effective_policy_sha256,
-    serialize_candidate_blocks,
-)
+from evoom_guard.guard import serialize_candidate_blocks
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT, extract_manifest, manifest_problems
-from evoom_guard.policy.config import ConfigError, load_config
+from evoom_guard.policy import (
+    ConfigError,
+    build_effective_policy,
+    effective_policy_payload,
+    effective_policy_sha256,
+    load_config,
+)
 from evoom_guard.strict_json import strict_json_loads
 from evoom_guard.verifiers.harness_policy import is_safe_relpath
 from evoom_guard.verifiers.repo_verifier import COPY_IGNORE
@@ -1612,32 +1614,34 @@ def _effective_policy_from_raw_config(
         raise FinalizerDerivationError(f"base policy {isolation!r} requires docker_image")
     pack = policy_str("verifier_pack")
     pack_pin = policy_str("expect_verifier_pack_sha256")
-    policy = _effective_policy(
-        mode="blackbox" if policy_bool("blackbox") else "repo",
-        isolation=isolation,
-        docker_image=docker_image,
-        docker_network=docker_network,
-        test_command=test_command,
-        setup_command=setup_command,
-        trust_setup_on_host=policy_bool("trust_setup_on_host"),
-        setup_output_globs=setup_globs,
-        protected=protected,
-        allow=allow,
-        allow_new_tests=policy_bool("allow_new_tests"),
-        timeout=timeout,
-        mem_limit_mb=mem_limit,
-        verifier_pack=pack,
-        expect_verifier_pack_sha256=pack_pin,
-        blackbox=policy_bool("blackbox"),
-        blackbox_only=policy_bool("blackbox_only"),
-        require_report_integrity=policy_str("require_report_integrity"),
-        require_candidate_isolation=policy_str("require_candidate_isolation"),
-        min_diff_coverage=policy_float("min_diff_coverage"),
-        baseline_evidence=policy_bool("baseline_evidence"),
-        require_demonstrated_fix=policy_bool("require_demonstrated_fix"),
-        strict_harness=policy_bool("strict_harness"),
-        policy_id=policy_str("policy_id"),
-        policy_version=policy_str("policy_version"),
+    policy = effective_policy_payload(
+        build_effective_policy(
+            mode="blackbox" if policy_bool("blackbox") else "repo",
+            isolation=isolation,
+            docker_image=docker_image,
+            docker_network=docker_network,
+            test_command=test_command,
+            setup_command=setup_command,
+            trust_setup_on_host=policy_bool("trust_setup_on_host"),
+            setup_output_globs=setup_globs,
+            protected=protected,
+            allow=allow,
+            allow_new_tests=policy_bool("allow_new_tests"),
+            timeout=timeout,
+            mem_limit_mb=mem_limit,
+            verifier_pack=pack,
+            expect_verifier_pack_sha256=pack_pin,
+            blackbox=policy_bool("blackbox"),
+            blackbox_only=policy_bool("blackbox_only"),
+            require_report_integrity=policy_str("require_report_integrity"),
+            require_candidate_isolation=policy_str("require_candidate_isolation"),
+            min_diff_coverage=policy_float("min_diff_coverage"),
+            baseline_evidence=policy_bool("baseline_evidence"),
+            require_demonstrated_fix=policy_bool("require_demonstrated_fix"),
+            strict_harness=policy_bool("strict_harness"),
+            policy_id=policy_str("policy_id"),
+            policy_version=policy_str("policy_version"),
+        )
     )
     return policy, pack, pack_pin
 

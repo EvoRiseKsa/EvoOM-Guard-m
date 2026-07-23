@@ -105,6 +105,15 @@ from evoom_guard.execution import (
 )
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.patchmin import risk_score
+from evoom_guard.policy import (
+    build_effective_policy as _build_effective_policy_contract,
+)
+from evoom_guard.policy import (
+    effective_policy_payload as _effective_policy_payload,
+)
+from evoom_guard.policy import (
+    effective_policy_sha256 as _effective_policy_digest,
+)
 from evoom_guard.verdict_contract_v1_11 import SCHEMA_VERSION
 from evoom_guard.verifiers.harness_policy import (
     discover_local_action_dirs,
@@ -1709,45 +1718,40 @@ def _effective_policy(
     ``verify-verdict --expect-policy-sha`` proved less than it appeared to.
     Every knob that changes what a verdict means belongs here.
     """
-    return {
-        "mode": mode,
-        "isolation": isolation,
-        "docker_image": docker_image,
-        "docker_network": docker_network,
-        "test_command": list(test_command) if test_command else "default:python -m pytest",
-        "setup_command": list(setup_command) if setup_command else None,
-        "trust_setup_on_host": trust_setup_on_host,
-        "setup_output_globs": sorted(setup_output_globs),
-        "protected": sorted(protected),
-        "allow": sorted(allow),
-        "allow_new_tests": allow_new_tests,
-        "timeout": timeout,
-        "mem_limit_mb": mem_limit_mb,
-        "verifier_pack_required": bool(verifier_pack),
-        "expect_verifier_pack_sha256": (
-            expect_verifier_pack_sha256.lower()
-            if expect_verifier_pack_sha256
-            else None
-        ),
-        "blackbox": blackbox,
-        "blackbox_only": blackbox_only,
-        "require_report_integrity": require_report_integrity,
-        "require_candidate_isolation": require_candidate_isolation,
-        "min_diff_coverage": min_diff_coverage,
-        "baseline_evidence": baseline_evidence,
-        "require_demonstrated_fix": require_demonstrated_fix,
-        # Additive schema-1.11 policy field: absent means false when verifying
-        # older published records, while all new producer records state it.
-        "strict_harness": strict_harness,
-        "policy_id": policy_id,
-        "policy_version": policy_version,
-    }
+    policy = _build_effective_policy_contract(
+        mode=mode,
+        isolation=isolation,
+        docker_image=docker_image,
+        docker_network=docker_network,
+        test_command=test_command,
+        setup_command=setup_command,
+        trust_setup_on_host=trust_setup_on_host,
+        setup_output_globs=setup_output_globs,
+        protected=protected,
+        allow=allow,
+        allow_new_tests=allow_new_tests,
+        timeout=timeout,
+        mem_limit_mb=mem_limit_mb,
+        verifier_pack=verifier_pack,
+        expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+        blackbox=blackbox,
+        blackbox_only=blackbox_only,
+        require_report_integrity=require_report_integrity,
+        require_candidate_isolation=require_candidate_isolation,
+        min_diff_coverage=min_diff_coverage,
+        baseline_evidence=baseline_evidence,
+        require_demonstrated_fix=require_demonstrated_fix,
+        strict_harness=strict_harness,
+        policy_id=policy_id,
+        policy_version=policy_version,
+    )
+    return _effective_policy_payload(policy)
 
 
 def effective_policy_sha256(policy: Mapping[str, Any]) -> str:
     """Return the frozen JSON fingerprint used by Guard attestations."""
 
-    return hashlib.sha256(json.dumps(policy, sort_keys=True).encode("utf-8")).hexdigest()
+    return _effective_policy_digest(policy)
 
 
 def _build_attestation(

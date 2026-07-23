@@ -75,8 +75,14 @@ evidence contracts remain pending.
 The second bounded slice moves frozen verdict, execution-lifecycle, and reason
 semantics into `domain/verdict.py`. The versioned
 `verdict_contract_v1_11.py` retains schema version, policy keys, and required
-wire-record fields while re-exporting the exact semantic objects. These slices
-do not claim Stage 3 is complete.
+wire-record fields while re-exporting the exact semantic objects.
+
+The third bounded slice introduces immutable `domain.policy.EffectivePolicy`
+and public canonical construction/projection/digesting in `policy.effective`.
+Guard retains exact compatibility facades and the raw-Git finalizer stops
+importing a Guard-private policy builder, lowering the private-import ratchet
+from 56 to 55. Request, assurance, aggregate evidence, and decision models
+remain pending; these slices do not claim Stage 3 is complete.
 
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
@@ -102,7 +108,8 @@ do not claim Stage 3 is complete.
 - Host-command resolution now belongs to `execution/command.py`; Guard consumes
   public setup-fidelity and harness-policy contracts from their owning modules.
   Exact `repo_verifier` aliases preserve the compatibility surface while the
-  private-import ratchet drops from 60 to 56.
+  private-import ratchet first dropped from 60 to 56; the public effective-policy
+  owner subsequently lowered it to 55.
 - Candidate parsing and pure patch transforms now live in `candidate/` behind
   exact legacy aliases. Candidate materialization and snapshots remain pending.
 - The flat `workspace.py` surface is now the classified

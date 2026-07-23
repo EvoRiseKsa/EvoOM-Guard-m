@@ -39,6 +39,14 @@ keys, and required record sections remain in
 Guard consumes generic semantics from the domain and only the schema version
 from the versioned wire contract.
 
+The third domain slice adds the immutable `EffectivePolicy` value in
+`domain/policy.py`. Trusted normalization, canonical schema-1.11 payload
+projection, and the frozen JSON digest live in `policy/effective.py`; domain
+does not import policy. Guard's existing `_effective_policy` and
+`effective_policy_sha256` names remain compatibility facades, while the raw-Git
+finalizer uses the public policy API. Validation and schema evolution remain in
+their existing owners so exception timing and published hashes do not change.
+
 The first candidate slice lives in `evoom_guard/candidate/`. `edits.py` owns
 the dependency-free FILE/PATCH block grammar and `PatchBlock`; `patch.py` owns
 the pure unique-anchor search/replace transform and its exception hierarchy.

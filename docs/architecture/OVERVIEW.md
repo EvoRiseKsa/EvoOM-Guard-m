@@ -51,8 +51,11 @@ The first `domain/verification.py` slice owns dependency-free JUnit and
 repository/pack phase contracts behind exact legacy aliases. A dedicated
 strict-Mypy gate protects that package. `domain/verdict.py` separately owns
 generic verdict/lifecycle/reason semantics; schema-1.11 policy and wire fields
-remain in their versioned contract. Broader request, assurance, and evidence
-domain models remain pending. The first `candidate/` slice now owns the
+remain in their versioned contract. `domain/policy.py` now owns the immutable
+effective-policy value, while `policy/effective.py` owns canonical construction,
+payload projection, and digesting; the finalizer no longer imports Guard's
+private policy builder. Broader request, assurance, and evidence domain models
+remain pending. The first `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
 aliases; candidate materialization remains pending while existing contained
 workspace effects retain their established implementation.

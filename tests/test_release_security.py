@@ -165,6 +165,7 @@ def test_extracted_contracts_have_strict_type_gates() -> None:
         assert "python -m mypy --strict evoom_guard/domain/" in text
         assert "python -m mypy --strict evoom_guard/candidate/" in text
         assert "python -m mypy --strict evoom_guard/workspace/" in text
+        assert "python -m mypy --strict evoom_guard/policy/" in text
 
 
 def test_release_workflow_prepares_a_draft_and_never_publishes_it() -> None:
