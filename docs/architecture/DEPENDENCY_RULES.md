@@ -90,10 +90,20 @@ patch transform into `candidate.edits` and `candidate.patch`. Guard, black-box,
 evidence, and repository verification consume the public candidate contracts.
 The historical `verifiers.candidate_edits` and `patch_applier` paths remain
 exact compatibility facades, including the parser regex identities used by
-the characterized repository verifier. Candidate materialization and all
-filesystem effects remain pending. The measured baseline remains at zero
+the characterized repository verifier. At that revision candidate
+materialization and all filesystem effects remained pending. The measured
+baseline remains at zero
 cycles, 56 cross-package private imports, and 27 unclassified legacy modules,
 so this move does not fabricate a ratchet revision.
+
+The bounded materialization slice now gives
+`verifiers.repo_materialization` ownership of the contained FILE-then-PATCH
+transaction and judge-manifest restoration. `repo_verifier` passes its current
+workspace, patch, and restoration globals into that owner on every call, so
+legacy monkeypatch seams remain dynamic. Repository copying, deletion,
+subprocess/container execution, pack selection, and verdict composition remain
+outside this module. This classified-to-classified extraction changes no
+baseline count and therefore adds no ratchet revision.
 
 Revision 5 performs the atomic `workspace.py` to `workspace/__init__.py`
 migration without changing the import name, implementation bytes, or

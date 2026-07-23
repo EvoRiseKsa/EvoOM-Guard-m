@@ -168,6 +168,16 @@ existing owners. The optional top-level `isolation_evidence` key is emitted only
 after its boundary is observed, preserving the published absence-versus-null
 semantics.
 
+The repository materialization slice lives in
+`evoom_guard/verifiers/repo_materialization.py`. It owns the ordered,
+fail-closed FILE/PATCH write transaction and restoration of judge-owned
+`package.json` fields. The owner receives contained reads/writes, the patch
+transform, and manifest restoration as explicit callables. The historical
+`repo_verifier.apply_blocks_to_copy` facade resolves and injects its current
+module globals on every call, preserving adopter monkeypatch seams. Repository
+copying, deletion, process/container execution, pack identity, and verdict
+composition do not cross this boundary.
+
 The third repository-verifier phase slice adds immutable
 `domain.evidence.VerificationEvidence`, `VerifierPackEvidence`,
 `RepositorySuiteEvidence`, and `RuntimeIdentityEvidence` values.

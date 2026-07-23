@@ -98,8 +98,10 @@ freeze the complete provider and artifact-lookup sequence.
 The first
 `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
-aliases; candidate materialization remains pending while existing contained
-workspace effects retain their established implementation.
+aliases. Candidate materialization now has a focused
+`verifiers.repo_materialization` owner behind the dynamic RepoVerifier facade;
+repository copying, deletion, and later execution effects remain in their
+established owners.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
 classification of changed/deleted paths. It binds local Actions from the base
 tree, preserves the reserved verifier-pack and non-exemptible harness rules,
@@ -121,7 +123,7 @@ in Guard remain pending; candidate path admission and the pure application
 decision pipeline are complete.
 
 The immediate structural priority is the next bounded slice: extract the CLI
-parser/registry or reduce a separately characterized RepoVerifier/black-box
-effect responsibility without changing trust boundaries. Every slice must
-retain the existing contract, mutation, differential, and architectural-boundary
-gates.
+parser/registry or reduce a separately characterized remaining
+RepoVerifier/black-box effect responsibility without changing trust
+boundaries. Every slice must retain the existing contract, mutation,
+differential, and architectural-boundary gates.

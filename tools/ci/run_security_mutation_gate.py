@@ -1167,6 +1167,158 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-materialization-package-snapshot-bypass",
+        path="evoom_guard/verifiers/repo_materialization.py",
+        before=(
+            "    package_originals: dict[str, str | None] = {}\n"
+            "    for relative_path in package_paths:\n"
+        ),
+        after=(
+            "    package_originals: dict[str, str | None] = {}\n"
+            "    for relative_path in ():\n"
+        ),
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[file_then_patch_and_restore]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-file-patch-order-inversion",
+        path="evoom_guard/verifiers/repo_materialization.py",
+        before=(
+            "    for path, content in file_blocks.items():\n"
+            "        write_error = safe_write(path, content)\n"
+            "        if write_error is not None:\n"
+            "            return write_error\n"
+            "\n"
+            "    for block in patch_blocks:\n"
+            "        source, read_error = safe_read(block.path)\n"
+            "        if read_error is not None:\n"
+            "            return read_error\n"
+            "        if source is None:\n"
+            "            return (\n"
+            "                f\"PATCH target not found: {block.path} — \"\n"
+            "                \"use a <<<FILE>>> block \"\n"
+            "                \"to create new files\"\n"
+            "            )\n"
+            "        try:\n"
+            "            patched = patcher(source, block.search, block.replace)\n"
+            "        except (PatchError, ValueError) as exc:\n"
+            "            return (\n"
+            "                f\"PATCH did not apply to {block.path}: \"\n"
+            "                f\"{type(exc).__name__}: {exc} — \"\n"
+            "                \"\"\n"
+            "                \"copy a unique anchor verbatim from the shown file\"\n"
+            "            )\n"
+            "        write_error = safe_write(block.path, patched)\n"
+            "        if write_error is not None:\n"
+            "            return write_error\n"
+        ),
+        after=(
+            "    for block in patch_blocks:\n"
+            "        source, read_error = safe_read(block.path)\n"
+            "        if read_error is not None:\n"
+            "            return read_error\n"
+            "        if source is None:\n"
+            "            return (\n"
+            "                f\"PATCH target not found: {block.path} — \"\n"
+            "                \"use a <<<FILE>>> block \"\n"
+            "                \"to create new files\"\n"
+            "            )\n"
+            "        try:\n"
+            "            patched = patcher(source, block.search, block.replace)\n"
+            "        except (PatchError, ValueError) as exc:\n"
+            "            return (\n"
+            "                f\"PATCH did not apply to {block.path}: \"\n"
+            "                f\"{type(exc).__name__}: {exc} — \"\n"
+            "                \"\"\n"
+            "                \"copy a unique anchor verbatim from the shown file\"\n"
+            "            )\n"
+            "        write_error = safe_write(block.path, patched)\n"
+            "        if write_error is not None:\n"
+            "            return write_error\n"
+            "\n"
+            "    for path, content in file_blocks.items():\n"
+            "        write_error = safe_write(path, content)\n"
+            "        if write_error is not None:\n"
+            "            return write_error\n"
+        ),
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[file_then_patch_and_restore]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-unsafe-read-as-absent",
+        path="evoom_guard/verifiers/repo_materialization.py",
+        before=(
+            "        except (UnicodeError, UnsafeWorkspacePath, OSError) as exc:\n"
+            "            return None, (\n"
+        ),
+        after=(
+            "        except (UnicodeError, UnsafeWorkspacePath, OSError) as exc:\n"
+            "            return None, None\n"
+            "            return None, (\n"
+        ),
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[unsafe_manifest_read]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-file-write-fail-fast-bypass",
+        path="evoom_guard/verifiers/repo_materialization.py",
+        before=(
+            "    for path, content in file_blocks.items():\n"
+            "        write_error = safe_write(path, content)\n"
+            "        if write_error is not None:\n"
+            "            return write_error\n"
+        ),
+        after=(
+            "    for path, content in file_blocks.items():\n"
+            "        write_error = safe_write(path, content)\n"
+            "        if False and write_error is not None:\n"
+            "            return write_error\n"
+        ),
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[write_failure]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-dynamic-patcher-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="        patcher=apply_patch,\n",
+        after=(
+            "        patcher=lambda source, search, replace: "
+            "source.replace(search, replace),\n"
+        ),
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[patch_failure]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-manifest-disappearance-bypass",
+        path="evoom_guard/verifiers/repo_materialization.py",
+        before="        if candidate_package is None:\n",
+        after="        if False and candidate_package is None:\n",
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[manifest_disappears]"
+        ),
+    ),
+    Mutation(
+        name="repo-materialization-package-restore-bypass",
+        path="evoom_guard/verifiers/repo_materialization.py",
+        before="        if restored != candidate_package:\n",
+        after="        if False and restored != candidate_package:\n",
+        test=(
+            "tests/test_repo_materialization_characterization.py::"
+            "test_frozen_repo_materialization_behavior[file_then_patch_and_restore]"
+        ),
+    ),
+    Mutation(
         name="strict-harness-exit-only-bypass",
         path="evoom_guard/verifiers/repo_phase_contracts.py",
         before=(
