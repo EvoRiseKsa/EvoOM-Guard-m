@@ -162,6 +162,12 @@ def test_full_payload_preserves_order_normalization_and_digest() -> None:
     )
     payload = policy_api.effective_policy_payload(value)
 
+    assert value.test_command == ("python", "-m", "pytest", "-q")
+    assert value.setup_command == ("python", "setup.py")
+    assert value.setup_output_globs == ("a/**", "z/**")
+    assert value.protected == ("a", "z")
+    assert value.allow == ("a", "b")
+    assert value.expect_verifier_pack_sha256 == "a" * 64
     assert list(payload) == [
         "mode",
         "isolation",
@@ -198,6 +204,69 @@ def test_full_payload_preserves_order_normalization_and_digest() -> None:
     assert (
         policy_api.effective_policy_sha256(payload)
         == "a4ff9326fa418fd05f501ea8d14abcc92aeb39f924ab28c49bb453df405a4fdf"
+    )
+
+
+def test_semantically_equivalent_policies_have_equal_value_identity() -> None:
+    first = policy_api.build_effective_policy(
+        mode="repo",
+        isolation="subprocess",
+        docker_image=None,
+        docker_network="none",
+        test_command=["python", "-m", "pytest"],
+        setup_command=None,
+        trust_setup_on_host=False,
+        setup_output_globs=("z/**", "a/**"),
+        protected=("z", "a"),
+        allow=("b", "a"),
+        allow_new_tests=False,
+        timeout=120,
+        mem_limit_mb=1024,
+        verifier_pack="packs/core",
+        expect_verifier_pack_sha256="A" * 64,
+        blackbox=False,
+        blackbox_only=False,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        min_diff_coverage=None,
+        baseline_evidence=False,
+        require_demonstrated_fix=False,
+        strict_harness=False,
+        policy_id=None,
+        policy_version=None,
+    )
+    second = policy_api.build_effective_policy(
+        mode="repo",
+        isolation="subprocess",
+        docker_image=None,
+        docker_network="none",
+        test_command=["python", "-m", "pytest"],
+        setup_command=None,
+        trust_setup_on_host=False,
+        setup_output_globs=("a/**", "z/**"),
+        protected=("a", "z"),
+        allow=("a", "b"),
+        allow_new_tests=False,
+        timeout=120,
+        mem_limit_mb=1024,
+        verifier_pack="packs/core",
+        expect_verifier_pack_sha256="a" * 64,
+        blackbox=False,
+        blackbox_only=False,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        min_diff_coverage=None,
+        baseline_evidence=False,
+        require_demonstrated_fix=False,
+        strict_harness=False,
+        policy_id=None,
+        policy_version=None,
+    )
+
+    assert first == second
+    assert hash(first) == hash(second)
+    assert policy_api.effective_policy_payload(first) == policy_api.effective_policy_payload(
+        second
     )
 
 

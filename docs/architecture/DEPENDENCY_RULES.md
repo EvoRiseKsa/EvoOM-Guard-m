@@ -108,6 +108,14 @@ Revision 6 extracts the immutable effective-policy value into
 `guard._effective_policy`. The frozen default digest and full payload remain
 byte-for-byte equivalent, and the private-import ceiling falls from 56 to 55.
 
+The next Stage-3 slice adds `domain.request` as a dependency-closed aggregate
+over repository, candidate, source identity, effective policy, verifier-pack
+path, and coverage intent. Guard constructs an owned snapshot after the
+existing public scalar checks, then derives all operational inputs and one
+policy payload from that request. The public
+33-parameter `guard()` signature remains frozen. This adds no baseline
+violation and therefore does not fabricate a ratchet revision.
+
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline
 fingerprint. It therefore does not manufacture a ratchet revision or lower a

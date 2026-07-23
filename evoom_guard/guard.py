@@ -52,6 +52,12 @@ from typing import Any
 
 from evoom_guard import __version__
 from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
+from evoom_guard.domain import (
+    CandidateInput,
+    GuardRequest,
+    RepositoryInput,
+    SourceIdentity,
+)
 from evoom_guard.domain.verdict import (
     ERROR,
     EXECUTION_COMPLETED,
@@ -532,6 +538,96 @@ def guard(
     if expect_verifier_pack_sha256 and not verifier_pack:
         raise ValueError("expect_verifier_pack_sha256 requires verifier_pack")
 
+    request = GuardRequest(
+        repository=RepositoryInput(path=repo_path),
+        candidate=CandidateInput(
+            text=candidate,
+            deleted_paths=deleted,
+            file_blocks=file_blocks,
+        ),
+        source=SourceIdentity(
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+        ),
+        policy=_build_effective_policy_contract(
+            mode="blackbox" if blackbox else "repo",
+            isolation=isolation,
+            docker_image=docker_image,
+            docker_network=docker_network,
+            test_command=test_command,
+            setup_command=setup_command,
+            trust_setup_on_host=trust_setup_on_host,
+            setup_output_globs=setup_output_globs,
+            protected=protected,
+            allow=allow,
+            allow_new_tests=allow_new_tests,
+            timeout=timeout,
+            mem_limit_mb=mem_limit_mb,
+            verifier_pack=verifier_pack,
+            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+            blackbox=blackbox,
+            blackbox_only=blackbox_only,
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            min_diff_coverage=min_diff_coverage,
+            baseline_evidence=baseline_evidence,
+            require_demonstrated_fix=require_demonstrated_fix,
+            strict_harness=strict_harness,
+            policy_id=policy_id,
+            policy_version=policy_version,
+        ),
+        verifier_pack_path=verifier_pack,
+        collect_diff_coverage=diff_coverage,
+    )
+    effective_policy = _effective_policy_payload(request.policy)
+    repo_path = request.repository.path
+    candidate = request.candidate.text
+    deleted = request.candidate.deleted_paths
+    file_blocks = (
+        dict(request.candidate.file_blocks)
+        if request.candidate.file_blocks is not None
+        else None
+    )
+    base_sha = request.source.base_sha
+    head_sha = request.source.head_sha
+    base_tree_sha = request.source.base_tree_sha
+    head_tree_sha = request.source.head_tree_sha
+    test_command = (
+        list(request.policy.test_command)
+        if request.policy.test_command is not None
+        else None
+    )
+    setup_command = (
+        list(request.policy.setup_command)
+        if request.policy.setup_command is not None
+        else None
+    )
+    trust_setup_on_host = request.policy.trust_setup_on_host
+    setup_output_globs = request.policy.setup_output_globs
+    protected = request.policy.protected
+    allow = request.policy.allow
+    allow_new_tests = request.policy.allow_new_tests
+    timeout = request.policy.timeout
+    mem_limit_mb = request.policy.mem_limit_mb
+    isolation = request.policy.isolation
+    docker_image = request.policy.docker_image
+    docker_network = request.policy.docker_network
+    verifier_pack = request.verifier_pack_path
+    expect_verifier_pack_sha256 = request.policy.expect_verifier_pack_sha256
+    diff_coverage = request.collect_diff_coverage
+    min_diff_coverage = request.policy.min_diff_coverage
+    blackbox = request.policy.blackbox
+    blackbox_only = request.policy.blackbox_only
+    require_report_integrity = request.policy.require_report_integrity
+    require_candidate_isolation = request.policy.require_candidate_isolation
+    policy_id = request.policy.policy_id
+    policy_version = request.policy.policy_version
+    baseline_evidence = request.policy.baseline_evidence
+    require_demonstrated_fix = request.policy.require_demonstrated_fix
+    strict_harness = request.policy.strict_harness
+
     # Fail-closed policy consistency (1.7): a GATE the selected judge cannot
     # enforce must stop the run — "require X" answered with a PASS that never
     # checked X is exactly the silent-degradation failure the policy contract
@@ -546,24 +642,6 @@ def guard(
         _unsupported.append("setup_command")
     if _unsupported:
         _mode_desc = "the black-box judge" if blackbox else f"isolation {isolation!r}"
-        _ep = _effective_policy(
-            mode="blackbox" if blackbox else "repo", isolation=isolation,
-            docker_image=docker_image, docker_network=docker_network,
-            test_command=test_command, setup_command=setup_command,
-            trust_setup_on_host=trust_setup_on_host,
-            setup_output_globs=setup_output_globs,
-            protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-            timeout=timeout, mem_limit_mb=mem_limit_mb,
-            verifier_pack=verifier_pack, blackbox=blackbox, blackbox_only=blackbox_only,
-            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            require_report_integrity=require_report_integrity,
-            require_candidate_isolation=require_candidate_isolation,
-            min_diff_coverage=min_diff_coverage,
-            baseline_evidence=baseline_evidence,
-            require_demonstrated_fix=require_demonstrated_fix,
-            strict_harness=strict_harness,
-            policy_id=policy_id, policy_version=policy_version,
-        )
         return GuardResult(
             verdict=ERROR, passed=False,
             reason=(
@@ -581,7 +659,7 @@ def guard(
             assurance=_preflight_assurance_profile(verifier_pack),
             attestation=_build_attestation(
                 candidate, safe_deleted=[], test_command=test_command,
-                effective_policy=_ep, art={
+                effective_policy=effective_policy, art={
                     "base_sha": base_sha, "head_sha": head_sha,
                     "base_tree_sha": base_tree_sha, "head_tree_sha": head_tree_sha,
                     "policy_id": policy_id, "policy_version": policy_version,
@@ -682,25 +760,6 @@ def guard(
         from evoom_guard.blackbox import run_blackbox
 
         if not verifier_pack:
-            ep_missing_pack = _effective_policy(
-                mode="blackbox", isolation=isolation,
-                docker_image=docker_image, docker_network=docker_network,
-                test_command=test_command, setup_command=setup_command,
-                trust_setup_on_host=trust_setup_on_host,
-                setup_output_globs=setup_output_globs,
-                protected=protected, allow=allow,
-                allow_new_tests=allow_new_tests, timeout=timeout,
-                mem_limit_mb=mem_limit_mb, verifier_pack=None,
-                blackbox=True, blackbox_only=blackbox_only,
-                expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-                require_report_integrity=require_report_integrity,
-                require_candidate_isolation=require_candidate_isolation,
-                min_diff_coverage=min_diff_coverage,
-                baseline_evidence=baseline_evidence,
-                require_demonstrated_fix=require_demonstrated_fix,
-                strict_harness=strict_harness,
-                policy_id=policy_id, policy_version=policy_version,
-            )
             return GuardResult(
                 verdict=ERROR, passed=False,
                 reason="--blackbox requires --verifier-pack (the judge-owned protocol tests)",
@@ -716,7 +775,7 @@ def guard(
                     candidate,
                     safe_deleted=safe_deleted,
                     test_command=test_command,
-                    effective_policy=ep_missing_pack,
+                    effective_policy=effective_policy,
                     art={
                         "base_sha": base_sha,
                         "head_sha": head_sha,
@@ -1047,24 +1106,6 @@ def guard(
                 "note": "changed-line coverage runs under the subprocess repo "
                         "judge only; the black-box judge did not measure it",
             }
-        ep_bx = _effective_policy(
-            mode="blackbox", isolation=isolation,
-            docker_image=docker_image, docker_network=docker_network,
-            test_command=test_command, setup_command=setup_command,
-            trust_setup_on_host=trust_setup_on_host,
-            setup_output_globs=setup_output_globs,
-            protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-            timeout=timeout, mem_limit_mb=mem_limit_mb,
-            verifier_pack=verifier_pack, blackbox=True, blackbox_only=blackbox_only,
-            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            require_report_integrity=require_report_integrity,
-            require_candidate_isolation=require_candidate_isolation,
-            min_diff_coverage=min_diff_coverage,
-            baseline_evidence=baseline_evidence,
-            require_demonstrated_fix=require_demonstrated_fix,
-            strict_harness=strict_harness,
-            policy_id=policy_id, policy_version=policy_version,
-        )
         return GuardResult(
             verdict=v_bx, passed=(v_bx == PASS), reason=reason_bx,
             files_changed=changed, protected_violations=[],
@@ -1082,7 +1123,7 @@ def guard(
             diff_coverage=coverage_bx,
             attestation=_build_attestation(
                 candidate, safe_deleted=safe_deleted, test_command=test_command,
-                effective_policy=ep_bx,
+                effective_policy=effective_policy,
                 art={
                     "verifier_pack_sha256": bx.pack_sha256,
                     "verifier_pack_manifest": bx.pack_manifest,
@@ -1444,24 +1485,7 @@ def guard(
     judgment_mode = "blackbox" if blackbox else "repo"
     attestation = _build_attestation(
         candidate, safe_deleted=safe_deleted, test_command=test_command,
-        effective_policy=_effective_policy(
-            mode=judgment_mode, isolation=isolation,
-            docker_image=docker_image, docker_network=docker_network,
-            test_command=test_command, setup_command=setup_command,
-            trust_setup_on_host=trust_setup_on_host,
-            setup_output_globs=setup_output_globs,
-            protected=protected, allow=allow, allow_new_tests=allow_new_tests,
-            timeout=timeout, mem_limit_mb=mem_limit_mb,
-            verifier_pack=verifier_pack, blackbox=blackbox, blackbox_only=blackbox_only,
-            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            require_report_integrity=require_report_integrity,
-            require_candidate_isolation=require_candidate_isolation,
-            min_diff_coverage=min_diff_coverage,
-            baseline_evidence=baseline_evidence,
-            require_demonstrated_fix=require_demonstrated_fix,
-            strict_harness=strict_harness,
-            policy_id=policy_id, policy_version=policy_version,
-        ), art={
+        effective_policy=effective_policy, art={
             **art,
             "execution_state": execution_state,
             "execution_phase": execution_phase,

@@ -84,6 +84,14 @@ importing a Guard-private policy builder, lowering the private-import ratchet
 from 56 to 55. Request, assurance, aggregate evidence, and decision models
 remain pending; these slices do not claim Stage 3 is complete.
 
+The fourth bounded slice adds the dependency-closed `GuardRequest` aggregate
+with repository, candidate, source-identity, policy, verifier-pack, and
+coverage inputs. The unchanged public `guard()` function performs its scalar
+checks, captures one owned request, and derives execution values plus one
+canonical policy payload from it for all result paths. Assurance, aggregate
+evidence, and decision models remain pending, so
+Stage 3 is still in progress.
+
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
 - Bounded process execution and cleanup were extracted in PR #112 and hardened
