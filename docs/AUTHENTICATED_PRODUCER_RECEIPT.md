@@ -130,7 +130,7 @@ the consumer must bind its exact artifact and its trusted workflow identity.
 
 Do not attach this receipt alone to `release.yml`, branch protection, a
 deployment, or a Marketplace publication. `v4.1.0` introduced—and published
-`v4.2.0` retains—the distinct V2 envelope/key domain,
+`v4.3.0` retains—the distinct V2 envelope/key domain,
 protected C runtime capability, raw-Git A/B/C workflow bindings, replay
 handling, fresh isolated provider check, and detached verifier. Those
 implementation facts do not make this older data-only reference topology an
