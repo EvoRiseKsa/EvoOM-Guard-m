@@ -215,7 +215,12 @@ belong to their characterized legacy facades until Stage 8 slices move them.
 
 - The flat CLI has been migrated byte-for-byte to the classified `cli/`
   package while preserving `evoom_guard.cli:main`, imports, and command
-  behavior. Parser/registry and command-family extraction remain pending.
+  behavior.
+- Declarative parser construction is now owned by dependency-free
+  `cli/parser.py` behind the unchanged public facade. A frozen snapshot binds
+  all 41 subcommands, help pages, representative defaults, immutable-ref
+  validation, and live injected helper lookups. Command-family extraction
+  remains pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

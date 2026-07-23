@@ -116,14 +116,16 @@ verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package without splitting its security-sensitive globals.
 The flat CLI module has likewise been migrated byte-for-byte into the
-classified `cli/` package. Its parser and command families remain together in
-the compatibility `__init__` pending separately characterized extraction.
+classified `cli/` package. Declarative parser construction now lives in the
+dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
+facade. The facade injects live validators and argument-group helpers on every
+call; command handlers and dispatch remain in `cli/__init__.py`.
 Internal workspace decomposition and the remaining runtime-effect sequencing
 in Guard remain pending; candidate path admission and the pure application
 decision pipeline are complete.
 
-The immediate structural priority is the next bounded slice: extract the CLI
-parser/registry or reduce a separately characterized remaining
-RepoVerifier/black-box effect responsibility without changing trust
-boundaries. Every slice must retain the existing contract, mutation,
-differential, and architectural-boundary gates.
+The immediate structural priority is the next bounded slice: extract one
+separately characterized CLI command family or reduce a remaining
+RepoVerifier/black-box effect responsibility without changing trust boundaries.
+Every slice must retain the existing contract, mutation, differential, and
+architectural-boundary gates.
