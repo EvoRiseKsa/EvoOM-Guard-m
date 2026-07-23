@@ -801,6 +801,31 @@ def test_workspace_package_is_classified_and_dependency_free() -> None:
     )
 
 
+def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:
+    """Policy construction may depend on domain values, never Guard internals."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    assert (
+        "evoom_guard.policy.effective",
+        "evoom_guard.domain",
+    ) in analysis.internal_edges
+    assert (
+        "evoom_guard.finalizer_derivation",
+        "evoom_guard.policy",
+    ) in analysis.internal_edges
+    assert not any(
+        violation.startswith(
+            "evoom_guard.finalizer_derivation | evoom_guard.guard | _effective_policy"
+        )
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+    assert not any(
+        source.startswith("evoom_guard.domain.")
+        and target.startswith("evoom_guard.policy")
+        for source, target in analysis.internal_edges
+    )
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

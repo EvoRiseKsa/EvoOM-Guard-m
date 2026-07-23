@@ -31,6 +31,8 @@ canonical evidence envelope against external key and run-context inputs.
 |---|---|
 | `domain/verification.py` | Dependency-free authoritative JUnit counts and typed repository/pack phase evidence/results. Legacy verifier modules re-export the same class objects. |
 | `domain/verdict.py` | Dependency-free frozen verdict names, execution lifecycle, reason codes, and read-only reason compatibility semantics. Versioned policy/wire fields stay in their schema contract. |
+| `domain/policy.py` | Immutable, dependency-free `EffectivePolicy` value. It contains no validation, hashing, serialization, or schema logic. |
+| `policy/effective.py` | Canonical construction, schema-1.11 payload projection, and frozen JSON digest for effective policy. Guard retains compatibility facades; the raw-Git finalizer consumes this public owner directly. |
 | `contracts.py` | The `Verifier` Protocol + `VerdictResult` / `Problem` — the domain-agnostic interface. |
 | `verifiers/repo_verifier.py` | **The engine.** Parse blocks, the harness-edit **pre-gate**, copy + apply + delete, run setup/suite/pack phases (subprocess/docker/gvisor) with a timeout and POSIX rlimits where available, read the judge-owned JUnit, grade, and detect drift/tamper. |
 | `execution/process.py` | Typed generic bounded-process requests/results, shared output capture, timeouts, and native process-tree cleanup. |

@@ -101,6 +101,13 @@ monkeypatch globals. The now-real `workspace` package is classified and has no
 internal EvoOM dependency, so the unclassified-module ceiling drops from 27
 to 26. Cycles remain zero and the private-import ceiling remains 56.
 
+Revision 6 extracts the immutable effective-policy value into
+`domain.policy` and its canonical builder/payload/digest into
+`policy.effective`. Guard retains its historical private facade, while
+`finalizer_derivation` now imports the public policy owner instead of
+`guard._effective_policy`. The frozen default digest and full payload remain
+byte-for-byte equivalent, and the private-import ceiling falls from 56 to 55.
+
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline
 fingerprint. It therefore does not manufacture a ratchet revision or lower a
