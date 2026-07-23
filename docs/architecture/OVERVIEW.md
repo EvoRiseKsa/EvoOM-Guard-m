@@ -75,7 +75,13 @@ delivered-assurance and verifier-pack values, while
 evaluation. Guard keeps exact private compatibility aliases and the frozen
 pre-extraction assurance vector proves unchanged schema-1.11 payloads and
 diagnostics. This completes the dependency-closed Stage 3 contracts; it does
-not complete Stage 8 orchestration.
+not complete Stage 8 orchestration. `application/attestation.py` now owns pure
+assembly of the established 57-key attestation. Guard retains the historical
+private signature and supplies live clock, version, candidate-digest,
+policy-digest, and pack-digest-format providers, retaining its historical
+candidate-hashing seam. A frozen pre-extraction vector protects key order,
+null presence, clock count, and reference-versus-copy behavior; focused tests
+freeze the complete provider and artifact-lookup sequence.
 The first
 `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
@@ -92,8 +98,8 @@ Internal workspace decomposition and the complete `application` verification
 pipeline remain pending.
 
 The immediate structural priority is Stage 8 in bounded characterized slices:
-extract attestation assembly and the remaining decision demotions before
-introducing a pipeline facade. Small RepoVerifier and black-box responsibility
-slices can continue independently where their effect boundaries are already
-characterized. Every slice must retain the existing contract, mutation,
-differential, and architectural-boundary gates.
+extract the remaining decision demotions before introducing a pipeline facade.
+Small RepoVerifier and black-box responsibility slices can continue
+independently where their effect boundaries are already characterized. Every
+slice must retain the existing contract, mutation, differential, and
+architectural-boundary gates.

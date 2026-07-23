@@ -178,6 +178,19 @@ boundary; black-box versus repo-native key presence is frozen by a
 pre-extraction characterization vector. Attestation assembly, later decision
 demotions, and all runtime effects remain outside this slice.
 
+The third application slice adds `application.attestation.build_attestation`.
+It owns pure assembly of the complete established 57-key attestation and no
+runtime effects. Guard's `_build_attestation` keeps its exact signature and
+supplies live providers for UTC time, tool version, candidate digest, policy
+digest, and verifier-pack digest format. The application layer neither imports
+Guard nor chooses those values itself. Deleted paths and explicit commands
+remain copied; effective policy and nested artifact evidence remain
+reference-compatible. A pre-extraction vector freezes key order, present-null
+fields, clock call count, and copy/reference behavior. Focused contract tests
+freeze provider and artifact-lookup ordering, including both verifier-pack SHA
+reads. Schema changes, evidence interpretation, validation, signing, and
+finalizer logic remain outside this builder.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay
