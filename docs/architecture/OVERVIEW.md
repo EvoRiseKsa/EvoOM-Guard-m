@@ -65,8 +65,12 @@ lifecycle state. `domain/evidence.py` now owns the immutable repo-native
 verification aggregate, and `verifiers/repo_evidence.py` is the sole adapter
 from verifier artifact facts to that aggregate and back to the unchanged
 attestation fields. The repo-native decision, lifecycle, assurance, and result
-paths no longer inspect the raw artifact mapping. Broader assurance and
-decision domain models remain pending. The first
+paths no longer inspect the raw artifact mapping. `domain/decision.py` now owns
+the immutable core `GuardDecision`, and `application/repo_decision.py` owns the
+pure repo-native twelve-branch composer. Guard delegates that initial decision
+while retaining later diff-coverage, demonstrated-fix, and assurance demotions
+in their characterized order. Broader assurance domain models remain pending.
+The first
 `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
 aliases; candidate materialization remains pending while existing contained
@@ -78,8 +82,8 @@ builder rather than mutating an untyped trace dictionary.
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package without splitting its security-sensitive globals.
-Internal workspace decomposition and the `application` verification pipeline
-remain pending.
+Internal workspace decomposition and the complete `application` verification
+pipeline remain pending.
 
 The immediate structural priority is to continue Stage 3 only with
 dependency-closed contracts, followed by small characterized slices for those

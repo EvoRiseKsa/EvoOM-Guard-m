@@ -157,6 +157,15 @@ temporary compatibility bridge for valid legacy partial artifacts; they are
 not the final transport-independent domain shape. Black-box composition,
 assurance evaluation, and decision composition remain outside this slice.
 
+The first application slice adds immutable `domain.decision.GuardDecision` and
+the pure `application.repo_decision` composer. It owns the existing repo-native
+core decision priority and shared outcome tables without importing Guard,
+verifiers, execution, isolation, filesystem, or process facilities. Guard
+delegates only the initial verdict/reason composition. Diff-coverage,
+demonstrated-fix, assurance demotions, black-box decisions, evidence
+serialization, and effects remain in their existing owners until separately
+characterized slices.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

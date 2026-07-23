@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import FrozenInstanceError, fields
+from typing import cast
 
 import pytest
 
@@ -325,6 +326,20 @@ def _guard_with_artifact(
         str(repo),
         "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>\n",
     )
+
+
+def test_malformed_null_verdict_score_preserves_native_failure(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(TypeError, match="not supported"):
+        _guard_with_artifact(
+            tmp_path,
+            monkeypatch,
+            {},
+            passed=False,
+            score=cast(float, None),
+        )
 
 
 def test_partial_artifact_preserves_unknown_pack_lifecycle_in_attestation(

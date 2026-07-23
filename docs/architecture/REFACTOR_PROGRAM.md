@@ -113,6 +113,14 @@ shape; they remain until a future schema boundary can remove that compatibility.
 Assurance and `GuardDecision` models remain pending, so Stage 3 is still in
 progress.
 
+The seventh bounded slice adds immutable `GuardDecision` and a pure
+`application.repo_decision` composer for the repo-native core decision. It
+freezes the existing twelve-branch priority, including partial-artifact
+presence semantics, score boundaries, and exact reason text. Guard delegates
+that initial decision without moving later diff-coverage, demonstrated-fix,
+or assurance demotions. Black-box composition remains on its characterized
+compatibility path. Assurance remains pending, so Stage 3 is still in progress.
+
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
 - Bounded process execution and cleanup were extracted in PR #112 and hardened
@@ -148,8 +156,9 @@ progress.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining effectful RepoVerifier responsibilities.
-- Pending: build the `application` pipeline (`VerificationPipeline`, `VerdictComposer`,
-  `AssuranceEvaluator`, `AttestationBuilder`) and shadow-mode differential.
+- Pending: extend the first application decision composer into a complete
+  pipeline (`VerificationPipeline`, `AssuranceEvaluator`, `AttestationBuilder`)
+  with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

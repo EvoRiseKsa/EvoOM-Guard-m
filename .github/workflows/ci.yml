@@ -46,6 +46,9 @@ jobs:
       - name: Type-check domain contracts (mypy strict)
         run: python -m mypy --strict evoom_guard/domain/
 
+      - name: Type-check application contracts (mypy strict)
+        run: python -m mypy --strict evoom_guard/application/
+
       - name: Type-check candidate contracts (mypy strict)
         run: python -m mypy --strict evoom_guard/candidate/
 

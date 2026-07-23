@@ -48,9 +48,14 @@ import subprocess
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from evoom_guard import __version__
+from evoom_guard.application.repo_decision import (
+    OUTCOME_REASON_POLICY,
+    TAMPER_OUTCOME_REASON_POLICY,
+    compose_repo_decision,
+)
 from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
 from evoom_guard.domain import (
     CandidateInput,
@@ -69,22 +74,16 @@ from evoom_guard.domain.verdict import (
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_BINARY_PATCH,
     REASON_CANDIDATE_NOT_EXERCISED,
-    REASON_CANDIDATE_TREE_CHANGED,
     REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
     REASON_EMPTY_DIFF,
     REASON_FIX_NOT_DEMONSTRATED,
     REASON_JUNIT_EXIT_MISMATCH,
-    REASON_NO_PARSEABLE_EDITS,
     REASON_NO_TEST_VERDICT,
     REASON_NO_VERIFIABLE_CHANGES,
     REASON_PATCH_APPLY_FAILED,
     REASON_POLICY_REQUIREMENT_UNSUPPORTED,
-    REASON_PROTECTED_HARNESS_EDIT,
     REASON_REVERSE_APPLY_FAILED,
     REASON_RUNTIME_CLEANUP_FAILED,
-    REASON_SETUP_FAILED,
-    REASON_SETUP_TIMEOUT,
-    REASON_TEST_COMMAND_UNAVAILABLE,
     REASON_TEST_TIMEOUT,
     REASON_TESTS_FAILED,
     REASON_TESTS_PASSED,
@@ -96,6 +95,24 @@ from evoom_guard.domain.verdict import (
     REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
     REJECTED,
     TAMPERED,
+)
+from evoom_guard.domain.verdict import (
+    REASON_CANDIDATE_TREE_CHANGED as REASON_CANDIDATE_TREE_CHANGED,
+)
+from evoom_guard.domain.verdict import (
+    REASON_NO_PARSEABLE_EDITS as REASON_NO_PARSEABLE_EDITS,
+)
+from evoom_guard.domain.verdict import (
+    REASON_PROTECTED_HARNESS_EDIT as REASON_PROTECTED_HARNESS_EDIT,
+)
+from evoom_guard.domain.verdict import (
+    REASON_SETUP_FAILED as REASON_SETUP_FAILED,
+)
+from evoom_guard.domain.verdict import (
+    REASON_SETUP_TIMEOUT as REASON_SETUP_TIMEOUT,
+)
+from evoom_guard.domain.verdict import (
+    REASON_TEST_COMMAND_UNAVAILABLE as REASON_TEST_COMMAND_UNAVAILABLE,
 )
 from evoom_guard.execution import (
     ProcessContainmentError as _SubprocessContainmentError,
@@ -222,40 +239,8 @@ _REPORT_INTEGRITY_RANK = {
     "external_process_isolated": 1,
 }
 _ISOLATION_RANK = {"subprocess": 0, "docker": 1, "gvisor": 2}
-
-# Verifier ``outcome`` marker → (verdict, reason_code). The patch applied and the
-# session started, but did not produce a clean pass/fail — a timeout or a failed
-# setup step must NOT be mislabelled as "the patch did not apply".
-_OUTCOME_REASON = {
-    "test_timeout": (FAIL, REASON_TEST_TIMEOUT),
-    # The public schema intentionally has no separate output-cap reason.  An
-    # output flood leaves the test phase incomplete for the same reason a
-    # timeout does: the judge could not obtain a bounded, trustworthy verdict.
-    "test_output_limit": (ERROR, REASON_TEST_TIMEOUT),
-    "setup_timeout": (ERROR, REASON_SETUP_TIMEOUT),
-    "setup_output_limit": (ERROR, REASON_SETUP_TIMEOUT),
-    "setup_failed": (ERROR, REASON_SETUP_FAILED),
-    "runtime_containment_error": (ERROR, REASON_RUNTIME_CLEANUP_FAILED),
-    "isolation_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
-    "runtime_identity_unavailable": (ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET),
-    "pack_identity_mismatch": (ERROR, REASON_VERIFIER_PACK_IDENTITY_MISMATCH),
-    "pack_invalid": (ERROR, REASON_VERIFIER_PACK_INVALID),
-    "test_command_unavailable": (ERROR, REASON_TEST_COMMAND_UNAVAILABLE),
-    "pack_no_tests": (ERROR, REASON_NO_TEST_VERDICT),
-    "pack_no_verdict": (ERROR, REASON_NO_TEST_VERDICT),
-    "no_test_verdict": (ERROR, REASON_NO_TEST_VERDICT),
-}
-
-_TAMPER_OUTCOME_REASON = {
-    "candidate_tree_changed": (
-        REASON_CANDIDATE_TREE_CHANGED,
-        "prepared candidate runtime tree changed during the repo-suite/verifier-pack run",
-    ),
-    "pack_snapshot_changed": (
-        REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
-        "the accepted verifier-pack snapshot changed before or during execution",
-    ),
-}
+_OUTCOME_REASON = OUTCOME_REASON_POLICY
+_TAMPER_OUTCOME_REASON = TAMPER_OUTCOME_REASON_POLICY
 
 # Reserved namespace from the pre-3.4 in-tree pack mount. A candidate still may
 # not pre-plant it; accepted packs now live in a separate judge-owned snapshot.
@@ -965,13 +950,15 @@ def guard(
             # merely because the black-box pack completed first.
             repo_outcome = repo_art.get("outcome")
             if repo_outcome in _TAMPER_OUTCOME_REASON:
-                code_bx, summary = _TAMPER_OUTCOME_REASON[repo_outcome]
+                code_bx, summary = _TAMPER_OUTCOME_REASON[
+                    cast(str, repo_outcome)
+                ]
                 v_bx, repo_cause = TAMPERED, summary
             elif repo_art.get("tamper"):
                 v_bx, code_bx = TAMPERED, REASON_JUNIT_EXIT_MISMATCH
                 repo_cause = "the repo suite's exit code and JUnit report disagree"
             elif repo_outcome in _OUTCOME_REASON:
-                v_bx, code_bx = _OUTCOME_REASON[repo_outcome]
+                v_bx, code_bx = _OUTCOME_REASON[cast(str, repo_outcome)]
                 repo_cause = repo_verdict.diagnostics or str(repo_outcome)
             elif repo_art.get("tests_total") is not None:
                 v_bx, code_bx = FAIL, REASON_TESTS_FAILED
@@ -1228,90 +1215,19 @@ def guard(
             rmap[d] = (0, len(base.splitlines()))
     risk = risk_score(rmap, protected=_PROTECTED_GLOBS + tuple(protected))
 
-    if not all_touched:
-        v, reason, code = ERROR, (
-            "no parseable edit blocks — the patch produced no <<<FILE>>> or "
-            "<<<PATCH>>> edits (and no deletions) to verify"
-        ), REASON_NO_PARSEABLE_EDITS
-    elif unsafe:
-        # An absolute path, a ``..`` escape, or anything leaving the repo root. The
-        # verifier already refused to apply it; name the real cause here rather than
-        # mislabel it as a failed patch anchor.
-        v, reason, code = ERROR, (
-            "the patch references an unsafe path (absolute, '..', or escaping the "
-            f"repo root) — refusing to apply: {', '.join(unsafe)}"
-        ), REASON_UNSAFE_PATH
-    elif violations:
-        v, reason, code = REJECTED, (
-            "reward-hack guard: the patch edits or deletes the judging tests, their "
-            "configuration, the gate's CI/config, or an auto-executed file — fix the "
-            f"source under test, not the harness ({', '.join(violations)})"
-        ), REASON_PROTECTED_HARNESS_EDIT
-    elif (
-        verification_evidence is not None
-        and verification_evidence.outcome in _TAMPER_OUTCOME_REASON
-    ):
-        assert verification_evidence.outcome is not None
-        code, summary = _TAMPER_OUTCOME_REASON[verification_evidence.outcome]
-        v, reason = TAMPERED, f"{summary}: {diagnostics}"
-    elif verification_evidence is not None and verification_evidence.tamper:
-        # The two trustworthy signals (process exit code and the judge-owned JUnit
-        # report) disagree — a forced exit / rewritten ``$?``. Never read as a pass.
-        v, reason, code = TAMPERED, (
-            "tamper signature: the suite's exit code and its judge-owned JUnit report "
-            f"disagree ("
-            f"{verification_evidence.tests_passed if verification_evidence.tests_passed_present else 0}/"
-            f"{verification_evidence.tests_total if verification_evidence.tests_total_present else 0} "
-            "in the "
-            "report) — refusing to read this as a pass"
-        ), REASON_JUNIT_EXIT_MISMATCH
-    elif (
-        verification_evidence is not None
-        and verification_evidence.outcome == "pack_invalid"
-        and verification_evidence.verifier_pack.present is False
-    ):
-        v, code = ERROR, REASON_VERIFIER_PACK_NOT_FOUND
-        reason = diagnostics or "the configured verifier-pack path does not exist"
-    elif (
-        verification_evidence is not None
-        and verification_evidence.outcome in _OUTCOME_REASON
-        and verification_evidence.outcome != "no_test_verdict"
-    ):
-        # The patch applied and the session started, but timed out or its setup
-        # step/mandatory pack failed — never mislabel these as "the patch did
-        # not apply" or let already-positive repo counts mask a pack failure.
-        assert verification_evidence.outcome is not None
-        v, code = _OUTCOME_REASON[verification_evidence.outcome]
-        reason = diagnostics or f"run ended: {verification_evidence.outcome}"
-    elif verdict is not None and verdict.passed:
-        v, reason, code = PASS, (
-            "all repo tests pass and the patch leaves the test harness untouched"
-        ), REASON_TESTS_PASSED
-    elif verification_evidence is not None and verification_evidence.tests_total:
-        v, reason, code = FAIL, (
-            f"the repo's tests fail on this patch "
-            f"({verification_evidence.tests_passed if verification_evidence.tests_passed_present else 0}/"
-            f"{verification_evidence.tests_total} passed)"
-        ), REASON_TESTS_FAILED
-    elif (
-        verification_evidence is not None
-        and verification_evidence.outcome in _OUTCOME_REASON
-    ):
-        # Preserve the historical treatment of a positive JUnit error count as
-        # a test failure. ``no_test_verdict`` reaches this branch only when no
-        # test count exists; pack-specific no-verdict outcomes were handled
-        # above because a passing repo count must never mask them.
-        assert verification_evidence.outcome is not None
-        v, code = _OUTCOME_REASON[verification_evidence.outcome]
-        reason = diagnostics or f"run ended: {verification_evidence.outcome}"
-    elif verdict is not None and verdict.score <= 0.08:
-        v, reason, code = ERROR, (
-            "the patch did not apply cleanly (a PATCH anchor did not match)"
-        ), REASON_PATCH_APPLY_FAILED
-    else:
-        v, reason, code = FAIL, (
-            "the test session produced no clean verdict (collection/usage error)"
-        ), REASON_NO_TEST_VERDICT
+    initial_decision = compose_repo_decision(
+        has_changes=bool(all_touched),
+        unsafe_paths=unsafe,
+        protected_violations=violations,
+        verifier_present=verdict is not None,
+        verifier_passed=verdict.passed if verdict is not None else None,
+        verifier_score=verdict.score if verdict is not None else None,
+        diagnostics=diagnostics,
+        evidence=verification_evidence,
+    )
+    v = initial_decision.verdict
+    code = initial_decision.reason_code
+    reason = initial_decision.reason
 
     # Preserve both layers before later evidence gates can demote the top-level
     # verdict. Coverage gates the full core verdict. Baseline is narrower:
