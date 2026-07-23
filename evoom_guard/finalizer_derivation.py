@@ -46,6 +46,8 @@ from evoom_guard.verifiers.repo_verifier import COPY_IGNORE
 
 FINALIZER_DERIVATION_FORMAT = "EVOGUARD_FINALIZER_GIT_BINDINGS_V1"
 FINALIZER_DERIVATION_ROLE = "trusted-finalizer-git-bindings"
+AGENT_CHANGE_GIT_BINDINGS_FORMAT = "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V1"
+AGENT_CHANGE_GIT_BINDINGS_ROLE = "agent-change-git-bindings"
 MAX_GIT_TREE_BYTES = 16 * 1024 * 1024
 MAX_GIT_TREE_ENTRIES = 100_000
 MAX_POLICY_BYTES = 1 * 1024 * 1024
@@ -53,6 +55,8 @@ MAX_CANDIDATE_FILE_BYTES = 1 * 1024 * 1024
 MAX_PACK_FILE_BYTES = 8 * 1024 * 1024
 MAX_PACK_BYTES = 32 * 1024 * 1024
 MAX_BINDINGS_BYTES = 512 * 1024
+MAX_AGENT_CHANGE_CANDIDATE_BYTES = 64 * 1024 * 1024
+MAX_AGENT_CHANGE_PATHS = 10_000
 MAX_GIT_STDERR_BYTES = 64 * 1024
 MAX_GIT_EXECUTABLE_BYTES = 256 * 1024 * 1024
 _GIT_STREAM_CHUNK_BYTES = 64 * 1024
@@ -83,6 +87,20 @@ _BINDING_KEYS = {
     "verifier_pack_manifest",
     "effective_policy",
 }
+_AGENT_CHANGE_BINDING_KEYS = {
+    "format",
+    "base_sha",
+    "head_sha",
+    "base_tree_sha",
+    "head_tree_sha",
+    "candidate_sha256",
+    "candidate_size",
+    "changed_paths",
+    "deleted_paths",
+    "touched_paths",
+    "policy_sha256",
+    "verifier_pack_sha256",
+}
 _SOURCE_KEYS = {
     "pull_request_number",
     "workflow_run_id",
@@ -94,6 +112,43 @@ _SOURCE_KEYS = {
 
 class FinalizerDerivationError(ValueError):
     """A binding could not be derived or did not match a verdict."""
+
+
+@dataclass(frozen=True)
+class DerivedAgentChangeBindings:
+    """Raw-Git truth used to check one untrusted agent proposal.
+
+    This is a separate format rather than an extension of the frozen Trusted
+    Finalizer V1 payload.  It exposes only immutable revision, candidate,
+    changed-path, policy, and verifier-pack facts; no producer claim is trusted.
+    """
+
+    payload: dict[str, Any]
+
+    @property
+    def candidate_sha256(self) -> str:
+        return str(self.payload["candidate_sha256"])
+
+    @property
+    def changed_paths(self) -> tuple[str, ...]:
+        return tuple(self.payload["changed_paths"])
+
+    @property
+    def deleted_paths(self) -> tuple[str, ...]:
+        return tuple(self.payload["deleted_paths"])
+
+    @property
+    def touched_paths(self) -> tuple[str, ...]:
+        return tuple(self.payload["touched_paths"])
+
+    @property
+    def policy_sha256(self) -> str:
+        return str(self.payload["policy_sha256"])
+
+    @property
+    def verifier_pack_sha256(self) -> str | None:
+        value = self.payload["verifier_pack_sha256"]
+        return value if isinstance(value, str) else None
 
 
 def _is_reparse_point(metadata: os.stat_result) -> bool:
@@ -397,8 +452,8 @@ def _validate_sha256(value: object, *, label: str, nullable: bool = False) -> st
     return value
 
 
-def _valid_git_sha(value: str, *, label: str) -> str:
-    if _GIT_SHA.fullmatch(value) is None:
+def _valid_git_sha(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or _GIT_SHA.fullmatch(value) is None:
         raise FinalizerDerivationError(f"{label} must be a lowercase immutable Git digest")
     return value
 
@@ -1076,6 +1131,8 @@ def _derive_raw_evaluation_from_readers(
     head_sha: str,
     base_tree_sha: str,
     head_tree_sha: str,
+    maximum_candidate_paths: int | None = None,
+    maximum_candidate_bytes: int | None = None,
 ) -> dict[str, Any]:
     if base.commit_tree(base_sha) != base_tree_sha or head.commit_tree(head_sha) != head_tree_sha:
         raise FinalizerDerivationError("provided commit/tree binding is not immutable Git reality")
@@ -1110,7 +1167,14 @@ def _derive_raw_evaluation_from_readers(
     elif pack_pin is not None:
         raise FinalizerDerivationError("base policy pins a verifier pack without verifier_pack")
     candidate = serialize_candidate_blocks(
-        _candidate_blocks(base, head, base_sha=base_sha, head_sha=head_sha)
+        _candidate_blocks(
+            base,
+            head,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            maximum_paths=maximum_candidate_paths,
+            maximum_total_bytes=maximum_candidate_bytes,
+        )
     )
     return {
         "candidate_sha256": hashlib.sha256(candidate.encode("utf-8")).hexdigest(),
@@ -1120,6 +1184,182 @@ def _derive_raw_evaluation_from_readers(
         "verifier_pack_manifest": pack_manifest,
         "effective_policy": policy,
     }
+
+
+def _validate_agent_change_paths(value: object, *, label: str) -> list[str]:
+    if not isinstance(value, list) or any(
+        not isinstance(path, str) or not is_safe_relpath(path) for path in value
+    ):
+        raise FinalizerDerivationError(
+            f"agent-change bindings {label} must contain safe relative paths"
+        )
+    if value != sorted(set(value)):
+        raise FinalizerDerivationError(f"agent-change bindings {label} must be sorted and unique")
+    if len(value) > MAX_AGENT_CHANGE_PATHS:
+        raise FinalizerDerivationError(f"agent-change bindings {label} exceeds the entry limit")
+    return list(value)
+
+
+def validate_agent_change_bindings(
+    value: Mapping[str, Any],
+) -> DerivedAgentChangeBindings:
+    """Validate the closed-world Agent Change raw-Git binding payload."""
+
+    payload = dict(value)
+    if set(payload) != _AGENT_CHANGE_BINDING_KEYS:
+        raise FinalizerDerivationError("agent-change bindings have non-canonical keys")
+    if payload.get("format") != AGENT_CHANGE_GIT_BINDINGS_FORMAT:
+        raise FinalizerDerivationError("agent-change bindings have an unsupported format")
+    for field in ("base_sha", "head_sha", "base_tree_sha", "head_tree_sha"):
+        item = payload.get(field)
+        if not isinstance(item, str) or _GIT_SHA.fullmatch(item) is None:
+            raise FinalizerDerivationError(f"agent-change bindings {field} is invalid")
+    _validate_sha256(payload.get("candidate_sha256"), label="agent-change candidate_sha256")
+    candidate_size = payload.get("candidate_size")
+    if (
+        type(candidate_size) is not int
+        or not 1 <= candidate_size <= MAX_AGENT_CHANGE_CANDIDATE_BYTES
+    ):
+        raise FinalizerDerivationError(
+            "agent-change bindings candidate_size is outside the permitted range"
+        )
+    changed = _validate_agent_change_paths(payload.get("changed_paths"), label="changed_paths")
+    deleted = _validate_agent_change_paths(payload.get("deleted_paths"), label="deleted_paths")
+    touched = _validate_agent_change_paths(payload.get("touched_paths"), label="touched_paths")
+    if set(changed) & set(deleted):
+        raise FinalizerDerivationError("agent-change changed and deleted paths must be disjoint")
+    if touched != sorted(set(changed) | set(deleted)):
+        raise FinalizerDerivationError(
+            "agent-change touched_paths must equal changed_paths union deleted_paths"
+        )
+    if not touched:
+        raise FinalizerDerivationError("agent-change bindings require at least one touched path")
+    _validate_sha256(payload.get("policy_sha256"), label="agent-change policy_sha256")
+    pack = payload.get("verifier_pack_sha256")
+    if pack is not None:
+        _validate_sha256(pack, label="agent-change verifier_pack_sha256")
+    return DerivedAgentChangeBindings(payload=payload)
+
+
+def agent_change_bindings_bytes(bindings: DerivedAgentChangeBindings) -> bytes:
+    """Return canonical bytes for one already validated raw-Git binding."""
+
+    if type(bindings) is not DerivedAgentChangeBindings:
+        raise FinalizerDerivationError(
+            "agent-change bindings must be a DerivedAgentChangeBindings value"
+        )
+    checked = validate_agent_change_bindings(bindings.payload)
+    data = _canonical_json(checked.payload)
+    if len(data) > MAX_BINDINGS_BYTES:
+        raise FinalizerDerivationError("canonical agent-change bindings exceed the size limit")
+    return data
+
+
+def derive_agent_change_bindings(
+    *,
+    base_repo: str,
+    head_repo: str,
+    base_sha: str,
+    head_sha: str,
+    base_tree_sha: str,
+    head_tree_sha: str,
+    base_is_bare: bool = False,
+    head_is_bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
+) -> DerivedAgentChangeBindings:
+    """Derive proposal-relevant facts from immutable Git objects only.
+
+    The result deliberately does not contain an allowlist, producer identity,
+    or admission decision.  Those belong to separately authenticated control
+    data and cannot be selected by the candidate.
+    """
+
+    for label, value in (
+        ("base_sha", base_sha),
+        ("head_sha", head_sha),
+        ("base_tree_sha", base_tree_sha),
+        ("head_tree_sha", head_tree_sha),
+    ):
+        _valid_git_sha(value, label=label)
+    base = _GitReader(
+        base_repo,
+        bare=base_is_bare,
+        git_executable=git_executable,
+    )
+    try:
+        head = _GitReader(
+            head_repo,
+            bare=head_is_bare,
+            git_executable=git_executable,
+        )
+    except BaseException:
+        base.close()
+        raise
+    try:
+        raw = _derive_raw_evaluation_from_readers(
+            base,
+            head,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+            maximum_candidate_paths=MAX_AGENT_CHANGE_PATHS,
+            maximum_candidate_bytes=MAX_AGENT_CHANGE_CANDIDATE_BYTES,
+        )
+        blocks = _candidate_blocks(
+            base,
+            head,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            maximum_paths=MAX_AGENT_CHANGE_PATHS,
+            maximum_total_bytes=MAX_AGENT_CHANGE_CANDIDATE_BYTES,
+        )
+        candidate = serialize_candidate_blocks(blocks).encode("utf-8")
+        candidate_sha256 = hashlib.sha256(candidate).hexdigest()
+        if candidate_sha256 != raw["candidate_sha256"]:
+            raise FinalizerDerivationError(
+                "agent-change candidate identity diverged during raw-Git derivation"
+            )
+        # Authorization is an admission boundary for the *entire tracked Git
+        # change*, not only the text candidate that Guard can serialize.  In
+        # particular, COPY_IGNORE is a candidate-evaluation optimization and
+        # must never hide dist/, build/, node_modules/, or other tracked paths
+        # from the trusted scope check.
+        base_entries = base.tree(base_sha)
+        head_entries = head.tree(head_sha)
+        changed = sorted(
+            path
+            for path, candidate in head_entries.items()
+            if (original := base_entries.get(path)) is None
+            or original.mode != candidate.mode
+            or original.object_type != candidate.object_type
+            or original.object_id != candidate.object_id
+        )
+        deleted = sorted(set(base_entries) - set(head_entries))
+        if len(changed) + len(deleted) > MAX_AGENT_CHANGE_PATHS:
+            raise FinalizerDerivationError(
+                "tracked Git change exceeds the Agent Change path limit"
+            )
+        payload = {
+            "format": AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+            "base_sha": base_sha,
+            "head_sha": head_sha,
+            "base_tree_sha": base_tree_sha,
+            "head_tree_sha": head_tree_sha,
+            "candidate_sha256": candidate_sha256,
+            "candidate_size": len(candidate),
+            "changed_paths": changed,
+            "deleted_paths": deleted,
+            "touched_paths": sorted(set(changed) | set(deleted)),
+            "policy_sha256": raw["policy_sha256"],
+            "verifier_pack_sha256": raw["verifier_pack_sha256"],
+        }
+        bindings = validate_agent_change_bindings(payload)
+        agent_change_bindings_bytes(bindings)
+        return bindings
+    finally:
+        head.close()
+        base.close()
 
 
 def _ignored_path(path: str) -> bool:
@@ -1133,6 +1373,8 @@ def _candidate_blocks(
     *,
     base_sha: str,
     head_sha: str,
+    maximum_paths: int | None = None,
+    maximum_total_bytes: int | None = None,
 ) -> dict[str, str]:
     base_tree = {
         path: entry for path, entry in base.tree(base_sha).items() if not _ignored_path(path)
@@ -1142,6 +1384,8 @@ def _candidate_blocks(
     }
     blocks: dict[str, str] = {}
     problems: list[str] = []
+    changed_count = 0
+    total_blob_bytes = 0
     for path in sorted(head_tree):
         candidate = head_tree[path]
         original = base_tree.get(path)
@@ -1152,6 +1396,11 @@ def _candidate_blocks(
         )
         if unchanged:
             continue
+        changed_count += 1
+        if maximum_paths is not None and changed_count > maximum_paths:
+            raise FinalizerDerivationError(
+                "changed raw Git paths exceed the Agent Change path limit"
+            )
         if original is not None and original.mode != candidate.mode:
             problems.append(f"{path}: path mode changed")
             continue
@@ -1167,6 +1416,11 @@ def _candidate_blocks(
                 maximum=MAX_CANDIDATE_FILE_BYTES,
                 label=f"candidate path {path!r}",
             )
+            total_blob_bytes += len(data)
+            if maximum_total_bytes is not None and total_blob_bytes > maximum_total_bytes:
+                raise FinalizerDerivationError(
+                    "changed raw Git content exceeds the Agent Change candidate limit"
+                )
             blocks[path] = data.decode("utf-8", "strict")
         except UnicodeDecodeError:
             problems.append(f"{path}: changed file is not valid UTF-8 text")
@@ -1545,6 +1799,34 @@ def write_finalizer_bindings(
     """Write the canonical raw-Git derivation record."""
 
     return _write_canonical(bindings_path, bindings.payload, force=force)
+
+
+def read_agent_change_bindings(path: str) -> DerivedAgentChangeBindings:
+    """Read canonical Agent Change raw-Git bindings as untrusted input."""
+
+    try:
+        data = _read_regular_file(
+            path, limit=MAX_BINDINGS_BYTES, label="agent-change bindings"
+        )
+        payload = _load_json_object(data, "agent-change bindings")
+    except EvidenceBundleError as exc:
+        raise FinalizerDerivationError(str(exc)) from exc
+    if _canonical_json(payload) != data:
+        raise FinalizerDerivationError("agent-change bindings are not canonical JSON")
+    return validate_agent_change_bindings(payload)
+
+
+def write_agent_change_bindings(
+    bindings: DerivedAgentChangeBindings,
+    *,
+    bindings_path: str,
+    force: bool = False,
+) -> str:
+    """Write one canonical Agent Change raw-Git derivation record."""
+
+    checked = validate_agent_change_bindings(bindings.payload)
+    agent_change_bindings_bytes(checked)
+    return _write_canonical(bindings_path, checked.payload, force=force)
 
 
 def _attestation(record: Mapping[str, Any]) -> Mapping[str, Any]:

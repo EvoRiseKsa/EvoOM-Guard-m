@@ -800,6 +800,41 @@ def test_release_artifact_admission_dependencies_are_exactly_allowlisted() -> No
     assert actual_dependencies == expected_dependencies
 
 
+def test_agent_change_admission_is_classified_and_uses_public_dependencies() -> None:
+    """Keep Agent Change Admission inside the documented admission layer."""
+
+    module = "evoom_guard.admission.agent_change"
+    analysis = analyze_package(PACKAGE_ROOT)
+    assert module in analysis.modules
+    assert module not in analysis.violations["unclassified_modules"]
+    private_imports = tuple(
+        violation
+        for violation in analysis.violations["cross_package_private_imports"]
+        if violation.startswith(f"{module} | ")
+    )
+    assert private_imports == ()
+
+
+def test_agent_change_admission_dependencies_are_exactly_allowlisted() -> None:
+    """Freeze the candidate profile's intentionally small dependency surface."""
+
+    module = "evoom_guard.admission.agent_change"
+    expected_dependencies = {
+        "evoom_guard.evidence_bundle",
+        "evoom_guard.finalizer_derivation",
+        "evoom_guard.signing",
+        "evoom_guard.trusted_finalizer",
+        "evoom_guard.verifiers.harness_policy",
+    }
+    analysis = analyze_package(PACKAGE_ROOT)
+    actual_dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+    assert actual_dependencies == expected_dependencies
+
+
 def _write_package(tmp_path: Path, files: Mapping[str, str]) -> Path:
     package = tmp_path / INTERNAL_PACKAGE
     for relative, content in files.items():

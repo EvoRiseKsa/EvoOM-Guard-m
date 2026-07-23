@@ -83,6 +83,18 @@ correctness or security.
 > negative controls. None of those historical observations is V2 admission or
 > release evidence.
 
+> **Agent Change Admission candidate.** Unreleased
+> [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) separates an
+> untrusted agent proposal from signed scope, independently re-derived raw-Git
+> facts, and a Trusted Finalizer `ALLOW`. The public
+> [same-owner pilot](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
+> completed one permitted round, rejected an additional tracked
+> `dist/hidden.txt` path before signing, and replayed the unchanged permitted
+> base/head pair with fresh run-bound signatures. The exact evidence is in
+> [`PILOT_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/blob/main/PILOT_RESULTS.md).
+> This is not part of v4.2.0, a required or production gate, hostile-runner
+> proof, single-use authorization, independent review, or a v4.3 release.
+
 > **Governance and contribution.** The public core is source-available and
 > deliberately reviewable; signing keys, customer policy, held-out evaluation
 > data, and future operational-control-plane inputs are not public source
@@ -605,6 +617,7 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`GOVERNANCE.md`](GOVERNANCE.md) | Current ownership and trust-boundary governance, including the explicit limit of same-owner cross-account review |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and threat-model review process for ordinary changes versus trust-boundary changes |
 | [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
+| [`docs/AGENT_CHANGE_ADMISSION.md`](docs/AGENT_CHANGE_ADMISSION.md) | Experimental v4.3 candidate: bind an untrusted agent proposal to separate signed scope, raw-Git facts, and a Trusted Finalizer `ALLOW` without executing candidate code during offline verification |
 | [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
 | [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v4.2.0 build-artifact attestation and historical/future release runs |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
