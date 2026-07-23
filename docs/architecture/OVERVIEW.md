@@ -68,8 +68,11 @@ attestation fields. The repo-native decision, lifecycle, assurance, and result
 paths no longer inspect the raw artifact mapping. `domain/decision.py` now owns
 the immutable core `GuardDecision`, and `application/repo_decision.py` owns the
 pure repo-native twelve-branch composer. Guard delegates that initial decision
-while retaining later diff-coverage, demonstrated-fix, and assurance demotions
-in their characterized order. `domain/assurance.py` now owns immutable
+while retaining later demotions in their characterized order.
+`application/decision_gates.py` now owns the first post-decision gate: exact
+changed-line coverage evaluation. Guard still owns collection and invokes the
+pure gate at the historical point before demonstrated-fix and assurance.
+`domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
 evaluation. Guard keeps exact private compatibility aliases and the frozen
@@ -98,7 +101,8 @@ Internal workspace decomposition and the complete `application` verification
 pipeline remain pending.
 
 The immediate structural priority is Stage 8 in bounded characterized slices:
-extract the remaining decision demotions before introducing a pipeline facade.
+extract the demonstrated-fix and assurance decision demotions before
+introducing a pipeline facade.
 Small RepoVerifier and black-box responsibility slices can continue
 independently where their effect boundaries are already characterized. Every
 slice must retain the existing contract, mutation, differential, and

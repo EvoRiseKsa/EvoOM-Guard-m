@@ -1795,10 +1795,10 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-required-unmeasured-pass-bypass",
-        path="evoom_guard/guard.py",
-        before='            if coverage_evidence.get("measured") is not True:\n',
+        path="evoom_guard/application/decision_gates.py",
+        before='    if coverage_evidence.get("measured") is not True:\n',
         after=(
-            '            if False and coverage_evidence.get("measured") '
+            '    if False and coverage_evidence.get("measured") '
             'is not True:\n'
         ),
         test=(
@@ -2277,26 +2277,23 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-exact-ratio-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/decision_gates.py",
         before=(
-            "                if isinstance(min_diff_coverage, int):\n"
-            "                    floor_numerator, floor_denominator = "
+            "    if isinstance(min_diff_coverage, int):\n"
+            "        floor_numerator, floor_denominator = "
             "min_diff_coverage, 1\n"
-            "                else:\n"
-            "                    floor_numerator, floor_denominator = (\n"
-            "                        min_diff_coverage.as_integer_ratio()\n"
-            "                    )\n"
-            "                coverage_below_floor = (\n"
-            "                    coverage_total > 0\n"
-            "                    and 100 * coverage_executed * floor_denominator\n"
-            "                    < floor_numerator * coverage_total\n"
-            "                )\n"
+            "    else:\n"
+            "        floor_numerator, floor_denominator = "
+            "min_diff_coverage.as_integer_ratio()\n"
+            "    coverage_below_floor = (\n"
+            "        coverage_total > 0\n"
+            "        and 100 * coverage_executed * floor_denominator "
+            "< floor_numerator * coverage_total\n"
+            "    )\n"
         ),
         after=(
-            "                coverage_below_floor = (\n"
-            "                    float(coverage_evidence['percent'])\n"
-            "                    < min_diff_coverage\n"
-            "                )\n"
+            "    coverage_below_floor = "
+            "float(coverage_evidence['percent']) < min_diff_coverage\n"
         ),
         test=(
             "tests/test_diff_coverage_trust.py::"

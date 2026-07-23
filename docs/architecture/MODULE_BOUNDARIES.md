@@ -191,6 +191,17 @@ freeze provider and artifact-lookup ordering, including both verifier-pack SHA
 reads. Schema changes, evidence interpretation, validation, signing, and
 finalizer logic remain outside this builder.
 
+The fourth application slice adds
+`application.decision_gates.apply_diff_coverage_gate`. It owns only the pure
+demotion of an already completed `PASS` when required changed-line coverage is
+unmeasured or below its exact floor. Coverage collection, candidate execution,
+and policy validation remain in their existing owners. The gate preserves the
+exact integer-ratio comparison, does not use the rounded display percentage for
+judgment, leaves a non-positive `total` unchanged, and does not read coverage
+evidence for an optional floor or an earlier non-`PASS`. A pre-extraction
+characterization vector freezes decision text, access and exception order, and
+priority over the later demonstrated-fix and assurance gates.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

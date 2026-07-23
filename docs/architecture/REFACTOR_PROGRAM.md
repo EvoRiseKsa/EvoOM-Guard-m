@@ -175,9 +175,14 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   `application.attestation` builder behind Guard's unchanged private facade.
   A pre-extraction vector freezes payload order, null presence, clock count,
   and copy/reference semantics.
+- Exact changed-line coverage demotion is owned by
+  `application.decision_gates.apply_diff_coverage_gate`; Guard retains the
+  effectful collector and invokes the pure gate in its historical order.
+  A pre-extraction vector freezes the ratio, evidence access and exception
+  behavior, and priority over later decision gates.
 - Pending: extend the application composers into a complete
-  `VerificationPipeline` by extracting the remaining decision demotions and
-  effect sequencing with shadow-mode differential coverage.
+  `VerificationPipeline` by extracting demonstrated-fix and assurance
+  demotions plus effect sequencing with shadow-mode differential coverage.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

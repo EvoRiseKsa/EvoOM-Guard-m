@@ -71,6 +71,7 @@ from evoom_guard.application.assurance import (
 from evoom_guard.application.attestation import (
     build_attestation as _build_attestation_payload,
 )
+from evoom_guard.application.decision_gates import apply_diff_coverage_gate
 from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
     TAMPER_OUTCOME_REASON_POLICY,
@@ -94,7 +95,6 @@ from evoom_guard.domain.verdict import (
     REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_BINARY_PATCH,
     REASON_CANDIDATE_NOT_EXERCISED,
-    REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
     REASON_EMPTY_DIFF,
     REASON_FIX_NOT_DEMONSTRATED,
     REASON_JUNIT_EXIT_MISMATCH,
@@ -118,6 +118,9 @@ from evoom_guard.domain.verdict import (
 )
 from evoom_guard.domain.verdict import (
     REASON_CANDIDATE_TREE_CHANGED as REASON_CANDIDATE_TREE_CHANGED,
+)
+from evoom_guard.domain.verdict import (
+    REASON_DIFF_COVERAGE_BELOW_THRESHOLD as REASON_DIFF_COVERAGE_BELOW_THRESHOLD,
 )
 from evoom_guard.domain.verdict import (
     REASON_NO_PARSEABLE_EDITS as REASON_NO_PARSEABLE_EDITS,
@@ -1292,38 +1295,14 @@ def guard(
                 core_verdict_passed and min_diff_coverage is not None
             ),
         )
-        if core_verdict_passed and min_diff_coverage is not None:
-            coverage_below_floor = False
-            if coverage_evidence.get("measured") is not True:
-                v, code = ERROR, REASON_ASSURANCE_REQUIREMENT_NOT_MET
-                reason = (
-                    "required changed-line coverage could not be measured: "
-                    f"{coverage_evidence.get('note', 'the collector returned no reason')}"
-                )
-            else:
-                coverage_executed = int(coverage_evidence["executed"])
-                coverage_total = int(coverage_evidence["total"])
-                if isinstance(min_diff_coverage, int):
-                    floor_numerator, floor_denominator = min_diff_coverage, 1
-                else:
-                    floor_numerator, floor_denominator = (
-                        min_diff_coverage.as_integer_ratio()
-                    )
-                coverage_below_floor = (
-                    coverage_total > 0
-                    and 100 * coverage_executed * floor_denominator
-                    < floor_numerator * coverage_total
-                )
-            if coverage_below_floor:
-                v, code = FAIL, REASON_DIFF_COVERAGE_BELOW_THRESHOLD
-                reason = (
-                    "the suite passes but executed only "
-                    f"{coverage_evidence['executed']}/{coverage_evidence['total']} of the "
-                    "changed executable lines; the exact ratio is below the required "
-                    f"{min_diff_coverage:g}% (the evidence display rounds it to "
-                    f"{coverage_evidence['percent']}%) — the change is largely "
-                    "unexercised by the tests that judged it"
-                )
+        coverage_decision = apply_diff_coverage_gate(
+            initial_decision,
+            coverage_evidence=coverage_evidence,
+            min_diff_coverage=min_diff_coverage,
+        )
+        v = coverage_decision.verdict
+        code = coverage_decision.reason_code
+        reason = coverage_decision.reason
 
     # Baseline differential evidence (opt-in; one extra suite run on the
     # PRISTINE base — no candidate applied). "all tests pass on head" does not
