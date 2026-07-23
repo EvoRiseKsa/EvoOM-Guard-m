@@ -38,7 +38,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `execution/command.py` | Shell-free host-command resolution. On Windows it resolves trusted `PATHEXT` shims while excluding candidate-controlled relative `PATH` entries for bare commands. |
 | `candidate/` | Dependency-free candidate input ownership: typed edit blocks, strict/lenient block parsers, and pure unique-anchor patch transforms. It performs no filesystem or process effects. |
 | `blackbox.py` | Black-box orchestration and compatibility surface: judge-command construction, candidate/pack coordination, report interpretation, evidence composition, and verdict policy. Historical private process seams delegate to `execution/judge.py`. |
-| `workspace.py` | Contained workspace I/O: atomic descriptor-relative/no-follow operations on POSIX; reparse rejection plus pre/post parent/object identity checks as a non-atomic Windows fallback. |
+| `workspace/` | Contained workspace I/O: atomic descriptor-relative/no-follow operations on POSIX; reparse rejection plus pre/post parent/object identity checks as a non-atomic Windows fallback. The atomic file-to-package migration preserves the historical `evoom_guard.workspace` API and monkeypatch seams. |
 | `runtime_identity.py` | Canonical post-setup runtime-tree identity (`EVOGUARD_RUNTIME_TREE_V1`), including setup-created outputs. |
 | `verifiers/fidelity.py` | Public setup-fidelity snapshot/change contracts and drift details; setup output exceptions are scoped to this validation step. |
 | `verifiers/harness_policy.py` | Public deterministic protected-harness and glob policy contracts used before candidate execution. |

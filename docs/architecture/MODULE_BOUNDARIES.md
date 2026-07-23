@@ -48,6 +48,14 @@ or verdict interpretation. Historical imports through
 aliases. Candidate tree copying and edit materialization remain effectful
 repository-verifier responsibilities until their own characterized slice.
 
+The first workspace slice is an atomic module-to-package migration:
+`evoom_guard/workspace/__init__.py` contains the exact implementation bytes
+formerly stored in `workspace.py`. This intentionally precedes internal
+splitting because TOCTOU tests and adopters patch module globals such as
+`os`, `tempfile`, and `_open_parent_dir_fd`. The package owns contained
+workspace reads, writes, and deletions; later submodule extraction must retain
+those dynamic seams or replace them with explicit injected contracts.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain

@@ -80,6 +80,32 @@ assert candidate.apply_patch is repo_verifier.apply_patch
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
+def test_pyz_contains_workspace_package_not_the_removed_flat_module(tmp_path):
+    out = _build(tmp_path)
+    with zipfile.ZipFile(out) as archive:
+        names = set(archive.namelist())
+
+    assert "evoom_guard/workspace/__init__.py" in names
+    assert "evoom_guard/workspace.py" not in names
+
+    code = """
+import sys
+sys.path.insert(0, sys.argv[1])
+import evoom_guard.workspace as workspace
+
+assert workspace.__name__ == "evoom_guard.workspace"
+assert workspace.UnsafeWorkspacePath.__module__ == "evoom_guard.workspace"
+assert workspace.read_text_within_root.__globals__ is workspace.__dict__
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code, out],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 def test_pyz_exposes_github_attestation_admission_cli_contract(tmp_path):
     out = _build(tmp_path)
     sealed = subprocess.run(

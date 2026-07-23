@@ -159,11 +159,12 @@ def test_non_release_workflows_declare_their_read_only_baseline() -> None:
     assert "security-events: write" in analyze
 
 
-def test_domain_and_candidate_contracts_have_strict_type_gates() -> None:
+def test_extracted_contracts_have_strict_type_gates() -> None:
     for workflow in (CI, RELEASE):
         text = workflow.read_text(encoding="utf-8")
         assert "python -m mypy --strict evoom_guard/domain/" in text
         assert "python -m mypy --strict evoom_guard/candidate/" in text
+        assert "python -m mypy --strict evoom_guard/workspace/" in text
 
 
 def test_release_workflow_prepares_a_draft_and_never_publishes_it() -> None:

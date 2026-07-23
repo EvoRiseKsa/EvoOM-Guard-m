@@ -41,7 +41,7 @@ VIOLATION_KINDS = (
 # ADR-0001's arrow describes increasingly high-level layers.  Imports may point
 # to the same or a lower layer, never from a lower layer to a higher layer.  A
 # name is considered extracted only when it is a real package (has __init__.py),
-# so same-named compatibility monoliths such as workspace.py are not mislabeled.
+# so same-named compatibility monoliths such as evidence.py are not mislabeled.
 LAYER_GROUPS: tuple[tuple[str, ...], ...] = (
     ("domain",),
     ("policy", "candidate", "workspace"),
@@ -782,6 +782,23 @@ def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contract() 
         "evoom_guard.guard",
         "evoom_guard.domain.verdict",
     ) in analysis.internal_edges
+
+
+def test_workspace_package_is_classified_and_dependency_free() -> None:
+    """The atomic module-to-package move must remove real legacy debt."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.workspace"
+
+    assert module in analysis.modules
+    assert module not in analysis.violations["unclassified_modules"]
+    assert {
+        target for source, target in analysis.internal_edges if source == module
+    } == set()
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
 
 
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:

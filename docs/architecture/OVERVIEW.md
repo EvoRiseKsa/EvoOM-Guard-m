@@ -54,13 +54,16 @@ generic verdict/lifecycle/reason semantics; schema-1.11 policy and wire fields
 remain in their versioned contract. Broader request, assurance, and evidence
 domain models remain pending. The first `candidate/` slice now owns the
 dependency-free edit grammar and pure patch transform behind exact legacy
-aliases; candidate materialization and workspace effects remain pending.
+aliases; candidate materialization remains pending while existing contained
+workspace effects retain their established implementation.
 `RepoVerifier` still owns effectful subprocess,
 container, filesystem, runtime-identity, and trace operations.
 `blackbox.py` still owns command construction, report interpretation,
 verdict/evidence composition, and remaining pack/CID responsibilities.
-The workspace domain and the `application` verification pipeline also remain
-pending.
+The flat workspace module has been migrated atomically into the classified
+`workspace/` package without splitting its security-sensitive globals.
+Internal workspace decomposition and the `application` verification pipeline
+remain pending.
 
 The immediate structural priority is to continue Stage 3 only with
 dependency-closed contracts, followed by small characterized slices for those

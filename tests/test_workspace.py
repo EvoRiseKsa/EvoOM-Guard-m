@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------
 """Direct branch coverage for the workspace containment primitives.
 
-``workspace.py`` was previously exercised only indirectly through the guard
+The ``evoom_guard.workspace`` package was previously exercised only indirectly through the guard
 flow, leaving its rejection branches — unsafe paths, reparse parents,
 non-regular targets, identity drift — mostly uncovered. These tests drive the
 public API (``write_text_within_root``, ``read_text_within_root``,
@@ -17,11 +17,14 @@ public contract, so the same assertions bind both; the CI Linux job covers the
 
 from __future__ import annotations
 
+import base64
 import os
+import pickle
 import tempfile
 
 import pytest
 
+import evoom_guard.workspace as workspace
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
     _is_safe_relative_path,
@@ -30,6 +33,64 @@ from evoom_guard.workspace import (
     read_text_within_root,
     write_text_within_root,
 )
+
+
+def test_module_to_package_move_preserves_the_legacy_surface_and_globals() -> None:
+    assert {
+        name for name in dir(workspace) if not name.startswith("__")
+    } == {
+        "Iterator",
+        "UnsafeWorkspacePath",
+        "_DIR_FD_FUNCTIONS",
+        "_HAS_DESCRIPTOR_RELATIVE",
+        "_atomic_write_at",
+        "_best_effort_target",
+        "_directory_open_flags",
+        "_is_safe_relative_path",
+        "_is_within",
+        "_object_identity",
+        "_open_parent_dir_fd",
+        "_reopen_parent",
+        "_require_posix_descriptor_support",
+        "_rmtree_at",
+        "_stable_file_identity",
+        "_verify_best_effort_parent",
+        "_verify_parent_still_bound",
+        "annotations",
+        "contextlib",
+        "delete_path_within_root",
+        "os",
+        "read_text_within_root",
+        "secrets",
+        "shutil",
+        "stat",
+        "tempfile",
+        "write_text_within_root",
+    }
+    assert UnsafeWorkspacePath.__module__ == "evoom_guard.workspace"
+    for function in (
+        delete_path_within_root,
+        read_text_within_root,
+        write_text_within_root,
+    ):
+        assert function.__module__ == "evoom_guard.workspace"
+        assert function.__globals__ is workspace.__dict__
+
+
+def test_historical_workspace_pickles_resolve_after_package_migration() -> None:
+    error_bytes = base64.b64decode(
+        "Y2V2b29tX2d1YXJkLndvcmtzcGFjZQpVbnNhZmVXb3Jrc3BhY2VQYXRoCnAwCihW"
+        "aGlzdG9yaWNhbApwMQp0cDIKUnAzCi4="
+    )
+    function_bytes = base64.b64decode(
+        "Y2V2b29tX2d1YXJkLndvcmtzcGFjZQpyZWFkX3RleHRfd2l0aGluX3Jvb3QKcDAK"
+        "Lg=="
+    )
+
+    restored_error = pickle.loads(error_bytes)
+    assert type(restored_error) is UnsafeWorkspacePath
+    assert restored_error.args == ("historical",)
+    assert pickle.loads(function_bytes) is read_text_within_root
 
 
 @pytest.fixture()

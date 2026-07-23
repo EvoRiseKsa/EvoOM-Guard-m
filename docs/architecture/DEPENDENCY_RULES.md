@@ -33,7 +33,7 @@ The enforced layer order is explicit and matches `MODULE_BOUNDARIES.md`:
 `domain -> policy/candidate/workspace -> execution/isolation -> verifiers ->
 application -> evidence -> finalizer/admission -> api/cli/integrations`. A module
 is assigned to a layer only when its first-level name is a real Python package;
-same-named compatibility files such as `evidence.py`, `workspace.py`, and `cli.py`
+same-named compatibility files such as `evidence.py` and `cli.py`
 remain declared legacy debt until their atomic file-to-package migrations.
 
 `record_verification` also remains unclassified debt. Its current `report` and
@@ -94,6 +94,12 @@ the characterized repository verifier. Candidate materialization and all
 filesystem effects remain pending. The measured baseline remains at zero
 cycles, 56 cross-package private imports, and 27 unclassified legacy modules,
 so this move does not fabricate a ratchet revision.
+
+Revision 5 performs the atomic `workspace.py` to `workspace/__init__.py`
+migration without changing the import name, implementation bytes, or
+monkeypatch globals. The now-real `workspace` package is classified and has no
+internal EvoOM dependency, so the unclassified-module ceiling drops from 27
+to 26. Cycles remain zero and the private-import ceiling remains 56.
 
 The Docker isolation slice adds only public imports within the documented
 `execution/isolation` layer and does not remove any remaining baseline

@@ -93,6 +93,9 @@ jobs:
       - name: Type-check candidate contracts (Mypy strict)
         run: python -m mypy --strict evoom_guard/candidate/
 
+      - name: Type-check workspace contracts (Mypy strict)
+        run: python -m mypy --strict evoom_guard/workspace/
+
       - name: Tests must be green before a release
         run: python -m pytest tests/ -q
 

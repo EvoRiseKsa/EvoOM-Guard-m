@@ -91,6 +91,17 @@
         "layer_violations": 0,
         "unclassified_modules": 27
       }
+    },
+    {
+      "revision": 5,
+      "ceilings": {
+        "cycle_edges": 0,
+        "cross_package_private_imports": 56,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 26
+      }
     }
   ],
   "violations": {
@@ -182,8 +193,7 @@
       "evoom_guard.signing",
       "evoom_guard.strict_json",
       "evoom_guard.trusted_finalizer",
-      "evoom_guard.verdict_contract_v1_11",
-      "evoom_guard.workspace"
+      "evoom_guard.verdict_contract_v1_11"
     ]
   }
 }
