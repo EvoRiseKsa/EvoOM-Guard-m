@@ -61,6 +61,7 @@ import threading
 import time
 from typing import Any, Literal, NamedTuple
 
+from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
 from evoom_guard.candidate_runner import (
     CANDIDATE_CID_DIRNAME,
     CandidateRunner,
@@ -134,9 +135,7 @@ from evoom_guard.verifiers.repo_verifier import (
     distill_diagnostics,
     is_safe_relpath,
     judge_subprocess_env,
-    parse_file_blocks,
     parse_junit_xml,
-    parse_patch_blocks,
 )
 from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 

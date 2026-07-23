@@ -85,6 +85,23 @@ import time
 from typing import Any, TypedDict, cast
 
 from evoom_guard.adapters import instrument_command
+from evoom_guard.candidate import (
+    PatchBlock as PatchBlock,
+)
+from evoom_guard.candidate import (
+    PatchError,
+    apply_patch,
+)
+from evoom_guard.candidate import edits as _candidate_edits
+from evoom_guard.candidate import (
+    parse_blocks_lenient as parse_blocks_lenient,
+)
+from evoom_guard.candidate import (
+    parse_file_blocks as parse_file_blocks,
+)
+from evoom_guard.candidate import (
+    parse_patch_blocks as parse_patch_blocks,
+)
 from evoom_guard.contracts import VerdictResult
 from evoom_guard.execution import (
     DEFAULT_KILL_GRACE_SECONDS,
@@ -143,36 +160,11 @@ from evoom_guard.pack_manifest import (
     snapshot_pack,
     verify_pack_snapshot,
 )
-from evoom_guard.patch_applier import PatchError, apply_patch
 from evoom_guard.runtime_identity import (
     RuntimeIdentity,
     RuntimeIdentityError,
     capture_runtime_identity,
     verify_runtime_identity,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    _BLOCK_RE as _BLOCK_RE,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    _LENIENT_FILE_RE as _LENIENT_FILE_RE,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    _LENIENT_PATCH_RE as _LENIENT_PATCH_RE,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    _PATCH_BLOCK_RE as _PATCH_BLOCK_RE,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    PatchBlock as PatchBlock,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    parse_blocks_lenient as parse_blocks_lenient,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    parse_file_blocks as parse_file_blocks,
-)
-from evoom_guard.verifiers.candidate_edits import (
-    parse_patch_blocks as parse_patch_blocks,
 )
 from evoom_guard.verifiers.diagnostics import distill_diagnostics
 from evoom_guard.verifiers.fidelity import (
@@ -288,6 +280,11 @@ from evoom_guard.workspace import (
     read_text_within_root,
     write_text_within_root,
 )
+
+_BLOCK_RE = _candidate_edits._BLOCK_RE
+_LENIENT_FILE_RE = _candidate_edits._LENIENT_FILE_RE
+_LENIENT_PATCH_RE = _candidate_edits._LENIENT_PATCH_RE
+_PATCH_BLOCK_RE = _candidate_edits._PATCH_BLOCK_RE
 
 # Stable compatibility facades. Internal call sites retain their historical
 # names so monkeypatch-based adopters keep controlling RepoVerifier, while new

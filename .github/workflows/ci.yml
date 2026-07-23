@@ -46,6 +46,9 @@ jobs:
       - name: Type-check domain contracts (mypy strict)
         run: python -m mypy --strict evoom_guard/domain/
 
+      - name: Type-check candidate contracts (mypy strict)
+        run: python -m mypy --strict evoom_guard/candidate/
+
       - name: Architecture import-boundary ratchet
         run: python -m pytest tests/architecture/test_import_boundaries.py -q
 

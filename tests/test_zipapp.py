@@ -45,6 +45,41 @@ def test_pyz_builds_and_reports_version(tmp_path):
     assert __version__ in r.stdout
 
 
+def test_pyz_contains_candidate_domain_and_legacy_facades(tmp_path):
+    out = _build(tmp_path)
+    with zipfile.ZipFile(out) as archive:
+        names = set(archive.namelist())
+
+    assert {
+        "evoom_guard/candidate/__init__.py",
+        "evoom_guard/candidate/edits.py",
+        "evoom_guard/candidate/patch.py",
+        "evoom_guard/patch_applier.py",
+        "evoom_guard/verifiers/candidate_edits.py",
+    } <= names
+
+    code = """
+import sys
+sys.path.insert(0, sys.argv[1])
+import evoom_guard.candidate as candidate
+import evoom_guard.patch_applier as legacy_patch
+import evoom_guard.verifiers.candidate_edits as legacy_edits
+import evoom_guard.verifiers.repo_verifier as repo_verifier
+
+assert candidate.PatchBlock is legacy_edits.PatchBlock
+assert candidate.PatchBlock is repo_verifier.PatchBlock
+assert candidate.apply_patch is legacy_patch.apply_patch
+assert candidate.apply_patch is repo_verifier.apply_patch
+"""
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code, out],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
 def test_pyz_exposes_github_attestation_admission_cli_contract(tmp_path):
     out = _build(tmp_path)
     sealed = subprocess.run(

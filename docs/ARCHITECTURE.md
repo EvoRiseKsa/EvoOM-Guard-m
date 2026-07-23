@@ -36,6 +36,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `execution/process.py` | Typed generic bounded-process requests/results, shared output capture, timeouts, and native process-tree cleanup. |
 | `execution/judge.py` | Typed black-box judge-process lifecycle: bounded stdout/stderr capture, timeout handling, reader lifecycle, and process-group cleanup. It does not build judge commands or interpret verdict evidence. |
 | `execution/command.py` | Shell-free host-command resolution. On Windows it resolves trusted `PATHEXT` shims while excluding candidate-controlled relative `PATH` entries for bare commands. |
+| `candidate/` | Dependency-free candidate input ownership: typed edit blocks, strict/lenient block parsers, and pure unique-anchor patch transforms. It performs no filesystem or process effects. |
 | `blackbox.py` | Black-box orchestration and compatibility surface: judge-command construction, candidate/pack coordination, report interpretation, evidence composition, and verdict policy. Historical private process seams delegate to `execution/judge.py`. |
 | `workspace.py` | Contained workspace I/O: atomic descriptor-relative/no-follow operations on POSIX; reparse rejection plus pre/post parent/object identity checks as a non-atomic Windows fallback. |
 | `runtime_identity.py` | Canonical post-setup runtime-tree identity (`EVOGUARD_RUNTIME_TREE_V1`), including setup-created outputs. |
@@ -48,7 +49,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `adapters.py` | Per-runner report wiring (`RunnerAdapter` + `instrument_command`). One class per runner; the engine stays runner-agnostic. |
 | `verdict_contract_v1_11.py` | Frozen schema-1.11 compatibility facade: it re-exports the dependency-free domain verdict vocabulary and owns the versioned policy keys and required record sections. It contains no producer or verifier algorithm and is loaded through the installed `evoom_guard` package. |
 | `guard.py` | **Producer orchestration.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, independent outcome selection, assurance/attestation construction, and report renderers (Markdown / JSON / SARIF). It re-exports the established schema-1.11 constants for compatibility. |
-| `patch_applier.py` | `apply_patch` — unique-anchor search/replace for `<<<PATCH>>>` blocks. |
+| `patch_applier.py` | Compatibility facade for the historical patch API; implementation ownership is in `candidate/patch.py`. |
 | `patchmin.py` | Pure, model-free helpers: delta-debugging (`minimize_patch`) + blast-radius `risk_score`. |
 | `record_verifier.py` | Public bounded schema-1.11 semantic-verification API and ordered claim-family orchestration. It checks consistency of recorded claims; it does not rerun the judged change. |
 | `record_verification/` | Internal verifier components extracted incrementally behind the public API. `report.py` owns the stable report envelope and independent schema-support pin; `isolation.py` owns isolation-parity checks. |
