@@ -138,6 +138,22 @@ def test_verify_docker_without_image_is_a_clear_error(tmp_path):
     assert "docker" in res.diagnostics.lower() and "image" in res.diagnostics.lower()
 
 
+def test_repo_verifier_rejects_unknown_isolation_before_copy(
+    monkeypatch,
+) -> None:
+    copied = []
+    monkeypatch.setattr(
+        repo_verifier_module,
+        "copy_repo_tree",
+        lambda *_args, **_kwargs: copied.append(True),
+    )
+
+    with pytest.raises(ValueError, match="unsupported isolation mode 'gvisro'"):
+        RepoVerifier(isolation="gvisro")
+
+    assert copied == []
+
+
 def test_cli_docker_without_image_is_usage_error(tmp_path, capsys):
     repo = tmp_path / "repo"
     repo.mkdir()

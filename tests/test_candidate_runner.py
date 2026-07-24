@@ -30,6 +30,10 @@ from evoom_guard.verifiers.repo_verifier import _SubprocessOutputLimitExceeded
 
 
 class LauncherIsShellFreeTests(unittest.TestCase):
+    def test_unknown_isolation_is_rejected_at_construction(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported isolation mode 'gvisro'"):
+            CandidateRunner(isolation="gvisro")
+
     def test_generated_launcher_uses_execvp_not_a_shell(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             launcher = CandidateRunner._write_launcher(

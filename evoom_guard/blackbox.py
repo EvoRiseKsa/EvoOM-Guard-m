@@ -67,6 +67,7 @@ from evoom_guard.candidate_runner import (
     CandidateRunner,
     IsolationUnavailable,
 )
+from evoom_guard.domain import validate_isolation_mode
 from evoom_guard.execution import (
     DEFAULT_MAX_OUTPUT_BYTES as _MAX_SUBPROCESS_OUTPUT_BYTES,
 )
@@ -808,6 +809,7 @@ def run_blackbox(
     expect_verifier_pack_sha256: str | None = None,
 ) -> BlackboxResult:
     """Run the black-box judge and report strict post-run cleanup failures."""
+    validate_isolation_mode(isolation)
     try:
         return _run_blackbox_impl(
             repo_path,

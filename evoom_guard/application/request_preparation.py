@@ -29,6 +29,7 @@ from evoom_guard.domain import (
     GuardRequest,
     RepositoryInput,
     SourceIdentity,
+    validate_isolation_mode,
 )
 
 
@@ -218,6 +219,7 @@ def prepare_guard_request(
         raise ValueError("mem_limit_mb must be a non-negative integer")
     if type(raw.strict_harness) is not bool:
         raise ValueError("strict_harness must be a boolean")
+    validate_isolation_mode(raw.isolation)
     if (
         raw.min_diff_coverage is not None
         and (

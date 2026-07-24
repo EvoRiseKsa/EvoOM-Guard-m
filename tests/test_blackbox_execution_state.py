@@ -78,6 +78,28 @@ def test_missing_pack_is_a_not_started_preflight(tmp_path: Path) -> None:
     assert result.error and "not found" in result.error
 
 
+def test_unknown_isolation_is_rejected_before_blackbox_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allocations: list[str] = []
+    monkeypatch.setattr(
+        blackbox_module.tempfile,
+        "mkdtemp",
+        lambda **_kwargs: allocations.append("workspace") or str(tmp_path / "work"),
+    )
+
+    with pytest.raises(ValueError, match="unsupported isolation mode 'gvisro'"):
+        run_blackbox(
+            str(tmp_path),
+            "",
+            str(tmp_path / "missing-pack"),
+            isolation="gvisro",
+        )
+
+    assert allocations == []
+
+
 def test_invalid_pack_is_a_not_started_preflight(
     repo_and_pack: tuple[Path, Path],
 ) -> None:

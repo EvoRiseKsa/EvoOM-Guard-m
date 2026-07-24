@@ -104,6 +104,7 @@ from evoom_guard.candidate import (
     parse_patch_blocks as parse_patch_blocks,
 )
 from evoom_guard.contracts import VerdictResult
+from evoom_guard.domain import validate_isolation_mode
 from evoom_guard.domain.execution import IsolationObservation
 from evoom_guard.execution import (
     DEFAULT_KILL_GRACE_SECONDS,
@@ -698,6 +699,7 @@ class RepoVerifier:
         setup_output_globs: tuple[str, ...] = (),
         strict_harness: bool = False,
     ) -> None:
+        validate_isolation_mode(isolation)
         self.timeout = timeout
         self.mem_limit_mb = mem_limit_mb
         self.test_command = test_command

@@ -46,6 +46,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
+from evoom_guard.domain import validate_isolation_mode
 from evoom_guard.execution import (
     ProcessContainmentError as _SubprocessContainmentError,
 )
@@ -160,6 +161,9 @@ class CandidateRunner:
     invocation_socket: str | None = None
     invocation_token: str | None = None
     _launcher: str = field(default="", init=False)
+
+    def __post_init__(self) -> None:
+        validate_isolation_mode(self.isolation)
 
     @staticmethod
     def _docker_control(
