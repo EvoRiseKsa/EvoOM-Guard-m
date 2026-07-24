@@ -4611,13 +4611,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-pack-phase-snapshot-pass-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_result.py",
         before=(
-            "                    repo_suite_passed=(\n"
-            "                        passed if verdict_source is not None else None\n"
-            "                    ),\n"
+            "            passed=phase.passed "
+            "if phase.verdict_source is not None else None,\n"
         ),
-        after="                    repo_suite_passed=False,\n",
+        after="            passed=False,\n",
         test=(
             "tests/test_record_verifier.py::"
             "test_pack_failure_preserves_repo_suite_baseline_effect"
