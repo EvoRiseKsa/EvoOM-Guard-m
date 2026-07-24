@@ -472,6 +472,20 @@ Frozen vectors cover report bytes, operation order, stdin rejection, error
 classification, and exit status. This slice does not move parser dispatch or
 any Release Source command.
 
+The third command-family slice adds the stdlib-only
+`cli.record_commands` owner for `verify-verdict`, `verify-record`,
+`bundle-evidence`, `finalize-record`, and `verify-bundle`. The owner fixes the
+ordered application pipeline—bounded read, parse/semantic validation,
+authentication or sealing, then machine-report projection—without importing a
+record, evidence, signing, or filesystem implementation. The `cli` facade keeps
+all five public `cmd_*` names and signatures. Function-local imports that were
+historically resolved at command entry remain entry snapshots; the bounded
+reader, machine reporter, path/hash/JSON projection, and the intentionally late
+`verify-verdict` JSON parser remain call-through providers. Characterization
+tests freeze operation order, stdout, exit status, public signatures, and those
+lookup points. This is an R2-compatible ownership move; it changes no verdict,
+bundle, signature, or frozen-release format.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

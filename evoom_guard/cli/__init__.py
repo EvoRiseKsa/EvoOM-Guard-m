@@ -69,6 +69,7 @@ from evoom_guard import __version__
 from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import parser as _parser_owner
+from evoom_guard.cli import record_commands as _record_command_owner
 from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
@@ -747,66 +748,40 @@ def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] =
     what a merge or deploy gate actually needs (chain of custody, not just
     file integrity).
     """
+
     from evoom_guard.signing import SigningUnavailableError, verify_bytes
 
-    sig = args.sig or (args.verdict + ".sig")
-    try:
-        payload_bytes = _read_bounded_bytes(
-            args.verdict,
-            limit=MAX_OFFLINE_RECORD_BYTES,
-            label="verdict",
-        )
-        encoded_signature = _read_bounded_bytes(
-            sig,
-            limit=MAX_SIGNATURE_FILE_BYTES,
-            label="signature",
-        ).strip()
-        signature = base64.b64decode(encoded_signature, validate=True)
-        ok = verify_bytes(payload_bytes, signature, args.pub)
-    except (OSError, ValueError, binascii.Error, SigningUnavailableError) as exc:
-        out(f"unusable input: {exc}")
-        return 2
-    out(f"input sha256: {hashlib.sha256(payload_bytes).hexdigest()}")
-    if not ok:
-        out("signature: INVALID — the verdict bytes changed after signing")
-        return 1
-    out("signature: VALID")
-
-    expectations = (
-        ("head_sha", getattr(args, "expect_head_sha", None)),
-        ("base_sha", getattr(args, "expect_base_sha", None)),
-        ("policy_sha256", getattr(args, "expect_policy_sha", None)),
-        ("policy_id", getattr(args, "expect_policy_id", None)),
-    )
-    if not any(want for _f, want in expectations):
-        return 0
-    try:
+    def strict_json_loads_provider() -> Callable[[str], Any]:
         from evoom_guard.record_verifier import strict_json_loads
 
-        payload = strict_json_loads(payload_bytes.decode("utf-8"))
-    except (UnicodeError, ValueError) as exc:
-        out(f"context: UNCHECKABLE — the verdict is not readable JSON ({exc})")
-        return 1
-    if not isinstance(payload, dict):
-        out("context: UNCHECKABLE - the verdict JSON root is not an object")
-        return 1
-    raw_attestation = payload.get("attestation")
-    att = raw_attestation if isinstance(raw_attestation, dict) else {}
-    failed = False
-    for field, want in expectations:
-        if not want:
-            continue
-        got = att.get(field)
-        if got == want:
-            out(f"context: {field} matches ({want})")
-        else:
-            out(f"context: MISMATCH — {field} is {got!r}, expected {want!r}")
-            failed = True
-    if failed:
-        out("context: FAILED — the signature is valid but this verdict was not "
-            "produced for the expected revision/policy")
-        return 1
-    return 0
+        return strict_json_loads
+
+    return _record_command_owner.execute_verify_verdict(
+        args,
+        services=_record_command_owner.VerifyVerdictServices(
+            read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
+                path,
+                limit=limit,
+                label=label,
+            ),
+            decode_signature=lambda encoded: base64.b64decode(
+                encoded,
+                validate=True,
+            ),
+            verify_bytes=verify_bytes,
+            input_errors=(
+                OSError,
+                ValueError,
+                binascii.Error,
+                SigningUnavailableError,
+            ),
+            sha256_hex=lambda payload: hashlib.sha256(payload).hexdigest(),
+            strict_json_loads_provider=strict_json_loads_provider,
+            max_record_bytes=MAX_OFFLINE_RECORD_BYTES,
+            max_signature_bytes=MAX_SIGNATURE_FILE_BYTES,
+        ),
+        out=out,
+    )
 
 
 def cmd_verify_record(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
@@ -817,36 +792,34 @@ def cmd_verify_record(args: argparse.Namespace, *, out: Callable[[str], None] = 
     found, exit 1 means a well-formed JSON value failed validation, and exit 2
     means the input could not be read as JSON.
     """
+
     from evoom_guard.record_verifier import (
         invalid_json_report,
         strict_json_loads,
         verify_record,
     )
 
-    try:
-        payload_bytes = _read_bounded_bytes(
-            args.verdict,
-            limit=MAX_OFFLINE_RECORD_BYTES,
-            label="verdict",
-        )
-    except (OSError, ValueError) as exc:
-        report = invalid_json_report(f"unusable JSON input: {exc}")
-        out(json.dumps(report, indent=2, sort_keys=True))
-        return 2
-    input_sha256 = hashlib.sha256(payload_bytes).hexdigest()
-    try:
-        payload = strict_json_loads(payload_bytes.decode("utf-8"))
-    except (UnicodeError, ValueError) as exc:
-        report = invalid_json_report(f"unusable JSON input: {exc}")
-        report["input_sha256"] = input_sha256
-        report["input_size"] = len(payload_bytes)
-        out(json.dumps(report, indent=2, sort_keys=True))
-        return 2
-    report = verify_record(payload)
-    report["input_sha256"] = input_sha256
-    report["input_size"] = len(payload_bytes)
-    out(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report["ok"] else 1
+    return _record_command_owner.execute_verify_record(
+        args,
+        services=_record_command_owner.VerifyRecordServices(
+            read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
+                path,
+                limit=limit,
+                label=label,
+            ),
+            strict_json_loads=strict_json_loads,
+            verify_record=verify_record,
+            invalid_json_report=invalid_json_report,
+            sha256_hex=lambda payload: hashlib.sha256(payload).hexdigest(),
+            render_report=lambda report: json.dumps(
+                report,
+                indent=2,
+                sort_keys=True,
+            ),
+            max_record_bytes=MAX_OFFLINE_RECORD_BYTES,
+        ),
+        out=out,
+    )
 
 
 def _machine_report(out: Callable[[str], None], value: dict[str, object]) -> None:
@@ -868,126 +841,41 @@ def cmd_bundle_evidence(
     from evoom_guard.record_verifier import strict_json_loads, verify_record
     from evoom_guard.signing import SigningUnavailableError
 
-    try:
-        verdict_bytes = _read_bounded_bytes(
-            args.verdict,
-            limit=MAX_OFFLINE_RECORD_BYTES,
-            label="verdict",
-        )
-        context_bytes = _read_bounded_bytes(
-            args.context,
-            limit=MAX_CONTEXT_INPUT_BYTES,
-            label="context",
-        )
-        verdict = strict_json_loads(verdict_bytes.decode("utf-8"))
-        context = strict_json_loads(context_bytes.decode("utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-                "ok": False,
-                "status": "ERROR",
-                "error": f"unusable JSON input: {exc}",
-            },
-        )
-        return 2
-    record_report = verify_record(verdict)
-    if not record_report["ok"]:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-                "ok": False,
-                "status": "INVALID_RECORD",
-                "record": record_report,
-            },
-        )
-        return 1
-    if not isinstance(context, dict):
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-                "ok": False,
-                "status": "ERROR",
-                "error": "context JSON must be an object",
-            },
-        )
-        return 2
-
-    materials: list[EvidenceMaterial] = []
-    for specification in args.material:
-        role, separator, path = specification.partition("=")
-        if not separator or not role or not path:
-            _machine_report(
-                out,
-                {
-                    "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-                    "ok": False,
-                    "status": "ERROR",
-                    "error": f"invalid --material {specification!r}; expected ROLE=PATH",
-                },
-            )
-            return 2
-        materials.append(EvidenceMaterial(role=role, source_path=path))
-
-    try:
-        manifest = create_evidence_bundle(
-            args.verdict,
-            args.out,
-            context=context,
-            private_key_path=args.sign_key,
-            materials=materials,
-            force=args.force,
-            require_valid_record=True,
-        )
-    except EvidenceBundleError as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-                "ok": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-                "ok": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-
-    canonical_manifest = (
-        json.dumps(
-            manifest,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        )
-        + "\n"
-    ).encode("ascii")
-    _machine_report(
-        out,
-        {
-            "format": "EVOGUARD_EVIDENCE_CREATION_V1",
-            "ok": True,
-            "status": "CREATED",
-            "bundle": os.path.abspath(args.out),
-            "manifest_sha256": hashlib.sha256(canonical_manifest).hexdigest(),
-            "record_sha256": manifest["record"]["sha256"],
-            "key_id": manifest["authentication"]["key_id"],
-        },
+    return _record_command_owner.execute_bundle_evidence(
+        args,
+        services=_record_command_owner.BundleEvidenceServices(
+            read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
+                path,
+                limit=limit,
+                label=label,
+            ),
+            strict_json_loads=strict_json_loads,
+            verify_record=verify_record,
+            evidence_material=EvidenceMaterial,
+            create_evidence_bundle=create_evidence_bundle,
+            invalid_input_errors=(EvidenceBundleError,),
+            operational_errors=(OSError, ValueError, SigningUnavailableError),
+            machine_report=lambda reporter, value: _machine_report(
+                reporter,
+                value,
+            ),
+            canonical_manifest_bytes=lambda manifest: (
+                json.dumps(
+                    manifest,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode("ascii"),
+            sha256_hex=lambda payload: hashlib.sha256(payload).hexdigest(),
+            absolute_path=lambda path: os.path.abspath(path),
+            max_record_bytes=MAX_OFFLINE_RECORD_BYTES,
+            max_context_bytes=MAX_CONTEXT_INPUT_BYTES,
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_finalize_record(
@@ -1011,159 +899,40 @@ def cmd_finalize_record(
     from evoom_guard.record_verifier import strict_json_loads, verify_record
     from evoom_guard.signing import SigningUnavailableError
 
-    if args.verdict == "-":
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "ERROR",
-                "error": "finalize-record verdict must be a regular file, not standard input",
-            },
-        )
-        return 2
-    try:
-        verdict_bytes = _read_bounded_bytes(
-            args.verdict,
-            limit=MAX_OFFLINE_RECORD_BYTES,
-            label="verdict",
-        )
-        context_bytes = _read_bounded_bytes(
-            args.expected_context,
-            limit=MAX_CONTEXT_INPUT_BYTES,
-            label="expected context",
-        )
-        verdict = strict_json_loads(verdict_bytes.decode("utf-8"))
-        expected_context = strict_json_loads(context_bytes.decode("utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "ERROR",
-                "error": f"unusable JSON input: {exc}",
-            },
-        )
-        return 2
-    if not isinstance(verdict, dict):
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "INVALID_RECORD",
-                "error": "verdict JSON must be an object",
-            },
-        )
-        return 1
-    record_report = verify_record(verdict)
-    if not record_report["ok"]:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "INVALID_RECORD",
-                "record": record_report,
-            },
-        )
-        return 1
-    if not isinstance(expected_context, dict):
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "ERROR",
-                "error": "expected context JSON must be an object",
-            },
-        )
-        return 2
-
-    materials: list[EvidenceMaterial] = []
-    for specification in args.material:
-        role, separator, path = specification.partition("=")
-        if not separator or not role or not path:
-            _machine_report(
-                out,
-                {
-                    "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                    "ok": False,
-                    "finalized": False,
-                    "status": "ERROR",
-                    "error": f"invalid --material {specification!r}; expected ROLE=PATH",
-                },
-            )
-            return 2
-        materials.append(EvidenceMaterial(role=role, source_path=path))
-
-    try:
-        finalized = finalize_evidence_bundle(
-            args.verdict,
-            args.out,
-            expected_context=expected_context,
-            private_key_path=args.sign_key,
-            materials=materials,
-            force=args.force,
-        )
-    except EvidenceBundleError as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "finalized": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-
-    canonical_manifest = (
-        json.dumps(
-            finalized.manifest,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=True,
-            allow_nan=False,
-        )
-        + "\n"
-    ).encode("ascii")
-    allowed = finalized.decision == "ALLOW"
-    _machine_report(
-        out,
-        {
-            "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-            "ok": allowed,
-            "finalized": True,
-            "status": "FINALIZED" if allowed else "DENIED",
-            "decision": finalized.decision,
-            "bundle": finalized.bundle_path,
-            "manifest_sha256": hashlib.sha256(canonical_manifest).hexdigest(),
-            "record_sha256": finalized.manifest["record"]["sha256"],
-            "key_id": finalized.manifest["authentication"]["key_id"],
-            "record": finalized.record_report,
-        },
+    return _record_command_owner.execute_finalize_record(
+        args,
+        services=_record_command_owner.FinalizeRecordServices(
+            read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
+                path,
+                limit=limit,
+                label=label,
+            ),
+            strict_json_loads=strict_json_loads,
+            verify_record=verify_record,
+            evidence_material=EvidenceMaterial,
+            finalize_evidence_bundle=finalize_evidence_bundle,
+            invalid_input_errors=(EvidenceBundleError,),
+            operational_errors=(OSError, ValueError, SigningUnavailableError),
+            machine_report=lambda reporter, value: _machine_report(
+                reporter,
+                value,
+            ),
+            canonical_manifest_bytes=lambda manifest: (
+                json.dumps(
+                    manifest,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode("ascii"),
+            sha256_hex=lambda payload: hashlib.sha256(payload).hexdigest(),
+            max_record_bytes=MAX_OFFLINE_RECORD_BYTES,
+            max_context_bytes=MAX_CONTEXT_INPUT_BYTES,
+        ),
+        out=out,
     )
-    return 0 if allowed or not args.require_pass else 1
 
 
 def _read_external_finalizer_object(path: str, *, label: str) -> dict[str, object]:
@@ -3690,159 +3459,33 @@ def cmd_verify_bundle(
     from evoom_guard.record_verifier import strict_json_loads, verify_record
     from evoom_guard.signing import SigningUnavailableError
 
-    try:
-        expected_context_bytes = _read_bounded_bytes(
-            args.expect_context,
-            limit=MAX_CONTEXT_INPUT_BYTES,
-            label="expected context",
-        )
-        expected_context = strict_json_loads(expected_context_bytes.decode("utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "error": f"unusable expected context: {exc}",
-            },
-        )
-        return 2
-    if not isinstance(expected_context, dict):
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "error": "expected context JSON must be an object",
-            },
-        )
-        return 2
-
-    claims = {
-        "canonical_container": "not_checked",
-        "external_key_signature": "not_checked",
-        "expected_context": "not_checked",
-        "record_semantics": "not_checked",
-    }
-    try:
-        inspected = inspect_evidence_bundle(args.bundle)
-        claims["canonical_container"] = "pass"
-    except EvidenceBundleError as exc:
-        claims["canonical_container"] = "fail"
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "claims": claims,
-                "error": str(exc),
-            },
-        )
-        return 1
-    except OSError as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "claims": claims,
-                "error": str(exc),
-            },
-        )
-        return 2
-
-    try:
-        verify_bundle_signature(
-            inspected,
-            trusted_public_key_path=args.trusted_pub,
-        )
-        claims["external_key_signature"] = "pass"
-    except EvidenceBundleError as exc:
-        claims["external_key_signature"] = "fail"
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "claims": claims,
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "claims": claims,
-                "error": str(exc),
-            },
-        )
-        return 2
-
-    try:
-        verify_bundle_context(inspected, expected_context=expected_context)
-        claims["expected_context"] = "pass"
-    except EvidenceBundleError as exc:
-        claims["expected_context"] = "fail"
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "claims": claims,
-                "error": str(exc),
-            },
-        )
-        return 1
-
-    verdict_record = inspected.verdict
-    record_report = verify_record(verdict_record)
-    claims["record_semantics"] = "pass" if record_report["ok"] else "fail"
-    verified = bool(record_report["ok"])
-    decision = {
-        field: verdict_record.get(field)
-        for field in ("verdict", "passed", "reason_code", "exit_code")
-    }
-    pass_gate = (
-        verified
-        and verdict_record.get("verdict") == "PASS"
-        and verdict_record.get("passed") is True
+    return _record_command_owner.execute_verify_bundle(
+        args,
+        services=_record_command_owner.VerifyBundleServices(
+            read_bounded_bytes=lambda path, *, limit, label: _read_bounded_bytes(
+                path,
+                limit=limit,
+                label=label,
+            ),
+            strict_json_loads=strict_json_loads,
+            verify_record=verify_record,
+            inspect_evidence_bundle=inspect_evidence_bundle,
+            verify_bundle_signature=verify_bundle_signature,
+            verify_bundle_context=verify_bundle_context,
+            invalid_bundle_errors=(EvidenceBundleError,),
+            signature_operational_errors=(
+                OSError,
+                ValueError,
+                SigningUnavailableError,
+            ),
+            machine_report=lambda reporter, value: _machine_report(
+                reporter,
+                value,
+            ),
+            max_context_bytes=MAX_CONTEXT_INPUT_BYTES,
+        ),
+        out=out,
     )
-    require_pass = bool(getattr(args, "require_pass", False))
-    ok = verified and (pass_gate or not require_pass)
-    status = "VERIFIED" if ok else ("DENIED" if verified else "INVALID")
-    _machine_report(
-        out,
-        {
-            "format": "EVOGUARD_EVIDENCE_VERIFICATION_V1",
-            "ok": ok,
-            "verified": verified,
-            "status": status,
-            "claims": claims,
-            "decision": decision,
-            "pass_gate": "ALLOW" if pass_gate else "DENY",
-            "key_id": inspected.manifest["authentication"]["key_id"],
-            "context": inspected.manifest["context"],
-            "record": record_report,
-        },
-    )
-    return 0 if ok else 1
 
 
 def validate_pack(pack_dir: str) -> dict[str, object]:
