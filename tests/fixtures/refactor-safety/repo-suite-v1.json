@@ -49,7 +49,7 @@
       "sha256": "e6f8178d62442046a03413d0c6a61b402dd08ec9d6f9751ca6b64fad5c9c0529"
     },
     "pack_configured_host_timeout": {
-      "sha256": "20f778cb7eeaab2eb1e39fef6abddc6594af556152a2df45fc0dcbb8574f3a03"
+      "sha256": "80d5c3aaa23557894ec42775b141209d7a9036367d732e7ed8f4ff944d6d3851"
     }
   },
   "schema_version": "repo-suite-characterization-v1"

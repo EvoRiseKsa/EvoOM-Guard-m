@@ -19,12 +19,7 @@ from repo_suite_characterization_harness import (
 
 from evoom_guard.verifiers import repo_suite
 
-VECTOR = (
-    Path(__file__).parent
-    / "fixtures"
-    / "refactor-safety"
-    / "repo-suite-v1.json"
-)
+VECTOR = Path(__file__).parent / "fixtures" / "refactor-safety" / "repo-suite-v1.json"
 
 
 def _frozen() -> dict:
@@ -105,9 +100,7 @@ def test_container_branches_preserve_delivery_and_trace(
     assert artifact["delivered_isolation"] == delivered
     assert artifact["repo_suite_isolation_evidence"]["delivered"] == delivered
     assert artifact["repo_suite_isolation_evidence"]["runtime"] == runtime
-    docker_event = next(
-        event for event in case["events"] if event["op"] == "docker-run"
-    )
+    docker_event = next(event for event in case["events"] if event["op"] == "docker-run")
     assert docker_event["report_outside_candidate"] is True
 
 
@@ -128,6 +121,9 @@ def test_terminal_suite_failure_never_starts_the_pack(tmp_path: Path) -> None:
     assert artifact["test_command_completed"] is False
     assert artifact["verifier_pack_started"] is False
     assert artifact["verifier_pack_completed"] is False
+    assert artifact["runtime_tree_sha256"] == ("<PLATFORM-BOUND-RUNTIME-TREE-SHA256>")
+    assert len(artifact["verifier_pack_sha256"]) == 64
+    assert set(artifact["verifier_pack_sha256"]) <= set("0123456789abcdef")
 
 
 def test_suite_dependencies_are_resolved_live_in_historical_order(
@@ -180,12 +176,8 @@ def test_repo_suite_owner_exposes_separate_immutable_contracts() -> None:
         strict_harness=True,
     )
 
-    assert repo_suite.execute_repo_suite.__module__ == (
-        "evoom_guard.verifiers.repo_suite"
-    )
-    assert repo_suite.interpret_repo_suite.__module__ == (
-        "evoom_guard.verifiers.repo_suite"
-    )
+    assert repo_suite.execute_repo_suite.__module__ == ("evoom_guard.verifiers.repo_suite")
+    assert repo_suite.interpret_repo_suite.__module__ == ("evoom_guard.verifiers.repo_suite")
     with pytest.raises(FrozenInstanceError):
         completed.returncode = 1  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):

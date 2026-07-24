@@ -52,6 +52,7 @@ _JUNIT_XML = (
     '<testcase classname="suite" name="passes"/></testsuite>'
 )
 _DIRECTORY_DIGEST = "e" * 64
+_RUNTIME_TREE_DIGEST = "<PLATFORM-BOUND-RUNTIME-TREE-SHA256>"
 
 
 def canonical_json(value: Any) -> str:
@@ -64,6 +65,19 @@ def _normalized_result(result: VerdictResult) -> dict[str, Any]:
     artifact = copy.deepcopy(result.artifact)
     artifact.pop("elapsed", None)
     artifact.pop("runtime_identity_elapsed_ms", None)
+    runtime_tree_sha256 = artifact.get("runtime_tree_sha256")
+    if runtime_tree_sha256 is not None:
+        if (
+            not isinstance(runtime_tree_sha256, str)
+            or len(runtime_tree_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in runtime_tree_sha256)
+        ):
+            raise AssertionError("runtime-tree characterization digest is not canonical SHA-256")
+        # Runtime-tree V1 deliberately binds executable permission bits.  The
+        # same controlled bytes therefore have different identities on
+        # Windows and POSIX.  Freeze the presence and shape here; dedicated
+        # runtime-identity tests retain exact digest semantics.
+        artifact["runtime_tree_sha256"] = _RUNTIME_TREE_DIGEST
     return {
         "artifact": artifact,
         "diagnostics": result.diagnostics,
@@ -87,9 +101,7 @@ def _docker_output_limit(*, started: bool) -> DockerRunOutputLimit:
 
 
 def _runner_effect(case_name: str) -> object:
-    completed = subprocess.CompletedProcess(
-        ["suite"], 0, "suite stdout", "suite stderr"
-    )
+    completed = subprocess.CompletedProcess(["suite"], 0, "suite stdout", "suite stderr")
     effects: dict[str, object] = {
         "docker_containment_started": DockerRunContainmentError(
             "docker cleanup missing", container_started=True
@@ -113,9 +125,7 @@ def _runner_effect(case_name: str) -> object:
         "host_not_found": FileNotFoundError("suite-tool"),
         "host_output_limit": ProcessOutputLimitExceeded(99),
         "host_timeout": subprocess.TimeoutExpired(["suite-tool"], 7),
-        "pack_configured_host_timeout": subprocess.TimeoutExpired(
-            ["suite-tool"], 7
-        ),
+        "pack_configured_host_timeout": subprocess.TimeoutExpired(["suite-tool"], 7),
     }
     return effects[case_name]
 
@@ -137,16 +147,13 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
 
     source = workspace / f"source-{case_name}"
     source.mkdir(parents=True)
-    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (source / "app.py").write_bytes(b"VALUE = 1\n")
 
     pack: Path | None = None
     if case_name == "pack_configured_host_timeout":
         pack = workspace / f"pack-{case_name}"
         pack.mkdir()
-        (pack / "test_contract.py").write_text(
-            "def test_contract():\n    assert True\n",
-            encoding="utf-8",
-        )
+        (pack / "test_contract.py").write_bytes(b"def test_contract():\n    assert True\n")
 
     events: list[dict[str, Any]] = []
     effect = _runner_effect(case_name)
@@ -171,9 +178,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         "verify_pack": repo_verifier.verify_pack_snapshot,
     }
 
-    def instrument(
-        command: list[str], report_path: str
-    ) -> tuple[list[str], bool, dict[str, str]]:
+    def instrument(command: list[str], report_path: str) -> tuple[list[str], bool, dict[str, str]]:
         state["report"] = report_path
         events.append(
             {
@@ -212,9 +217,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
             {
                 "command": list(command),
                 "op": "host-run",
-                "strict_cleanup": kwargs[
-                    "require_process_group_cleanup_proof"
-                ],
+                "strict_cleanup": kwargs["require_process_group_cleanup_proof"],
                 "timeout": kwargs["timeout"],
             }
         )
@@ -228,9 +231,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
             {
                 "matches_instrumented_path": path == state.get("report"),
                 "op": "read-report",
-                "outside_candidate": (
-                    "copy" in state and not _is_within(path, state["copy"])
-                ),
+                "outside_candidate": ("copy" in state and not _is_within(path, state["copy"])),
             }
         )
         return None if directory_case else _JUNIT_XML
@@ -246,9 +247,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
             {
                 "matches_owned_sibling": path == state.get("report", "") + ".d",
                 "op": "parse-directory",
-                "outside_candidate": (
-                    "copy" in state and not _is_within(path, state["copy"])
-                ),
+                "outside_candidate": ("copy" in state and not _is_within(path, state["copy"])),
             }
         )
         if not directory_case:
@@ -363,9 +362,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
                         "copy_is_candidate": Path(copy_path).name == "repo",
                         "op": "docker-run",
                         "pack_dir": pack_dir,
-                        "report_outside_candidate": not _is_within(
-                            report, copy_path
-                        ),
+                        "report_outside_candidate": not _is_within(report, copy_path),
                     }
                 )
                 if isinstance(effect, BaseException):

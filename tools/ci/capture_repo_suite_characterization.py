@@ -22,19 +22,13 @@ from repo_suite_characterization_harness import (  # noqa: E402
     capture_all,
 )
 
-VECTOR = (
-    TESTS / "fixtures" / "refactor-safety" / "repo-suite-v1.json"
-)
+VECTOR = TESTS / "fixtures" / "refactor-safety" / "repo-suite-v1.json"
 
 
 def _digest_cases(payload: dict) -> dict:
     return {
         "cases": {
-            name: {
-                "sha256": hashlib.sha256(
-                    canonical_json(value).encode("utf-8")
-                ).hexdigest()
-            }
+            name: {"sha256": hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()}
             for name, value in payload["cases"].items()
         },
         "schema_version": SCHEMA_VERSION,
@@ -50,20 +44,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    with tempfile.TemporaryDirectory(
-        prefix="evoguard-repo-suite-characterization-"
-    ) as temp:
+    with tempfile.TemporaryDirectory(prefix="evoguard-repo-suite-characterization-") as temp:
         observed = _digest_cases(capture_all(Path(temp)))
 
-    rendered = json.dumps(
-        observed,
-        ensure_ascii=False,
-        indent=2,
-        sort_keys=True,
-    ) + "\n"
+    rendered = (
+        json.dumps(
+            observed,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     if args.write:
         VECTOR.parent.mkdir(parents=True, exist_ok=True)
-        VECTOR.write_text(rendered, encoding="utf-8")
+        VECTOR.write_text(rendered, encoding="utf-8", newline="\n")
         print(f"Wrote {VECTOR.relative_to(ROOT)}")
         return 0
 
@@ -72,8 +67,7 @@ def main() -> int:
         return 1
     if VECTOR.read_text(encoding="utf-8") != rendered:
         print(
-            "Repository-suite characterization drifted; "
-            "run with --write only after review.",
+            "Repository-suite characterization drifted; run with --write only after review.",
             file=sys.stderr,
         )
         return 1
