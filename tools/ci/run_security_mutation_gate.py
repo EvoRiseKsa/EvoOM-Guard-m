@@ -40,6 +40,26 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="repository-copy-windows-reparse-preflight-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before='    if platform == "nt":\n',
+        after='    if False and platform == "nt":\n',
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_copy_rejects_simulated_windows_reparse_before_copying"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-file-not-found-absence-proof-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="            if path_absent(path) is True:\n",
+        after="            if True:\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_cleanup_requires_positive_root_absence_proof"
+        ),
+    ),
+    Mutation(
         name="repository-copy-symlink-fidelity-bypass",
         path="evoom_guard/workspace/repository.py",
         before="        symlinks=True,\n",
