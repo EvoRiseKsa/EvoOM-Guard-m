@@ -99,6 +99,7 @@ from evoom_guard.domain import (
     RepositoryInput,
     SourceIdentity,
 )
+from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.verdict import (
     ERROR,
     EXECUTION_COMPLETED,
@@ -926,6 +927,11 @@ def guard(
                 attestation_builder_provider=(
                     lambda: _build_attestation
                 ),
+                verification_pipeline_provider=(
+                    lambda: VerificationPipeline
+                ),
+                guard_decision_provider=lambda: GuardDecision,
+                guard_result_factory_provider=lambda: GuardResult,
                 decision_symbol_providers=(
                     _blackbox_decision_symbol_providers()
                 ),
@@ -935,36 +941,38 @@ def guard(
                 ),
             ),
         )
-        decision_bx = finalization_bx.decision
-        return GuardResult(
-            verdict=decision_bx.verdict,
-            passed=finalization_bx.passed,
-            reason=decision_bx.reason,
-            files_changed=changed,
-            protected_violations=[],
-            risk_level=finalization_bx.risk_level,
-            risk_score=finalization_bx.risk_score,
-            tests_passed=finalization_bx.tests_passed,
-            tests_total=finalization_bx.tests_total,
-            test_command_ran=finalization_bx.test_command_started,
-            execution_state=finalization_bx.execution_state,
-            execution_phase=finalization_bx.execution_phase,
-            verdict_source=finalization_bx.verdict_source,
-            diagnostics=finalization_bx.diagnostics,
-            reason_code=decision_bx.reason_code,
-            isolation=finalization_bx.effective_candidate_isolation,
-            assurance=cast(dict[str, Any], finalization_bx.assurance),
-            baseline=cast(
-                dict[str, Any] | None,
-                finalization_bx.baseline,
-            ),
-            diff_coverage=cast(
-                dict[str, Any] | None,
-                finalization_bx.diff_coverage,
-            ),
-            attestation=cast(
-                dict[str, Any],
-                finalization_bx.attestation,
+        return cast(
+            "GuardResult",
+            finalization_bx.guard_result_factory(
+                verdict=finalization_bx.verdict,
+                passed=finalization_bx.passed,
+                reason=finalization_bx.reason,
+                files_changed=changed,
+                protected_violations=[],
+                risk_level=finalization_bx.risk_level,
+                risk_score=finalization_bx.risk_score,
+                tests_passed=finalization_bx.tests_passed,
+                tests_total=finalization_bx.tests_total,
+                test_command_ran=finalization_bx.test_command_started,
+                execution_state=finalization_bx.execution_state,
+                execution_phase=finalization_bx.execution_phase,
+                verdict_source=finalization_bx.verdict_source,
+                diagnostics=finalization_bx.diagnostics,
+                reason_code=finalization_bx.reason_code,
+                isolation=finalization_bx.effective_candidate_isolation,
+                assurance=cast(dict[str, Any], finalization_bx.assurance),
+                baseline=cast(
+                    dict[str, Any] | None,
+                    finalization_bx.baseline,
+                ),
+                diff_coverage=cast(
+                    dict[str, Any] | None,
+                    finalization_bx.diff_coverage,
+                ),
+                attestation=cast(
+                    dict[str, Any],
+                    finalization_bx.attestation,
+                ),
             ),
         )
 

@@ -20,6 +20,7 @@ from assurance_decision_gate_characterization_harness import capture_case
 
 from evoom_guard.blackbox import BlackboxResult
 from evoom_guard.contracts import VerdictResult
+from evoom_guard.domain.decision import GuardDecision as DomainGuardDecision
 from evoom_guard.guard import guard
 
 guard_module = importlib.import_module("evoom_guard.guard")
@@ -47,6 +48,32 @@ def _inputs(root: Path) -> tuple[Path, Path]:
         encoding="utf-8",
     )
     return repo, pack
+
+
+def _completed_runtime() -> BlackboxResult:
+    return BlackboxResult(
+        passed=True,
+        tests_passed=1,
+        tests_total=1,
+        diagnostics="",
+        ran=True,
+        error=None,
+        pack_sha256="a" * 64,
+        pack_manifest={"id": "probe", "version": "1.0.0"},
+        junit_sha256="b" * 64,
+        isolation={
+            "requested": "subprocess",
+            "delivered": "subprocess",
+        },
+        deleted_applied=[],
+        started=True,
+        completed=True,
+        execution_state="completed",
+        execution_phase="blackbox_pack",
+        pack_present=True,
+        candidate_invocations=1,
+        candidate_launcher_invocation_observed=True,
+    )
 
 
 def test_blackbox_only_finalization_order_is_frozen(tmp_path: Path) -> None:
@@ -248,6 +275,309 @@ def test_finalization_helpers_are_resolved_after_blackbox_cleanup(
         "shortfall:late",
         "attestation:late",
     ]
+
+
+def test_verification_pipeline_lookup_remains_live_at_composition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Match the pre-extraction module-global lookup after prior effects."""
+
+    repo, pack = _inputs(tmp_path)
+    timeline: list[str] = []
+    original_profile = guard_module._assurance_profile
+    original_pipeline = guard_module.VerificationPipeline
+
+    class PrematurePipeline:
+        @classmethod
+        def from_decision(cls, _decision: object) -> object:
+            pytest.fail("VerificationPipeline was captured before composition")
+
+    class LivePipeline:
+        @classmethod
+        def from_decision(cls, decision: object) -> object:
+            timeline.append("pipeline:live")
+            return original_pipeline.from_decision(decision)
+
+    def rebind_during_profile(
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        timeline.append("profile:rebind-pipeline")
+        monkeypatch.setattr(
+            guard_module,
+            "VerificationPipeline",
+            LivePipeline,
+        )
+        return original_profile(*args, **kwargs)
+
+    monkeypatch.setattr(
+        guard_module,
+        "VerificationPipeline",
+        PrematurePipeline,
+    )
+    monkeypatch.setattr(
+        guard_module,
+        "_assurance_profile",
+        rebind_during_profile,
+    )
+    monkeypatch.setattr(
+        blackbox_module,
+        "run_blackbox",
+        lambda *a, **k: _completed_runtime(),
+    )
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+        blackbox_only=True,
+    )
+
+    assert result.passed is True
+    assert timeline == ["profile:rebind-pipeline", "pipeline:live"]
+
+
+def test_guard_decision_reexport_and_lookup_remain_live_at_composition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Freeze both Guard's historical ABI and its late class lookup."""
+
+    assert guard_module.GuardDecision is DomainGuardDecision
+
+    repo, pack = _inputs(tmp_path)
+    timeline: list[str] = []
+    original_profile = guard_module._assurance_profile
+
+    def premature_decision(**_kwargs: Any) -> DomainGuardDecision:
+        pytest.fail("GuardDecision was captured before composition")
+
+    def live_decision(**kwargs: Any) -> DomainGuardDecision:
+        timeline.append("decision:live")
+        return DomainGuardDecision(**kwargs)
+
+    def rebind_during_profile(
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        timeline.append("profile:rebind-decision")
+        monkeypatch.setattr(guard_module, "GuardDecision", live_decision)
+        return original_profile(*args, **kwargs)
+
+    monkeypatch.setattr(
+        guard_module,
+        "GuardDecision",
+        premature_decision,
+    )
+    monkeypatch.setattr(
+        guard_module,
+        "_assurance_profile",
+        rebind_during_profile,
+    )
+    monkeypatch.setattr(
+        blackbox_module,
+        "run_blackbox",
+        lambda *a, **k: _completed_runtime(),
+    )
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+        blackbox_only=True,
+    )
+
+    assert result.passed is True
+    assert timeline == ["profile:rebind-decision", "decision:live"]
+
+
+def test_guard_result_factory_is_snapshotted_before_final_wire_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Freeze decision reads before the historical result-factory lookup."""
+
+    repo, pack = _inputs(tmp_path)
+    timeline: list[str] = []
+    original_result = guard_module.GuardResult
+    original_attestation = guard_module._build_attestation
+
+    class RuntimeProbe:
+        passed = True
+        tests_passed = 1
+        tests_total = 1
+        ran = True
+        error = None
+        pack_sha256 = "a" * 64
+        pack_manifest = {"id": "probe", "version": "1.0.0"}
+        junit_sha256 = "b" * 64
+        isolation = {
+            "requested": "subprocess",
+            "delivered": "subprocess",
+        }
+        deleted_applied: list[str] = []
+        started = True
+        completed = True
+        execution_state = "completed"
+        execution_phase = "blackbox_pack"
+        pack_present = True
+        candidate_invocations = 1
+        candidate_launcher_invocation_observed = True
+
+        @property
+        def diagnostics(self) -> str:
+            timeline.append("runtime:diagnostics")
+            return ""
+
+    class RiskProbe:
+        @property
+        def level(self) -> str:
+            timeline.append("risk:level")
+            monkeypatch.setattr(guard_module, "GuardResult", late_factory)
+            return "low"
+
+        @property
+        def score(self) -> float:
+            timeline.append("risk:score")
+            return 0.1
+
+    class DecisionProbe:
+        def __init__(
+            self,
+            *,
+            verdict: str,
+            reason_code: str,
+            reason: str,
+        ) -> None:
+            self._verdict = verdict
+            self._reason_code = reason_code
+            self._reason = reason
+
+        @property
+        def verdict(self) -> str:
+            timeline.append("decision:verdict")
+            monkeypatch.setattr(guard_module, "GuardResult", selected_factory)
+            return self._verdict
+
+        @property
+        def reason_code(self) -> str:
+            timeline.append("decision:reason-code")
+            return self._reason_code
+
+        @property
+        def reason(self) -> str:
+            timeline.append("decision:reason")
+            return self._reason
+
+    def premature_factory(**_kwargs: Any) -> object:
+        pytest.fail("GuardResult was captured before decision projection")
+
+    def selected_factory(**kwargs: Any) -> object:
+        timeline.append("factory:selected")
+        return original_result(**kwargs)
+
+    def late_factory(**_kwargs: Any) -> object:
+        pytest.fail("GuardResult was resolved after keyword evaluation began")
+
+    def risk_score_probe(*_args: Any, **_kwargs: Any) -> RiskProbe:
+        return RiskProbe()
+
+    def attestation_probe(
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        timeline.append("attestation:build")
+        monkeypatch.setattr(guard_module, "GuardResult", late_factory)
+        return original_attestation(*args, **kwargs)
+
+    monkeypatch.setattr(guard_module, "GuardResult", premature_factory)
+    monkeypatch.setattr(guard_module, "GuardDecision", DecisionProbe)
+    monkeypatch.setattr(
+        guard_module,
+        "_assurance_shortfall",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(guard_module, "risk_score", risk_score_probe)
+    monkeypatch.setattr(
+        guard_module,
+        "_build_attestation",
+        attestation_probe,
+    )
+    monkeypatch.setattr(
+        blackbox_module,
+        "run_blackbox",
+        lambda *a, **k: RuntimeProbe(),
+    )
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+        blackbox_only=True,
+        baseline_evidence=True,
+        diff_coverage=True,
+    )
+
+    assert isinstance(result, original_result)
+    assert result.passed is True
+    assert timeline == [
+        "decision:verdict",
+        "decision:reason-code",
+        "decision:reason",
+        "risk:level",
+        "risk:score",
+        "runtime:diagnostics",
+        "attestation:build",
+        "factory:selected",
+    ]
+
+
+def test_attestation_can_delete_guard_result_after_callable_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No facade type cast may perform a second runtime global lookup."""
+
+    repo, pack = _inputs(tmp_path)
+    original_result = guard_module.GuardResult
+    original_attestation = guard_module._build_attestation
+
+    def deleting_attestation(
+        *args: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        monkeypatch.delattr(guard_module, "GuardResult")
+        return original_attestation(*args, **kwargs)
+
+    monkeypatch.setattr(
+        guard_module,
+        "_build_attestation",
+        deleting_attestation,
+    )
+    monkeypatch.setattr(
+        blackbox_module,
+        "run_blackbox",
+        lambda *a, **k: _completed_runtime(),
+    )
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+        blackbox_only=True,
+    )
+
+    assert isinstance(result, original_result)
+    assert result.passed is True
 
 
 @pytest.mark.parametrize(

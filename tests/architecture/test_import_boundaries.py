@@ -1199,10 +1199,7 @@ def test_blackbox_finalization_has_only_application_and_domain_dependencies() ->
         if source == module and target != module
     }
 
-    assert dependencies == {
-        "evoom_guard.application.pipeline",
-        "evoom_guard.domain.decision",
-    }
+    assert dependencies == set()
     assert ("evoom_guard.guard", module) in analysis.internal_edges
     assert not any(
         violation.startswith(f"{module} |")

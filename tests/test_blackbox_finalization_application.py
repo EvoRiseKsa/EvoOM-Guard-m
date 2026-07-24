@@ -16,6 +16,7 @@ from evoom_guard.application.blackbox_finalization import (
     BlackboxFinalizationServices,
     finalize_blackbox_verification,
 )
+from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.domain.decision import GuardDecision
 
 
@@ -29,8 +30,13 @@ def test_blackbox_finalization_is_public_and_outcome_is_frozen_slotted() -> None
     coverage = {"measured": False}
     attestation = {"mode": "blackbox"}
     assurance = {"execution_state": "completed"}
+    guard_result_factory = object
     outcome = BlackboxFinalizationOutcome(
         decision=decision,
+        verdict=decision.verdict,
+        reason_code=decision.reason_code,
+        reason=decision.reason,
+        guard_result_factory=guard_result_factory,
         passed=True,
         risk_level="low",
         risk_score=0.1,
@@ -58,6 +64,7 @@ def test_blackbox_finalization_is_public_and_outcome_is_frozen_slotted() -> None
     )
     assert not hasattr(outcome, "__dict__")
     assert outcome.passed is True
+    assert outcome.guard_result_factory is guard_result_factory
     assert outcome.baseline is baseline
     assert outcome.diff_coverage is coverage
     assert outcome.attestation is attestation
@@ -107,6 +114,8 @@ def test_blackbox_finalization_owner_has_no_runtime_effect_imports() -> None:
         if module.startswith(forbidden_prefixes)
     }
     assert "evoom_guard.application.repo_decision" not in imported_modules
+    assert "evoom_guard.application.pipeline" not in imported_modules
+    assert "evoom_guard.domain.decision" not in imported_modules
     assert "evoom_guard.domain.verdict" not in imported_modules
 
 
@@ -181,9 +190,12 @@ def test_final_wire_reads_still_precede_attestation_provider() -> None:
         ran = True
         error = None
         pack_sha256 = "a" * 64
-        pack_manifest = {"id": "probe", "version": "1.0.0"}
+        pack_manifest: dict[str, object] = {
+            "id": "probe",
+            "version": "1.0.0",
+        }
         junit_sha256 = "b" * 64
-        isolation = {
+        isolation: dict[str, object] = {
             "requested": "subprocess",
             "delivered": "subprocess",
         }
@@ -254,6 +266,11 @@ def test_final_wire_reads_still_precede_attestation_provider() -> None:
             assurance_builder_provider=lambda: assurance,
             assurance_shortfall_provider=lambda: shortfall,
             attestation_builder_provider=lambda: attestation,
+            verification_pipeline_provider=lambda: VerificationPipeline,
+            guard_decision_provider=lambda: GuardDecision,
+            guard_result_factory_provider=(
+                lambda: lambda **_kwargs: object()
+            ),
             decision_symbol_providers={
                 "PASS": pass_symbol,
                 "FAIL": lambda: "FAIL",
@@ -272,6 +289,7 @@ def test_final_wire_reads_still_precede_attestation_provider() -> None:
     )
 
     assert outcome.attestation == {"mode": "blackbox"}
+    assert callable(outcome.guard_result_factory)
     assert timeline[-5:] == [
         "symbol:pass",
         "risk:level",

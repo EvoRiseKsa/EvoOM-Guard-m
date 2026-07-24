@@ -16,10 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Protocol, cast
-
-from evoom_guard.application.pipeline import VerificationPipeline
-from evoom_guard.domain.decision import GuardDecision
+from typing import Any, Protocol, cast
 
 EvidenceMapping = Mapping[str, object]
 DecisionSymbolProviders = Mapping[str, Callable[[], str]]
@@ -148,6 +145,19 @@ class AssuranceShortfallEvaluator(Protocol):
     ) -> str | None: ...
 
 
+class GuardDecisionLike(Protocol):
+    """Decision surface needed by finalization without owning its class."""
+
+    @property
+    def verdict(self) -> str: ...
+
+    @property
+    def reason_code(self) -> str: ...
+
+    @property
+    def reason(self) -> str: ...
+
+
 class BlackboxAttestationBuilder(Protocol):
     def __call__(
         self,
@@ -193,6 +203,11 @@ class BlackboxFinalizationServices:
     assurance_builder_provider: Callable[[], BlackboxAssuranceBuilder]
     assurance_shortfall_provider: Callable[[], AssuranceShortfallEvaluator]
     attestation_builder_provider: Callable[[], BlackboxAttestationBuilder]
+    verification_pipeline_provider: Callable[[], type[Any]]
+    guard_decision_provider: Callable[
+        [], Callable[..., GuardDecisionLike]
+    ]
+    guard_result_factory_provider: Callable[[], Callable[..., object]]
     decision_symbol_providers: DecisionSymbolProviders
     outcome_reason_policy_provider: Callable[[], OutcomeReasonPolicy]
     tamper_outcome_reason_policy_provider: Callable[[], OutcomeReasonPolicy]
@@ -202,7 +217,11 @@ class BlackboxFinalizationServices:
 class BlackboxFinalizationOutcome:
     """Final decision and exact wire evidence consumed by ``GuardResult``."""
 
-    decision: GuardDecision
+    decision: GuardDecisionLike
+    verdict: str
+    reason_code: str
+    reason: str
+    guard_result_factory: Callable[..., object]
     passed: bool
     risk_level: str
     risk_score: float
@@ -601,8 +620,8 @@ def finalize_blackbox_verification(
         test_command_started=test_command_started,
         pack_evidence=pack_evidence,
     )
-    decision_pipeline = VerificationPipeline.from_decision(
-        GuardDecision(
+    decision_pipeline = services.verification_pipeline_provider().from_decision(
+        services.guard_decision_provider()(
             verdict=verdict,
             reason_code=reason_code,
             reason=reason,
@@ -617,6 +636,9 @@ def finalize_blackbox_verification(
         eager_shortfall=True,
     )
     decision = decision_pipeline.decision
+    final_verdict = decision.verdict
+    final_reason_code = decision.reason_code
+    final_reason = decision.reason
 
     baseline = None
     if request.collect_baseline_evidence:
@@ -641,10 +663,17 @@ def finalize_blackbox_verification(
             ),
         }
 
+    # Python historically resolved ``GuardResult`` before evaluating any of its
+    # keyword arguments.  Preserve that exact snapshot point: after the
+    # baseline/diff projections, immediately before ``passed``, risk,
+    # diagnostics, and attestation.  The facade invokes the captured factory
+    # only after every argument has been evaluated.
+    guard_result_factory = services.guard_result_factory_provider()
+
     # Historical Guard evaluated ``passed=(verdict == PASS)`` immediately
     # before reading the final risk/diagnostic properties and building the
     # attestation. Keep both the live symbol lookup and that access order.
-    passed = decision.verdict == decision_symbol("PASS")
+    passed = final_verdict == decision_symbol("PASS")
 
     # GuardResult historically read these properties immediately before the
     # final attestation call.  Keep that exception/access order even though the
@@ -726,6 +755,10 @@ def finalize_blackbox_verification(
 
     return BlackboxFinalizationOutcome(
         decision=decision,
+        verdict=final_verdict,
+        reason_code=final_reason_code,
+        reason=final_reason,
+        guard_result_factory=guard_result_factory,
         passed=passed,
         risk_level=risk_level,
         risk_score=risk_score,
