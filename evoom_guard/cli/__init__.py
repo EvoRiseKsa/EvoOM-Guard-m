@@ -69,6 +69,7 @@ from evoom_guard import __version__
 from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import parser as _parser_owner
+from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
     PackManifestError,
@@ -1213,53 +1214,25 @@ def cmd_derive_finalizer_bindings(
         write_finalizer_bindings,
     )
 
-    source = {
-        "pull_request_number": args.pr_number,
-        "workflow_run_id": args.run_id,
-        "workflow_run_attempt": args.run_attempt,
-        "base_sha": args.base_sha,
-        "head_sha": args.head_sha,
-    }
-    try:
-        bindings = derive_finalizer_bindings(
-            base_repo=args.base_repo,
-            head_repo=args.head_repo,
-            base_sha=args.base_sha,
-            head_sha=args.head_sha,
-            base_tree_sha=args.base_tree_sha,
-            head_tree_sha=args.head_tree_sha,
-            source=source,
-            repository=args.repository,
-            repository_id=args.repository_id,
-            guard_artifact_sha256=args.guard_artifact_sha,
-            base_is_bare=args.base_bare,
-            head_is_bare=args.head_bare,
-        )
-        output = write_finalizer_bindings(bindings, bindings_path=args.out, force=args.force)
-    except (FinalizerDerivationError, OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": FINALIZER_DERIVATION_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": FINALIZER_DERIVATION_FORMAT,
-            "ok": True,
-            "status": "DERIVED",
-            "bindings": output,
-            "candidate_sha256": bindings.candidate_sha256,
-            "policy_sha256": bindings.policy_sha256,
-            "verifier_pack_sha256": bindings.verifier_pack_sha256,
-        },
+    return _trusted_finalizer_command_owner.execute_derive_finalizer_bindings(
+        args,
+        services=_trusted_finalizer_command_owner.DeriveBindingsServices(
+            derivation_format=FINALIZER_DERIVATION_FORMAT,
+            expected_errors=(
+                FinalizerDerivationError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            derive_bindings=derive_finalizer_bindings,
+            write_bindings=write_finalizer_bindings,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_validate_agent_change_proposal(
@@ -1451,17 +1424,15 @@ def _read_semantic_finalizer_record(path: str) -> dict[str, Any]:
     from evoom_guard.evidence_bundle import MAX_VERDICT_BYTES, _load_json_object, _read_regular_file
     from evoom_guard.record_verifier import verify_record
 
-    if path == "-":
-        raise ValueError("verdict must be a regular JSON file, not standard input")
-    data = _read_regular_file(path, limit=MAX_VERDICT_BYTES, label="verdict")
-    record = _load_json_object(data, "verdict")
-    report = verify_record(record)
-    if not report["ok"]:
-        failed = ", ".join(
-            item["id"] for item in report["checks"] if item.get("status") == "fail"
-        )
-        raise ValueError("verdict record is semantically invalid: " + failed)
-    return record
+    return _trusted_finalizer_command_owner.execute_read_semantic_finalizer_record(
+        path,
+        services=_trusted_finalizer_command_owner.SemanticRecordServices(
+            max_verdict_bytes=MAX_VERDICT_BYTES,
+            read_regular_file=_read_regular_file,
+            load_json_object=_load_json_object,
+            verify_record=verify_record,
+        ),
+    )
 
 
 def cmd_verify_finalizer_bindings(
@@ -1479,41 +1450,29 @@ def cmd_verify_finalizer_bindings(
         write_verified_finalizer_context,
     )
 
-    try:
-        bindings = read_finalizer_bindings(args.bindings)
-        record = _read_semantic_finalizer_record(args.verdict)
-        source, context = context_from_verified_bindings(bindings, record)
-        source_out, context_out = write_verified_finalizer_context(
-            bindings,
-            record,
-            source_path=args.source_out,
-            context_path=args.context_out,
-            force=args.force,
-        )
-    except (FinalizerDerivationError, OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": FINALIZER_DERIVATION_FORMAT,
-                "ok": False,
-                "status": "MISMATCH",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": FINALIZER_DERIVATION_FORMAT,
-            "ok": True,
-            "status": "VERIFIED",
-            "source": source,
-            "context": context,
-            "source_path": source_out,
-            "context_path": context_out,
-        },
+    return _trusted_finalizer_command_owner.execute_verify_finalizer_bindings(
+        args,
+        services=_trusted_finalizer_command_owner.VerifyBindingsServices(
+            derivation_format=FINALIZER_DERIVATION_FORMAT,
+            expected_errors=(
+                FinalizerDerivationError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            read_bindings=read_finalizer_bindings,
+            read_semantic_record=lambda record_path: _read_semantic_finalizer_record(
+                record_path
+            ),
+            context_from_bindings=context_from_verified_bindings,
+            write_verified_context=write_verified_finalizer_context,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_finalizer_handoff(
@@ -1529,74 +1488,24 @@ def cmd_finalizer_handoff(
         create_finalizer_handoff,
     )
 
-    if args.verdict == "-":
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
-                "ok": False,
-                "status": "ERROR",
-                "error": "finalizer-handoff verdict must be a regular file, not standard input",
-            },
-        )
-        return 2
-    try:
-        source = _read_external_finalizer_object(args.source, label="source")
-        context = _read_external_finalizer_object(args.context, label="context")
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
-                "ok": False,
-                "status": "ERROR",
-                "error": f"unusable trusted metadata: {exc}",
-            },
-        )
-        return 2
-    try:
-        handoff = create_finalizer_handoff(
-            args.verdict,
-            args.out,
-            source=source,
-            context=context,
-            force=args.force,
-        )
-    except (EvidenceBundleError, FinalizerHandoffError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
-                "ok": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except OSError as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
-                "ok": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": "EVOGUARD_TRUSTED_FINALIZER_HANDOFF_V1",
-            "ok": True,
-            "status": "CREATED",
-            "handoff": os.path.abspath(args.out),
-            "record_sha256": handoff["record"]["sha256"],
-            "source": handoff["source"],
-            "context": handoff["context"],
-        },
+    return _trusted_finalizer_command_owner.execute_finalizer_handoff(
+        args,
+        services=_trusted_finalizer_command_owner.FinalizerHandoffServices(
+            metadata_errors=(OSError, UnicodeError, ValueError),
+            invalid_input_errors=(EvidenceBundleError, FinalizerHandoffError),
+            operational_errors=(OSError,),
+            read_external_object=lambda object_path, *, label: (
+                _read_external_finalizer_object(object_path, label=label)
+            ),
+            create_handoff=create_finalizer_handoff,
+            absolute_path=lambda output_path: os.path.abspath(output_path),
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_finalizer(
@@ -1611,94 +1520,25 @@ def cmd_seal_finalizer(
     from evoom_guard.signing import SigningUnavailableError
     from evoom_guard.trusted_finalizer import FinalizerHandoffError, seal_finalizer_bundle
 
-    if args.verdict == "-":
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": "seal-finalizer verdict must be a regular file, not standard input",
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-        expected_derivation = (
-            read_finalizer_bindings(args.expected_derivation).payload
-            if args.expected_derivation is not None
-            else None
-        )
-        materials = _parse_finalizer_materials(args.material)
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": f"unusable trusted input: {exc}",
-            },
-        )
-        return 2
-    try:
-        sealed = seal_finalizer_bundle(
-            args.handoff,
-            args.verdict,
-            args.out,
-            expected_source=expected_source,
-            expected_context=expected_context,
-            private_key_path=args.sign_key,
-            expected_derivation=expected_derivation,
-            materials=materials,
-            force=args.force,
-        )
-    except (EvidenceBundleError, FinalizerHandoffError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "sealed": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    allowed = sealed.decision == "ALLOW"
-    _machine_report(
-        out,
-        {
-            "format": "EVOGUARD_TRUSTED_FINALIZATION_V1",
-            "ok": allowed,
-            "sealed": True,
-            "status": "FINALIZED" if allowed else "DENIED",
-            "decision": sealed.decision,
-            "bundle": sealed.finalized.bundle_path,
-            "record_sha256": sealed.finalized.manifest["record"]["sha256"],
-            "key_id": sealed.finalized.manifest["authentication"]["key_id"],
-        },
+    return _trusted_finalizer_command_owner.execute_seal_finalizer(
+        args,
+        services=_trusted_finalizer_command_owner.SealFinalizerServices(
+            trusted_input_errors=(OSError, UnicodeError, ValueError),
+            invalid_input_errors=(EvidenceBundleError, FinalizerHandoffError),
+            operational_errors=(OSError, ValueError, SigningUnavailableError),
+            read_external_object=lambda object_path, *, label: (
+                _read_external_finalizer_object(object_path, label=label)
+            ),
+            read_bindings=read_finalizer_bindings,
+            parse_materials=lambda values: _parse_finalizer_materials(values),
+            seal_finalizer=seal_finalizer_bundle,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0 if allowed or not args.require_pass else 1
 
 
 def cmd_verify_finalized(
@@ -1714,71 +1554,23 @@ def cmd_verify_finalized(
         verify_finalized_bundle,
     )
 
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        verified = verify_finalized_bundle(
-            args.bundle,
-            trusted_public_key_path=args.trusted_pub,
-            expected_source=expected_source,
-            expected_context=expected_context,
-        )
-    except SigningUnavailableError as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "error": str(exc),
-            },
-        )
-        return 2
-    except (OSError, ValueError, FinalizerHandoffError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "error": str(exc),
-            },
-        )
-        return 1
-    allowed = verified.decision == "ALLOW"
-    ok = allowed or not args.require_pass
-    _machine_report(
-        out,
-        {
-            "format": "EVOGUARD_TRUSTED_FINALIZER_VERIFICATION_V1",
-            "ok": ok,
-            "verified": True,
-            "status": "VERIFIED" if ok else "DENIED",
-            "decision": verified.decision,
-            "key_id": verified.bundle.manifest["authentication"]["key_id"],
-            "record": verified.bundle.record_report,
-        },
+    return _trusted_finalizer_command_owner.execute_verify_finalized(
+        args,
+        services=_trusted_finalizer_command_owner.VerifyFinalizedServices(
+            external_input_errors=(OSError, UnicodeError, ValueError),
+            signing_unavailable_errors=(SigningUnavailableError,),
+            invalid_bundle_errors=(OSError, ValueError, FinalizerHandoffError),
+            read_external_object=lambda object_path, *, label: (
+                _read_external_finalizer_object(object_path, label=label)
+            ),
+            verify_finalized=verify_finalized_bundle,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0 if ok else 1
 
 
 def cmd_release_source_handoff(
