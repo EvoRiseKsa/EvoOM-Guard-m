@@ -116,6 +116,312 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="guard-output-markdown-reason-sanitization-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before='        f"**{_markdown_text(r.reason)}**",\n',
+        after='        f"**{r.reason}**",\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_markdown_projection_neutralizes_untrusted_structure"
+        ),
+    ),
+    Mutation(
+        name="guard-output-markdown-diagnostic-fence-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            _markdown_fenced_code(diag),\n",
+        after='            f"```\\n{diag}\\n```",\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_markdown_projection_neutralizes_untrusted_structure"
+        ),
+    ),
+    Mutation(
+        name="guard-output-markdown-entity-introducer-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before='        elif markdown and character == "&":\n',
+        after='        elif False and markdown and character == "&":\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_markdown_projection_neutralizes_untrusted_structure"
+        ),
+    ),
+    Mutation(
+        name="guard-output-percent-type-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    if type(value) not in {int, float}:\n"
+            '        raise ValueError(f"{field} must be a finite number '
+            'from 0 to 100")\n'
+        ),
+        after=(
+            "    if False and type(value) not in {int, float}:\n"
+            '        raise ValueError(f"{field} must be a finite number '
+            'from 0 to 100")\n'
+        ),
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_diff_coverage_numeric_evidence_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="guard-output-count-type-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if type(value) is not int or value < 0:\n",
+        after="    if False and type(value) is not int or value < 0:\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_missed_line_evidence_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="guard-output-top-level-test-count-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    tests = _validated_test_counts(\n"
+            "        r.tests_passed,\n"
+            "        r.tests_total,\n"
+            "    )\n"
+        ),
+        after='    tests = "bypassed"\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_top_level_test_counts_fail_closed_before_markdown_projection"
+        ),
+    ),
+    Mutation(
+        name="guard-output-risk-score-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    risk_score = _require_probability(\n"
+            "        r.risk_score,\n"
+            '        field="risk_score",\n'
+            "    )\n"
+        ),
+        after="    risk_score = 0.0\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_risk_score_fails_closed_before_markdown_projection"
+        ),
+    ),
+    Mutation(
+        name="guard-output-atomic-fsync-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            os.fsync(stream.fileno())\n",
+        after="            if False:\n                os.fsync(stream.fileno())\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_fsyncs_before_same_directory_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-atomic-same-directory-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="        dir=directory,\n",
+        after="        dir=None,\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_fsyncs_before_same_directory_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-stream-closefd-ownership-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            closefd=False,\n",
+        after="            closefd=True,\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_close_after_wrapper_close_never_closes_a_victim"
+        ),
+    ),
+    Mutation(
+        name="guard-output-raw-descriptor-close-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            os.close(raw_descriptor)\n",
+        after="            if False:\n                os.close(raw_descriptor)\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_close_before_wrapper_close_releases_raw_handle"
+        ),
+    ),
+    Mutation(
+        name="guard-output-raw-descriptor-disarm-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "        raw_descriptor = descriptor\n"
+            "        descriptor = -1\n"
+            "        try:\n"
+        ),
+        after=(
+            "        raw_descriptor = descriptor\n"
+            "        try:\n"
+        ),
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_raw_descriptor_close_is_attempted_only_once"
+        ),
+    ),
+    Mutation(
+        name="guard-output-nonregular-destination-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if not stat.S_ISREG(observed.st_mode):\n",
+        after="    if False and not stat.S_ISREG(observed.st_mode):\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_rejects_directory_destination"
+        ),
+    ),
+    Mutation(
+        name="guard-output-windows-reserved-name-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before='    if platform_name == "nt":\n',
+        after='    if False and platform_name == "nt":\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_destination_validator_rejects_windows_devices_and_namespaces"
+        ),
+    ),
+    Mutation(
+        name="guard-output-read-only-mode-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if mode & 0o222 == 0:\n",
+        after="    if False and mode & 0o222 == 0:\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_destination_validator_rejects_simulated_read_only_regular_file"
+        ),
+    ),
+    Mutation(
+        name="guard-output-close-primary-precedence-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if primary is None:\n",
+        after="    if True:\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_preserves_primary_when_close_also_fails"
+        ),
+    ),
+    Mutation(
+        name="guard-output-second-destination-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "        current_mode = "
+            "_validate_output_destination(destination_path)\n"
+        ),
+        after="        current_mode = None\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_revalidates_leaf_immediately_before_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-mode-preservation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            os.chmod(temp_path, replacement_mode)\n",
+        after="            if False:\n                os.chmod(temp_path, replacement_mode)\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_applies_existing_mode_before_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-control-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    if any(_is_unsafe_control(character) for character in path):\n"
+        ),
+        after=(
+            "    if False and any("
+            "_is_unsafe_control(character) for character in path):\n"
+        ),
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_rejects_control_or_non_repository_artifact_paths"
+            "[src/control\\nname.py]"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-surrogate-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '    if any(unicodedata.category(character) == "Cs" '
+            "for character in path):\n"
+        ),
+        after=(
+            '    if False and any(unicodedata.category(character) == "Cs" '
+            "for character in path):\n"
+        ),
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_path_errors_are_structured"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-backslash-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before='    if "\\\\" in path:\n',
+        after='    if False and "\\\\" in path:\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_path_errors_are_structured"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-drive-prefix-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if _has_ascii_drive_prefix(path):\n",
+        after="    if False and _has_ascii_drive_prefix(path):\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_path_errors_are_structured"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-unicode-drive-prefix-regression",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '        and ("A" <= value[0] <= "Z" '
+            'or "a" <= value[0] <= "z")\n'
+        ),
+        after="        and value[0].isalpha()\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_unicode_letter_colon_is_not_an_ascii_drive_prefix"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-message-control-escape-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '                    f"{_visible_inline_text('
+            'result.reason, markdown=False)}"\n'
+        ),
+        after='                    f"{result.reason}"\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_message_text_projects_controls_as_visible_escapes"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-uri-encoding-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before='    return quote(path, safe="/-._~")\n',
+        after="    return path\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_artifact_uri_is_normalized_and_percent_encoded"
+        ),
+    ),
+    Mutation(
+        name="guard-output-non-pass-sarif-suppression",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if result.verdict != pass_verdict_provider():\n",
+        after="    if False and result.verdict != pass_verdict_provider():\n",
+        test=(
+            "tests/test_guard_output_characterization.py::"
+            "test_output_owner_sarif_non_pass_is_not_suppressed"
+        ),
+    ),
+    Mutation(
         name="candidate-tree-reparse-classification-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before="    if is_windows_reparse(full_path, info):\n",

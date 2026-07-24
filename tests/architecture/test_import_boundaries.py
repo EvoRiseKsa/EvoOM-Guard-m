@@ -911,6 +911,49 @@ def test_cli_guard_command_has_one_typed_owner_and_no_runtime_internal_imports()
     assert {"cmd_guard", "_guard_command_services"} <= facade_functions
 
 
+def test_guard_output_has_one_stdlib_owner_and_public_facades() -> None:
+    """Output publication belongs to integrations while Guard keeps its API."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.guard"
+    owner_module = "evoom_guard.integrations.guard_output"
+    facade_path = PACKAGE_ROOT / "guard.py"
+    owner_path = PACKAGE_ROOT / "integrations" / "guard_output.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "render_report",
+        "to_sarif",
+        "write_json",
+        "write_sarif",
+    } <= owner_functions
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name for node in facade_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "render_report",
+        "to_sarif",
+        "write_json",
+        "write_sarif",
+    } <= facade_functions
+
+
 def test_cli_agent_change_commands_have_one_stdlib_owner_and_public_facades() -> None:
     """The five bounded adapters keep effects and import timing in the facade."""
 

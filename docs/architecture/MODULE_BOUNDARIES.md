@@ -14,7 +14,17 @@
 - `finalizer/`: PR/release source finalization workflows and handoff.
 - `admission/`: admission adapters and output contracts.
 - `api/` and `cli/`: thin public/CLI compatibility surfaces.
-- `integrations/`: external platform adapters.
+- `integrations/`: high-level output and external-platform adapters. Guard
+  output projection is owned by `integrations/guard_output.py`; public
+  `guard.py` functions remain compatibility facades. The same owner provides
+  the same-directory atomic writer used by the CLI Markdown report and the
+  JSON/SARIF facades. It rejects observed non-regular and read-only leaves
+  before staging and again immediately before replacement, while preserving
+  portable mode bits on an existing regular file. The caller owns a trusted,
+  quiescent parent directory; ACL/xattr/ownership metadata, parent-directory
+  fsync, crash/NFS durability, and multi-file atomicity are outside this
+  boundary. The `closefd=False` stream is only a text wrapper; the writer owns,
+  disarms, and closes the raw descriptor exactly once before unlink cleanup.
 
 ## Rule
 

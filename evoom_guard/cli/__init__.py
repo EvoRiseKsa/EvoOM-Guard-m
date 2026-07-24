@@ -466,10 +466,10 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
         write_json,
         write_sarif,
     )
+    from evoom_guard.integrations.guard_output import write_markdown
 
     def write_report(path: str, report: str) -> None:
-        with open(path, "w", encoding="utf-8") as file:
-            file.write(report + "\n")
+        write_markdown(report + "\n", path)
 
     def sign_file_provider() -> Callable[[str, str], str]:
         from evoom_guard.signing import sign_file

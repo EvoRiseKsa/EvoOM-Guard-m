@@ -172,13 +172,37 @@ classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
 facade. The facade injects live validators and argument-group helpers on every
 call; command handlers and dispatch remain in `cli/__init__.py`.
-Internal workspace decomposition and the remaining black-box
-candidate/evidence/cleanup orchestration remain pending; black-box pack
-runtime-effect sequencing, candidate path admission, and the repo-native
+Markdown rendering and JSON/SARIF publication now belong to the stdlib-only
+`integrations/guard_output.py` owner. `guard.py` retains all four historical
+function signatures. A frozen wire vector binds benign report strings,
+object/key order, indentation, trailing-newline behavior, platform text
+translation, and non-PASS SARIF alert emission. Candidate-derived Markdown is
+escaped for its rendering context; top-level test counts, risk score, and
+dynamic numeric evidence are type/range checked; and SARIF artifact paths are
+canonical repository-relative URIs that reject controls, surrogates, ASCII
+drive prefixes, and backslashes. SARIF message controls render as visible
+escapes without changing the producer-owned JSON record. Markdown/JSON/SARIF
+destinations share one fsynced same-directory temporary-write plus
+atomic-replace boundary. Existing symlinks, directories, special files, and
+mode-bit read-only files are rejected before staging and immediately before
+replacement; an existing regular file's portable `rwx` mode is preserved.
+The text wrapper uses `closefd=False`, so the writer retains exclusive raw
+descriptor ownership. After wrapper close is attempted, the writer releases
+the wrapper reference, disarms the cleanup slot, and attempts raw close exactly
+once before unlink cleanup. This avoids both closing a reused descriptor and
+leaking a Windows temporary-file handle when wrapper close fails early.
+The parent directory remains a trusted, quiescent boundary between those two
+checks. Ownership, ACLs, xattrs, Windows security descriptors/alternate
+streams, and other non-portable metadata are not preserved. No parent-directory
+fsync is performed, so this does not promise power-loss/crash, NFS/distributed
+filesystem, or multi-file transactional durability.
+The remaining black-box candidate/evidence/cleanup orchestration and further
+runtime-effect decomposition remain pending; black-box pack sequencing,
+candidate path admission, candidate-tree intake, repository workspace
+ownership, and the repo-native
 application decision/finalization path are complete.
 
-The immediate structural priority is the next bounded slice: extract one
-separately characterized CLI command family or reduce a remaining
-RepoVerifier/black-box effect responsibility without changing trust boundaries.
-Every slice must retain the existing contract, mutation, differential, and
-architectural-boundary gates.
+The immediate structural priority after this bounded output slice is to reduce
+one remaining RepoVerifier/black-box effect responsibility without changing
+trust boundaries. Every slice must retain the existing contract, mutation,
+differential, and architectural-boundary gates.
