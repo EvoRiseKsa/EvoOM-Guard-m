@@ -81,6 +81,15 @@ This classifies the public integration boundary and creates a real package for
 later parser/registry and command-family extraction; it does not by itself
 claim that the 6,082-line implementation has been decomposed.
 
+The second CLI slice gives declarative parser construction a dependency-free
+owner in `evoom_guard/cli/parser.py`. The public `cli.build_parser` facade
+injects the current immutable-release validator and four argument-group helpers
+for each invocation, so no callable is snapshotted across monkeypatches. A
+re-runnable frozen characterization binds parser structure, 41 subcommands,
+all help output, representative defaults, and immutable-ref rejection.
+Handlers, dispatch, file/process effects, and command-family ownership remain
+in `cli/__init__.py`.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain

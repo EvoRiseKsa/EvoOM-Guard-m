@@ -2945,6 +2945,68 @@ MUTATIONS = (
             "test_guard_adapter_reads_reserved_namespace_after_discovery"
         ),
     ),
+    Mutation(
+        name="cli-parser-live-ref-injection-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before="        immutable_release_ref_provider=lambda: _immutable_release_ref,\n",
+        after=(
+            "        immutable_release_ref_provider="
+            "lambda: (lambda value: str(value)),\n"
+        ),
+        test=(
+            "tests/test_cli_parser_characterization.py::"
+            "test_cli_parser_matches_frozen_characterization"
+        ),
+    ),
+    Mutation(
+        name="cli-parser-live-helper-injection-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "        add_github_attestation_policy_arguments=lambda parser: (\n"
+            "            _add_github_attestation_policy_arguments(parser)\n"
+            "        ),\n"
+        ),
+        after=(
+            "        add_github_attestation_policy_arguments="
+            "lambda _parser: None,\n"
+        ),
+        test=(
+            "tests/test_cli_parser_characterization.py::"
+            "test_cli_parser_matches_frozen_characterization"
+        ),
+    ),
+    Mutation(
+        name="cli-parser-construction-time-helper-rebinding-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "        add_release_artifact_key_registry_arguments=lambda parser: (\n"
+            "            _add_release_artifact_key_registry_arguments(parser)\n"
+            "        ),\n"
+        ),
+        after=(
+            "        add_release_artifact_key_registry_arguments=(\n"
+            "            _add_release_artifact_key_registry_arguments\n"
+            "        ),\n"
+        ),
+        test=(
+            "tests/test_cli_parser_characterization.py::"
+            "test_cli_parser_resolves_dependencies_at_their_original_call_sites"
+        ),
+    ),
+    Mutation(
+        name="cli-parser-construction-time-ref-rebinding-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before="        immutable_release_ref_provider=lambda: _immutable_release_ref,\n",
+        after=(
+            "        immutable_release_ref_provider=(\n"
+            "            lambda ref=_immutable_release_ref: lambda: ref\n"
+            "        )(),\n"
+        ),
+        test=(
+            "tests/test_cli_parser_characterization.py::"
+            "test_cli_parser_resolves_dependencies_at_their_original_call_sites"
+        ),
+    ),
 )
 
 

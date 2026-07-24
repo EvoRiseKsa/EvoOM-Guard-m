@@ -802,20 +802,34 @@ def test_workspace_package_is_classified_and_dependency_free() -> None:
 
 
 def test_cli_package_is_classified_and_preserves_the_console_surface() -> None:
-    """The atomic CLI move must retain its public module and entry point."""
+    """The CLI facade and parser owner must retain the public entry point."""
 
     modules, _ = _discover_modules(PACKAGE_ROOT)
     analysis = analyze_package(PACKAGE_ROOT)
     module = "evoom_guard.cli"
+    parser_module = "evoom_guard.cli.parser"
     cli_path = PACKAGE_ROOT / "cli" / "__init__.py"
+    parser_path = PACKAGE_ROOT / "cli" / "parser.py"
 
     assert modules[module] == cli_path
+    assert modules[parser_module] == parser_path
     assert module not in analysis.violations["unclassified_modules"]
+    assert parser_module not in analysis.violations["unclassified_modules"]
     tree = ast.parse(cli_path.read_text(encoding="utf-8"))
     functions = {
         node.name for node in tree.body if isinstance(node, ast.FunctionDef)
     }
     assert {"build_parser", "main"} <= functions
+    parser_tree = ast.parse(parser_path.read_text(encoding="utf-8"))
+    parser_functions = {
+        node.name for node in parser_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert parser_functions == {"build_parser"}
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == parser_module and target != parser_module
+    } == set()
     assert 'evo-guard = "evoom_guard.cli:main"' in (
         ROOT / "pyproject.toml"
     ).read_text(encoding="utf-8")

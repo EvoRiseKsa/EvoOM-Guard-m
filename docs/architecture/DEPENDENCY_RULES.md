@@ -176,6 +176,15 @@ private-import ceiling remains 55. Parser and command extraction are separate
 later slices; this move does not claim that the CLI monolith has already been
 decomposed.
 
+The next CLI slice moves only declarative `argparse` construction into the
+dependency-free `cli.parser` owner. `cli.__init__` retains the public
+`build_parser` facade and injects its current immutable-ref validator and four
+argument-group helpers on every call, preserving the established monkeypatch
+surface. A frozen parser snapshot covers all 41 subcommands, every help page,
+representative defaults, immutable-ref rejection, and live helper lookup.
+Command handlers and dispatch remain in the compatibility facade. This
+same-package move creates no new ratchet revision or baseline-ceiling claim.
+
 ## Acceptance rules
 
 - Any architecture-extraction PR must:
