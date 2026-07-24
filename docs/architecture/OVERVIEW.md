@@ -106,12 +106,20 @@ Optional repository verifier-pack admission now has the focused
 `verifiers.repo_pack_intake` owner. It checks the required digest pin and
 reserved mount, creates and identifies the judge-owned snapshot through
 injected live operations, and returns immutable intake evidence. Pack
-execution, post-snapshot verification, and cleanup remain in `RepoVerifier`.
+execution is separate; post-snapshot verification and cleanup remain in
+`RepoVerifier`.
 Repository-suite execution and JUnit interpretation now have the focused
 `verifiers.repo_suite` owner. Its two immutable boundaries leave the
 runtime-tree continuity check between process completion and report reading in
-`RepoVerifier`; pack execution, sticky evidence projection, and cleanup also
-remain there.
+`RepoVerifier`; sticky evidence projection and cleanup also remain there.
+Verifier-pack execution and JUnit interpretation now have the focused
+`verifiers.repo_pack` owner. Its immutable execution boundary freezes
+host/docker/gVisor process evidence; its separate interpretation boundary
+cannot read the judge-owned report until `RepoVerifier` has re-verified both
+the accepted pack snapshot and candidate runtime tree. Pack admission,
+pre/post snapshot checks, runtime continuity, sticky evidence, phase
+composition, final artifact projection, and cleanup remain in
+`RepoVerifier`.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
 classification of changed/deleted paths. It binds local Actions from the base
 tree, preserves the reserved verifier-pack and non-exemptible harness rules,
@@ -119,9 +127,10 @@ and returns the exact safe-deletion set. Guard calls it at the characterized
 post-parse/pre-materialization seam and retains risk, execution, decision, and
 serialization responsibilities.
 `RepoVerifier` still owns repository filesystem coordination, runtime identity,
-pack execution, and cleanup. Repository-suite subprocess/container operations
-are now coordinated by `repo_suite` through live injected effects; lifecycle
-changes still flow through the typed builder.
+pack snapshot continuity, phase composition, and cleanup. Repository-suite and
+verifier-pack subprocess/container operations are coordinated by `repo_suite`
+and `repo_pack` through live injected effects; lifecycle changes still flow
+through the typed builder.
 `blackbox.py` still owns command construction, report interpretation,
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified

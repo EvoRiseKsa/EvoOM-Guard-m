@@ -214,6 +214,16 @@ snapshotting so its existing `finally` cleanup covers unexpected exceptions.
 Pack execution and post-execution snapshot verification stay outside this
 boundary.
 
+Verifier-pack execution and interpretation live in
+`evoom_guard/verifiers/repo_pack.py`. Immutable execution and interpretation
+requests are deliberately separate so `RepoVerifier` can verify both the pack
+snapshot and candidate runtime tree after the process completes but before
+judge-owned JUnit is read. Host, Docker, and gVisor operations, phase evidence,
+report readers, and the pure pack evaluator are injected as live providers at
+their historical call sites. Pack admission/identity, both snapshot checks,
+runtime continuity, sticky repository-suite evidence, phase composition,
+final artifact projection, and workspace cleanup stay in `RepoVerifier`.
+
 Repository-suite execution and interpretation live in
 `evoom_guard/verifiers/repo_suite.py`. Immutable execution and interpretation
 requests are deliberately separate so `RepoVerifier` can verify runtime-tree
@@ -221,7 +231,7 @@ continuity after the suite process completes but before judge-owned JUnit is
 read. Host, Docker, and gVisor operations, phase evidence, report readers, and
 the pure phase evaluator are injected as live providers at their historical
 call sites. Terminal execution failures return before any verifier pack can
-start. Pack execution, runtime-identity policy, sticky artifact projection,
+start. Runtime-identity policy, sticky artifact projection, phase composition,
 and workspace cleanup stay in `RepoVerifier`.
 
 The third repository-verifier phase slice adds immutable

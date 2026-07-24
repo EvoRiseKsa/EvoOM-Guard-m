@@ -74,7 +74,6 @@ trust boundary in ``docs/GUARD.md``).
 
 from __future__ import annotations
 
-import hashlib
 import os
 import secrets
 import shutil
@@ -277,6 +276,14 @@ from evoom_guard.verifiers.repo_execution import (
     isolation_observation_payload,
 )
 from evoom_guard.verifiers.repo_materialization import materialize_candidate_edits
+from evoom_guard.verifiers.repo_pack import (
+    RepoPackExecutionRequest,
+    RepoPackExecutionServices,
+    RepoPackInterpretationRequest,
+    RepoPackInterpretationServices,
+    execute_repo_pack,
+    interpret_repo_pack,
+)
 from evoom_guard.verifiers.repo_pack_intake import (
     RepoPackIntakeRequest,
     RepoPackIntakeServices,
@@ -284,7 +291,6 @@ from evoom_guard.verifiers.repo_pack_intake import (
     rejection_artifact,
 )
 from evoom_guard.verifiers.repo_phase_contracts import (
-    CompletedRunEvidence,
     compose_repo_and_pack,
     evaluate_pack_phase,
     evaluate_repo_phase,
@@ -1403,6 +1409,43 @@ class RepoVerifier:
             if pack_dir:
                 trace.execution_phase = "verifier_pack"
                 assert pack_snapshot is not None and pack_identity is not None
+                pack_execution_request = RepoPackExecutionRequest(
+                    candidate_copy=copy,
+                    workdir=workdir,
+                    pack_snapshot=pack_snapshot,
+                    files_changed=tuple(changed),
+                    environment=env,
+                    container_mode=container_mode,
+                    resolved_image=resolved_image,
+                    setup_isolation=setup_isolation,
+                    suite_isolation_evidence=suite_isolation_evidence,
+                    strict_harness=strict_harness,
+                )
+                pack_execution_services = RepoPackExecutionServices(
+                    trace=trace,
+                    requested_isolation=lambda: self.isolation,
+                    timeout=lambda: self.timeout,
+                    python_executable=lambda: sys.executable,
+                    instrument_command=lambda: cast(
+                        Any, instrument_command
+                    ),
+                    resolve_host_command=lambda: cast(
+                        Any, _resolve_host_command
+                    ),
+                    run_host_pack=lambda: cast(
+                        Any, _run_bounded_subprocess
+                    ),
+                    run_docker_pack=lambda: cast(
+                        Any, self._run_docker
+                    ),
+                    limits=lambda: self._limits(),
+                    phase_isolation_evidence=lambda: (
+                        self._phase_isolation_evidence
+                    ),
+                    runtime_evidence=lambda: runtime_evidence(),
+                    isolation_payload=lambda: isolation_observation_payload,
+                    distill_diagnostics=lambda: distill_diagnostics,
+                )
                 try:
                     verify_pack_snapshot(pack_snapshot, pack_identity)
                 except PackManifestError as exc:
@@ -1420,244 +1463,14 @@ class RepoVerifier:
                             **runtime_evidence(),
                         },
                     )
-                pack_phase = os.path.join(workdir, "pack-phase")
-                os.makedirs(pack_phase, exist_ok=True)
-                pack_test_root = "/verifier-pack" if container_mode else pack_snapshot
-                pack_cmd = [
-                    "python" if container_mode else sys.executable,
-                    "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider",
-                    # The pack snapshot is intentionally outside ``cwd=copy``.
-                    # Without an explicit conftest boundary pytest walks their
-                    # common ancestors and may enumerate unrelated volatile temp
-                    # siblings.  On Windows its same-file fallback then stats a
-                    # sibling another verifier has just cleaned up (WinError 2).
-                    f"--confcutdir={pack_test_root}",
-                    pack_test_root,
-                ]
-                try:
-                    if container_mode:
-                        pack_xml, pack_run, pack_report_expected = self._run_docker(
-                            pack_cmd, copy, pack_phase, pack_dir=pack_snapshot
-                        )
-                    else:
-                        pack_xml = os.path.join(pack_phase, "judge-result.xml")
-                        instrumented, pack_report_expected, pack_report_env = (
-                            instrument_command(pack_cmd, pack_xml)
-                        )
-                        pack_env = {**env, **pack_report_env}
-                        instrumented = _resolve_host_command(
-                            instrumented, cwd=copy, env=pack_env
-                        )
-                        pack_run = _run_bounded_subprocess(
-                            instrumented,
-                            cwd=copy,
-                            env=pack_env,
-                            timeout=self.timeout,
-                            preexec_fn=(
-                                self._limits() if os.name == "posix" else None
-                            ),
-                            require_process_group_cleanup_proof=strict_harness,
-                        )
-                except _DockerRunTimeout as exc:
-                    delivered = self.isolation if exc.container_started else "not_run"
-                    trace.verifier_pack_isolation_evidence = (
-                        self._phase_isolation_evidence(
-                            delivered,
-                            resolved_image,
-                            note=(
-                                None
-                                if exc.container_started
-                                else (
-                                    "docker client timed out before container start "
-                                    "was proven"
-                                )
-                            ),
-                        )
-                    )
-                    if exc.container_started:
-                        trace.execution_state = "started_incomplete"
-                        trace.verifier_pack_started = True
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"verifier pack timed out after {self.timeout}s",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "test_timeout",
-                            "setup_isolation": setup_isolation,
-                            "isolation_evidence": isolation_observation_payload(
-                                suite_isolation_evidence
-                            ),
-                            **runtime_evidence(),
-                        },
-                    )
-                except _SubprocessOutputLimitExceeded as exc:
-                    docker_failure = isinstance(exc, _DockerRunOutputLimit)
-                    container_started = bool(
-                        getattr(exc, "container_started", True)
-                    )
-                    delivered = (
-                        self.isolation
-                        if docker_failure and container_started
-                        else ("not_run" if docker_failure else "subprocess")
-                    )
-                    if container_started:
-                        trace.execution_state = "started_incomplete"
-                        trace.verifier_pack_started = True
-                    trace.verifier_pack_isolation_evidence = (
-                        self._phase_isolation_evidence(
-                            delivered,
-                            resolved_image,
-                            note=(
-                                None
-                                if container_started
-                                else "docker client output limit was reached before container start was proven"
-                            ),
-                        )
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"verifier pack output was rejected: {exc}",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "test_output_limit",
-                            "setup_isolation": setup_isolation,
-                            "isolation_evidence": (
-                                isolation_observation_payload(
-                                    suite_isolation_evidence
-                                )
-                                if container_mode
-                                else None
-                            ),
-                            **runtime_evidence(),
-                        },
-                    )
-                except _SubprocessContainmentError as exc:
-                    docker_failure = isinstance(exc, _DockerRunContainmentError)
-                    container_started = bool(
-                        getattr(exc, "container_started", True)
-                    )
-                    delivered = (
-                        self.isolation
-                        if docker_failure and container_started
-                        else ("not_run" if docker_failure else "subprocess")
-                    )
-                    if container_started:
-                        trace.execution_state = "started_incomplete"
-                        trace.verifier_pack_started = True
-                    trace.verifier_pack_isolation_evidence = (
-                        self._phase_isolation_evidence(
-                            delivered,
-                            resolved_image,
-                            note=(
-                                "docker container cleanup was not proven"
-                                if docker_failure
-                                else "subprocess cleanup was not proven"
-                            ),
-                        )
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"verifier pack containment failed: {exc}",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "runtime_containment_error",
-                            "setup_isolation": setup_isolation,
-                            "isolation_evidence": (
-                                isolation_observation_payload(
-                                    suite_isolation_evidence
-                                )
-                                if container_mode
-                                else None
-                            ),
-                            **runtime_evidence(),
-                        },
-                    )
-                except subprocess.TimeoutExpired:
-                    trace.execution_state = "started_incomplete"
-                    trace.verifier_pack_started = True
-                    trace.verifier_pack_isolation_evidence = (
-                        self._phase_isolation_evidence("subprocess", resolved_image)
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"verifier pack timed out after {self.timeout}s",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "test_timeout",
-                            "setup_isolation": setup_isolation,
-                            "isolation_evidence": (
-                                isolation_observation_payload(
-                                    suite_isolation_evidence
-                                )
-                                if container_mode
-                                else None
-                            ),
-                            **runtime_evidence(),
-                        },
-                    )
-                except FileNotFoundError:
-                    trace.verifier_pack_isolation_evidence = (
-                        self._phase_isolation_evidence(
-                            "unavailable" if container_mode else "not_run",
-                            resolved_image,
-                        )
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics="verifier pack needs pytest/python in the judge environment",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "test_command_unavailable",
-                            "setup_isolation": setup_isolation,
-                            "isolation_evidence": (
-                                isolation_observation_payload(
-                                    suite_isolation_evidence
-                                )
-                                if container_mode
-                                else None
-                            ),
-                            **runtime_evidence(),
-                        },
-                    )
-                if container_mode and pack_run.returncode == 125:
-                    pack_unavailable_evidence = self._phase_isolation_evidence(
-                        "unavailable", resolved_image
-                    )
-                    trace.verifier_pack_isolation_evidence = (
-                        pack_unavailable_evidence
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            f"the {self.isolation} verifier-pack container could not "
-                            "be started (docker exit 125): "
-                            + distill_diagnostics(pack_run.stdout + "\n" + pack_run.stderr)
-                        ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "isolation_unavailable",
-                            "setup_isolation": setup_isolation,
-                            "isolation_evidence": isolation_observation_payload(
-                                suite_isolation_evidence
-                            ),
-                            **runtime_evidence(),
-                        },
-                    )
-                trace.verifier_pack_isolation_evidence = (
-                    self._phase_isolation_evidence(
-                        self.isolation if container_mode else "subprocess",
-                        resolved_image,
-                    )
+                pack_execution = execute_repo_pack(
+                    pack_execution_request,
+                    services=pack_execution_services,
                 )
-                trace.execution_state = "completed"
-                trace.verifier_pack_started = True
-                trace.verifier_pack_completed = True
+                if pack_execution.terminal_result is not None:
+                    return pack_execution.terminal_result
+                assert pack_execution.completed is not None
+                completed_pack = pack_execution.completed
                 trace.execution_phase = "runtime_verification"
                 try:
                     verify_pack_snapshot(pack_snapshot, pack_identity)
@@ -1715,29 +1528,16 @@ class RepoVerifier:
                         },
                     )
                 runtime_continuity = runtime_delivery
-                pack_xml_text = _read_text_or_none(pack_xml) or ""
-                pack_junit = parse_junit_xml(pack_xml_text)
-                pack_junit_sha256 = (
-                    hashlib.sha256(pack_xml_text.encode("utf-8")).hexdigest()
-                    if pack_xml_text
-                    else None
-                )
-                pack_junit_digest_format = (
-                    JUNIT_XML_DIGEST_FORMAT
-                    if pack_junit_sha256 is not None
-                    else None
-                )
-                pack_phase_result = evaluate_pack_phase(
-                    CompletedRunEvidence(
-                        returncode=pack_run.returncode,
-                        junit=pack_junit,
-                        report_expected=pack_report_expected,
-                        stdout=pack_run.stdout,
-                        stderr=pack_run.stderr,
-                        junit_text=pack_xml_text,
-                        junit_sha256=pack_junit_sha256,
-                        junit_digest_format=pack_junit_digest_format,
-                    )
+                pack_phase_result = interpret_repo_pack(
+                    RepoPackInterpretationRequest(
+                        completed=completed_pack,
+                    ),
+                    services=RepoPackInterpretationServices(
+                        read_report=lambda: _read_text_or_none,
+                        parse_xml=lambda: cast(Any, parse_junit_xml),
+                        evaluate_phase=lambda: evaluate_pack_phase,
+                        junit_xml_digest_format=lambda: JUNIT_XML_DIGEST_FORMAT,
+                    ),
                 )
                 composite_phase = compose_repo_and_pack(
                     repo_phase,

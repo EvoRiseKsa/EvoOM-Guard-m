@@ -2679,28 +2679,279 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-pack-process-group-proof-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_pack.py",
         before=(
-            "                            cwd=copy,\n"
-            "                            env=pack_env,\n"
-            "                            timeout=self.timeout,\n"
-            "                            preexec_fn=(\n"
-            "                                self._limits() if os.name == \"posix\" else None\n"
-            "                            ),\n"
-            "                            require_process_group_cleanup_proof=strict_harness,\n"
+            "                require_process_group_cleanup_proof="
+            "(request.strict_harness),\n"
         ),
-        after=(
-            "                            cwd=copy,\n"
-            "                            env=pack_env,\n"
-            "                            timeout=self.timeout,\n"
-            "                            preexec_fn=(\n"
-            "                                self._limits() if os.name == \"posix\" else None\n"
-            "                            ),\n"
-            "                            require_process_group_cleanup_proof=False,\n"
-        ),
+        after="                require_process_group_cleanup_proof=False,\n",
         test=(
             "tests/test_strict_harness.py::"
             "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-docker-timeout-start-proof-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before=(
+            "        if exc.container_started:\n"
+            "            trace.execution_state = \"started_incomplete\"\n"
+        ),
+        after=(
+            "        if True:\n"
+            "            trace.execution_state = \"started_incomplete\"\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_frozen_repo_pack_behavior[docker_timeout_unstarted]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-docker-output-classification-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before="        docker_failure = isinstance(exc, DockerRunOutputLimit)\n",
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_frozen_repo_pack_behavior[docker_output_limit_started]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-docker-containment-classification-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before=(
+            "        docker_failure = isinstance(\n"
+            "            exc,\n"
+            "            DockerRunContainmentError,\n"
+            "        )\n"
+        ),
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_frozen_repo_pack_behavior[docker_containment_started]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-docker-exit-125-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before="    if request.container_mode and process.returncode == 125:\n",
+        after=(
+            "    if False and request.container_mode and "
+            "process.returncode == 125:\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_frozen_repo_pack_behavior[docker_exit_125]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-host-report-owner-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before=(
+            "            report_path = os.path.join(\n"
+            "                pack_phase,\n"
+            "                \"judge-result.xml\",\n"
+            "            )\n"
+        ),
+        after=(
+            "            report_path = os.path.join(\n"
+            "                request.candidate_copy,\n"
+            "                \"judge-result.xml\",\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_host_command_order_and_strict_cleanup_are_frozen"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-terminal-return-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                if pack_execution.terminal_result is not None:\n"
+            "                    return pack_execution.terminal_result\n"
+        ),
+        after=(
+            "                if False and "
+            "pack_execution.terminal_result is not None:\n"
+            "                    return pack_execution.terminal_result\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_frozen_repo_pack_behavior[host_timeout]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-host-runner-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    run_host_pack=lambda: cast(\n"
+            "                        Any, _run_bounded_subprocess\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    run_host_pack=(\n"
+            "                        lambda provider=_run_bounded_subprocess: "
+            "cast(Any, provider)\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_host_pack_dependencies_are_resolved_live_in_order"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-docker-runner-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    run_docker_pack=lambda: cast(\n"
+            "                        Any, self._run_docker\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    run_docker_pack=(\n"
+            "                        lambda provider=self._run_docker: "
+            "cast(Any, provider)\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_container_pack_runner_and_trace_builder_are_live[docker]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-parser-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        parse_xml=lambda: cast(Any, parse_junit_xml),\n"
+        ),
+        after=(
+            "                        parse_xml=(\n"
+            "                            lambda provider=parse_junit_xml: "
+            "cast(Any, provider)\n"
+            "                        ),\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_host_pack_dependencies_are_resolved_live_in_order"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-evaluator-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                        evaluate_phase=lambda: evaluate_pack_phase,\n",
+        after=(
+            "                        evaluate_phase=(\n"
+            "                            lambda provider=evaluate_pack_phase: "
+            "provider\n"
+            "                        ),\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_host_pack_dependencies_are_resolved_live_in_order"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-junit-digest-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before=(
+            "    junit_sha256 = hashlib.sha256("
+            "junit_text.encode(\"utf-8\")).hexdigest() if junit_text else None\n"
+        ),
+        after=(
+            "    junit_sha256 = hashlib.sha256(b\"\").hexdigest() "
+            "if junit_text else None\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_frozen_repo_pack_behavior[host_pass_strict]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-pre-execution-snapshot-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                try:\n"
+            "                    verify_pack_snapshot(pack_snapshot, pack_identity)\n"
+            "                except PackManifestError as exc:\n"
+            "                    return VerdictResult(\n"
+            "                        passed=False,\n"
+            "                        score=0.0,\n"
+            "                        diagnostics=f\"verifier pack was changed "
+            "before execution: {exc}\",\n"
+        ),
+        after=(
+            "                try:\n"
+            "                    if False:\n"
+            "                        verify_pack_snapshot(pack_snapshot, pack_identity)\n"
+            "                except PackManifestError as exc:\n"
+            "                    return VerdictResult(\n"
+            "                        passed=False,\n"
+            "                        score=0.0,\n"
+            "                        diagnostics=f\"verifier pack was changed "
+            "before execution: {exc}\",\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_pack_or_runtime_drift_precedes_junit_read"
+            "[pack_drift_before_execution]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-post-execution-snapshot-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                try:\n"
+            "                    verify_pack_snapshot(pack_snapshot, pack_identity)\n"
+            "                except PackManifestError as exc:\n"
+            "                    return VerdictResult(\n"
+            "                        passed=False,\n"
+            "                        score=0.0,\n"
+            "                        diagnostics=f\"verifier pack changed while "
+            "executing: {exc}\",\n"
+        ),
+        after=(
+            "                try:\n"
+            "                    if False:\n"
+            "                        verify_pack_snapshot(pack_snapshot, pack_identity)\n"
+            "                except PackManifestError as exc:\n"
+            "                    return VerdictResult(\n"
+            "                        passed=False,\n"
+            "                        score=0.0,\n"
+            "                        diagnostics=f\"verifier pack changed while "
+            "executing: {exc}\",\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_pack_or_runtime_drift_precedes_junit_read"
+            "[pack_drift_after_execution]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-post-execution-runtime-drift-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                if candidate_changes:\n"
+            "                    return VerdictResult(\n"
+            "                        passed=False,\n"
+            "                        score=0.0,\n"
+            "                        diagnostics=(\n"
+            "                            \"verifier-pack execution modified "
+            "the candidate tree: \"\n"
+        ),
+        after=(
+            "                if False and candidate_changes:\n"
+            "                    return VerdictResult(\n"
+            "                        passed=False,\n"
+            "                        score=0.0,\n"
+            "                        diagnostics=(\n"
+            "                            \"verifier-pack execution modified "
+            "the candidate tree: \"\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_pack_or_runtime_drift_precedes_junit_read"
+            "[runtime_drift_after_execution]"
         ),
     ),
     Mutation(

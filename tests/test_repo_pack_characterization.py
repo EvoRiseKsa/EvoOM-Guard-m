@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,9 @@ from repo_pack_characterization_harness import (
     observe_live_container_provider_timing,
     observe_live_host_provider_timing,
 )
+
+from evoom_guard.domain.execution import IsolationObservation
+from evoom_guard.verifiers import repo_pack
 
 VECTOR = Path(__file__).parent / "fixtures" / "refactor-safety" / "repo-pack-v1.json"
 
@@ -193,3 +197,47 @@ def test_container_pack_runner_and_trace_builder_are_live(
         "phase:late",
         "pack:2",
     ]
+
+
+def test_repo_pack_owner_exposes_separate_immutable_contracts() -> None:
+    completed = repo_pack.RepoPackCompleted(
+        report_path="report.xml",
+        returncode=0,
+        stdout="",
+        stderr="",
+        report_expected=True,
+    )
+    execution = repo_pack.RepoPackExecutionRequest(
+        candidate_copy="copy",
+        workdir="judge",
+        pack_snapshot="pack",
+        files_changed=("app.py",),
+        environment={},
+        container_mode=False,
+        resolved_image=None,
+        setup_isolation=None,
+        suite_isolation_evidence=IsolationObservation(
+            requested="subprocess",
+            delivered="subprocess",
+            image_digest=None,
+            network=None,
+            runtime=None,
+        ),
+        strict_harness=True,
+    )
+    interpretation = repo_pack.RepoPackInterpretationRequest(
+        completed=completed,
+    )
+
+    assert repo_pack.execute_repo_pack.__module__ == (
+        "evoom_guard.verifiers.repo_pack"
+    )
+    assert repo_pack.interpret_repo_pack.__module__ == (
+        "evoom_guard.verifiers.repo_pack"
+    )
+    with pytest.raises(FrozenInstanceError):
+        completed.returncode = 1  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        execution.pack_snapshot = "changed"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        interpretation.completed = completed  # type: ignore[misc]

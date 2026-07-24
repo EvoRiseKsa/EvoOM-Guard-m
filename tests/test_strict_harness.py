@@ -24,6 +24,7 @@ from evoom_guard.guard import (
     guard,
 )
 from evoom_guard.verifiers import (
+    repo_pack,
     repo_phase_contracts,
     repo_setup,
     repo_suite,
@@ -214,10 +215,27 @@ def test_strict_harness_zero_test_guard_cannot_be_disabled() -> None:
 def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase() -> None:
     calls = _calls_named(repo_verifier.RepoVerifier._verify, "_run_bounded_subprocess")
 
-    # The verifier pack remains direct. Setup and the repository suite cross
-    # separately typed call-through seams checked below.
-    assert len(calls) == 1
-    _assert_strict_cleanup_keyword(calls[0], "strict_harness")
+    # Setup, the repository suite, and the verifier pack each cross a separate
+    # typed call-through seam checked below.
+    assert calls == []
+
+    pack_tree = ast.parse(
+        textwrap.dedent(inspect.getsource(repo_pack.execute_repo_pack))
+    )
+    pack_calls = [
+        node
+        for node in ast.walk(pack_tree)
+        if isinstance(node, ast.Call)
+        and any(
+            keyword.arg == "require_process_group_cleanup_proof"
+            for keyword in node.keywords
+        )
+    ]
+    assert len(pack_calls) == 1
+    _assert_strict_cleanup_keyword(
+        pack_calls[0],
+        "request.strict_harness",
+    )
 
     suite_tree = ast.parse(
         textwrap.dedent(inspect.getsource(repo_suite.execute_repo_suite))
