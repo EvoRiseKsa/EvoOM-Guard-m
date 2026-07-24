@@ -70,18 +70,18 @@ the immutable core `GuardDecision`, and `application/repo_decision.py` owns the
 pure repo-native twelve-branch composer. Guard delegates that initial decision
 while retaining later demotions in their characterized order.
 `application/decision_gates.py` now owns the first post-decision gate: exact
-changed-line coverage evaluation. Guard still owns collection and invokes the
-pure gate at the historical point before demonstrated-fix and assurance. The
-same application module owns demonstrated-fix demotion from already prepared
-baseline evidence; Guard retains baseline execution, repair-effect
-classification, and repo-suite scope. It also owns final delivered-assurance
-demotion. Guard supplies the already constructed profile and preserves the
-historical black-box eager versus repo-native lazy evaluation modes, including
-their different access and exception order.
+changed-line coverage evaluation. The same application module owns
+demonstrated-fix demotion from already prepared baseline evidence and final
+delivered-assurance demotion.
 `application/pipeline.py` now provides the immutable decision cursor used by
-Guard for the repo composer and all three gates. It is intentionally
-effect-free: execution, coverage and baseline collection, profile construction,
-and attestation assembly remain at their characterized Guard boundaries.
+the repo composer and all three gates. It remains intentionally effect-free.
+`application/repo_finalization.py` owns the characterized repo-native sequence
+around that cursor: coverage and baseline effects, repair-effect annotation,
+attestation placement, profile construction, and lazy assurance evaluation.
+The facade injects live providers at each historical call point, so effect
+implementations, identity, mutation, and exception order remain compatible.
+Black-box orchestration, `GuardResult`, and the baseline runner remain in
+Guard; this slice does not merge the distinct eager black-box assurance path.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
@@ -125,9 +125,9 @@ classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
 facade. The facade injects live validators and argument-group helpers on every
 call; command handlers and dispatch remain in `cli/__init__.py`.
-Internal workspace decomposition and the remaining runtime-effect sequencing
-in Guard remain pending; candidate path admission and the pure application
-decision pipeline are complete.
+Internal workspace decomposition and black-box runtime-effect sequencing
+remain pending; candidate path admission and the repo-native application
+decision/finalization path are complete.
 
 The immediate structural priority is the next bounded slice: extract one
 separately characterized CLI command family or reduce a remaining

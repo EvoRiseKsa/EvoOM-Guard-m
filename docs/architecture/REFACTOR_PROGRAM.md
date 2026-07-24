@@ -131,9 +131,10 @@ pack lifecycle state, and shortfall diagnostic:
 Stage 3 is complete at the domain-contract boundary: request, policy,
 verification/evidence, execution, decision, and assurance values are now
 dependency-closed and strict-typed. This does **not** mean the orchestration
-refactor is complete. Diff-coverage and demonstrated-fix demotions,
-black-box composition, final result orchestration, and effect sequencing still
-belong to their characterized legacy facades until Stage 8 slices move them.
+refactor is complete. Repo-native post-decision sequencing has moved behind a
+characterized Stage 8 application boundary, while black-box composition,
+public result orchestration, and other effectful verifier/CLI responsibilities
+remain in their established facades.
 
 ## Stage 4+: Execution and verifier extraction (partially completed)
 
@@ -207,12 +208,18 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   exception order instead of silently normalizing them.
 - The immutable `application.pipeline.VerificationPipeline` cursor is Guard's
   single facade for repo-native decision composition and the three pure
-  demotions. It does not sequence runtime effects: coverage collection,
-  baseline execution, profile and attestation placement remain in Guard so the
-  existing effect and exception order is unchanged.
-- Pending: move the remaining effect sequencing only behind separately
-  characterized boundaries with shadow-mode differential coverage. Candidate
-  preflight is no longer part of that effectful remainder.
+  demotions. It remains effect-free.
+- `application.repo_finalization.finalize_repo_verification` owns the
+  repo-native post-decision effect sequence behind frozen public
+  characterization. Guard injects live coverage, baseline, attestation,
+  profile, shortfall, evidence-projection, and pack-presence services at their
+  historical call positions. Baseline-after-coverage behavior, evidence object
+  identity, trusted binding precedence, and fail-loud exception order are
+  preserved.
+- Pending: move only the remaining black-box and verifier effect sequencing
+  behind separately characterized boundaries. Public `GuardResult`,
+  `_run_baseline_suite`, and the black-box branch intentionally remain in Guard
+  for this slice.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

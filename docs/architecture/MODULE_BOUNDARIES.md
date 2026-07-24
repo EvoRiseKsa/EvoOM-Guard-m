@@ -281,14 +281,20 @@ versioned contract rather than an incidental refactor.
 The seventh application slice adds the immutable
 `application.pipeline.VerificationPipeline` cursor. It is the single Guard
 facade for the repo-native composer and the three extracted decision gates, but
-it deliberately does not offer a monolithic `run()` method. Guard still owns
-candidate execution, changed-line coverage collection, baseline execution,
-attestation placement, assurance-profile construction, and when each pure
-method is called. This keeps baseline evidence running after a coverage
-demotion, preserves black-box eager versus repo-native lazy assurance timing,
-and prevents a structural refactor from introducing new short-circuit or
-exception behavior. The underlying composer and gates remain public,
-independently testable application services.
+it deliberately does not offer a monolithic `run()` method. The underlying
+composer and gates remain public, independently testable application services.
+
+The eighth application slice adds
+`application.repo_finalization.finalize_repo_verification`. It owns the
+repo-native post-decision sequence: optional coverage collection and gate,
+optional pristine-baseline execution and repair-effect classification,
+execution/pack evidence projection, attestation placement, assurance-profile
+construction, and the final lazy assurance gate. Every effect and compatibility
+helper is supplied through a late provider, preserving the characterized
+lookup, identity, mutation, and fail-loud exception order. The Guard facade
+still owns the effect implementations, public `GuardResult`, black-box branch,
+baseline runner, and wire casts. This boundary deliberately does not unify the
+black-box eager-assurance path or move verifier execution.
 
 The first command-family slice adds the typed `cli.guard_command` owner for
 the public `guard` command. It owns only effective-policy resolution, routing
