@@ -7361,6 +7361,16 @@ MUTATIONS = (
             "test_reconstruction_reason_code_is_looked_up_after_runtime_effect"
         ),
     ),
+    Mutation(
+        name="diff-verification-eager-result-class-lookup",
+        path="evoom_guard/guard.py",
+        before="        DiffVerificationServices(\n",
+        after="        DiffVerificationServices[GuardResult](\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_facade_does_not_resolve_guard_result_before_diff_preflight"
+        ),
+    ),
 )
 
 

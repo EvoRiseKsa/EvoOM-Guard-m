@@ -93,6 +93,14 @@ cleanup completes before this boundary is entered, and primary or cleanup
 `BaseException` values from the judge cannot be masked by finalization.
 The two finalizers intentionally preserve their different eager/lazy assurance
 and attestation order instead of pretending the paths are equivalent.
+`application/diff_verification.py` now owns the characterized unified-diff
+sequence: fail-closed preflight, throwaway base reconstruction, changed-path
+projection, candidate serialization, and delegation to the existing Guard
+judgment. The facade retains the public signature and result type and supplies
+all effects, reason codes, and revision parsers through live providers. This
+preserves SHA short-circuiting, cleanup/exception order, and the historical
+absence of an eager runtime result-class lookup; it does not move baseline,
+coverage, verifier, black-box, or CLI policy ownership.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor

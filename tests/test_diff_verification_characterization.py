@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from diff_verification_characterization_harness import (
@@ -10,6 +11,8 @@ from diff_verification_characterization_harness import (
     TEXT_DIFF,
     capture_case,
 )
+
+import evoom_guard.guard as guard_module
 
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)
@@ -234,6 +237,30 @@ def test_reconstruction_reason_code_is_looked_up_after_runtime_effect(
         "reason:rebind:reverse",
         "workspace:cleanup:True:True",
     ]
+
+
+def test_facade_does_not_resolve_guard_result_before_diff_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The extraction must not add an eager result-class lookup.
+
+    The pre-extraction facade could reach its first diff branch while the
+    result factory was independently replaced.  Generic type parameters must
+    therefore remain static typing only and never become a new runtime lookup.
+    """
+
+    expected = SimpleNamespace(source="diff", base_reconstruction="failed")
+    monkeypatch.setattr(
+        guard_module,
+        "_diff_error",
+        lambda *_args, **_kwargs: expected,
+    )
+    monkeypatch.delattr(guard_module, "GuardResult")
+
+    result, deleted = guard_module.guard_from_diff("HEAD", "")
+
+    assert result is expected
+    assert deleted == []
 
 
 @pytest.mark.parametrize(

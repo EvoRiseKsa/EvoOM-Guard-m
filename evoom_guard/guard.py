@@ -1913,7 +1913,7 @@ def guard_from_diff(
                 strict_harness=strict_harness,
             ),
         ),
-        DiffVerificationServices[GuardResult](
+        DiffVerificationServices(
             diff_error_provider=lambda: _diff_error,
             input_error_provider=lambda: input_error_result,
             empty_diff_reason_code_provider=lambda: REASON_EMPTY_DIFF,

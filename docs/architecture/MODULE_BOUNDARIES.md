@@ -437,6 +437,18 @@ profile, shortfall, and attestation services and still constructs the public
 and container cleanup, invocation receipts, and `BlackboxResult`; primary or
 cleanup `BaseException` values therefore exit before finalization begins.
 
+The tenth application slice adds
+`application.diff_verification.verify_diff`. It owns the established
+unified-diff preflight, throwaway base reconstruction, changed-path
+projection, candidate serialization, and delegation to the existing Guard
+judgment. Guard injects every filesystem, process, error/result, reason-code,
+revision-parser, and cleanup operation through a provider resolved at its
+historical use site. The public `guard_from_diff()` signature and `GuardResult`
+remain in the facade; baseline, coverage, verifier execution, black-box
+finalization, and CLI policy loading remain in their existing owners. The
+boundary deliberately preserves SHA short-circuiting, primary-versus-cleanup
+exception behavior, and the absence of any eager runtime result-class lookup.
+
 The first command-family slice adds the typed `cli.guard_command` owner for
 the public `guard` command. It owns only effective-policy resolution, routing
 between patch/diff/base-head inputs, and report/JSON/SARIF/signature
