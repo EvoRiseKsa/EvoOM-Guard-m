@@ -172,13 +172,19 @@ classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
 facade. The facade injects live validators and argument-group helpers on every
 call; command handlers and dispatch remain in `cli/__init__.py`.
-Internal workspace decomposition and the remaining black-box
-candidate/evidence/cleanup orchestration remain pending; black-box pack
-runtime-effect sequencing, candidate path admission, and the repo-native
+Markdown rendering and JSON/SARIF publication now belong to the stdlib-only
+`integrations/guard_output.py` owner. `guard.py` retains all four historical
+function signatures and supplies live badge, verdict, version, and SARIF
+conversion providers at the characterized lookup points. A frozen wire vector
+binds report strings, object/key order, indentation, trailing-newline behavior,
+platform text translation, and non-PASS SARIF alert emission.
+The remaining black-box candidate/evidence/cleanup orchestration and further
+runtime-effect decomposition remain pending; black-box pack sequencing,
+candidate path admission, candidate-tree intake, repository workspace
+ownership, and the repo-native
 application decision/finalization path are complete.
 
-The immediate structural priority is the next bounded slice: extract one
-separately characterized CLI command family or reduce a remaining
-RepoVerifier/black-box effect responsibility without changing trust boundaries.
-Every slice must retain the existing contract, mutation, differential, and
-architectural-boundary gates.
+The immediate structural priority after this bounded output slice is to reduce
+one remaining RepoVerifier/black-box effect responsibility without changing
+trust boundaries. Every slice must retain the existing contract, mutation,
+differential, and architectural-boundary gates.

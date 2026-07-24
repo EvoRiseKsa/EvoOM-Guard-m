@@ -304,6 +304,12 @@ remain in their established facades.
   behind separately characterized boundaries. Public `GuardResult`,
   `_run_baseline_suite`, and the black-box branch intentionally remain in Guard
   for this slice.
+- Markdown, JSON, and SARIF output projection/publication is owned by the
+  stdlib-only `integrations.guard_output` adapter. Guard retains four exact
+  compatibility facades and injects live badge, verdict, version, and
+  converter providers. A pre-extraction vector freezes report/JSON/SARIF
+  content and writer bytes, while a focused mutation prevents a non-PASS SARIF
+  result from being silently suppressed.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

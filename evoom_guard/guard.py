@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import difflib
 import hashlib
-import json
 import os
 import shutil
 import subprocess
@@ -161,6 +160,7 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
 )
+from evoom_guard.integrations import guard_output as _guard_output
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.patchmin import risk_score
 from evoom_guard.policy import (
@@ -2213,181 +2213,39 @@ def guard_from_diff(
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-_BADGE = {
-    PASS: "✅ PASS", REJECTED: "⛔ REJECTED", FAIL: "❌ FAIL",
-    ERROR: "⚠️ ERROR", TAMPERED: "🚨 TAMPERED",
-}
+_BADGE = _guard_output.DEFAULT_BADGES
 
 
-def render_report(result: GuardResult, *, deleted: list[str] | None = None, title: str = "EvoGuard") -> str:
+def render_report(
+    result: GuardResult,
+    *,
+    deleted: list[str] | None = None,
+    title: str = "EvoGuard",
+) -> str:
     """Render a :class:`GuardResult` as a Markdown report (PR-comment ready)."""
-    r = result
-    tests = (
-        f"{r.tests_passed}/{r.tests_total}"
-        if r.tests_total is not None else "—"
+
+    return _guard_output.render_report(
+        result,
+        deleted=deleted,
+        title=title,
+        badge_provider=lambda: _BADGE,
+        pass_verdict_provider=lambda: PASS,
+        fail_verdict_provider=lambda: FAIL,
+        error_verdict_provider=lambda: ERROR,
+        tampered_verdict_provider=lambda: TAMPERED,
+        static_gate_provider=lambda: EXECUTION_STATIC_GATE,
+        not_started_provider=lambda: EXECUTION_NOT_STARTED,
+        started_incomplete_provider=lambda: EXECUTION_STARTED_INCOMPLETE,
     )
-    lines = [
-        f"## {title} — {_BADGE.get(r.verdict, r.verdict)}",
-        "",
-        f"**{r.reason}**",
-        "",
-        "| | |",
-        "|---|---|",
-        f"| Verdict | **{r.verdict}** |",
-        f"| Tests passed | {tests} |",
-        f"| Files changed | {len(r.files_changed)} |",
-        f"| Blast radius | **{r.risk_level}** ({r.risk_score:.2f}) |",
-        f"| Execution | `{r.execution_state}` · phase `{r.execution_phase}` |",
-        f"| Test command started | {'yes' if r.test_command_ran else 'no'} |",
-        f"| Verdict source | {r.verdict_source or '—'} |",
-    ]
-    if r.source:
-        lines.append(f"| Input | {r.source} |")
-    if r.base_reconstruction:
-        lines.append(f"| Base reconstruction | {r.base_reconstruction} |")
-    if r.diff_coverage is not None:
-        dc = r.diff_coverage
-        if dc.get("measured"):
-            lines.append(
-                f"| Changed lines executed | {dc['executed']}/{dc['total']} "
-                f"({dc['percent']}%) |"
-            )
-        else:
-            lines.append(f"| Changed lines executed | not measured — {dc.get('note', '')} |")
-    if r.baseline is not None:
-        b = r.baseline
-        btests = (
-            f" ({b['tests_passed']}/{b['tests_total']})"
-            if b.get("tests_total") is not None else ""
-        )
-        bverdict = b.get("verdict") or "not measured"
-        lines.append(f"| Baseline (pristine base) | {bverdict}{btests} |")
-        lines.append(f"| Repair effect | **{b.get('repair_effect')}** |")
-    if r.attestation and r.attestation.get("policy_id"):
-        pv = r.attestation.get("policy_version")
-        lines.append(
-            f"| Policy | `{r.attestation['policy_id']}`"
-            + (f" v{pv}" if pv else "") + " |"
-        )
-    if r.attestation and r.attestation.get("verifier_pack_sha256"):
-        lines.append(
-            f"| Verifier pack | `{str(r.attestation['verifier_pack_sha256'])[:12]}…` |"
-        )
-    if r.assurance:
-        a = r.assurance
-        lines.append(
-            f"| Assurance | harness `{a['harness_integrity']}` · "
-            f"report `{a['report_integrity']}` · isolation `{a['candidate_isolation']}` |"
-        )
-    # On a PASS, spell out the report-integrity caveat so a green verdict is never
-    # read as a stronger guarantee than it is.
-    if r.verdict == PASS and r.assurance and r.assurance.get("report_integrity") == "same_process_candidate_writable":
-        lines += [
-            "",
-            "> <sub>**Assurance note:** this PASS means the repo's suite passed and the "
-            "test harness was left untouched. The result is read from a judge-owned "
-            "report, which resists stdout forgery — but the code under test runs in the "
-            "same process as the reporter, so a *deliberate* in-process forgery is not "
-            "caught here (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)). For untrusted "
-            "authors, gate on this in review.</sub>",
-        ]
-    if r.protected_violations:
-        lines += [
-            "",
-            "### ⛔ Reward-hack: the patch tried to edit the judging harness",
-            "",
-            *[f"- `{p}`" for p in r.protected_violations],
-            "",
-            "A patch must fix the **source under test**, never the tests or their "
-            "configuration. This is rejected before the suite runs.",
-        ]
-    if r.diff_coverage is not None and r.diff_coverage.get("measured"):
-        missed = {
-            p: d["missed"] for p, d in r.diff_coverage.get("files", {}).items() if d.get("missed")
-        }
-        if missed:
-            lines += [
-                "",
-                "<details><summary>Changed lines the suite never executed</summary>",
-                "",
-                *[f"- `{p}`: lines {', '.join(map(str, ln))}" for p, ln in sorted(missed.items())],
-                "",
-                f"<sub>{r.diff_coverage.get('caveat', '')}</sub>",
-                "</details>",
-            ]
-    if deleted:
-        lines += [
-            "",
-            "> Note: these files were **deleted** in head and applied to the verified "
-            "tree (a deletion of a test/config/CI/auto-exec file is instead "
-            "**REJECTED**): " + ", ".join(f"`{p}`" for p in deleted),
-        ]
-    if r.files_changed and not r.protected_violations:
-        shown = ", ".join(f"`{p}`" for p in r.files_changed[:15])
-        more = "" if len(r.files_changed) <= 15 else f" (+{len(r.files_changed) - 15} more)"
-        lines += ["", f"<details><summary>Files changed</summary>\n\n{shown}{more}\n</details>"]
-    if r.verdict == TAMPERED:
-        lines += [
-            "",
-            "### 🚨 Tamper signature: exit code ⟷ JUnit report disagree",
-            "",
-            "The process exit code and the judge-owned JUnit report — the two signals "
-            "the candidate cannot forge via stdout — **disagree**. This is treated as "
-            "tampering and is never read as a pass.",
-        ]
-    if r.diagnostics and r.verdict in (FAIL, ERROR, TAMPERED):
-        diag = r.diagnostics.strip()[:1200]
-        lines += ["", "<details><summary>Diagnostics</summary>\n", "```", diag, "```", "</details>"]
-    _judge = {
-        "docker": "in a network-less, read-only container (defence in depth — but a "
-                  "container shares the host kernel, so not a complete boundary)",
-        "gvisor": "in a network-less container under the gVisor (runsc) runtime — a "
-                  "separate user-space guest kernel (for untrusted code)",
-    }.get(
-        r.isolation,
-        "in a subprocess with rlimits + a timeout — fine for trusted repos, not a "
-        "sandbox for untrusted code; isolate it further (--isolation docker|gvisor) for that",
-    )
-    if r.execution_state == EXECUTION_STATIC_GATE:
-        _execution_note = (
-            "EvoGuard decided this result from the pre-execution diff gate; the "
-            "suite was not started, so no test command, JUnit report, or runtime "
-            "isolation was delivered."
-        )
-    elif r.execution_state == EXECUTION_NOT_STARTED:
-        _execution_note = (
-            "Runtime verification stopped before any test command started "
-            f"(furthest phase: {r.execution_phase}); no suite/report isolation "
-            "is claimed."
-        )
-    elif r.execution_state == EXECUTION_STARTED_INCOMPLETE:
-        _execution_note = (
-            "A verification command started but the required execution sequence "
-            f"did not complete (furthest phase: {r.execution_phase}); therefore "
-            "there is no clean verdict source."
-        )
-    else:
-        _execution_note = (
-            "EvoGuard reads the verdict from a judge-owned JUnit report + the "
-            "process exit code (not stdout), and rejects any edit to the tests or "
-            f"their config. The judge runs the suite {_judge}."
-        )
-    lines += [
-        "",
-        f"<sub>{_execution_note} See docs/GUARD.md.</sub>",
-    ]
-    return "\n".join(lines)
 
 
-def write_json(result: GuardResult, path: str, *, deleted: list[str] | None = None) -> None:
-    payload = result.to_dict()
-    if deleted:
-        # Files deleted in head. Non-protected (source) deletions are applied to the
-        # verified tree; a protected-harness deletion instead drives REJECTED. (Was
-        # ``deleted_not_gated`` before schema 1.1, when deletions were ungated.)
-        payload["deleted"] = deleted
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+def write_json(
+    result: GuardResult,
+    path: str,
+    *,
+    deleted: list[str] | None = None,
+) -> None:
+    _guard_output.write_json(result, path, deleted=deleted)
 
 
 def to_sarif(result: GuardResult) -> dict[str, Any]:
@@ -2400,51 +2258,17 @@ def to_sarif(result: GuardResult) -> dict[str, Any]:
     the changed files. SARIF is only a *view*; the decision stays the verdict + exit
     code.
     """
-    rules: list[dict[str, Any]] = []
-    results: list[dict[str, Any]] = []
-    if result.verdict != PASS:
-        rule_id = result.reason_code or result.verdict.lower()
-        located = result.protected_violations or result.files_changed
-        locations = [
-            {"physicalLocation": {"artifactLocation": {"uri": p}}} for p in located if p
-        ]
-        entry: dict[str, Any] = {
-            "ruleId": rule_id,
-            "level": "error",
-            "message": {"text": f"EvoGuard {result.verdict}: {result.reason}"},
-            "properties": {
-                "verdict": result.verdict,
-                "risk_level": result.risk_level,
-                "verdict_source": result.verdict_source,
-                "isolation": result.isolation,
-                "test_command_ran": result.test_command_ran,
-                "execution_state": result.execution_state,
-                "execution_phase": result.execution_phase,
-            },
-        }
-        if locations:
-            entry["locations"] = locations
-        results.append(entry)
-        rules.append({"id": rule_id, "name": result.verdict})
-    return {
-        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-        "version": "2.1.0",
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "EvoGuard",
-                        "version": __version__,
-                        "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
-                        "rules": rules,
-                    }
-                },
-                "results": results,
-            }
-        ],
-    }
+
+    return _guard_output.to_sarif(
+        result,
+        pass_verdict_provider=lambda: PASS,
+        version_provider=lambda: __version__,
+    )
 
 
 def write_sarif(result: GuardResult, path: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(to_sarif(result), f, indent=2)
+    _guard_output.write_sarif(
+        result,
+        path,
+        converter=lambda current: to_sarif(cast(GuardResult, current)),
+    )

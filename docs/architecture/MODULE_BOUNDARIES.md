@@ -14,7 +14,9 @@
 - `finalizer/`: PR/release source finalization workflows and handoff.
 - `admission/`: admission adapters and output contracts.
 - `api/` and `cli/`: thin public/CLI compatibility surfaces.
-- `integrations/`: external platform adapters.
+- `integrations/`: high-level output and external-platform adapters. Guard
+  output projection is owned by `integrations/guard_output.py`; public
+  `guard.py` functions remain compatibility facades.
 
 ## Rule
 

@@ -116,6 +116,16 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="guard-output-non-pass-sarif-suppression",
+        path="evoom_guard/integrations/guard_output.py",
+        before="    if result.verdict != pass_verdict_provider():\n",
+        after="    if False and result.verdict != pass_verdict_provider():\n",
+        test=(
+            "tests/test_guard_output_characterization.py::"
+            "test_output_owner_sarif_non_pass_is_not_suppressed"
+        ),
+    ),
+    Mutation(
         name="candidate-tree-reparse-classification-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before="    if is_windows_reparse(full_path, info):\n",
