@@ -1,0 +1,539 @@
+{
+  "cases": {
+    "copy_failure": {
+      "error": {
+        "message": "controlled copy failure",
+        "type": "RuntimeError"
+      },
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "RuntimeError",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": null
+    },
+    "deletion_failure": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "files": {
+            "app.py": "VALUE = 2"
+          },
+          "op": "materialize",
+          "patches": [],
+          "root": "<REPO_COPY>"
+        },
+        {
+          "files_changed": [
+            "app.py"
+          ],
+          "op": "pack-intake"
+        },
+        {
+          "op": "delete",
+          "path": "old.py",
+          "root": "<REPO_COPY>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "files_deleted": [],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "candidate deletion could not be applied safely: controlled unsafe deletion",
+        "passed": false,
+        "score": 0.05
+      }
+    },
+    "deletion_success_after_pack_intake": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "files": {
+            "app.py": "VALUE = 2"
+          },
+          "op": "materialize",
+          "patches": [],
+          "root": "<REPO_COPY>"
+        },
+        {
+          "files_changed": [
+            "app.py"
+          ],
+          "op": "pack-intake"
+        },
+        {
+          "op": "delete",
+          "path": "old.py",
+          "root": "<REPO_COPY>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "isolation_evidence": {
+            "delivered": "unavailable",
+            "image_digest": null,
+            "network": "none",
+            "requested": "docker",
+            "runtime": null
+          },
+          "outcome": "isolation_unavailable",
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "docker isolation requires a docker image (--docker-image)",
+        "passed": false,
+        "score": 0.0
+      }
+    },
+    "empty_candidate": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "no parseable blocks; expected <<<FILE: path>>> … <<<END FILE>>> or <<<PATCH: path>>> <<<SEARCH>>> … <<<REPLACE>>> … <<<END PATCH>>>",
+        "passed": false,
+        "score": 0.02
+      }
+    },
+    "lenient_candidate": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "files": {
+            "app.py": "VALUE = 3"
+          },
+          "op": "materialize",
+          "patches": [],
+          "root": "<REPO_COPY>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "controlled materialization failure",
+        "passed": false,
+        "score": 0.08
+      }
+    },
+    "materialization_failure": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "files": {
+            "app.py": "VALUE = 2"
+          },
+          "op": "materialize",
+          "patches": [],
+          "root": "<REPO_COPY>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "controlled materialization failure",
+        "passed": false,
+        "score": 0.08
+      }
+    },
+    "protected_deletion": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "modifying the judging tests is forbidden: tests/test_app.py",
+        "passed": false,
+        "score": 0.05
+      }
+    },
+    "protected_edit": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "modifying the judging tests is forbidden: tests/test_app.py",
+        "passed": false,
+        "score": 0.05
+      }
+    },
+    "structured_candidate": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "files": {
+            "app.py": "literal <<<END FILE>>> remains content\n"
+          },
+          "op": "materialize",
+          "patches": [],
+          "root": "<REPO_COPY>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "controlled materialization failure",
+        "passed": false,
+        "score": 0.08
+      }
+    },
+    "textual_file_and_patch": {
+      "error": null,
+      "events": [
+        {
+          "op": "isdir",
+          "path": "<SOURCE>",
+          "result": true
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "dst": "<REPO_COPY>",
+          "op": "copy",
+          "src": "<SOURCE>"
+        },
+        {
+          "files": {
+            "app.py": "VALUE = 2"
+          },
+          "op": "materialize",
+          "patches": [
+            {
+              "path": "old.py",
+              "replace": "False",
+              "search": "True"
+            }
+          ],
+          "root": "<REPO_COPY>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": [
+            [
+              "candidate workspace",
+              "<CANDIDATE_WORKSPACE>"
+            ],
+            [
+              "verifier-pack snapshot",
+              "<NONE>"
+            ]
+          ]
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py",
+            "old.py"
+          ],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "controlled materialization failure",
+        "passed": false,
+        "score": 0.08
+      }
+    }
+  },
+  "schema_version": "repo-candidate-phase-v1"
+}
