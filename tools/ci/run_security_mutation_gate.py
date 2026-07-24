@@ -3432,14 +3432,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-setup-forwarding-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
-            "            setup_command=setup_command, "
-            "setup_output_globs=setup_output_globs,\n"
+            "            deleted=tuple(request.safe_deleted_paths),\n"
+            "            test_command=request.test_command,\n"
+            "            setup_command=request.setup_command,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
         ),
         after=(
-            "            setup_command=None, "
-            "setup_output_globs=setup_output_globs,\n"
+            "            deleted=tuple(request.safe_deleted_paths),\n"
+            "            test_command=request.test_command,\n"
+            "            setup_command=None,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
         ),
         test=(
             "tests/test_diff_coverage_trust.py::"
@@ -3528,18 +3532,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-memory-policy-forwarding-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
-            "            setup_command=setup_command, "
-            "setup_output_globs=setup_output_globs,\n"
-            "            timeout=timeout, mem_limit_mb=mem_limit_mb,\n"
-            "            file_blocks=file_blocks,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
+            "            timeout=request.timeout,\n"
+            "            mem_limit_mb=request.mem_limit_mb,\n"
+            "            file_blocks=request.file_blocks,\n"
         ),
         after=(
-            "            setup_command=setup_command, "
-            "setup_output_globs=setup_output_globs,\n"
-            "            timeout=timeout, mem_limit_mb=1024,\n"
-            "            file_blocks=file_blocks,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
+            "            timeout=request.timeout,\n"
+            "            mem_limit_mb=1024,\n"
+            "            file_blocks=request.file_blocks,\n"
         ),
         test=(
             "tests/test_diff_coverage_trust.py::"
