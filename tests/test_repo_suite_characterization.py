@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,8 @@ from repo_suite_characterization_harness import (
     observe_live_container_provider_timing,
     observe_live_provider_timing,
 )
+
+from evoom_guard.verifiers import repo_suite
 
 VECTOR = (
     Path(__file__).parent
@@ -150,3 +153,42 @@ def test_container_runner_and_trace_builder_are_resolved_live(
         "docker:late",
         "phase:late",
     ]
+
+
+def test_repo_suite_owner_exposes_separate_immutable_contracts() -> None:
+    completed = repo_suite.RepoSuiteCompleted(
+        report_path="report.xml",
+        returncode=0,
+        stdout="",
+        stderr="",
+        report_expected=True,
+        elapsed_seconds=0.25,
+    )
+    execution = repo_suite.RepoSuiteExecutionRequest(
+        candidate_copy="copy",
+        workdir=".",
+        files_changed=("app.py",),
+        environment={},
+        container_mode=False,
+        resolved_image=None,
+        pack_configured=False,
+        setup_isolation=None,
+        strict_harness=True,
+    )
+    interpretation = repo_suite.RepoSuiteInterpretationRequest(
+        completed=completed,
+        strict_harness=True,
+    )
+
+    assert repo_suite.execute_repo_suite.__module__ == (
+        "evoom_guard.verifiers.repo_suite"
+    )
+    assert repo_suite.interpret_repo_suite.__module__ == (
+        "evoom_guard.verifiers.repo_suite"
+    )
+    with pytest.raises(FrozenInstanceError):
+        completed.returncode = 1  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        execution.pack_configured = True  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        interpretation.strict_harness = False  # type: ignore[misc]

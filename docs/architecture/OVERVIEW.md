@@ -107,15 +107,21 @@ Optional repository verifier-pack admission now has the focused
 reserved mount, creates and identifies the judge-owned snapshot through
 injected live operations, and returns immutable intake evidence. Pack
 execution, post-snapshot verification, and cleanup remain in `RepoVerifier`.
+Repository-suite execution and JUnit interpretation now have the focused
+`verifiers.repo_suite` owner. Its two immutable boundaries leave the
+runtime-tree continuity check between process completion and report reading in
+`RepoVerifier`; pack execution, sticky evidence projection, and cleanup also
+remain there.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
 classification of changed/deleted paths. It binds local Actions from the base
 tree, preserves the reserved verifier-pack and non-exemptible harness rules,
 and returns the exact safe-deletion set. Guard calls it at the characterized
 post-parse/pre-materialization seam and retains risk, execution, decision, and
 serialization responsibilities.
-`RepoVerifier` still owns effectful subprocess, container, filesystem, and
-runtime-identity operations; it records lifecycle changes through the typed
-builder rather than mutating an untyped trace dictionary.
+`RepoVerifier` still owns repository filesystem coordination, runtime identity,
+pack execution, and cleanup. Repository-suite subprocess/container operations
+are now coordinated by `repo_suite` through live injected effects; lifecycle
+changes still flow through the typed builder.
 `blackbox.py` still owns command construction, report interpretation,
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified

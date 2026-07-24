@@ -170,6 +170,11 @@ remain in their established facades.
   judge-owned snapshot identity now live in the immutable
   `verifiers/repo_pack_intake.py` contract; later pack execution and
   post-execution snapshot verification remain in RepoVerifier.
+- Repository-suite host/docker/gVisor execution and judge-owned JUnit
+  interpretation now live in `verifiers/repo_suite.py` behind separate
+  immutable contracts and frozen branch/order/provider-timing vectors.
+  `RepoVerifier` retains the intervening runtime-tree continuity check plus
+  verifier-pack execution, sticky evidence projection, and workspace cleanup.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction
@@ -185,7 +190,9 @@ remain in their established facades.
   submodules remain pending.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
-- Pending: split the remaining effectful RepoVerifier responsibilities.
+- Pending: split the remaining repository filesystem, runtime-identity,
+  verifier-pack execution, sticky-projection, and cleanup responsibilities in
+  independent characterized slices.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.
