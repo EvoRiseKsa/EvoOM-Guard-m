@@ -740,7 +740,14 @@ def cmd_keygen(args: argparse.Namespace, *, out: Callable[[str], None] = print) 
 
 
 def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
-    """Execute ``verify-verdict`` through the extracted typed owner."""
+    """Execute ``evo-guard verify-verdict`` — signature + CONTEXT check (exit 0/1).
+
+    A valid signature only proves the verdict bytes did not change after
+    signing. The optional ``--expect-*`` flags make the check *contextual*:
+    a perfectly signed verdict for the WRONG commit / policy fails — which is
+    what a merge or deploy gate actually needs (chain of custody, not just
+    file integrity).
+    """
 
     from evoom_guard.signing import SigningUnavailableError, verify_bytes
 
@@ -778,7 +785,13 @@ def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] =
 
 
 def cmd_verify_record(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
-    """Execute ``verify-record`` through the extracted typed owner."""
+    """Validate record semantics and emit one machine-readable JSON report.
+
+    This command intentionally leaves signature verification to
+    :func:`cmd_verify_verdict`.  Exit 0 means no semantic contradiction was
+    found, exit 1 means a well-formed JSON value failed validation, and exit 2
+    means the input could not be read as JSON.
+    """
 
     from evoom_guard.record_verifier import (
         invalid_json_report,
@@ -818,7 +831,7 @@ def cmd_bundle_evidence(
     *,
     out: Callable[[str], None] = print,
 ) -> int:
-    """Execute ``bundle-evidence`` through the extracted typed owner."""
+    """Create a signed envelope only after semantic record validation succeeds."""
 
     from evoom_guard.evidence_bundle import (
         EvidenceBundleError,
@@ -870,7 +883,13 @@ def cmd_finalize_record(
     *,
     out: Callable[[str], None] = print,
 ) -> int:
-    """Execute ``finalize-record`` through the extracted typed owner."""
+    """Seal a semantic record against trusted context and expose ALLOW/DENY.
+
+    The command is deliberately not an execution verifier: its context must be
+    derived by a trusted finalizer from the control plane, after an isolated
+    re-verification.  It never upgrades a PR artifact into a trusted runtime
+    observation by itself.
+    """
 
     from evoom_guard.evidence_bundle import (
         EvidenceBundleError,
@@ -3429,7 +3448,7 @@ def cmd_verify_bundle(
     *,
     out: Callable[[str], None] = print,
 ) -> int:
-    """Execute ``verify-bundle`` through the extracted typed owner."""
+    """Verify canonical bytes, external-key authenticity, context, and semantics."""
 
     from evoom_guard.evidence_bundle import (
         EvidenceBundleError,
