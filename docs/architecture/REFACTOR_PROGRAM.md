@@ -340,6 +340,17 @@ remain in their established facades.
   container cleanup and the public runtime result. Eager assurance-before-
   attestation order, composite counts, no-invocation refusal, and fail-loud
   cleanup boundaries remain unchanged.
+- `application.diff_verification.verify_diff` owns the unified-diff
+  application sequence behind the unchanged `guard_from_diff()` facade:
+  fail-closed preflight, throwaway base reconstruction, changed-path
+  projection, candidate serialization, and delegation to the existing Guard
+  judgment. Guard supplies live filesystem, process, error/result,
+  reason-code, revision-parser, verifier, and cleanup providers. Frozen
+  characterization protects operation order, SHA short-circuiting,
+  primary/cleanup exception behavior, caller-owned command identity, and the
+  absence of an eager runtime `GuardResult` lookup. Baseline, coverage,
+  verifier execution, black-box finalization, and CLI policy loading remain
+  outside this owner.
 - Pending: extract only the remaining bounded verifier/runtime effects where a
   characterized boundary reduces ownership, without relocating whole
   orchestrators. Public `GuardResult` remains in Guard, while

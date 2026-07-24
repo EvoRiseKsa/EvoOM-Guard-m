@@ -17,6 +17,13 @@ from evoom_guard.application.decision_gates import (
     apply_demonstrated_fix_gate,
     apply_diff_coverage_gate,
 )
+from evoom_guard.application.diff_verification import (
+    DiffVerificationOptions,
+    DiffVerificationOutcome,
+    DiffVerificationRequest,
+    DiffVerificationServices,
+    verify_diff,
+)
 from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.application.repo_decision import compose_repo_decision
 from evoom_guard.application.repo_finalization import (
@@ -38,10 +45,15 @@ __all__ = [
     "BlackboxFinalizationOutcome",
     "BlackboxFinalizationServices",
     "compose_repo_decision",
+    "DiffVerificationOptions",
+    "DiffVerificationOutcome",
+    "DiffVerificationRequest",
+    "DiffVerificationServices",
     "finalize_blackbox_verification",
     "finalize_repo_verification",
     "RepoFinalizationInput",
     "RepoFinalizationOutcome",
     "RepoFinalizationServices",
     "VerificationPipeline",
+    "verify_diff",
 ]
