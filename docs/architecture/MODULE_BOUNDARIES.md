@@ -253,18 +253,30 @@ evidence. `RepoVerifier` supplies call-through `lexists`, workspace-allocation,
 and `snapshot_pack` operations so an earlier operation can still replace a
 later historical seam. `RepoVerifier` also records the workspace before
 snapshotting so its existing `finally` cleanup covers unexpected exceptions.
-Pack execution and post-execution snapshot verification stay outside this
+Pack execution and the accepted-snapshot continuity state stay outside this
 boundary.
 
 Verifier-pack execution and interpretation live in
 `evoom_guard/verifiers/repo_pack.py`. Immutable execution and interpretation
-requests are deliberately separate so `RepoVerifier` can verify both the pack
-snapshot and candidate runtime tree after the process completes but before
+requests are deliberately separate so the pack/runtime continuity owners can
+verify their respective snapshots after the process completes but before
 judge-owned JUnit is read. Host, Docker, and gVisor operations, phase evidence,
 report readers, and the pure pack evaluator are injected as live providers at
-their historical call sites. Pack admission/identity, both snapshot checks,
-runtime continuity, sticky repository-suite evidence, phase composition,
-final artifact projection, and workspace cleanup stay in `RepoVerifier`.
+their historical call sites. Pack admission/identity, continuity state,
+sticky repository-suite evidence, phase composition, final artifact
+projection, and workspace cleanup stay outside this execution owner.
+
+Accepted verifier-pack continuity lives in
+`evoom_guard/verifiers/repo_pack_continuity.py`. One immutable identity value
+defensively snapshots the admitted digest and manifest. The judgment-local
+state machine requires `accepted -> pre_execution_verified -> delivered`,
+keeps snapshot drift sticky, and forbids skip, repeat, or recovery. The second
+checkpoint applies after a completed pack execution and before JUnit reading.
+The snapshot verifier remains a live provider at both historical call sites.
+Unexpected provider failures enter terminal state and are re-raised unchanged,
+so `RepoVerifier`'s outer `finally` retains workspace-cleanup and
+primary-exception precedence. The owner neither launches a process nor reads
+JUnit, projects artifacts, composes verdicts, or cleans a workspace.
 
 Repository-suite execution and interpretation live in
 `evoom_guard/verifiers/repo_suite.py`. Immutable execution and interpretation
