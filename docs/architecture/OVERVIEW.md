@@ -80,8 +80,11 @@ around that cursor: coverage and baseline effects, repair-effect annotation,
 attestation placement, profile construction, and lazy assurance evaluation.
 The facade injects live providers at each historical call point, so effect
 implementations, identity, mutation, and exception order remain compatible.
-Black-box orchestration, `GuardResult`, and the baseline runner remain in
-Guard; this slice does not merge the distinct eager black-box assurance path.
+The pristine baseline runner is now owned by `verifiers.repo_baseline`; Guard's
+private facade supplies the same live host effects while finalization retains
+repair-effect classification and decision demotion. Black-box orchestration
+and `GuardResult` remain in Guard; this does not merge the distinct eager
+black-box assurance path.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
@@ -113,7 +116,12 @@ execution is separate; post-snapshot verification and cleanup remain in
 Repository-suite execution and JUnit interpretation now have the focused
 `verifiers.repo_suite` owner. Its two immutable boundaries leave the
 runtime-tree continuity check between process completion and report reading in
-`RepoVerifier`; cleanup also remains there.
+`RepoVerifier`; candidate-workspace cleanup also remains there.
+Pristine-base execution now has the separate `verifiers.repo_baseline` owner.
+It preserves setup fidelity, bounded subprocess and strict process-group
+requirements, the judge-owned report path, JUnit/exit grading, and final
+workspace cleanup. It does not classify the candidate transition or apply the
+demonstrated-fix gate.
 Verifier-pack execution and JUnit interpretation now have the focused
 `verifiers.repo_pack` owner. Its immutable execution boundary freezes
 host/docker/gVisor process evidence; its separate interpretation boundary

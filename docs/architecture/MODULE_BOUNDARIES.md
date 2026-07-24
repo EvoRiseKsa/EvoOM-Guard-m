@@ -376,8 +376,9 @@ The fifth application slice adds
 `application.decision_gates.apply_demonstrated_fix_gate`. It owns only the
 demotion of the current decision when policy requires a demonstrated
 counterfactual repair and prepared baseline evidence does not report
-`repair_effect == "demonstrated"`. Baseline execution, repo-suite scope,
-repair-effect classification, and evidence annotation remain in Guard. The
+`repair_effect == "demonstrated"`. Baseline execution is now owned by
+`verifiers.repo_baseline`; repo-suite scope, repair-effect classification, and
+evidence annotation are coordinated by `application.repo_finalization`. The
 gate receives the current post-coverage decision so an earlier failure cannot
 be overwritten. Characterization freezes mapping access and exception order,
 the two established reason variants, and precedence before assurance.
@@ -409,9 +410,19 @@ execution/pack evidence projection, attestation placement, assurance-profile
 construction, and the final lazy assurance gate. Every effect and compatibility
 helper is supplied through a late provider, preserving the characterized
 lookup, identity, mutation, and fail-loud exception order. The Guard facade
-still owns the effect implementations, public `GuardResult`, black-box branch,
-baseline runner, and wire casts. This boundary deliberately does not unify the
-black-box eager-assurance path or move verifier execution.
+still owns the coverage effect, public `GuardResult`, black-box branch, and
+wire casts; pristine-baseline execution has the focused owner described below.
+This boundary deliberately does not unify the black-box eager-assurance path
+or move candidate verifier execution.
+
+The next bounded verifier slice adds
+`verifiers.repo_baseline.run_repo_baseline`. It owns only pristine-copy setup
+and repository-suite execution, setup-fidelity rejection, bounded
+subprocess/JUnit interpretation, and its temporary workspace lifetime. The
+private Guard facade retains its historical signature and resolves host
+effects live at their original operation sites. Repair-effect annotation,
+scope, and decision demotion remain in `application.repo_finalization`; this
+slice does not move diff coverage, candidate execution, or CLI behavior.
 
 The first command-family slice adds the typed `cli.guard_command` owner for
 the public `guard` command. It owns only effective-policy resolution, routing

@@ -3982,17 +3982,25 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-baseline-setup-group-proof-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/verifiers/repo_baseline.py",
         before=(
-            "                    env=setup_env,\n"
-            "                    timeout=timeout,\n"
-            "                    preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
-            "                    require_process_group_cleanup_proof=strict_harness,\n"
+            "                    timeout=request.timeout,\n"
+            "                    preexec_fn=(\n"
+            "                        verifier._limits()\n"
+            "                        if services.platform_name_provider() == \"posix\"\n"
+            "                        else None\n"
+            "                    ),\n"
+            "                    require_process_group_cleanup_proof=(\n"
+            "                        request.strict_harness\n"
+            "                    ),\n"
         ),
         after=(
-            "                    env=setup_env,\n"
-            "                    timeout=timeout,\n"
-            "                    preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
+            "                    timeout=request.timeout,\n"
+            "                    preexec_fn=(\n"
+            "                        verifier._limits()\n"
+            "                        if services.platform_name_provider() == \"posix\"\n"
+            "                        else None\n"
+            "                    ),\n"
             "                    require_process_group_cleanup_proof=False,\n"
         ),
         test=(
@@ -4002,22 +4010,195 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-baseline-suite-group-proof-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/verifiers/repo_baseline.py",
         before=(
-            "                env=run_env,\n"
-            "                preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
-            "                timeout=timeout,\n"
-            "                require_process_group_cleanup_proof=strict_harness,\n"
+            "                preexec_fn=(\n"
+            "                    verifier._limits()\n"
+            "                    if services.platform_name_provider() == \"posix\"\n"
+            "                    else None\n"
+            "                ),\n"
+            "                timeout=request.timeout,\n"
+            "                require_process_group_cleanup_proof=(\n"
+            "                    request.strict_harness\n"
+            "                ),\n"
         ),
         after=(
-            "                env=run_env,\n"
-            "                preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
-            "                timeout=timeout,\n"
+            "                preexec_fn=(\n"
+            "                    verifier._limits()\n"
+            "                    if services.platform_name_provider() == \"posix\"\n"
+            "                    else None\n"
+            "                ),\n"
+            "                timeout=request.timeout,\n"
             "                require_process_group_cleanup_proof=False,\n"
         ),
         test=(
             "tests/test_strict_harness.py::"
             "test_strict_baseline_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-historical-cleanup-masking-bypass",
+        path="evoom_guard/verifiers/repo_baseline.py",
+        before=(
+            "    finally:\n"
+            "        services.cleanup_workspace_provider()(\n"
+            "            workdir,\n"
+            "            ignore_errors=True,\n"
+            "        )\n"
+        ),
+        after=(
+            "    finally:\n"
+            "        try:\n"
+            "            services.cleanup_workspace_provider()(\n"
+            "                workdir,\n"
+            "                ignore_errors=True,\n"
+            "            )\n"
+            "        except BaseException:\n"
+            "            pass\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_cleanup_failure_historically_masks_an_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-command-alias-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            repository_path=repo_path,\n"
+            "            test_command=test_command,\n"
+            "            setup_command=setup_command,\n"
+        ),
+        after=(
+            "            repository_path=repo_path,\n"
+            "            test_command=(\n"
+            "                list(test_command) if test_command is not None else None\n"
+            "            ),\n"
+            "            setup_command=(\n"
+            "                list(setup_command) if setup_command is not None else None\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_commands_keep_caller_lists_live_until_historical_use"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-path-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            path_join_provider=lambda: cast(Any, os.path.join),\n"
+        ),
+        after=(
+            "            path_join_provider=(\n"
+            "                lambda join=cast(Any, os.path.join): join\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_uses_guard_os_path_and_platform_at_each_historical_site"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-platform-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            platform_name_provider=lambda: os.name,\n",
+        after=(
+            "            platform_name_provider=(\n"
+            "                lambda platform_name=os.name: platform_name\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_uses_guard_os_path_and_platform_at_each_historical_site"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-os-error-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            os_error_provider=lambda: OSError,\n",
+        after=(
+            "            os_error_provider=(\n"
+            "                lambda error=OSError: error\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_resolves_operational_exception_matchers_at_catch_time"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-containment-error-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            containment_error_provider=(\n"
+            "                lambda: _SubprocessContainmentError\n"
+            "            ),\n"
+        ),
+        after=(
+            "            containment_error_provider=(\n"
+            "                lambda error=_SubprocessContainmentError: error\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_resolves_operational_exception_matchers_at_catch_time"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-output-limit-error-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            output_limit_error_provider=(\n"
+            "                lambda: _SubprocessOutputLimitExceeded\n"
+            "            ),\n"
+        ),
+        after=(
+            "            output_limit_error_provider=(\n"
+            "                lambda error=_SubprocessOutputLimitExceeded: error\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_resolves_operational_exception_matchers_at_catch_time"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-timeout-error-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            timeout_error_provider=lambda: "
+            "subprocess.TimeoutExpired,\n"
+        ),
+        after=(
+            "            timeout_error_provider=(\n"
+            "                lambda error=subprocess.TimeoutExpired: error\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_resolves_operational_exception_matchers_at_catch_time"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-setup-fidelity-error-live-rebinding",
+        path="evoom_guard/guard.py",
+        before=(
+            "            setup_fidelity_error_provider="
+            "lambda: SetupFidelityError,\n"
+        ),
+        after=(
+            "            setup_fidelity_error_provider=lambda: getattr(\n"
+            "                __import__(\n"
+            "                    \"evoom_guard.verifiers.repo_verifier\",\n"
+            "                    fromlist=[\"SetupFidelityError\"],\n"
+            "                ),\n"
+            "                \"SetupFidelityError\",\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_snapshots_setup_fidelity_error_at_facade_entry"
         ),
     ),
     Mutation(

@@ -191,6 +191,11 @@ from evoom_guard.verifiers.harness_policy import (
 from evoom_guard.verifiers.harness_policy import (
     matches_globs as _matches_globs,
 )
+from evoom_guard.verifiers.repo_baseline import (
+    RepoBaselineRequest,
+    RepoBaselineServices,
+    run_repo_baseline,
+)
 from evoom_guard.verifiers.repo_evidence import (
     repo_attestation_evidence_payload,
     repo_verification_evidence_from_artifact,
@@ -1320,14 +1325,7 @@ def _run_baseline_suite(
     mem_limit_mb: int,
     strict_harness: bool,
 ) -> dict[str, Any]:
-    """Run the repo's suite on a PRISTINE copy (no candidate) — the baseline.
-
-    Subprocess judge only (mirrors diff-coverage's scope). The verdict here is
-    graded from the same judge-owned JUnit + exit-code channel as the main run,
-    so baseline evidence carries the same anti-forgery properties. Returns a
-    small dict: verdict (PASS | FAIL | NO_CLEAN_VERDICT), tests_passed,
-    tests_total.
-    """
+    """Compatibility facade for the pristine repository baseline owner."""
     import tempfile as _tempfile
 
     from evoom_guard.adapters import instrument_command
@@ -1347,106 +1345,51 @@ def _run_baseline_suite(
         read_junit_xml,
     )
 
-    rv = RepoVerifier(
-        timeout=timeout,
-        mem_limit_mb=mem_limit_mb,
-        strict_harness=strict_harness,
+    return run_repo_baseline(
+        RepoBaselineRequest(
+            repository_path=repo_path,
+            test_command=test_command,
+            setup_command=setup_command,
+            setup_output_globs=setup_output_globs,
+            timeout=timeout,
+            mem_limit_mb=mem_limit_mb,
+            strict_harness=strict_harness,
+        ),
+        services=RepoBaselineServices(
+            verifier_factory=RepoVerifier,
+            workspace_factory_provider=lambda: _tempfile.mkdtemp,
+            path_join_provider=lambda: cast(Any, os.path.join),
+            platform_name_provider=lambda: os.name,
+            os_error_provider=lambda: OSError,
+            setup_fidelity_error_provider=lambda: SetupFidelityError,
+            containment_error_provider=(
+                lambda: _SubprocessContainmentError
+            ),
+            output_limit_error_provider=(
+                lambda: _SubprocessOutputLimitExceeded
+            ),
+            timeout_error_provider=lambda: subprocess.TimeoutExpired,
+            copy_repository_provider=lambda: cast(Any, copy_repo_tree),
+            judge_environment_provider=lambda: judge_subprocess_env,
+            setup_fidelity_snapshot=cast(
+                Any,
+                _setup_fidelity_snapshot,
+            ),
+            setup_fidelity_changes=_setup_fidelity_changes,
+            instrument_command=cast(Any, instrument_command),
+            resolve_host_command_provider=lambda: cast(
+                Any,
+                _resolve_host_command,
+            ),
+            run_bounded_subprocess_provider=lambda: _run_bounded_subprocess,
+            read_junit_xml=read_junit_xml,
+            parse_junit_xml=cast(Any, parse_junit_xml),
+            parse_junit_dir=cast(Any, parse_junit_dir),
+            grade_repo_run=grade_repo_run,
+            detect_tamper=detect_tamper,
+            cleanup_workspace_provider=lambda: shutil.rmtree,
+        ),
     )
-    workdir = _tempfile.mkdtemp(prefix="evo_baseline_")
-    copy = os.path.join(workdir, "repo")
-    try:
-        copy_repo_tree(repo_path, copy)
-        env = judge_subprocess_env(workdir)
-        if setup_command:
-            try:
-                setup_before = _setup_fidelity_snapshot(copy, setup_output_globs)
-                setup_env = dict(env)
-                setup_cmd = _resolve_host_command(
-                    list(setup_command), cwd=copy, env=setup_env
-                )
-                # Baseline evidence is still candidate-adjacent execution: its
-                # setup command and suite must not regain an unbounded stdout /
-                # stderr channel merely because they run on the pristine tree.
-                r_setup = _run_bounded_subprocess(
-                    setup_cmd,
-                    cwd=copy,
-                    env=setup_env,
-                    timeout=timeout,
-                    preexec_fn=rv._limits() if os.name == "posix" else None,
-                    require_process_group_cleanup_proof=strict_harness,
-                )
-                setup_after = _setup_fidelity_snapshot(
-                    copy, setup_output_globs, baseline=setup_before
-                )
-            except (
-                OSError,
-                SetupFidelityError,
-                _SubprocessContainmentError,
-                _SubprocessOutputLimitExceeded,
-                subprocess.TimeoutExpired,
-            ):
-                return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
-                        "tests_total": None, "setup_fidelity": "unverified"}
-            if r_setup.returncode != 0:
-                return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
-                        "tests_total": None, "setup_fidelity": "setup_failed"}
-            setup_changes = _setup_fidelity_changes(setup_before, setup_after)
-            if setup_changes:
-                return {
-                    "verdict": "NO_CLEAN_VERDICT",
-                    "tests_passed": None,
-                    "tests_total": None,
-                    "setup_fidelity": "changed_judged_tree",
-                    "setup_fidelity_changes": setup_changes,
-                }
-        base_cmd = rv._command({"repo_path": repo_path})
-        if test_command:
-            base_cmd = list(test_command)
-        host_xml = os.path.join(workdir, "judge-result.xml")
-        cmd, report_expected, report_env = instrument_command(base_cmd, host_xml)
-        run_env = {**env, **report_env}
-        cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
-        try:
-            r = _run_bounded_subprocess(
-                cmd,
-                cwd=copy,
-                env=run_env,
-                preexec_fn=rv._limits() if os.name == "posix" else None,
-                timeout=timeout,
-                require_process_group_cleanup_proof=strict_harness,
-            )
-        except (
-            OSError,
-            _SubprocessContainmentError,
-            _SubprocessOutputLimitExceeded,
-            subprocess.TimeoutExpired,
-        ):
-            return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": None,
-                    "tests_total": None}
-        # The report path is judge-owned, but its contents are produced by the
-        # command being judged.  Read it through the same byte-bounded helper as
-        # the main RepoVerifier path; a missing, oversized, or racing report is
-        # no clean baseline evidence.
-        xml_text = read_junit_xml(host_xml) or ""
-        junit = parse_junit_xml(xml_text)
-        if junit is None:
-            junit = parse_junit_dir(host_xml + ".d")
-        passed, _score, tp, tt = grade_repo_run(
-            r.returncode, junit, report_expected=report_expected
-        )
-        tampered = detect_tamper(r.returncode, junit, report_expected=report_expected)
-        if tampered or (junit is None and report_expected) or (
-            strict_harness
-            and (not report_expected or junit is None or junit.total <= 0)
-        ):
-            return {"verdict": "NO_CLEAN_VERDICT", "tests_passed": tp, "tests_total": tt}
-        return {
-            "verdict": "PASS" if passed else "FAIL",
-            "tests_passed": tp,
-            "tests_total": tt,
-        }
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def _utc_now() -> str:
