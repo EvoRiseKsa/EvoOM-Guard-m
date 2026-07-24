@@ -1286,6 +1286,28 @@ def test_repo_suite_has_only_public_execution_and_evidence_dependencies() -> Non
     )
 
 
+def test_blackbox_pack_has_only_public_execution_and_pack_dependencies() -> None:
+    """Pack execution must not absorb facade, candidate, or cleanup ownership."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.verifiers.blackbox_pack"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == {
+        "evoom_guard.execution",
+        "evoom_guard.pack_manifest",
+    }
+    assert ("evoom_guard.blackbox", module) in analysis.internal_edges
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

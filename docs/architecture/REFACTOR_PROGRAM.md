@@ -152,6 +152,14 @@ remain in their established facades.
   `execution/judge.py`, retaining command construction, compatibility seams,
   report interpretation, evidence composition, and verdict policy in
   `blackbox.py`.
+- Black-box verifier-pack execution and completed-process interpretation now
+  live in `verifiers/blackbox_pack.py` behind immutable requests/services,
+  explicit terminal-or-completed outcomes, and a mutable cleanup lifecycle.
+  Pre/post snapshot identity, runner-before-command lookup timing, process
+  failure mapping, raw-JUnit hashing, exit/report coherence, and zero-test
+  rejection are frozen by a pre-extraction vector and focused mutations.
+  `blackbox.py` retains command construction, `BlackboxResult`, candidate
+  invocation/CID evidence, cleanup precedence, and workspace lifetime.
 - Pure repository/pack interpretation and composition were extracted in PR
   #133 into the
   typed `verifiers/repo_phase_contracts.py` module behind frozen vectors; keep
@@ -200,8 +208,9 @@ remain in their established facades.
   bounded read/compare interval; it does not close the classification/open gap
   or create an atomic whole-tree snapshot. Other containment submodules remain
   pending.
-- Pending: split the remaining `blackbox.py` pack/CID/evidence
-  responsibilities behind characterized compatibility boundaries.
+- Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
+  responsibilities behind characterized compatibility boundaries. The pack
+  execution and interpretation slice is complete.
 - Pending: split the remaining repository filesystem, runtime-identity,
   sticky-projection, and cleanup responsibilities in independent characterized
   slices.

@@ -74,8 +74,8 @@ from evoom_guard.execution import (
     BoundedOutput as _BoundedOutput,
 )
 from evoom_guard.execution import (
-    JudgeOutputLimitError,
-    JudgeProcessCleanupError,
+    JudgeOutputLimitError,  # noqa: F401 - historical public patch seam
+    JudgeProcessCleanupError,  # noqa: F401 - historical public patch seam
     JudgeProcessLimits,
     JudgeProcessRequest,
     ProcessContainmentError,
@@ -127,6 +127,16 @@ from evoom_guard.pack_manifest import (
     digest_and_manifest,
     snapshot_pack,
     verify_pack_snapshot,
+)
+from evoom_guard.verifiers.blackbox_pack import (
+    BlackboxPackExecutionRequest,
+    BlackboxPackExecutionServices,
+    BlackboxPackInterpretationRequest,
+    BlackboxPackInterpretationServices,
+    BlackboxPackLifecycle,
+    BlackboxPackVerdictFacts,
+    execute_blackbox_pack,
+    interpret_blackbox_pack,
 )
 from evoom_guard.verifiers.junit_oracle import read_junit_xml
 from evoom_guard.verifiers.repo_verifier import (
@@ -516,8 +526,7 @@ def _run_blackbox_impl(
     workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
     copy = os.path.join(workdir, "repo")
     pack_workdir: str | None = None
-    judge_process_active = False
-    judge_process_started = False
+    pack_lifecycle = BlackboxPackLifecycle()
     invocation_recorder: _InvocationRecorder | None = None
     pack_sha256: str | None = None
     pack_manifest: dict | None = None
@@ -628,6 +637,36 @@ def _run_blackbox_impl(
                 observed_container_ids=observed_candidate_container_ids,
             )
 
+        def project_pack_verdict(
+            facts: BlackboxPackVerdictFacts,
+        ) -> BlackboxResult:
+            result = BlackboxResult(
+                facts.passed,
+                facts.tests_passed,
+                facts.tests_total,
+                facts.diagnostics,
+                facts.ran,
+                facts.error,
+                pack_sha256,
+                pack_manifest,
+                facts.junit_sha256,
+                iso,
+                deleted_applied,
+                started=facts.started,
+                completed=facts.completed,
+                execution_state=facts.execution_state,
+                execution_phase=facts.execution_phase,
+                pack_present=True,
+            )
+            if not facts.attach_candidate_evidence:
+                return result
+            return with_candidate_evidence(
+                result,
+                wait_for_late_container_evidence=(
+                    facts.wait_for_late_container_evidence
+                ),
+            )
+
         xml_path = os.path.join(workdir, "judge-blackbox.xml")
         env = {
             **judge_subprocess_env(workdir),
@@ -636,178 +675,42 @@ def _run_blackbox_impl(
             # launcher the pack should prefer.
             **run_env,
         }
-        t0 = time.perf_counter()
-        try:
-            verify_pack_snapshot(pack_snapshot, pack_identity)
-            judge_process_active = True
-            judge_process_started = True
-            r = _run_judge_process(
-                _judge_command(pack_snapshot, xml_path),
-                cwd=pack_snapshot,       # judge runs in the snapshot, NOT in the repo copy
+        execution = execute_blackbox_pack(
+            BlackboxPackExecutionRequest(
+                pack_snapshot=pack_snapshot,
+                pack_identity=pack_identity,
+                xml_path=xml_path,
+                environment=env,
                 timeout=timeout,
-                env=env,
-            )
-            judge_process_active = False
-        except subprocess.TimeoutExpired:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False, 0, 0, f"black-box pack timed out after {timeout}s",
-                    False, "timeout", pack_sha256, pack_manifest,
-                    None, iso, deleted_applied,
-                    started=True,
-                    completed=False,
-                    execution_state="started_incomplete",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                ),
-                wait_for_late_container_evidence=True,
-            )
-        except JudgeOutputLimitError as exc:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False,
-                    0,
-                    0,
-                    str(exc),
-                    False,
-                    "black-box output limit",
-                    pack_sha256,
-                    pack_manifest,
-                    None,
-                    iso,
-                    deleted_applied,
-                    started=True,
-                    completed=False,
-                    execution_state="started_incomplete",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                ),
-                wait_for_late_container_evidence=True,
-            )
-        except JudgeProcessCleanupError as exc:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False,
-                    0,
-                    0,
-                    str(exc),
-                    False,
-                    "judge process cleanup failed",
-                    pack_sha256,
-                    pack_manifest,
-                    None,
-                    iso,
-                    deleted_applied,
-                    started=True,
-                    completed=False,
-                    execution_state="started_incomplete",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                ),
-                wait_for_late_container_evidence=True,
-            )
-        except PackManifestError as exc:
-            # The runner may be prepared, but pytest was never started and no
-            # candidate receipt was observed.  Keep the trailing execution
-            # fields at their conservative 0/False defaults; callers must not
-            # interpret the prepared ``iso`` dictionary as candidate execution.
-            return BlackboxResult(
-                False, 0, 0, str(exc), False, "verifier pack snapshot changed",
-                pack_sha256, pack_manifest, None, iso, deleted_applied,
-                pack_present=True,
-            )
-        try:
-            verify_pack_snapshot(pack_snapshot, pack_identity)
-        except PackManifestError as exc:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False, 0, 0, str(exc), False,
-                    "verifier pack changed while executing", pack_sha256,
-                    pack_manifest, None, iso, deleted_applied,
-                    started=True,
-                    completed=True,
-                    execution_state="completed",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                )
-            )
-        # Read the judge-owned report immediately (all pack subprocesses have
-        # exited by now). The JUDGE's exit code is authoritative regardless.
-        junit = None
-        junit_sha256 = None
-        xml_text = read_junit_xml(xml_path)
-        if xml_text is not None:
-            junit = parse_junit_xml(xml_text)
-            junit_sha256 = hashlib.sha256(xml_text.encode("utf-8")).hexdigest()
-        _elapsed = time.perf_counter() - t0
-        diagnostics = distill_diagnostics(r.stdout + "\n" + r.stderr)
-
-        # The judge process ran no candidate code, so its exit code is trustworthy.
-        # exit 0 = pack passed; exit 1 = pack failed. Counts come from the report
-        # when present (the judge wrote it), else fall back to the exit code.
-        if junit is None or junit.total <= 0:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False, 0, 0, diagnostics, False,
-                    "black-box pack produced no judge-owned test results",
-                    pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied,
-                    started=True,
-                    completed=True,
-                    execution_state="completed",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                )
-            )
-        tp, tt = junit.passed, junit.total
-        junit_all_passed = junit.failures == 0 and junit.errors == 0 and tp == tt
-        if (r.returncode == 0 and not junit_all_passed) or (
-            r.returncode == 1 and junit_all_passed
-        ):
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False, tp, tt, diagnostics, False,
-                    "black-box JUnit/exit mismatch", pack_sha256, pack_manifest,
-                    junit_sha256, iso, deleted_applied,
-                    started=True,
-                    completed=True,
-                    execution_state="completed",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                )
-            )
-        if r.returncode == 0:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    True, tp, tt, diagnostics, True, None, pack_sha256,
-                    pack_manifest, junit_sha256, iso, deleted_applied,
-                    started=True,
-                    completed=True,
-                    execution_state="completed",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                )
-            )
-        if r.returncode == 1:
-            return with_candidate_evidence(
-                BlackboxResult(
-                    False, tp, tt, diagnostics, True, None, pack_sha256,
-                    pack_manifest, junit_sha256, iso, deleted_applied,
-                    started=True,
-                    completed=True,
-                    execution_state="completed",
-                    execution_phase="blackbox_pack",
-                    pack_present=True,
-                )
-            )
-        # 2+ = pytest usage/collection error in the pack itself (author's bug).
-        return with_candidate_evidence(
-            BlackboxResult(False, tp, tt, diagnostics, False,
-                           f"black-box pack did not run cleanly (pytest exit {r.returncode})",
-                           pack_sha256, pack_manifest, junit_sha256, iso, deleted_applied,
-                           started=True, completed=True,
-                           execution_state="completed",
-                           execution_phase="blackbox_pack", pack_present=True)
+            ),
+            lifecycle=pack_lifecycle,
+            services=BlackboxPackExecutionServices(
+                verify_snapshot=lambda: verify_pack_snapshot,
+                build_command=lambda: _judge_command,
+                run_judge=lambda: _run_judge_process,
+                perf_counter=lambda: time.perf_counter(),
+            ),
         )
+        if execution.terminal is not None:
+            return project_pack_verdict(execution.terminal)
+        completed_pack = execution.completed
+        if completed_pack is None:
+            raise RuntimeError(
+                "black-box pack execution returned no terminal or completed value"
+            )
+        verdict = interpret_blackbox_pack(
+            BlackboxPackInterpretationRequest(completed=completed_pack),
+            services=BlackboxPackInterpretationServices(
+                read_report=lambda: read_junit_xml,
+                parse_report=lambda: parse_junit_xml,
+                digest_text=lambda text: hashlib.sha256(
+                    text.encode("utf-8")
+                ).hexdigest(),
+                distill_diagnostics=lambda: distill_diagnostics,
+                perf_counter=lambda: time.perf_counter(),
+            ),
+        )
+        return project_pack_verdict(verdict)
     finally:
         # A timed-out/interrupted pytest can leave its Docker descendant alive.
         # Clean it before deleting the cidfiles. Expected operational cleanup
@@ -820,16 +723,16 @@ def _run_blackbox_impl(
             try:
                 _cleanup_candidate_containers(
                     cidfile_dir,
-                    wait_for_late_cidfiles=judge_process_active,
+                    wait_for_late_cidfiles=pack_lifecycle.active,
                     # A caught timeout/incomplete result or an unhandled
                     # operator exception remains primary. A normally completed
                     # judge must prove every candidate container absent before
                     # its pending PASS/FAIL can be returned.
-                    strict=not judge_process_active,
+                    strict=not pack_lifecycle.active,
                     known_container_ids=observed_candidate_container_ids,
                 )
             except CandidateContainerCleanupError as exc:
-                if primary_exception_active or judge_process_active:
+                if primary_exception_active or pack_lifecycle.active:
                     pass
                 else:
                     cleanup_result = BlackboxResult(
@@ -844,19 +747,19 @@ def _run_blackbox_impl(
                         None,
                         iso,
                         deleted_applied,
-                        started=judge_process_started,
+                        started=pack_lifecycle.started,
                         completed=False,
                         execution_state=(
                             "started_incomplete"
-                            if judge_process_started
+                            if pack_lifecycle.started
                             else "not_started"
                         ),
                         execution_phase=(
-                            "blackbox_pack" if judge_process_started else "preflight"
+                            "blackbox_pack" if pack_lifecycle.started else "preflight"
                         ),
                         pack_present=True if pack_sha256 else None,
                     )
-                    if judge_process_started:
+                    if pack_lifecycle.started:
                         cleanup_result = _attach_candidate_execution_evidence(
                             cleanup_result,
                             recorder=invocation_recorder,

@@ -131,8 +131,12 @@ pack snapshot continuity, phase composition, and cleanup. Repository-suite and
 verifier-pack subprocess/container operations are coordinated by `repo_suite`
 and `repo_pack` through live injected effects; lifecycle changes still flow
 through the typed builder.
-`blackbox.py` still owns command construction, report interpretation,
-verdict/evidence composition, and remaining pack/CID responsibilities.
+`verifiers/blackbox_pack.py` now owns the characterized verifier-pack process
+sequence and completed-process report interpretation through immutable
+boundaries plus an explicit mutable cleanup lifecycle. `blackbox.py` retains
+pack intake, command construction, candidate preparation, invocation/CID
+observation, evidence attachment, `BlackboxResult` projection, cleanup, and
+workspace lifetime.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package. Its first bounded submodule,
 `workspace/candidate_tree.py`, now owns root validation, reparse-safe walking,
@@ -149,8 +153,9 @@ classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
 facade. The facade injects live validators and argument-group helpers on every
 call; command handlers and dispatch remain in `cli/__init__.py`.
-Further workspace decomposition and black-box runtime-effect sequencing remain
-pending; candidate path admission, candidate-tree intake, and the repo-native
+Internal workspace decomposition and the remaining black-box
+candidate/evidence/cleanup orchestration remain pending; black-box pack
+runtime-effect sequencing, candidate path admission, and the repo-native
 application decision/finalization path are complete.
 
 The immediate structural priority is the next bounded slice: extract one

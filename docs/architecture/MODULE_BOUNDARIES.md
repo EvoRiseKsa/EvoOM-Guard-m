@@ -149,9 +149,18 @@ The fifth execution-kernel slice lives in `evoom_guard/execution/judge.py`. It
 owns the typed judge-process request, limits, and result contracts together
 with bounded stdout/stderr capture, timeout handling, reader lifecycle, and
 process-group cleanup. It does not assemble the judge command, interpret its
-report, or compose evidence or verdicts. Those responsibilities remain in
-`blackbox.py`, which also retains its historical private patch seams through a
-compatibility facade.
+report, or compose evidence or verdicts.
+
+Black-box verifier-pack execution and interpretation live in
+`evoom_guard/verifiers/blackbox_pack.py`. Its immutable request, service, and
+outcome contracts plus one explicit mutable lifecycle object preserve the
+established pre-snapshot check, runner-before-command provider lookup, process
+error mapping, post-snapshot check, raw-JUnit digest, exit/report coherence,
+and zero-test rejection. The module imports only the public execution and pack
+contracts. It does not own candidate preparation, invocation/CID observation,
+container cleanup, workspace lifetime, `BlackboxResult`, or evidence
+attachment. Those remain in `blackbox.py`, which supplies live compatibility
+providers and performs the final projection without changing the public ABI.
 
 Host-command ownership lives in `evoom_guard/execution/command.py`. It resolves
 Windows `PATHEXT` shims without a shell and refuses candidate-controlled
