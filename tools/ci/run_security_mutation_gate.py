@@ -2169,25 +2169,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-setup-process-group-proof-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_setup.py",
         before=(
-            "                            cwd=setup_cwd,\n"
-            "                            env=setup_env,\n"
-            "                            timeout=self.timeout,\n"
-            "                            preexec_fn=(\n"
-            "                                self._limits() if os.name == \"posix\" else None\n"
-            "                            ),\n"
-            "                            require_process_group_cleanup_proof=self.strict_harness,\n"
+            "                require_process_group_cleanup_proof="
+            "services.strict_harness(),\n"
         ),
-        after=(
-            "                            cwd=setup_cwd,\n"
-            "                            env=setup_env,\n"
-            "                            timeout=self.timeout,\n"
-            "                            preexec_fn=(\n"
-            "                                self._limits() if os.name == \"posix\" else None\n"
-            "                            ),\n"
-            "                            require_process_group_cleanup_proof=False,\n"
-        ),
+        after="                require_process_group_cleanup_proof=False,\n",
         test=(
             "tests/test_strict_harness.py::"
             "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
