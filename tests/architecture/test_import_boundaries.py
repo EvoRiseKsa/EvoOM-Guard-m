@@ -871,6 +871,79 @@ def test_cli_guard_command_has_one_typed_owner_and_no_runtime_internal_imports()
     assert {"cmd_guard", "_guard_command_services"} <= facade_functions
 
 
+def test_cli_agent_change_commands_have_one_stdlib_owner_and_public_facades() -> None:
+    """The five bounded adapters keep effects and import timing in the facade."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.cli"
+    owner_module = "evoom_guard.cli.agent_change_commands"
+    facade_path = PACKAGE_ROOT / "cli" / "__init__.py"
+    owner_path = PACKAGE_ROOT / "cli" / "agent_change_commands.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert owner_functions == {
+        "execute_derive_agent_change_bindings",
+        "execute_seal_agent_change_authorization",
+        "execute_seal_agent_change_finalized",
+        "execute_validate_agent_change_proposal",
+        "execute_verify_agent_change_finalized",
+    }
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "argparse",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+    owner_classes = {
+        node.name for node in owner_tree.body if isinstance(node, ast.ClassDef)
+    }
+    assert {
+        "DeriveBindingsServices",
+        "SealAuthorizationServices",
+        "SealFinalizedServices",
+        "ValidateProposalServices",
+        "VerifyFinalizedServices",
+    } <= owner_classes
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name for node in facade_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "cmd_derive_agent_change_bindings",
+        "cmd_seal_agent_change_authorization",
+        "cmd_seal_agent_change_finalized",
+        "cmd_validate_agent_change_proposal",
+        "cmd_verify_agent_change_finalized",
+    } <= facade_functions
+
+
 def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:
     """Policy construction may depend on domain values, never Guard internals."""
 

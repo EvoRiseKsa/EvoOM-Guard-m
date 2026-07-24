@@ -3980,6 +3980,206 @@ MUTATIONS = (
             "test_signing_provider_is_resolved_after_json_publication"
         ),
     ),
+    Mutation(
+        name="cli-agent-change-validate-error-exit-bypass",
+        path="evoom_guard/cli/agent_change_commands.py",
+        before=(
+            '                "format": services.proposal_format,\n'
+            '                "ok": False,\n'
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    services.machine_report(\n"
+        ),
+        after=(
+            '                "format": services.proposal_format,\n'
+            '                "ok": False,\n'
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 0\n"
+            "    services.machine_report(\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_frozen_cli_agent_change_command_behavior[validate_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-git-pin-bypass",
+        path="evoom_guard/cli/agent_change_commands.py",
+        before=(
+            "        git_executable = services.git_executable_pin(\n"
+            "            args.git_executable,\n"
+            "            args.git_executable_sha256,\n"
+            "        )\n"
+            "        bindings = services.derive_bindings(\n"
+        ),
+        after=(
+            "        git_executable = args.git_executable\n"
+            "        bindings = services.derive_bindings(\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_frozen_cli_agent_change_command_behavior[derive_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-authorization-read-order-inversion",
+        path="evoom_guard/cli/agent_change_commands.py",
+        before=(
+            "        source = services.read_external_object(\n"
+            "            args.source,\n"
+            '            label="authorization source",\n'
+            "        )\n"
+            "        scope = services.read_external_object(\n"
+            "            args.scope,\n"
+            '            label="authorization scope",\n'
+            "        )\n"
+        ),
+        after=(
+            "        scope = services.read_external_object(\n"
+            "            args.scope,\n"
+            '            label="authorization scope",\n'
+            "        )\n"
+            "        source = services.read_external_object(\n"
+            "            args.source,\n"
+            '            label="authorization source",\n'
+            "        )\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_frozen_cli_agent_change_command_behavior"
+            "[seal_authorization_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-seal-deny-exit-bypass",
+        path="evoom_guard/cli/agent_change_commands.py",
+        before=(
+            "        return 1\n"
+            "    services.machine_report(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.proposal_format,\n'
+            '            "ok": True,\n'
+            '            "status": "ALLOW",\n'
+            '            "decision": sealed.decision,\n'
+        ),
+        after=(
+            "        return 0\n"
+            "    services.machine_report(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.proposal_format,\n'
+            '            "ok": True,\n'
+            '            "status": "ALLOW",\n'
+            '            "decision": sealed.decision,\n'
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_frozen_cli_agent_change_command_behavior[seal_finalized_deny]"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-verify-deny-exit-bypass",
+        path="evoom_guard/cli/agent_change_commands.py",
+        before=(
+            "        return 1\n"
+            "    services.machine_report(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.proposal_format,\n'
+            '            "ok": True,\n'
+            '            "status": "ALLOW",\n'
+            '            "decision": verified.decision,\n'
+        ),
+        after=(
+            "        return 0\n"
+            "    services.machine_report(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.proposal_format,\n'
+            '            "ok": True,\n'
+            '            "status": "ALLOW",\n'
+            '            "decision": verified.decision,\n'
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_frozen_cli_agent_change_command_behavior[verify_finalized_deny]"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-live-reader-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            read_external_object=lambda path, *, label: "
+            "_read_external_finalizer_object(\n"
+            "                path, label=label\n"
+            "            ),\n"
+            "            seal_authorization=seal_agent_change_authorization,\n"
+        ),
+        after=(
+            "            read_external_object=_read_external_finalizer_object,\n"
+            "            seal_authorization=seal_agent_change_authorization,\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_authorization_reads_stay_live_but_sealer_snapshots_at_entry"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-entry-derive-helper-late-bound",
+        path="evoom_guard/cli/__init__.py",
+        before="            derive_bindings=derive_agent_change_bindings,\n",
+        after=(
+            "            derive_bindings=lambda **kwargs: getattr(\n"
+            '                sys.modules["evoom_guard.finalizer_derivation"],\n'
+            '                "derive_agent_change_bindings",\n'
+            "            )(**kwargs),\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_derive_dependencies_snapshot_at_entry_but_reporter_resolves_late"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-live-reporter-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            write_bindings=write_agent_change_bindings,\n"
+            "            machine_report=lambda report_out, value: _machine_report(\n"
+            "                report_out,\n"
+            "                value,\n"
+            "            ),\n"
+        ),
+        after=(
+            "            write_bindings=write_agent_change_bindings,\n"
+            "            machine_report=_machine_report,\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_derive_dependencies_snapshot_at_entry_but_reporter_resolves_late"
+        ),
+    ),
+    Mutation(
+        name="cli-agent-change-entry-sealer-late-bound",
+        path="evoom_guard/cli/__init__.py",
+        before="            seal_authorization=seal_agent_change_authorization,\n",
+        after=(
+            "            seal_authorization=lambda *positional, **keyword: getattr(\n"
+            '                sys.modules["evoom_guard.admission.agent_change"],\n'
+            '                "seal_agent_change_authorization",\n'
+            "            )(*positional, **keyword),\n"
+        ),
+        test=(
+            "tests/test_cli_agent_change_command_characterization.py::"
+            "test_authorization_reads_stay_live_but_sealer_snapshots_at_entry"
+        ),
+    ),
 )
 
 
