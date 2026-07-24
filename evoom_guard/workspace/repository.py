@@ -38,6 +38,7 @@ CopyIgnore = Callable[[str, list[str]], Iterable[str]]
 IgnorePatterns = Callable[..., CopyIgnore]
 RemoveTree = Callable[[str], object]
 NoteFailure = Callable[[BaseException, str], None]
+PathAbsent = Callable[[str], bool]
 UnsafeReparseProbe = Callable[[str], bool]
 
 
@@ -170,11 +171,26 @@ def note_cleanup_failure(primary: BaseException, message: str) -> None:
         pass
 
 
+def repository_path_absent(path: str) -> bool:
+    """Return true only after one positive root-path absence observation."""
+
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        # Permission, malformed-path, and other lookup failures are doubt, not
+        # proof that a judge-owned workspace disappeared.
+        return False
+    return False
+
+
 def cleanup_repo_workspaces(
     workspaces: tuple[tuple[str, str | None], ...],
     *,
     primary: BaseException | None,
     remove_tree: RemoveTree | None = None,
+    path_absent: PathAbsent | None = None,
     note_failure: NoteFailure | None = None,
     owner_name: str = "RepoVerifier",
 ) -> None:
@@ -188,6 +204,10 @@ def cleanup_repo_workspaces(
 
     if remove_tree is None:
         remove_tree = shutil.rmtree
+    if path_absent is None:
+        # Resolve the module provider at call time so tests/adopters retain a
+        # live seam around the new absence observation.
+        path_absent = repository_path_absent
     if note_failure is None:
         note_failure = note_cleanup_failure
 
@@ -197,10 +217,17 @@ def cleanup_repo_workspaces(
             continue
         try:
             remove_tree(path)
-        except FileNotFoundError:
-            # Absence is the cleanup postcondition, so an earlier removal is an
-            # idempotent success rather than a lifecycle failure.
-            continue
+        except FileNotFoundError as exc:
+            # rmtree can surface FileNotFoundError for a raced child while the
+            # workspace root remains. Only a fresh positive root observation
+            # makes this an idempotent-success case.
+            try:
+                if path_absent(path) is True:
+                    continue
+            except BaseException as proof_error:
+                failures.append((label, proof_error))
+                continue
+            failures.append((label, exc))
         except BaseException as exc:
             failures.append((label, exc))
 
@@ -236,4 +263,5 @@ __all__ = (
     "cleanup_repo_workspaces",
     "copy_repo_tree",
     "note_cleanup_failure",
+    "repository_path_absent",
 )

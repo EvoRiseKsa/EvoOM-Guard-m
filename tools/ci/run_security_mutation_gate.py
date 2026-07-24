@@ -92,8 +92,14 @@ MUTATIONS = (
     Mutation(
         name="repository-cleanup-stop-after-first-failure",
         path="evoom_guard/workspace/repository.py",
-        before="            failures.append((label, exc))\n",
-        after="            failures.append((label, exc)); break\n",
+        before=(
+            "        except BaseException as exc:\n"
+            "            failures.append((label, exc))\n"
+        ),
+        after=(
+            "        except BaseException as exc:\n"
+            "            failures.append((label, exc)); break\n"
+        ),
         test=(
             "tests/test_repository_workspace_owner.py::"
             "test_repository_workspace_cleanup_attempts_every_path_and_preserves_primary"
