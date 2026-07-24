@@ -130,6 +130,36 @@ def test_verify_verdict_freezes_signature_provider_then_resolves_json_late(
     ]
 
 
+def test_verify_verdict_rejects_an_invalid_signature_before_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verdict = b'{"attestation":{"head_sha":"abc"}}'
+    messages: list[str] = []
+    monkeypatch.setattr(signing_module, "verify_bytes", lambda *_args: False)
+    monkeypatch.setattr(
+        cli,
+        "_read_bounded_bytes",
+        lambda _path, *, limit, label: (
+            verdict if label == "verdict" else base64.b64encode(b"signature")
+        ),
+    )
+    args = _namespace(
+        verdict="verdict.json",
+        sig="verdict.sig",
+        pub="trusted.pub",
+        expect_head_sha="abc",
+        expect_base_sha=None,
+        expect_policy_sha=None,
+        expect_policy_id=None,
+    )
+
+    assert cli.cmd_verify_verdict(args, out=messages.append) == 1
+    assert messages == [
+        f"input sha256: {hashlib.sha256(verdict).hexdigest()}",
+        "signature: INVALID — the verdict bytes changed after signing",
+    ]
+
+
 def test_verify_record_freezes_validator_before_live_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -215,6 +245,11 @@ def test_bundle_evidence_preserves_validate_then_create_then_report_order(
             "authentication": {"key_id": "key-1"},
         }
 
+    def read_context(path: str, *, limit: int, label: str) -> bytes:
+        events.append(f"read-live:{label}:{path}:{limit}")
+        assert label == "context"
+        return context
+
     def read(path: str, *, limit: int, label: str) -> bytes:
         events.append(f"read:{label}:{path}:{limit}")
         monkeypatch.setattr(
@@ -222,7 +257,10 @@ def test_bundle_evidence_preserves_validate_then_create_then_report_order(
             "create_evidence_bundle",
             lambda *_args, **_kwargs: pytest.fail("bundle creator drifted after entry"),
         )
-        return verdict if label == "verdict" else context
+        monkeypatch.setattr(cli, "_read_bounded_bytes", read_context)
+        monkeypatch.setattr(cli, "_machine_report", late_report)
+        assert label == "verdict"
+        return verdict
 
     def late_report(_out: object, value: dict[str, object]) -> None:
         events.append("report:" + json.dumps(value, sort_keys=True))
@@ -232,7 +270,11 @@ def test_bundle_evidence_preserves_validate_then_create_then_report_order(
     monkeypatch.setattr(record_module, "strict_json_loads", parse)
     monkeypatch.setattr(record_module, "verify_record", verify)
     monkeypatch.setattr(cli, "_read_bounded_bytes", read)
-    monkeypatch.setattr(cli, "_machine_report", late_report)
+    monkeypatch.setattr(
+        cli,
+        "_machine_report",
+        lambda *_args: pytest.fail("machine reporter was snapshotted at entry"),
+    )
     args = _namespace(
         verdict="verdict.json",
         context="context.json",
@@ -245,7 +287,7 @@ def test_bundle_evidence_preserves_validate_then_create_then_report_order(
     assert cli.cmd_bundle_evidence(args, out=lambda _message: None) == 0
     assert [event.split(":", 1)[0] for event in events] == [
         "read",
-        "read",
+        "read-live",
         "parse",
         "parse",
         "verify",
@@ -254,6 +296,43 @@ def test_bundle_evidence_preserves_validate_then_create_then_report_order(
         "report",
     ]
     assert '"status": "CREATED"' in events[-1]
+
+
+def test_bundle_evidence_rejects_invalid_record_before_creation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "_read_bounded_bytes",
+        lambda _path, *, limit, label: (
+            b'{"verdict":"PASS"}' if label == "verdict" else b"{}"
+        ),
+    )
+    monkeypatch.setattr(record_module, "strict_json_loads", json.loads)
+    monkeypatch.setattr(
+        record_module,
+        "verify_record",
+        lambda _record: {"ok": False, "checks": ["controlled"]},
+    )
+    monkeypatch.setattr(
+        bundle_module,
+        "create_evidence_bundle",
+        lambda *_args, **_kwargs: pytest.fail(
+            "invalid record reached bundle creation"
+        ),
+    )
+    args = _namespace(
+        verdict="verdict.json",
+        context="context.json",
+        material=[],
+        out="evidence.evb",
+        sign_key="private.key",
+        force=True,
+    )
+
+    assert cli.cmd_bundle_evidence(args, out=messages.append) == 1
+    assert json.loads(messages[0])["status"] == "INVALID_RECORD"
 
 
 def test_finalize_record_preserves_read_verify_finalize_report_order(
@@ -331,6 +410,113 @@ def test_finalize_record_preserves_read_verify_finalize_report_order(
     assert '"status": "FINALIZED"' in events[-1]
 
 
+def test_finalize_record_rejects_stdin_before_any_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "_read_bounded_bytes",
+        lambda *_args, **_kwargs: pytest.fail("stdin reached bounded file read"),
+    )
+    args = _namespace(
+        verdict="-",
+        expected_context="context.json",
+        material=[],
+        out="evidence.evb",
+        sign_key="private.key",
+        force=True,
+        require_pass=False,
+    )
+
+    assert cli.cmd_finalize_record(args, out=messages.append) == 2
+    report = json.loads(messages[0])
+    assert report["status"] == "ERROR"
+    assert report["finalized"] is False
+
+
+def test_finalize_record_rejects_semantically_invalid_object_before_sealing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    messages: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "_read_bounded_bytes",
+        lambda _path, *, limit, label: (
+            b'{"verdict":"PASS"}' if label == "verdict" else b"{}"
+        ),
+    )
+    monkeypatch.setattr(record_module, "strict_json_loads", json.loads)
+    monkeypatch.setattr(
+        record_module,
+        "verify_record",
+        lambda _record: {"ok": False, "checks": ["controlled"]},
+    )
+    monkeypatch.setattr(
+        bundle_module,
+        "finalize_evidence_bundle",
+        lambda *_args, **_kwargs: pytest.fail(
+            "invalid record reached trusted sealing"
+        ),
+    )
+    args = _namespace(
+        verdict="verdict.json",
+        expected_context="context.json",
+        material=[],
+        out="evidence.evb",
+        sign_key="private.key",
+        force=True,
+        require_pass=False,
+    )
+
+    assert cli.cmd_finalize_record(args, out=messages.append) == 1
+    report = json.loads(messages[0])
+    assert report["status"] == "INVALID_RECORD"
+    assert report["finalized"] is False
+
+
+def test_finalize_record_require_pass_denies_a_finalized_deny(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "_read_bounded_bytes",
+        lambda _path, *, limit, label: (
+            b'{"verdict":"REJECTED"}' if label == "verdict" else b"{}"
+        ),
+    )
+    monkeypatch.setattr(record_module, "strict_json_loads", json.loads)
+    monkeypatch.setattr(
+        record_module,
+        "verify_record",
+        lambda _record: {"ok": True},
+    )
+    monkeypatch.setattr(
+        bundle_module,
+        "finalize_evidence_bundle",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            manifest={
+                "record": {"sha256": "a" * 64},
+                "authentication": {"key_id": "key-1"},
+            },
+            decision="DENY",
+            bundle_path="evidence.evb",
+            record_report={"ok": True},
+        ),
+    )
+    args = _namespace(
+        verdict="verdict.json",
+        expected_context="context.json",
+        material=[],
+        out="evidence.evb",
+        sign_key="private.key",
+        force=True,
+        require_pass=True,
+    )
+
+    assert cli.cmd_finalize_record(args, out=lambda _message: None) == 1
+
+
 def test_verify_bundle_preserves_authentication_pipeline_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -401,3 +587,63 @@ def test_verify_bundle_preserves_authentication_pipeline_order(
         "report",
     ]
     assert '"pass_gate": "ALLOW"' in events[-1]
+
+
+@pytest.mark.parametrize("failed_claim", ["signature", "context", "record"])
+def test_verify_bundle_fails_closed_at_each_verification_claim(
+    monkeypatch: pytest.MonkeyPatch,
+    failed_claim: str,
+) -> None:
+    messages: list[str] = []
+    verdict = {
+        "verdict": "PASS",
+        "passed": True,
+        "reason_code": "PASS",
+        "exit_code": 0,
+    }
+    inspected = SimpleNamespace(
+        verdict=verdict,
+        manifest={
+            "authentication": {"key_id": "key-1"},
+            "context": {"repository": "org/repo"},
+        },
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "_read_bounded_bytes",
+        lambda _path, *, limit, label: b'{"repository":"org/repo"}',
+    )
+    monkeypatch.setattr(record_module, "strict_json_loads", json.loads)
+    monkeypatch.setattr(
+        bundle_module,
+        "inspect_evidence_bundle",
+        lambda _path: inspected,
+    )
+
+    def verify_signature(*_args: object, **_kwargs: object) -> None:
+        if failed_claim == "signature":
+            raise bundle_module.EvidenceBundleError("controlled signature failure")
+
+    def verify_context(*_args: object, **_kwargs: object) -> None:
+        if failed_claim == "context":
+            raise bundle_module.EvidenceBundleError("controlled context failure")
+
+    monkeypatch.setattr(bundle_module, "verify_bundle_signature", verify_signature)
+    monkeypatch.setattr(bundle_module, "verify_bundle_context", verify_context)
+    monkeypatch.setattr(
+        record_module,
+        "verify_record",
+        lambda _record: {"ok": failed_claim != "record"},
+    )
+    args = _namespace(
+        expect_context="context.json",
+        bundle="evidence.evb",
+        trusted_pub="trusted.pub",
+        require_pass=False,
+    )
+
+    assert cli.cmd_verify_bundle(args, out=messages.append) == 1
+    report = json.loads(messages[0])
+    assert report["ok"] is False
+    assert report["status"] == "INVALID"

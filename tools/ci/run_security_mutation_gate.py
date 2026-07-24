@@ -6301,6 +6301,156 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-record-verdict-signature-gate-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before="    if not signature_valid:\n",
+        after="    if False and not signature_valid:\n",
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_verify_verdict_rejects_an_invalid_signature_before_context"
+        ),
+    ),
+    Mutation(
+        name="cli-record-verdict-late-parser-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            strict_json_loads_provider=strict_json_loads_provider,\n"
+        ),
+        after=(
+            "            strict_json_loads_provider=(\n"
+            "                lambda parser=strict_json_loads_provider(): lambda: parser\n"
+            "            )(),\n"
+        ),
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_verify_verdict_freezes_signature_provider_then_resolves_json_late"
+        ),
+    ),
+    Mutation(
+        name="cli-record-bundle-live-reader-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "        services=_record_command_owner.BundleEvidenceServices(\n"
+            "            read_bounded_bytes=lambda path, *, limit, label: "
+            "_read_bounded_bytes(\n"
+            "                path,\n"
+            "                limit=limit,\n"
+            "                label=label,\n"
+            "            ),\n"
+        ),
+        after=(
+            "        services=_record_command_owner.BundleEvidenceServices(\n"
+            "            read_bounded_bytes=_read_bounded_bytes,\n"
+        ),
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_bundle_evidence_preserves_validate_then_create_then_report_order"
+        ),
+    ),
+    Mutation(
+        name="cli-record-bundle-live-reporter-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            create_evidence_bundle=create_evidence_bundle,\n"
+            "            invalid_input_errors=(EvidenceBundleError,),\n"
+            "            operational_errors=(OSError, ValueError, SigningUnavailableError),\n"
+            "            machine_report=lambda reporter, value: _machine_report(\n"
+            "                reporter,\n"
+            "                value,\n"
+            "            ),\n"
+        ),
+        after=(
+            "            create_evidence_bundle=create_evidence_bundle,\n"
+            "            invalid_input_errors=(EvidenceBundleError,),\n"
+            "            operational_errors=(OSError, ValueError, SigningUnavailableError),\n"
+            "            machine_report=_machine_report,\n"
+        ),
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_bundle_evidence_preserves_validate_then_create_then_report_order"
+        ),
+    ),
+    Mutation(
+        name="cli-record-bundle-semantic-gate-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before="    if not record_is_valid:\n",
+        after="    if False and not record_is_valid:\n",
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_bundle_evidence_rejects_invalid_record_before_creation"
+        ),
+    ),
+    Mutation(
+        name="cli-record-finalize-stdin-gate-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before='    if args.verdict == "-":\n',
+        after='    if False and args.verdict == "-":\n',
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_finalize_record_rejects_stdin_before_any_read"
+        ),
+    ),
+    Mutation(
+        name="cli-record-finalize-semantic-gate-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before="    if not record_is_semantic:\n",
+        after="    if False and not record_is_semantic:\n",
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_finalize_record_rejects_semantically_invalid_object_before_sealing"
+        ),
+    ),
+    Mutation(
+        name="cli-record-finalize-require-pass-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before="    return 0 if allowed or not args.require_pass else 1\n",
+        after="    return 0\n",
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_finalize_record_require_pass_denies_a_finalized_deny"
+        ),
+    ),
+    Mutation(
+        name="cli-record-bundle-signature-verification-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before=(
+            "        services.verify_bundle_signature(\n"
+            "            inspected,\n"
+            "            trusted_public_key_path=args.trusted_pub,\n"
+            "        )\n"
+        ),
+        after="        pass\n",
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_verify_bundle_fails_closed_at_each_verification_claim[signature]"
+        ),
+    ),
+    Mutation(
+        name="cli-record-bundle-context-verification-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before=(
+            "        services.verify_bundle_context(\n"
+            "            inspected,\n"
+            "            expected_context=expected_context,\n"
+            "        )\n"
+        ),
+        after="        pass\n",
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_verify_bundle_fails_closed_at_each_verification_claim[context]"
+        ),
+    ),
+    Mutation(
+        name="cli-record-bundle-semantic-verification-bypass",
+        path="evoom_guard/cli/record_commands.py",
+        before="    record_report = services.verify_record(verdict_record)\n",
+        after='    record_report = {"ok": True}\n',
+        test=(
+            "tests/test_cli_record_command_characterization.py::"
+            "test_verify_bundle_fails_closed_at_each_verification_claim[record]"
+        ),
+    ),
+    Mutation(
         name="cli-agent-change-validate-error-exit-bypass",
         path="evoom_guard/cli/agent_change_commands.py",
         before=(

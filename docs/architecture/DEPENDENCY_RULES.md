@@ -252,8 +252,11 @@ dependency-free `cli.parser` owner. `cli.__init__` retains the public
 argument-group helpers on every call, preserving the established monkeypatch
 surface. A frozen parser snapshot covers all 41 subcommands, every help page,
 representative defaults, immutable-ref rejection, and live helper lookup.
-Command handlers and dispatch remain in the compatibility facade. This
-same-package move creates no new ratchet revision or baseline-ceiling claim.
+Parser dispatch and command families not yet extracted remain in the
+compatibility facade. Extracted command families use stdlib-only typed owners;
+their public `cmd_*` facades retain dependency lookup timing and inject all
+effects. These same-package moves create no new ratchet revision or
+baseline-ceiling claim.
 
 ## Acceptance rules
 
