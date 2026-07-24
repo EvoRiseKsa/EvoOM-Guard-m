@@ -76,13 +76,16 @@ those dynamic seams or replace them with explicit injected contracts.
 The second workspace slice lives in
 `evoom_guard/workspace/candidate_tree.py`. It owns the complete base/head
 filesystem intake transaction: root validation, non-following traversal,
-Windows reparse classification, object/metadata identity, non-blocking
-no-follow POSIX opens, bounded reads/comparisons, changed-path classification,
-and canonical FILE-block serialization. Guard retains its historical names as
-thin compatibility types/facades and injects every established helper at call
-time, so private type metadata and monkeypatch seams remain stable. The
-transaction proves per-file stability, not an atomic whole-tree snapshot;
-revision identity still requires a quiescent checkout or raw-Git finalization.
+copy-equivalent ignore matching (case-insensitive on Windows), Windows reparse
+classification, object/metadata identity, Windows handles that deny
+write/delete sharing, non-blocking no-follow POSIX opens, bounded
+reads/comparisons, changed-path classification, and canonical FILE-block
+serialization. Guard retains its historical names as thin compatibility
+types/facades and injects every established helper at call time, so private
+type metadata and monkeypatch seams remain stable. The transaction proves only
+the bounded per-file read/compare interval; it does not close the
+classification/open gap or claim an atomic whole-tree snapshot. Revision
+identity still requires a quiescent checkout or raw-Git finalization.
 Candidate admission, repository mutation, execution, evidence, and verdict
 composition remain outside this owner.
 

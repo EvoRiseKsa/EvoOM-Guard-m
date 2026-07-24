@@ -1561,14 +1561,35 @@ def _build_attestation(
     )
 
 
-class _TreeEntry(_candidate_tree.TreeEntry):
-    """Historical private value type backed by the workspace owner."""
+@dataclass(frozen=True)
+class _TreeEntry:
+    """A non-ignored filesystem entry used by ``blocks_from_dirs``.
+
+    Metadata is retained even for entries that cannot become text edit blocks.
+    Otherwise a changed oversized or binary harness file could disappear before
+    the static gate saw it.
+    """
+
+    full_path: str
+    kind: str
+    mode: int | None
+    size: int | None
+    link_target: str | None = None
+    problem: str | None = None
+    identity: tuple[int, ...] | None = None
+    path_times: tuple[int, int] | None = None
 
 
-class _UnverifiableChangedPathsError(
-    _candidate_tree.UnverifiableChangedPathsError
-):
-    """Historical private exception type backed by the workspace owner."""
+class _UnverifiableChangedPathsError(ValueError):
+    """A base/head change cannot be represented safely as Guard file blocks."""
+
+    def __init__(self, problems: list[tuple[str, str]]) -> None:
+        self.problems = tuple(problems)
+        listed = "; ".join(f"{path}: {reason}" for path, reason in problems)
+        super().__init__(
+            "changed path(s) cannot be safely represented for verification "
+            f"({listed})"
+        )
 
 
 def blocks_from_dirs(
@@ -1605,7 +1626,9 @@ def blocks_from_dirs(
         read_changed_text=lambda entry, limit: _read_changed_text(
             cast(_TreeEntry, entry), limit
         ),
-        unverifiable_error=_UnverifiableChangedPathsError,
+        unverifiable_error=lambda problems: _UnverifiableChangedPathsError(
+            problems
+        ),
     )
 
 
@@ -1658,7 +1681,10 @@ def _walk_tree_entries(root: str) -> dict[str, _TreeEntry]:
             root,
             copy_ignore=COPY_IGNORE,
             tree_entry_lookup=lambda path: _tree_entry(path),
-            entry_factory=_TreeEntry,
+            entry_factory=lambda *args, **kwargs: cast(
+                Any,
+                _TreeEntry(*args, **kwargs),
+            ),
         ),
     )
 
@@ -1669,7 +1695,10 @@ def _tree_entry(full_path: str) -> _TreeEntry:
         _TreeEntry,
         _candidate_tree.tree_entry(
             full_path,
-            entry_factory=_TreeEntry,
+            entry_factory=lambda *args, **kwargs: cast(
+                Any,
+                _TreeEntry(*args, **kwargs),
+            ),
             is_windows_reparse=lambda path, info: _is_windows_reparse(path, info),
             stat_identity=lambda info: _stat_identity(info),
             stat_path_times=lambda info: _stat_path_times(info),

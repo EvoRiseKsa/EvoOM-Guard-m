@@ -6,14 +6,18 @@
 """Fail-closed base/head filesystem candidate derivation.
 
 This module owns the complete candidate-tree snapshot transaction: root
-validation, non-following traversal, Windows reparse classification, stable
-regular-file identity, bounded descriptor reads/comparisons, changed-path
-classification, and canonical FILE-block serialization.
+validation, non-following traversal, Windows reparse classification,
+regular-file identity, write-exclusive Windows reads, bounded descriptor
+reads/comparisons, changed-path classification, and canonical FILE-block
+serialization.
 
 The transaction binds each file read to the object and metadata observed while
-that path was classified. It does not claim an atomic snapshot across the whole
-tree; callers that need revision identity must use a quiescent checkout or the
-raw-Git finalizer path.
+that path was classified. On Windows the live descriptor also denies write and
+delete sharing, so a concurrent writer makes the read fail closed instead of
+passing behind restorable timestamps. It does not close the per-path
+classification/open gap or claim an atomic snapshot across the whole tree;
+callers that need revision identity must use a quiescent checkout or the raw-Git
+finalizer path.
 
 Guard keeps its historical public/private facade and injects live providers on
 every call. That preserves adopter monkeypatch seams without moving policy,
@@ -23,11 +27,14 @@ composition into this workspace owner.
 
 from __future__ import annotations
 
+import fnmatch
+import ntpath
 import os
+import posixpath
 import stat
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -55,6 +62,34 @@ class UnverifiableChangedPathsError(ValueError):
         )
 
 
+class TreeEntryView(Protocol):
+    """Read-only structural contract shared with Guard's historical value type."""
+
+    @property
+    def full_path(self) -> str: ...
+
+    @property
+    def kind(self) -> str: ...
+
+    @property
+    def mode(self) -> int | None: ...
+
+    @property
+    def size(self) -> int | None: ...
+
+    @property
+    def link_target(self) -> str | None: ...
+
+    @property
+    def problem(self) -> str | None: ...
+
+    @property
+    def identity(self) -> tuple[int, ...] | None: ...
+
+    @property
+    def path_times(self) -> tuple[int, int] | None: ...
+
+
 class TreeEntryFactory(Protocol):
     """Constructor shape retained by Guard's private ``_TreeEntry`` facade."""
 
@@ -68,7 +103,7 @@ class TreeEntryFactory(Protocol):
         problem: str | None = None,
         identity: tuple[int, ...] | None = None,
         path_times: tuple[int, int] | None = None,
-    ) -> TreeEntry: ...
+    ) -> TreeEntryView: ...
 
 
 class UnverifiableErrorFactory(Protocol):
@@ -77,7 +112,7 @@ class UnverifiableErrorFactory(Protocol):
     def __call__(
         self,
         problems: list[tuple[str, str]],
-    ) -> UnverifiableChangedPathsError: ...
+    ) -> ValueError: ...
 
 
 class BlocksFromDirs(Protocol):
@@ -92,28 +127,32 @@ class BlocksFromDirs(Protocol):
     ) -> tuple[dict[str, str], list[str]]: ...
 
 
-WalkTreeEntries = Callable[[str], Mapping[str, TreeEntry]]
-TreeEntryLookup = Callable[[str], TreeEntry]
-DirectoryHasRegularDescendant = Callable[[Mapping[str, TreeEntry], str], bool]
+WalkTreeEntries = Callable[[str], Mapping[str, TreeEntryView]]
+TreeEntryLookup = Callable[[str], TreeEntryView]
+DirectoryHasRegularDescendant = Callable[[Mapping[str, TreeEntryView], str], bool]
 EntriesChanged = Callable[
-    [TreeEntry | None, TreeEntry],
+    [TreeEntryView | None, TreeEntryView],
     tuple[bool, str | None],
 ]
-EntryProblem = Callable[[TreeEntry], str]
-ReadChangedText = Callable[[TreeEntry, int], str]
-RegularFilesEqual = Callable[[str, str, TreeEntry | None, TreeEntry | None], bool]
+EntryProblem = Callable[[TreeEntryView], str]
+ReadChangedText = Callable[[TreeEntryView, int], str]
+RegularFilesEqual = Callable[
+    [str, str, TreeEntryView | None, TreeEntryView | None],
+    bool,
+]
 SerializeCandidateBlocks = Callable[[Mapping[str, str]], str]
 WindowsReparseProbe = Callable[[str, os.stat_result], bool]
 StatIdentity = Callable[[os.stat_result], tuple[int, ...]]
 StatPathTimes = Callable[[os.stat_result], tuple[int, int]]
 VerifyRegularSnapshot = Callable[
-    [TreeEntry, os.stat_result, str, bool],
+    [TreeEntryView, os.stat_result, str, bool],
     None,
 ]
 RegularSnapshotOpenFlags = Callable[[], int]
-OpenRegularSnapshot = Callable[[TreeEntry], int]
-VerifyOpenRegularSnapshot = Callable[[TreeEntry, int, str], None]
+OpenRegularSnapshot = Callable[[TreeEntryView], int]
+VerifyOpenRegularSnapshot = Callable[[TreeEntryView, int, str], None]
 ReadFileDescriptor = Callable[[int, int], bytes]
+WindowsOpenRegularSnapshot = Callable[[str, int], int]
 
 
 def blocks_from_dirs(
@@ -204,17 +243,41 @@ def candidate_from_dirs(
     return serialize_blocks(blocks), deleted
 
 
+def _ignored_copy_name(
+    name: str,
+    patterns: Iterable[str],
+    *,
+    platform_name: str | None = None,
+) -> bool:
+    """Match one basename exactly as ``shutil.ignore_patterns`` would.
+
+    ``copy_repo_tree`` delegates to ``fnmatch.filter``. That function applies
+    the host path module's ``normcase`` before wildcard matching, which makes
+    every ignore pattern case-insensitive on Windows but case-sensitive on
+    POSIX. Candidate derivation must classify the same tree that execution
+    copies, especially for the Git control pointer and dependency directories.
+    """
+
+    platform = os.name if platform_name is None else platform_name
+    normalize = ntpath.normcase if platform == "nt" else posixpath.normcase
+    normalized_name = normalize(name)
+    return any(
+        fnmatch.fnmatchcase(normalized_name, normalize(pattern))
+        for pattern in patterns
+    )
+
+
 def walk_tree_entries(
     root: str,
     *,
     copy_ignore: Iterable[str],
     tree_entry_lookup: TreeEntryLookup,
     entry_factory: TreeEntryFactory = TreeEntry,
-) -> dict[str, TreeEntry]:
+) -> dict[str, TreeEntryView]:
     """Return every non-ignored path without dropping non-text entries."""
 
-    out: dict[str, TreeEntry] = {}
-    ignore = set(copy_ignore) | {".git"}
+    out: dict[str, TreeEntryView] = {}
+    ignore = tuple(sorted(set(copy_ignore) | {".git"}))
 
     def walk_error(exc: OSError) -> None:
         # ``os.walk`` otherwise silently skips an unreadable directory.
@@ -235,7 +298,9 @@ def walk_tree_entries(
         )
 
     for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error):
-        dirnames[:] = [name for name in dirnames if name not in ignore]
+        dirnames[:] = [
+            name for name in dirnames if not _ignored_copy_name(name, ignore)
+        ]
         traversable_dirs: list[str] = []
         for dirname in dirnames:
             full = os.path.join(dirpath, dirname)
@@ -247,6 +312,8 @@ def walk_tree_entries(
                 traversable_dirs.append(dirname)
         dirnames[:] = traversable_dirs
         for filename in filenames:
+            if _ignored_copy_name(filename, ignore):
+                continue
             full = os.path.join(dirpath, filename)
             rel = os.path.relpath(full, root).replace(os.sep, "/")
             out[rel] = tree_entry_lookup(full)
@@ -260,7 +327,7 @@ def tree_entry(
     is_windows_reparse: WindowsReparseProbe,
     stat_identity: StatIdentity,
     stat_path_times: StatPathTimes,
-) -> TreeEntry:
+) -> TreeEntryView:
     """Describe a path without following a symlink or reading its payload."""
 
     try:
@@ -361,7 +428,7 @@ def stat_path_times(info: os.stat_result) -> tuple[int, int]:
 
 
 def verify_regular_snapshot(
-    entry: TreeEntry,
+    entry: TreeEntryView,
     observed: os.stat_result,
     *,
     problem: str,
@@ -404,12 +471,103 @@ def regular_snapshot_open_flags(
     return flags
 
 
+def _open_windows_regular_snapshot_handle(
+    full_path: str,
+    descriptor_flags: int,
+    *,
+    create_file: Callable[..., int | None],
+    close_handle: Callable[[int], Any],
+    open_osfhandle: Callable[[int, int], int],
+    get_last_error: Callable[[], int],
+    win_error: Callable[[int], OSError],
+    invalid_handle_value: int,
+) -> int:
+    """Apply the reviewed Windows share/open/ownership contract."""
+
+    handle = create_file(
+        full_path,
+        0x80000000,  # GENERIC_READ
+        0x00000001,  # FILE_SHARE_READ; deliberately no WRITE or DELETE share
+        None,
+        3,  # OPEN_EXISTING
+        0x00200000 | 0x08000000,  # OPEN_REPARSE_POINT | SEQUENTIAL_SCAN
+        None,
+    )
+    if handle is None or handle == invalid_handle_value:
+        raise win_error(get_last_error())
+
+    try:
+        return int(
+            open_osfhandle(
+                int(handle),
+                descriptor_flags | getattr(os, "O_NOINHERIT", 0),
+            )
+        )
+    except BaseException:
+        close_handle(handle)
+        raise
+
+
+def open_windows_regular_snapshot(full_path: str, descriptor_flags: int) -> int:
+    """Open a Windows file while denying concurrent writes, deletes, and renames.
+
+    The standard library has no high-level share-mode API, so this boundary
+    calls ``CreateFileW`` through ``ctypes``. ``FILE_SHARE_READ`` permits other
+    readers but rejects existing and subsequent write/delete handles until the
+    returned descriptor is closed. ``FILE_FLAG_OPEN_REPARSE_POINT`` prevents a
+    raced final-component reparse object from being followed before the normal
+    descriptor/path identity checks run.
+
+    A successful native handle is owned by the returned CRT descriptor. The
+    native handle is closed directly only when descriptor conversion fails.
+    """
+
+    if os.name != "nt":
+        raise OSError("Windows write-exclusive candidate reads require Windows")
+
+    import importlib
+
+    ctypes_module = importlib.import_module("ctypes")
+    wintypes = importlib.import_module("ctypes.wintypes")
+    msvcrt = importlib.import_module("msvcrt")
+    kernel32 = ctypes_module.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create_file.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (wintypes.HANDLE,)
+    close_handle.restype = wintypes.BOOL
+
+    invalid_handle_value = ctypes_module.c_void_p(-1).value
+    assert invalid_handle_value is not None
+    return _open_windows_regular_snapshot_handle(
+        full_path,
+        descriptor_flags,
+        create_file=create_file,
+        close_handle=close_handle,
+        open_osfhandle=msvcrt.open_osfhandle,
+        get_last_error=ctypes_module.get_last_error,
+        win_error=ctypes_module.WinError,
+        invalid_handle_value=invalid_handle_value,
+    )
+
+
 def open_regular_snapshot(
-    entry: TreeEntry,
+    entry: TreeEntryView,
     *,
     is_windows_reparse: WindowsReparseProbe,
     verify_regular_snapshot_provider: VerifyRegularSnapshot,
     open_flags: RegularSnapshotOpenFlags,
+    platform_name: str | None = None,
+    windows_open_provider: WindowsOpenRegularSnapshot = open_windows_regular_snapshot,
 ) -> int:
     """Open one classified regular file without accepting a name swap."""
 
@@ -422,7 +580,13 @@ def open_regular_snapshot(
         "candidate file identity changed after it was classified",
         True,
     )
-    descriptor = os.open(entry.full_path, open_flags())
+    flags = open_flags()
+    platform = os.name if platform_name is None else platform_name
+    descriptor = (
+        windows_open_provider(entry.full_path, flags)
+        if platform == "nt"
+        else os.open(entry.full_path, flags)
+    )
     try:
         opened = os.fstat(descriptor)
         current = os.lstat(entry.full_path)
@@ -447,7 +611,7 @@ def open_regular_snapshot(
 
 
 def verify_open_regular_snapshot(
-    entry: TreeEntry,
+    entry: TreeEntryView,
     descriptor: int,
     *,
     operation: str,
@@ -466,8 +630,8 @@ def verify_open_regular_snapshot(
 
 
 def entries_changed(
-    base: TreeEntry | None,
-    head: TreeEntry,
+    base: TreeEntryView | None,
+    head: TreeEntryView,
     *,
     regular_files_equal: RegularFilesEqual,
     entry_problem: EntryProblem,
@@ -507,8 +671,8 @@ def regular_files_equal(
     base_path: str,
     head_path: str,
     *,
-    base_snapshot: TreeEntry | None = None,
-    head_snapshot: TreeEntry | None = None,
+    base_snapshot: TreeEntryView | None = None,
+    head_snapshot: TreeEntryView | None = None,
     tree_entry_lookup: TreeEntryLookup,
     open_regular_snapshot_provider: OpenRegularSnapshot,
     verify_open_regular_snapshot_provider: VerifyOpenRegularSnapshot,
@@ -552,7 +716,7 @@ def regular_files_equal(
         os.close(base_descriptor)
 
 
-def entry_problem(entry: TreeEntry) -> str:
+def entry_problem(entry: TreeEntryView) -> str:
     """Return the established diagnostic for an unrepresentable entry."""
 
     if entry.problem:
@@ -565,7 +729,7 @@ def entry_problem(entry: TreeEntry) -> str:
 
 
 def directory_has_regular_descendant(
-    entries: Mapping[str, TreeEntry],
+    entries: Mapping[str, TreeEntryView],
     directory: str,
 ) -> bool:
     """Whether FILE blocks implicitly recreate a newly added directory."""
@@ -577,7 +741,7 @@ def directory_has_regular_descendant(
 
 
 def read_changed_text(
-    entry: TreeEntry,
+    entry: TreeEntryView,
     max_bytes: int,
     *,
     open_regular_snapshot_provider: OpenRegularSnapshot,
@@ -625,6 +789,7 @@ __all__ = (
     "entry_problem",
     "is_windows_reparse",
     "open_regular_snapshot",
+    "open_windows_regular_snapshot",
     "read_changed_text",
     "read_fd_bounded",
     "regular_files_equal",

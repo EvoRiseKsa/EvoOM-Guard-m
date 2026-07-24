@@ -133,6 +133,46 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="candidate-tree-windows-write-delete-share-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "        0x00000001,  # FILE_SHARE_READ; deliberately no WRITE "
+            "or DELETE share\n"
+        ),
+        after=(
+            "        0x00000007,  # unsafe READ | WRITE | DELETE sharing\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_windows_native_open_contract_denies_write_delete_and_follows_ownership"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-windows-final-reparse-open-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "        0x00200000 | 0x08000000,  # OPEN_REPARSE_POINT | "
+            "SEQUENTIAL_SCAN\n"
+        ),
+        after=(
+            "        0x08000000,  # unsafe: follows a raced final reparse point\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_windows_native_open_contract_denies_write_delete_and_follows_ownership"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-windows-exclusive-open-dispatch-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before='        if platform == "nt"\n',
+        after='        if False and platform == "nt"\n',
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_windows_open_dispatch_uses_write_exclusive_provider"
+        ),
+    ),
+    Mutation(
         name="candidate-tree-comparison-snapshot-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before="                    base,\n                    head,\n",
@@ -145,11 +185,40 @@ MUTATIONS = (
     Mutation(
         name="candidate-tree-git-ignore-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
-        before='    ignore = set(copy_ignore) | {".git"}\n',
-        after="    ignore = set(copy_ignore)\n",
+        before='    ignore = tuple(sorted(set(copy_ignore) | {".git"}))\n',
+        after="    ignore = tuple(sorted(set(copy_ignore)))\n",
         test=(
             "tests/test_candidate_tree_characterization.py::"
             "test_walk_tree_uses_current_copy_ignore_and_always_ignores_git"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-gitfile-ignore-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "            if _ignored_copy_name(filename, ignore):\n"
+            "                continue\n"
+        ),
+        after=(
+            "            if False and _ignored_copy_name(filename, ignore):\n"
+            "                continue\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_gitfile_add_change_delete_is_invisible_without_hiding_git_names"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-windows-ignore-normcase-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            '    normalize = ntpath.normcase if platform == "nt" '
+            "else posixpath.normcase\n"
+        ),
+        after="    normalize = posixpath.normcase\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_copy_ignore_matching_uses_windows_normcase_only_on_windows"
         ),
     ),
     Mutation(
@@ -230,6 +299,67 @@ MUTATIONS = (
         test=(
             "tests/test_candidate_tree_characterization.py::"
             "test_blocks_from_dirs_resolves_later_helpers_after_walk_effects"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-late-entry-factory-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            full_path,\n"
+            "            entry_factory=lambda *args, **kwargs: cast(\n"
+            "                Any,\n"
+            "                _TreeEntry(*args, **kwargs),\n"
+            "            ),\n"
+        ),
+        after=(
+            "            full_path,\n"
+            "            entry_factory=cast(Any, _TreeEntry),\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_tree_entry_resolves_private_type_after_lstat_effect"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-late-walk-error-entry-factory-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            root,\n"
+            "            copy_ignore=COPY_IGNORE,\n"
+            "            tree_entry_lookup=lambda path: _tree_entry(path),\n"
+            "            entry_factory=lambda *args, **kwargs: cast(\n"
+            "                Any,\n"
+            "                _TreeEntry(*args, **kwargs),\n"
+            "            ),\n"
+        ),
+        after=(
+            "            root,\n"
+            "            copy_ignore=COPY_IGNORE,\n"
+            "            tree_entry_lookup=lambda path: _tree_entry(path),\n"
+            "            entry_factory=cast(Any, _TreeEntry),\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_walk_error_resolves_private_entry_type_after_os_walk_starts"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-late-error-factory-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "        unverifiable_error=lambda problems: "
+            "_UnverifiableChangedPathsError(\n"
+            "            problems\n"
+            "        ),\n"
+        ),
+        after=(
+            "        unverifiable_error=cast(\n"
+            "            Any, _UnverifiableChangedPathsError\n"
+            "        ),\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_blocks_from_dirs_resolves_private_error_after_walk_effects"
         ),
     ),
     Mutation(
