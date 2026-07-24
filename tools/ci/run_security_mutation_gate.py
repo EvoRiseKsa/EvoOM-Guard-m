@@ -2379,8 +2379,16 @@ MUTATIONS = (
     Mutation(
         name="repo-pack-intake-sticky-identity-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
-        before="            if pack_identity is not None:\n",
-        after="            if False and pack_identity is not None:\n",
+        before=(
+            "            if pack_identity is not None:\n"
+            "                # Once accepted, bind every later early-return "
+            "artifact to the\n"
+        ),
+        after=(
+            "            if False and pack_identity is not None:\n"
+            "                # Once accepted, bind every later early-return "
+            "artifact to the\n"
+        ),
         test=(
             "tests/test_repo_pack_intake_characterization.py::"
             "test_frozen_repo_pack_intake_behavior[valid_identity_sticky_evidence]"
