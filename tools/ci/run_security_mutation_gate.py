@@ -148,8 +148,16 @@ MUTATIONS = (
     Mutation(
         name="guard-output-percent-type-validation-bypass",
         path="evoom_guard/integrations/guard_output.py",
-        before="    if type(value) not in {int, float}:\n",
-        after="    if False and type(value) not in {int, float}:\n",
+        before=(
+            "    if type(value) not in {int, float}:\n"
+            '        raise ValueError(f"{field} must be a finite number '
+            'from 0 to 100")\n'
+        ),
+        after=(
+            "    if False and type(value) not in {int, float}:\n"
+            '        raise ValueError(f"{field} must be a finite number '
+            'from 0 to 100")\n'
+        ),
         test=(
             "tests/test_guard_output_security.py::"
             "test_diff_coverage_numeric_evidence_fails_closed"
@@ -163,6 +171,36 @@ MUTATIONS = (
         test=(
             "tests/test_guard_output_security.py::"
             "test_missed_line_evidence_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="guard-output-top-level-test-count-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    tests = _validated_test_counts(\n"
+            "        r.tests_passed,\n"
+            "        r.tests_total,\n"
+            "    )\n"
+        ),
+        after='    tests = "bypassed"\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_top_level_test_counts_fail_closed_before_markdown_projection"
+        ),
+    ),
+    Mutation(
+        name="guard-output-risk-score-validation-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    risk_score = _require_probability(\n"
+            "        r.risk_score,\n"
+            '        field="risk_score",\n'
+            "    )\n"
+        ),
+        after="    risk_score = 0.0\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_risk_score_fails_closed_before_markdown_projection"
         ),
     ),
     Mutation(
@@ -183,6 +221,16 @@ MUTATIONS = (
         test=(
             "tests/test_guard_output_security.py::"
             "test_atomic_writer_fsyncs_before_same_directory_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-stream-descriptor-ownership-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="        descriptor = -1\n",
+        after="        if False:\n            descriptor = -1\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_cleanup_never_closes_a_reused_stream_descriptor"
         ),
     ),
     Mutation(
@@ -293,16 +341,37 @@ MUTATIONS = (
     Mutation(
         name="guard-output-sarif-drive-prefix-validation-bypass",
         path="evoom_guard/integrations/guard_output.py",
-        before=(
-            '    if len(path) >= 2 and path[0].isalpha() and path[1] == ":":\n'
-        ),
-        after=(
-            '    if False and len(path) >= 2 and path[0].isalpha() '
-            'and path[1] == ":":\n'
-        ),
+        before="    if _has_ascii_drive_prefix(path):\n",
+        after="    if False and _has_ascii_drive_prefix(path):\n",
         test=(
             "tests/test_guard_output_security.py::"
             "test_sarif_path_errors_are_structured"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-unicode-drive-prefix-regression",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '        and ("A" <= value[0] <= "Z" '
+            'or "a" <= value[0] <= "z")\n'
+        ),
+        after="        and value[0].isalpha()\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_unicode_letter_colon_is_not_an_ascii_drive_prefix"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-message-control-escape-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '                    f"{_visible_inline_text('
+            'result.reason, markdown=False)}"\n'
+        ),
+        after='                    f"{result.reason}"\n',
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_message_text_projects_controls_as_visible_escapes"
         ),
     ),
     Mutation(

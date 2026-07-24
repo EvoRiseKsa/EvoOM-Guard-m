@@ -87,6 +87,103 @@ class _ExplosiveText:
 
 
 @pytest.mark.parametrize(
+    ("tests_passed", "tests_total"),
+    (
+        (True, 1),
+        (1, False),
+        (1.0, 1),
+        (1, 1.0),
+        ("1", 1),
+        (1, "1"),
+        (-1, 1),
+        (1, -1),
+        (2, 1),
+        (None, 1),
+        (1, None),
+        (_ExplosiveText(), 1),
+    ),
+)
+def test_top_level_test_counts_fail_closed_before_markdown_projection(
+    tests_passed: object,
+    tests_total: object,
+) -> None:
+    result = _error_result()
+    result.tests_passed = tests_passed  # type: ignore[assignment]
+    result.tests_total = tests_total  # type: ignore[assignment]
+    badge_requested = False
+
+    def observe_badge_request() -> dict[str, str]:
+        nonlocal badge_requested
+        badge_requested = True
+        return {}
+
+    with pytest.raises(ValueError, match="tests_"):
+        guard_output.render_report(
+            result,
+            badge_provider=observe_badge_request,
+        )
+
+    assert badge_requested is False
+
+
+@pytest.mark.parametrize(
+    "risk_score",
+    (
+        True,
+        "0.1",
+        float("nan"),
+        float("inf"),
+        -0.01,
+        1.01,
+        _ExplosiveText(),
+    ),
+)
+def test_risk_score_fails_closed_before_markdown_projection(
+    risk_score: object,
+) -> None:
+    result = _error_result()
+    result.risk_score = risk_score  # type: ignore[assignment]
+    badge_requested = False
+
+    def observe_badge_request() -> dict[str, str]:
+        nonlocal badge_requested
+        badge_requested = True
+        return {}
+
+    with pytest.raises(ValueError, match="risk_score"):
+        guard_output.render_report(
+            result,
+            badge_provider=observe_badge_request,
+        )
+
+    assert badge_requested is False
+
+
+@pytest.mark.parametrize(
+    ("tests_passed", "tests_total", "risk_score", "expected_tests"),
+    (
+        (None, None, 0, "—"),
+        (0, 0, 1, "0/0"),
+    ),
+)
+def test_top_level_numeric_boundaries_remain_valid(
+    tests_passed: int | None,
+    tests_total: int | None,
+    risk_score: int,
+    expected_tests: str,
+) -> None:
+    result = _error_result()
+    result.tests_passed = tests_passed
+    result.tests_total = tests_total
+    result.risk_score = risk_score
+
+    report = guard_module.render_report(result)
+
+    assert f"| Tests passed | {expected_tests} |" in report
+    assert f"({risk_score:.2f}) |" in report
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     (
         ("executed", "1"),
@@ -347,6 +444,81 @@ def test_atomic_writer_preserves_primary_when_close_also_fails(
     assert _atomic_temps(tmp_path) == []
 
 
+def test_atomic_cleanup_never_closes_a_reused_stream_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_fdopen = guard_output.os.fdopen
+    victim_path = tmp_path / "victim.bin"
+    reused_descriptors: list[int] = []
+
+    class CloseThenReuseStream:
+        def __init__(self, descriptor: int) -> None:
+            self._descriptor = descriptor
+            self._stream = real_fdopen(
+                descriptor,
+                "w",
+                encoding="utf-8",
+                newline=None,
+            )
+
+        def write(self, value: str) -> int:
+            return self._stream.write(value)
+
+        def flush(self) -> None:
+            self._stream.flush()
+
+        def fileno(self) -> int:
+            return self._stream.fileno()
+
+        def close(self) -> None:
+            self._stream.close()
+            source_descriptor = os.open(
+                victim_path,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
+                0o600,
+            )
+            if source_descriptor != self._descriptor:
+                os.dup2(source_descriptor, self._descriptor)
+                os.close(source_descriptor)
+            reused_descriptors.append(self._descriptor)
+            raise OSError("secondary close failure after descriptor reuse")
+
+    monkeypatch.setattr(
+        guard_output.os,
+        "fdopen",
+        lambda descriptor, *_args, **_kwargs: CloseThenReuseStream(descriptor),
+    )
+
+    def reject_write(_stream: TextIO) -> None:
+        raise RuntimeError("primary serialization failure")
+
+    with pytest.raises(
+        RuntimeError,
+        match="primary serialization failure",
+    ) as captured:
+        guard_output._atomic_write(
+            str(tmp_path / "report.md"),
+            reject_write,
+        )
+
+    notes = getattr(captured.value, "__notes__", [])
+    if notes:
+        assert any("atomic output close failed" in note for note in notes)
+    assert len(reused_descriptors) == 1
+    victim_descriptor = reused_descriptors[0]
+    try:
+        os.write(victim_descriptor, b"victim-survived")
+    finally:
+        try:
+            os.close(victim_descriptor)
+        except OSError:
+            pass
+
+    assert victim_path.read_bytes() == b"victim-survived"
+    assert _atomic_temps(tmp_path) == []
+
+
 def test_atomic_writer_rejects_leaf_symlink_without_following_it(
     tmp_path: Path,
 ) -> None:
@@ -570,6 +742,27 @@ def test_sarif_artifact_uri_is_normalized_and_percent_encoded() -> None:
             }
         }
     ]
+
+
+def test_sarif_unicode_letter_colon_is_not_an_ascii_drive_prefix() -> None:
+    result = _error_result(files_changed=["é:relative.py"])
+
+    finding = guard_module.to_sarif(result)["runs"][0]["results"][0]
+
+    assert finding["locations"][0]["physicalLocation"]["artifactLocation"] == {
+        "uri": "%C3%A9%3Arelative.py"
+    }
+
+
+def test_sarif_message_text_projects_controls_as_visible_escapes() -> None:
+    result = _error_result(reason="failed\nnul\x00bidi\u202e")
+
+    finding = guard_module.to_sarif(result)["runs"][0]["results"][0]
+
+    assert finding["message"]["text"] == (
+        "EvoGuard ERROR: failed\\nnul\\u0000bidi\\u202e"
+    )
+    assert result.to_dict()["reason"] == "failed\nnul\x00bidi\u202e"
 
 
 @pytest.mark.parametrize(

@@ -218,6 +218,42 @@ def _require_percent(value: object, *, field: str) -> int | float:
     return numeric
 
 
+def _require_probability(value: object, *, field: str) -> int | float:
+    """Return one finite probability-like score in the closed interval [0, 1]."""
+
+    if type(value) not in {int, float}:
+        raise ValueError(f"{field} must be a finite number from 0 to 1")
+    numeric = cast(int | float, value)
+    if not math.isfinite(numeric) or not 0 <= numeric <= 1:
+        raise ValueError(f"{field} must be a finite number from 0 to 1")
+    return numeric
+
+
+def _validated_test_counts(
+    tests_passed: object,
+    tests_total: object,
+) -> str:
+    """Render top-level test counts only after strict pair validation."""
+
+    if tests_passed is None and tests_total is None:
+        return "—"
+    if tests_passed is None or tests_total is None:
+        raise ValueError(
+            "tests_passed and tests_total must both be null or integers"
+        )
+    passed = _require_nonnegative_int(
+        tests_passed,
+        field="tests_passed",
+    )
+    total = _require_nonnegative_int(
+        tests_total,
+        field="tests_total",
+    )
+    if passed > total:
+        raise ValueError("tests_passed must not exceed tests_total")
+    return f"{passed}/{total}"
+
+
 def _validated_missed_lines(diff_coverage: Mapping[str, Any]) -> dict[str, list[int]]:
     """Validate the dynamic changed-line evidence before Markdown projection."""
 
@@ -249,6 +285,16 @@ def _validated_missed_lines(diff_coverage: Mapping[str, Any]) -> dict[str, list[
     return missed
 
 
+def _has_ascii_drive_prefix(value: str) -> bool:
+    """Whether a path starts with the Windows ASCII drive-letter grammar."""
+
+    return (
+        len(value) >= 2
+        and value[1] == ":"
+        and ("A" <= value[0] <= "Z" or "a" <= value[0] <= "z")
+    )
+
+
 def _windows_destination_error(path: str) -> tuple[str, str] | None:
     """Classify device names and namespaces before Windows path resolution."""
 
@@ -267,7 +313,11 @@ def _windows_destination_error(path: str) -> tuple[str, str] | None:
 
     components = [component for component in normalized.split("/") if component]
     for index, component in enumerate(components):
-        if index == 0 and len(component) == 2 and component[1] == ":":
+        if (
+            index == 0
+            and len(component) == 2
+            and _has_ascii_drive_prefix(component)
+        ):
             continue
         if ":" in component:
             return (
@@ -380,6 +430,7 @@ def _atomic_write(path: str, writer: TextWriter) -> None:
             encoding="utf-8",
             newline=None,
         )
+        descriptor = -1
         primary: BaseException | None = None
         try:
             writer(stream)
@@ -397,8 +448,6 @@ def _atomic_write(path: str, writer: TextWriter) -> None:
                     primary,
                     f"atomic output close failed: {close_failure}",
                 )
-        else:
-            descriptor = -1
         if primary is not None:
             raise primary.with_traceback(primary.__traceback__)
 
@@ -443,7 +492,7 @@ def _normalize_sarif_artifact_uri(path: str) -> str:
             "backslash",
             "SARIF artifact path must use forward slashes",
         )
-    if len(path) >= 2 and path[0].isalpha() and path[1] == ":":
+    if _has_ascii_drive_prefix(path):
         raise SarifArtifactPathError(
             "drive_prefix",
             "SARIF artifact path must not have a drive prefix",
@@ -478,9 +527,13 @@ def render_report(
     """Render a result as a Markdown report suitable for a PR comment."""
 
     r = result
-    tests = (
-        f"{r.tests_passed}/{r.tests_total}"
-        if r.tests_total is not None else "—"
+    tests = _validated_test_counts(
+        r.tests_passed,
+        r.tests_total,
+    )
+    risk_score = _require_probability(
+        r.risk_score,
+        field="risk_score",
     )
     badge = badge_provider().get(r.verdict, r.verdict)
     lines = [
@@ -494,7 +547,7 @@ def render_report(
         f"| Tests passed | {tests} |",
         f"| Files changed | {len(r.files_changed)} |",
         f"| Blast radius | **{_markdown_table_text(r.risk_level)}** "
-        f"({r.risk_score:.2f}) |",
+        f"({risk_score:.2f}) |",
         f"| Execution | {_markdown_table_code(r.execution_state)} · "
         f"phase {_markdown_table_code(r.execution_phase)} |",
         f"| Test command started | {'yes' if r.test_command_ran else 'no'} |",
@@ -756,7 +809,13 @@ def to_sarif(
         entry: dict[str, Any] = {
             "ruleId": rule_id,
             "level": "error",
-            "message": {"text": f"EvoGuard {result.verdict}: {result.reason}"},
+            "message": {
+                "text": (
+                    "EvoGuard "
+                    f"{_visible_inline_text(result.verdict, markdown=False)}: "
+                    f"{_visible_inline_text(result.reason, markdown=False)}"
+                )
+            },
             "properties": {
                 "verdict": result.verdict,
                 "risk_level": result.risk_level,
