@@ -91,6 +91,75 @@ def test_repo_candidate_owner_exposes_immutable_xor_contracts() -> None:
             )
 
 
+def test_empty_structured_mapping_never_falls_back_to_hypothesis_parser(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    def unexpected_parser(*_args: object):
+        pytest.fail("an empty structured candidate fell back to text parsing")
+
+    monkeypatch.setattr(repo_verifier, "parse_file_blocks", unexpected_parser)
+    monkeypatch.setattr(repo_verifier, "parse_patch_blocks", unexpected_parser)
+    monkeypatch.setattr(repo_verifier, "parse_blocks_lenient", unexpected_parser)
+
+    result = repo_verifier.RepoVerifier(mem_limit_mb=0).verify(
+        "<<<FILE: app.py>>>\nVALUE = 999\n<<<END FILE>>>",
+        {"repo_path": str(source), "file_blocks": {}},
+    )
+
+    assert result.passed is False
+    assert result.score == 0.02
+    assert result.artifact["files_changed"] == []
+    assert (source / "app.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+
+
+def test_empty_structured_mapping_with_deletion_ignores_hypothesis(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (source / "old.py").write_text("OLD = True\n", encoding="utf-8")
+    deleted: list[str] = []
+
+    def unexpected_parser(*_args: object):
+        pytest.fail("structured deletion parsed stale hypothesis text")
+
+    def record_delete(_root: str, path: str) -> bool:
+        deleted.append(path)
+        return True
+
+    monkeypatch.setattr(repo_verifier, "parse_file_blocks", unexpected_parser)
+    monkeypatch.setattr(repo_verifier, "parse_patch_blocks", unexpected_parser)
+    monkeypatch.setattr(repo_verifier, "parse_blocks_lenient", unexpected_parser)
+    monkeypatch.setattr(
+        repo_verifier,
+        "delete_path_within_root",
+        record_delete,
+    )
+
+    result = repo_verifier.RepoVerifier(
+        isolation="docker",
+        mem_limit_mb=0,
+    ).verify(
+        "<<<FILE: app.py>>>\nVALUE = 999\n<<<END FILE>>>",
+        {
+            "repo_path": str(source),
+            "file_blocks": {},
+            "deleted": ["old.py"],
+        },
+    )
+
+    assert deleted == ["old.py"]
+    assert result.artifact["files_changed"] == []
+    assert result.artifact["outcome"] == "isolation_unavailable"
+
+
 def test_admission_preserves_sorted_changes_and_deletion_input_order() -> None:
     outcome = repo_candidate.admit_repo_candidate(
         repo_candidate.RepoCandidateAdmissionRequest(

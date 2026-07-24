@@ -1860,17 +1860,24 @@ MUTATIONS = (
     Mutation(
         name="repo-candidate-structured-mode-bypass",
         path="evoom_guard/verifiers/repo_candidate.py",
-        before=(
-            "    if isinstance(file_blocks_override, dict) and "
-            "file_blocks_override:\n"
-        ),
-        after=(
-            "    if False and isinstance(file_blocks_override, dict) and "
-            "file_blocks_override:\n"
-        ),
+        before="    if isinstance(file_blocks_override, dict):\n",
+        after="    if False and isinstance(file_blocks_override, dict):\n",
         test=(
             "tests/test_repo_candidate_characterization.py::"
             "test_frozen_repo_candidate_behavior[structured_candidate]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-empty-structured-fallback-regression",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="    if isinstance(file_blocks_override, dict):\n",
+        after=(
+            "    if isinstance(file_blocks_override, dict) and "
+            "file_blocks_override:\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_empty_structured_mapping_never_falls_back_to_hypothesis_parser"
         ),
     ),
     Mutation(

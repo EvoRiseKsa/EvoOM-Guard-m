@@ -241,7 +241,9 @@ admitted deletions. All filesystem and policy operations are live providers,
 preserving the historical facade lookup and exception order. Workspace
 allocation, verifier-pack intake, runtime identity, process/container
 execution, sticky evidence, final projection, and `finally` cleanup do not
-cross this boundary.
+cross this boundary. A structured `file_blocks` mapping is authoritative by
+presence, including an empty mapping; textual marker parsing is used only when
+the structured transport is absent.
 
 Repository verifier-pack admission lives in
 `evoom_guard/verifiers/repo_pack_intake.py`. Its immutable request/result and

@@ -242,9 +242,10 @@ def admit_repo_candidate(
     ]
 
     file_blocks_override = services.file_blocks_override()
-    if isinstance(file_blocks_override, dict) and file_blocks_override:
-        # Behavior-preserving R2 condition.  A following security commit changes
-        # presence semantics so an empty dict also selects structured mode.
+    if isinstance(file_blocks_override, dict):
+        # Mapping presence selects the structured transport even when it carries
+        # no file writes.  Falling back to the hypothesis would let stale or
+        # adversarial marker text override the caller's explicit candidate mode.
         file_blocks = {
             str(path): str(content)
             for path, content in file_blocks_override.items()
