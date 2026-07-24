@@ -18,7 +18,12 @@
       "strict_status_checks_required": true,
       "enforce_admins_required": true,
       "immutable_releases_required": true,
-      "release_tag_ruleset": "v* CREATE_AND_MUTATION_RESTRICTED_TO_TRUSTED_H_WHERE_SUPPORTED",
+      "release_tag_ruleset": "v* CREATE_UPDATE_DELETE_AND_NON_FAST_FORWARD_RESTRICTED_TO_DEPLOY_KEY",
+      "release_tag_authority": {
+        "bypass_actor": "DeployKey",
+        "only_one_write_deploy_key_required": true,
+        "private_key_environment": "evoguard-release-publication"
+      },
       "concurrent_contents_writers_frozen_during_publication": true,
       "manual_release_and_tag_operations_frozen_during_publication": true,
       "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
@@ -86,6 +91,11 @@
       "EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID": 60002,
       "EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID": 60002
     },
+    "tag_authority": {
+      "EVOGUARD_RELEASE_TAG_RULESET_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT": "POST_MERGE_REQUIRED"
+    },
     "public_roots": {
       "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
       "EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
@@ -105,8 +115,8 @@
       "purpose": "F artifact admission only"
     },
     "evoguard-release-publication": {
-      "secret": null,
-      "purpose": "H final immutable publication approval"
+      "secret": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+      "purpose": "temporary H-only v* tag creation and exact pre-PATCH cleanup; not a signing key; delete the key and secret after the frozen release ledger records the public fingerprint"
     },
     "evoguard-release-draft": {
       "secret": null,
@@ -124,6 +134,7 @@
       "workflow IDs and raw-Git blob SHAs",
       "trusted parent SHA/tree and literal builder/generator blob SHAs",
       "runtime, Git, gh, policy, pack, and dependency pins",
+      "tag ruleset ID, sole write deploy-key ID, and public fingerprint",
       "release asset checksums"
     ],
     "prohibition": "Do not add trust envelopes to release assets and do not create, move, or rewrite a tag from the ledger step."

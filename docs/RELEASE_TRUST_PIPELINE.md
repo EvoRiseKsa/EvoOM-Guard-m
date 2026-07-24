@@ -15,8 +15,10 @@ been configured, or that any key currently exists.
   Marketplace update, ledger entry, deployment, or production gate.
 - When deliberately activated, H uses two approvals: `evoguard-release-draft`
   is a read-only intent approval, then `evoguard-release-publication` alone
-  creates, reads back, and publishes the draft in one protected job, and only
-  with Immutable Releases already enabled.
+  creates, reads back, and publishes the draft in one protected job. Immediately
+  before publication, that job alone creates the exact `v*` tag with the sole
+  write-enabled deploy key allowed by the active tag ruleset. Immutable Releases
+  must already be enabled.
 
 ## Phase contracts
 
@@ -29,7 +31,7 @@ been configured, or that any key currently exists.
 | E-attest | same workflow, separate job | Downloads an exact closed file set, performs no checkout and executes neither source nor artifact, then attests the pyz and SPDX subjects independently. |
 | F | `evoguard-admit-release-artifact.yml` | Freezes E/F identities and six distinct public roots before Environment access. It freshly verifies each E attestation and creates a separate RAAE for the pyz and SPDX bytes. |
 | G | `evoguard-verify-release-artifact.yml` | Re-verifies both detached RAAE envelopes, exact checksums, cross-artifact substitution, byte mutations, root substitution, and tool-pin mutations without a provider call or private key. |
-| H | `evoguard-publish-admitted-release.yml` | Preflight independently re-verifies both RAAE envelopes and stages exactly three assets. The first protected Environment is read-only and rejects any existing tag/release. Only the second protected Environment has `contents: write`; it rechecks main and Immutable Releases, creates an attributable draft, reads back exact GitHub SHA-256 asset digests, and immediately submits `draft=false` in the same job. Pre-PATCH failures delete only the exact verified draft; after PATCH begins no automatic deletion is safe. Bounded polling then requires an immutable release and exact tag-to-target binding. Marketplace listing remains separate. |
+| H | `evoguard-publish-admitted-release.yml` | Preflight independently re-verifies both RAAE envelopes and stages exactly three assets. The first protected Environment is read-only and rejects any existing tag/release. Only the second protected Environment has `contents: write` and the tag deploy key; it rechecks main and Immutable Releases, creates an attributable draft, reads back exact GitHub SHA-256 asset digests, creates the exact tag through the deploy-key-only `v*` ruleset, and immediately submits `draft=false` in the same job. Pre-PATCH failures delete only the exact verified draft and any exact tag created by that run; after PATCH begins no automatic deletion is safe. Bounded polling then requires an immutable release and exact tag-to-target binding. Marketplace listing remains separate. |
 
 The pyz and SPDX document use separate RAAE envelopes because the core contract
 binds one regular file per envelope. `SHA256SUMS` is derived by E from those two
@@ -57,9 +59,11 @@ admission.
 6. Review the canonical Git and `gh` executable hashes on `ubuntu-24.04`.
    Source admission uses UID/GID 60001; artifact admission uses 60002. The
    identities must not be root or `65534`.
-7. Establish six mutually distinct Ed25519 public-key IDs. Store only public
+7. Establish six mutually distinct Ed25519 signing public-key IDs. Store only public
    PEM values as repository variables. C and F private keys belong only in
-   their separately protected Environments, and H has no signing secret.
+   their separately protected Environments. Separately create exactly one
+   write-enabled deploy key for release tags; store its private half only in
+   `evoguard-release-publication`. H has no signing secret.
 8. Merge a distinct one-parent **source candidate**. A must consume its policy,
    pack, and locks from that candidate's parent; the infrastructure commit
    cannot authorize itself.
@@ -70,8 +74,10 @@ admission.
    fresh provider verifications, two detached `ALLOW` results, and the complete
    negative matrix.
 11. Before H, freeze every other `contents: write` actor and all manual or
-    automated release/tag operations. Protect `v*` creation and mutation so
-    only trusted H can act where GitHub rulesets support that restriction.
+    automated release operations. Require an active `v*` tag ruleset covering
+    creation, update, deletion, and non-fast-forward, with `DeployKey` as its
+    only bypass class; verify the repository has exactly one write-enabled
+    deploy key and record its ID and public fingerprint.
     Enable publication only for the reviewed G attempt. Approve the read-only
     `evoguard-release-draft` intent, then separately approve
     `evoguard-release-publication`; that one job creates and immediately
@@ -82,7 +88,13 @@ admission.
     release ID recorded by H, and delete only a still-draft matching ID, tag,
     target, marker, author, and assets; never use the Publish UI to recover.
     Marketplace listing remains a separate, non-admission step.
-12. Return all flags to false and remove both private Environment secrets.
+12. Return all flags to false and remove both signing private-key Environment
+    secrets. Delete the non-expiring write deploy key and its publication
+    Environment secret after the release ledger records its public fingerprint;
+    create a fresh deploy key for the next release window. If an operational
+    exception keeps it temporarily, it must remain only in the no-admin-bypass
+    publication Environment and the repository must still have exactly one
+    write deploy key.
     GitHub Actions artifacts are temporary evidence (even where repository
     retention is configured for 30 days), not a durable ledger.
 13. After the first publication, freeze a `v4.4.0` ledger containing both RAAE
@@ -104,7 +116,7 @@ dependencies. An RAAE proves the implemented binding and verification events;
 it does not prove absence of vulnerabilities, reproducibility across unrelated
 builders, safe deployment, or external certification.
 GitHub's release API has no compare-and-swap transaction spanning draft
-creation, tag creation, and publication. Therefore the `contents: write`
-freeze and protected `v*` creation boundary are activation trust assumptions;
-the postcheck detects interference but cannot safely undo an already immutable
-wrong publication.
+creation, deploy-key tag creation, and publication. The active tag ruleset
+prevents other actors from creating or mutating `v*`, while the
+`contents: write` freeze limits release-API races. The postcheck detects
+interference but cannot safely undo an already immutable wrong publication.

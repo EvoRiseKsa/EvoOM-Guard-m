@@ -81,7 +81,8 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     )
     assert bootstrap["protected_environments"][
         "evoguard-release-publication"
-    ]["secret"] is None
+    ]["secret"] == "EVOGUARD_RELEASE_TAG_DEPLOY_KEY"
+    assert set(required["tag_authority"].values()) == {"POST_MERGE_REQUIRED"}
     assert bootstrap["protected_environments"][
         "evoguard-release-draft"
     ]["secret"] is None
@@ -347,6 +348,33 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "removed only the incomplete draft created by this H run" in publish
     assert "cleanup_verified_unpublished_draft" in publish
     assert "removed exact unpublished draft after a pre-PATCH failure" in publish
+    assert "secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY" in publish
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in publish
+    assert "actual_tag_key_fingerprint" in publish
+    assert "HostKeyAlgorithms=ssh-ed25519" in publish
+    assert "IdentityAgent=none" in publish
+    assert "ssh -F /dev/null" in publish
+    assert "git -C \"$tag_repo\" push" in publish
+    assert '"$TARGET_SHA:refs/tags/$tag"' in publish
+    assert '":refs/tags/$tag"' in publish
+    assert '--force-with-lease="refs/tags/$tag:$TARGET_SHA"' in publish
+    assert "deploy-key push did not prove a newly created tag" in publish
+    assert "cleanup-exact-tag.json" in publish
+    assert "cleanup-exact-tag.response" not in publish
+    assert "tag deletion was not proven" in publish
+    assert "tag_created=true" in publish
+    assert "tag-created-by-deploy-key.json" in publish
+    assert "preserving the draft for manual recovery" in publish
+    assert publish.index("trap cleanup_verified_unpublished_draft ERR") < publish.index(
+        'test -n "$TAG_DEPLOY_KEY"'
+    )
+    assert 'if ! GIT_SSH_COMMAND="$tag_ssh_command"' not in publish[
+        publish.index('"$TARGET_SHA:refs/tags/$tag"') - 400 :
+        publish.index('"$TARGET_SHA:refs/tags/$tag"') + 100
+    ]
+    assert publish.index('"$TARGET_SHA:refs/tags/$tag"') < publish.index(
+        "printf '%s\\n' '{\"draft\":false}'"
+    )
     assert publish.index("trap cleanup_verified_unpublished_draft ERR") < publish.index(
         "trap - ERR\n          gh api"
     )

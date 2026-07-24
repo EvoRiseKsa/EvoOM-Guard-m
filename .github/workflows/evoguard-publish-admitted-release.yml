@@ -863,6 +863,8 @@ jobs:
       - name: Revalidate the draft and publish the immutable admitted release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_DEPLOY_KEY: ${{ secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY }}
+          EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
@@ -913,6 +915,7 @@ jobs:
           )
           tag="$(jq -er '.tag | select(type == "string")' "$record")"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag_created=false
           marker="<!-- EVOGUARD_RELEASE_DRAFT_V1 h_run=$GITHUB_RUN_ID h_attempt=$GITHUB_RUN_ATTEMPT g_run=$G_RUN_ID g_attempt=$G_RUN_ATTEMPT target=$TARGET_SHA -->"
           body="$(
             MARKER="$marker" python - "$record" <<'PY'
@@ -957,7 +960,7 @@ jobs:
           )"
           cleanup_verified_unpublished_draft() {
             local failure=$?
-            local release_ok=false tag_absent=false
+            local release_ok=false tag_absent=false tag_exact=false
             trap - ERR
             set +e
             gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
@@ -965,18 +968,28 @@ jobs:
             if test "$?" -eq 0; then
               release_ok=true
             fi
-            gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
-              > "$RUNNER_TEMP/cleanup-exact-tag.response" \
+            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+              > "$RUNNER_TEMP/cleanup-exact-tag.json" \
               2> "$RUNNER_TEMP/cleanup-exact-tag.error"
             tag_rc=$?
-            tag_status="$(
-              awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
-                "$RUNNER_TEMP/cleanup-exact-tag.response"
-            )"
-            if test "$tag_rc" -ne 0 -a "$tag_status" = "404"; then
+            if test "$tag_rc" -ne 0 \
+              && jq -e \
+                '.status == "404" and .message == "Not Found"' \
+                "$RUNNER_TEMP/cleanup-exact-tag.json" >/dev/null 2>&1; then
               tag_absent=true
+            elif test "$tag_rc" -eq 0 \
+              && jq -e \
+                --arg tag "refs/tags/$tag" \
+                --arg target "$TARGET_SHA" \
+                '.ref == $tag and .object.type == "commit" and .object.sha == $target' \
+                "$RUNNER_TEMP/cleanup-exact-tag.json" >/dev/null; then
+              tag_exact=true
             fi
-            if test "$release_ok" = "true" -a "$tag_absent" = "true" \
+            if test "$release_ok" = "true" \
+              -a \( \
+                \( "$tag_created" = "false" -a "$tag_absent" = "true" \) \
+                -o \( "$tag_created" = "true" -a "$tag_exact" = "true" \) \
+              \) \
               && RELEASE_BODY="$body" python - \
                 "$record" "$RUNNER_TEMP/cleanup-exact-release.json" "$RELEASE_ID" <<'PY'
           import json
@@ -1015,8 +1028,35 @@ jobs:
                   raise SystemExit(1)
           PY
             then
-              gh api --method DELETE \
-                "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" >/dev/null
+              if test "$tag_created" = "true"; then
+                if ! GIT_SSH_COMMAND="$tag_ssh_command" \
+                  git -C "$tag_repo" push \
+                    --porcelain \
+                    --force-with-lease="refs/tags/$tag:$TARGET_SHA" \
+                    "$tag_remote" \
+                    ":refs/tags/$tag" \
+                    > "$RUNNER_TEMP/tag-delete-by-deploy-key.txt" 2>&1; then
+                  echo "could not remove the exact deploy-key-created tag; preserving the draft for manual recovery" >&2
+                  exit "$failure"
+                fi
+                gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+                  > "$RUNNER_TEMP/tag-after-cleanup.json" \
+                  2> "$RUNNER_TEMP/tag-after-cleanup.error"
+                tag_after_cleanup_rc=$?
+                if test "$tag_after_cleanup_rc" -eq 0 \
+                  || ! jq -e \
+                    '.status == "404" and .message == "Not Found"' \
+                    "$RUNNER_TEMP/tag-after-cleanup.json" >/dev/null 2>&1; then
+                  echo "tag deletion was not proven; preserving the draft for manual recovery" >&2
+                  exit "$failure"
+                fi
+                echo "removed the exact deploy-key-created tag after a pre-PATCH failure: $tag" >&2
+              fi
+              if ! gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" >/dev/null; then
+                echo "tag cleanup succeeded but exact draft deletion failed; manual recovery is required" >&2
+                exit "$failure"
+              fi
               echo "removed exact unpublished draft after a pre-PATCH failure: $RELEASE_ID" >&2
             else
               echo "pre-PATCH failure left no uniquely verified draft safe to delete" >&2
@@ -1024,6 +1064,35 @@ jobs:
             exit "$failure"
           }
           trap cleanup_verified_unpublished_draft ERR
+          test -n "$TAG_DEPLOY_KEY"
+          tag_repo="$RUNNER_TEMP/release-tag-authority.git"
+          tag_key="$RUNNER_TEMP/release-tag-authority.key"
+          tag_known_hosts="$RUNNER_TEMP/release-tag-known-hosts"
+          tag_remote="git@github.com:$GITHUB_REPOSITORY.git"
+          umask 077
+          printf '%s\n' "$TAG_DEPLOY_KEY" > "$tag_key"
+          unset TAG_DEPLOY_KEY
+          grep -q '^-----BEGIN OPENSSH PRIVATE KEY-----$' "$tag_key"
+          grep -q '^-----END OPENSSH PRIVATE KEY-----$' "$tag_key"
+          [[ "$EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
+          ssh-keygen -y -f "$tag_key" > "$RUNNER_TEMP/release-tag-authority.pub"
+          actual_tag_key_fingerprint="$(
+            ssh-keygen -lf "$RUNNER_TEMP/release-tag-authority.pub" -E sha256 \
+              | awk 'NR == 1 { print $2 }'
+          )"
+          test "$actual_tag_key_fingerprint" = "$EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT"
+          cat > "$tag_known_hosts" <<'EOF'
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          EOF
+          chmod 600 "$tag_key" "$tag_known_hosts"
+          tag_ssh_command="ssh -F /dev/null -i $tag_key -o IdentityAgent=none -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$tag_known_hosts -o HostKeyAlgorithms=ssh-ed25519"
+          git init --bare "$tag_repo"
+          git -C "$tag_repo" fetch \
+            --no-tags \
+            --depth=1 \
+            "https://github.com/$GITHUB_REPOSITORY.git" \
+            "refs/heads/main:refs/remotes/origin/main"
+          test "$(git -C "$tag_repo" rev-parse refs/remotes/origin/main)" = "$TARGET_SHA"
           current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
           immutable_enabled="$(
@@ -1091,6 +1160,43 @@ jobs:
               ):
                   raise SystemExit(f"approved draft asset changed: {asset.get('name')}")
           PY
+          GIT_SSH_COMMAND="$tag_ssh_command" \
+          git -C "$tag_repo" push \
+            --porcelain \
+            "$tag_remote" \
+            "$TARGET_SHA:refs/tags/$tag" \
+            > "$RUNNER_TEMP/tag-create-by-deploy-key.txt" 2>&1
+          TAG="$tag" python - "$RUNNER_TEMP/tag-create-by-deploy-key.txt" <<'PY'
+          import os
+          import pathlib
+          import sys
+
+          output = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+          records = [
+              line
+              for line in output.splitlines()
+              if len(line) >= 3 and line[0] in " +-*!=" and '\t' in line
+          ]
+          if len(records) != 1:
+              raise SystemExit('deploy-key push did not report exactly one ref result')
+          fields = records[0].split('\t')
+          expected_destination = f"refs/tags/{os.environ['TAG']}"
+          if (
+              len(fields) != 3
+              or fields[0] != '*'
+              or fields[1].split(':', 1)[-1] != expected_destination
+              or fields[2].strip() != '[new tag]'
+          ):
+              raise SystemExit('deploy-key push did not prove a newly created tag')
+          PY
+          tag_created=true
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+            > "$RUNNER_TEMP/tag-created-by-deploy-key.json"
+          jq -e \
+            --arg tag "refs/tags/$tag" \
+            --arg target "$TARGET_SHA" \
+            '.ref == $tag and .object.type == "commit" and .object.sha == $target' \
+            "$RUNNER_TEMP/tag-created-by-deploy-key.json" >/dev/null
           printf '%s\n' '{"draft":false}' > "$RUNNER_TEMP/publish-request.json"
           # From this boundary onward a failed PATCH may have mutated GitHub.
           # Never delete automatically after the publication request begins.
