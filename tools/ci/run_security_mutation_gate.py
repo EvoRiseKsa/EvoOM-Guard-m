@@ -1244,9 +1244,14 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-workspace-cleanup-error-hiding",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="            shutil.rmtree(path)\n",
-        after="            shutil.rmtree(path, ignore_errors=True)\n",
+        path="evoom_guard/workspace/repository.py",
+        before="            remove_tree(path)\n",
+        after=(
+            "            try:\n"
+            "                remove_tree(path)\n"
+            "            except BaseException:\n"
+            "                continue\n"
+        ),
         test=(
             "tests/test_repo_verifier_cleanup_priority.py::"
             "test_workspace_cleanup_failure_is_visible_after_pending_result"
