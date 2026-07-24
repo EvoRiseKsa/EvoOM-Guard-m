@@ -202,6 +202,12 @@ class RepoPackExecutionOutcome:
     terminal_result: VerdictResult | None = None
     completed: RepoPackCompleted | None = None
 
+    def __post_init__(self) -> None:
+        if (self.terminal_result is None) == (self.completed is None):
+            raise ValueError(
+                "repository pack outcome requires exactly one terminal or completed value"
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class RepoPackInterpretationRequest:

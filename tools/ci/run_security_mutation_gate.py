@@ -2765,6 +2765,22 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-pack-outcome-exclusivity-bypass",
+        path="evoom_guard/verifiers/repo_pack.py",
+        before=(
+            "        if (self.terminal_result is None) == "
+            "(self.completed is None):\n"
+        ),
+        after=(
+            "        if self.terminal_result is None and "
+            "self.completed is None:\n"
+        ),
+        test=(
+            "tests/test_repo_pack_characterization.py::"
+            "test_repo_pack_outcome_rejects_both_branches"
+        ),
+    ),
+    Mutation(
         name="repo-pack-terminal-return-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before=(
