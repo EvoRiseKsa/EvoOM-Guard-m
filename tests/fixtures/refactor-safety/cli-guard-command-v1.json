@@ -1,0 +1,323 @@
+{
+  "cases": {
+    "broken_config": {
+      "events": [
+        {
+          "op": "config-path"
+        },
+        {
+          "op": "load-config",
+          "path": "<ROOT>/broken.json",
+          "required": true
+        }
+      ],
+      "exit_code": 2,
+      "messages": [
+        "config error (fail-closed): controlled broken policy"
+      ],
+      "report_text": null
+    },
+    "diff_policy_defaults": {
+      "events": [
+        {
+          "op": "config-path"
+        },
+        {
+          "op": "read-text",
+          "path": "<ROOT>/candidate.diff"
+        },
+        {
+          "diff": "DIFF-BYTES",
+          "head": "<ROOT>/repo",
+          "kwargs": {
+            "allow": [],
+            "allow_new_tests": false,
+            "base_sha": null,
+            "base_tree_sha": null,
+            "baseline_evidence": false,
+            "blackbox": false,
+            "blackbox_only": false,
+            "diff_coverage": false,
+            "docker_image": null,
+            "docker_network": "none",
+            "expect_verifier_pack_sha256": null,
+            "head_sha": null,
+            "head_tree_sha": null,
+            "isolation": "subprocess",
+            "mem_limit_mb": 1024,
+            "min_diff_coverage": null,
+            "policy_id": null,
+            "policy_version": null,
+            "protected": [],
+            "require_candidate_isolation": null,
+            "require_demonstrated_fix": false,
+            "require_report_integrity": null,
+            "setup_command": null,
+            "setup_output_globs": [],
+            "strict_harness": false,
+            "test_command": null,
+            "timeout": 120,
+            "trust_setup_on_host": false,
+            "verifier_pack": null
+          },
+          "op": "guard-from-diff"
+        },
+        {
+          "deleted": [
+            "src/old.py"
+          ],
+          "op": "render",
+          "source": null,
+          "verdict": "REJECTED"
+        }
+      ],
+      "exit_code": 1,
+      "messages": [
+        "REPORT:REJECTED:None:src/old.py"
+      ],
+      "report_text": null
+    },
+    "dirs_success": {
+      "events": [
+        {
+          "op": "config-path"
+        },
+        {
+          "op": "load-config",
+          "path": "<ROOT>/trusted/.evoguard.json",
+          "required": false
+        },
+        {
+          "candidate": "<ROOT>/head",
+          "digest": null,
+          "op": "pack-trust",
+          "pack": null
+        },
+        {
+          "base": "<ROOT>/base",
+          "head": "<ROOT>/head",
+          "op": "blocks-from-dirs"
+        },
+        {
+          "blocks": {
+            "src/app.py": "VALUE = 2\n"
+          },
+          "op": "serialize"
+        },
+        {
+          "candidate": "SERIALIZED-DIRS",
+          "kwargs": {
+            "allow": [
+              "policy/safe.py"
+            ],
+            "allow_new_tests": false,
+            "base_sha": null,
+            "base_tree_sha": null,
+            "baseline_evidence": true,
+            "blackbox": false,
+            "blackbox_only": false,
+            "deleted": [
+              "src/old.py"
+            ],
+            "diff_coverage": true,
+            "docker_image": null,
+            "docker_network": "none",
+            "expect_verifier_pack_sha256": null,
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "head_sha": null,
+            "head_tree_sha": null,
+            "isolation": "subprocess",
+            "mem_limit_mb": 768,
+            "min_diff_coverage": 87.5,
+            "policy_id": "org/strict",
+            "policy_version": "7",
+            "protected": [
+              "policy/**"
+            ],
+            "require_candidate_isolation": "subprocess",
+            "require_demonstrated_fix": true,
+            "require_report_integrity": "external_process_isolated",
+            "setup_command": [
+              "policy-setup"
+            ],
+            "setup_output_globs": [
+              "generated/**"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "sh",
+              "-c",
+              "policy-test && policy-finish"
+            ],
+            "timeout": 33,
+            "trust_setup_on_host": true,
+            "verifier_pack": null
+          },
+          "op": "guard",
+          "repo": "<ROOT>/base"
+        },
+        {
+          "deleted": [
+            "src/old.py"
+          ],
+          "op": "render",
+          "source": "base/head",
+          "verdict": "PASS"
+        }
+      ],
+      "exit_code": 0,
+      "messages": [
+        "REPORT:PASS:base/head:src/old.py"
+      ],
+      "report_text": null
+    },
+    "dirs_unverifiable": {
+      "events": [
+        {
+          "op": "config-path"
+        },
+        {
+          "op": "load-config",
+          "path": "<ROOT>/trusted/.evoguard.json",
+          "required": false
+        },
+        {
+          "candidate": "<ROOT>/head",
+          "digest": null,
+          "op": "pack-trust",
+          "pack": null
+        },
+        {
+          "base": "<ROOT>/base",
+          "head": "<ROOT>/head",
+          "op": "blocks-from-dirs"
+        },
+        {
+          "kwargs": {
+            "reason_code": "no_verifiable_changes",
+            "source": "base/head",
+            "verifier_pack": null
+          },
+          "op": "input-error",
+          "reason": "the base/head input includes changed path(s) Guard cannot safely verify: changed path(s) cannot be safely represented for verification (bin/app: changed file is not valid UTF-8 text)"
+        },
+        {
+          "deleted": [],
+          "op": "render",
+          "source": "base/head",
+          "verdict": "ERROR"
+        }
+      ],
+      "exit_code": 1,
+      "messages": [
+        "REPORT:ERROR:base/head:"
+      ],
+      "report_text": null
+    },
+    "missing_input": {
+      "events": [
+        {
+          "op": "config-path"
+        }
+      ],
+      "exit_code": 2,
+      "messages": [
+        "usage: evo-guard guard <repo> --patch <file|->   |   evo-guard guard --base <dir> --head <dir>   |   evo-guard guard [<repo>] --diff <file|->"
+      ],
+      "report_text": null
+    },
+    "patch_cli_precedence_and_outputs": {
+      "events": [
+        {
+          "op": "config-path"
+        },
+        {
+          "op": "load-config",
+          "path": "<ROOT>/trusted/.evoguard.json",
+          "required": false
+        },
+        {
+          "op": "read-text",
+          "path": "<ROOT>/candidate.txt"
+        },
+        {
+          "candidate": "PATCH-BYTES",
+          "kwargs": {
+            "allow": [
+              "cli/safe.py"
+            ],
+            "allow_new_tests": true,
+            "base_sha": null,
+            "base_tree_sha": null,
+            "baseline_evidence": true,
+            "blackbox": true,
+            "blackbox_only": false,
+            "diff_coverage": true,
+            "docker_image": null,
+            "docker_network": "none",
+            "expect_verifier_pack_sha256": null,
+            "head_sha": null,
+            "head_tree_sha": null,
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "min_diff_coverage": 91.0,
+            "policy_id": "org/strict",
+            "policy_version": "7",
+            "protected": [
+              "cli/**"
+            ],
+            "require_candidate_isolation": "subprocess",
+            "require_demonstrated_fix": true,
+            "require_report_integrity": "external_process_isolated",
+            "setup_command": [
+              "policy-setup"
+            ],
+            "setup_output_globs": [
+              "generated/**"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "cli-test"
+            ],
+            "timeout": 7,
+            "trust_setup_on_host": true,
+            "verifier_pack": null
+          },
+          "op": "guard",
+          "repo": "<ROOT>/repo"
+        },
+        {
+          "deleted": [],
+          "op": "render",
+          "source": "edit blocks",
+          "verdict": "PASS"
+        },
+        {
+          "deleted": [],
+          "op": "write-json",
+          "path": "<ROOT>/guard.json",
+          "verdict": "PASS"
+        },
+        {
+          "key": "<ROOT>/signing.key",
+          "op": "sign-file",
+          "path": "<ROOT>/guard.json"
+        },
+        {
+          "op": "write-sarif",
+          "path": "<ROOT>/guard.sarif",
+          "verdict": "PASS"
+        }
+      ],
+      "exit_code": 0,
+      "messages": [
+        "wrote <ROOT>/guard.md",
+        "signed <ROOT>/guard.json -> <ROOT>/guard.json.sig"
+      ],
+      "report_text": "REPORT:PASS:edit blocks:\n"
+    }
+  },
+  "schema_version": "cli-guard-command-characterization-v1"
+}
