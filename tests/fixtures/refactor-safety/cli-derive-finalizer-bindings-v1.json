@@ -1,0 +1,139 @@
+{
+  "cases": {
+    "derive_domain_error": {
+      "events": [
+        {
+          "kwargs": {
+            "base_is_bare": true,
+            "base_repo": "<ROOT>/base.git",
+            "base_sha": "1111111111111111111111111111111111111111",
+            "base_tree_sha": "3333333333333333333333333333333333333333",
+            "guard_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "head_is_bare": true,
+            "head_repo": "<ROOT>/head.git",
+            "head_sha": "2222222222222222222222222222222222222222",
+            "head_tree_sha": "4444444444444444444444444444444444444444",
+            "repository": "org/repo",
+            "repository_id": "1234",
+            "source": {
+              "base_sha": "1111111111111111111111111111111111111111",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "pull_request_number": 17,
+              "workflow_run_attempt": 2,
+              "workflow_run_id": "run-9"
+            }
+          },
+          "op": "derive-bindings"
+        }
+      ],
+      "exit_code": 2,
+      "messages": [
+        "{\n  \"error\": \"controlled derivation rejection\",\n  \"format\": \"EVOGUARD_FINALIZER_GIT_BINDINGS_V1\",\n  \"ok\": false,\n  \"status\": \"ERROR\"\n}"
+      ]
+    },
+    "derive_invalid_error": {
+      "events": [
+        {
+          "kwargs": {
+            "base_is_bare": true,
+            "base_repo": "<ROOT>/base.git",
+            "base_sha": "1111111111111111111111111111111111111111",
+            "base_tree_sha": "3333333333333333333333333333333333333333",
+            "guard_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "head_is_bare": true,
+            "head_repo": "<ROOT>/head.git",
+            "head_sha": "2222222222222222222222222222222222222222",
+            "head_tree_sha": "4444444444444444444444444444444444444444",
+            "repository": "org/repo",
+            "repository_id": "1234",
+            "source": {
+              "base_sha": "1111111111111111111111111111111111111111",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "pull_request_number": 17,
+              "workflow_run_attempt": 2,
+              "workflow_run_id": "run-9"
+            }
+          },
+          "op": "derive-bindings"
+        }
+      ],
+      "exit_code": 2,
+      "messages": [
+        "{\n  \"error\": \"controlled invalid derivation input\",\n  \"format\": \"EVOGUARD_FINALIZER_GIT_BINDINGS_V1\",\n  \"ok\": false,\n  \"status\": \"ERROR\"\n}"
+      ]
+    },
+    "derive_success": {
+      "events": [
+        {
+          "kwargs": {
+            "base_is_bare": true,
+            "base_repo": "<ROOT>/base.git",
+            "base_sha": "1111111111111111111111111111111111111111",
+            "base_tree_sha": "3333333333333333333333333333333333333333",
+            "guard_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "head_is_bare": true,
+            "head_repo": "<ROOT>/head.git",
+            "head_sha": "2222222222222222222222222222222222222222",
+            "head_tree_sha": "4444444444444444444444444444444444444444",
+            "repository": "org/repo",
+            "repository_id": "1234",
+            "source": {
+              "base_sha": "1111111111111111111111111111111111111111",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "pull_request_number": 17,
+              "workflow_run_attempt": 2,
+              "workflow_run_id": "run-9"
+            }
+          },
+          "op": "derive-bindings"
+        },
+        {
+          "bindings_path": "<ROOT>/bindings.json",
+          "force": true,
+          "op": "write-bindings"
+        }
+      ],
+      "exit_code": 0,
+      "messages": [
+        "{\n  \"bindings\": \"<ROOT>/bindings.json.canonical\",\n  \"candidate_sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n  \"format\": \"EVOGUARD_FINALIZER_GIT_BINDINGS_V1\",\n  \"ok\": true,\n  \"policy_sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\n  \"status\": \"DERIVED\",\n  \"verifier_pack_sha256\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"\n}"
+      ]
+    },
+    "derive_write_failure": {
+      "events": [
+        {
+          "kwargs": {
+            "base_is_bare": true,
+            "base_repo": "<ROOT>/base.git",
+            "base_sha": "1111111111111111111111111111111111111111",
+            "base_tree_sha": "3333333333333333333333333333333333333333",
+            "guard_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "head_is_bare": true,
+            "head_repo": "<ROOT>/head.git",
+            "head_sha": "2222222222222222222222222222222222222222",
+            "head_tree_sha": "4444444444444444444444444444444444444444",
+            "repository": "org/repo",
+            "repository_id": "1234",
+            "source": {
+              "base_sha": "1111111111111111111111111111111111111111",
+              "head_sha": "2222222222222222222222222222222222222222",
+              "pull_request_number": 17,
+              "workflow_run_attempt": 2,
+              "workflow_run_id": "run-9"
+            }
+          },
+          "op": "derive-bindings"
+        },
+        {
+          "bindings_path": "<ROOT>/bindings.json",
+          "force": true,
+          "op": "write-bindings"
+        }
+      ],
+      "exit_code": 2,
+      "messages": [
+        "{\n  \"error\": \"controlled binding write failure\",\n  \"format\": \"EVOGUARD_FINALIZER_GIT_BINDINGS_V1\",\n  \"ok\": false,\n  \"status\": \"ERROR\"\n}"
+      ]
+    }
+  },
+  "schema_version": "cli-derive-finalizer-bindings-characterization-v1"
+}

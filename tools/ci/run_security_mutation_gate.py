@@ -4475,6 +4475,203 @@ MUTATIONS = (
             "test_authorization_reads_stay_live_but_sealer_snapshots_at_entry"
         ),
     ),
+    Mutation(
+        name="cli-trusted-finalizer-derive-source-binding-bypass",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before='        "pull_request_number": args.pr_number,\n',
+        after='        "pull_request_number": 0,\n',
+        test=(
+            "tests/test_cli_derive_finalizer_bindings_characterization.py::"
+            "test_frozen_cli_derive_finalizer_bindings_behavior[derive_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-derive-write-bypass",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before=(
+            "        output = services.write_bindings(\n"
+            "            bindings,\n"
+            "            bindings_path=args.out,\n"
+            "            force=args.force,\n"
+            "        )\n"
+        ),
+        after="        output = args.out\n",
+        test=(
+            "tests/test_cli_derive_finalizer_bindings_characterization.py::"
+            "test_frozen_cli_derive_finalizer_bindings_behavior[derive_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-entry-binding-writer-late-bound",
+        path="evoom_guard/cli/__init__.py",
+        before="            write_bindings=write_finalizer_bindings,\n",
+        after=(
+            "            write_bindings=lambda *positional, **keyword: getattr(\n"
+            '                sys.modules["evoom_guard.finalizer_derivation"],\n'
+            '                "write_finalizer_bindings",\n'
+            "            )(*positional, **keyword),\n"
+        ),
+        test=(
+            "tests/test_cli_derive_finalizer_bindings_characterization.py::"
+            "test_dependencies_snapshot_at_entry_but_reporter_resolves_late"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-semantic-verification-bypass",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before=(
+            '    report = services.verify_record(record)\n'
+            '    if not report["ok"]:\n'
+        ),
+        after=(
+            '    report = {"ok": True, "checks": []}\n'
+            '    if not report["ok"]:\n'
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_frozen_cli_trusted_finalizer_command_behavior"
+            "[bindings_semantic_invalid]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-binding-read-order-inversion",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before=(
+            "        bindings = services.read_bindings(args.bindings)\n"
+            "        record = services.read_semantic_record(args.verdict)\n"
+        ),
+        after=(
+            "        record = services.read_semantic_record(args.verdict)\n"
+            "        bindings = services.read_bindings(args.bindings)\n"
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_frozen_cli_trusted_finalizer_command_behavior[bindings_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-handoff-read-order-inversion",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before=(
+            '        source = services.read_external_object(args.source, label="source")\n'
+            '        context = services.read_external_object(args.context, label="context")\n'
+        ),
+        after=(
+            '        context = services.read_external_object(args.context, label="context")\n'
+            '        source = services.read_external_object(args.source, label="source")\n'
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_frozen_cli_trusted_finalizer_command_behavior[handoff_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-seal-derivation-bypass",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before=(
+            "        expected_derivation = (\n"
+            "            services.read_bindings(args.expected_derivation).payload\n"
+            "            if args.expected_derivation is not None\n"
+            "            else None\n"
+            "        )\n"
+            "        materials = services.parse_materials(args.material)\n"
+        ),
+        after=(
+            "        expected_derivation = None\n"
+            "        materials = services.parse_materials(args.material)\n"
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_frozen_cli_trusted_finalizer_command_behavior[seal_allow]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-seal-require-pass-bypass",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before=(
+            "    return 0 if allowed or not args.require_pass else 1\n"
+            "\n"
+            "\n"
+            "def execute_verify_finalized(\n"
+        ),
+        after=(
+            "    return 0\n"
+            "\n"
+            "\n"
+            "def execute_verify_finalized(\n"
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_frozen_cli_trusted_finalizer_command_behavior[seal_deny_gated]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-verify-require-pass-bypass",
+        path="evoom_guard/cli/trusted_finalizer_commands.py",
+        before="    ok = allowed or not args.require_pass\n",
+        after="    ok = allowed\n",
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_frozen_cli_trusted_finalizer_command_behavior"
+            "[verify_deny_ungated]"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-live-reader-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            operational_errors=(OSError,),\n"
+            "            read_external_object=lambda object_path, *, label: (\n"
+            "                _read_external_finalizer_object(object_path, label=label)\n"
+            "            ),\n"
+            "            create_handoff=create_finalizer_handoff,\n"
+        ),
+        after=(
+            "            operational_errors=(OSError,),\n"
+            "            read_external_object=_read_external_finalizer_object,\n"
+            "            create_handoff=create_finalizer_handoff,\n"
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_handoff_reads_and_path_stay_live_but_creator_snapshots_at_entry"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-live-reporter-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            context_from_bindings=context_from_verified_bindings,\n"
+            "            write_verified_context=write_verified_finalizer_context,\n"
+            "            machine_report=lambda report_out, value: _machine_report(\n"
+            "                report_out,\n"
+            "                value,\n"
+            "            ),\n"
+        ),
+        after=(
+            "            context_from_bindings=context_from_verified_bindings,\n"
+            "            write_verified_context=write_verified_finalizer_context,\n"
+            "            machine_report=_machine_report,\n"
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_binding_imports_snapshot_but_semantic_reader_and_reporter_stay_live"
+        ),
+    ),
+    Mutation(
+        name="cli-trusted-finalizer-entry-sealer-late-bound",
+        path="evoom_guard/cli/__init__.py",
+        before="            seal_finalizer=seal_finalizer_bundle,\n",
+        after=(
+            "            seal_finalizer=lambda *positional, **keyword: getattr(\n"
+            '                sys.modules["evoom_guard.trusted_finalizer"],\n'
+            '                "seal_finalizer_bundle",\n'
+            "            )(*positional, **keyword),\n"
+        ),
+        test=(
+            "tests/test_cli_trusted_finalizer_command_characterization.py::"
+            "test_seal_imports_snapshot_but_readers_and_material_parser_stay_live"
+        ),
+    ),
 )
 
 

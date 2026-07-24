@@ -317,6 +317,18 @@ CLI-over-policy precedence, input modes, fail-closed errors, output order, and
 exit codes. All other command handlers and parser dispatch remain in the
 facade; this slice does not claim the broader CLI split is complete.
 
+The second command-family slice adds the stdlib-only
+`cli.trusted_finalizer_commands` owner for raw-Git binding derivation and
+verification, semantic-record loading, handoff construction, finalizer
+sealing, and finalized-bundle verification. The `cli` package facade keeps the
+five historical commands plus the semantic-record helper and their exact
+import/lookup contract: domain operations imported at command entry are
+snapshotted, while the semantic reader, external-input reader, material
+parser, path projection, and machine reporter remain call-through seams.
+Frozen vectors cover report bytes, operation order, stdin rejection, error
+classification, and exit status. This slice does not move parser dispatch or
+any Release Source command.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

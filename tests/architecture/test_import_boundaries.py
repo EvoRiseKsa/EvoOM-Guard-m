@@ -944,6 +944,82 @@ def test_cli_agent_change_commands_have_one_stdlib_owner_and_public_facades() ->
     } <= facade_functions
 
 
+def test_cli_trusted_finalizer_commands_have_one_stdlib_owner_and_public_facades() -> None:
+    """The Trusted Finalizer adapters keep effects and lookup timing in the facade."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.cli"
+    owner_module = "evoom_guard.cli.trusted_finalizer_commands"
+    facade_path = PACKAGE_ROOT / "cli" / "__init__.py"
+    owner_path = PACKAGE_ROOT / "cli" / "trusted_finalizer_commands.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert owner_functions == {
+        "execute_derive_finalizer_bindings",
+        "execute_finalizer_handoff",
+        "execute_read_semantic_finalizer_record",
+        "execute_seal_finalizer",
+        "execute_verify_finalized",
+        "execute_verify_finalizer_bindings",
+    }
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "argparse",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+    owner_classes = {
+        node.name for node in owner_tree.body if isinstance(node, ast.ClassDef)
+    }
+    assert {
+        "DeriveBindingsServices",
+        "FinalizerHandoffServices",
+        "SealFinalizerServices",
+        "SemanticRecordServices",
+        "VerifyBindingsServices",
+        "VerifyFinalizedServices",
+    } <= owner_classes
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name for node in facade_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert {
+        "_read_semantic_finalizer_record",
+        "cmd_derive_finalizer_bindings",
+        "cmd_finalizer_handoff",
+        "cmd_seal_finalizer",
+        "cmd_verify_finalized",
+        "cmd_verify_finalizer_bindings",
+    } <= facade_functions
+
+
 def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:
     """Policy construction may depend on domain values, never Guard internals."""
 
