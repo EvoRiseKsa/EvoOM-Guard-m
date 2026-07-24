@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -2245,7 +2246,12 @@ def write_json(
     *,
     deleted: list[str] | None = None,
 ) -> None:
-    _guard_output.write_json(result, path, deleted=deleted)
+    _guard_output.write_json(
+        result,
+        path,
+        deleted=deleted,
+        json_dump_provider=lambda: json.dump,
+    )
 
 
 def to_sarif(result: GuardResult) -> dict[str, Any]:
@@ -2270,5 +2276,6 @@ def write_sarif(result: GuardResult, path: str) -> None:
     _guard_output.write_sarif(
         result,
         path,
-        converter=lambda current: to_sarif(cast(GuardResult, current)),
+        converter=lambda current: to_sarif(current),  # type: ignore[arg-type]
+        json_dump_provider=lambda: json.dump,
     )

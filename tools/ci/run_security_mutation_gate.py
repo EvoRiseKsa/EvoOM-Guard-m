@@ -116,6 +116,57 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="guard-output-badge-lookup-snapshot",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "    lines = [\n"
+            '        f"## {title} — {badge_provider().get(r.verdict, r.verdict)}",\n'
+        ),
+        after=(
+            "    badges = badge_provider()\n"
+            "    lines = [\n"
+            '        f"## {title} — {badges.get(r.verdict, r.verdict)}",\n'
+        ),
+        test=(
+            "tests/test_guard_output_characterization.py::"
+            "test_render_report_resolves_badges_after_title_formatting"
+        ),
+    ),
+    Mutation(
+        name="guard-output-json-dump-snapshot",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '    with open(path, "w", encoding="utf-8") as destination:\n'
+            "        json_dump_provider()(payload, destination, indent=2)\n"
+        ),
+        after=(
+            "    json_dump = json_dump_provider()\n"
+            '    with open(path, "w", encoding="utf-8") as destination:\n'
+            "        json_dump(payload, destination, indent=2)\n"
+        ),
+        test=(
+            "tests/test_guard_output_characterization.py::"
+            "test_guard_output_writers_resolve_json_dump_after_open[write_json]"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-dump-snapshot",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            '    with open(path, "w", encoding="utf-8") as destination:\n'
+            "        json_dump_provider()(converter(result), destination, indent=2)\n"
+        ),
+        after=(
+            "    json_dump = json_dump_provider()\n"
+            '    with open(path, "w", encoding="utf-8") as destination:\n'
+            "        json_dump(converter(result), destination, indent=2)\n"
+        ),
+        test=(
+            "tests/test_guard_output_characterization.py::"
+            "test_guard_output_writers_resolve_json_dump_after_open[write_sarif]"
+        ),
+    ),
+    Mutation(
         name="guard-output-non-pass-sarif-suppression",
         path="evoom_guard/integrations/guard_output.py",
         before="    if result.verdict != pass_verdict_provider():\n",

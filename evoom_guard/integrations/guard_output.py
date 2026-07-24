@@ -8,8 +8,8 @@
 This high-level integration owns only projections and destination writes.  It
 does not decide verdicts, execute candidate code, or reinterpret evidence.  The
 historical :mod:`evoom_guard.guard` functions remain compatibility facades and
-inject their live wire constants and SARIF converter at the original lookup
-positions.
+inject their live wire constants, JSON dumper, and SARIF converter at the
+original lookup positions.
 """
 
 from __future__ import annotations
@@ -52,6 +52,8 @@ class GuardResultView(Protocol):
 BadgeProvider = Callable[[], Mapping[str, str]]
 ValueProvider = Callable[[], str]
 SarifConverter = Callable[[GuardResultView], dict[str, Any]]
+JsonDump = Callable[..., Any]
+JsonDumpProvider = Callable[[], JsonDump]
 
 DEFAULT_BADGES: Mapping[str, str] = {
     "PASS": "✅ PASS",
@@ -68,6 +70,10 @@ def _constant(value: str) -> ValueProvider:
 
 def _default_badge_provider() -> Mapping[str, str]:
     return DEFAULT_BADGES
+
+
+def _default_json_dump_provider() -> JsonDump:
+    return json.dump
 
 
 _PASS_PROVIDER = _constant("PASS")
@@ -100,9 +106,8 @@ def render_report(
         f"{r.tests_passed}/{r.tests_total}"
         if r.tests_total is not None else "—"
     )
-    badges = badge_provider()
     lines = [
-        f"## {title} — {badges.get(r.verdict, r.verdict)}",
+        f"## {title} — {badge_provider().get(r.verdict, r.verdict)}",
         "",
         f"**{r.reason}**",
         "",
@@ -265,6 +270,7 @@ def write_json(
     path: str,
     *,
     deleted: list[str] | None = None,
+    json_dump_provider: JsonDumpProvider = _default_json_dump_provider,
 ) -> None:
     """Write the producer-owned JSON record without reinterpreting it."""
 
@@ -272,7 +278,7 @@ def write_json(
     if deleted:
         payload["deleted"] = deleted
     with open(path, "w", encoding="utf-8") as destination:
-        json.dump(payload, destination, indent=2)
+        json_dump_provider()(payload, destination, indent=2)
 
 
 def to_sarif(
@@ -335,8 +341,9 @@ def write_sarif(
     path: str,
     *,
     converter: SarifConverter,
+    json_dump_provider: JsonDumpProvider = _default_json_dump_provider,
 ) -> None:
     """Write SARIF while resolving the injected converter after destination open."""
 
     with open(path, "w", encoding="utf-8") as destination:
-        json.dump(converter(result), destination, indent=2)
+        json_dump_provider()(converter(result), destination, indent=2)
