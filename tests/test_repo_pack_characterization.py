@@ -17,6 +17,7 @@ from repo_pack_characterization_harness import (
     observe_live_host_provider_timing,
 )
 
+from evoom_guard.contracts import VerdictResult
 from evoom_guard.domain.execution import IsolationObservation
 from evoom_guard.verifiers import repo_pack
 
@@ -241,3 +242,35 @@ def test_repo_pack_owner_exposes_separate_immutable_contracts() -> None:
         execution.pack_snapshot = "changed"  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         interpretation.completed = completed  # type: ignore[misc]
+
+
+def test_repo_pack_outcome_rejects_no_branch() -> None:
+    with pytest.raises(
+        ValueError,
+        match="requires exactly one terminal or completed value",
+    ):
+        repo_pack.RepoPackExecutionOutcome()
+
+
+def test_repo_pack_outcome_rejects_both_branches() -> None:
+    terminal = VerdictResult(
+        passed=False,
+        score=0.0,
+        diagnostics="terminal",
+    )
+    completed = repo_pack.RepoPackCompleted(
+        report_path="report.xml",
+        returncode=0,
+        stdout="",
+        stderr="",
+        report_expected=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="requires exactly one terminal or completed value",
+    ):
+        repo_pack.RepoPackExecutionOutcome(
+            terminal_result=terminal,
+            completed=completed,
+        )
