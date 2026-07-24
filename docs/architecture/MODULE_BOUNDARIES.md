@@ -410,10 +410,10 @@ execution/pack evidence projection, attestation placement, assurance-profile
 construction, and the final lazy assurance gate. Every effect and compatibility
 helper is supplied through a late provider, preserving the characterized
 lookup, identity, mutation, and fail-loud exception order. The Guard facade
-still owns the coverage effect, public `GuardResult`, black-box branch, and
-wire casts; pristine-baseline execution has the focused owner described below.
-This boundary deliberately does not unify the black-box eager-assurance path
-or move candidate verifier execution.
+still owns the coverage effect, public `GuardResult`, black-box runtime branch,
+and wire casts; pristine-baseline execution has the focused owner described
+below. This boundary deliberately does not unify the black-box eager-assurance
+path or move candidate verifier execution.
 
 The next bounded verifier slice adds
 `verifiers.repo_baseline.run_repo_baseline`. It owns only pristine-copy setup
@@ -423,6 +423,19 @@ private Guard facade retains its historical signature and resolves host
 effects live at their original operation sites. Repair-effect annotation,
 scope, and decision demotion remain in `application.repo_finalization`; this
 slice does not move diff coverage, candidate execution, or CLI behavior.
+
+The ninth application slice adds
+`application.blackbox_finalization.finalize_blackbox_verification`. It starts
+only after the external judge and candidate/container cleanup return
+successfully. It owns the established post-cleanup sequence: conservative
+launcher/isolation interpretation, risk-provider placement, conditional
+repo-native composition, decision and aggregate-count projection, pack and
+phase evidence, the eager assurance gate, unsupported baseline/coverage
+markers, and attestation placement. Guard injects live risk, repo-verifier,
+profile, shortfall, and attestation services and still constructs the public
+`GuardResult`. `blackbox.py` remains the runtime owner for workspaces, process
+and container cleanup, invocation receipts, and `BlackboxResult`; primary or
+cleanup `BaseException` values therefore exit before finalization begins.
 
 The first command-family slice adds the typed `cli.guard_command` owner for
 the public `guard` command. It owns only effective-policy resolution, routing

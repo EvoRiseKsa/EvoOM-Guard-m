@@ -4811,18 +4811,356 @@ MUTATIONS = (
     ),
     Mutation(
         name="assurance-blackbox-eager-mode-inversion",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/blackbox_finalization.py",
         before=(
-            "            shortfall_evaluator=_assurance_shortfall,\n"
-            "            eager_shortfall=True,\n"
+            "        shortfall_evaluator="
+            "services.assurance_shortfall_provider(),\n"
+            "        eager_shortfall=True,\n"
         ),
         after=(
-            "            shortfall_evaluator=_assurance_shortfall,\n"
-            "            eager_shortfall=False,\n"
+            "        shortfall_evaluator="
+            "services.assurance_shortfall_provider(),\n"
+            "        eager_shortfall=False,\n"
         ),
         test=(
             "tests/test_assurance_decision_gate_characterization.py::"
             "test_blackbox_gate_is_eager_but_preserves_prior_decisions"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-candidate-invocation-proof-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before="    gradeable = bool(result.ran and invocation_observed)\n",
+        after="    gradeable = bool(result.ran)\n",
+        test=(
+            "tests/test_blackbox_composite_contract.py::"
+            "test_vacuous_blackbox_pack_is_refused_and_repo_phase_is_not_run"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-composite-repo-phase-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before=(
+            "    if not request.blackbox_only and gradeable and result.passed:\n"
+        ),
+        after=(
+            "    if False and not request.blackbox_only "
+            "and gradeable and result.passed:\n"
+        ),
+        test=(
+            "tests/test_blackbox_composite_contract.py::"
+            "test_completed_composite_sums_counts_and_uses_weakest_report_channel"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-profile-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="                assurance_builder_provider=lambda: _assurance_profile,\n",
+        after=(
+            "                assurance_builder_provider=(\n"
+            "                    lambda builder=_assurance_profile: builder\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_finalization_helpers_are_resolved_after_blackbox_cleanup"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-shortfall-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                assurance_shortfall_provider=(\n"
+            "                    lambda: _assurance_shortfall\n"
+            "                ),\n"
+        ),
+        after=(
+            "                assurance_shortfall_provider=(\n"
+            "                    lambda evaluator=_assurance_shortfall: "
+            "evaluator\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_finalization_helpers_are_resolved_after_blackbox_cleanup"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-attestation-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                attestation_builder_provider=(\n"
+            "                    lambda: _build_attestation\n"
+            "                ),\n"
+        ),
+        after=(
+            "                attestation_builder_provider=(\n"
+            "                    lambda builder=_build_attestation: "
+            "builder\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_finalization_helpers_are_resolved_after_blackbox_cleanup"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-pipeline-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                verification_pipeline_provider=(\n"
+            "                    lambda: VerificationPipeline\n"
+            "                ),\n"
+        ),
+        after=(
+            "                verification_pipeline_provider=(\n"
+            "                    lambda pipeline=VerificationPipeline: pipeline\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_verification_pipeline_lookup_remains_live_at_composition"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-decision-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="                guard_decision_provider=lambda: GuardDecision,\n",
+        after=(
+            "                guard_decision_provider=(\n"
+            "                    lambda decision=GuardDecision: decision\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_decision_reexport_and_lookup_remain_live_at_composition"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-result-factory-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                guard_result_factory_provider=lambda: GuardResult,\n"
+        ),
+        after=(
+            "                guard_result_factory_provider=(\n"
+            "                    lambda factory=GuardResult: factory\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-guard-result-late-global-lookup",
+        path="evoom_guard/guard.py",
+        before="            finalization_bx.guard_result_factory(\n",
+        after="            GuardResult(\n",
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-decision-projection-order-inversion",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before=(
+            "    final_verdict = decision.verdict\n"
+            "    final_reason_code = decision.reason_code\n"
+            "    final_reason = decision.reason\n"
+        ),
+        after=(
+            "    final_reason_code = decision.reason_code\n"
+            "    final_verdict = decision.verdict\n"
+            "    final_reason = decision.reason\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-pass-decision-reread",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before=(
+            '    passed = final_verdict == decision_symbol("PASS")\n'
+        ),
+        after='    passed = decision.verdict == decision_symbol("PASS")\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-facade-verdict-reread",
+        path="evoom_guard/guard.py",
+        before="                verdict=finalization_bx.verdict,\n",
+        after="                verdict=finalization_bx.decision.verdict,\n",
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-facade-reason-reread",
+        path="evoom_guard/guard.py",
+        before="                reason=finalization_bx.reason,\n",
+        after="                reason=finalization_bx.decision.reason,\n",
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-facade-reason-code-reread",
+        path="evoom_guard/guard.py",
+        before="                reason_code=finalization_bx.reason_code,\n",
+        after=(
+            "                reason_code="
+            "finalization_bx.decision.reason_code,\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_guard_result_factory_is_snapshotted_before_final_wire_reads"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-runtime-cast-global-lookup",
+        path="evoom_guard/guard.py",
+        before=(
+            "        return cast(\n"
+            '            "GuardResult",\n'
+            "            finalization_bx.guard_result_factory(\n"
+        ),
+        after=(
+            "        return cast(\n"
+            "            GuardResult,\n"
+            "            finalization_bx.guard_result_factory(\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_attestation_can_delete_guard_result_after_callable_snapshot"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-pass-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "PASS": lambda: PASS,\n',
+        after='        "PASS": lambda value=PASS: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-fail-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "FAIL": lambda: FAIL,\n',
+        after='        "FAIL": lambda value=FAIL: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-error-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "ERROR": lambda: ERROR,\n',
+        after='        "ERROR": lambda value=ERROR: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-tampered-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "TAMPERED": lambda: TAMPERED,\n',
+        after='        "TAMPERED": lambda value=TAMPERED: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-pass-reason-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            '        "REASON_TESTS_PASSED": lambda: '
+            "REASON_TESTS_PASSED,\n"
+        ),
+        after=(
+            '        "REASON_TESTS_PASSED": lambda value='
+            "REASON_TESTS_PASSED: value,\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-timeout-reason-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            '        "REASON_TEST_TIMEOUT": lambda: REASON_TEST_TIMEOUT,\n'
+        ),
+        after=(
+            '        "REASON_TEST_TIMEOUT": lambda value='
+            "REASON_TEST_TIMEOUT: value,\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-execution-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            lambda: EXECUTION_STARTED_INCOMPLETE\n"
+        ),
+        after=(
+            "            lambda value=EXECUTION_STARTED_INCOMPLETE: value\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_execution_vocabulary_remains_live_after_composed_repo_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-outcome-policy-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                outcome_reason_policy_provider="
+            "lambda: _OUTCOME_REASON,\n"
+        ),
+        after=(
+            "                outcome_reason_policy_provider=(\n"
+            "                    lambda policy=_OUTCOME_REASON: policy\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_repo_outcome_policies_remain_live_after_composed_repo_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-tamper-policy-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                tamper_outcome_reason_policy_provider=(\n"
+            "                    lambda: _TAMPER_OUTCOME_REASON\n"
+            "                ),\n"
+        ),
+        after=(
+            "                tamper_outcome_reason_policy_provider=(\n"
+            "                    lambda policy=_TAMPER_OUTCOME_REASON: policy\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_repo_outcome_policies_remain_live_after_composed_repo_effect"
         ),
     ),
     Mutation(

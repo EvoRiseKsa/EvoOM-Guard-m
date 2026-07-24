@@ -82,9 +82,17 @@ The facade injects live providers at each historical call point, so effect
 implementations, identity, mutation, and exception order remain compatible.
 The pristine baseline runner is now owned by `verifiers.repo_baseline`; Guard's
 private facade supplies the same live host effects while finalization retains
-repair-effect classification and decision demotion. Black-box orchestration
-and `GuardResult` remain in Guard; this does not merge the distinct eager
-black-box assurance path.
+repair-effect classification and decision demotion.
+`application/blackbox_finalization.py` separately owns the characterized
+post-cleanup black-box sequence: interpreting judge facts, conditionally
+invoking the required repo-native phase, composing decision/count/lifecycle
+evidence, eagerly applying the assurance floor, and only then building the
+attestation. Guard retains `run_blackbox`, risk and repo-verifier effect
+implementations, the public `GuardResult`, and the live baseline facade. Runtime
+cleanup completes before this boundary is entered, and primary or cleanup
+`BaseException` values from the judge cannot be masked by finalization.
+The two finalizers intentionally preserve their different eager/lazy assurance
+and attestation order instead of pretending the paths are equivalent.
 `domain/assurance.py` now owns immutable
 delivered-assurance and verifier-pack values, while
 `application/assurance.py` owns pure profile construction and floor
@@ -204,11 +212,10 @@ checks. Ownership, ACLs, xattrs, Windows security descriptors/alternate
 streams, and other non-portable metadata are not preserved. No parent-directory
 fsync is performed, so this does not promise power-loss/crash, NFS/distributed
 filesystem, or multi-file transactional durability.
-The remaining black-box candidate/evidence/cleanup orchestration and further
+The remaining black-box candidate/runtime/cleanup orchestration and further
 runtime-effect decomposition remain pending; black-box pack sequencing,
 candidate path admission, candidate-tree intake, repository workspace
-ownership, and the repo-native
-application decision/finalization path are complete.
+ownership, and both application decision/finalization paths are complete.
 
 The immediate structural priority after this bounded output slice is to reduce
 one remaining RepoVerifier/black-box effect responsibility without changing

@@ -1188,6 +1188,25 @@ def test_repo_finalization_has_only_pipeline_and_domain_dependencies() -> None:
     )
 
 
+def test_blackbox_finalization_has_only_application_and_domain_dependencies() -> None:
+    """Post-cleanup finalization must not absorb judge/runtime ownership."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.application.blackbox_finalization"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == set()
+    assert ("evoom_guard.guard", module) in analysis.internal_edges
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_execution_evidence_contracts_follow_public_layer_boundaries() -> None:
     """Execution snapshots are pure domain values projected by the verifier."""
 
