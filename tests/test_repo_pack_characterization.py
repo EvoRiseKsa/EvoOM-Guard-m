@@ -70,6 +70,7 @@ def test_host_command_order_and_strict_cleanup_are_frozen(
         "distill",
     ]
     instrument = case["events"][5]
+    assert instrument["report_outside_candidate"] is True
     assert instrument["command"] == [
         "<PYTHON>",
         "-m",
