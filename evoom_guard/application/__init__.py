@@ -13,6 +13,12 @@ from evoom_guard.application.decision_gates import (
 )
 from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.application.repo_decision import compose_repo_decision
+from evoom_guard.application.repo_finalization import (
+    RepoFinalizationInput,
+    RepoFinalizationOutcome,
+    RepoFinalizationServices,
+    finalize_repo_verification,
+)
 
 __all__ = [
     "assurance_profile",
@@ -23,5 +29,9 @@ __all__ = [
     "apply_diff_coverage_gate",
     "build_attestation",
     "compose_repo_decision",
+    "finalize_repo_verification",
+    "RepoFinalizationInput",
+    "RepoFinalizationOutcome",
+    "RepoFinalizationServices",
     "VerificationPipeline",
 ]

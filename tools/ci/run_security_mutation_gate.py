@@ -2663,10 +2663,11 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-required-clean-run-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
             "            require_passing_suite=(\n"
-            "                core_verdict_passed and min_diff_coverage is not None\n"
+            "                core_verdict_passed "
+            "and request.min_diff_coverage is not None\n"
             "            ),\n"
         ),
         after="            require_passing_suite=False,\n",
@@ -2856,13 +2857,15 @@ MUTATIONS = (
     ),
     Mutation(
         name="assurance-repo-lazy-mode-inversion",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
-            "        shortfall_evaluator=_assurance_shortfall,\n"
+            "        shortfall_evaluator="
+            "services.assurance_shortfall_provider(),\n"
             "        eager_shortfall=False,\n"
         ),
         after=(
-            "        shortfall_evaluator=_assurance_shortfall,\n"
+            "        shortfall_evaluator="
+            "services.assurance_shortfall_provider(),\n"
             "        eager_shortfall=True,\n"
         ),
         test=(
@@ -2983,13 +2986,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-baseline-effect-ordering-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
-            '        elif baseline_info.get("verdict") == "FAIL" '
-            "and candidate_suite_passed:\n"
+            "        elif (\n"
+            '            baseline_info.get("verdict") == "FAIL"\n'
+            "            and candidate_suite_passed\n"
+            "        ):\n"
         ),
         after=(
-            '        elif baseline_info.get("verdict") == "FAIL" and v == PASS:\n'
+            "        elif (\n"
+            '            baseline_info.get("verdict") == "FAIL"\n'
+            "            and verdict == PASS\n"
+            "        ):\n"
         ),
         test=(
             "tests/test_diff_coverage_trust.py::"
@@ -3011,17 +3019,145 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-pack-baseline-phase-selection-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
             "    candidate_suite_passed = (\n"
-            "        repo_suite_pass_value is True if repo_suite_completed "
-            "else core_verdict_passed\n"
+            "        repo_suite_pass_value is True\n"
+            "        if repo_suite_completed\n"
+            "        else core_verdict_passed\n"
             "    )\n"
         ),
         after="    candidate_suite_passed = core_verdict_passed\n",
         test=(
             "tests/test_record_verifier.py::"
             "test_pack_failure_preserves_repo_suite_baseline_effect"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-baseline-after-coverage-bypass",
+        path="evoom_guard/application/repo_finalization.py",
+        before=(
+            "        and candidate_suite_completed\n"
+            '        and request.isolation == "subprocess"\n'
+        ),
+        after=(
+            "        and candidate_suite_completed\n"
+            "        and verdict == PASS\n"
+            '        and request.isolation == "subprocess"\n'
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_coverage_demotion_does_not_skip_baseline"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-live-baseline-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            baseline_runner_provider=lambda: _run_baseline_suite,\n",
+        after=(
+            "            baseline_runner_provider=(\n"
+            "                lambda runner=_run_baseline_suite: runner\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_repo_finalization_preserves_live_provider_lookup"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-live-attestation-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            attestation_builder_provider=lambda: _build_attestation,\n",
+        after=(
+            "            attestation_builder_provider=(\n"
+            "                lambda builder=_build_attestation: builder\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_repo_finalization_preserves_live_provider_lookup"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-live-profile-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            runtime_assurance_builder_provider="
+            "lambda: _assurance_profile,\n"
+        ),
+        after=(
+            "            runtime_assurance_builder_provider=(\n"
+            "                lambda builder=_assurance_profile: builder\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_repo_finalization_preserves_live_provider_lookup"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-live-shortfall-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            assurance_shortfall_provider="
+            "lambda: _assurance_shortfall,\n"
+        ),
+        after=(
+            "            assurance_shortfall_provider=(\n"
+            "                lambda evaluator=_assurance_shortfall: evaluator\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_repo_finalization_preserves_live_provider_lookup"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-trusted-binding-precedence-bypass",
+        path="evoom_guard/application/repo_finalization.py",
+        before='            "base_sha": request.base_sha,\n',
+        after='            "base_sha": attestation_art.get("base_sha"),\n',
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_trusted_context_overrides_raw_artifact_values"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-pack-presence-probe-bypass",
+        path="evoom_guard/application/repo_finalization.py",
+        before=(
+            "            if (\n"
+            "                present is None\n"
+            "                and request.verification_evidence.outcome "
+            '== "pack_invalid"\n'
+            "            ):\n"
+        ),
+        after=(
+            "            if False and (\n"
+            "                present is None\n"
+            "                and request.verification_evidence.outcome "
+            '== "pack_invalid"\n'
+            "            ):\n"
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_pack_presence_probe_precedes_attestation"
+        ),
+    ),
+    Mutation(
+        name="repo-finalization-coverage-identity-copy",
+        path="evoom_guard/application/repo_finalization.py",
+        before="        diff_coverage=coverage_evidence,\n",
+        after=(
+            "        diff_coverage=(\n"
+            "            dict(coverage_evidence)\n"
+            "            if coverage_evidence is not None\n"
+            "            else None\n"
+            "        ),\n"
+        ),
+        test=(
+            "tests/test_repo_finalization_characterization.py::"
+            "test_repo_finalization_preserves_live_provider_lookup"
         ),
     ),
     Mutation(
@@ -3296,14 +3432,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-setup-forwarding-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
-            "            setup_command=setup_command, "
-            "setup_output_globs=setup_output_globs,\n"
+            "            deleted=tuple(request.safe_deleted_paths),\n"
+            "            test_command=request.test_command,\n"
+            "            setup_command=request.setup_command,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
         ),
         after=(
-            "            setup_command=None, "
-            "setup_output_globs=setup_output_globs,\n"
+            "            deleted=tuple(request.safe_deleted_paths),\n"
+            "            test_command=request.test_command,\n"
+            "            setup_command=None,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
         ),
         test=(
             "tests/test_diff_coverage_trust.py::"
@@ -3392,18 +3532,18 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-memory-policy-forwarding-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/repo_finalization.py",
         before=(
-            "            setup_command=setup_command, "
-            "setup_output_globs=setup_output_globs,\n"
-            "            timeout=timeout, mem_limit_mb=mem_limit_mb,\n"
-            "            file_blocks=file_blocks,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
+            "            timeout=request.timeout,\n"
+            "            mem_limit_mb=request.mem_limit_mb,\n"
+            "            file_blocks=request.file_blocks,\n"
         ),
         after=(
-            "            setup_command=setup_command, "
-            "setup_output_globs=setup_output_globs,\n"
-            "            timeout=timeout, mem_limit_mb=1024,\n"
-            "            file_blocks=file_blocks,\n"
+            "            setup_output_globs=request.setup_output_globs,\n"
+            "            timeout=request.timeout,\n"
+            "            mem_limit_mb=1024,\n"
+            "            file_blocks=request.file_blocks,\n"
         ),
         test=(
             "tests/test_diff_coverage_trust.py::"

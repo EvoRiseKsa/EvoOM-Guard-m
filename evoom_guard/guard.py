@@ -75,6 +75,12 @@ from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
     TAMPER_OUTCOME_REASON_POLICY,
 )
+from evoom_guard.application.repo_finalization import (
+    RepoCoverageCollector,
+    RepoFinalizationInput,
+    RepoFinalizationServices,
+    finalize_repo_verification,
+)
 from evoom_guard.application.request_preparation import (
     GuardRequestPreparationInput,
     GuardRequestPreparationServices,
@@ -425,6 +431,14 @@ def changed_paths(candidate: str, file_blocks: dict[str, str] | None = None) -> 
     blocks = parse_file_blocks(candidate)
     patches = parse_patch_blocks(candidate)
     return sorted(set(blocks) | {pb.path for pb in patches})
+
+
+def _repo_coverage_collector() -> RepoCoverageCollector:
+    """Resolve the historical local-import coverage seam only when reached."""
+
+    from evoom_guard.evidence import collect_diff_coverage
+
+    return collect_diff_coverage
 
 
 def guard(
@@ -1200,233 +1214,64 @@ def guard(
         diagnostics=diagnostics,
         evidence=verification_evidence,
     )
-    initial_decision = decision_pipeline.decision
-    current_decision = initial_decision
-    v = current_decision.verdict
-    code = current_decision.reason_code
-    reason = current_decision.reason
-
-    # Preserve both layers before later evidence gates can demote the top-level
-    # verdict. Coverage gates the full core verdict. Baseline is narrower:
-    # ``scope=repo_suite_only`` compares the pristine suite with the candidate's
-    # repo phase, even when a separately composed verifier pack later fails.
-    core_verdict_completed = v in (PASS, FAIL)
-    core_verdict_passed = v == PASS
-    repo_suite_pass_value = (
-        verification_evidence.repo_suite.passed
-        if verification_evidence is not None
-        else None
-    )
-    repo_suite_completed = (
-        verification_evidence is not None
-        and verification_evidence.repo_suite.started is True
-        and verification_evidence.repo_suite.completed is True
-        and isinstance(repo_suite_pass_value, bool)
-    )
-    candidate_suite_completed = repo_suite_completed or core_verdict_completed
-    candidate_suite_passed = (
-        repo_suite_pass_value is True if repo_suite_completed else core_verdict_passed
-    )
-
-    # Changed-line coverage evidence (opt-in; one extra suite run). Only when the
-    # suite actually ran — a REJECTED/ERROR verdict has nothing to measure. A
-    # request the container judges cannot fulfil degrades EXPLICITLY (1.7).
-    coverage_evidence: dict[str, Any] | None = None
-    if diff_coverage and isolation != "subprocess":
-        coverage_evidence = {
-            "measured": False,
-            "note": f"changed-line coverage runs under the subprocess judge "
-                    f"only; isolation {isolation!r} did not measure it",
-        }
-    if diff_coverage and core_verdict_completed and isolation == "subprocess":
-        from evoom_guard.evidence import collect_diff_coverage
-
-        coverage_evidence = collect_diff_coverage(
-            repo_path, candidate,
-            deleted=tuple(safe_deleted), test_command=test_command,
-            setup_command=setup_command, setup_output_globs=setup_output_globs,
-            timeout=timeout, mem_limit_mb=mem_limit_mb,
-            file_blocks=file_blocks,
-            require_passing_suite=(
-                core_verdict_passed and min_diff_coverage is not None
-            ),
-        )
-        decision_pipeline = decision_pipeline.apply_diff_coverage(
-            coverage_evidence=coverage_evidence,
-            min_diff_coverage=min_diff_coverage,
-        )
-        current_decision = decision_pipeline.decision
-        v = current_decision.verdict
-        code = current_decision.reason_code
-        reason = current_decision.reason
-
-    # Baseline differential evidence (opt-in; one extra suite run on the
-    # PRISTINE base — no candidate applied). "all tests pass on head" does not
-    # by itself show the change FIXED anything: the base may already have been
-    # green. The baseline run makes the counterfactual measurable:
-    #   baseline FAIL → candidate PASS, same tests/policy/env  ⇒ repair_effect
-    #   "demonstrated". Anything else ⇒ "not_demonstrated" (or "unmeasured"
-    # when the baseline produced no clean verdict). Evidence only, unless
-    # require_demonstrated_fix demotes an undemonstrated PASS to FAIL.
-    baseline_info: dict[str, Any] | None = None
-    if baseline_evidence and isolation != "subprocess":
-        baseline_info = {
-            "verdict": None, "tests_passed": None, "tests_total": None,
-            "repair_effect": "unmeasured", "scope": "unsupported_mode",
-            "note": f"baseline differential evidence runs under the subprocess "
-                    f"judge only; isolation {isolation!r} did not measure it",
-        }
-    if (
-        (baseline_evidence or require_demonstrated_fix)
-        and candidate_suite_completed
-        and isolation == "subprocess"
-    ):
-        baseline_info = _run_baseline_suite(
-            repo_path, test_command=test_command, setup_command=setup_command,
+    finalization = finalize_repo_verification(
+        RepoFinalizationInput(
+            pipeline=decision_pipeline,
+            verification_evidence=verification_evidence,
+            raw_artifact=art,
+            run_suite=run_suite,
+            repository_path=repo_path,
+            candidate_text=candidate,
+            safe_deleted_paths=safe_deleted,
+            test_command=test_command,
+            setup_command=setup_command,
             setup_output_globs=setup_output_globs,
-            timeout=timeout, mem_limit_mb=mem_limit_mb,
+            file_blocks=file_blocks,
+            timeout=timeout,
+            mem_limit_mb=mem_limit_mb,
             strict_harness=strict_harness,
-        )
-        if baseline_info.get("verdict") == "NO_CLEAN_VERDICT":
-            baseline_info["repair_effect"] = "unmeasured"
-        elif baseline_info.get("verdict") == "FAIL" and candidate_suite_passed:
-            baseline_info["repair_effect"] = "demonstrated"
-        else:
-            baseline_info["repair_effect"] = "not_demonstrated"
-        # Honest scope: the baseline runs the repo's own suite ONLY —
-        # the candidate-only verifier-pack phase is NOT run here,
-        # so with a pack the two runs are not judged by identical check sets.
-        baseline_info["scope"] = "repo_suite_only"
-        baseline_info["note"] = (
-            "counterfactual suite-transition evidence, not a causal proof: the "
-            "same judge and environment ran the REPO suite on the pristine base "
-            "and on the candidate; 'demonstrated' means the base failed and the "
-            "candidate passed. A verifier pack (if any) is exercised only on "
-            "the candidate run — see scope."
-        )
-        decision_pipeline = decision_pipeline.apply_demonstrated_fix(
-            baseline_evidence=baseline_info,
+            isolation=isolation,
+            judgment_mode="blackbox" if blackbox else "repo",
+            verifier_pack_path=verifier_pack,
+            collect_diff_coverage=diff_coverage,
+            min_diff_coverage=min_diff_coverage,
+            collect_baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
-        )
-        current_decision = decision_pipeline.decision
-        v = current_decision.verdict
-        code = current_decision.reason_code
-        reason = current_decision.reason
-
-    if run_suite:
-        assert verification_evidence is not None
-        execution_state = verification_evidence.execution.execution_state
-        execution_phase = verification_evidence.execution.execution_phase
-        test_command_started = (
-            verification_evidence.execution.test_command_started
-        )
-        delivered_isolation = (
-            verification_evidence.execution.delivered_isolation
-        )
-    else:
-        execution_state = EXECUTION_STATIC_GATE
-        execution_phase = "pre_gate"
-        test_command_started = False
-        delivered_isolation = "not_run"
-
-    effective_candidate_isolation = (
-        "subprocess"
-        if (
-            verification_evidence is not None
-            and verification_evidence.setup_isolation == "subprocess_host_opt_in"
-        )
-        else delivered_isolation
-    )
-
-    pack_evidence: dict[str, Any] | None = None
-    if verifier_pack:
-        if verification_evidence is None:
-            pack_evidence = {
-                "present": None,
-                "snapshot_sha256": None,
-                "started": False,
-                "completed": False,
-                "outcome": None,
-            }
-        else:
-            present = verification_evidence.verifier_pack.present
-            if present is None and verification_evidence.verifier_pack.sha256:
-                present = True
-            if present is None and verification_evidence.outcome == "pack_invalid":
-                present = os.path.isdir(verifier_pack)
-            pack_evidence = {
-                "present": present,
-                "snapshot_sha256": verification_evidence.verifier_pack.sha256,
-                "started": verification_evidence.execution.verifier_pack_started,
-                "completed": verification_evidence.execution.verifier_pack_completed,
-                "outcome": verification_evidence.outcome,
-            }
-
-    judgment_mode = "blackbox" if blackbox else "repo"
-    attestation_art = dict(art)
-    if verification_evidence is not None:
-        attestation_art.update(
-            repo_attestation_evidence_payload(verification_evidence)
-        )
-    attestation_art.update(
-        {
-            "execution_state": execution_state,
-            "execution_phase": execution_phase,
-            "test_command_started": test_command_started,
-            "delivered_isolation": delivered_isolation,
-            "effective_candidate_isolation": effective_candidate_isolation,
-            # Repo-native verdicts are revision-bound too (1.6): black-box was
-            # the only mode carrying base/head before, which left the common
-            # Action path's signed verdicts unbound from the commit they judged.
-            "base_sha": base_sha,
-            "head_sha": head_sha,
-            "base_tree_sha": base_tree_sha,
-            "head_tree_sha": head_tree_sha,
-            "policy_id": policy_id,
-            "policy_version": policy_version,
-        }
-    )
-    attestation = _build_attestation(
-        candidate, safe_deleted=safe_deleted, test_command=test_command,
-        effective_policy=effective_policy, art=attestation_art,
-        mode=judgment_mode,
-    )
-
-    assurance = (
-        _assurance_profile(
-            delivered_isolation,
-            verifier_pack,
-            setup_isolation=(
-                verification_evidence.setup_isolation
-                if verification_evidence is not None
-                else None
+            require_report_integrity=require_report_integrity,
+            require_candidate_isolation=require_candidate_isolation,
+            effective_policy=effective_policy,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+            policy_id=policy_id,
+            policy_version=policy_version,
+        ),
+        services=RepoFinalizationServices(
+            coverage_collector_provider=lambda: _repo_coverage_collector(),
+            baseline_runner_provider=lambda: _run_baseline_suite,
+            attestation_builder_provider=lambda: _build_attestation,
+            runtime_assurance_builder_provider=lambda: _assurance_profile,
+            static_assurance_builder_provider=lambda: _static_assurance_profile,
+            assurance_shortfall_provider=lambda: _assurance_shortfall,
+            attestation_evidence_projector_provider=(
+                lambda: repo_attestation_evidence_payload
             ),
-            runtime_continuity=(
-                verification_evidence.runtime.continuity
-                if verification_evidence is not None
-                else None
-            ),
-            execution_state=execution_state,
-            execution_phase=execution_phase,
-            test_command_started=test_command_started,
-            pack_evidence=pack_evidence,
-        )
-        if run_suite
-        else _static_assurance_profile(verifier_pack)
+            pack_directory_predicate=lambda path: os.path.isdir(path),
+        ),
     )
-    decision_pipeline = decision_pipeline.apply_assurance(
-        assurance=assurance,
-        execution_state=execution_state,
-        execution_requested=run_suite,
-        require_report_integrity=require_report_integrity,
-        require_candidate_isolation=require_candidate_isolation,
-        shortfall_evaluator=_assurance_shortfall,
-        eager_shortfall=False,
-    )
-    current_decision = decision_pipeline.decision
+    current_decision = finalization.decision
     v = current_decision.verdict
     code = current_decision.reason_code
     reason = current_decision.reason
+    execution_state = finalization.execution_state
+    execution_phase = finalization.execution_phase
+    test_command_started = finalization.test_command_started
+    effective_candidate_isolation = finalization.effective_candidate_isolation
+    coverage_evidence = cast(dict[str, Any] | None, finalization.diff_coverage)
+    baseline_info = cast(dict[str, Any] | None, finalization.baseline)
+    attestation = cast(dict[str, Any], finalization.attestation)
+    assurance = cast(dict[str, Any], finalization.assurance)
 
     return GuardResult(
         verdict=v,
