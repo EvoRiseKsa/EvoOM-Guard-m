@@ -234,11 +234,17 @@ def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase(
     )
     assert len(setup_services) == 1
     service_keywords = {
-        keyword.arg: ast.unparse(keyword.value)
+        keyword.arg: keyword.value
         for keyword in setup_services[0].keywords
         if keyword.arg is not None
     }
-    assert service_keywords.get("strict_harness") == "lambda: self.strict_harness"
+    strict_harness_provider = service_keywords.get("strict_harness")
+    assert isinstance(strict_harness_provider, ast.Lambda)
+    assert not strict_harness_provider.args.args
+    assert ast.dump(strict_harness_provider.body, include_attributes=False) == ast.dump(
+        ast.parse("self.strict_harness", mode="eval").body,
+        include_attributes=False,
+    )
 
 
 def test_strict_baseline_requires_group_proof_for_every_host_phase() -> None:
