@@ -163,8 +163,12 @@ from evoom_guard.pack_manifest import (
     verify_pack_snapshot,
 )
 from evoom_guard.runtime_identity import (
-    RuntimeIdentity,
-    RuntimeIdentityError,
+    RuntimeIdentity as RuntimeIdentity,
+)
+from evoom_guard.runtime_identity import (
+    RuntimeIdentityError as RuntimeIdentityError,
+)
+from evoom_guard.runtime_identity import (
     capture_runtime_identity,
     verify_runtime_identity,
 )
@@ -305,6 +309,12 @@ from evoom_guard.verifiers.repo_phase_contracts import (
     compose_repo_and_pack,
     evaluate_pack_phase,
     evaluate_repo_phase,
+)
+from evoom_guard.verifiers.repo_runtime_continuity import (
+    RepoRuntimeContinuity,
+    RepoRuntimeContinuityRequest,
+    RepoRuntimeContinuityServices,
+    runtime_identity_evidence_payload,
 )
 from evoom_guard.verifiers.repo_setup import (
     RepoSetupRequest,
@@ -1147,50 +1157,48 @@ class RepoVerifier:
             # runtime tree the repo suite received. Setup fidelity deliberately
             # permits new dependency/build outputs; this second identity includes
             # all of them and never applies setup_output_globs.
-            candidate_runtime_baseline: RuntimeIdentity | None = None
-            runtime_identity_elapsed_ms = 0.0
-            runtime_continuity = "not_applicable"
-            runtime_delivery = "not_applicable"
-
-            def runtime_evidence(*, status: str | None = None) -> dict[str, Any]:
-                """Describe runtime evidence truthfully on every exit path."""
-                baseline = candidate_runtime_baseline
-                return {
-                    "runtime_tree_sha256": baseline.sha256 if baseline else None,
-                    "runtime_tree_digest_format": (
-                        baseline.digest_format if baseline else None
+            runtime_continuity = RepoRuntimeContinuity(
+                RepoRuntimeContinuityRequest(
+                    candidate_copy=copy,
+                    pack_configured=bool(pack_dir),
+                    container_mode=container_mode,
+                    setup_configured=bool(setup_cmd_raw),
+                    trust_setup_on_host=(
+                        self.trust_setup_on_host
+                        if pack_dir and container_mode and bool(setup_cmd_raw)
+                        else False
                     ),
-                    "runtime_tree_entries": baseline.entries if baseline else None,
-                    "runtime_tree_bytes": baseline.regular_bytes if baseline else None,
-                    "runtime_identity_elapsed_ms": runtime_identity_elapsed_ms,
-                    "runtime_continuity": status or runtime_continuity,
-                }
+                ),
+                RepoRuntimeContinuityServices(
+                    trace=trace,
+                    capture_identity=lambda: capture_runtime_identity,
+                    verify_identity=lambda: verify_runtime_identity,
+                ),
+            )
 
-            if pack_dir:
-                trace.execution_phase = "runtime_verification"
-                runtime_delivery = (
-                    "read_only_enforced"
-                    if container_mode
-                    and not (bool(setup_cmd_raw) and self.trust_setup_on_host)
-                    else "snapshot_boundary_checked"
+            def runtime_evidence() -> dict[str, Any]:
+                """Describe runtime evidence truthfully on every exit path."""
+                return cast(
+                    dict[str, Any],
+                    runtime_identity_evidence_payload(
+                        runtime_continuity.evidence()
+                    ),
                 )
-                runtime_continuity = "unavailable"
-                try:
-                    candidate_runtime_baseline = capture_runtime_identity(copy)
-                    runtime_identity_elapsed_ms += candidate_runtime_baseline.elapsed_ms
-                except RuntimeIdentityError as exc:
+
+            if runtime_continuity.required:
+                capture_failure = runtime_continuity.capture_baseline()
+                if capture_failure is not None:
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"candidate runtime identity failed: {exc}",
+                        diagnostics=capture_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "runtime_identity_unavailable",
                             "setup_isolation": setup_isolation,
-                            **runtime_evidence(status="unavailable"),
+                            **runtime_evidence(),
                         },
                     )
-                runtime_continuity = "incomplete"
 
             # Execute the repository suite first, but preserve runtime identity
             # verification below before any JUnit report is interpreted.
@@ -1247,43 +1255,41 @@ class RepoVerifier:
             )
             assert suite_isolation_evidence is not None
 
-            if candidate_runtime_baseline is not None:
-                trace.execution_phase = "runtime_verification"
-                try:
-                    candidate_after_suite, candidate_changes = verify_runtime_identity(
-                        copy, candidate_runtime_baseline
-                    )
-                    runtime_identity_elapsed_ms += candidate_after_suite.elapsed_ms
-                except RuntimeIdentityError as exc:
+            if runtime_continuity.baseline is not None:
+                runtime_failure = runtime_continuity.verify_after_suite()
+                if (
+                    runtime_failure is not None
+                    and runtime_failure.kind == "verification_error"
+                ):
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"candidate runtime identity verification failed: {exc}",
+                        diagnostics=runtime_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "candidate_tree_changed",
                             "tamper": True,
                             "setup_isolation": setup_isolation,
-                            **runtime_evidence(status="verification_failed"),
+                            **runtime_evidence(),
                         },
                     )
-                if candidate_changes:
+                if runtime_failure is not None:
+                    assert runtime_failure.kind == "suite_drift"
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=(
-                            "repo suite modified the candidate tree before verifier-pack "
-                            "execution: " + ", ".join(candidate_changes[:20])
-                        ),
+                        diagnostics=runtime_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "candidate_tree_changed",
                             "tamper": True,
-                            "candidate_fidelity_changes": candidate_changes,
+                            "candidate_fidelity_changes": list(
+                                runtime_failure.changes
+                            ),
                             "verifier_pack_sha256": pack_sha256,
                             "verifier_pack_manifest": pack_manifest,
                             "setup_isolation": setup_isolation,
-                            **runtime_evidence(status="verification_failed"),
+                            **runtime_evidence(),
                         },
                     )
 
@@ -1434,45 +1440,43 @@ class RepoVerifier:
                             **runtime_evidence(),
                         },
                     )
-                assert candidate_runtime_baseline is not None
-                try:
-                    candidate_after_pack, candidate_changes = verify_runtime_identity(
-                        copy, candidate_runtime_baseline
-                    )
-                    runtime_identity_elapsed_ms += candidate_after_pack.elapsed_ms
-                except RuntimeIdentityError as exc:
+                assert runtime_continuity.baseline is not None
+                runtime_failure = runtime_continuity.verify_after_pack()
+                if (
+                    runtime_failure is not None
+                    and runtime_failure.kind == "verification_error"
+                ):
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"candidate runtime identity verification failed: {exc}",
+                        diagnostics=runtime_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "candidate_tree_changed",
                             "tamper": True,
                             "setup_isolation": setup_isolation,
-                            **runtime_evidence(status="verification_failed"),
+                            **runtime_evidence(),
                         },
                     )
-                if candidate_changes:
+                if runtime_failure is not None:
+                    assert runtime_failure.kind == "pack_drift"
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=(
-                            "verifier-pack execution modified the candidate tree: "
-                            + ", ".join(candidate_changes[:20])
-                        ),
+                        diagnostics=runtime_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "candidate_tree_changed",
                             "tamper": True,
-                            "candidate_fidelity_changes": candidate_changes,
+                            "candidate_fidelity_changes": list(
+                                runtime_failure.changes
+                            ),
                             "verifier_pack_sha256": pack_sha256,
                             "verifier_pack_manifest": pack_manifest,
                             "setup_isolation": setup_isolation,
-                            **runtime_evidence(status="verification_failed"),
+                            **runtime_evidence(),
                         },
                     )
-                runtime_continuity = runtime_delivery
                 pack_phase_result = interpret_repo_pack(
                     RepoPackInterpretationRequest(
                         completed=completed_pack,

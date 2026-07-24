@@ -184,8 +184,8 @@ remain in their established facades.
 - Repository-suite host/docker/gVisor execution and judge-owned JUnit
   interpretation now live in `verifiers/repo_suite.py` behind separate
   immutable contracts and frozen branch/order/provider-timing vectors.
-  `RepoVerifier` retains the intervening runtime-tree continuity check plus
-  sticky evidence projection and workspace cleanup.
+  Runtime-tree continuity is delegated to the owner described below;
+  `RepoVerifier` retains sticky evidence projection and workspace cleanup.
 - Repository-candidate parsing/admission, copy/materialization coordination,
   and post-pack safe deletion now live in
   `verifiers/repo_candidate.py`. Immutable XOR contracts and live effect
@@ -193,6 +193,14 @@ remain in their established facades.
   admission → RepoVerifier allocation → copy/materialization → RepoVerifier
   pack intake → deletion → execution. Allocation, pack handling, runtime
   identity, sticky projection, and final cleanup remain in `RepoVerifier`.
+- The mandatory-pack runtime-tree baseline, suite/pack drift checks, elapsed
+  identity-scan accounting, continuity state, and immutable runtime evidence
+  projection now live in `verifiers/repo_runtime_continuity.py`. Its providers
+  are resolved at each historical operation, the no-pack path performs no
+  identity lookup, its phase state cannot skip the suite checkpoint or recover
+  from failure, and trusted host setup cannot be mislabeled as a read-only
+  container boundary. Pack-snapshot checks, sticky evidence projection, final
+  composition, and workspace cleanup remain in `RepoVerifier`.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction
@@ -226,10 +234,11 @@ remain in their established facades.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: split the remaining repository workspace-allocation,
-  runtime-identity continuity, and sticky-projection responsibilities in
-  independent characterized slices. Candidate coordination, repository-suite,
-  and verifier-pack execution owners are complete.
+- Pending: split the remaining repository workspace allocation,
+  pack-snapshot coordination, sticky projection, final composition, and
+  cleanup responsibilities in independent characterized slices. Candidate
+  coordination, repository-suite, verifier-pack execution, and runtime
+  continuity owners are complete.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.
