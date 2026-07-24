@@ -14,6 +14,7 @@ from evoom_guard.admission import agent_change
 from tests.cli_agent_change_command_characterization_harness import (
     CASE_NAMES,
     SCHEMA_VERSION,
+    _normalized,
     canonical_json,
     capture_case,
 )
@@ -54,6 +55,20 @@ def test_machine_report_schema_order_is_canonical(case_name: str) -> None:
     assert len(messages) == 1
     payload = json.loads(messages[0])
     assert messages[0] == json.dumps(payload, indent=2, sort_keys=True)
+
+
+def test_characterization_paths_are_canonical_across_platform_encodings() -> None:
+    root = r"C:\work\root"
+    raw_path = root + r"\nested\file.json"
+    embedded = json.dumps({"path": raw_path}, indent=2, sort_keys=True)
+
+    assert _normalized(raw_path, root) == "<ROOT>/nested/file.json"
+    assert _normalized(embedded, root) == json.dumps(
+        {"path": "<ROOT>/nested/file.json"},
+        indent=2,
+        sort_keys=True,
+    )
+    assert _normalized("/tmp/root/nested/file.json", "/tmp/root") == ("<ROOT>/nested/file.json")
 
 
 def test_derive_dependencies_snapshot_at_entry_but_reporter_resolves_late(

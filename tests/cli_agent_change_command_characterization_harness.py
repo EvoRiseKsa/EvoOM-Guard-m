@@ -47,8 +47,18 @@ def canonical_json(value: Any) -> str:
 
 def _normalized(value: object, root: str) -> object:
     if isinstance(value, str):
-        escaped_root = root.replace("\\", "\\\\")
-        return value.replace(escaped_root, "<ROOT>").replace(root, "<ROOT>").replace("\\", "/")
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, (dict, list)):
+            return json.dumps(
+                _normalized(decoded, root),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        return value.replace(root, "<ROOT>").replace("\\", "/")
     if isinstance(value, dict):
         return {
             str(key): _normalized(item, root)
