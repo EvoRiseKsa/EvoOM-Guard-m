@@ -395,12 +395,14 @@ def test_atomic_writer_preserves_primary_when_close_also_fails(
     real_fdopen = guard_output.os.fdopen
 
     class CloseFailureStream:
-        def __init__(self, descriptor: int) -> None:
+        def __init__(self, descriptor: int, *, closefd: bool) -> None:
+            assert closefd is False
             self._stream = real_fdopen(
                 descriptor,
                 "w",
                 encoding="utf-8",
                 newline=None,
+                closefd=closefd,
             )
 
         def write(self, value: str) -> int:
@@ -419,7 +421,10 @@ def test_atomic_writer_preserves_primary_when_close_also_fails(
     monkeypatch.setattr(
         guard_output.os,
         "fdopen",
-        lambda descriptor, *_args, **_kwargs: CloseFailureStream(descriptor),
+        lambda descriptor, *_args, **kwargs: CloseFailureStream(
+            descriptor,
+            closefd=kwargs["closefd"],
+        ),
     )
     if primary_point == "fsync":
         def reject_fsync(_descriptor: int) -> None:
@@ -440,26 +445,27 @@ def test_atomic_writer_preserves_primary_when_close_also_fails(
 
     notes = getattr(captured.value, "__notes__", [])
     if notes:
-        assert any("atomic output close failed" in note for note in notes)
+        assert any("atomic output stream close failed" in note for note in notes)
     assert _atomic_temps(tmp_path) == []
 
 
-def test_atomic_cleanup_never_closes_a_reused_stream_descriptor(
+def test_atomic_close_after_wrapper_close_never_closes_a_victim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     real_fdopen = guard_output.os.fdopen
     victim_path = tmp_path / "victim.bin"
-    reused_descriptors: list[int] = []
+    victim_descriptors: list[int] = []
 
-    class CloseThenReuseStream:
-        def __init__(self, descriptor: int) -> None:
+    class CloseAfterWrapperCloseStream:
+        def __init__(self, descriptor: int, *, closefd: bool) -> None:
             self._descriptor = descriptor
             self._stream = real_fdopen(
                 descriptor,
                 "w",
                 encoding="utf-8",
                 newline=None,
+                closefd=closefd,
             )
 
         def write(self, value: str) -> int:
@@ -473,21 +479,31 @@ def test_atomic_cleanup_never_closes_a_reused_stream_descriptor(
 
         def close(self) -> None:
             self._stream.close()
+            try:
+                os.fstat(self._descriptor)
+            except OSError:
+                raw_descriptor_is_open = False
+            else:
+                raw_descriptor_is_open = True
             source_descriptor = os.open(
                 victim_path,
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
                 0o600,
             )
-            if source_descriptor != self._descriptor:
+            if not raw_descriptor_is_open and source_descriptor != self._descriptor:
                 os.dup2(source_descriptor, self._descriptor)
                 os.close(source_descriptor)
-            reused_descriptors.append(self._descriptor)
+                source_descriptor = self._descriptor
+            victim_descriptors.append(source_descriptor)
             raise OSError("secondary close failure after descriptor reuse")
 
     monkeypatch.setattr(
         guard_output.os,
         "fdopen",
-        lambda descriptor, *_args, **_kwargs: CloseThenReuseStream(descriptor),
+        lambda descriptor, *_args, **kwargs: CloseAfterWrapperCloseStream(
+            descriptor,
+            closefd=kwargs["closefd"],
+        ),
     )
 
     def reject_write(_stream: TextIO) -> None:
@@ -504,9 +520,9 @@ def test_atomic_cleanup_never_closes_a_reused_stream_descriptor(
 
     notes = getattr(captured.value, "__notes__", [])
     if notes:
-        assert any("atomic output close failed" in note for note in notes)
-    assert len(reused_descriptors) == 1
-    victim_descriptor = reused_descriptors[0]
+        assert any("atomic output stream close failed" in note for note in notes)
+    assert len(victim_descriptors) == 1
+    victim_descriptor = victim_descriptors[0]
     try:
         os.write(victim_descriptor, b"victim-survived")
     finally:
@@ -516,6 +532,95 @@ def test_atomic_cleanup_never_closes_a_reused_stream_descriptor(
             pass
 
     assert victim_path.read_bytes() == b"victim-survived"
+    assert _atomic_temps(tmp_path) == []
+
+
+def test_atomic_close_before_wrapper_close_releases_raw_handle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_fdopen = guard_output.os.fdopen
+    raw_descriptors: list[int] = []
+
+    class CloseBeforeWrapperCloseStream:
+        def __init__(self, descriptor: int, *, closefd: bool) -> None:
+            assert closefd is False
+            raw_descriptors.append(descriptor)
+            self._stream = real_fdopen(
+                descriptor,
+                "w",
+                encoding="utf-8",
+                newline=None,
+                closefd=closefd,
+            )
+
+        def write(self, value: str) -> int:
+            return self._stream.write(value)
+
+        def flush(self) -> None:
+            self._stream.flush()
+
+        def fileno(self) -> int:
+            return self._stream.fileno()
+
+        def close(self) -> None:
+            raise OSError("close failed before wrapper release")
+
+    monkeypatch.setattr(
+        guard_output.os,
+        "fdopen",
+        lambda descriptor, *_args, **kwargs: CloseBeforeWrapperCloseStream(
+            descriptor,
+            closefd=kwargs["closefd"],
+        ),
+    )
+
+    with pytest.raises(OSError, match="close failed before wrapper release"):
+        guard_output.write_markdown(
+            "complete",
+            str(tmp_path / "report.md"),
+        )
+
+    assert len(raw_descriptors) == 1
+    with pytest.raises(OSError):
+        os.fstat(raw_descriptors[0])
+    assert not (tmp_path / "report.md").exists()
+    assert _atomic_temps(tmp_path) == []
+
+
+def test_atomic_raw_descriptor_close_is_attempted_only_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_close = guard_output.os.close
+    close_calls: list[int] = []
+
+    def close_then_fail(descriptor: int) -> None:
+        close_calls.append(descriptor)
+        real_close(descriptor)
+        raise OSError("simulated raw close reporting failure")
+
+    monkeypatch.setattr(guard_output.os, "close", close_then_fail)
+
+    def reject_write(_stream: TextIO) -> None:
+        raise RuntimeError("primary serialization failure")
+
+    with pytest.raises(
+        RuntimeError,
+        match="primary serialization failure",
+    ) as captured:
+        guard_output._atomic_write(
+            str(tmp_path / "report.md"),
+            reject_write,
+        )
+
+    assert len(close_calls) == 1
+    notes = getattr(captured.value, "__notes__", [])
+    if notes:
+        assert any(
+            "atomic output raw descriptor close failed" in note
+            for note in notes
+        )
     assert _atomic_temps(tmp_path) == []
 
 

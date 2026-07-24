@@ -224,13 +224,40 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="guard-output-stream-descriptor-ownership-bypass",
+        name="guard-output-stream-closefd-ownership-bypass",
         path="evoom_guard/integrations/guard_output.py",
-        before="        descriptor = -1\n",
-        after="        if False:\n            descriptor = -1\n",
+        before="            closefd=False,\n",
+        after="            closefd=True,\n",
         test=(
             "tests/test_guard_output_security.py::"
-            "test_atomic_cleanup_never_closes_a_reused_stream_descriptor"
+            "test_atomic_close_after_wrapper_close_never_closes_a_victim"
+        ),
+    ),
+    Mutation(
+        name="guard-output-raw-descriptor-close-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            os.close(raw_descriptor)\n",
+        after="            if False:\n                os.close(raw_descriptor)\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_close_before_wrapper_close_releases_raw_handle"
+        ),
+    ),
+    Mutation(
+        name="guard-output-raw-descriptor-disarm-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before=(
+            "        raw_descriptor = descriptor\n"
+            "        descriptor = -1\n"
+            "        try:\n"
+        ),
+        after=(
+            "        raw_descriptor = descriptor\n"
+            "        try:\n"
+        ),
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_raw_descriptor_close_is_attempted_only_once"
         ),
     ),
     Mutation(
@@ -266,8 +293,8 @@ MUTATIONS = (
     Mutation(
         name="guard-output-close-primary-precedence-bypass",
         path="evoom_guard/integrations/guard_output.py",
-        before="            if primary is None:\n",
-        after="            if True:\n",
+        before="    if primary is None:\n",
+        after="    if True:\n",
         test=(
             "tests/test_guard_output_security.py::"
             "test_atomic_writer_preserves_primary_when_close_also_fails"

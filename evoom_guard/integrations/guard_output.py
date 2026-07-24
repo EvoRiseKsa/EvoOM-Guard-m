@@ -375,6 +375,20 @@ def _add_exception_note(primary: BaseException, note: str) -> None:
         add_note(note)
 
 
+def _preserve_primary(
+    primary: BaseException | None,
+    secondary: BaseException,
+    *,
+    label: str,
+) -> BaseException:
+    """Keep the first failure and attach every later close failure."""
+
+    if primary is None:
+        return secondary
+    _add_exception_note(primary, f"{label}: {secondary}")
+    return primary
+
+
 def _cleanup_atomic_temp(
     descriptor: int,
     temp_path: str,
@@ -407,8 +421,10 @@ def _atomic_write(path: str, writer: TextWriter) -> None:
     The temporary file is created exclusively in the destination directory.
     Existing non-regular and read-only leaves are rejected before staging and
     again immediately before replacement. Portable mode bits are carried from
-    an existing regular destination. The parent directory must be trusted and
-    quiescent; this function does not fsync it or claim crash/NFS durability.
+    an existing regular destination. The text wrapper never owns the raw file
+    descriptor; the writer closes that descriptor exactly once before cleanup.
+    The parent directory must be trusted and quiescent; this function does not
+    fsync it or claim crash/NFS durability.
     """
 
     initial_mode = _validate_output_destination(path)
@@ -429,8 +445,8 @@ def _atomic_write(path: str, writer: TextWriter) -> None:
             "w",
             encoding="utf-8",
             newline=None,
+            closefd=False,
         )
-        descriptor = -1
         primary: BaseException | None = None
         try:
             writer(stream)
@@ -441,13 +457,23 @@ def _atomic_write(path: str, writer: TextWriter) -> None:
         try:
             stream.close()
         except BaseException as close_failure:
-            if primary is None:
-                primary = close_failure
-            else:
-                _add_exception_note(
-                    primary,
-                    f"atomic output close failed: {close_failure}",
-                )
+            primary = _preserve_primary(
+                primary,
+                close_failure,
+                label="atomic output stream close failed",
+            )
+        del stream
+
+        raw_descriptor = descriptor
+        descriptor = -1
+        try:
+            os.close(raw_descriptor)
+        except BaseException as raw_close_failure:
+            primary = _preserve_primary(
+                primary,
+                raw_close_failure,
+                label="atomic output raw descriptor close failed",
+            )
         if primary is not None:
             raise primary.with_traceback(primary.__traceback__)
 

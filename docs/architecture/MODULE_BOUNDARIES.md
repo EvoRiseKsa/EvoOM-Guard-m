@@ -23,8 +23,8 @@
   portable mode bits on an existing regular file. The caller owns a trusted,
   quiescent parent directory; ACL/xattr/ownership metadata, parent-directory
   fsync, crash/NFS durability, and multi-file atomicity are outside this
-  boundary. Once `fdopen` succeeds, the stream owns its descriptor; cleanup
-  will not raw-close the former descriptor number after a close exception.
+  boundary. The `closefd=False` stream is only a text wrapper; the writer owns,
+  disarms, and closes the raw descriptor exactly once before unlink cleanup.
 
 ## Rule
 

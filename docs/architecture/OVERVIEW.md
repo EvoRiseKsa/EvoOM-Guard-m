@@ -186,9 +186,11 @@ destinations share one fsynced same-directory temporary-write plus
 atomic-replace boundary. Existing symlinks, directories, special files, and
 mode-bit read-only files are rejected before staging and immediately before
 replacement; an existing regular file's portable `rwx` mode is preserved.
-Descriptor ownership transfers to the stream immediately after `fdopen`;
-cleanup never raw-closes that former integer after a failed stream close,
-because the operating system may already have reused it.
+The text wrapper uses `closefd=False`, so the writer retains exclusive raw
+descriptor ownership. After wrapper close is attempted, the writer releases
+the wrapper reference, disarms the cleanup slot, and attempts raw close exactly
+once before unlink cleanup. This avoids both closing a reused descriptor and
+leaking a Windows temporary-file handle when wrapper close fails early.
 The parent directory remains a trusted, quiescent boundary between those two
 checks. Ownership, ACLs, xattrs, Windows security descriptors/alternate
 streams, and other non-portable metadata are not preserved. No parent-directory
