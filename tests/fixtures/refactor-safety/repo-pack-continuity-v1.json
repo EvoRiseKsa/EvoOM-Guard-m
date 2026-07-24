@@ -1,0 +1,14 @@
+{
+  "cases": {
+    "complete": {
+      "sha256": "fc089e301293de70a0c8587a46be177a19da2b5e4faca5b0f0c620f396d6a96f"
+    },
+    "post_execution_drift": {
+      "sha256": "d49cd841ce7d796411582c66ad0a0a74db37e0d1892d916856f4bf75b13214af"
+    },
+    "pre_execution_drift": {
+      "sha256": "f77cf3b0af905fd125ab46e35a37099dc9693374f22216fdf6be19e3f6a472b8"
+    }
+  },
+  "schema_version": "repo-pack-continuity-characterization-v1"
+}
