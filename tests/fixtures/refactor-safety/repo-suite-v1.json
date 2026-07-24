@@ -1,0 +1,56 @@
+{
+  "cases": {
+    "docker_containment_started": {
+      "sha256": "bee44b0f3641e8a80865d13950b91998b5d81ddff931e1681605863dda920051"
+    },
+    "docker_containment_unstarted": {
+      "sha256": "bf9d6b904d996b1a127ba9f32c66844aeb2223c1837ff8b9c0b8841d836c914f"
+    },
+    "docker_exit_125": {
+      "sha256": "17def272da0363ecbd33b814ce41b76fc59a4f9b4f8b0e1987d5a419e8ef4390"
+    },
+    "docker_junit_file_pass": {
+      "sha256": "afd4cbbbe884f30756123c83efc571969f49bac8b27012cfcab40f79fe45e568"
+    },
+    "docker_not_found": {
+      "sha256": "ad69b46d4b0b8424dac9384a4ef4937fe465783552f0e6861a0b769e1787aea2"
+    },
+    "docker_output_limit_started": {
+      "sha256": "a446ac5b4bfbf08fa75bb7b628667312f8370be6187c6066b7f5fd3132f05ccf"
+    },
+    "docker_output_limit_unstarted": {
+      "sha256": "681006cd49688d6f4b6c89ae01841c678a5f3308c9dd7c13e113dda1dab1bb08"
+    },
+    "docker_timeout_started": {
+      "sha256": "37a16a9fe744c7332d3e79df945361a633e7dd48b334cd9be6353a80cc9fe5a7"
+    },
+    "docker_timeout_unstarted": {
+      "sha256": "c5e424500b7546fd7b2bb8efe4c7a17f57dcc7246066e73c0ea797c34d9feec0"
+    },
+    "gvisor_junit_file_pass": {
+      "sha256": "1dba411c7c3b82887feded3c0142ef24ac0bdbec07c3afa2a1236b17e037feff"
+    },
+    "host_containment": {
+      "sha256": "44fd7d54724b1bd439ad2298f2e1fb5d26eb6182858137d09d36957ed7ca8604"
+    },
+    "host_junit_directory_pass": {
+      "sha256": "511c4e9c6d86ad5152e44a94023cc62230bbfea5ce9326c1127a56649c311aa4"
+    },
+    "host_junit_file_pass": {
+      "sha256": "2d0920a63e599efb27a492aeed705a0102ab652e3f0441b466ae8af2cac37770"
+    },
+    "host_not_found": {
+      "sha256": "2f745f2c036b1d8795e2c49a9ad9f913025bac4429703591eb4f97ac6e8066ca"
+    },
+    "host_output_limit": {
+      "sha256": "ccf381649c69a5a22c3ae8a429c5059f10aea644532f2937f2ac7c02b317df37"
+    },
+    "host_timeout": {
+      "sha256": "e6f8178d62442046a03413d0c6a61b402dd08ec9d6f9751ca6b64fad5c9c0529"
+    },
+    "pack_configured_host_timeout": {
+      "sha256": "80d5c3aaa23557894ec42775b141209d7a9036367d732e7ed8f4ff944d6d3851"
+    }
+  },
+  "schema_version": "repo-suite-characterization-v1"
+}

@@ -294,6 +294,14 @@ from evoom_guard.verifiers.repo_setup import (
     RepoSetupServices,
     execute_repo_setup,
 )
+from evoom_guard.verifiers.repo_suite import (
+    RepoSuiteExecutionRequest,
+    RepoSuiteExecutionServices,
+    RepoSuiteInterpretationRequest,
+    RepoSuiteInterpretationServices,
+    execute_repo_suite,
+    interpret_repo_suite,
+)
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
     delete_path_within_root,
@@ -1233,215 +1241,60 @@ class RepoVerifier:
                     )
                 runtime_continuity = "incomplete"
 
-            # The machine-readable verdict is written to a JUnit report the JUDGE
-            # owns — a path *outside* the repo copy, so the candidate (restricted to
-            # relative paths inside the copy) cannot pre-plant or overwrite it via an
-            # edit. The score is read from this report and the exit code, never from
-            # the candidate-influenced stdout.
-            trace.execution_phase = "repo_suite"
-            base_cmd = self._command(problem)
-            t0 = time.perf_counter()
-            try:
-                if self.isolation in ("docker", "gvisor"):
-                    host_xml, r, report_expected = self._run_docker(base_cmd, copy, workdir)
-                else:
-                    host_xml = os.path.join(workdir, "judge-result.xml")
-                    cmd, report_expected, report_env = instrument_command(base_cmd, host_xml)
-                    run_env = {**env, **report_env}
-                    cmd = _resolve_host_command(cmd, cwd=copy, env=run_env)
-                    r = _run_bounded_subprocess(
-                        cmd,
-                        cwd=copy,
-                        env=run_env,
-                        timeout=self.timeout,
-                        preexec_fn=self._limits() if os.name == "posix" else None,
-                        require_process_group_cleanup_proof=strict_harness,
-                    )
-            except _DockerRunTimeout as exc:
-                delivered = self.isolation if exc.container_started else "not_run"
-                suite_isolation_evidence = self._phase_isolation_evidence(
-                    delivered,
-                    resolved_image,
-                    note=(
-                        None
-                        if exc.container_started
-                        else "docker client timed out before container start was proven"
+            # Execute the repository suite first, but preserve runtime identity
+            # verification below before any JUnit report is interpreted.
+            suite_execution = execute_repo_suite(
+                RepoSuiteExecutionRequest(
+                    candidate_copy=copy,
+                    workdir=workdir,
+                    files_changed=tuple(changed),
+                    environment=env,
+                    container_mode=container_mode,
+                    resolved_image=resolved_image,
+                    pack_configured=bool(pack_dir),
+                    setup_isolation=setup_isolation,
+                    strict_harness=strict_harness,
+                ),
+                services=RepoSuiteExecutionServices(
+                    trace=trace,
+                    command=lambda: self._command(problem),
+                    requested_isolation=lambda: self.isolation,
+                    timeout=lambda: self.timeout,
+                    instrument_command=lambda: cast(
+                        Any,
+                        instrument_command,
                     ),
-                )
-                trace.repo_suite_isolation_evidence = suite_isolation_evidence
-                if exc.container_started:
-                    trace.execution_state = "started_incomplete"
-                    trace.test_command_started = True
-                    trace.delivered_isolation = self.isolation
-                return VerdictResult(
-                    passed=False,
-                    score=0.0,
-                    diagnostics=f"test suite timed out after {self.timeout}s",
-                    artifact={
-                        "elapsed": self.timeout,
-                        "files_changed": changed,
-                        "outcome": "test_timeout",
-                        "isolation_evidence": isolation_observation_payload(
-                            suite_isolation_evidence
-                        ),
-                        **runtime_evidence(),
-                    },
-                )
-            except _SubprocessOutputLimitExceeded as exc:
-                docker_failure = isinstance(exc, _DockerRunOutputLimit)
-                container_started = bool(getattr(exc, "container_started", True))
-                delivered = (
-                    self.isolation
-                    if docker_failure and container_started
-                    else ("not_run" if docker_failure else "subprocess")
-                )
-                if container_started:
-                    trace.execution_state = "started_incomplete"
-                    trace.test_command_started = True
-                    trace.delivered_isolation = delivered
-                trace.repo_suite_isolation_evidence = self._phase_isolation_evidence(
-                    delivered,
-                    resolved_image,
-                    note=(
-                        None
-                        if container_started
-                        else "docker client output limit was reached before container start was proven"
+                    resolve_host_command=lambda: cast(
+                        Any,
+                        _resolve_host_command,
                     ),
-                )
-                return VerdictResult(
-                    passed=False,
-                    score=0.0,
-                    diagnostics=f"test suite output was rejected: {exc}",
-                    artifact={
-                        "files_changed": changed,
-                        "outcome": "test_output_limit",
-                        "setup_isolation": setup_isolation,
-                        **runtime_evidence(),
-                    },
-                )
-            except _SubprocessContainmentError as exc:
-                docker_failure = isinstance(exc, _DockerRunContainmentError)
-                container_started = bool(getattr(exc, "container_started", True))
-                delivered = (
-                    self.isolation
-                    if docker_failure and container_started
-                    else ("not_run" if docker_failure else "subprocess")
-                )
-                if container_started:
-                    trace.execution_state = "started_incomplete"
-                    trace.test_command_started = True
-                    trace.delivered_isolation = delivered
-                trace.repo_suite_isolation_evidence = self._phase_isolation_evidence(
-                    delivered,
-                    resolved_image,
-                    note=(
-                        "docker container cleanup was not proven"
-                        if docker_failure
-                        else "subprocess cleanup was not proven"
+                    run_host_suite=lambda: cast(
+                        Any,
+                        _run_bounded_subprocess,
                     ),
-                )
-                return VerdictResult(
-                    passed=False,
-                    score=0.0,
-                    diagnostics=f"test suite containment failed: {exc}",
-                    artifact={
-                        "files_changed": changed,
-                        "outcome": "runtime_containment_error",
-                        "setup_isolation": setup_isolation,
-                        **runtime_evidence(),
-                    },
-                )
-            except subprocess.TimeoutExpired:
-                trace.execution_state = "started_incomplete"
-                trace.test_command_started = True
-                trace.delivered_isolation = "subprocess"
-                trace.repo_suite_isolation_evidence = self._phase_isolation_evidence(
-                    "subprocess", resolved_image
-                )
-                return VerdictResult(
-                    passed=False,
-                    score=0.0,
-                    diagnostics=f"test suite timed out after {self.timeout}s",
-                    artifact={
-                        "elapsed": self.timeout,
-                        "files_changed": changed,
-                        "outcome": "test_timeout",
-                        **runtime_evidence(),
-                    },
-                )
-            except FileNotFoundError:
-                unavailable_evidence = self._phase_isolation_evidence(
-                    "unavailable" if container_mode else "not_run",
-                    resolved_image,
-                )
-                trace.repo_suite_isolation_evidence = unavailable_evidence
-                return VerdictResult(
-                    passed=False, score=0.0,
-                    diagnostics=(
-                        f"{self.isolation} isolation requested but the docker CLI was not found"
-                        if container_mode
-                        else f"test command not found: {base_cmd[0]!r}"
+                    run_docker_suite=lambda: cast(
+                        Any,
+                        self._run_docker,
                     ),
-                    artifact={
-                        "files_changed": changed,
-                        "outcome": (
-                            "isolation_unavailable"
-                            if container_mode
-                            else "test_command_unavailable"
-                        ),
-                        "setup_isolation": setup_isolation,
-                        "isolation_evidence": (
-                            isolation_observation_payload(unavailable_evidence)
-                            if container_mode
-                            else None
-                        ),
-                        **runtime_evidence(),
-                    },
-                )
-            elapsed = time.perf_counter() - t0
-
-            if container_mode and r.returncode == 125:
-                unavailable_evidence = self._phase_isolation_evidence(
-                    "unavailable", resolved_image
-                )
-                trace.repo_suite_isolation_evidence = unavailable_evidence
-                return VerdictResult(
-                    passed=False,
-                    score=0.0,
-                    diagnostics=(
-                        f"the {self.isolation} suite container could not be started "
-                        "(docker exit 125): "
-                        + distill_diagnostics(r.stdout + "\n" + r.stderr)
+                    limits=lambda: self._limits(),
+                    phase_isolation_evidence=lambda: (
+                        self._phase_isolation_evidence
                     ),
-                    artifact={
-                        "files_changed": changed,
-                        "outcome": "isolation_unavailable",
-                        "setup_isolation": setup_isolation,
-                        "isolation_evidence": isolation_observation_payload(
-                            unavailable_evidence
-                        ),
-                        **runtime_evidence(),
-                    },
-                )
-
-            suite_isolation_evidence = self._phase_isolation_evidence(
-                self.isolation if container_mode else "subprocess",
-                resolved_image,
+                    runtime_evidence=lambda: runtime_evidence(),
+                    isolation_payload=lambda: isolation_observation_payload,
+                    distill_diagnostics=lambda: distill_diagnostics,
+                    perf_counter=lambda: time.perf_counter(),
+                ),
             )
-            trace.repo_suite_isolation_evidence = suite_isolation_evidence
-            if container_mode:
-                # ``isolation_evidence`` is the top-level repo-suite boundary.
-                # Later verifier-pack failures must not overwrite this proven
-                # delivery with the pack phase's independent availability.
-                trace.primary_isolation_evidence = suite_isolation_evidence
-            trace.execution_state = (
-                "started_incomplete" if pack_dir else "completed"
+            if suite_execution.terminal_result is not None:
+                return suite_execution.terminal_result
+            assert suite_execution.completed is not None
+            completed_suite = suite_execution.completed
+            elapsed = completed_suite.elapsed_seconds
+            suite_isolation_evidence = (
+                trace.repo_suite_isolation_evidence
             )
-            trace.test_command_started = True
-            trace.test_command_completed = True
-            trace.delivered_isolation = (
-                self.isolation if container_mode else "subprocess"
-            )
+            assert suite_isolation_evidence is not None
 
             if candidate_runtime_baseline is not None:
                 trace.execution_phase = "runtime_verification"
@@ -1483,35 +1336,27 @@ class RepoVerifier:
                         },
                     )
 
-            xml_text = _read_text_or_none(host_xml) or ""
-            junit = parse_junit_xml(xml_text)
-            repo_junit_sha256 = (
-                hashlib.sha256(xml_text.encode("utf-8")).hexdigest()
-                if junit is not None and xml_text
-                else None
-            )
-            repo_junit_digest_format = (
-                JUNIT_XML_DIGEST_FORMAT if repo_junit_sha256 is not None else None
-            )
-            if junit is None:
-                # Directory-based runners (Maven Surefire) write one report file per
-                # test class into a judge-owned dir derived as ``<report>.d``.
-                report_set = parse_junit_dir_with_digest(host_xml + ".d")
-                if report_set is not None:
-                    junit, repo_junit_sha256 = report_set
-                    repo_junit_digest_format = JUNIT_REPORT_SET_DIGEST_FORMAT
-            repo_phase = evaluate_repo_phase(
-                CompletedRunEvidence(
-                    returncode=r.returncode,
-                    junit=junit,
-                    report_expected=report_expected,
-                    stdout=r.stdout,
-                    stderr=r.stderr,
-                    junit_text=xml_text,
-                    junit_sha256=repo_junit_sha256,
-                    junit_digest_format=repo_junit_digest_format,
+            repo_phase = interpret_repo_suite(
+                RepoSuiteInterpretationRequest(
+                    completed=completed_suite,
+                    strict_harness=strict_harness,
                 ),
-                strict_harness=strict_harness,
+                services=RepoSuiteInterpretationServices(
+                    read_report=lambda: _read_text_or_none,
+                    parse_xml=lambda: cast(
+                        Any,
+                        parse_junit_xml,
+                    ),
+                    parse_directory=lambda: cast(
+                        Any,
+                        parse_junit_dir_with_digest,
+                    ),
+                    evaluate_phase=lambda: evaluate_repo_phase,
+                    junit_xml_digest_format=lambda: JUNIT_XML_DIGEST_FORMAT,
+                    junit_report_set_digest_format=(
+                        lambda: JUNIT_REPORT_SET_DIGEST_FORMAT
+                    ),
+                ),
             )
             passed = repo_phase.passed
             score = repo_phase.score
@@ -1539,9 +1384,11 @@ class RepoVerifier:
                     repo_suite_tests_passed=tests_passed,
                     repo_suite_tests_total=tests_total,
                     repo_suite_verdict_source=verdict_source,
-                    repo_suite_returncode=r.returncode,
-                    repo_suite_junit_sha256=repo_junit_sha256,
-                    repo_suite_junit_digest_format=repo_junit_digest_format,
+                    repo_suite_returncode=completed_suite.returncode,
+                    repo_suite_junit_sha256=repo_phase.junit_sha256,
+                    repo_suite_junit_digest_format=(
+                        repo_phase.junit_digest_format
+                    ),
                 )
             pack_tests_passed: int | None = None
             pack_tests_total: int | None = None
@@ -1920,7 +1767,7 @@ class RepoVerifier:
                 score=score,
                 diagnostics=distill_diagnostics(output),
                 artifact={
-                    "returncode": r.returncode,
+                    "returncode": completed_suite.returncode,
                     "elapsed": elapsed,
                     "tests_passed": tests_passed,
                     "tests_total": tests_total,

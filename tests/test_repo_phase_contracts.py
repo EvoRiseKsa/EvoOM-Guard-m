@@ -10,7 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from evoom_guard.verifiers import repo_phase_contracts, repo_verifier
+from evoom_guard.verifiers import (
+    repo_phase_contracts,
+    repo_suite,
+    repo_verifier,
+)
 from evoom_guard.verifiers.junit_oracle import JUnitCounts
 from evoom_guard.verifiers.repo_phase_contracts import (
     CompletedRunEvidence,
@@ -80,20 +84,40 @@ def test_phase_results_are_immutable() -> None:
 
 
 def test_repo_verifier_forwards_strict_harness_to_phase_contract() -> None:
-    tree = ast.parse(
+    verifier_tree = ast.parse(
         textwrap.dedent(inspect.getsource(repo_verifier.RepoVerifier._verify))
     )
-    calls = [
+    request_calls = [
         node
-        for node in ast.walk(tree)
+        for node in ast.walk(verifier_tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
-        and node.func.id == "evaluate_repo_phase"
+        and node.func.id == "RepoSuiteInterpretationRequest"
     ]
-    assert len(calls) == 1
+    assert len(request_calls) == 1
     keywords = {
         keyword.arg: ast.unparse(keyword.value)
-        for keyword in calls[0].keywords
+        for keyword in request_calls[0].keywords
         if keyword.arg is not None
     }
     assert keywords["strict_harness"] == "strict_harness"
+
+    owner_tree = ast.parse(
+        textwrap.dedent(inspect.getsource(repo_suite.interpret_repo_suite))
+    )
+    evaluation_calls = [
+        node
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Call)
+        and any(
+            keyword.arg == "strict_harness"
+            for keyword in node.keywords
+        )
+    ]
+    assert len(evaluation_calls) == 1
+    owner_keywords = {
+        keyword.arg: ast.unparse(keyword.value)
+        for keyword in evaluation_calls[0].keywords
+        if keyword.arg is not None
+    }
+    assert owner_keywords["strict_harness"] == "request.strict_harness"

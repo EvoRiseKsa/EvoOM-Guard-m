@@ -1134,6 +1134,34 @@ def test_repo_setup_has_only_public_execution_and_fidelity_dependencies() -> Non
     )
 
 
+def test_repo_suite_has_only_public_execution_and_evidence_dependencies() -> None:
+    """Suite ownership must not absorb pack, identity, or cleanup orchestration."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.verifiers.repo_suite"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == {
+        "evoom_guard.contracts",
+        "evoom_guard.domain.execution",
+        "evoom_guard.domain.verification",
+        "evoom_guard.execution",
+        "evoom_guard.isolation",
+    }
+    assert (
+        "evoom_guard.verifiers.repo_verifier",
+        module,
+    ) in analysis.internal_edges
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

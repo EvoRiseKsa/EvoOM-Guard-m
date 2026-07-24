@@ -2181,22 +2181,164 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-suite-process-group-proof-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_suite.py",
         before=(
-            "                        env=run_env,\n"
-            "                        timeout=self.timeout,\n"
-            "                        preexec_fn=self._limits() if os.name == \"posix\" else None,\n"
-            "                        require_process_group_cleanup_proof=strict_harness,\n"
+            "                require_process_group_cleanup_proof=(\n"
+            "                    request.strict_harness\n"
+            "                ),\n"
         ),
         after=(
-            "                        env=run_env,\n"
-            "                        timeout=self.timeout,\n"
-            "                        preexec_fn=self._limits() if os.name == \"posix\" else None,\n"
-            "                        require_process_group_cleanup_proof=False,\n"
+            "                require_process_group_cleanup_proof=(\n"
+            "                    False\n"
+            "                ),\n"
         ),
         test=(
             "tests/test_strict_harness.py::"
             "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-docker-timeout-start-proof-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before=(
+            "        if exc.container_started:\n"
+            "            trace.execution_state = \"started_incomplete\"\n"
+        ),
+        after=(
+            "        if True:\n"
+            "            trace.execution_state = \"started_incomplete\"\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[docker_timeout_unstarted]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-docker-output-classification-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before="        docker_failure = isinstance(exc, DockerRunOutputLimit)\n",
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[docker_output_limit_started]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-docker-containment-classification-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before="        docker_failure = isinstance(exc, DockerRunContainmentError)\n",
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[docker_containment_started]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-docker-not-found-classification-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before=(
+            "                \"outcome\": (\n"
+            "                    \"isolation_unavailable\"\n"
+            "                    if request.container_mode\n"
+            "                    else \"test_command_unavailable\"\n"
+            "                ),\n"
+        ),
+        after="                \"outcome\": \"test_command_unavailable\",\n",
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[docker_not_found]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-docker-exit-125-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before="    if request.container_mode and process.returncode == 125:\n",
+        after=(
+            "    if False and request.container_mode and process.returncode == 125:\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[docker_exit_125]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-host-report-owner-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before=(
+            "            report_path = os.path.join(\n"
+            "                request.workdir,\n"
+            "                \"judge-result.xml\",\n"
+            "            )\n"
+        ),
+        after=(
+            "            report_path = os.path.join(\n"
+            "                request.candidate_copy,\n"
+            "                \"judge-result.xml\",\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_completed_branch_order_and_junit_ownership_are_frozen"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-terminal-return-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            if suite_execution.terminal_result is not None:\n"
+            "                return suite_execution.terminal_result\n"
+        ),
+        after=(
+            "            if False and suite_execution.terminal_result is not None:\n"
+            "                return suite_execution.terminal_result\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_terminal_suite_failure_never_starts_the_pack"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-host-runner-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    run_host_suite=lambda: cast(\n"
+            "                        Any,\n"
+            "                        _run_bounded_subprocess,\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    run_host_suite=(\n"
+            "                        lambda provider=_run_bounded_subprocess: cast(\n"
+            "                            Any,\n"
+            "                            provider,\n"
+            "                        )\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_suite_dependencies_are_resolved_live_in_historical_order"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-docker-runner-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    run_docker_suite=lambda: cast(\n"
+            "                        Any,\n"
+            "                        self._run_docker,\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    run_docker_suite=(\n"
+            "                        lambda provider=self._run_docker: cast(\n"
+            "                            Any,\n"
+            "                            provider,\n"
+            "                        )\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_container_runner_and_trace_builder_are_resolved_live"
         ),
     ),
     Mutation(
@@ -3227,15 +3369,72 @@ MUTATIONS = (
     ),
     Mutation(
         name="junit-report-set-format-binding-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_suite.py",
         before=(
-            "                    repo_junit_digest_format = "
-            "JUNIT_REPORT_SET_DIGEST_FORMAT\n"
+            "            junit_digest_format = (\n"
+            "                services.junit_report_set_digest_format()\n"
+            "            )\n"
         ),
-        after="                    repo_junit_digest_format = None\n",
+        after="            junit_digest_format = None\n",
         test=(
             "tests/test_adversarial_integrity_boundaries.py::"
             "test_maven_report_set_and_pack_are_both_bound_into_composite_evidence"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-junit-directory-fallback-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before="    if junit is None:\n",
+        after="    if False and junit is None:\n",
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[host_junit_directory_pass]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-junit-file-digest-bypass",
+        path="evoom_guard/verifiers/repo_suite.py",
+        before="        hashlib.sha256(junit_text.encode(\"utf-8\")).hexdigest()\n",
+        after="        hashlib.sha256(b\"\").hexdigest()\n",
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_frozen_repo_suite_behavior[host_junit_file_pass]"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-junit-parser-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    parse_xml=lambda: cast(\n"
+            "                        Any,\n"
+            "                        parse_junit_xml,\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    parse_xml=(\n"
+            "                        lambda provider=parse_junit_xml: cast(\n"
+            "                            Any,\n"
+            "                            provider,\n"
+            "                        )\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_suite_dependencies_are_resolved_live_in_historical_order"
+        ),
+    ),
+    Mutation(
+        name="repo-suite-phase-evaluator-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                    evaluate_phase=lambda: evaluate_repo_phase,\n",
+        after=(
+            "                    evaluate_phase=(\n"
+            "                        lambda provider=evaluate_repo_phase: provider\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_suite_characterization.py::"
+            "test_suite_dependencies_are_resolved_live_in_historical_order"
         ),
     ),
     Mutation(
@@ -3270,19 +3469,9 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-phase-strict-forwarding-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before=(
-            "                    junit_digest_format=repo_junit_digest_format,\n"
-            "                ),\n"
-            "                strict_harness=strict_harness,\n"
-            "            )\n"
-        ),
-        after=(
-            "                    junit_digest_format=repo_junit_digest_format,\n"
-            "                ),\n"
-            "                strict_harness=False,\n"
-            "            )\n"
-        ),
+        path="evoom_guard/verifiers/repo_suite.py",
+        before="        strict_harness=request.strict_harness,\n",
+        after="        strict_harness=False,\n",
         test=(
             "tests/test_repo_phase_contracts.py::"
             "test_repo_verifier_forwards_strict_harness_to_phase_contract"
