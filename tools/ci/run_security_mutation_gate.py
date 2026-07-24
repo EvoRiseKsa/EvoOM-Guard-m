@@ -41,9 +41,9 @@ class Mutation:
 MUTATIONS = (
     Mutation(
         name="candidate-tree-reparse-classification-bypass",
-        path="evoom_guard/guard.py",
-        before="    if _is_windows_reparse(full_path, info):\n",
-        after="    if False and _is_windows_reparse(full_path, info):\n",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before="    if is_windows_reparse(full_path, info):\n",
+        after="    if False and is_windows_reparse(full_path, info):\n",
         test=(
             "tests/test_candidate_tree_snapshot_hardening.py::"
             "test_tree_entry_rejects_a_reparse_directory_before_walk"
@@ -51,7 +51,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-reparse-attribute-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/workspace/candidate_tree.py",
         before="    if attributes & reparse_flag:\n",
         after="    if False and attributes & reparse_flag:\n",
         test=(
@@ -61,7 +61,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-root-kind-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/workspace/candidate_tree.py",
         before='        if root_entry.kind != "directory":\n',
         after='        if False and root_entry.kind != "directory":\n',
         test=(
@@ -71,8 +71,8 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-object-identity-bypass",
-        path="evoom_guard/guard.py",
-        before="        or _stat_identity(observed) != entry.identity\n",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before="        or stat_identity_provider(observed) != entry.identity\n",
         after="        or False\n",
         test=(
             "tests/test_candidate_tree_snapshot_hardening.py::"
@@ -81,7 +81,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-posix-open-support-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/workspace/candidate_tree.py",
         before="        if no_follow is None or non_block is None:\n",
         after="        if False and (no_follow is None or non_block is None):\n",
         test=(
@@ -91,7 +91,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-posix-non-block-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/workspace/candidate_tree.py",
         before="        flags |= no_follow | non_block\n",
         after="        flags |= no_follow\n",
         test=(
@@ -101,7 +101,7 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-posix-no-follow-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/workspace/candidate_tree.py",
         before="        flags |= no_follow | non_block\n",
         after="        flags |= non_block\n",
         test=(
@@ -111,9 +111,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-path-time-drift-bypass",
-        path="evoom_guard/guard.py",
-        before="                or _stat_path_times(observed) != entry.path_times\n",
-        after="                or False\n",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "            and (entry.path_times is None or "
+            "stat_path_times_provider(observed) != entry.path_times)\n"
+        ),
+        after="            and False\n",
         test=(
             "tests/test_candidate_tree_snapshot_hardening.py::"
             "test_changed_text_rejects_metadata_drift_during_bounded_read"
@@ -121,14 +124,8 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-post-read-verification-bypass",
-        path="evoom_guard/guard.py",
-        before=(
-            "        _verify_open_regular_snapshot(\n"
-            "            entry,\n"
-            "            descriptor,\n"
-            '            operation="read",\n'
-            "        )\n"
-        ),
+        path="evoom_guard/workspace/candidate_tree.py",
+        before='        verify_open_regular_snapshot_provider(entry, descriptor, "read")\n',
         after="        pass\n",
         test=(
             "tests/test_candidate_tree_snapshot_hardening.py::"
@@ -137,12 +134,115 @@ MUTATIONS = (
     ),
     Mutation(
         name="candidate-tree-comparison-snapshot-bypass",
-        path="evoom_guard/guard.py",
-        before="                    head_snapshot=head,\n",
-        after="                    head_snapshot=None,\n",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before="                    base,\n                    head,\n",
+        after="                    base,\n                    None,\n",
         test=(
             "tests/test_candidate_tree_snapshot_hardening.py::"
             "test_equal_file_comparison_rejects_hardlink_replacement_after_lstat"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-git-ignore-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before='    ignore = set(copy_ignore) | {".git"}\n',
+        after="    ignore = set(copy_ignore)\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_walk_tree_uses_current_copy_ignore_and_always_ignores_git"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-live-copy-ignore-bypass",
+        path="evoom_guard/guard.py",
+        before="            copy_ignore=COPY_IGNORE,\n",
+        after="            copy_ignore=(),\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_walk_tree_uses_current_copy_ignore_and_always_ignores_git"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-empty-directory-drop-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "            if not directory_has_regular_descendant("
+            "head_entries, rel):\n"
+        ),
+        after=(
+            "            if False and not directory_has_regular_descendant("
+            "head_entries, rel):\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_tree_reports_all_unrepresentable_paths_in_sorted_order"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-mode-change-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before="    if base.mode != head.mode:\n",
+        after="    if False and base.mode != head.mode:\n",
+        test=(
+            "tests/test_guard_internals.py::"
+            "test_directory_mode_change_is_unrepresentable"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-stale-size-limit-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before="    if entry.size > max_bytes:\n",
+        after="    if False and entry.size > max_bytes:\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_changed_text_rejects_stale_size_metadata_above_limit"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-concurrent-growth-limit-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before="        data = read_fd_bounded_provider(descriptor, max_bytes + 1)\n",
+        after="        data = read_fd_bounded_provider(descriptor, max_bytes)\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_changed_text_rejects_growth_after_snapshot"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-binary-decode-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before='    return data.decode("utf-8")\n',
+        after='    return data.decode("utf-8", errors="ignore")\n',
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_tree_reports_all_unrepresentable_paths_in_sorted_order"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-late-comparison-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "        entries_changed=lambda base, head: _entries_changed(\n"
+            "            cast(_TreeEntry | None, base), cast(_TreeEntry, head)\n"
+            "        ),\n"
+        ),
+        after="        entries_changed=_entries_changed,\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_blocks_from_dirs_resolves_later_helpers_after_walk_effects"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-late-serializer-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "        serialize_blocks=lambda blocks: "
+            "serialize_candidate_blocks(blocks),\n"
+        ),
+        after="        serialize_blocks=serialize_candidate_blocks,\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_from_dirs_resolves_serializer_after_derivation_effect"
         ),
     ),
     Mutation(

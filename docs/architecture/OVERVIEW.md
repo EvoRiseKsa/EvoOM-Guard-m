@@ -125,15 +125,21 @@ changes still flow through the typed builder.
 `blackbox.py` still owns command construction, report interpretation,
 verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
-`workspace/` package without splitting its security-sensitive globals.
+`workspace/` package. Its first bounded submodule,
+`workspace/candidate_tree.py`, now owns root validation, reparse-safe walking,
+per-file snapshot identity, non-blocking/no-follow opens, bounded intake and
+comparison, changed-path classification, and canonical serialization. Guard's
+thin compatibility facade retains the historical private type metadata and
+resolves helper providers at call time. This proves each observed file stayed
+bound during its read/compare; it does not claim an atomic whole-tree snapshot.
 The flat CLI module has likewise been migrated byte-for-byte into the
 classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
 facade. The facade injects live validators and argument-group helpers on every
 call; command handlers and dispatch remain in `cli/__init__.py`.
-Internal workspace decomposition and black-box runtime-effect sequencing
-remain pending; candidate path admission and the repo-native application
-decision/finalization path are complete.
+Further workspace decomposition and black-box runtime-effect sequencing remain
+pending; candidate path admission, candidate-tree intake, and the repo-native
+application decision/finalization path are complete.
 
 The immediate structural priority is the next bounded slice: extract one
 separately characterized CLI command family or reduce a remaining

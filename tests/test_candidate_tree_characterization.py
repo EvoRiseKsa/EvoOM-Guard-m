@@ -15,6 +15,8 @@ from typing import Any
 
 import pytest
 
+from evoom_guard.workspace import candidate_tree
+
 guard_module = importlib.import_module("evoom_guard.guard")
 
 
@@ -28,6 +30,16 @@ def test_candidate_tree_facade_value_shapes_are_frozen() -> None:
     assert (
         guard_module._UnverifiableChangedPathsError.__module__
         == "evoom_guard.guard"
+    )
+    assert issubclass(guard_module._TreeEntry, candidate_tree.TreeEntry)
+    assert guard_module._TreeEntry is not candidate_tree.TreeEntry
+    assert issubclass(
+        guard_module._UnverifiableChangedPathsError,
+        candidate_tree.UnverifiableChangedPathsError,
+    )
+    assert (
+        guard_module._UnverifiableChangedPathsError
+        is not candidate_tree.UnverifiableChangedPathsError
     )
     entry = guard_module._TreeEntry(
         "tree/file.py",
