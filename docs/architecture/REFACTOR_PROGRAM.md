@@ -168,13 +168,16 @@ remain in their established facades.
   behind RepoVerifier's dynamic compatibility facade. Repository copying,
   deletion, and execution remain pending. Optional verifier-pack intake and its
   judge-owned snapshot identity now live in the immutable
-  `verifiers/repo_pack_intake.py` contract; later pack execution and
-  post-execution snapshot verification remain in RepoVerifier.
+  `verifiers/repo_pack_intake.py` contract. Verifier-pack host/docker/gVisor
+  execution and later JUnit interpretation now live behind separate immutable
+  contracts in `verifiers/repo_pack.py`; pre/post snapshot verification,
+  candidate runtime continuity, sticky evidence, phase composition, final
+  projection, and cleanup remain in RepoVerifier.
 - Repository-suite host/docker/gVisor execution and judge-owned JUnit
   interpretation now live in `verifiers/repo_suite.py` behind separate
   immutable contracts and frozen branch/order/provider-timing vectors.
   `RepoVerifier` retains the intervening runtime-tree continuity check plus
-  verifier-pack execution, sticky evidence projection, and workspace cleanup.
+  sticky evidence projection and workspace cleanup.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction
@@ -200,8 +203,8 @@ remain in their established facades.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining repository filesystem, runtime-identity,
-  verifier-pack execution, sticky-projection, and cleanup responsibilities in
-  independent characterized slices.
+  sticky-projection, and cleanup responsibilities in independent characterized
+  slices.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.

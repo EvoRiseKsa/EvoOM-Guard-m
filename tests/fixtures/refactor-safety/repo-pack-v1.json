@@ -1,0 +1,59 @@
+{
+  "cases": {
+    "docker_containment_started": {
+      "sha256": "53067295edb42ba0ef2e56bbc9cbf45839b723e95d82950199f122d5d92993d0"
+    },
+    "docker_containment_unstarted": {
+      "sha256": "82a73fcd5551bc658f45e8ea70e7f7c84b4c50c4acf4585c251da5ea4b324c25"
+    },
+    "docker_exit_125": {
+      "sha256": "df9c0bd9b352318f4b7126c394cc5b8b1d3288bc699921d5894af40af9598b47"
+    },
+    "docker_not_found": {
+      "sha256": "a0cab0e5414e745c96bc2b55099f04cdc5e2b4a408978fe825c400b1e3f10a2b"
+    },
+    "docker_output_limit_started": {
+      "sha256": "08781b89dbceef1e6b9db57e12a803b321c1d534fb68b6a57d864dee9eacc293"
+    },
+    "docker_output_limit_unstarted": {
+      "sha256": "74fbe899bd51d1be593345978b0fd0c4086c5d09dee8902c0b8041c5e3782b1e"
+    },
+    "docker_pass": {
+      "sha256": "1f553af966567efd4c526772f8c7896236609ef400ef859aceab5902479c6411"
+    },
+    "docker_timeout_started": {
+      "sha256": "c990e0bbf96c572c9bdb03a7d3e9e4940493e01f038746330f276eacfad214f1"
+    },
+    "docker_timeout_unstarted": {
+      "sha256": "b180bb3f9ed9d6b6e17033fce77b3a4b120b08703526399374cc558b72f3cb70"
+    },
+    "gvisor_pass": {
+      "sha256": "4faba96387c7529122842348e9ec50ce4555bdaf56c92b248571bd408cd04993"
+    },
+    "host_containment": {
+      "sha256": "86452b23552ac3325a7df71b03b53e9db3a647fdad828fc0cfff7b1aee4f1413"
+    },
+    "host_not_found": {
+      "sha256": "7c58460ecbaf66e023991f96b6ff5c059165dc3c2347e178ab29a52b574a7d9e"
+    },
+    "host_output_limit": {
+      "sha256": "b15dfd50a95635e8c37b3d7a332940a4cd5a66a50b530e5b248eaa6f49e018c9"
+    },
+    "host_pass_strict": {
+      "sha256": "77f9d85f0402f3535009e2505fe839e5526a5d3a983ca4bb2777c5e428606c87"
+    },
+    "host_timeout": {
+      "sha256": "2f008eecb3b63aa28d3c339034ed90d89b92b06b84b12e4b56627291193641d6"
+    },
+    "pack_drift_after_execution": {
+      "sha256": "82c4fb50bbe22abfb8f9f625e67244e7ffb038504bddd528fbeb21d6243be926"
+    },
+    "pack_drift_before_execution": {
+      "sha256": "f0900166295d3879428aa4919697ff01be698c7dc949398e3ac19847e63d0ac7"
+    },
+    "runtime_drift_after_execution": {
+      "sha256": "837e47f6072f8834de984ce7b8bdda96ee0d8b527cd6eecc7693767996890084"
+    }
+  },
+  "schema_version": "repo-pack-characterization-v1"
+}

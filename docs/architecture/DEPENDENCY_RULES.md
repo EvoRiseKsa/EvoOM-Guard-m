@@ -109,8 +109,19 @@ The bounded verifier-pack intake slice gives
 `verifiers.repo_pack_intake` ownership of optional pack admission and its
 judge-owned snapshot identity. `repo_verifier` injects live `lexists`,
 workspace-allocation, and `snapshot_pack` operations at their historical
-positions, then retains workspace cleanup and later pack execution. The owner
-has one internal dependency, the public `pack_manifest` contract. This
+positions, then retains workspace cleanup and later phase coordination. The
+owner has one internal dependency, the public `pack_manifest` contract. This
+classified-to-classified extraction changes no baseline count and therefore
+adds no ratchet revision.
+
+The bounded verifier-pack execution slice gives
+`verifiers.repo_pack` ownership of host/docker/gVisor launch and later
+judge-owned JUnit interpretation through separate immutable contracts.
+`repo_verifier` injects all effects through live providers and retains pack
+admission, pre/post pack-snapshot verification, candidate runtime continuity,
+sticky evidence, phase composition, final projection, and cleanup. The owner
+may depend only on public contracts, domain execution/verification values, and
+the public execution/isolation exception vocabulary. This
 classified-to-classified extraction changes no baseline count and therefore
 adds no ratchet revision.
 
