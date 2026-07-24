@@ -15,11 +15,13 @@ preserve incidental module-global lookup timing.
 from __future__ import annotations
 
 import json
+import math
 import os
+import stat
 import tempfile
 import unicodedata
 from collections.abc import Callable, Mapping
-from typing import Any, Protocol, TextIO
+from typing import Any, Protocol, TextIO, cast
 from urllib.parse import quote
 
 
@@ -58,6 +60,23 @@ ValueProvider = Callable[[], str]
 SarifConverter = Callable[[GuardResultView], dict[str, Any]]
 JsonDump = Callable[..., None]
 TextWriter = Callable[[TextIO], object]
+
+
+class OutputDestinationError(RuntimeError):
+    """An output path cannot safely receive an atomic publication."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
+
+class SarifArtifactPathError(ValueError):
+    """A result path cannot be represented as a repository SARIF URI."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
 
 DEFAULT_BADGES: Mapping[str, str] = {
     "PASS": "✅ PASS",
@@ -105,6 +124,8 @@ def _visible_inline_text(value: object, *, markdown: bool) -> str:
             rendered.append("\\t")
         elif _is_unsafe_control(character):
             rendered.append(f"\\u{ord(character):04x}")
+        elif markdown and character == "&":
+            rendered.append("&amp;")
         elif markdown and character in markdown_special:
             rendered.append("\\" + character)
         elif markdown and character == "<":
@@ -169,6 +190,141 @@ def _markdown_fenced_code(value: object) -> str:
     return f"{fence}\n{safe}\n{fence}"
 
 
+def _require_nonnegative_int(value: object, *, field: str) -> int:
+    """Return one evidence count without invoking an arbitrary formatter."""
+
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{field} must be a non-negative integer")
+    return value
+
+
+def _require_positive_int(value: object, *, field: str) -> int:
+    """Return one one-based source line number."""
+
+    line = _require_nonnegative_int(value, field=field)
+    if line == 0:
+        raise ValueError(f"{field} must be a positive integer")
+    return line
+
+
+def _require_percent(value: object, *, field: str) -> int | float:
+    """Return one finite percentage in the closed interval [0, 100]."""
+
+    if type(value) not in {int, float}:
+        raise ValueError(f"{field} must be a finite number from 0 to 100")
+    numeric = cast(int | float, value)
+    if not math.isfinite(numeric) or not 0 <= numeric <= 100:
+        raise ValueError(f"{field} must be a finite number from 0 to 100")
+    return numeric
+
+
+def _validated_missed_lines(diff_coverage: Mapping[str, Any]) -> dict[str, list[int]]:
+    """Validate the dynamic changed-line evidence before Markdown projection."""
+
+    raw_files = diff_coverage.get("files", {})
+    if not isinstance(raw_files, Mapping):
+        raise ValueError("diff_coverage.files must be an object")
+    missed: dict[str, list[int]] = {}
+    for path, raw_details in raw_files.items():
+        if not isinstance(path, str):
+            raise ValueError("diff_coverage.files keys must be strings")
+        if not isinstance(raw_details, Mapping):
+            raise ValueError(
+                f"diff_coverage.files[{path!r}] must be an object"
+            )
+        raw_lines = raw_details.get("missed", [])
+        if not isinstance(raw_lines, list):
+            raise ValueError(
+                f"diff_coverage.files[{path!r}].missed must be an array"
+            )
+        lines = [
+            _require_positive_int(
+                line,
+                field=f"diff_coverage.files[{path!r}].missed",
+            )
+            for line in raw_lines
+        ]
+        if lines:
+            missed[path] = lines
+    return missed
+
+
+def _windows_destination_error(path: str) -> tuple[str, str] | None:
+    """Classify device names and namespaces before Windows path resolution."""
+
+    normalized = path.replace("\\", "/")
+    lowered = normalized.casefold()
+    if (
+        lowered.startswith("//?/")
+        or lowered.startswith("//./")
+        or lowered.startswith("/??/")
+        or lowered.startswith("//?/globalroot/")
+    ):
+        return (
+            "windows_namespace",
+            "Windows device and extended-length namespaces are not output paths",
+        )
+
+    components = [component for component in normalized.split("/") if component]
+    for index, component in enumerate(components):
+        if index == 0 and len(component) == 2 and component[1] == ":":
+            continue
+        if ":" in component:
+            return (
+                "windows_namespace",
+                "Windows alternate streams and device namespaces are not output paths",
+            )
+        canonical = component.rstrip(" .")
+        stem = canonical.split(".", 1)[0].upper()
+        if stem in {"CON", "PRN", "AUX", "NUL", "COM", "LPT"} or (
+            len(stem) == 4
+            and stem[:3] in {"COM", "LPT"}
+            and stem[3] in "123456789"
+        ):
+            return (
+                "windows_reserved_name",
+                "Windows reserved device names are not output paths",
+            )
+    return None
+
+
+def _validate_output_destination(
+    path: str,
+    *,
+    platform_name: str = os.name,
+) -> int | None:
+    """Reject unsafe existing leaves and return portable mode bits."""
+
+    if platform_name == "nt":
+        destination_error = _windows_destination_error(path)
+        if destination_error is not None:
+            raise OutputDestinationError(*destination_error)
+    try:
+        observed = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(observed.st_mode):
+        raise OutputDestinationError(
+            "non_regular",
+            "an existing output destination must be a regular file",
+        )
+    mode = stat.S_IMODE(observed.st_mode) & 0o777
+    if mode & 0o222 == 0:
+        raise OutputDestinationError(
+            "read_only",
+            "an existing output destination has no write mode bit",
+        )
+    return mode
+
+
+def _add_exception_note(primary: BaseException, note: str) -> None:
+    """Attach secondary failure context where the runtime supports notes."""
+
+    add_note = getattr(primary, "add_note", None)
+    if callable(add_note):
+        add_note(note)
+
+
 def _cleanup_atomic_temp(
     descriptor: int,
     temp_path: str,
@@ -188,22 +344,29 @@ def _cleanup_atomic_temp(
         pass
     except OSError as exc:
         cleanup_failures.append(exc)
-    add_note = getattr(primary, "add_note", None)
-    if callable(add_note):
-        for failure in cleanup_failures:
-            add_note(f"atomic output cleanup failed: {failure}")
+    for failure in cleanup_failures:
+        _add_exception_note(
+            primary,
+            f"atomic output cleanup failed: {failure}",
+        )
 
 
 def _atomic_write(path: str, writer: TextWriter) -> None:
-    """Commit one UTF-8 text file only after a durable temporary write.
+    """Commit one UTF-8 text file only after an fsynced temporary write.
 
     The temporary file is created exclusively in the destination directory.
-    ``os.replace`` replaces a destination symlink itself instead of opening its
-    target, and readers observe either the prior complete file or the new one.
-    The destination's parent directory remains a caller-owned trust boundary.
+    Existing non-regular and read-only leaves are rejected before staging and
+    again immediately before replacement. Portable mode bits are carried from
+    an existing regular destination. The parent directory must be trusted and
+    quiescent; this function does not fsync it or claim crash/NFS durability.
     """
 
+    initial_mode = _validate_output_destination(path)
     destination_path = os.path.abspath(path)
+    if destination_path != path:
+        absolute_mode = _validate_output_destination(destination_path)
+        if initial_mode is None:
+            initial_mode = absolute_mode
     directory = os.path.dirname(destination_path)
     descriptor, temp_path = tempfile.mkstemp(
         prefix=".evoguard-output-",
@@ -217,11 +380,34 @@ def _atomic_write(path: str, writer: TextWriter) -> None:
             encoding="utf-8",
             newline=None,
         )
-        descriptor = -1
-        with stream:
+        primary: BaseException | None = None
+        try:
             writer(stream)
             stream.flush()
             os.fsync(stream.fileno())
+        except BaseException as exc:
+            primary = exc
+        try:
+            stream.close()
+        except BaseException as close_failure:
+            if primary is None:
+                primary = close_failure
+            else:
+                _add_exception_note(
+                    primary,
+                    f"atomic output close failed: {close_failure}",
+                )
+        else:
+            descriptor = -1
+        if primary is not None:
+            raise primary.with_traceback(primary.__traceback__)
+
+        current_mode = _validate_output_destination(destination_path)
+        replacement_mode = (
+            current_mode if current_mode is not None else initial_mode
+        )
+        if replacement_mode is not None:
+            os.chmod(temp_path, replacement_mode)
         os.replace(temp_path, destination_path)
     except BaseException as primary:
         _cleanup_atomic_temp(descriptor, temp_path, primary)
@@ -237,28 +423,42 @@ def write_markdown(report: str, path: str) -> None:
 def _normalize_sarif_artifact_uri(path: str) -> str:
     """Return a canonical repository-relative URI or reject ambiguity."""
 
-    if any(_is_unsafe_control(character) for character in path):
-        raise ValueError(
-            "SARIF artifact path contains a control or format character"
+    if type(path) is not str:
+        raise SarifArtifactPathError(
+            "not_text",
+            "SARIF artifact path must be text",
         )
-    normalized = path.replace("\\", "/")
-    segments = normalized.split("/")
-    drive_like = bool(
-        segments
-        and len(segments[0]) == 2
-        and segments[0][0].isalpha()
-        and segments[0][1] == ":"
-    )
+    if any(unicodedata.category(character) == "Cs" for character in path):
+        raise SarifArtifactPathError(
+            "surrogate",
+            "SARIF artifact path contains a Unicode surrogate",
+        )
+    if any(_is_unsafe_control(character) for character in path):
+        raise SarifArtifactPathError(
+            "control_or_format",
+            "SARIF artifact path contains a control or format character",
+        )
+    if "\\" in path:
+        raise SarifArtifactPathError(
+            "backslash",
+            "SARIF artifact path must use forward slashes",
+        )
+    if len(path) >= 2 and path[0].isalpha() and path[1] == ":":
+        raise SarifArtifactPathError(
+            "drive_prefix",
+            "SARIF artifact path must not have a drive prefix",
+        )
+    segments = path.split("/")
     if (
-        not normalized
-        or normalized.startswith("/")
-        or drive_like
+        not path
+        or path.startswith("/")
         or any(segment in {"", ".", ".."} for segment in segments)
     ):
-        raise ValueError(
-            "SARIF artifact path must be normalized and repository-relative"
+        raise SarifArtifactPathError(
+            "not_repository_relative",
+            "SARIF artifact path must be normalized and repository-relative",
         )
-    return quote(normalized, safe="/-._~")
+    return quote(path, safe="/-._~")
 
 
 def render_report(
@@ -311,9 +511,26 @@ def render_report(
     if r.diff_coverage is not None:
         dc = r.diff_coverage
         if dc.get("measured"):
+            executed = _require_nonnegative_int(
+                dc.get("executed"),
+                field="diff_coverage.executed",
+            )
+            total = _require_nonnegative_int(
+                dc.get("total"),
+                field="diff_coverage.total",
+            )
+            percent = _require_percent(
+                dc.get("percent"),
+                field="diff_coverage.percent",
+            )
+            if executed > total:
+                raise ValueError(
+                    "diff_coverage.executed must not exceed "
+                    "diff_coverage.total"
+                )
             lines.append(
-                f"| Changed lines executed | {dc['executed']}/{dc['total']} "
-                f"({dc['percent']}%) |"
+                f"| Changed lines executed | {executed}/{total} "
+                f"({percent}%) |"
             )
         else:
             lines.append(
@@ -322,10 +539,29 @@ def render_report(
             )
     if r.baseline is not None:
         b = r.baseline
-        btests = (
-            f" ({b['tests_passed']}/{b['tests_total']})"
-            if b.get("tests_total") is not None else ""
-        )
+        raw_baseline_total = b.get("tests_total")
+        raw_baseline_passed = b.get("tests_passed")
+        if raw_baseline_total is None:
+            if raw_baseline_passed is not None:
+                raise ValueError(
+                    "baseline.tests_passed requires baseline.tests_total"
+                )
+            btests = ""
+        else:
+            baseline_total = _require_nonnegative_int(
+                raw_baseline_total,
+                field="baseline.tests_total",
+            )
+            baseline_passed = _require_nonnegative_int(
+                raw_baseline_passed,
+                field="baseline.tests_passed",
+            )
+            if baseline_passed > baseline_total:
+                raise ValueError(
+                    "baseline.tests_passed must not exceed "
+                    "baseline.tests_total"
+                )
+            btests = f" ({baseline_passed}/{baseline_total})"
         bverdict = b.get("verdict") or "not measured"
         lines.append(
             "| Baseline (pristine base) | "
@@ -382,9 +618,7 @@ def render_report(
             "configuration. This is rejected before the suite runs.",
         ]
     if r.diff_coverage is not None and r.diff_coverage.get("measured"):
-        missed = {
-            p: d["missed"] for p, d in r.diff_coverage.get("files", {}).items() if d.get("missed")
-        }
+        missed = _validated_missed_lines(r.diff_coverage)
         if missed:
             lines += [
                 "",

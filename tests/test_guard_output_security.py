@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, TextIO
 
 import pytest
@@ -50,7 +52,7 @@ def test_markdown_projection_neutralizes_untrusted_structure() -> None:
         reason="failed\n\n## Forged PASS\n<script>",
         files_changed=["src/`</code><h2>FORGED</h2>.py"],
         diagnostics="before\n```\n## forged diagnostics\n```\nafter",
-        source="diff|forged\u202e",
+        source="diff|forged\u202e&NewLine;&#10;&#x202E;",
     )
 
     report = guard_module.render_report(
@@ -65,7 +67,11 @@ def test_markdown_projection_neutralizes_untrusted_structure() -> None:
         "**failed\\n\\n## Forged PASS\\n&lt;script&gt;**"
         in report
     )
-    assert "| Input | diff\\|forged\\u202e |" in report
+    assert (
+        "| Input | diff\\|forged\\u202e"
+        "&amp;NewLine;&amp;#10;&amp;#x202E; |"
+        in report
+    )
     assert "`` src/`</code><h2>FORGED</h2>.py ``" in report
     assert "`` gone`\\n## forged deletion ``" in report
     assert (
@@ -73,6 +79,78 @@ def test_markdown_projection_neutralizes_untrusted_structure() -> None:
         in report
     )
     assert "\u202e" not in report
+
+
+class _ExplosiveText:
+    def __str__(self) -> str:
+        raise AssertionError("unvalidated evidence reached string projection")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("executed", "1"),
+        ("total", True),
+        ("percent", float("nan")),
+        ("percent", _ExplosiveText()),
+    ),
+)
+def test_diff_coverage_numeric_evidence_fails_closed(
+    field: str,
+    value: object,
+) -> None:
+    result = _error_result()
+    result.diff_coverage = {
+        "measured": True,
+        "executed": 1,
+        "total": 2,
+        "percent": 50.0,
+        "files": {},
+    }
+    result.diff_coverage[field] = value
+
+    with pytest.raises(ValueError, match=f"diff_coverage.{field}"):
+        guard_module.render_report(result)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("tests_passed", "1"),
+        ("tests_total", False),
+        ("tests_passed", _ExplosiveText()),
+    ),
+)
+def test_baseline_numeric_evidence_fails_closed(
+    field: str,
+    value: object,
+) -> None:
+    result = _error_result()
+    result.baseline = {
+        "verdict": "FAIL",
+        "repair_effect": "demonstrated",
+        "tests_passed": 1,
+        "tests_total": 2,
+    }
+    result.baseline[field] = value
+
+    with pytest.raises(ValueError, match=f"baseline.{field}"):
+        guard_module.render_report(result)
+
+
+@pytest.mark.parametrize("line", ("7", True, 0, -1, _ExplosiveText()))
+def test_missed_line_evidence_fails_closed(line: object) -> None:
+    result = _error_result()
+    result.diff_coverage = {
+        "measured": True,
+        "executed": 1,
+        "total": 2,
+        "percent": 50.0,
+        "files": {"src/app.py": {"missed": [line]}},
+    }
+
+    with pytest.raises(ValueError, match="missed"):
+        guard_module.render_report(result)
 
 
 @pytest.mark.parametrize("writer_name", ("json", "sarif"))
@@ -211,7 +289,65 @@ def test_atomic_cleanup_failure_never_masks_the_primary_error(
         temp_path.unlink()
 
 
-def test_atomic_writer_replaces_leaf_symlink_without_following_it(
+@pytest.mark.parametrize("primary_point", ("writer", "fsync"))
+def test_atomic_writer_preserves_primary_when_close_also_fails(
+    primary_point: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_fdopen = guard_output.os.fdopen
+
+    class CloseFailureStream:
+        def __init__(self, descriptor: int) -> None:
+            self._stream = real_fdopen(
+                descriptor,
+                "w",
+                encoding="utf-8",
+                newline=None,
+            )
+
+        def write(self, value: str) -> int:
+            return self._stream.write(value)
+
+        def flush(self) -> None:
+            self._stream.flush()
+
+        def fileno(self) -> int:
+            return self._stream.fileno()
+
+        def close(self) -> None:
+            self._stream.close()
+            raise OSError("secondary close failure")
+
+    monkeypatch.setattr(
+        guard_output.os,
+        "fdopen",
+        lambda descriptor, *_args, **_kwargs: CloseFailureStream(descriptor),
+    )
+    if primary_point == "fsync":
+        def reject_fsync(_descriptor: int) -> None:
+            raise RuntimeError("primary fsync failure")
+
+        monkeypatch.setattr(guard_output.os, "fsync", reject_fsync)
+
+    def writer(stream: TextIO) -> None:
+        if primary_point == "writer":
+            raise RuntimeError("primary writer failure")
+        stream.write("complete")
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"primary {primary_point} failure",
+    ) as captured:
+        guard_output._atomic_write(str(tmp_path / "report.md"), writer)
+
+    notes = getattr(captured.value, "__notes__", [])
+    if notes:
+        assert any("atomic output close failed" in note for note in notes)
+    assert _atomic_temps(tmp_path) == []
+
+
+def test_atomic_writer_rejects_leaf_symlink_without_following_it(
     tmp_path: Path,
 ) -> None:
     target = tmp_path / "target.md"
@@ -222,11 +358,184 @@ def test_atomic_writer_replaces_leaf_symlink_without_following_it(
     except (NotImplementedError, OSError) as exc:
         pytest.skip(f"symlink creation unavailable: {exc}")
 
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output.write_markdown("trusted report", str(destination))
+
+    assert captured.value.code == "non_regular"
+    assert target.read_text(encoding="utf-8") == "do not overwrite"
+    assert destination.is_symlink()
+    assert _atomic_temps(tmp_path) == []
+
+
+def test_atomic_writer_rejects_directory_destination(tmp_path: Path) -> None:
+    destination = tmp_path / "report.md"
+    destination.mkdir()
+
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output.write_markdown("trusted report", str(destination))
+
+    assert captured.value.code == "non_regular"
+    assert _atomic_temps(tmp_path) == []
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO unavailable")
+def test_atomic_writer_rejects_fifo_destination(tmp_path: Path) -> None:
+    destination = tmp_path / "report.md"
+    os.mkfifo(destination)
+
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output.write_markdown("trusted report", str(destination))
+
+    assert captured.value.code == "non_regular"
+    assert _atomic_temps(tmp_path) == []
+
+
+def test_destination_validator_rejects_device_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        guard_output.os,
+        "lstat",
+        lambda _path: SimpleNamespace(st_mode=stat.S_IFCHR | 0o660),
+    )
+
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output._validate_output_destination("report.md")
+
+    assert captured.value.code == "non_regular"
+
+
+def test_destination_validator_rejects_simulated_read_only_regular_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        guard_output.os,
+        "lstat",
+        lambda _path: SimpleNamespace(st_mode=stat.S_IFREG | 0o444),
+    )
+
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output._validate_output_destination("report.md")
+
+    assert captured.value.code == "read_only"
+
+
+@pytest.mark.parametrize(
+    "path",
+    (
+        "NUL",
+        "NUL.",
+        "NUL ",
+        "reports/CON.txt",
+        "reports/PRN",
+        "reports/AUX.json",
+        "reports/COM",
+        "reports/COM1.log",
+        "reports/LPT9",
+        r"\\?\C:\reports\verdict.json",
+        r"\\.\NUL",
+        r"\??\C:\reports\verdict.json",
+        "reports/verdict.json:stream",
+    ),
+)
+def test_destination_validator_rejects_windows_devices_and_namespaces(
+    path: str,
+) -> None:
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output._validate_output_destination(path, platform_name="nt")
+
+    assert captured.value.code in {
+        "windows_namespace",
+        "windows_reserved_name",
+    }
+
+
+def test_atomic_writer_revalidates_leaf_immediately_before_replace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "report.md"
+    calls = 0
+
+    def changing_destination(_path: str) -> int | None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise guard_output.OutputDestinationError(
+                "non_regular",
+                "simulated leaf replacement",
+            )
+        return None
+
+    monkeypatch.setattr(
+        guard_output,
+        "_validate_output_destination",
+        changing_destination,
+    )
+
+    with pytest.raises(guard_output.OutputDestinationError) as captured:
+        guard_output.write_markdown("trusted report", str(destination))
+
+    assert captured.value.code == "non_regular"
+    assert calls == 2
+    assert not destination.exists()
+    assert _atomic_temps(tmp_path) == []
+
+
+def test_atomic_writer_applies_existing_mode_before_replace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    destination = tmp_path / "report.md"
+    observed_modes: list[int] = []
+    real_chmod = guard_output.os.chmod
+
+    monkeypatch.setattr(
+        guard_output,
+        "_validate_output_destination",
+        lambda _path: 0o640,
+    )
+
+    def observed_chmod(path: str, mode: int) -> None:
+        observed_modes.append(mode)
+        real_chmod(path, mode)
+
+    monkeypatch.setattr(guard_output.os, "chmod", observed_chmod)
+
     guard_output.write_markdown("trusted report", str(destination))
 
-    assert target.read_text(encoding="utf-8") == "do not overwrite"
-    assert not destination.is_symlink()
+    assert observed_modes == [0o640]
     assert destination.read_text(encoding="utf-8") == "trusted report"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="portable POSIX mode assertion")
+def test_atomic_writer_preserves_existing_regular_mode(tmp_path: Path) -> None:
+    destination = tmp_path / "report.md"
+    destination.write_text("prior", encoding="utf-8")
+    destination.chmod(0o640)
+
+    guard_output.write_markdown("trusted report", str(destination))
+
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+    assert destination.read_text(encoding="utf-8") == "trusted report"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="portable POSIX mode assertion")
+def test_atomic_writer_refuses_existing_read_only_regular_file(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "report.md"
+    destination.write_text("prior", encoding="utf-8")
+    destination.chmod(0o444)
+    try:
+        with pytest.raises(guard_output.OutputDestinationError) as captured:
+            guard_output.write_markdown("trusted report", str(destination))
+
+        assert captured.value.code == "read_only"
+        assert destination.read_text(encoding="utf-8") == "prior"
+        assert _atomic_temps(tmp_path) == []
+    finally:
+        destination.chmod(0o600)
 
 
 def test_cli_report_path_uses_the_shared_atomic_writer(
@@ -247,7 +556,7 @@ def test_cli_report_path_uses_the_shared_atomic_writer(
 
 def test_sarif_artifact_uri_is_normalized_and_percent_encoded() -> None:
     result = _error_result(
-        files_changed=["src\\space name-µ.py"],
+        files_changed=["src/space name-\u00b5.py"],
     )
 
     finding = guard_module.to_sarif(result)["runs"][0]["results"][0]
@@ -274,6 +583,9 @@ def test_sarif_artifact_uri_is_normalized_and_percent_encoded() -> None:
         "src/../escape.py",
         "src//ambiguous.py",
         "C:\\absolute.py",
+        "C:relative.py",
+        "src\\relative.py",
+        "src/surrogate\ud800.py",
     ),
 )
 def test_sarif_rejects_control_or_non_repository_artifact_paths(
@@ -281,6 +593,21 @@ def test_sarif_rejects_control_or_non_repository_artifact_paths(
 ) -> None:
     with pytest.raises(ValueError, match="SARIF artifact path"):
         guard_module.to_sarif(_error_result(files_changed=[path]))
+
+
+@pytest.mark.parametrize(
+    ("path", "code"),
+    (
+        ("src\\relative.py", "backslash"),
+        ("C:relative.py", "drive_prefix"),
+        ("src/surrogate\ud800.py", "surrogate"),
+    ),
+)
+def test_sarif_path_errors_are_structured(path: str, code: str) -> None:
+    with pytest.raises(guard_output.SarifArtifactPathError) as captured:
+        guard_module.to_sarif(_error_result(files_changed=[path]))
+
+    assert captured.value.code == code
 
 
 def test_successful_atomic_json_preserves_the_public_wire_payload(

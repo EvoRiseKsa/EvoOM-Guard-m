@@ -308,11 +308,15 @@ remain in their established facades.
   stdlib-only `integrations.guard_output` adapter. Guard retains four exact
   compatibility facades. A pre-extraction vector freezes benign
   report/JSON/SARIF content and writer bytes. The owner now context-escapes
-  candidate-derived Markdown, rejects control/format characters and unsafe
-  repository paths in SARIF locations, and routes Markdown, JSON, and SARIF
-  through one fsynced same-directory atomic writer. Focused mutations protect
-  sanitization, same-directory staging, fsync-before-replace, URI encoding, and
-  non-PASS SARIF emission rather than incidental module-global lookup timing.
+  candidate-derived Markdown (including entity introducers), validates dynamic
+  numeric evidence, rejects ambiguous/control/surrogate SARIF locations, and
+  routes Markdown, JSON, and SARIF through one fsynced same-directory atomic
+  writer. The writer rejects observed non-regular/read-only leaves twice and
+  preserves portable regular-file mode bits. Its trusted/quiescent-parent race
+  bound, non-portable metadata exclusions, lack of parent-directory fsync, and
+  lack of crash/NFS/multi-file durability are explicit. Focused mutations
+  protect these boundaries plus URI encoding and non-PASS SARIF emission rather
+  than incidental module-global lookup timing.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

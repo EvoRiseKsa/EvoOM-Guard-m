@@ -177,11 +177,18 @@ Markdown rendering and JSON/SARIF publication now belong to the stdlib-only
 function signatures. A frozen wire vector binds benign report strings,
 object/key order, indentation, trailing-newline behavior, platform text
 translation, and non-PASS SARIF alert emission. Candidate-derived Markdown is
-escaped for its rendering context, SARIF artifact paths are canonical
-repository-relative URIs, and Markdown/JSON/SARIF destinations share one
-fsynced same-directory temporary-write plus atomic-replace boundary. Failed
-serialization or commit leaves the prior complete destination untouched, and
-a leaf symlink is replaced rather than followed.
+escaped for its rendering context, numeric evidence is type/range checked,
+and SARIF artifact paths are canonical repository-relative URIs that reject
+controls, surrogates, drive prefixes, and backslashes. Markdown/JSON/SARIF
+destinations share one fsynced same-directory temporary-write plus
+atomic-replace boundary. Existing symlinks, directories, special files, and
+mode-bit read-only files are rejected before staging and immediately before
+replacement; an existing regular file's portable `rwx` mode is preserved.
+The parent directory remains a trusted, quiescent boundary between those two
+checks. Ownership, ACLs, xattrs, Windows security descriptors/alternate
+streams, and other non-portable metadata are not preserved. No parent-directory
+fsync is performed, so this does not promise power-loss/crash, NFS/distributed
+filesystem, or multi-file transactional durability.
 The remaining black-box candidate/evidence/cleanup orchestration and further
 runtime-effect decomposition remain pending; black-box pack sequencing,
 candidate path admission, candidate-tree intake, repository workspace
