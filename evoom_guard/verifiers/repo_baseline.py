@@ -18,20 +18,13 @@ compatibility seams at the same operation sites.
 
 from __future__ import annotations
 
-import os
-import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from evoom_guard.execution import (
-    ProcessContainmentError,
-    ProcessOutputLimitExceeded,
-)
-from evoom_guard.verifiers.fidelity import SetupFidelityError
-
 BaselineEvidence = dict[str, Any]
 FidelitySnapshot = dict[str, Any]
+ExceptionType = type[BaseException]
 
 
 class BaselineProcess(Protocol):
@@ -185,9 +178,20 @@ class CleanupWorkspace(Protocol):
     def __call__(self, path: str, *, ignore_errors: bool) -> None: ...
 
 
+class JoinPath(Protocol):
+    """Join one judge-owned workspace path at its historical lookup site."""
+
+    def __call__(self, *parts: str) -> str: ...
+
+
 @dataclass(frozen=True, slots=True)
 class RepoBaselineRequest:
-    """Immutable inputs to one pristine repository-suite run."""
+    """Frozen field bindings for one pristine repository-suite run.
+
+    The two command lists deliberately retain their caller-owned references.
+    That historical aliasing is observable through the Guard compatibility
+    facade; a defensive tuple snapshot would be a separate semantic change.
+    """
 
     repository_path: str
     test_command: list[str] | None
@@ -204,6 +208,13 @@ class RepoBaselineServices:
 
     verifier_factory: BuildBaselineVerifier
     workspace_factory_provider: Callable[[], MakeWorkspace]
+    path_join_provider: Callable[[], JoinPath]
+    platform_name_provider: Callable[[], str]
+    os_error_provider: Callable[[], ExceptionType]
+    setup_fidelity_error_provider: Callable[[], ExceptionType]
+    containment_error_provider: Callable[[], ExceptionType]
+    output_limit_error_provider: Callable[[], ExceptionType]
+    timeout_error_provider: Callable[[], ExceptionType]
     copy_repository_provider: Callable[[], CopyRepository]
     judge_environment_provider: Callable[[], BuildJudgeEnvironment]
     setup_fidelity_snapshot: CaptureSetupFidelity
@@ -241,7 +252,7 @@ def run_repo_baseline(
         strict_harness=request.strict_harness,
     )
     workdir = services.workspace_factory_provider()(prefix="evo_baseline_")
-    candidate_copy = os.path.join(workdir, "repo")
+    candidate_copy = services.path_join_provider()(workdir, "repo")
     try:
         services.copy_repository_provider()(
             request.repository_path,
@@ -273,7 +284,7 @@ def run_repo_baseline(
                     timeout=request.timeout,
                     preexec_fn=(
                         verifier._limits()
-                        if os.name == "posix"
+                        if services.platform_name_provider() == "posix"
                         else None
                     ),
                     require_process_group_cleanup_proof=(
@@ -286,11 +297,11 @@ def run_repo_baseline(
                     baseline=setup_before,
                 )
             except (
-                OSError,
-                SetupFidelityError,
-                ProcessContainmentError,
-                ProcessOutputLimitExceeded,
-                subprocess.TimeoutExpired,
+                services.os_error_provider(),
+                services.setup_fidelity_error_provider(),
+                services.containment_error_provider(),
+                services.output_limit_error_provider(),
+                services.timeout_error_provider(),
             ):
                 return _empty_evidence(setup_fidelity="unverified")
             if setup_process.returncode != 0:
@@ -310,7 +321,10 @@ def run_repo_baseline(
         )
         if request.test_command:
             base_command = list(request.test_command)
-        report_path = os.path.join(workdir, "judge-result.xml")
+        report_path = services.path_join_provider()(
+            workdir,
+            "judge-result.xml",
+        )
         command, report_expected, report_environment = (
             services.instrument_command(base_command, report_path)
         )
@@ -334,7 +348,7 @@ def run_repo_baseline(
                 env=run_environment,
                 preexec_fn=(
                     verifier._limits()
-                    if os.name == "posix"
+                    if services.platform_name_provider() == "posix"
                     else None
                 ),
                 timeout=request.timeout,
@@ -343,10 +357,10 @@ def run_repo_baseline(
                 ),
             )
         except (
-            OSError,
-            ProcessContainmentError,
-            ProcessOutputLimitExceeded,
-            subprocess.TimeoutExpired,
+            services.os_error_provider(),
+            services.containment_error_provider(),
+            services.output_limit_error_provider(),
+            services.timeout_error_provider(),
         ):
             return _empty_evidence()
 

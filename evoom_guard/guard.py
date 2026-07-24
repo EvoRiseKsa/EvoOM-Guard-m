@@ -1337,6 +1337,7 @@ def _run_baseline_suite(
     )
     from evoom_guard.verifiers.repo_verifier import (
         RepoVerifier,
+        SetupFidelityError,
         detect_tamper,
         grade_repo_run,
         parse_junit_dir,
@@ -1357,6 +1358,17 @@ def _run_baseline_suite(
         services=RepoBaselineServices(
             verifier_factory=RepoVerifier,
             workspace_factory_provider=lambda: _tempfile.mkdtemp,
+            path_join_provider=lambda: cast(Any, os.path.join),
+            platform_name_provider=lambda: os.name,
+            os_error_provider=lambda: OSError,
+            setup_fidelity_error_provider=lambda: SetupFidelityError,
+            containment_error_provider=(
+                lambda: _SubprocessContainmentError
+            ),
+            output_limit_error_provider=(
+                lambda: _SubprocessOutputLimitExceeded
+            ),
+            timeout_error_provider=lambda: subprocess.TimeoutExpired,
             copy_repository_provider=lambda: cast(Any, copy_repo_tree),
             judge_environment_provider=lambda: judge_subprocess_env,
             setup_fidelity_snapshot=cast(

@@ -361,7 +361,173 @@ def test_baseline_cleanup_runs_after_unhandled_primary_failure(
     ]
 
 
-def test_repo_baseline_owner_exposes_an_immutable_request_contract() -> None:
+def test_cleanup_provider_lookup_failure_historically_masks_keyboard_interrupt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "owned-baseline"
+    primary = KeyboardInterrupt("operator interrupted repository copy")
+    lookup_failure = SystemExit("cleanup provider lookup exited")
+
+    class FakeVerifier:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class BrokenCleanupProvider:
+        @property
+        def rmtree(self) -> object:
+            raise lookup_failure
+
+    def make_workspace(*, prefix: str) -> str:
+        assert prefix == "evo_baseline_"
+        workspace.mkdir()
+        return str(workspace)
+
+    def fail_copy(_source: str, _destination: str) -> None:
+        raise primary
+
+    monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
+    monkeypatch.setattr(tempfile, "mkdtemp", make_workspace)
+    monkeypatch.setattr(guard_module, "copy_repo_tree", fail_copy)
+    monkeypatch.setattr(guard_module, "shutil", BrokenCleanupProvider())
+
+    with pytest.raises(SystemExit) as caught:
+        guard_module._run_baseline_suite(
+            str(tmp_path / "source"),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is lookup_failure
+    assert caught.value.__context__ is primary
+
+
+def test_cleanup_call_keyboard_interrupt_historically_masks_primary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "owned-baseline"
+    primary = RuntimeError("repository copy failed")
+    cleanup_failure = KeyboardInterrupt("cleanup interrupted")
+
+    class FakeVerifier:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    def make_workspace(*, prefix: str) -> str:
+        assert prefix == "evo_baseline_"
+        workspace.mkdir()
+        return str(workspace)
+
+    def fail_copy(_source: str, _destination: str) -> None:
+        raise primary
+
+    def fail_cleanup(_path: str, *, ignore_errors: bool) -> None:
+        assert ignore_errors is True
+        raise cleanup_failure
+
+    class InterruptingCleanupProvider:
+        @property
+        def rmtree(self) -> object:
+            return fail_cleanup
+
+    monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
+    monkeypatch.setattr(tempfile, "mkdtemp", make_workspace)
+    monkeypatch.setattr(guard_module, "copy_repo_tree", fail_copy)
+    monkeypatch.setattr(
+        guard_module,
+        "shutil",
+        InterruptingCleanupProvider(),
+    )
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        guard_module._run_baseline_suite(
+            str(tmp_path / "source"),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is cleanup_failure
+    assert caught.value.__context__ is primary
+
+
+def test_cleanup_lookup_failure_is_primary_without_an_original_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _events, _workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    lookup_failure = SystemExit("cleanup provider unavailable")
+
+    class BrokenCleanupProvider:
+        @property
+        def rmtree(self) -> object:
+            raise lookup_failure
+
+    monkeypatch.setattr(guard_module, "shutil", BrokenCleanupProvider())
+
+    with pytest.raises(SystemExit) as caught:
+        guard_module._run_baseline_suite(
+            str(source),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is lookup_failure
+
+
+def test_cleanup_keyboard_interrupt_is_primary_after_a_pending_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _events, _workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    cleanup_failure = KeyboardInterrupt("cleanup interrupted after result")
+
+    def fail_cleanup(_path: str, *, ignore_errors: bool) -> None:
+        assert ignore_errors is True
+        raise cleanup_failure
+
+    class InterruptingCleanupProvider:
+        @property
+        def rmtree(self) -> object:
+            return fail_cleanup
+
+    monkeypatch.setattr(
+        guard_module,
+        "shutil",
+        InterruptingCleanupProvider(),
+    )
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        guard_module._run_baseline_suite(
+            str(source),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is cleanup_failure
+
+
+def test_repo_baseline_owner_exposes_frozen_request_bindings() -> None:
     request = repo_baseline.RepoBaselineRequest(
         repository_path="repository",
         test_command=["suite"],
@@ -378,3 +544,50 @@ def test_repo_baseline_owner_exposes_an_immutable_request_contract() -> None:
     assert not hasattr(request, "__dict__")
     with pytest.raises(FrozenInstanceError):
         request.strict_harness = False  # type: ignore[misc]
+
+
+def test_guard_facade_preserves_caller_owned_baseline_command_references(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_command = ["suite", "--flag"]
+    setup_command = ["setup", "--flag"]
+    captured: list[repo_baseline.RepoBaselineRequest] = []
+
+    def capture(
+        request: repo_baseline.RepoBaselineRequest,
+        *,
+        services: repo_baseline.RepoBaselineServices,
+    ) -> dict[str, object]:
+        del services
+        captured.append(request)
+        assert request.test_command is test_command
+        assert request.setup_command is setup_command
+        test_command[:] = ["mutated-suite"]
+        setup_command[:] = ["mutated-setup"]
+        assert request.test_command == ["mutated-suite"]
+        assert request.setup_command == ["mutated-setup"]
+        return {
+            "verdict": "PASS",
+            "tests_passed": 1,
+            "tests_total": 1,
+        }
+
+    monkeypatch.setattr(guard_module, "run_repo_baseline", capture)
+
+    result = guard_module._run_baseline_suite(
+        "repository",
+        test_command=test_command,
+        setup_command=setup_command,
+        setup_output_globs=(),
+        timeout=17,
+        mem_limit_mb=23,
+        strict_harness=True,
+    )
+
+    assert result["verdict"] == "PASS"
+    assert len(captured) == 1
+    request = captured[0]
+    assert request.test_command is test_command
+    assert request.setup_command is setup_command
+    assert request.test_command == ["mutated-suite"]
+    assert request.setup_command == ["mutated-setup"]

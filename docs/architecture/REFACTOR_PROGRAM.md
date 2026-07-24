@@ -56,6 +56,11 @@ captured behavioral baseline.
   `python tools/ci/run_security_mutation_gate.py`. Every reviewed mutant must be
   killed by an assertion; timeouts and test infrastructure errors fail closed.
 
+For `R2` slices, compatibility covers published behavior and module/effect
+seams explicitly characterized before extraction. Arbitrary runtime rebinding
+of Python builtins or typing-only helpers is outside that contract and does not
+justify exposing those implementation details as injected services.
+
 The merged characterization and gate slices include PRs #109, #114, #115,
 #122, and #132. The capture tools require explicit `--write` for reviewed
 baseline replacement.
@@ -303,7 +308,18 @@ remain in their established facades.
 - `verifiers.repo_baseline.run_repo_baseline` owns the pristine-copy
   setup/suite runtime, bounded host execution, judge-owned JUnit grading, and
   workspace cleanup behind Guard's unchanged private compatibility facade.
-  Repair-effect policy remains in repo finalization.
+  Repair-effect policy remains in repo finalization. The facade retains the
+  historical exception-binding schedule: the function-local
+  `SetupFidelityError` import is bound once at entry, while `OSError`,
+  containment, output-limit, and timeout matchers remain live until the
+  corresponding `except` clause runs. Cross-commit characterization and one
+  focused mutation per matcher protect that schedule.
+- Deferred R3 follow-up, deliberately excluded from this extraction: snapshot
+  caller-owned setup/test command lists and preserve an active primary
+  `BaseException` across cleanup-provider lookup and cleanup execution. Both
+  changes alter observable compatibility behavior and therefore require their
+  own threat model, adversarial vectors, migration note, and rollback plan
+  after the R2 owner boundary is merged.
 - Pending: move only the remaining black-box and verifier effect sequencing
   behind separately characterized boundaries. Public `GuardResult` and the
   black-box branch intentionally remain in Guard. The `_run_baseline_suite`
