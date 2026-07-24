@@ -317,7 +317,7 @@ def test_docker_timeout_forcibly_removes_the_exact_named_container(
         isolation="docker",
         docker_image="python:3.12-slim",
     )
-    verifier._resolved_docker_image = "sha256:fixed"
+    verifier._resolved_docker_image = "sha256:" + "2" * 64
 
     with pytest.raises(subprocess.TimeoutExpired):
         verifier._run_docker(

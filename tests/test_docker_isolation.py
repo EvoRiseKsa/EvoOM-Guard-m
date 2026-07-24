@@ -26,6 +26,8 @@ from evoom_guard.guard import ERROR, FAIL, PASS, guard
 from evoom_guard.pack_manifest import pack_digest
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
 
+_IMAGE_ID = "sha256:" + "d" * 64
+
 
 def _docker_ok() -> bool:
     if shutil.which("docker") is None:
@@ -63,6 +65,7 @@ needs_gvisor = pytest.mark.skipif(
 # ───────────────────────────── command wiring (no docker) ───────────────────
 def test_docker_command_is_isolated_and_mounts_report_separately():
     v = RepoVerifier(mem_limit_mb=512, isolation="docker", docker_image="node:22-slim")
+    v._resolved_docker_image = _IMAGE_ID
     dc = v._docker_command(["node", "--test", "x.mjs"], "/copy", "/out", "evoguard_job")
     assert dc[:3] == ["docker", "run", "--rm"]
     # isolation flags
@@ -76,11 +79,12 @@ def test_docker_command_is_isolated_and_mounts_report_separately():
     # the repo copy and the judge-owned report dir are separate bind mounts
     assert "-v" in dc and "/copy:/work:ro" in dc and "/out:/out:rw" in dc
     # image then the command, in order
-    assert dc[-4:] == ["node:22-slim", "node", "--test", "x.mjs"]
+    assert dc[-4:] == [_IMAGE_ID, "node", "--test", "x.mjs"]
 
 
 def test_docker_command_omits_memory_when_uncapped():
     v = RepoVerifier(mem_limit_mb=0, isolation="docker", docker_image="node:22-slim")
+    v._resolved_docker_image = _IMAGE_ID
     assert "--memory" not in v._docker_command(["node", "--test"], "/c", "/o", "n")
 
 
@@ -99,6 +103,7 @@ def test_concurrent_container_names_are_unique_and_docker_safe():
 
 def test_setup_mount_is_writable_but_suite_and_pack_are_read_only():
     v = RepoVerifier(mem_limit_mb=0, isolation="docker", docker_image="python:3.12-slim")
+    v._resolved_docker_image = _IMAGE_ID
     setup = v._docker_command(
         ["python", "setup.py"], "/copy", None, "setup", work_writable=True
     )
@@ -121,6 +126,7 @@ def test_docker_command_injects_reporter_env():
     # A runner whose report path comes from the environment (jest-junit) gets it
     # passed into the container as a -e flag so the judge-owned mount receives it.
     v = RepoVerifier(mem_limit_mb=0, isolation="docker", docker_image="node:22-slim")
+    v._resolved_docker_image = _IMAGE_ID
     dc = v._docker_command(
         ["jest"], "/c", "/o", "n",
         {"JEST_JUNIT_OUTPUT_FILE": "/out/judge-result.xml"},
@@ -154,6 +160,39 @@ def test_repo_verifier_rejects_unknown_isolation_before_copy(
     assert copied == []
 
 
+def test_noncanonical_resolved_image_never_reaches_docker(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = RepoVerifier(
+        isolation="docker",
+        docker_image="mutable:tag",
+        mem_limit_mb=0,
+    )
+    docker_runs: list[list[str]] = []
+    monkeypatch.setattr(
+        verifier,
+        "_resolve_docker_image",
+        lambda: "--privileged",
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_run_docker_client",
+        lambda command, _name: docker_runs.append(command),
+    )
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(tmp_path)},
+    )
+
+    assert result.passed is False
+    assert result.artifact["outcome"] == "isolation_unavailable"
+    assert "non-canonical image ID" in result.diagnostics
+    assert docker_runs == []
+
+
 def test_cli_docker_without_image_is_usage_error(tmp_path, capsys):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -177,7 +216,7 @@ def test_setup_runs_inside_requested_container_by_default(tmp_path, monkeypatch)
         isolation="docker", docker_image="python:3.12-slim",
         setup_command=["python", "-c", "print('x; touch PWNED')"],
     )
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(verifier, "_run_docker_client", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
@@ -198,7 +237,7 @@ def test_setup_container_exit_125_is_isolation_unavailable(tmp_path, monkeypatch
         docker_image="python:3.12-slim",
         setup_command=["python", "-c", "pass"],
     )
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(
         verifier,
         "_run_docker_client",
@@ -215,7 +254,7 @@ def test_setup_container_exit_125_is_isolation_unavailable(tmp_path, monkeypatch
 def test_suite_container_exit_125_is_isolation_unavailable(tmp_path, monkeypatch):
     (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
     verifier = RepoVerifier(isolation="docker", docker_image="python:3.12-slim")
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(
         verifier,
         "_run_docker_client",
@@ -240,7 +279,7 @@ def test_host_setup_requires_explicit_opt_in_and_is_recorded(tmp_path, monkeypat
         isolation="docker", docker_image="python:3.12-slim",
         setup_command=["trusted-setup", "--offline"], trust_setup_on_host=True,
     )
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:fixed")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
@@ -273,7 +312,7 @@ def test_setup_suite_and_pack_share_one_resolved_image_id(tmp_path, monkeypatch)
     def resolve_once():
         nonlocal resolve_calls
         resolve_calls += 1
-        return "sha256:fixed-image"
+        return _IMAGE_ID
 
     def fake_run(cmd, _name):
         docker_commands.append(cmd)
@@ -300,9 +339,9 @@ def test_setup_suite_and_pack_share_one_resolved_image_id(tmp_path, monkeypatch)
     assert result.passed, result.diagnostics
     assert resolve_calls == 1
     assert len(docker_commands) == 3
-    assert all("sha256:fixed-image" in command for command in docker_commands)
+    assert all(_IMAGE_ID in command for command in docker_commands)
     assert all("python:mutable" not in command for command in docker_commands)
-    assert result.artifact["image_digest"] == "sha256:fixed-image"
+    assert result.artifact["image_digest"] == _IMAGE_ID
     assert result.artifact["runtime_continuity"] == "read_only_enforced"
 
 
@@ -448,6 +487,7 @@ def test_gvisor_isolation_uses_runsc_runtime():
     # gVisor is the container judge through the runsc OCI runtime — a user-space
     # guest kernel, no /dev/kvm. It inherits the same network-less/read-only flags.
     v = RepoVerifier(isolation="gvisor", docker_image="node:22-slim")
+    v._resolved_docker_image = _IMAGE_ID
     assert v.docker_runtime == "runsc"
     dc = v._docker_command(["node", "--test"], "/c", "/o", "n")
     assert "--runtime" in dc and dc[dc.index("--runtime") + 1] == "runsc"
@@ -457,6 +497,7 @@ def test_gvisor_isolation_uses_runsc_runtime():
 
 def test_docker_isolation_has_no_runtime_flag():
     v = RepoVerifier(isolation="docker", docker_image="node:22-slim")
+    v._resolved_docker_image = _IMAGE_ID
     assert v.docker_runtime is None
     assert "--runtime" not in v._docker_command(["node", "--test"], "/c", "/o", "n")
 

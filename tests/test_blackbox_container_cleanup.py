@@ -26,6 +26,7 @@ from evoom_guard.guard import ERROR, REASON_RUNTIME_CLEANUP_FAILED, guard
 
 _CID_A = "a" * 64
 _CID_B = "b" * 64
+_IMAGE_ID = "sha256:" + "3" * 64
 
 
 class _TimedOutJudgeProcess:
@@ -69,7 +70,7 @@ class _DockerEvidence:
         return {
             "requested": "docker",
             "delivered": "docker",
-            "image_digest": "sha256:judge-pinned-image",
+            "image_digest": _IMAGE_ID,
         }
 
 
@@ -329,7 +330,7 @@ def test_launcher_allocates_parallel_unique_cidfiles_outside_target(tmp_path: Pa
                 "docker",
                 "run",
                 "--rm",
-                "sha256:pinned",
+                _IMAGE_ID,
             ],
             "cidfile_dir": str(cidfile_dir),
         },
@@ -358,7 +359,7 @@ def test_launcher_allocates_parallel_unique_cidfiles_outside_target(tmp_path: Pa
         assert cid_path.parent == cidfile_dir
         assert cid_path.suffix == ".cid"
         assert target not in cid_path.parents
-        assert argv[cid_index + 2] == "sha256:pinned"
+        assert argv[cid_index + 2] == _IMAGE_ID
         assert argv[-1] == f"payload-{index}"
         assert "--rm" in argv
     assert cid_paths[0] != cid_paths[1]
@@ -377,7 +378,7 @@ def test_prepare_container_configures_judge_owned_cid_directory(tmp_path: Path) 
             "evoom_guard.candidate_runner._run_docker_control",
             return_value=SimpleNamespace(returncode=0, stdout="28", stderr=""),
         ),
-        mock.patch.object(CandidateRunner, "_ensure_image", return_value="sha256:pinned"),
+        mock.patch.object(CandidateRunner, "_ensure_image", return_value=_IMAGE_ID),
     ):
         launcher, _env, _evidence = runner.prepare(str(tmp_path), str(target))
 
@@ -386,7 +387,7 @@ def test_prepare_container_configures_judge_owned_cid_directory(tmp_path: Path) 
     cidfile_dir = Path(cfg["cidfile_dir"])
     assert cidfile_dir == tmp_path / CANDIDATE_CID_DIRNAME
     assert target not in cidfile_dir.parents
-    assert cfg["prefix"][-1] == "sha256:pinned"
+    assert cfg["prefix"][-1] == _IMAGE_ID
     assert cfg["prefix"][:3] == ["docker", "run", "--rm"]
     assert "secrets.token_hex(16)" in launcher_body
     assert "['--cidfile', cidfile, prefix[-1]]" in launcher_body

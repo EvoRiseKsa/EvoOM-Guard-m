@@ -12,6 +12,7 @@ from evoom_guard.verifiers import repo_verifier as repo_verifier_module
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
 
 _STARTED_AT = "2026-07-13T10:11:12.123456789Z"
+_IMAGE_ID = "sha256:" + "f" * 64
 
 
 @pytest.fixture(autouse=True)
@@ -119,7 +120,7 @@ def test_setup_timeout_requires_inspect_proof(
     repo, _pack = _roots(tmp_path)
     fake = _DockerFake(timeout_phase="setup", container_started=container_started)
     verifier = _verifier(setup=True)
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(_candidate(), {"repo_path": str(repo)})
@@ -149,7 +150,7 @@ def test_repo_suite_timeout_requires_inspect_proof(
         timeout_phase="repo_suite", container_started=container_started
     )
     verifier = _verifier()
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(_candidate(), {"repo_path": str(repo)})
@@ -180,7 +181,7 @@ def test_verifier_pack_timeout_requires_inspect_proof_without_erasing_suite(
         timeout_phase="verifier_pack", container_started=container_started
     )
     verifier = _verifier()
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(
@@ -205,7 +206,7 @@ def test_pack_exit_125_keeps_repo_suite_delivery_and_records_pack_unavailable(
     repo, pack = _roots(tmp_path)
     fake = _DockerFake(pack_exit_125=True)
     verifier = _verifier()
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake)
 
     result = verifier.verify(

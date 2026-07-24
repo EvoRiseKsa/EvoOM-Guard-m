@@ -28,6 +28,8 @@ from unittest import mock
 from evoom_guard.candidate_runner import CandidateRunner, IsolationUnavailable
 from evoom_guard.verifiers.repo_verifier import _SubprocessOutputLimitExceeded
 
+_IMAGE_ID = "sha256:" + "c" * 64
+
 
 class LauncherIsShellFreeTests(unittest.TestCase):
     def test_unknown_isolation_is_rejected_at_construction(self) -> None:
@@ -203,16 +205,53 @@ class ContainerPrefixTests(unittest.TestCase):
                 mock.patch("evoom_guard.candidate_runner.shutil.which", return_value="/usr/bin/docker"), \
                 mock.patch("evoom_guard.candidate_runner._run_docker_control",
                            return_value=types.SimpleNamespace(returncode=0, stdout="28", stderr="")), \
-                mock.patch.object(CandidateRunner, "_ensure_image", return_value="sha256:abc"):
+                mock.patch.object(
+                    CandidateRunner,
+                    "_ensure_image",
+                    return_value=_IMAGE_ID,
+                ):
             launcher, _env, evidence = runner.prepare(tmp, tmp)
             cfg = json.load(open(launcher + ".json", encoding="utf-8"))
         self.assertEqual(evidence.delivered, "docker")
-        self.assertEqual(cfg["prefix"][-1], "sha256:abc")
+        self.assertEqual(cfg["prefix"][-1], _IMAGE_ID)
         self.assertNotIn("img", cfg["prefix"])
         cap_index = cfg["prefix"].index("--cap-drop")
         self.assertEqual(cfg["prefix"][cap_index + 1], "ALL")
         self.assertIn(evil, cfg["prefix"])                 # preserved intact…
         self.assertEqual(cfg["prefix"].count(evil), 1)     # …as exactly one element
+
+    def test_noncanonical_image_identity_never_reaches_a_launcher(self) -> None:
+        runner = CandidateRunner(isolation="docker", docker_image="mutable:tag")
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("evoom_guard.candidate_runner.os.name", "posix"), \
+                mock.patch(
+                    "evoom_guard.candidate_runner.shutil.which",
+                    return_value="/usr/bin/docker",
+                ), \
+                mock.patch(
+                    "evoom_guard.candidate_runner._run_docker_control",
+                    return_value=types.SimpleNamespace(
+                        returncode=0,
+                        stdout="28",
+                        stderr="",
+                    ),
+                ), \
+                mock.patch.object(
+                    CandidateRunner,
+                    "_ensure_image",
+                    return_value="--privileged",
+                ), \
+                mock.patch.object(
+                    CandidateRunner,
+                    "_write_launcher",
+                ) as write_launcher:
+            with self.assertRaisesRegex(
+                IsolationUnavailable,
+                "non-canonical image ID",
+            ):
+                runner.prepare(tmp, tmp)
+
+        write_launcher.assert_not_called()
 
 
 if __name__ == "__main__":

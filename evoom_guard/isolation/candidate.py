@@ -64,8 +64,10 @@ from evoom_guard.isolation.docker import (
 )
 from evoom_guard.isolation.docker import (
     DockerControlRequest,
+    DockerImageIdentityError,
     execute_docker_control,
     inspect_docker_image,
+    require_canonical_docker_image_id,
 )
 
 # Docker writes candidate container IDs here.  The directory is owned by the
@@ -199,7 +201,11 @@ class CandidateRunner:
             return self._prepare_subprocess(workdir, target)
         except IsolationUnavailable:
             raise
-        except (OSError, subprocess.SubprocessError) as exc:
+        except (
+            DockerImageIdentityError,
+            OSError,
+            subprocess.SubprocessError,
+        ) as exc:
             # Docker CLI discovery/version/inspect/pull and launcher writes are
             # environmental delivery failures, not guard crashes. Preserve
             # KeyboardInterrupt/SystemExit (BaseException) for the operator.
@@ -254,7 +260,9 @@ class CandidateRunner:
                 f"reachable: {(probe.stderr or probe.stdout).strip()[:200]}"
             )
         runtime = self.docker_runtime or ("runsc" if self.isolation == "gvisor" else None)
-        image_digest = self._ensure_image(self.docker_image)
+        image_digest = require_canonical_docker_image_id(
+            self._ensure_image(self.docker_image)
+        )
 
         # A fully-resolved argv PREFIX (no shell, no env expansion). The launcher
         # appends the pack's argv and execs it directly, so image/network/runtime/
@@ -361,7 +369,8 @@ class CandidateRunner:
         )
         if inspected.returncode != 0:
             return None
-        return inspected.stdout.strip() or None
+        image_id = inspected.stdout.strip()
+        return require_canonical_docker_image_id(image_id) if image_id else None
 
     @staticmethod
     def _write_launcher(workdir: str, cfg: dict[str, Any]) -> str:

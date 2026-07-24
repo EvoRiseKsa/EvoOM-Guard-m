@@ -33,6 +33,22 @@ DOCKER_CLEANUP_TOTAL_TIMEOUT_SECONDS = 10.0
 
 _DOCKER_CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
 _DOCKER_CONTAINER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
+_DOCKER_IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}\Z")
+
+
+class DockerImageIdentityError(RuntimeError):
+    """Docker returned an image identity unsafe to place in run argv."""
+
+
+def require_canonical_docker_image_id(value: object) -> str:
+    """Return a canonical immutable image ID or fail closed."""
+
+    if type(value) is not str or _DOCKER_IMAGE_ID.fullmatch(value) is None:
+        raise DockerImageIdentityError(
+            "Docker image inspection returned a non-canonical image ID; "
+            "expected sha256 followed by 64 lowercase hexadecimal characters"
+        )
+    return value
 
 
 class BoundedProcessRunner(Protocol):
@@ -279,7 +295,13 @@ def resolve_docker_image(
     )
     initial_id = initial.stdout.strip() if initial.returncode == 0 else ""
     if initial_id:
-        return DockerImageResolution(image, initial, None, None, initial_id)
+        return DockerImageResolution(
+            image,
+            initial,
+            None,
+            None,
+            require_canonical_docker_image_id(initial_id),
+        )
 
     should_pull = initial.returncode != 0 or pull_when_inspection_empty
     if not should_pull:
@@ -299,12 +321,15 @@ def resolve_docker_image(
         timeout=control_timeout,
     )
     final_id = final.stdout.strip() if final.returncode == 0 else ""
+    canonical_final_id = (
+        require_canonical_docker_image_id(final_id) if final_id else None
+    )
     return DockerImageResolution(
         image,
         initial,
         pull,
         final,
-        final_id or None,
+        canonical_final_id,
     )
 
 

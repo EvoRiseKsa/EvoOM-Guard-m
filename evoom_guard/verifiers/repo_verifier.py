@@ -155,6 +155,7 @@ from evoom_guard.isolation import (
     execute_docker_control,
     probe_container_absent,
     probe_container_started,
+    require_canonical_docker_image_id,
     resolve_docker_image,
     run_named_docker_client,
 )
@@ -800,7 +801,10 @@ class RepoVerifier:
             docker += ["-e", f"{_k}={_v}"]
         if self.mem_limit_mb > 0:
             docker += ["--memory", f"{self.mem_limit_mb}m"]
-        return [*docker, str(self._resolved_docker_image or self.docker_image), *cmd]
+        image_id = require_canonical_docker_image_id(
+            str(self._resolved_docker_image or self.docker_image)
+        )
+        return [*docker, image_id, *cmd]
 
     def _resolve_docker_image(self) -> str:
         """Resolve a tag once so setup and suite use the exact same image bytes."""
@@ -1078,7 +1082,9 @@ class RepoVerifier:
             resolved_image: str | None = None
             if container_mode:
                 try:
-                    resolved_image = self._resolve_docker_image()
+                    resolved_image = require_canonical_docker_image_id(
+                        self._resolve_docker_image()
+                    )
                     # Tests may stub the resolver; pin its returned ID explicitly
                     # so setup, suite and pack all use the same image reference.
                     self._resolved_docker_image = resolved_image
