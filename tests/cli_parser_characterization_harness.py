@@ -17,6 +17,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -30,6 +31,12 @@ from evoom_guard import cli  # noqa: E402
 
 def _sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _normalized_help_text(value: str) -> str:
+    """Keep help content exact without freezing argparse's version-specific wrapping."""
+
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _callable_name(value: object) -> str:
@@ -221,9 +228,12 @@ def snapshot() -> dict[str, object]:
         "subcommand_count": len(subcommands),
         "subcommands": list(subcommands),
         "structure_sha256": _sha256_text(structure),
-        "root_help_sha256": _sha256_text(_help_text(parser, [])),
+        "root_help_sha256": _sha256_text(
+            _normalized_help_text(_help_text(parser, []))
+        ),
         "subcommand_help_sha256": {
-            name: _sha256_text(_help_text(parser, [name])) for name in subcommands
+            name: _sha256_text(_normalized_help_text(_help_text(parser, [name])))
+            for name in subcommands
         },
         "parse_vectors": parse_vectors,
         "invalid_immutable_ref": _parse_error(
