@@ -1,0 +1,1175 @@
+{
+  "cases": {
+    "command_baseexception": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "exception": {
+        "message": "frozen command interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "state": {
+        "attach_deleted_identity_preserved": null,
+        "attach_manifest_identity_preserved": null,
+        "cleanup": {
+          "strict": false,
+          "wait_for_late_cidfiles": true
+        },
+        "command_identity_preserved": null,
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo"
+      }
+    },
+    "distiller_baseexception": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "exception": {
+        "message": "frozen distiller interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "state": {
+        "attach_deleted_identity_preserved": null,
+        "attach_manifest_identity_preserved": null,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "exit_0_mismatch": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": "black-box JUnit/exit mismatch",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "8717c1b45dbf8067efcd4decc39383b1286d230f44f277dec0bad92d0b2ed3e7",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 1,
+        "tests_total": 2
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "exit_0_pass": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": true,
+        "ran": true,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "exit_1_fail": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": null,
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "8717c1b45dbf8067efcd4decc39383b1286d230f44f277dec0bad92d0b2ed3e7",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": true,
+        "started": true,
+        "tests_passed": 1,
+        "tests_total": 2
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "exit_1_mismatch": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": "black-box JUnit/exit mismatch",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "exit_2_error": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": "black-box pack did not run cleanly (pytest exit 2)",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "6b06bacd51f5421eb662095b282a3c84e00864c37a399d97000b2987c85f2e05",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 2,
+        "tests_total": 2
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "judge_cleanup_error": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": false,
+        "deleted_applied": [],
+        "diagnostics": "frozen judge cleanup failure",
+        "error": "judge process cleanup failed",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": true,
+        "cleanup": {
+          "strict": false,
+          "wait_for_late_cidfiles": true
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "malformed_xml": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": "black-box pack produced no judge-owned test results",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "3d65243adb91b784ee97eaed56c337aa25c50a45e549fc983277ec51a246f853",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "missing_xml": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": "black-box pack produced no judge-owned test results",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "output_limit": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": false,
+        "deleted_applied": [],
+        "diagnostics": "black-box judge output exceeded the 4096-byte judge capture limit",
+        "error": "black-box output limit",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": true,
+        "cleanup": {
+          "strict": false,
+          "wait_for_late_cidfiles": true
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "parser_baseexception": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "exception": {
+        "message": "frozen parser interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "state": {
+        "attach_deleted_identity_preserved": null,
+        "attach_manifest_identity_preserved": null,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "post_snapshot_drift": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen post-snapshot drift",
+        "error": "verifier pack changed while executing",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "pre_snapshot_drift": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 0,
+        "candidate_launcher_invocation_observed": false,
+        "completed": false,
+        "deleted_applied": [],
+        "diagnostics": "frozen pre-snapshot drift",
+        "error": "verifier pack snapshot changed",
+        "execution_phase": "preflight",
+        "execution_state": "not_started",
+        "isolation": {
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": false,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": null,
+        "attach_manifest_identity_preserved": null,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": null,
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo"
+      }
+    },
+    "reader_baseexception": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "exception": {
+        "message": "frozen reader interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "state": {
+        "attach_deleted_identity_preserved": null,
+        "attach_manifest_identity_preserved": null,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "run_baseexception": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "exception": {
+        "message": "frozen run interrupt",
+        "type": "KeyboardInterrupt"
+      },
+      "state": {
+        "attach_deleted_identity_preserved": null,
+        "attach_manifest_identity_preserved": null,
+        "cleanup": {
+          "strict": false,
+          "wait_for_late_cidfiles": true
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "timeout": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": false,
+        "deleted_applied": [],
+        "diagnostics": "black-box pack timed out after 7s",
+        "error": "timeout",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "started_incomplete",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": null,
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": true,
+        "cleanup": {
+          "strict": false,
+          "wait_for_late_cidfiles": true
+        },
+        "command_identity_preserved": true,
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    },
+    "zero_tests": {
+      "events": [
+        "prepare",
+        "clock",
+        "verify:1",
+        "command",
+        "run",
+        "verify:2",
+        "read",
+        "parse",
+        "clock",
+        "distill",
+        "attach",
+        "evidence:drain",
+        "cleanup:containers",
+        "cleanup:recorder-close",
+        "cleanup:rmtree:workdir",
+        "cleanup:rmtree:pack-workdir"
+      ],
+      "result": {
+        "candidate_invocations": 1,
+        "candidate_launcher_invocation_observed": true,
+        "completed": true,
+        "deleted_applied": [],
+        "diagnostics": "frozen stdout\nfrozen stderr",
+        "error": "black-box pack produced no judge-owned test results",
+        "execution_phase": "blackbox_pack",
+        "execution_state": "completed",
+        "isolation": {
+          "candidate_container_ids_observed": 0,
+          "candidate_invocation_evidence_note": "proves the trusted pack invoked EVOGUARD_EXEC; it does not by itself prove that the pack-supplied argv exercised candidate code. Only the zero/nonzero fact is security-relevant; same-host code could discover the sidecar after its first invocation, so the raw receipt count is not an audited exact call count",
+          "candidate_invocations": 1,
+          "candidate_launcher_events": 1,
+          "candidate_launcher_invocation_observed": true,
+          "delivered": "subprocess",
+          "note": "characterization boundary",
+          "requested": "subprocess"
+        },
+        "junit_sha256": "03ba6a97c535373451fd3e37e3ce1220f14b270067206a6cac09d50d83fef608",
+        "pack_manifest": {
+          "id": "blackbox-pack-characterization",
+          "target_type": "cli",
+          "version": "1"
+        },
+        "pack_present": true,
+        "pack_sha256": "c9164ee92ef099d62170fb63f729e2a3d59044ed544c6a2524e827aa5af1d6ab",
+        "passed": false,
+        "ran": false,
+        "started": true,
+        "tests_passed": 0,
+        "tests_total": 0
+      },
+      "result_manifest_identity_preserved": true,
+      "result_type_exact": true,
+      "state": {
+        "attach_deleted_identity_preserved": true,
+        "attach_manifest_identity_preserved": true,
+        "attach_wait_for_late": false,
+        "cleanup": {
+          "strict": true,
+          "wait_for_late_cidfiles": false
+        },
+        "command_identity_preserved": true,
+        "diagnostic_input": "frozen stdout\nfrozen stderr",
+        "judge_cwd": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "judge_timeout": 7,
+        "pack_snapshot": "<TEMP>/runtime-temp/evo_blackbox_pack_2/pack",
+        "parsed_exact_report_object": true,
+        "read_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml",
+        "rmtree_ignore_errors": [
+          true,
+          true
+        ],
+        "same_pack_identity_for_every_verification": true,
+        "target_dir": "<TEMP>/runtime-temp/evo_blackbox_1/repo",
+        "xml_path": "<TEMP>/runtime-temp/evo_blackbox_1/judge-blackbox.xml"
+      }
+    }
+  },
+  "live_lookup": {
+    "candidate_invocations": 1,
+    "events": [
+      "initial:clock-start",
+      "initial:verify-before",
+      "late:command",
+      "initial:verify-before",
+      "late:clock-end",
+      "evidence:drain",
+      "cleanup:containers",
+      "cleanup:recorder-close"
+    ],
+    "passed": true,
+    "ran": true
+  },
+  "normalization": [
+    "temporary_paths",
+    "current_python_executable",
+    "invocation_tokens"
+  ],
+  "schema_version": "blackbox-pack-phase-v1"
+}

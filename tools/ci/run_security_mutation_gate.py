@@ -5169,6 +5169,298 @@ MUTATIONS = (
             "test_seal_imports_snapshot_but_readers_and_material_parser_stay_live"
         ),
     ),
+    Mutation(
+        name="blackbox-pack-outcome-exclusivity-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="        if (self.terminal is None) == (self.completed is None):\n",
+        after="        if False:\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_pack_outcome_requires_exactly_one_branch"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-pre-snapshot-verification-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "    started_at = services.perf_counter()\n"
+            "    try:\n"
+            "        services.verify_snapshot()"
+            "(request.pack_snapshot, request.pack_identity)\n"
+            "        lifecycle.active = True\n"
+        ),
+        after=(
+            "    started_at = services.perf_counter()\n"
+            "    try:\n"
+            "        lifecycle.active = True\n"
+        ),
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[pre_snapshot_drift]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-active-lifecycle-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="        lifecycle.active = True\n",
+        after="        lifecycle.active = False\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_pack_error_from_command_preserves_historical_cleanup_state"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-started-lifecycle-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="        lifecycle.started = True\n",
+        after="        lifecycle.started = False\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_execute_preserves_identity_lookup_timing_and_lifecycle"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-runner-command-lookup-inversion",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "        run_judge = services.run_judge()\n"
+            "        command = services.build_command()"
+            "(request.pack_snapshot, request.xml_path)\n"
+        ),
+        after=(
+            "        command = services.build_command()"
+            "(request.pack_snapshot, request.xml_path)\n"
+            "        run_judge = services.run_judge()\n"
+        ),
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_execute_preserves_identity_lookup_timing_and_lifecycle"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-judge-cwd-binding-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="            cwd=request.pack_snapshot,\n",
+        after="            cwd=request.xml_path,\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_execute_preserves_identity_lookup_timing_and_lifecycle"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-environment-identity-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="            env=request.environment,\n",
+        after="            env=dict(request.environment),\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_execute_preserves_identity_lookup_timing_and_lifecycle"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-timeout-forwarding-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="            timeout=request.timeout,\n",
+        after="            timeout=request.timeout + 1,\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_execute_preserves_identity_lookup_timing_and_lifecycle"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-normal-active-clear-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="        lifecycle.active = False\n",
+        after="        lifecycle.active = True\n",
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_execute_preserves_identity_lookup_timing_and_lifecycle"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-timeout-classification-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before='            error="timeout",\n',
+        after='            error="black-box output limit",\n',
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[timeout]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-output-limit-classification-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before='            error="black-box output limit",\n',
+        after='            error="timeout",\n',
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[output_limit]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-cleanup-classification-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before='            error="judge process cleanup failed",\n',
+        after='            error="timeout",\n',
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[judge_cleanup_error]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-post-snapshot-verification-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "    try:\n"
+            "        services.verify_snapshot()"
+            "(request.pack_snapshot, request.pack_identity)\n"
+            "    except PackManifestError as exc:\n"
+        ),
+        after=(
+            "    try:\n"
+            "        pass\n"
+            "    except PackManifestError as exc:\n"
+        ),
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[post_snapshot_drift]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-report-owner-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="    xml_text = services.read_report()(completed.xml_path)\n",
+        after='    xml_text = services.read_report()("")\n',
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_interpretation_binds_raw_report_hash_and_effect_order"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-raw-report-digest-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="        junit_sha256 = services.digest_text(xml_text)\n",
+        after='        junit_sha256 = services.digest_text(xml_text + " ")\n',
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_interpretation_binds_raw_report_hash_and_effect_order"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-diagnostic-stream-order-inversion",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "        completed.process.stdout + "
+            '"\\n" + completed.process.stderr\n'
+        ),
+        after=(
+            "        completed.process.stderr + "
+            '"\\n" + completed.process.stdout\n'
+        ),
+        test=(
+            "tests/test_blackbox_pack_phase.py::"
+            "test_interpretation_binds_raw_report_hash_and_effect_order"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-zero-test-rejection-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="    if junit is None or junit.total <= 0:\n",
+        after="    if junit is None:\n",
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[zero_tests]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-junit-exit-coherence-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "    if (completed.process.returncode == 0 and not junit_all_passed) or (\n"
+            "        completed.process.returncode == 1 and junit_all_passed\n"
+            "    ):\n"
+        ),
+        after="    if False:\n",
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[exit_0_mismatch]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-pass-verdict-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "    if completed.process.returncode == 0:\n"
+            "        return BlackboxPackVerdictFacts(\n"
+            "            passed=True,\n"
+        ),
+        after=(
+            "    if completed.process.returncode == 0:\n"
+            "        return BlackboxPackVerdictFacts(\n"
+            "            passed=False,\n"
+        ),
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[exit_0_pass]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-failing-test-gradeability-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before=(
+            "    if completed.process.returncode == 1:\n"
+            "        return BlackboxPackVerdictFacts(\n"
+            "            passed=False,\n"
+            "            tests_passed=tests_passed,\n"
+            "            tests_total=tests_total,\n"
+            "            diagnostics=diagnostics,\n"
+            "            ran=True,\n"
+        ),
+        after=(
+            "    if completed.process.returncode == 1:\n"
+            "        return BlackboxPackVerdictFacts(\n"
+            "            passed=False,\n"
+            "            tests_passed=tests_passed,\n"
+            "            tests_total=tests_total,\n"
+            "            diagnostics=diagnostics,\n"
+            "            ran=False,\n"
+        ),
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[exit_1_fail]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-non-verdict-exit-bypass",
+        path="evoom_guard/verifiers/blackbox_pack.py",
+        before="    if completed.process.returncode == 1:\n",
+        after="    if completed.process.returncode >= 1:\n",
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[exit_2_error]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-facade-evidence-attachment-bypass",
+        path="evoom_guard/blackbox.py",
+        before="            if not facts.attach_candidate_evidence:\n",
+        after="            if True:\n",
+        test=(
+            "tests/test_blackbox_pack_characterization.py::"
+            "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
+            "[exit_0_pass]"
+        ),
+    ),
 )
 
 

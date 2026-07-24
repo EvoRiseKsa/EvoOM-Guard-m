@@ -179,6 +179,13 @@ surface for command construction, patch seams, report interpretation, and
 evidence composition. This move adds no import-boundary fingerprint and does
 not justify a new ratchet revision or a baseline-ceiling change.
 
+The black-box pack-phase slice moves only execution sequencing and completed
+process interpretation into `verifiers.blackbox_pack`. That owner may import
+the public `execution` and `pack_manifest` contracts only; it must never import
+`blackbox`, candidate/isolation owners, evidence, or cleanup facilities.
+`blackbox` depends one-way on this owner and retains command construction,
+candidate evidence, cleanup, workspace lifetime, and compatibility projection.
+
 Release Source Admission V2 enters the real `admission.release_source`
 package. The extracted module imports only explicit public contracts from the
 legacy evidence, finalizer-derivation pin, provider, release-source, receipt,
