@@ -1,0 +1,1588 @@
+{
+  "cases": {
+    "attestation_exception_stops_profile": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": null,
+      "exception": {
+        "message": "synthetic attestation failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": "attestation",
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        },
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "tests_passed",
+            "tests_total",
+            "junit_sha256",
+            "junit_digest_format",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "setup_isolation",
+            "runtime_continuity",
+            "base_sha",
+            "head_sha",
+            "policy_id",
+            "raw_marker",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "effective_candidate_isolation",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "completed",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": "preserved",
+            "repo_suite_passed": true
+          }
+        }
+      ],
+      "result_identities": null,
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early",
+        "attestation:build"
+      ]
+    },
+    "baseline_exception_stops_attestation": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": null,
+      "exception": {
+        "message": "synthetic baseline failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": "baseline",
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        }
+      ],
+      "result_identities": null,
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early"
+      ]
+    },
+    "core_fail_collects_without_gate_reads": {
+      "access_trace": [
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "not_demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason_code": "tests_failed",
+        "tests_passed": 1,
+        "tests_total": 2,
+        "verdict": "FAIL",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": null,
+        "runtime": "FAIL",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": false
+        },
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "tests_passed",
+            "tests_total",
+            "junit_sha256",
+            "junit_digest_format",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "setup_isolation",
+            "runtime_continuity",
+            "base_sha",
+            "head_sha",
+            "policy_id",
+            "raw_marker",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "effective_candidate_isolation",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "completed",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": "preserved",
+            "repo_suite_passed": false
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": true,
+        "coverage": true
+      },
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early",
+        "attestation:build",
+        "profile:runtime"
+      ]
+    },
+    "coverage_demotion_keeps_baseline_effect": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "coverage:getitem:percent",
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 0,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 0.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": false,
+        "reason_code": "diff_coverage_below_threshold",
+        "tests_passed": 2,
+        "tests_total": 2,
+        "verdict": "FAIL",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": true,
+        "live_rebinding": false,
+        "raise_at": null,
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        },
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "tests_passed",
+            "tests_total",
+            "junit_sha256",
+            "junit_digest_format",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "setup_isolation",
+            "runtime_continuity",
+            "base_sha",
+            "head_sha",
+            "policy_id",
+            "raw_marker",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "effective_candidate_isolation",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "completed",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": "preserved",
+            "repo_suite_passed": true
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": true,
+        "coverage": true
+      },
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early",
+        "attestation:build",
+        "profile:runtime"
+      ]
+    },
+    "coverage_exception_stops_baseline": {
+      "access_trace": [],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": null,
+      "exception": {
+        "message": "synthetic coverage failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": "coverage",
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        }
+      ],
+      "result_identities": null,
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect"
+      ]
+    },
+    "incomplete_error_skips_optional_effects": {
+      "access_trace": [],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "setup",
+        "execution_state": "started_incomplete",
+        "isolation": "not_run",
+        "passed": false,
+        "reason_code": "setup_failed",
+        "tests_passed": null,
+        "tests_total": null,
+        "verdict": "ERROR",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": null,
+        "runtime": "ERROR",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "artifact_key_order": [
+            "outcome",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "junit_sha256",
+            "junit_digest_format",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_passed",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "setup_isolation",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "runtime_continuity",
+            "effective_candidate_isolation",
+            "base_sha",
+            "head_sha",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_id",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "started_incomplete",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": null,
+            "repo_suite_passed": null
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": false,
+        "coverage": false
+      },
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "attestation:build",
+        "profile:runtime"
+      ]
+    },
+    "live_provider_rebinding": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": true,
+        "reason_code": "tests_passed",
+        "tests_passed": 2,
+        "tests_total": 2,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": true,
+        "raise_at": null,
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        },
+        {
+          "keyword_order": [
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "strict_harness"
+          ],
+          "provider": "baseline:late"
+        },
+        {
+          "assurance_identity": true,
+          "provider": "shortfall:late"
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": true,
+        "coverage": true
+      },
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:late",
+        "attestation:late",
+        "profile:late",
+        "shortfall:late"
+      ]
+    },
+    "pack_presence_inference_precedes_attestation": {
+      "access_trace": [],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "preflight",
+        "execution_state": "not_started",
+        "isolation": "not_run",
+        "passed": false,
+        "reason_code": "verifier_pack_invalid",
+        "tests_passed": null,
+        "tests_total": null,
+        "verdict": "ERROR",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": false,
+        "coverage": false,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": null,
+        "runtime": "PACK_INVALID",
+        "static": false,
+        "verifier_pack": true
+      },
+      "pack_isdir_calls": [
+        true
+      ],
+      "provider_calls": [
+        {
+          "artifact_key_order": [
+            "outcome",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "verifier_pack_present",
+            "junit_sha256",
+            "junit_digest_format",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_passed",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_image_digest",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "setup_isolation",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "runtime_continuity",
+            "effective_candidate_isolation",
+            "base_sha",
+            "head_sha",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_id",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "not_started",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": null,
+            "repo_suite_passed": null
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": false,
+        "coverage": false
+      },
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "pack:isdir",
+        "attestation:build",
+        "profile:runtime"
+      ]
+    },
+    "profile_exception_follows_attestation": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": null,
+      "exception": {
+        "message": "synthetic profile failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": "profile",
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        },
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "tests_passed",
+            "tests_total",
+            "junit_sha256",
+            "junit_digest_format",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "setup_isolation",
+            "runtime_continuity",
+            "base_sha",
+            "head_sha",
+            "policy_id",
+            "raw_marker",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "effective_candidate_isolation",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "completed",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": "preserved",
+            "repo_suite_passed": true
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        }
+      ],
+      "result_identities": null,
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early",
+        "attestation:build",
+        "profile:runtime"
+      ]
+    },
+    "repo_completed_pass_full_pipeline": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "isolation": "subprocess",
+        "passed": true,
+        "reason_code": "tests_passed",
+        "tests_passed": 2,
+        "tests_total": 2,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": null,
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        },
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "tests_passed",
+            "tests_total",
+            "junit_sha256",
+            "junit_digest_format",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "setup_isolation",
+            "runtime_continuity",
+            "base_sha",
+            "head_sha",
+            "policy_id",
+            "raw_marker",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "effective_candidate_isolation",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "completed",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": "preserved",
+            "repo_suite_passed": true
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        },
+        {
+          "assurance_identity": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "provider": "shortfall"
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": true,
+        "coverage": true
+      },
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early",
+        "attestation:build",
+        "profile:runtime",
+        "shortfall:call"
+      ]
+    },
+    "shortfall_exception_follows_profile": {
+      "access_trace": [
+        "coverage:get:measured",
+        "coverage:getitem:executed",
+        "coverage:getitem:total",
+        "baseline:get:verdict",
+        "baseline:get:verdict",
+        "baseline:setitem:repair_effect",
+        "baseline:setitem:scope",
+        "baseline:setitem:note"
+      ],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "note": "counterfactual suite-transition evidence, not a causal proof: the same judge and environment ran the REPO suite on the pristine base and on the candidate; 'demonstrated' means the base failed and the candidate passed. A verifier pack (if any) is exercised only on the candidate run — see scope.",
+        "repair_effect": "demonstrated",
+        "scope": "repo_suite_only",
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": null,
+      "exception": {
+        "message": "synthetic shortfall failure",
+        "type": "ProbeError"
+      },
+      "inputs": {
+        "baseline": true,
+        "coverage": true,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": "shortfall",
+        "runtime": "PASS",
+        "static": false,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "candidate_matches": true,
+          "keyword_order": [
+            "deleted",
+            "test_command",
+            "setup_command",
+            "setup_output_globs",
+            "timeout",
+            "mem_limit_mb",
+            "file_blocks",
+            "require_passing_suite"
+          ],
+          "positional_count": 2,
+          "provider": "coverage",
+          "repo_matches": true,
+          "require_passing_suite": true
+        },
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "test_command_completed",
+            "delivered_isolation",
+            "verdict_source",
+            "tests_passed",
+            "tests_total",
+            "junit_sha256",
+            "junit_digest_format",
+            "repo_suite_started",
+            "repo_suite_completed",
+            "repo_suite_state",
+            "repo_suite_passed",
+            "setup_isolation",
+            "runtime_continuity",
+            "base_sha",
+            "head_sha",
+            "policy_id",
+            "raw_marker",
+            "verifier_pack_sha256",
+            "verifier_pack_manifest",
+            "verifier_pack_tests_passed",
+            "verifier_pack_tests_total",
+            "verifier_pack_junit_sha256",
+            "verifier_pack_junit_digest_format",
+            "isolation_evidence",
+            "setup_isolation_evidence",
+            "repo_suite_isolation_evidence",
+            "verifier_pack_isolation_evidence",
+            "repo_suite_junit_sha256",
+            "repo_suite_junit_digest_format",
+            "repo_suite_tests_passed",
+            "repo_suite_tests_total",
+            "repo_suite_verdict_source",
+            "repo_suite_returncode",
+            "repo_suite_image_digest",
+            "verifier_pack_present",
+            "verifier_pack_started",
+            "verifier_pack_completed",
+            "runtime_tree_sha256",
+            "runtime_tree_digest_format",
+            "runtime_tree_entries",
+            "runtime_tree_bytes",
+            "runtime_identity_elapsed_ms",
+            "effective_candidate_isolation",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "completed",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": "preserved",
+            "repo_suite_passed": true
+          }
+        },
+        {
+          "keyword_order": [
+            "setup_isolation",
+            "runtime_continuity",
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "pack_evidence"
+          ],
+          "provider": "profile:runtime"
+        },
+        {
+          "assurance_identity": true,
+          "keyword_order": [
+            "require_report_integrity",
+            "require_candidate_isolation"
+          ],
+          "provider": "shortfall"
+        }
+      ],
+      "result_identities": null,
+      "timeline": [
+        "verifier:init",
+        "verifier:verify",
+        "coverage:collect",
+        "baseline:early",
+        "attestation:build",
+        "profile:runtime",
+        "shortfall:call"
+      ]
+    },
+    "static_rejection_uses_static_profile": {
+      "access_trace": [],
+      "assurance_snapshot": {
+        "candidate_isolation": "subprocess",
+        "execution_phase": "repo_suite",
+        "execution_state": "completed",
+        "report_integrity": "same_process_candidate_writable"
+      },
+      "baseline_snapshot": {
+        "tests_passed": 0,
+        "tests_total": 1,
+        "verdict": "FAIL"
+      },
+      "coverage_snapshot": {
+        "executed": 1,
+        "measured": true,
+        "note": "synthetic coverage",
+        "percent": 100.0,
+        "total": 1
+      },
+      "decision": {
+        "execution_phase": "pre_gate",
+        "execution_state": "static_gate",
+        "isolation": "not_run",
+        "passed": false,
+        "reason_code": "protected_harness_edit",
+        "tests_passed": null,
+        "tests_total": null,
+        "verdict": "REJECTED",
+        "verdict_source": null
+      },
+      "exception": null,
+      "inputs": {
+        "baseline": false,
+        "coverage": false,
+        "coverage_below": false,
+        "live_rebinding": false,
+        "raise_at": null,
+        "runtime": "PASS",
+        "static": true,
+        "verifier_pack": false
+      },
+      "pack_isdir_calls": [],
+      "provider_calls": [
+        {
+          "artifact_key_order": [
+            "execution_state",
+            "execution_phase",
+            "test_command_started",
+            "delivered_isolation",
+            "effective_candidate_isolation",
+            "base_sha",
+            "head_sha",
+            "base_tree_sha",
+            "head_tree_sha",
+            "policy_id",
+            "policy_version"
+          ],
+          "keyword_order": [
+            "safe_deleted",
+            "test_command",
+            "effective_policy",
+            "art",
+            "mode"
+          ],
+          "provider": "attestation",
+          "trusted_bindings": {
+            "base_sha": "trusted-base",
+            "execution_state": "static_gate",
+            "head_sha": "trusted-head",
+            "policy_id": "trusted-policy",
+            "raw_marker": null,
+            "repo_suite_passed": null
+          }
+        }
+      ],
+      "result_identities": {
+        "assurance": true,
+        "attestation": true,
+        "baseline": false,
+        "coverage": false
+      },
+      "timeline": [
+        "attestation:build",
+        "profile:static"
+      ]
+    }
+  },
+  "normalization": [
+    "provider arguments retain values but temporary paths are reduced to booleans"
+  ],
+  "schema_version": "repo-finalization-characterization-v1"
+}
