@@ -270,6 +270,17 @@ from evoom_guard.verifiers.junit_oracle import (
 from evoom_guard.verifiers.junit_oracle import (
     read_junit_xml as read_junit_xml,
 )
+from evoom_guard.verifiers.repo_candidate import (
+    RepoCandidateAdmissionRequest,
+    RepoCandidateAdmissionServices,
+    RepoCandidateDeletionRequest,
+    RepoCandidateDeletionServices,
+    RepoCandidateMaterializationRequest,
+    RepoCandidateMaterializationServices,
+    admit_repo_candidate,
+    apply_repo_candidate_deletions,
+    materialize_repo_candidate,
+)
 from evoom_guard.verifiers.repo_execution import (
     RepoExecutionTrace,
     execution_phase_payload,
@@ -902,93 +913,67 @@ class RepoVerifier:
         sticky_evidence: dict[str, Any],
     ) -> VerdictResult:
         repo_path = str(problem.get("repo_path", ""))
-        if not repo_path or not os.path.isdir(repo_path):
-            raise ValueError(f"problem['repo_path'] is not a directory: {repo_path!r}")
-
-        # Paths the candidate deletes (set by Guard from a base→head diff). A deleted
-        # *source* file is applied to the copy so the verdict matches the merge; a
-        # deleted protected harness file is rejected below (removing a check is a
-        # reward-hack as direct as editing it).
-        deleted_paths = [str(p) for p in problem.get("deleted", ()) if str(p).strip()]
-
-        fb_override = problem.get("file_blocks")
-        if isinstance(fb_override, dict) and fb_override:
-            # Structured candidate (the dirs/diff path): trust the mapping, skip
-            # the marker parse entirely — content containing literal block markers
-            # must never terminate its own block.
-            file_blocks = {str(k): str(v) for k, v in fb_override.items()}
-            patch_blocks: list[PatchBlock] = []
-        else:
-            file_blocks = parse_file_blocks(hypothesis)
-            patch_blocks = parse_patch_blocks(hypothesis)
-            if not file_blocks and not patch_blocks:
-                targets = [str(t) for t in problem.get("target_files", ()) if str(t).strip()]
-                default_path = targets[0] if len(targets) == 1 else None
-                file_blocks, patch_blocks = parse_blocks_lenient(hypothesis, default_path)
-        if not file_blocks and not patch_blocks and not deleted_paths:
-            return VerdictResult(
-                passed=False,
-                score=0.02,
-                diagnostics=(
-                    "no parseable blocks; expected "
-                    "<<<FILE: path>>> … <<<END FILE>>> or "
-                    "<<<PATCH: path>>> <<<SEARCH>>> … <<<REPLACE>>> … <<<END PATCH>>>"
+        admission = admit_repo_candidate(
+            RepoCandidateAdmissionRequest(
+                hypothesis=hypothesis,
+                repo_path=repo_path,
+            ),
+            services=RepoCandidateAdmissionServices(
+                is_directory=lambda: os.path.isdir,
+                deleted_paths=lambda: problem.get("deleted", ()),
+                file_blocks_override=lambda: problem.get("file_blocks"),
+                target_files=lambda: problem.get("target_files", ()),
+                extra_protected=lambda: (
+                    self.protected + tuple(problem.get("protected", ()))
                 ),
-                artifact={"files_changed": []},
-            )
-
-        extra = self.protected + tuple(problem.get("protected", ()))
-        allow = self.allow + tuple(problem.get("allow", ()))
-        # Local actions may execute helper files beside their manifest.  Discover
-        # their directories in the unmodified repository before candidate files
-        # are applied, then pass that base-owned policy into the pure preflight.
-        local_action_dirs = discover_local_action_dirs(repo_path)
-        changed = sorted(set(file_blocks) | {pb.path for pb in patch_blocks})
-        allow_new_tests = self.allow_new_tests or bool(problem.get("allow_new_tests"))
-        strict_harness = self.strict_harness or problem.get("strict_harness") is True
-        new_paths = frozenset(
-            p for p in changed
-            if is_safe_relpath(p) and not os.path.exists(os.path.join(repo_path, p))
+                allow=lambda: self.allow + tuple(problem.get("allow", ())),
+                allow_new_tests=lambda: (
+                    self.allow_new_tests
+                    or bool(problem.get("allow_new_tests"))
+                ),
+                strict_harness=lambda: (
+                    self.strict_harness
+                    or problem.get("strict_harness") is True
+                ),
+                parse_file_blocks=lambda: parse_file_blocks,
+                parse_patch_blocks=lambda: parse_patch_blocks,
+                parse_blocks_lenient=lambda: parse_blocks_lenient,
+                discover_local_action_dirs=lambda: discover_local_action_dirs,
+                is_safe_relpath=lambda: is_safe_relpath,
+                join_path=lambda: os.path.join,
+                path_exists=lambda: os.path.exists,
+                reject_paths=lambda: cast(
+                    Any, reject_unsafe_or_protected
+                ),
+            ),
         )
-        rejection = reject_unsafe_or_protected(
-            changed,
-            extra,
-            allow_new_tests=allow_new_tests,
-            new_paths=new_paths,
-            allow=allow,
-            local_action_dirs=local_action_dirs,
-            strict_harness=strict_harness,
-        )
-        if rejection is not None:
-            return rejection
-        # Deletions are never "new" and feature mode never exempts removing a check,
-        # so a protected deletion is always rejected (defence in depth — Guard also
-        # filters these before calling verify).
-        if deleted_paths:
-            del_rejection = reject_unsafe_or_protected(
-                deleted_paths,
-                extra,
-                allow=allow,
-                local_action_dirs=local_action_dirs,
-                strict_harness=strict_harness,
-            )
-            if del_rejection is not None:
-                return del_rejection
+        if admission.terminal_result is not None:
+            return admission.terminal_result
+        assert admission.candidate is not None
+        candidate = admission.candidate
+        deleted_paths = list(candidate.deleted_paths)
+        changed = list(candidate.files_changed)
+        strict_harness = candidate.strict_harness
 
         workdir = tempfile.mkdtemp(prefix="evo_repo_")
         copy = os.path.join(workdir, "repo")
         pack_workdir: str | None = None
         pack_snapshot: str | None = None
         try:
-            copy_repo_tree(repo_path, copy)
-            apply_error = apply_blocks_to_copy(copy, file_blocks, patch_blocks)
-            if apply_error is not None:
-                return VerdictResult(
-                    passed=False,
-                    score=0.08,
-                    diagnostics=apply_error,
-                    artifact={"files_changed": changed},
-                )
+            materialization = materialize_repo_candidate(
+                RepoCandidateMaterializationRequest(
+                    candidate_copy=copy,
+                    candidate=candidate,
+                ),
+                services=RepoCandidateMaterializationServices(
+                    copy_repo_tree=lambda: copy_repo_tree,
+                    apply_candidate_edits=lambda: cast(
+                        Any, apply_blocks_to_copy
+                    ),
+                ),
+            )
+            if materialization.terminal_result is not None:
+                return materialization.terminal_result
 
             # Accept an Independent Verifier Pack into a separate judge-owned
             # snapshot outside both the candidate tree and HOME. The legacy mount
@@ -1044,20 +1029,19 @@ class RepoVerifier:
                     artifact=rejection_artifact(pack_request, pack_intake),
                 )
 
-            # Apply deletions to the copy so the verdict reflects the real merge
-            # (a removed source file should be *absent* when the suite runs).
-            try:
-                for rel in deleted_paths:
-                    if not is_safe_relpath(rel):
-                        continue  # already gated; belt-and-braces
-                    delete_path_within_root(copy, rel)
-            except (OSError, UnsafeWorkspacePath) as exc:
-                return VerdictResult(
-                    passed=False,
-                    score=0.05,
-                    diagnostics=f"candidate deletion could not be applied safely: {exc}",
-                    artifact={"files_changed": changed, "files_deleted": []},
-                )
+            deletion = apply_repo_candidate_deletions(
+                RepoCandidateDeletionRequest(
+                    candidate_copy=copy,
+                    candidate=candidate,
+                ),
+                services=RepoCandidateDeletionServices(
+                    is_safe_relpath=lambda: is_safe_relpath,
+                    delete_path=lambda: delete_path_within_root,
+                    deletion_errors=lambda: (OSError, UnsafeWorkspacePath),
+                ),
+            )
+            if deletion.terminal_result is not None:
+                return deletion.terminal_result
 
             env = judge_subprocess_env(workdir)
 

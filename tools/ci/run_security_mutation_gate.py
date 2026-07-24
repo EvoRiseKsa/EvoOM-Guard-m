@@ -1811,9 +1811,15 @@ MUTATIONS = (
     ),
     Mutation(
         name="protected-edit-preflight-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="        if rejection is not None:\n            return rejection\n",
-        after="        if False and rejection is not None:\n            return rejection\n",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "    if rejection is not None:\n"
+            "        return _terminal_admission(rejection)\n"
+        ),
+        after=(
+            "    if False and rejection is not None:\n"
+            "        return _terminal_admission(rejection)\n"
+        ),
         test=(
             "tests/test_repo_verifier_characterization.py::"
             "test_frozen_repo_verifier_behavior_and_evidence[protected_test_edit]"
@@ -1821,18 +1827,330 @@ MUTATIONS = (
     ),
     Mutation(
         name="protected-deletion-preflight-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_candidate.py",
         before=(
-            "            if del_rejection is not None:\n"
-            "                return del_rejection\n"
+            "        if deletion_rejection is not None:\n"
+            "            return _terminal_admission(deletion_rejection)\n"
         ),
         after=(
-            "            if False and del_rejection is not None:\n"
-            "                return del_rejection\n"
+            "        if False and deletion_rejection is not None:\n"
+            "            return _terminal_admission(deletion_rejection)\n"
         ),
         test=(
             "tests/test_repo_verifier_characterization.py::"
             "test_frozen_repo_verifier_behavior_and_evidence[deleted_protected_test]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-invalid-root-admission-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "    if not repo_path or not services.is_directory()(repo_path):\n"
+        ),
+        after=(
+            "    if False and (\n"
+            "        not repo_path or not services.is_directory()(repo_path)\n"
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_invalid_repo_fails_before_candidate_or_workspace_lookup"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-structured-mode-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="    if isinstance(file_blocks_override, dict):\n",
+        after="    if False and isinstance(file_blocks_override, dict):\n",
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[structured_candidate]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-empty-structured-fallback-regression",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="    if isinstance(file_blocks_override, dict):\n",
+        after=(
+            "    if isinstance(file_blocks_override, dict) and "
+            "file_blocks_override:\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_empty_structured_mapping_never_falls_back_to_hypothesis_parser"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-strict-file-parser-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "        file_blocks = services.parse_file_blocks()"
+            "(request.hypothesis)\n"
+        ),
+        after="        file_blocks = {}\n",
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[textual_file_and_patch]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-strict-patch-parser-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "        patch_blocks = services.parse_patch_blocks()"
+            "(request.hypothesis)\n"
+        ),
+        after="        patch_blocks = []\n",
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[textual_file_and_patch]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-lenient-fallback-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="        if not file_blocks and not patch_blocks:\n",
+        after="        if False and not file_blocks and not patch_blocks:\n",
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[lenient_candidate]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-empty-admission-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "    if not file_blocks and not patch_blocks and "
+            "not deleted_paths:\n"
+        ),
+        after=(
+            "    if False and not file_blocks and not patch_blocks and "
+            "not deleted_paths:\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[empty_candidate]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-file-change-set-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "        set(file_blocks) | {block.path for block in patch_blocks}\n"
+        ),
+        after=(
+            "        set() | {block.path for block in patch_blocks}\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_admission_preserves_sorted_changes_and_deletion_input_order"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-safe-new-path-classification-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="        if services.is_safe_relpath()(path)\n",
+        after="        if False and services.is_safe_relpath()(path)\n",
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_admission_forwards_only_safe_absent_paths_as_new"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-copy-operation-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "    services.copy_repo_tree()"
+            "(candidate.repo_path, request.candidate_copy)\n"
+        ),
+        after=(
+            "    if False:\n"
+            "        services.copy_repo_tree()"
+            "(candidate.repo_path, request.candidate_copy)\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_copy_exception_identity_reaches_final_cleanup"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-materialization-failure-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="    if apply_error is not None:\n",
+        after="    if False and apply_error is not None:\n",
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[materialization_failure]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-deletion-safety-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "            if not services.is_safe_relpath()(relative_path):\n"
+            "                continue\n"
+        ),
+        after=(
+            "            if False and not services.is_safe_relpath()"
+            "(relative_path):\n"
+            "                continue\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_deletion_owner_retains_belt_and_braces_safe_path_gate"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-delete-operation-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "            services.delete_path()"
+            "(request.candidate_copy, relative_path)\n"
+        ),
+        after=(
+            "            if False:\n"
+            "                services.delete_path()"
+            "(request.candidate_copy, relative_path)\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior"
+            "[deletion_success_after_pack_intake]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-deletion-error-catch-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before="    except services.deletion_errors() as exc:\n",
+        after="    except OSError as exc:\n",
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_deletion_exception_class_is_resolved_after_delete_call"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-admission-terminal-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "        if admission.terminal_result is not None:\n"
+            "            return admission.terminal_result\n"
+        ),
+        after=(
+            "        if False and admission.terminal_result is not None:\n"
+            "            return admission.terminal_result\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[empty_candidate]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-materialization-terminal-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            if materialization.terminal_result is not None:\n"
+            "                return materialization.terminal_result\n"
+        ),
+        after=(
+            "            if False and "
+            "materialization.terminal_result is not None:\n"
+            "                return materialization.terminal_result\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[materialization_failure]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-pack-before-deletion-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="            if pack_intake.failure is not None:\n",
+        after="            if False and pack_intake.failure is not None:\n",
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_pack_intake_failure_prevents_candidate_deletion"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-deletion-terminal-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            if deletion.terminal_result is not None:\n"
+            "                return deletion.terminal_result\n"
+        ),
+        after=(
+            "            if False and deletion.terminal_result is not None:\n"
+            "                return deletion.terminal_result\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_characterization.py::"
+            "test_frozen_repo_candidate_behavior[deletion_failure]"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-live-patch-parser-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                parse_patch_blocks=lambda: parse_patch_blocks,\n",
+        after=(
+            "                parse_patch_blocks=lambda: "
+            "_candidate_edits.parse_patch_blocks,\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_repo_verifier_resolves_each_parser_at_its_operation_site"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-live-rejection-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                reject_paths=lambda: cast(\n"
+            "                    Any, reject_unsafe_or_protected\n"
+            "                ),\n"
+        ),
+        after=(
+            "                reject_paths=lambda reject="
+            "reject_unsafe_or_protected: cast(\n"
+            "                    Any, reject\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_changed_path_gate_can_replace_the_deletion_gate_seam"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-live-materialization-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    apply_candidate_edits=lambda: cast(\n"
+            "                        Any, apply_blocks_to_copy\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    apply_candidate_edits=lambda apply="
+            "apply_blocks_to_copy: cast(\n"
+            "                        Any, apply\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_copy_operation_can_replace_the_later_materialization_seam"
+        ),
+    ),
+    Mutation(
+        name="repo-candidate-live-deletion-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    delete_path=lambda: delete_path_within_root,\n"
+        ),
+        after=(
+            "                    delete_path=lambda delete="
+            "delete_path_within_root: delete,\n"
+        ),
+        test=(
+            "tests/test_repo_candidate_owner.py::"
+            "test_each_deletion_resolves_the_current_facade_seam"
         ),
     ),
     Mutation(

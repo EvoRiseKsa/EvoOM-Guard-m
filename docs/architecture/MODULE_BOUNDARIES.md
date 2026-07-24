@@ -103,9 +103,10 @@ observation is not a stable-absence claim against later recreation. The
 provider on every invocation. This preserves the established module-level
 monkeypatch timing used by repository verification and by the exact facade
 objects already imported into Guard, black-box, and coverage evidence.
-Workspace allocation, candidate edit/deletion policy, pack intake, execution,
-runtime identity, evidence, and verdict composition remain in their existing
-owners.
+Workspace allocation, pack intake, execution, runtime identity, evidence, and
+verdict composition remain in their existing owners. Candidate
+admission/materialization/deletion coordination belongs to
+`verifiers/repo_candidate.py`.
 
 The first CLI slice is the same kind of atomic compatibility migration:
 `evoom_guard/cli/__init__.py` contains the exact implementation bytes formerly
@@ -229,6 +230,20 @@ transform, and manifest restoration as explicit callables. The historical
 module globals on every call, preserving adopter monkeypatch seams. Repository
 copying, deletion, process/container execution, pack identity, and verdict
 composition do not cross this boundary.
+
+Repository candidate coordination lives in
+`evoom_guard/verifiers/repo_candidate.py`. Its immutable XOR outcomes separate
+terminal policy/materialization/deletion verdicts from admitted candidates.
+Admission completes before workspace allocation; `RepoVerifier` then allocates
+the candidate workspace and calls the owner to copy and materialize it. The
+verifier performs pack intake next and only then calls the owner to apply
+admitted deletions. All filesystem and policy operations are live providers,
+preserving the historical facade lookup and exception order. Workspace
+allocation, verifier-pack intake, runtime identity, process/container
+execution, sticky evidence, final projection, and `finally` cleanup do not
+cross this boundary. A structured `file_blocks` mapping is authoritative by
+presence, including an empty mapping; textual marker parsing is used only when
+the structured transport is absent.
 
 Repository verifier-pack admission lives in
 `evoom_guard/verifiers/repo_pack_intake.py`. Its immutable request/result and
