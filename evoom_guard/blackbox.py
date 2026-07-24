@@ -59,7 +59,7 @@ import sys
 import tempfile
 import threading
 import time
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple, cast
 
 from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
 from evoom_guard.candidate_runner import (
@@ -135,6 +135,8 @@ from evoom_guard.verifiers.blackbox_pack import (
     BlackboxPackInterpretationServices,
     BlackboxPackLifecycle,
     BlackboxPackVerdictFacts,
+    ParseJUnitReport,
+    VerifyPackSnapshot,
     execute_blackbox_pack,
     interpret_blackbox_pack,
 )
@@ -685,7 +687,10 @@ def _run_blackbox_impl(
             ),
             lifecycle=pack_lifecycle,
             services=BlackboxPackExecutionServices(
-                verify_snapshot=lambda: verify_pack_snapshot,
+                verify_snapshot=lambda: cast(
+                    VerifyPackSnapshot,
+                    verify_pack_snapshot,
+                ),
                 build_command=lambda: _judge_command,
                 run_judge=lambda: _run_judge_process,
                 perf_counter=lambda: time.perf_counter(),
@@ -702,7 +707,10 @@ def _run_blackbox_impl(
             BlackboxPackInterpretationRequest(completed=completed_pack),
             services=BlackboxPackInterpretationServices(
                 read_report=lambda: read_junit_xml,
-                parse_report=lambda: parse_junit_xml,
+                parse_report=lambda: cast(
+                    ParseJUnitReport,
+                    parse_junit_xml,
+                ),
                 digest_text=lambda text: hashlib.sha256(
                     text.encode("utf-8")
                 ).hexdigest(),
