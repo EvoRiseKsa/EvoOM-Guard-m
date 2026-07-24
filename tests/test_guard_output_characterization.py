@@ -15,6 +15,7 @@ from evoom_guard import guard as guard_module
 from evoom_guard.guard import ERROR, PASS, GuardResult
 from tests.guard_output_characterization_harness import (
     CASE_NAMES,
+    FIXED_GUARD_VERSION,
     SCHEMA_VERSION,
     canonical_json,
     capture_case,
@@ -49,6 +50,18 @@ def test_guard_output_vector_metadata_is_exact() -> None:
     frozen = _frozen()
     assert frozen["schema_version"] == SCHEMA_VERSION
     assert tuple(frozen["cases"]) == CASE_NAMES
+
+
+def test_guard_output_vector_is_independent_of_live_package_version(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(guard_module, "__version__", "999.0.0")
+
+    assert FIXED_GUARD_VERSION == "4.3.0"
+    assert capture_case("pass_full_evidence", tmp_path) == _frozen()["cases"][
+        "pass_full_evidence"
+    ]
 
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)
