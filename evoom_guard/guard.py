@@ -560,18 +560,12 @@ def guard(
             file_blocks=file_blocks,
         ),
         services=GuardRequestPreparationServices(
-            repository_input=lambda **values: RepositoryInput(**values),
-            candidate_input=lambda **values: CandidateInput(**values),
-            source_identity=lambda **values: SourceIdentity(**values),
-            effective_policy=lambda **values: _build_effective_policy_contract(
-                **values
-            ),
-            # Python resolves the outer GuardRequest callable before evaluating
-            # its historical nested constructor arguments. Snapshot the current
-            # per-call facade provider here; the nested providers below remain
-            # call-through at their original evaluation positions.
-            guard_request=GuardRequest,
-            effective_policy_payload=lambda policy: _effective_policy_payload(policy),
+            repository_input_provider=lambda: RepositoryInput,
+            candidate_input_provider=lambda: CandidateInput,
+            source_identity_provider=lambda: SourceIdentity,
+            effective_policy_provider=lambda: _build_effective_policy_contract,
+            guard_request_provider=lambda: GuardRequest,
+            effective_policy_payload_provider=lambda: _effective_policy_payload,
         ),
     )
     effective_policy = prepared_request.effective_policy

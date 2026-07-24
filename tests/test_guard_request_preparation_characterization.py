@@ -329,3 +329,128 @@ def test_outer_request_provider_is_resolved_before_nested_providers(
 
     assert result.reason_code == "policy_requirement_unsupported"
     assert calls == ["repository", "initial-request"]
+
+
+def test_request_provider_is_resolved_after_coverage_implication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Argument coercion before the historical request expression stays observable."""
+
+    guard_module = importlib.import_module("evoom_guard.guard")
+    original_request = guard_module.GuardRequest
+    calls: list[str] = []
+
+    def late_request(**values: object) -> GuardRequest:
+        calls.append("late-request")
+        return original_request(**values)
+
+    class RebindingCoverage:
+        def __bool__(self) -> bool:
+            monkeypatch.setattr(guard_module, "GuardRequest", late_request)
+            return False
+
+    result = guard_module.guard(
+        "not-read-for-preflight",
+        "opaque candidate",
+        file_blocks={"app.py": "VALUE = 2\n"},
+        isolation="docker",
+        diff_coverage=RebindingCoverage(),  # type: ignore[arg-type]
+        min_diff_coverage=80.0,
+    )
+
+    assert result.reason_code == "policy_requirement_unsupported"
+    assert calls == ["late-request"]
+
+
+def test_policy_provider_is_resolved_before_mode_argument_evaluation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The policy callable is captured before ``blackbox`` is coerced."""
+
+    guard_module = importlib.import_module("evoom_guard.guard")
+    original_policy = guard_module._build_effective_policy_contract
+    calls: list[str] = []
+
+    def initial_policy(**values: object) -> EffectivePolicy:
+        calls.append("initial-policy")
+        return original_policy(**values)
+
+    def late_policy(**values: object) -> EffectivePolicy:
+        calls.append("late-policy")
+        return original_policy(**values)
+
+    class RebindingBlackbox(int):
+        def __new__(cls) -> RebindingBlackbox:
+            return int.__new__(cls, 0)
+
+        def __bool__(self) -> bool:
+            monkeypatch.setattr(
+                guard_module, "_build_effective_policy_contract", late_policy
+            )
+            return False
+
+    monkeypatch.setattr(
+        guard_module, "_build_effective_policy_contract", initial_policy
+    )
+    result = guard_module.guard(
+        "not-read-for-preflight",
+        "opaque candidate",
+        file_blocks={"app.py": "VALUE = 2\n"},
+        isolation="docker",
+        blackbox=RebindingBlackbox(),  # type: ignore[arg-type]
+        min_diff_coverage=80.0,
+    )
+
+    assert result.reason_code == "policy_requirement_unsupported"
+    assert calls == ["initial-policy"]
+
+
+def test_payload_provider_is_resolved_before_request_policy_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The serializer is captured before the historical policy property read."""
+
+    guard_module = importlib.import_module("evoom_guard.guard")
+    original_request = guard_module.GuardRequest
+    original_payload = guard_module._effective_policy_payload
+    calls: list[str] = []
+
+    def initial_payload(policy: EffectivePolicy) -> dict[str, object]:
+        calls.append("initial-payload")
+        return original_payload(policy)
+
+    def late_payload(policy: EffectivePolicy) -> dict[str, object]:
+        calls.append("late-payload")
+        return original_payload(policy)
+
+    class RequestProxy:
+        def __init__(self, request: GuardRequest) -> None:
+            self._request = request
+
+        @property
+        def policy(self) -> EffectivePolicy:
+            monkeypatch.setattr(
+                guard_module, "_effective_policy_payload", late_payload
+            )
+            return self._request.policy
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._request, name)
+
+    def request_provider(**values: object) -> GuardRequest:
+        return RequestProxy(original_request(**values))  # type: ignore[return-value]
+
+    monkeypatch.setattr(guard_module, "GuardRequest", request_provider)
+    monkeypatch.setattr(
+        guard_module, "_effective_policy_payload", initial_payload
+    )
+    result = guard_module.guard(
+        "not-read-for-preflight",
+        "opaque candidate",
+        file_blocks={"app.py": "VALUE = 2\n"},
+        isolation="docker",
+        min_diff_coverage=80.0,
+    )
+
+    assert result.reason_code == "policy_requirement_unsupported"
+    assert calls == ["initial-payload"]

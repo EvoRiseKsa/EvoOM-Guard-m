@@ -36,16 +36,6 @@ class _RepositoryInputFactory(Protocol):
     def __call__(self, *, path: str) -> RepositoryInput: ...
 
 
-class _CandidateInputFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        text: str,
-        deleted_paths: Sequence[str],
-        file_blocks: Mapping[str, str] | None,
-    ) -> CandidateInput: ...
-
-
 class _SourceIdentityFactory(Protocol):
     def __call__(
         self,
@@ -143,14 +133,16 @@ class GuardRequestPreparationInput:
 
 @dataclass(frozen=True, slots=True)
 class GuardRequestPreparationServices:
-    """Live providers required to construct and serialize the owned request."""
+    """Resolvers for callables used at their historical evaluation positions."""
 
-    repository_input: _RepositoryInputFactory
-    candidate_input: _CandidateInputFactory
-    source_identity: _SourceIdentityFactory
-    effective_policy: _EffectivePolicyFactory
-    guard_request: _GuardRequestFactory
-    effective_policy_payload: Callable[[EffectivePolicy], dict[str, object]]
+    repository_input_provider: Callable[[], _RepositoryInputFactory]
+    candidate_input_provider: Callable[[], Callable[..., CandidateInput]]
+    source_identity_provider: Callable[[], _SourceIdentityFactory]
+    effective_policy_provider: Callable[[], _EffectivePolicyFactory]
+    guard_request_provider: Callable[[], _GuardRequestFactory]
+    effective_policy_payload_provider: Callable[
+        [], Callable[[EffectivePolicy], dict[str, object]]
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,21 +238,24 @@ def prepare_guard_request(
     if raw.expect_verifier_pack_sha256 and not raw.verifier_pack_path:
         raise ValueError("expect_verifier_pack_sha256 requires verifier_pack")
 
-    # Keep these provider positions explicit. They are long-established private
-    # compatibility seams and their timing is covered by characterization.
-    repository = services.repository_input(path=raw.repository_path)
-    candidate = services.candidate_input(
+    # Python resolves the outer callable first, then each nested callable
+    # immediately before that nested call's arguments. Keep those positions
+    # explicit: integrations have historically monkeypatched these private
+    # seams, including from argument coercion and property access.
+    guard_request_factory = services.guard_request_provider()
+    repository = services.repository_input_provider()(path=raw.repository_path)
+    candidate = services.candidate_input_provider()(
         text=raw.candidate_text,
         deleted_paths=raw.deleted_paths,
         file_blocks=raw.file_blocks,
     )
-    source = services.source_identity(
+    source = services.source_identity_provider()(
         base_sha=raw.base_sha,
         head_sha=raw.head_sha,
         base_tree_sha=raw.base_tree_sha,
         head_tree_sha=raw.head_tree_sha,
     )
-    policy = services.effective_policy(
+    policy = services.effective_policy_provider()(
         mode="blackbox" if raw.blackbox else "repo",
         isolation=raw.isolation,
         docker_image=raw.docker_image,
@@ -287,7 +282,7 @@ def prepare_guard_request(
         policy_id=raw.policy_id,
         policy_version=raw.policy_version,
     )
-    request = services.guard_request(
+    request = guard_request_factory(
         repository=repository,
         candidate=candidate,
         source=source,
@@ -295,7 +290,7 @@ def prepare_guard_request(
         verifier_pack_path=raw.verifier_pack_path,
         collect_diff_coverage=collect_diff_coverage,
     )
-    effective_policy = services.effective_policy_payload(request.policy)
+    effective_policy = services.effective_policy_payload_provider()(request.policy)
 
     compatibility = GuardCompatibilityProjection(
         repository_path=request.repository.path,

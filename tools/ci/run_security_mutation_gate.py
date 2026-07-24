@@ -177,11 +177,12 @@ MUTATIONS = (
     Mutation(
         name="guard-request-live-candidate-provider-snapshot",
         path="evoom_guard/guard.py",
-        before=(
-            "            candidate_input=lambda **values: "
-            "CandidateInput(**values),\n"
+        before="            candidate_input_provider=lambda: CandidateInput,\n",
+        after=(
+            "            candidate_input_provider=(\n"
+            "                lambda factory=CandidateInput: lambda: factory\n"
+            "            )(),\n"
         ),
-        after="            candidate_input=CandidateInput,\n",
         test=(
             "tests/test_guard_request_preparation.py::"
             "test_guard_facade_resolves_providers_at_each_historical_call_position"
@@ -190,11 +191,12 @@ MUTATIONS = (
     Mutation(
         name="guard-request-live-source-provider-snapshot",
         path="evoom_guard/guard.py",
-        before=(
-            "            source_identity=lambda **values: "
-            "SourceIdentity(**values),\n"
+        before="            source_identity_provider=lambda: SourceIdentity,\n",
+        after=(
+            "            source_identity_provider=(\n"
+            "                lambda factory=SourceIdentity: lambda: factory\n"
+            "            )(),\n"
         ),
-        after="            source_identity=SourceIdentity,\n",
         test=(
             "tests/test_guard_request_preparation.py::"
             "test_guard_facade_resolves_providers_at_each_historical_call_position"
@@ -204,14 +206,14 @@ MUTATIONS = (
         name="guard-request-live-policy-provider-snapshot",
         path="evoom_guard/guard.py",
         before=(
-            "            effective_policy=lambda **values: "
-            "_build_effective_policy_contract(\n"
-            "                **values\n"
-            "            ),\n"
+            "            effective_policy_provider="
+            "lambda: _build_effective_policy_contract,\n"
         ),
         after=(
-            "            effective_policy="
-            "_build_effective_policy_contract,\n"
+            "            effective_policy_provider=(\n"
+            "                lambda factory=_build_effective_policy_contract: "
+            "lambda: factory\n"
+            "            )(),\n"
         ),
         test=(
             "tests/test_guard_request_preparation.py::"
@@ -222,10 +224,15 @@ MUTATIONS = (
         name="guard-request-live-payload-provider-snapshot",
         path="evoom_guard/guard.py",
         before=(
-            "            effective_policy_payload=lambda policy: "
-            "_effective_policy_payload(policy),\n"
+            "            effective_policy_payload_provider="
+            "lambda: _effective_policy_payload,\n"
         ),
-        after="            effective_policy_payload=_effective_policy_payload,\n",
+        after=(
+            "            effective_policy_payload_provider=(\n"
+            "                lambda provider=_effective_policy_payload: "
+            "lambda: provider\n"
+            "            )(),\n"
+        ),
         test=(
             "tests/test_guard_request_preparation.py::"
             "test_guard_facade_resolves_providers_at_each_historical_call_position"
@@ -233,15 +240,55 @@ MUTATIONS = (
     ),
     Mutation(
         name="guard-request-outer-provider-resolution-delay",
-        path="evoom_guard/guard.py",
-        before="            guard_request=GuardRequest,\n",
-        after=(
-            "            guard_request=lambda **values: "
-            "GuardRequest(**values),\n"
-        ),
+        path="evoom_guard/application/request_preparation.py",
+        before="    request = guard_request_factory(\n",
+        after="    request = services.guard_request_provider()(\n",
         test=(
             "tests/test_guard_request_preparation_characterization.py::"
             "test_outer_request_provider_is_resolved_before_nested_providers"
+        ),
+    ),
+    Mutation(
+        name="guard-request-provider-pre-validation-snapshot",
+        path="evoom_guard/guard.py",
+        before="            guard_request_provider=lambda: GuardRequest,\n",
+        after=(
+            "            guard_request_provider=(\n"
+            "                lambda factory=GuardRequest: lambda: factory\n"
+            "            )(),\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_request_provider_is_resolved_after_coverage_implication"
+        ),
+    ),
+    Mutation(
+        name="guard-request-policy-provider-argument-delay",
+        path="evoom_guard/application/request_preparation.py",
+        before="    policy = services.effective_policy_provider()(\n",
+        after=(
+            "    policy = (lambda **values: "
+            "services.effective_policy_provider()(**values))(\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_policy_provider_is_resolved_before_mode_argument_evaluation"
+        ),
+    ),
+    Mutation(
+        name="guard-request-payload-provider-property-delay",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "    effective_policy = "
+            "services.effective_policy_payload_provider()(request.policy)\n"
+        ),
+        after=(
+            "    effective_policy = (lambda policy: "
+            "services.effective_policy_payload_provider()(policy))(request.policy)\n"
+        ),
+        test=(
+            "tests/test_guard_request_preparation_characterization.py::"
+            "test_payload_provider_is_resolved_before_request_policy_access"
         ),
     ),
     Mutation(

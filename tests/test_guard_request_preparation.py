@@ -71,12 +71,12 @@ def _raw(**overrides: object) -> GuardRequestPreparationInput:
 
 def _services() -> GuardRequestPreparationServices:
     return GuardRequestPreparationServices(
-        repository_input=lambda **values: RepositoryInput(**values),
-        candidate_input=lambda **values: CandidateInput(**values),
-        source_identity=lambda **values: SourceIdentity(**values),
-        effective_policy=lambda **values: build_effective_policy(**values),
-        guard_request=lambda **values: GuardRequest(**values),
-        effective_policy_payload=lambda policy: effective_policy_payload(policy),
+        repository_input_provider=lambda: RepositoryInput,
+        candidate_input_provider=lambda: CandidateInput,
+        source_identity_provider=lambda: SourceIdentity,
+        effective_policy_provider=lambda: build_effective_policy,
+        guard_request_provider=lambda: GuardRequest,
+        effective_policy_payload_provider=lambda: effective_policy_payload,
     )
 
 
@@ -127,7 +127,7 @@ def test_projection_uses_owned_request_containers_not_caller_containers() -> Non
         raw,
         services=replace(
             services,
-            effective_policy_payload=payload_and_mutate,
+            effective_policy_payload_provider=lambda: payload_and_mutate,
         ),
     )
 
