@@ -116,54 +116,69 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="guard-output-badge-lookup-snapshot",
+        name="guard-output-markdown-reason-sanitization-bypass",
         path="evoom_guard/integrations/guard_output.py",
-        before=(
-            "    lines = [\n"
-            '        f"## {title} — {badge_provider().get(r.verdict, r.verdict)}",\n'
-        ),
-        after=(
-            "    badges = badge_provider()\n"
-            "    lines = [\n"
-            '        f"## {title} — {badges.get(r.verdict, r.verdict)}",\n'
-        ),
+        before='        f"**{_markdown_text(r.reason)}**",\n',
+        after='        f"**{r.reason}**",\n',
         test=(
-            "tests/test_guard_output_characterization.py::"
-            "test_render_report_resolves_badges_after_title_formatting"
+            "tests/test_guard_output_security.py::"
+            "test_markdown_projection_neutralizes_untrusted_structure"
         ),
     ),
     Mutation(
-        name="guard-output-json-dump-snapshot",
+        name="guard-output-markdown-diagnostic-fence-bypass",
         path="evoom_guard/integrations/guard_output.py",
-        before=(
-            '    with open(path, "w", encoding="utf-8") as destination:\n'
-            "        json_dump_provider()(payload, destination, indent=2)\n"
-        ),
-        after=(
-            "    json_dump = json_dump_provider()\n"
-            '    with open(path, "w", encoding="utf-8") as destination:\n'
-            "        json_dump(payload, destination, indent=2)\n"
-        ),
+        before="            _markdown_fenced_code(diag),\n",
+        after='            f"```\\n{diag}\\n```",\n',
         test=(
-            "tests/test_guard_output_characterization.py::"
-            "test_guard_output_writers_resolve_json_dump_after_open[write_json]"
+            "tests/test_guard_output_security.py::"
+            "test_markdown_projection_neutralizes_untrusted_structure"
         ),
     ),
     Mutation(
-        name="guard-output-sarif-dump-snapshot",
+        name="guard-output-atomic-fsync-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="            os.fsync(stream.fileno())\n",
+        after="            if False:\n                os.fsync(stream.fileno())\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_fsyncs_before_same_directory_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-atomic-same-directory-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before="        dir=directory,\n",
+        after="        dir=None,\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_atomic_writer_fsyncs_before_same_directory_replace"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-control-validation-bypass",
         path="evoom_guard/integrations/guard_output.py",
         before=(
-            '    with open(path, "w", encoding="utf-8") as destination:\n'
-            "        json_dump_provider()(converter(result), destination, indent=2)\n"
+            "    if any(_is_unsafe_control(character) for character in path):\n"
         ),
         after=(
-            "    json_dump = json_dump_provider()\n"
-            '    with open(path, "w", encoding="utf-8") as destination:\n'
-            "        json_dump(converter(result), destination, indent=2)\n"
+            "    if False and any("
+            "_is_unsafe_control(character) for character in path):\n"
         ),
         test=(
-            "tests/test_guard_output_characterization.py::"
-            "test_guard_output_writers_resolve_json_dump_after_open[write_sarif]"
+            "tests/test_guard_output_security.py::"
+            "test_sarif_rejects_control_or_non_repository_artifact_paths"
+            "[src/control\\nname.py]"
+        ),
+    ),
+    Mutation(
+        name="guard-output-sarif-uri-encoding-bypass",
+        path="evoom_guard/integrations/guard_output.py",
+        before='    return quote(normalized, safe="/-._~")\n',
+        after="    return normalized\n",
+        test=(
+            "tests/test_guard_output_security.py::"
+            "test_sarif_artifact_uri_is_normalized_and_percent_encoded"
         ),
     ),
     Mutation(

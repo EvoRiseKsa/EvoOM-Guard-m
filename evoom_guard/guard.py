@@ -2250,7 +2250,7 @@ def write_json(
         result,
         path,
         deleted=deleted,
-        json_dump_provider=lambda: json.dump,
+        json_dump=json.dump,
     )
 
 
@@ -2277,5 +2277,5 @@ def write_sarif(result: GuardResult, path: str) -> None:
         result,
         path,
         converter=lambda current: to_sarif(current),  # type: ignore[arg-type]
-        json_dump_provider=lambda: json.dump,
+        json_dump=json.dump,
     )

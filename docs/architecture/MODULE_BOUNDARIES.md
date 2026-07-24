@@ -16,7 +16,9 @@
 - `api/` and `cli/`: thin public/CLI compatibility surfaces.
 - `integrations/`: high-level output and external-platform adapters. Guard
   output projection is owned by `integrations/guard_output.py`; public
-  `guard.py` functions remain compatibility facades.
+  `guard.py` functions remain compatibility facades. The same owner provides
+  the leaf-symlink-safe, same-directory atomic writer used by the CLI Markdown
+  report and the JSON/SARIF facades.
 
 ## Rule
 

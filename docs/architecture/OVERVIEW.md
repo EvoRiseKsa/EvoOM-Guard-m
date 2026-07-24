@@ -174,11 +174,14 @@ facade. The facade injects live validators and argument-group helpers on every
 call; command handlers and dispatch remain in `cli/__init__.py`.
 Markdown rendering and JSON/SARIF publication now belong to the stdlib-only
 `integrations/guard_output.py` owner. `guard.py` retains all four historical
-function signatures and supplies live badge, verdict, version, JSON-dumper,
-and SARIF-conversion providers at the characterized lookup points. A frozen
-wire vector binds report strings, object/key order, indentation,
-trailing-newline behavior, platform text translation, and non-PASS SARIF alert
-emission.
+function signatures. A frozen wire vector binds benign report strings,
+object/key order, indentation, trailing-newline behavior, platform text
+translation, and non-PASS SARIF alert emission. Candidate-derived Markdown is
+escaped for its rendering context, SARIF artifact paths are canonical
+repository-relative URIs, and Markdown/JSON/SARIF destinations share one
+fsynced same-directory temporary-write plus atomic-replace boundary. Failed
+serialization or commit leaves the prior complete destination untouched, and
+a leaf symlink is replaced rather than followed.
 The remaining black-box candidate/evidence/cleanup orchestration and further
 runtime-effect decomposition remain pending; black-box pack sequencing,
 candidate path admission, candidate-tree intake, repository workspace

@@ -306,10 +306,13 @@ remain in their established facades.
   for this slice.
 - Markdown, JSON, and SARIF output projection/publication is owned by the
   stdlib-only `integrations.guard_output` adapter. Guard retains four exact
-  compatibility facades and injects live badge, verdict, version, JSON-dumper,
-  and converter providers. A pre-extraction vector freezes report/JSON/SARIF
-  content and writer bytes, while focused mutations protect historical lookup
-  timing and prevent a non-PASS SARIF result from being silently suppressed.
+  compatibility facades. A pre-extraction vector freezes benign
+  report/JSON/SARIF content and writer bytes. The owner now context-escapes
+  candidate-derived Markdown, rejects control/format characters and unsafe
+  repository paths in SARIF locations, and routes Markdown, JSON, and SARIF
+  through one fsynced same-directory atomic writer. Focused mutations protect
+  sanitization, same-directory staging, fsync-before-replace, URI encoding, and
+  non-PASS SARIF emission rather than incidental module-global lookup timing.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 
