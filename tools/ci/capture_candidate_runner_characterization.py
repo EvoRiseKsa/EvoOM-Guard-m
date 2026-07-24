@@ -17,7 +17,7 @@ from candidate_runner_characterization_harness import (  # noqa: E402
     capture_all,
 )
 
-VECTOR = TESTS / "fixtures" / "refactor-safety" / "candidate-runner-v1.json"
+VECTOR = TESTS / "fixtures" / "refactor-safety" / "candidate-runner-v2.json"
 
 
 def main() -> int:
@@ -25,7 +25,7 @@ def main() -> int:
     parser.add_argument(
         "--write",
         action="store_true",
-        help="replace the reviewed vector (never used implicitly by tests or CI)",
+        help="write the reviewed v2 vector (never used implicitly by tests or CI)",
     )
     args = parser.parse_args()
 

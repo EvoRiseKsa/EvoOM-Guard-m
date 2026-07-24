@@ -36,7 +36,7 @@ from evoom_guard.execution import (
     ProcessOutputLimitExceeded,
 )
 
-SCHEMA_VERSION = "candidate-runner-characterization-v1"
+SCHEMA_VERSION = "candidate-runner-characterization-v2"
 NORMALIZED_FIELDS = (
     "temporary workspace paths",
     "judge-owned invocation token",
@@ -51,6 +51,7 @@ CASE_NAMES = (
     "image_inspect_pull_inspect",
     "keyboard_interrupt",
     "launcher_files",
+    "noncanonical_image_id",
     "os_error",
     "output_limit",
     "pull_failure",
@@ -61,7 +62,8 @@ CASE_NAMES = (
 )
 
 _IMAGE = "registry.example/guard:mutable"
-_DIGEST = "sha256:0123456789abcdef"
+_DIGEST = "sha256:" + ("0123456789abcdef" * 4)
+_NONCANONICAL_DIGEST = "sha256:0123456789abcdef"
 _TOKEN = "characterization-secret-token"
 
 
@@ -448,6 +450,43 @@ def _daemon_unavailable(workspace: Path) -> dict[str, Any]:
     }
 
 
+def _noncanonical_image_id(workspace: Path) -> dict[str, Any]:
+    workdir = workspace / "noncanonical"
+    target = workspace / "target"
+    workdir.mkdir(parents=True)
+    target.mkdir(parents=True)
+    version = ["docker", "version", "--format", "{{.Server.Version}}"]
+    inspect = ["docker", "image", "inspect", "--format", "{{.Id}}", _IMAGE]
+    docker = _DockerControlStub(
+        [
+            _completed(version, 0, stdout="28.0.1\n"),
+            _completed(inspect, 0, stdout=f"{_NONCANONICAL_DIGEST}\n"),
+        ]
+    )
+    runner = CandidateRunner(isolation="docker", docker_image=_IMAGE)
+    with (
+        mock.patch.object(candidate_runner_module.os, "name", "posix"),
+        mock.patch.object(
+            candidate_runner_module.shutil,
+            "which",
+            return_value="/usr/bin/docker",
+        ),
+        mock.patch.object(candidate_runner_module, "_run_docker_control", docker),
+    ):
+        try:
+            runner.prepare(str(workdir), str(target))
+        except IsolationUnavailable as exc:
+            exception = _exception_record(exc)
+        else:  # pragma: no cover - a non-canonical identity must fail closed
+            raise AssertionError("non-canonical image ID prepared a launcher")
+    docker.assert_exhausted()
+    return {
+        "exception": exception,
+        "docker_control_calls": docker.calls,
+        "workdir_entries": sorted(path.name for path in workdir.iterdir()),
+    }
+
+
 def _preflight_exception(
     workspace: Path,
     side_effect: BaseException,
@@ -507,6 +546,8 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         result = _image_resolution(case_name)
     elif case_name == "daemon_unavailable":
         result = _daemon_unavailable(case_workspace)
+    elif case_name == "noncanonical_image_id":
+        result = _noncanonical_image_id(case_workspace)
     else:
         effects: dict[str, Callable[[], BaseException]] = {
             "output_limit": lambda: ProcessOutputLimitExceeded(128),

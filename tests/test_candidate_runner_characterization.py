@@ -19,6 +19,12 @@ VECTOR = (
     Path(__file__).parent
     / "fixtures"
     / "refactor-safety"
+    / "candidate-runner-v2.json"
+)
+LEGACY_VECTOR = (
+    Path(__file__).parent
+    / "fixtures"
+    / "refactor-safety"
     / "candidate-runner-v1.json"
 )
 
@@ -32,6 +38,15 @@ def test_candidate_runner_vector_metadata_is_exact() -> None:
     assert frozen["schema_version"] == SCHEMA_VERSION
     assert frozen["normalization"] == list(NORMALIZED_FIELDS)
     assert tuple(frozen["cases"]) == tuple(sorted(CASE_NAMES))
+
+
+def test_security_ratchet_preserves_the_historical_v1_vector() -> None:
+    legacy = json.loads(LEGACY_VECTOR.read_text(encoding="utf-8"))
+    assert legacy["schema_version"] == "candidate-runner-characterization-v1"
+    assert (
+        legacy["cases"]["image_inspect_hit"]["digest"]
+        == "sha256:0123456789abcdef"
+    )
 
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)
