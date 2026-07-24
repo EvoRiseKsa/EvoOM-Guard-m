@@ -105,6 +105,15 @@ subprocess/container execution, pack selection, and verdict composition remain
 outside this module. This classified-to-classified extraction changes no
 baseline count and therefore adds no ratchet revision.
 
+The bounded verifier-pack intake slice gives
+`verifiers.repo_pack_intake` ownership of optional pack admission and its
+judge-owned snapshot identity. `repo_verifier` injects live `lexists`,
+workspace-allocation, and `snapshot_pack` operations at their historical
+positions, then retains workspace cleanup and later pack execution. The owner
+has one internal dependency, the public `pack_manifest` contract. This
+classified-to-classified extraction changes no baseline count and therefore
+adds no ratchet revision.
+
 Revision 5 performs the atomic `workspace.py` to `workspace/__init__.py`
 migration without changing the import name, implementation bytes, or
 monkeypatch globals. The now-real `workspace` package is classified and has no

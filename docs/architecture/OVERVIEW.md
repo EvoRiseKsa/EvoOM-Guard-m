@@ -102,6 +102,11 @@ aliases. Candidate materialization now has a focused
 `verifiers.repo_materialization` owner behind the dynamic RepoVerifier facade;
 repository copying, deletion, and later execution effects remain in their
 established owners.
+Optional repository verifier-pack admission now has the focused
+`verifiers.repo_pack_intake` owner. It checks the required digest pin and
+reserved mount, creates and identifies the judge-owned snapshot through
+injected live operations, and returns immutable intake evidence. Pack
+execution, post-snapshot verification, and cleanup remain in `RepoVerifier`.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
 classification of changed/deleted paths. It binds local Actions from the base
 tree, preserves the reserved verifier-pack and non-exemptible harness rules,

@@ -277,6 +277,12 @@ from evoom_guard.verifiers.repo_execution import (
     isolation_observation_payload,
 )
 from evoom_guard.verifiers.repo_materialization import materialize_candidate_edits
+from evoom_guard.verifiers.repo_pack_intake import (
+    RepoPackIntakeRequest,
+    RepoPackIntakeServices,
+    intake_repo_pack,
+    rejection_artifact,
+)
 from evoom_guard.verifiers.repo_phase_contracts import (
     CompletedRunEvidence,
     compose_repo_and_pack,
@@ -1007,75 +1013,56 @@ class RepoVerifier:
             # Accept an Independent Verifier Pack into a separate judge-owned
             # snapshot outside both the candidate tree and HOME. The legacy mount
             # namespace remains reserved so a repo cannot pre-plant a shadow copy.
-            pack_sha256 = None
-            pack_manifest: dict | None = None
-            pack_identity: tuple[str, dict | None] | None = None
             pack_dir = str(problem.get("verifier_pack", "") or "")
             expected_pack_sha256 = str(
                 problem.get("expect_verifier_pack_sha256", "") or ""
             ).lower()
-            if expected_pack_sha256 and not pack_dir:
+            pack_request = RepoPackIntakeRequest(
+                candidate_copy=copy,
+                files_changed=tuple(changed),
+                pack_dir=pack_dir,
+                expected_pack_sha256=expected_pack_sha256,
+            )
+
+            def create_pack_workspace(prefix: str) -> str:
+                nonlocal pack_workdir
+                pack_workdir = tempfile.mkdtemp(prefix=prefix)
+                return pack_workdir
+
+            pack_intake = intake_repo_pack(
+                pack_request,
+                services=RepoPackIntakeServices(
+                    lexists=lambda path: os.path.lexists(path),
+                    create_workspace=create_pack_workspace,
+                    snapshot_pack=lambda source, destination: snapshot_pack(
+                        source, destination
+                    ),
+                ),
+            )
+            pack_workdir = pack_intake.pack_workdir or pack_workdir
+            pack_snapshot = pack_intake.pack_snapshot
+            pack_sha256 = pack_intake.pack_sha256
+            pack_manifest = (
+                None
+                if pack_intake.pack_manifest is None
+                else dict(pack_intake.pack_manifest)
+            )
+            pack_identity = pack_intake.identity()
+            if pack_identity is not None:
+                # Once accepted, bind every later early-return artifact to the
+                # exact judge-owned snapshot. Individual return sites must not
+                # accidentally erase this delivered evidence.
+                sticky_evidence.update(
+                    verifier_pack_sha256=pack_sha256,
+                    verifier_pack_manifest=pack_manifest,
+                )
+            if pack_intake.failure is not None:
                 return VerdictResult(
                     passed=False,
-                    score=0.0,
-                    diagnostics=(
-                        "an expected verifier-pack SHA-256 was configured but no "
-                        "verifier pack was supplied"
-                    ),
-                    artifact={
-                        "files_changed": changed,
-                        "outcome": "pack_identity_mismatch",
-                        "expected_verifier_pack_sha256": expected_pack_sha256,
-                    },
+                    score=pack_intake.failure.score,
+                    diagnostics=pack_intake.failure.diagnostics,
+                    artifact=rejection_artifact(pack_request, pack_intake),
                 )
-            if pack_dir:
-                reserved = os.path.join(copy, "evoguard_verifier_pack")
-                if os.path.lexists(reserved):
-                    return VerdictResult(
-                        passed=False, score=0.05,
-                        diagnostics=(
-                            "the repo already contains 'evoguard_verifier_pack/' — the "
-                            "judge-owned pack mount point must not exist in the tree"
-                        ),
-                        artifact={"files_changed": changed},
-                    )
-                try:
-                    # Keep the accepted snapshot outside both the candidate tree
-                    # and its HOME. The repo suite never receives this path.
-                    pack_workdir = tempfile.mkdtemp(prefix="evo_pack_snapshot_")
-                    pack_snapshot = os.path.join(pack_workdir, "pack")
-                    pack_identity = snapshot_pack(pack_dir, pack_snapshot)
-                    pack_sha256, pack_manifest = pack_identity
-                    # Once accepted, bind every later early-return artifact to
-                    # the exact judge-owned snapshot.  Individual return sites
-                    # must not accidentally erase this delivered evidence.
-                    sticky_evidence.update(
-                        verifier_pack_sha256=pack_sha256,
-                        verifier_pack_manifest=pack_manifest,
-                    )
-                except PackManifestError as exc:
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=str(exc),
-                        artifact={"files_changed": changed, "outcome": "pack_invalid"},
-                    )
-                if expected_pack_sha256 and pack_sha256.lower() != expected_pack_sha256:
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            "verifier-pack identity mismatch: expected "
-                            f"{expected_pack_sha256}, observed {pack_sha256}"
-                        ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "pack_identity_mismatch",
-                            "expected_verifier_pack_sha256": expected_pack_sha256,
-                            "verifier_pack_sha256": pack_sha256,
-                            "verifier_pack_manifest": pack_manifest,
-                        },
-                    )
 
             # Apply deletions to the copy so the verdict reflects the real merge
             # (a removed source file should be *absent* when the suite runs).

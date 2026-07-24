@@ -187,6 +187,17 @@ module globals on every call, preserving adopter monkeypatch seams. Repository
 copying, deletion, process/container execution, pack identity, and verdict
 composition do not cross this boundary.
 
+Repository verifier-pack admission lives in
+`evoom_guard/verifiers/repo_pack_intake.py`. Its immutable request/result and
+service contracts own no-pack/required-pin consistency, the reserved mount
+collision, snapshot validation, digest matching, and the exact rejection
+evidence. `RepoVerifier` supplies call-through `lexists`, workspace-allocation,
+and `snapshot_pack` operations so an earlier operation can still replace a
+later historical seam. `RepoVerifier` also records the workspace before
+snapshotting so its existing `finally` cleanup covers unexpected exceptions.
+Pack execution and post-execution snapshot verification stay outside this
+boundary.
+
 The third repository-verifier phase slice adds immutable
 `domain.evidence.VerificationEvidence`, `VerifierPackEvidence`,
 `RepositorySuiteEvidence`, and `RuntimeIdentityEvidence` values.

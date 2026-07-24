@@ -1589,6 +1589,97 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-pack-intake-required-pin-bypass",
+        path="evoom_guard/verifiers/repo_pack_intake.py",
+        before="    if request.expected_pack_sha256 and not request.pack_dir:\n",
+        after=(
+            "    if False and request.expected_pack_sha256 and "
+            "not request.pack_dir:\n"
+        ),
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_frozen_repo_pack_intake_behavior[expected_pin_without_pack]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-intake-reserved-mount-bypass",
+        path="evoom_guard/verifiers/repo_pack_intake.py",
+        before="    if services.lexists(reserved):\n",
+        after="    if False and services.lexists(reserved):\n",
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_frozen_repo_pack_intake_behavior[reserved_mount_collision]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-intake-invalid-snapshot-catch-bypass",
+        path="evoom_guard/verifiers/repo_pack_intake.py",
+        before="    except PackManifestError as exc:\n",
+        after="    except TypeError as exc:\n",
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_frozen_repo_pack_intake_behavior[invalid_pack_snapshot]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-intake-digest-pin-bypass",
+        path="evoom_guard/verifiers/repo_pack_intake.py",
+        before=(
+            "    if (\n"
+            "        request.expected_pack_sha256\n"
+            "        and pack_sha256.lower() != request.expected_pack_sha256\n"
+            "    ):\n"
+        ),
+        after=(
+            "    if False and (\n"
+            "        request.expected_pack_sha256\n"
+            "        and pack_sha256.lower() != request.expected_pack_sha256\n"
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_frozen_repo_pack_intake_behavior[digest_mismatch]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-intake-sticky-identity-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="            if pack_identity is not None:\n",
+        after="            if False and pack_identity is not None:\n",
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_frozen_repo_pack_intake_behavior[valid_identity_sticky_evidence]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-intake-live-snapshot-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    snapshot_pack=lambda source, destination: "
+            "snapshot_pack(\n"
+            "                        source, destination\n"
+            "                    ),\n"
+        ),
+        after="                    snapshot_pack=snapshot_pack,\n",
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_repo_verifier_resolves_pack_operation_seams_at_each_use"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-intake-workspace-cleanup-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                pack_workdir = tempfile.mkdtemp(prefix=prefix)\n"
+            "                return pack_workdir\n"
+        ),
+        after="                return tempfile.mkdtemp(prefix=prefix)\n",
+        test=(
+            "tests/test_repo_pack_intake_characterization.py::"
+            "test_unexpected_snapshot_failure_preserves_workspace_for_final_cleanup"
+        ),
+    ),
+    Mutation(
         name="strict-harness-exit-only-bypass",
         path="evoom_guard/verifiers/repo_phase_contracts.py",
         before=(
