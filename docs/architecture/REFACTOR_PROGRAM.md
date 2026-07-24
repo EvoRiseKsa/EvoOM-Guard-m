@@ -173,14 +173,14 @@ remain in their established facades.
 - Candidate parsing and pure patch transforms now live in `candidate/` behind
   exact legacy aliases. The contained FILE-then-PATCH transaction and
   judge-manifest restoration now live in `verifiers/repo_materialization.py`
-  behind RepoVerifier's dynamic compatibility facade. Repository copying,
-  deletion, and execution remain pending. Optional verifier-pack intake and its
-  judge-owned snapshot identity now live in the immutable
-  `verifiers/repo_pack_intake.py` contract. Verifier-pack host/docker/gVisor
+  behind RepoVerifier's dynamic compatibility facade. At that slice,
+  repository copying, deletion, and execution remained pending. Optional
+  verifier-pack intake and its judge-owned snapshot identity now live in the
+  immutable `verifiers/repo_pack_intake.py` contract. Verifier-pack host/docker/gVisor
   execution and later JUnit interpretation now live behind separate immutable
   contracts in `verifiers/repo_pack.py`; pre/post snapshot verification,
   candidate runtime continuity, sticky evidence, phase composition, final
-  projection, and cleanup remain in RepoVerifier.
+  projection, and cleanup coordination remained in RepoVerifier at that slice.
 - Repository-suite host/docker/gVisor execution and judge-owned JUnit
   interpretation now live in `verifiers/repo_suite.py` behind separate
   immutable contracts and frozen branch/order/provider-timing vectors.
@@ -206,14 +206,23 @@ remain in their established facades.
   canonical serialization. Guard retains its original private value/exception
   ABI plus live injected helper facades. The guarantee is limited to each
   bounded read/compare interval; it does not close the classification/open gap
-  or create an atomic whole-tree snapshot. Other containment submodules remain
-  pending.
+  or create an atomic whole-tree snapshot.
+- The dependency-free `workspace/repository.py` owner now contains the
+  historical copy-ignore tuple, filtered symlink-preserving repository copy,
+  Windows symlink/reparse-root rejection, observed child
+  junction/non-symlink-reparse rejection, and all-workspace cleanup
+  sequencing. Recursive `FileNotFoundError` is ignored only after a fresh
+  root-absence observation. Repository copying requires a quiescent source and
+  makes no atomic-snapshot claim; cleanup does not claim stable absence against
+  later recreation. `repo_verifier` keeps live compatibility facades and
+  retains workspace allocation plus higher-level repository orchestration.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: split the remaining repository filesystem, runtime-identity,
-  sticky-projection, and cleanup responsibilities in independent characterized
-  slices.
+- Pending: split the remaining repository candidate-admission/deletion
+  coordination, workspace allocation, runtime-identity continuity, and
+  sticky-projection responsibilities in independent characterized slices.
+  Repository-suite and verifier-pack execution owners are complete.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.

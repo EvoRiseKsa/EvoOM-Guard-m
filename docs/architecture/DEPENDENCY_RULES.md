@@ -105,6 +105,18 @@ subprocess/container execution, pack selection, and verdict composition remain
 outside this module. This classified-to-classified extraction changes no
 baseline count and therefore adds no ratchet revision.
 
+The repository-workspace slice gives the dependency-free
+`workspace.repository` module ownership of copy-ignore semantics,
+symlink-preserving repository copying, and cleanup exception precedence.
+`repo_verifier` remains the compatibility facade and injects its live
+filesystem and note providers at every call. No policy, execution, evidence,
+or verdict dependency enters the workspace layer, and no measured baseline
+ceiling changes. Windows copy visits reject observed junctions and other
+non-symlink reparse objects, but the source must remain quiescent: this is not
+an atomic source-tree snapshot. Cleanup treats a recursive
+`FileNotFoundError` as idempotent success only after its live path provider
+observes the workspace root absent.
+
 The bounded verifier-pack intake slice gives
 `verifiers.repo_pack_intake` ownership of optional pack admission and its
 judge-owned snapshot identity. `repo_verifier` injects live `lexists`,

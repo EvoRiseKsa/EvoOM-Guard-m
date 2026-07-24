@@ -40,6 +40,82 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="repository-copy-windows-reparse-preflight-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before='    if platform == "nt":\n',
+        after='    if False and platform == "nt":\n',
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_copy_rejects_simulated_windows_reparse_before_copying"
+        ),
+    ),
+    Mutation(
+        name="repository-copy-windows-root-symlink-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        if root_probe(src):\n",
+        after="        if False and root_probe(src):\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_copy_rejects_a_simulated_windows_symlink_root"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-file-not-found-absence-proof-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="            if path_absent(path) is True:\n",
+        after="            if True:\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_cleanup_requires_positive_root_absence_proof"
+        ),
+    ),
+    Mutation(
+        name="repository-copy-symlink-fidelity-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        symlinks=True,\n",
+        after="        symlinks=False,\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_owner_freezes_the_historical_copy_contract"
+        ),
+    ),
+    Mutation(
+        name="repository-copy-ignore-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    ignore = ignore_patterns_provider(*copy_ignore)\n",
+        after="    ignore = ignore_patterns_provider()\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_owner_freezes_the_historical_copy_contract"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-primary-precedence-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    if primary is not None:\n",
+        after="    if False and primary is not None:\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_cleanup_attempts_every_path_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-stop-after-first-failure",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "        except BaseException as exc:\n"
+            "            failures.append((label, exc))\n"
+        ),
+        after=(
+            "        except BaseException as exc:\n"
+            "            failures.append((label, exc)); break\n"
+        ),
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_cleanup_attempts_every_path_and_preserves_primary"
+        ),
+    ),
+    Mutation(
         name="candidate-tree-reparse-classification-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before="    if is_windows_reparse(full_path, info):\n",
@@ -1178,9 +1254,14 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-workspace-cleanup-error-hiding",
-        path="evoom_guard/verifiers/repo_verifier.py",
-        before="            shutil.rmtree(path)\n",
-        after="            shutil.rmtree(path, ignore_errors=True)\n",
+        path="evoom_guard/workspace/repository.py",
+        before="            remove_tree(path)\n",
+        after=(
+            "            try:\n"
+            "                remove_tree(path)\n"
+            "            except BaseException:\n"
+            "                continue\n"
+        ),
         test=(
             "tests/test_repo_verifier_cleanup_priority.py::"
             "test_workspace_cleanup_failure_is_visible_after_pending_result"

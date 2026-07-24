@@ -26,6 +26,7 @@ import pytest
 
 import evoom_guard.workspace as workspace
 import evoom_guard.workspace.candidate_tree as candidate_tree
+import evoom_guard.workspace.repository as repository_workspace
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
     _is_safe_relative_path,
@@ -63,6 +64,7 @@ def test_module_to_package_move_preserves_the_legacy_surface_and_globals() -> No
         "delete_path_within_root",
         "os",
         "read_text_within_root",
+        "repository",
         "secrets",
         "shutil",
         "stat",
@@ -70,6 +72,7 @@ def test_module_to_package_move_preserves_the_legacy_surface_and_globals() -> No
         "write_text_within_root",
     }
     assert workspace.candidate_tree is candidate_tree
+    assert workspace.repository is repository_workspace
     assert UnsafeWorkspacePath.__module__ == "evoom_guard.workspace"
     for function in (
         delete_path_within_root,
