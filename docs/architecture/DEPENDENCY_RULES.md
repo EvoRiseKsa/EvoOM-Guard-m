@@ -171,6 +171,14 @@ The Docker isolation slice adds only public imports within the documented
 fingerprint. It therefore does not manufacture a ratchet revision or lower a
 ceiling without a measured architectural change.
 
+The isolation-validation slice adds the dependency-free
+`domain.isolation` vocabulary. Application request preparation, the
+repository verifier, the black-box entry point, and candidate-boundary
+construction depend one-way on that domain contract. The domain module never
+imports execution, isolation, verifier, or compatibility code. Docker's
+canonical image-identity validator remains in `isolation.docker`, because it
+validates an observed runtime fact rather than policy vocabulary.
+
 The candidate-isolation slice moves launcher and boundary preparation into
 `isolation.candidate`. The legacy `candidate_runner` module imports only public
 typed isolation contracts and remains the compatibility surface; the extracted

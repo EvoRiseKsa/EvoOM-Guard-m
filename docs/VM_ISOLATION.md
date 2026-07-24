@@ -93,8 +93,12 @@ a separate host-readable drive (or over `vsock`). Requires `/dev/kvm` on the run
   auto-exec is `REJECTED` with **no candidate code executed**.
 - **Host-assembled candidate, guest setup.** The host copies and applies the patch.
   By default `setup_command` runs inside the container/guest boundary, not on the
-  host, and the same resolved image ID is reused for setup, suite and pack. The
-  explicit `trust_setup_on_host` compatibility option is recorded and lowers the
+  host. At the start of each verification the configured image is freshly
+  inspected and must resolve to a canonical immutable `sha256:` plus
+  64-lowercase-hex ID. That judgment-local pin, rather than the configured tag,
+  is used for setup, suite, and pack. Reusing a `RepoVerifier` starts a new
+  resolution; it does not reuse the previous judgment's pin. The explicit
+  `trust_setup_on_host` compatibility option is recorded and lowers the
   effective isolation claim to `subprocess`.
 - **Phase-specific writes.** Setup receives a writable candidate mount. Repo-suite
   and verifier-pack phases receive the candidate read-only; a configured pack is a
