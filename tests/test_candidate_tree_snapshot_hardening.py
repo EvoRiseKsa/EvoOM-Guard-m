@@ -17,6 +17,8 @@ from typing import Any
 
 import pytest
 
+from evoom_guard.workspace import candidate_tree
+
 guard_module = importlib.import_module("evoom_guard.guard")
 
 
@@ -171,6 +173,222 @@ def test_posix_open_flags_require_no_follow_and_non_block() -> None:
 
     assert flags & expected["O_NOFOLLOW"]
     assert flags & expected["O_NONBLOCK"]
+
+
+def test_windows_open_dispatch_uses_write_exclusive_provider(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "candidate.txt"
+    target.write_bytes(b"stable")
+    entry = guard_module._tree_entry(str(target))
+    calls: list[tuple[str, int]] = []
+
+    def portable_windows_open(path: str, flags: int) -> int:
+        calls.append((path, flags))
+        return os.open(path, flags)
+
+    descriptor = candidate_tree.open_regular_snapshot(
+        entry,
+        is_windows_reparse=guard_module._is_windows_reparse,
+        verify_regular_snapshot_provider=(
+            lambda candidate, observed, problem, path_observation: (
+                guard_module._verify_regular_snapshot(
+                    candidate,
+                    observed,
+                    problem=problem,
+                    path_observation=path_observation,
+                )
+            )
+        ),
+        open_flags=guard_module._regular_snapshot_open_flags,
+        platform_name="nt",
+        windows_open_provider=portable_windows_open,
+    )
+    try:
+        assert os.read(descriptor, 6) == b"stable"
+    finally:
+        os.close(descriptor)
+
+    assert calls == [(str(target), guard_module._regular_snapshot_open_flags())]
+
+
+def test_windows_native_open_contract_denies_write_delete_and_follows_ownership() -> None:
+    create_calls: list[tuple[Any, ...]] = []
+    close_calls: list[int] = []
+    conversion_calls: list[tuple[int, int]] = []
+
+    def create_file(*args: Any) -> int:
+        create_calls.append(args)
+        return 123
+
+    def open_osfhandle(handle: int, flags: int) -> int:
+        conversion_calls.append((handle, flags))
+        return 456
+
+    descriptor = candidate_tree._open_windows_regular_snapshot_handle(
+        "candidate.txt",
+        os.O_RDONLY | getattr(os, "O_BINARY", 0),
+        create_file=create_file,
+        close_handle=lambda handle: close_calls.append(handle),
+        open_osfhandle=open_osfhandle,
+        get_last_error=lambda: 5,
+        win_error=lambda code: OSError(code, "win32"),
+        invalid_handle_value=(1 << 64) - 1,
+    )
+
+    assert descriptor == 456
+    assert create_calls == [
+        (
+            "candidate.txt",
+            0x80000000,
+            0x00000001,
+            None,
+            3,
+            0x00200000 | 0x08000000,
+            None,
+        )
+    ]
+    assert conversion_calls == [
+        (
+            123,
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_NOINHERIT", 0),
+        )
+    ]
+    assert close_calls == []
+
+
+def test_windows_native_open_rejects_pointer_sized_invalid_handle() -> None:
+    invalid_handle = (1 << 64) - 1
+    close_calls: list[int] = []
+
+    with pytest.raises(OSError, match="win32"):
+        candidate_tree._open_windows_regular_snapshot_handle(
+            "candidate.txt",
+            os.O_RDONLY,
+            create_file=lambda *_args: invalid_handle,
+            close_handle=lambda handle: close_calls.append(handle),
+            open_osfhandle=lambda *_args: pytest.fail(
+                "invalid handle reached descriptor conversion"
+            ),
+            get_last_error=lambda: 32,
+            win_error=lambda code: OSError(code, "win32"),
+            invalid_handle_value=invalid_handle,
+        )
+
+    assert close_calls == []
+
+
+def test_windows_native_handle_closes_only_when_descriptor_conversion_fails() -> None:
+    close_calls: list[int] = []
+
+    with pytest.raises(RuntimeError, match="conversion failed"):
+        candidate_tree._open_windows_regular_snapshot_handle(
+            "candidate.txt",
+            os.O_RDONLY,
+            create_file=lambda *_args: 123,
+            close_handle=lambda handle: close_calls.append(handle),
+            open_osfhandle=lambda *_args: (_ for _ in ()).throw(
+                RuntimeError("conversion failed")
+            ),
+            get_last_error=lambda: 0,
+            win_error=lambda code: OSError(code, "win32"),
+            invalid_handle_value=(1 << 64) - 1,
+        )
+
+    assert close_calls == [123]
+
+
+@pytest.mark.skipif(
+    os.name != "nt",
+    reason="requires Windows CreateFileW sharing enforcement",
+)
+def test_windows_existing_writer_causes_candidate_read_to_fail_closed(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "candidate.txt"
+    target.write_bytes(b"SAFE")
+    entry = guard_module._tree_entry(str(target))
+
+    with target.open("r+b"):
+        with pytest.raises(OSError):
+            guard_module._read_changed_text(entry, 100)
+
+
+@pytest.mark.skipif(
+    os.name != "nt",
+    reason="requires Windows CreateFileW sharing enforcement",
+)
+def test_windows_same_size_rewrite_with_restored_mtime_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "candidate.txt"
+    target.write_bytes(b"SAFE")
+    captured_times = target.stat()
+    entry = guard_module._tree_entry(str(target))
+    original_read = guard_module._read_fd_bounded
+
+    def read_then_attempt_rewrite(descriptor: int, maximum: int) -> bytes:
+        data = original_read(descriptor, maximum)
+        target.write_bytes(b"EVIL")
+        os.utime(
+            target,
+            ns=(captured_times.st_atime_ns, captured_times.st_mtime_ns),
+        )
+        return data
+
+    monkeypatch.setattr(
+        guard_module,
+        "_read_fd_bounded",
+        read_then_attempt_rewrite,
+    )
+
+    with pytest.raises(OSError):
+        guard_module._read_changed_text(entry, 100)
+
+    assert target.read_bytes() == b"SAFE"
+
+
+@pytest.mark.skipif(
+    os.name != "nt",
+    reason="requires Windows CreateFileW delete-share enforcement",
+)
+@pytest.mark.parametrize("operation", ["delete", "rename"])
+def test_windows_delete_or_rename_during_read_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    target = tmp_path / "candidate.txt"
+    moved = tmp_path / "moved.txt"
+    target.write_bytes(b"SAFE")
+    entry = guard_module._tree_entry(str(target))
+    original_read = guard_module._read_fd_bounded
+
+    def read_then_attempt_path_mutation(
+        descriptor: int,
+        maximum: int,
+    ) -> bytes:
+        data = original_read(descriptor, maximum)
+        if operation == "delete":
+            target.unlink()
+        else:
+            target.rename(moved)
+        return data
+
+    monkeypatch.setattr(
+        guard_module,
+        "_read_fd_bounded",
+        read_then_attempt_path_mutation,
+    )
+
+    with pytest.raises(OSError):
+        guard_module._read_changed_text(entry, 100)
+
+    assert target.read_bytes() == b"SAFE"
+    assert not moved.exists()
 
 
 @pytest.mark.skipif(
