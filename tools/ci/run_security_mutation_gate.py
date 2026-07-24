@@ -1680,6 +1680,362 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-setup-no-command-guard-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            if setup_cmd_raw:\n"
+            "                setup_outcome = execute_repo_setup(\n"
+        ),
+        after=(
+            "            if True:\n"
+            "                setup_outcome = execute_repo_setup(\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_no_setup_command_performs_no_setup_specific_attribute_lookups"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-string-tokenization-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if isinstance(setup_cmd_raw, str):\n",
+        after="    if False and isinstance(setup_cmd_raw, str):\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_setup_command_precedence_and_token_normalization_are_frozen"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-container-placement-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    if setup_in_container:\n"
+            "        setup_isolation: str | None = services.requested_isolation()\n"
+        ),
+        after=(
+            "    if False and setup_in_container:\n"
+            "        setup_isolation: str | None = services.requested_isolation()\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_exit_125]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-pre-snapshot-fail-closed-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    except SetupFidelityError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity snapshot failed: {exc}",\n'
+        ),
+        after=(
+            "    except TypeError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity snapshot failed: {exc}",\n'
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[pre_snapshot_error]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-timeout-start-proof-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "        delivered = (\n"
+            "            services.requested_isolation()\n"
+            "            if exc.container_started\n"
+            '            else "not_run"\n'
+            "        )\n"
+        ),
+        after='        delivered = "not_run"\n',
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_timeout_started]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-output-classification-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "        docker_failure = isinstance(exc, DockerRunOutputLimit)\n"
+        ),
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_output_limit_unstarted]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-containment-classification-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "        docker_failure = isinstance(exc, DockerRunContainmentError)\n"
+        ),
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_containment_unstarted]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-exit-125-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if setup_in_container and r_setup.returncode == 125:\n",
+        after=(
+            "    if False and setup_in_container "
+            "and r_setup.returncode == 125:\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_exit_125]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-nonzero-failure-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if r_setup.returncode != 0:\n",
+        after="    if False and r_setup.returncode != 0:\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[host_nonzero]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-post-snapshot-fail-closed-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    except SetupFidelityError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity verification failed: {exc}",\n'
+        ),
+        after=(
+            "    except TypeError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity verification failed: {exc}",\n'
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[post_snapshot_error]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-fidelity-change-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if setup_changes:\n",
+        after="    if False and setup_changes:\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[fidelity_change]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-pre-snapshot-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        capture_setup_before=lambda: cast(\n"
+            "                            Any, _setup_fidelity_snapshot\n"
+            "                        ),\n"
+        ),
+        after=(
+            "                        capture_setup_before=(\n"
+            "                            lambda operation=cast(\n"
+            "                                Any, _setup_fidelity_snapshot\n"
+            "                            ): operation\n"
+            "                        ),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_repo_verifier_resolves_host_setup_seams_at_each_operation"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-trust-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        trust_setup_on_host=lambda: "
+            "self.trust_setup_on_host,\n"
+        ),
+        after=(
+            "                        trust_setup_on_host=(lambda "
+            "value=self.trust_setup_on_host: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_token_normalization_can_change_container_setup_trust"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-output-globs-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        setup_output_globs=lambda: "
+            "self.setup_output_globs,\n"
+        ),
+        after=(
+            "                        setup_output_globs=(lambda "
+            "value=self.setup_output_globs: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_host_resolver_can_change_setup_output_globs_before_snapshot"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-timeout-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                        timeout=lambda: self.timeout,\n",
+        after=(
+            "                        timeout=(lambda "
+            "value=self.timeout: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-strict-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        strict_harness=lambda: "
+            "self.strict_harness,\n"
+        ),
+        after=(
+            "                        strict_harness=(lambda "
+            "value=self.strict_harness: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-isolation-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        requested_isolation=lambda: self.isolation,\n"
+        ),
+        after=(
+            "                        requested_isolation=(lambda "
+            "value=self.isolation: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_docker_runner_can_change_isolation_before_timeout_evidence"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-network-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        docker_network=lambda: self.docker_network,\n"
+        ),
+        after=(
+            "                        docker_network=(lambda "
+            "value=self.docker_network: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_docker_exit_125_uses_live_network_and_runtime_fields"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-runtime-provider-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        docker_runtime=lambda: self.docker_runtime,\n"
+        ),
+        after=(
+            "                        docker_runtime=(lambda "
+            "value=self.docker_runtime: value),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_docker_exit_125_uses_live_network_and_runtime_fields"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-host-runner-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        run_host_setup=lambda: cast(\n"
+            "                            Any, _run_bounded_subprocess\n"
+            "                        ),\n"
+        ),
+        after=(
+            "                        run_host_setup=(\n"
+            "                            lambda operation=cast(\n"
+            "                                Any, _run_bounded_subprocess\n"
+            "                            ): operation\n"
+            "                        ),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_repo_verifier_resolves_host_setup_seams_at_each_operation"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-docker-builder-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        build_docker_command=lambda: cast(\n"
+            "                            Any, self._docker_command\n"
+            "                        ),\n"
+        ),
+        after=(
+            "                        build_docker_command=(\n"
+            "                            lambda operation=cast(\n"
+            "                                Any, self._docker_command\n"
+            "                            ): operation\n"
+            "                        ),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_repo_verifier_resolves_docker_setup_methods_at_each_operation"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-evidence-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        phase_isolation_evidence=lambda: (\n"
+            "                            self._phase_isolation_evidence\n"
+            "                        ),\n"
+        ),
+        after=(
+            "                        phase_isolation_evidence=(\n"
+            "                            lambda operation="
+            "self._phase_isolation_evidence: operation\n"
+            "                        ),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_repo_verifier_resolves_docker_setup_methods_at_each_operation"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-diagnostics-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                        distill_diagnostics=lambda: "
+            "distill_diagnostics,\n"
+        ),
+        after=(
+            "                        distill_diagnostics=(lambda "
+            "operation=distill_diagnostics: operation),\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_repo_verifier_resolves_docker_setup_methods_at_each_operation"
+        ),
+    ),
+    Mutation(
         name="strict-harness-exit-only-bypass",
         path="evoom_guard/verifiers/repo_phase_contracts.py",
         before=(
@@ -1813,25 +2169,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-setup-process-group-proof-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_setup.py",
         before=(
-            "                            cwd=setup_cwd,\n"
-            "                            env=setup_env,\n"
-            "                            timeout=self.timeout,\n"
-            "                            preexec_fn=(\n"
-            "                                self._limits() if os.name == \"posix\" else None\n"
-            "                            ),\n"
-            "                            require_process_group_cleanup_proof=self.strict_harness,\n"
+            "                require_process_group_cleanup_proof="
+            "services.strict_harness(),\n"
         ),
-        after=(
-            "                            cwd=setup_cwd,\n"
-            "                            env=setup_env,\n"
-            "                            timeout=self.timeout,\n"
-            "                            preexec_fn=(\n"
-            "                                self._limits() if os.name == \"posix\" else None\n"
-            "                            ),\n"
-            "                            require_process_group_cleanup_proof=False,\n"
-        ),
+        after="                require_process_group_cleanup_proof=False,\n",
         test=(
             "tests/test_strict_harness.py::"
             "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"

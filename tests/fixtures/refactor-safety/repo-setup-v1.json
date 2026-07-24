@@ -1,0 +1,53 @@
+{
+  "cases": {
+    "docker_containment_started": {
+      "sha256": "a0a2f821ef0af57bc6185547439c23747c6a0c4984bfc3d9330515f11cb5d6ad"
+    },
+    "docker_containment_unstarted": {
+      "sha256": "5d8442c30ecc44f20329c41f6e800f325b761b158c31b1da5d5e737995a2eccd"
+    },
+    "docker_exit_125": {
+      "sha256": "a376b43c7b6640669e5b6359facec3eb2a68be14a53c439c4d06bb1c7e972da5"
+    },
+    "docker_not_found": {
+      "sha256": "83b02d48339a581baaddd4415077f4496e8d152f0ef7502226a82d23fee63650"
+    },
+    "docker_output_limit_started": {
+      "sha256": "9546db71d6cd932fc91a718e7cebd8bc1f19dc6f945051567e0b51d1549d0486"
+    },
+    "docker_output_limit_unstarted": {
+      "sha256": "457a9629d490567f26c0a6df0cf8bf833cc3de8b8e27363b23097ce00fa63241"
+    },
+    "docker_timeout_started": {
+      "sha256": "ecc2af7c1bc73e469cc12afbb97534a5d2fb8d7e60f698211b6da27f772eaf3c"
+    },
+    "docker_timeout_unstarted": {
+      "sha256": "1bd52a3e4e3de97faa4e37e831cbf8b57dd3940c87abd750a8f0b9f32622605b"
+    },
+    "fidelity_change": {
+      "sha256": "780fc275ca81dbca00aa871619bb71527ab68915e4d2bcfbacfa75477e66ddb5"
+    },
+    "host_containment": {
+      "sha256": "679e2dd7157037736e57a80d5d835955ea44ec29180871416bba78f8a76e92b1"
+    },
+    "host_nonzero": {
+      "sha256": "a8c32af558a4c11f3b6a87313433a72a400876c64ea4fd5a543acb2acfd4c3df"
+    },
+    "host_not_found": {
+      "sha256": "92db1ec7c577bef4ea4868b4622309f01acd7ab199a1de416bcbb1f1c77f47d5"
+    },
+    "host_output_limit": {
+      "sha256": "90939584ff75970d578b6cecca1ba8e3fd4b6e08dfa92a90cb5bbae521b95502"
+    },
+    "host_timeout": {
+      "sha256": "54b4c8be8a69ef6d664e1e50e2afa318461b1607ed4f11b5ee6386476e4aa69c"
+    },
+    "post_snapshot_error": {
+      "sha256": "a745344d650cf45c97cfe9ab22dc061ce2e6b8203483ef3ea222c398985bfb11"
+    },
+    "pre_snapshot_error": {
+      "sha256": "c303c5346b7cc589acf1d8a340326183f0e4522518953bc0c68e173c0cccb415"
+    }
+  },
+  "schema_version": "repo-setup-characterization-v1"
+}

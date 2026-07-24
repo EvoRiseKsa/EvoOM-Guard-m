@@ -21,7 +21,7 @@ from evoom_guard.guard import (
     REJECTED,
     guard,
 )
-from evoom_guard.verifiers import repo_phase_contracts, repo_verifier
+from evoom_guard.verifiers import repo_phase_contracts, repo_setup, repo_verifier
 from evoom_guard.verifiers.harness_policy import (
     is_protected_config,
     reject_unsafe_or_protected,
@@ -169,8 +169,12 @@ def _calls_named(function: object, name: str) -> list[ast.Call]:
         node
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == name
+        and (
+            isinstance(node.func, ast.Name)
+            and node.func.id == name
+            or isinstance(node.func, ast.Attribute)
+            and node.func.attr == name
+        )
     ]
 
 
@@ -203,11 +207,44 @@ def test_strict_harness_zero_test_guard_cannot_be_disabled() -> None:
 def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase() -> None:
     calls = _calls_named(repo_verifier.RepoVerifier._verify, "_run_bounded_subprocess")
 
-    # Host setup, repo suite, and verifier pack. A new host phase must make an
-    # explicit strict-harness cleanup decision instead of inheriting a default.
-    assert len(calls) == 3
+    # Repo suite and verifier pack remain direct host phases. Setup now crosses
+    # a typed call-through seam and is checked independently below.
+    assert len(calls) == 2
     for call in calls:
         _assert_strict_cleanup_keyword(call, "self.strict_harness")
+
+    setup_tree = ast.parse(
+        textwrap.dedent(inspect.getsource(repo_setup.execute_repo_setup))
+    )
+    setup_calls = [
+        node
+        for node in ast.walk(setup_tree)
+        if isinstance(node, ast.Call)
+        and any(
+            keyword.arg == "require_process_group_cleanup_proof"
+            for keyword in node.keywords
+        )
+    ]
+    assert len(setup_calls) == 1
+    _assert_strict_cleanup_keyword(setup_calls[0], "services.strict_harness()")
+
+    setup_services = _calls_named(
+        repo_verifier.RepoVerifier._verify,
+        "RepoSetupServices",
+    )
+    assert len(setup_services) == 1
+    service_keywords = {
+        keyword.arg: keyword.value
+        for keyword in setup_services[0].keywords
+        if keyword.arg is not None
+    }
+    strict_harness_provider = service_keywords.get("strict_harness")
+    assert isinstance(strict_harness_provider, ast.Lambda)
+    assert not strict_harness_provider.args.args
+    assert ast.dump(strict_harness_provider.body, include_attributes=False) == ast.dump(
+        ast.parse("self.strict_harness", mode="eval").body,
+        include_attributes=False,
+    )
 
 
 def test_strict_baseline_requires_group_proof_for_every_host_phase() -> None:

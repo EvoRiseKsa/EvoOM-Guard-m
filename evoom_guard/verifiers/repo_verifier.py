@@ -289,6 +289,11 @@ from evoom_guard.verifiers.repo_phase_contracts import (
     evaluate_pack_phase,
     evaluate_repo_phase,
 )
+from evoom_guard.verifiers.repo_setup import (
+    RepoSetupRequest,
+    RepoSetupServices,
+    execute_repo_setup,
+)
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
     delete_path_within_root,
@@ -1126,290 +1131,59 @@ class RepoVerifier:
                     )
 
             # Run optional setup_command before the suite under the requested
-            # container boundary by default (or a restricted host environment by
-            # explicit compatibility opt-in). The suite stays restricted, and
-            # the verdict is read only from the judge-owned JUnit report + the test
-            # command's exit code — so setup's stdout can never inflate the verdict.
+            # boundary. Every service is a call-through adapter so historical
+            # monkeypatch seams remain live at their original operation sites.
             setup_cmd_raw = self.setup_command or problem.get("setup_command")
             setup_isolation: str | None = None
             if setup_cmd_raw:
-                trace.execution_phase = "setup"
-                if isinstance(setup_cmd_raw, str):
-                    setup_cmd_raw = setup_cmd_raw.split()
-                setup_tokens = [str(token) for token in setup_cmd_raw]
-                setup_in_container = container_mode and not self.trust_setup_on_host
-                setup_name: str | None = None
-                if setup_in_container:
-                    setup_isolation = self.isolation
-                    setup_name = _docker_container_name("setup")
-                    setup_run_cmd = self._docker_command(
-                        setup_tokens,
-                        copy,
-                        None,
-                        setup_name,
-                        work_writable=True,
-                    )
-                    setup_cwd = None
-                    setup_env = os.environ.copy()
-                else:
-                    setup_isolation = (
-                        "subprocess_host_opt_in" if container_mode else "subprocess"
-                    )
-                    setup_run_cmd = setup_tokens
-                    setup_cwd = copy
-                    setup_env = dict(env)
-                    setup_run_cmd = _resolve_host_command(
-                        setup_run_cmd, cwd=setup_cwd, env=setup_env
-                    )
-                try:
-                    setup_before = _setup_fidelity_snapshot(
-                        copy, self.setup_output_globs
-                    )
-                except SetupFidelityError as exc:
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"setup fidelity snapshot failed: {exc}",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "setup_failed",
-                            "setup_isolation": None,
-                        },
-                    )
-                try:
-                    if setup_in_container:
-                        assert setup_name is not None
-                        r_setup = self._run_docker_client(setup_run_cmd, setup_name)
-                    else:
-                        r_setup = _run_bounded_subprocess(
-                            setup_run_cmd,
-                            cwd=setup_cwd,
-                            env=setup_env,
-                            timeout=self.timeout,
-                            preexec_fn=(
-                                self._limits() if os.name == "posix" else None
-                            ),
-                            require_process_group_cleanup_proof=self.strict_harness,
-                        )
-                except _DockerRunTimeout as exc:
-                    delivered = self.isolation if exc.container_started else "not_run"
-                    trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                        delivered,
-                        resolved_image,
-                        note=(
-                            None
-                            if exc.container_started
-                            else "docker client timed out before container start was proven"
+                setup_outcome = execute_repo_setup(
+                    RepoSetupRequest(
+                        configured_command=setup_cmd_raw,
+                        candidate_copy=copy,
+                        files_changed=tuple(changed),
+                        environment=env,
+                        container_mode=container_mode,
+                        resolved_image=resolved_image,
+                    ),
+                    services=RepoSetupServices(
+                        trace=trace,
+                        requested_isolation=lambda: self.isolation,
+                        trust_setup_on_host=lambda: self.trust_setup_on_host,
+                        setup_output_globs=lambda: self.setup_output_globs,
+                        timeout=lambda: self.timeout,
+                        strict_harness=lambda: self.strict_harness,
+                        docker_network=lambda: self.docker_network,
+                        docker_runtime=lambda: self.docker_runtime,
+                        resolve_host_command=lambda: cast(
+                            Any, _resolve_host_command
                         ),
-                    )
-                    if exc.container_started:
-                        trace.execution_state = "started_incomplete"
-                        setup_isolation = self.isolation
-                    else:
-                        setup_isolation = None
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"setup command timed out after {self.timeout}s",
-                        artifact={
-                            "elapsed": self.timeout,
-                            "files_changed": changed,
-                            "outcome": "setup_timeout",
-                            "setup_isolation": setup_isolation,
-                        },
-                    )
-                except _SubprocessOutputLimitExceeded as exc:
-                    docker_failure = isinstance(exc, _DockerRunOutputLimit)
-                    container_started = bool(
-                        getattr(exc, "container_started", True)
-                    )
-                    delivered = (
-                        self.isolation
-                        if docker_failure and container_started
-                        else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
-                    )
-                    reported_setup_isolation = (
-                        self.isolation
-                        if docker_failure and container_started
-                        else (None if docker_failure else setup_isolation)
-                    )
-                    if container_started:
-                        trace.execution_state = "started_incomplete"
-                    trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                        delivered,
-                        resolved_image,
-                        note=(
-                            None
-                            if container_started
-                            else "docker client output limit was reached before container start was proven"
+                        capture_setup_before=lambda: cast(
+                            Any, _setup_fidelity_snapshot
                         ),
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"setup command output was rejected: {exc}",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "setup_output_limit",
-                            "setup_isolation": reported_setup_isolation,
-                        },
-                    )
-                except _SubprocessContainmentError as exc:
-                    docker_failure = isinstance(exc, _DockerRunContainmentError)
-                    container_started = bool(
-                        getattr(exc, "container_started", True)
-                    )
-                    delivered = (
-                        self.isolation
-                        if docker_failure and container_started
-                        else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
-                    )
-                    reported_setup_isolation = (
-                        self.isolation
-                        if docker_failure and container_started
-                        else (None if docker_failure else setup_isolation)
-                    )
-                    if container_started:
-                        trace.execution_state = "started_incomplete"
-                    trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                        delivered,
-                        resolved_image,
-                        note=(
-                            "docker container cleanup was not proven"
-                            if docker_failure
-                            else "subprocess cleanup was not proven"
+                        capture_setup_after=lambda: cast(
+                            Any, _setup_fidelity_snapshot
                         ),
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"setup command containment failed: {exc}",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "runtime_containment_error",
-                            "setup_isolation": reported_setup_isolation,
-                        },
-                    )
-                except subprocess.TimeoutExpired:
-                    trace.execution_state = "started_incomplete"
-                    trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                        setup_isolation or "subprocess", resolved_image
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"setup command timed out after {self.timeout}s",
-                        artifact={
-                            "elapsed": self.timeout,
-                            "files_changed": changed,
-                            "outcome": "setup_timeout",
-                            "setup_isolation": setup_isolation,
-                        },
-                    )
-                except FileNotFoundError:
-                    trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                        "unavailable" if setup_in_container else "not_run",
-                        resolved_image,
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            f"{self.isolation} isolation requested but the docker CLI "
-                            "was not found while starting setup_command"
-                            if setup_in_container
-                            else f"setup command not found: {setup_tokens[0]!r}"
+                        setup_fidelity_changes=lambda: _setup_fidelity_changes,
+                        run_host_setup=lambda: cast(
+                            Any, _run_bounded_subprocess
                         ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "setup_failed",
-                            "setup_isolation": None,
-                        },
-                    )
-                if setup_in_container and r_setup.returncode == 125:
-                    diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
-                    trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                        "unavailable", resolved_image
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            f"the {self.isolation} setup container could not be "
-                            f"started (docker exit 125): {diag}"
+                        container_name=lambda: _docker_container_name,
+                        build_docker_command=lambda: cast(
+                            Any, self._docker_command
                         ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "isolation_unavailable",
-                            "setup_isolation": "unavailable",
-                            "isolation_evidence": {
-                                "requested": self.isolation,
-                                "delivered": "unavailable",
-                                "image_digest": resolved_image,
-                                "network": self.docker_network,
-                                "runtime": self.docker_runtime,
-                            },
-                        },
-                    )
-                trace.execution_state = "started_incomplete"
-                trace.setup_isolation_evidence = self._phase_isolation_evidence(
-                    setup_isolation or self.isolation, resolved_image
+                        run_docker_setup=lambda: cast(
+                            Any, self._run_docker_client
+                        ),
+                        limits=lambda: self._limits(),
+                        phase_isolation_evidence=lambda: (
+                            self._phase_isolation_evidence
+                        ),
+                        distill_diagnostics=lambda: distill_diagnostics,
+                    ),
                 )
-                if r_setup.returncode != 0:
-                    diag = distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
-                    hint = (
-                        " (setup ran inside the container: the image must contain "
-                        "the setup tool, and --docker-network none blocks registries)"
-                        if setup_in_container
-                        else ""
-                    )
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            f"setup command failed (exit {r_setup.returncode}){hint}: {diag}"
-                        ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "setup_failed",
-                            "setup_isolation": setup_isolation,
-                        },
-                    )
-                try:
-                    setup_after = _setup_fidelity_snapshot(
-                        copy,
-                        self.setup_output_globs,
-                        baseline=setup_before,
-                    )
-                except SetupFidelityError as exc:
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=f"setup fidelity verification failed: {exc}",
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "setup_failed",
-                            "setup_isolation": setup_isolation,
-                        },
-                    )
-                setup_changes = _setup_fidelity_changes(setup_before, setup_after)
-                if setup_changes:
-                    return VerdictResult(
-                        passed=False,
-                        score=0.0,
-                        diagnostics=(
-                            "setup_command modified the judged source/harness outside "
-                            "declared setup outputs — refusing to run a suite against "
-                            "a tree different from the candidate: "
-                            + ", ".join(setup_changes[:20])
-                        ),
-                        artifact={
-                            "files_changed": changed,
-                            "outcome": "setup_failed",
-                            "setup_isolation": setup_isolation,
-                            "setup_fidelity_changes": setup_changes,
-                        },
-                    )
+                setup_isolation = setup_outcome.setup_isolation
+                if setup_outcome.terminal_result is not None:
+                    return setup_outcome.terminal_result
             # A mandatory repo-native pack must judge the exact fully prepared
             # runtime tree the repo suite received. Setup fidelity deliberately
             # permits new dependency/build outputs; this second identity includes
