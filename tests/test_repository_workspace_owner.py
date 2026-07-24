@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import inspect
 import os
 import subprocess
 from pathlib import Path
@@ -124,6 +125,50 @@ def test_repository_copy_rejects_simulated_windows_reparse_before_copying() -> N
     assert copied == []
 
 
+def test_repository_copy_rejects_a_simulated_windows_symlink_root() -> None:
+    owner = _repository_workspace()
+    copied: list[tuple[str, str]] = []
+
+    def fake_copytree(src: str, dst: str, **_kwargs: object) -> None:
+        copied.append((src, dst))
+
+    with pytest.raises(owner.UnsafeRepositoryTree, match="root"):
+        owner.copy_repo_tree(
+            "source-link",
+            "destination",
+            platform_name="nt",
+            unsafe_reparse_probe=lambda _path: False,
+            unsafe_root_reparse_probe=lambda path: path == "source-link",
+            copytree=fake_copytree,
+            ignore_patterns=lambda *_patterns: lambda _directory, _names: (),
+        )
+
+    assert copied == []
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires a real Windows symlink")
+def test_repository_copy_does_not_follow_a_windows_symlink_root(
+    tmp_path: Path,
+) -> None:
+    owner = _repository_workspace()
+    external = tmp_path / "external"
+    source_link = tmp_path / "source-link"
+    destination = tmp_path / "destination"
+    external.mkdir()
+    secret = external / "secret.txt"
+    secret.write_text("outside-content\n", encoding="utf-8")
+    try:
+        source_link.symlink_to(external, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"cannot create a Windows directory symlink: {exc}")
+
+    with pytest.raises(owner.UnsafeRepositoryTree, match="root"):
+        owner.copy_repo_tree(str(source_link), str(destination))
+
+    assert secret.read_text(encoding="utf-8") == "outside-content\n"
+    assert not (destination / "secret.txt").exists()
+
+
 @pytest.mark.skipif(os.name != "nt", reason="requires a real Windows junction")
 def test_repository_copy_does_not_materialize_a_windows_junction(
     tmp_path: Path,
@@ -199,6 +244,41 @@ def test_existing_consumers_retain_the_exact_repo_verifier_copy_facade() -> None
     assert blackbox.copy_repo_tree is repo_verifier.copy_repo_tree
     assert evidence.copy_repo_tree is repo_verifier.copy_repo_tree
     assert guard.COPY_IGNORE is repo_verifier.COPY_IGNORE
+
+
+def test_repo_verifier_workspace_facades_retain_historical_docstrings() -> None:
+    assert inspect.getdoc(repo_verifier.copy_repo_tree) == inspect.cleandoc(
+        """
+        Copy a repository into a throwaway working copy, faithfully.
+
+        ``symlinks=True`` keeps symlinks *as symlinks* (and regular files keep their
+        permission bits via ``copy2``), which matters twice:
+
+        * **No crash on dangling links.** Real repos routinely carry symlinks into
+          directories ``COPY_IGNORE`` strips (``.venv/``, ``node_modules/``) or
+          plain broken links; dereferencing (the ``symlinks=False`` default) makes
+          ``copytree`` raise on those, crashing the judge instead of judging.
+        * **No content smuggling.** Dereferencing would copy the link's *target
+          content* into the copy — for an absolute link that means host files get
+          materialized inside the tree that container isolation later mounts.
+
+        Writing *through* a symlink is prevented separately by the descriptor-bound
+        workspace helpers used in :func:`apply_blocks_to_copy`.
+        """
+    )
+    assert inspect.getdoc(repo_verifier._note_repo_cleanup_failure) == (
+        "Attach cleanup diagnostics without ever replacing ``primary``."
+    )
+    assert inspect.getdoc(repo_verifier._cleanup_repo_workspaces) == inspect.cleandoc(
+        """
+        Remove every judge-owned workspace with explicit exception precedence.
+
+        All paths are attempted.  With no active exception, the first cleanup
+        failure remains visible (and any later failures are attached as notes).
+        While another exception is unwinding, that exact exception remains primary
+        and receives one note per cleanup failure instead of being masked.
+        """
+    )
 
 
 def test_repo_verifier_cleanup_facade_resolves_note_provider_at_call_time(

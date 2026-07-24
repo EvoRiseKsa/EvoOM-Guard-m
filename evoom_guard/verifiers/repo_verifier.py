@@ -491,7 +491,7 @@ def _read_text_or_none(path: str) -> str | None:
 
 
 def copy_repo_tree(src: str, dst: str) -> None:
-    """Compatibility facade for faithful throwaway repository copying.
+    """Copy a repository into a throwaway working copy, faithfully.
 
     ``symlinks=True`` keeps symlinks *as symlinks* (and regular files keep their
     permission bits via ``copy2``), which matters twice:
@@ -627,7 +627,7 @@ def _cleanup_docker_container(name: str) -> bool:
 
 
 def _note_repo_cleanup_failure(primary: BaseException, message: str) -> None:
-    """Compatibility facade for secondary cleanup diagnostics."""
+    """Attach cleanup diagnostics without ever replacing ``primary``."""
 
     _repository_workspace.note_cleanup_failure(primary, message)
 
@@ -637,7 +637,13 @@ def _cleanup_repo_workspaces(
     *,
     primary: BaseException | None,
 ) -> None:
-    """Compatibility facade for repository-workspace cleanup sequencing."""
+    """Remove every judge-owned workspace with explicit exception precedence.
+
+    All paths are attempted.  With no active exception, the first cleanup
+    failure remains visible (and any later failures are attached as notes).
+    While another exception is unwinding, that exact exception remains primary
+    and receives one note per cleanup failure instead of being masked.
+    """
 
     _repository_workspace.cleanup_repo_workspaces(
         workspaces,

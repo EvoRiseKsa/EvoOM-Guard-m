@@ -173,14 +173,14 @@ remain in their established facades.
 - Candidate parsing and pure patch transforms now live in `candidate/` behind
   exact legacy aliases. The contained FILE-then-PATCH transaction and
   judge-manifest restoration now live in `verifiers/repo_materialization.py`
-  behind RepoVerifier's dynamic compatibility facade. Repository copying,
-  deletion, and execution remain pending. Optional verifier-pack intake and its
-  judge-owned snapshot identity now live in the immutable
-  `verifiers/repo_pack_intake.py` contract. Verifier-pack host/docker/gVisor
+  behind RepoVerifier's dynamic compatibility facade. At that slice,
+  repository copying, deletion, and execution remained pending. Optional
+  verifier-pack intake and its judge-owned snapshot identity now live in the
+  immutable `verifiers/repo_pack_intake.py` contract. Verifier-pack host/docker/gVisor
   execution and later JUnit interpretation now live behind separate immutable
   contracts in `verifiers/repo_pack.py`; pre/post snapshot verification,
   candidate runtime continuity, sticky evidence, phase composition, final
-  projection, and cleanup remain in RepoVerifier.
+  projection, and cleanup coordination remained in RepoVerifier at that slice.
 - Repository-suite host/docker/gVisor execution and judge-owned JUnit
   interpretation now live in `verifiers/repo_suite.py` behind separate
   immutable contracts and frozen branch/order/provider-timing vectors.
@@ -209,13 +209,13 @@ remain in their established facades.
   or create an atomic whole-tree snapshot.
 - The dependency-free `workspace/repository.py` owner now contains the
   historical copy-ignore tuple, filtered symlink-preserving repository copy,
-  observed Windows junction/non-symlink-reparse rejection, and all-workspace
-  cleanup sequencing. Recursive `FileNotFoundError` is ignored only after a
-  fresh root-absence observation. Repository copying requires a quiescent
-  source and makes no atomic-snapshot claim; cleanup does not claim stable
-  absence against later recreation. `repo_verifier` keeps live compatibility
-  facades and retains workspace allocation plus higher-level repository
-  orchestration.
+  Windows symlink/reparse-root rejection, observed child
+  junction/non-symlink-reparse rejection, and all-workspace cleanup
+  sequencing. Recursive `FileNotFoundError` is ignored only after a fresh
+  root-absence observation. Repository copying requires a quiescent source and
+  makes no atomic-snapshot claim; cleanup does not claim stable absence against
+  later recreation. `repo_verifier` keeps live compatibility facades and
+  retains workspace allocation plus higher-level repository orchestration.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.

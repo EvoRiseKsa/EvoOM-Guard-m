@@ -73,6 +73,25 @@ def _unsafe_windows_copy_reparse(path: str) -> bool:
     )
 
 
+def _unsafe_windows_copy_root(path: str) -> bool:
+    """Whether ``copytree`` would follow a Windows reparse/symlink root."""
+
+    is_junction = getattr(os.path, "isjunction", None)
+    try:
+        if callable(is_junction) and is_junction(path):
+            return True
+        info = os.lstat(path)
+    except OSError as exc:
+        raise UnsafeRepositoryTree(
+            f"cannot classify repository root before copying: {path!r} ({exc})"
+        ) from exc
+
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & reparse_flag
+    )
+
+
 def _guard_windows_copy_ignore(
     ignore: CopyIgnore,
     *,
@@ -104,6 +123,7 @@ def copy_repo_tree(
     copy_ignore: tuple[str, ...] = COPY_IGNORE,
     platform_name: str | None = None,
     unsafe_reparse_probe: UnsafeReparseProbe | None = None,
+    unsafe_root_reparse_probe: UnsafeReparseProbe | None = None,
     copytree: CopyTree | None = None,
     ignore_patterns: IgnorePatterns | None = None,
 ) -> None:
@@ -114,7 +134,9 @@ def copy_repo_tree(
     including executable bits, continues to be copied through ``copytree``'s
     default ``copy2`` operation. On Windows, each visited directory rejects
     junctions and other non-symlink reparse objects before ``copytree`` can
-    follow them.
+    follow them. The repository root itself rejects every symlink/reparse
+    object because ``copytree`` opens that root before child-link preservation
+    applies.
 
     The source must remain quiescent for the duration of this operation. These
     path checks run at each ``copytree`` visit but are not an atomic filesystem
@@ -133,10 +155,16 @@ def copy_repo_tree(
             if unsafe_reparse_probe is None
             else unsafe_reparse_probe
         )
-        if probe(src):
+        if unsafe_root_reparse_probe is not None:
+            root_probe = unsafe_root_reparse_probe
+        elif unsafe_reparse_probe is not None:
+            root_probe = probe
+        else:
+            root_probe = _unsafe_windows_copy_root
+        if root_probe(src):
             raise UnsafeRepositoryTree(
-                "refusing to copy a Windows junction or non-symlink "
-                f"reparse repository root: {src!r}"
+                "refusing to follow a Windows symlink or reparse repository "
+                f"root: {src!r}"
             )
         ignore = _guard_windows_copy_ignore(
             ignore,

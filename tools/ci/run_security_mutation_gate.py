@@ -50,6 +50,16 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repository-copy-windows-root-symlink-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        if root_probe(src):\n",
+        after="        if False and root_probe(src):\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_copy_rejects_a_simulated_windows_symlink_root"
+        ),
+    ),
+    Mutation(
         name="repository-cleanup-file-not-found-absence-proof-bypass",
         path="evoom_guard/workspace/repository.py",
         before="            if path_absent(path) is True:\n",
