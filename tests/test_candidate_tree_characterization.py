@@ -222,6 +222,53 @@ def test_walk_tree_resolves_tree_entry_through_live_guard_facade(
     assert walked["file.txt"].size == 123
 
 
+def test_tree_entry_resolves_private_entry_type_at_call_time(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "file.txt"
+    target.write_text("payload", encoding="utf-8")
+    original_type = guard_module._TreeEntry
+
+    class LateTreeEntry(original_type):
+        pass
+
+    monkeypatch.setattr(guard_module, "_TreeEntry", LateTreeEntry)
+
+    entry = guard_module._tree_entry(str(target))
+
+    assert type(entry) is LateTreeEntry
+
+
+def test_blocks_from_dirs_resolves_private_error_type_at_call_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_type = guard_module._UnverifiableChangedPathsError
+
+    class LateUnverifiableChangedPathsError(original_type):
+        pass
+
+    monkeypatch.setattr(
+        guard_module,
+        "_UnverifiableChangedPathsError",
+        LateUnverifiableChangedPathsError,
+    )
+    monkeypatch.setattr(
+        guard_module,
+        "_tree_entry",
+        lambda path: guard_module._TreeEntry(
+            path,
+            "special",
+            None,
+            None,
+            problem="late root rejection",
+        ),
+    )
+
+    with pytest.raises(LateUnverifiableChangedPathsError):
+        guard_module.blocks_from_dirs("base", "head")
+
+
 def test_blocks_from_dirs_resolves_helpers_through_live_guard_facade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
