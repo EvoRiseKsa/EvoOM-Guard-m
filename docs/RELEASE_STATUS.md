@@ -14,6 +14,10 @@ release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
 provides a release attestation for the immutable release and a separate GitHub
 Actions build-artifact attestation for those bytes.
 
+`v4.3.0` has no SPDX SBOM asset or SBOM attestation. Protected source now
+prepares that three-asset contract for a future release, but no historical
+tag, asset, baseline, or release ledger is changed. See [Release SBOM](SBOM.md).
+
 The `v4.3.0` release adds Agent Change Admission V1. Its archived public
 same-owner pilot retained one permitted run, one ignored tracked-path
 rejection before signing, and one exact-change replay with detached offline

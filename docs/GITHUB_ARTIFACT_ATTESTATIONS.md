@@ -19,15 +19,28 @@ published asset succeeds when constrained to the repository, the `Release`
 workflow at `.github/workflows/release.yml@refs/heads/main`, the `main`
 source ref, and GitHub-hosted runners.
 
+`v4.3.0` has no `evo-guard.spdx.json` release asset and no SBOM attestation.
+The protected source tree now prepares an external SPDX 2.3 inventory and a
+second `actions/attest` invocation for the next release that uses the updated
+workflow. This is a source capability, not a retroactive claim about any
+published release. See [Release SBOM](SBOM.md).
+
 `v3.7.0` has a GitHub **release** attestation. It does **not** have a GitHub
 Actions build-artifact attestation for `evo-guard.pyz`. Do not describe the
 v3.7.0 release attestation as build provenance. Historical release records,
 including v3.8.0, remain historical evidence; they are not the current
 consumer release.
 
-The build job receives only `contents: read`, `id-token: write`, and
-`attestations: write`; it does not receive `contents: write`. Artifact
-attestation is not itself a reason to create a release. Follow the
+The build job receives only `contents: read`; it receives no OIDC,
+attestation, or repository-write authority. A separate job with no checkout,
+dependency installation, project-script execution, or zipapp execution
+receives `contents: read`, `id-token: write`, and `attestations: write`. It
+rechecks the exact asset set, checksum manifest, and SPDX package SHA-256
+binding before requesting either provider attestation. Transfers use the
+immutable artifact ID emitted by the upload step, not a mutable name lookup,
+and digest mismatch is fatal. The publication job receives only the artifact
+ID approved by the clean job. Artifact attestation
+is not itself a reason to create a release. Follow the
 [release-channel policy](../README.md#release-channel): make a new release only
 for an intentional versioned product change, after its version and consumer
 pins are updated and the protected release validation succeeds.
@@ -76,6 +89,40 @@ GitHub Actions provenance identity for the local asset bytes. Neither command
 substitutes for verifying the downloaded checksum. For offline verification,
 use the GitHub CLI's downloaded attestation bundle and trusted-root procedure
 rather than treating a copied JSON document as a trust root.
+
+## Future SBOM attestation contract
+
+For a future release that actually publishes `evo-guard.spdx.json`, the
+separate clean attestation job in the default-branch release workflow requests
+a distinct SBOM attestation with:
+
+- `subject-path: dist/evo-guard.pyz`; and
+- `sbom-path: dist/evo-guard.spdx.json`.
+
+The same exact zipapp is therefore the subject of both the build-provenance and
+SBOM attestations. The release workflow creates the inventory and checksums in
+an unprivileged build job, transfers the three files to a clean attestation
+job, verifies their exact set and digest binding there, and only then requests
+both attestations. A separate write-capable job later receives those same
+files for the draft release. This split prevents candidate execution from
+sharing provider identity, but it is **not independent construction or
+review**: the zipapp and inventory still share one workflow and build
+provenance.
+
+The in-workflow default-branch condition is a fail-closed operational guard,
+not an external trust root against a maintainer who can alter the workflow at
+the ref selected for `workflow_dispatch`. Do not describe this job as
+environment-protected. External environment branch policy and release-artifact
+admission remain prerequisites before an RAAE-governed release claim.
+
+Before describing a release as SBOM-enabled, verify that its immutable
+manually uploaded asset set contains exactly `evo-guard.pyz`,
+`evo-guard.spdx.json`, and `SHA256SUMS` (GitHub-generated source archives are
+separate), that both checksum lines pass, and that the provider statement
+binds the downloaded zipapp to the expected SPDX predicate. The inventory
+records zipapp members; it is not vulnerability scanning, VEX, license legal
+review, or security/admission evidence.
+
 ## Relation to EvoGuard Artifact Digest Admission V2
 
 `EVOGUARD_ARTIFACT_BINDING_V2` deliberately treats its provenance file as
@@ -85,8 +132,10 @@ V2 in an ordinary PR job does not establish verified provenance.
 
 The only intended integration sequence is:
 
-1. A protected build/release job creates the artifact attestation immediately
-   after building the immutable artifact.
+1. An unprivileged build job creates and transfers one immutable artifact; a
+   separate clean job in the reviewed default-branch workflow verifies that
+   exact artifact ID and then creates its artifact attestation without
+   executing candidate code.
 2. A separate protected admission job downloads the exact artifact bytes,
    runs `gh attestation verify` with exact `--repo`, `--signer-workflow`, and
    when known `--source-digest` constraints, and fails closed on any error.
@@ -109,9 +158,9 @@ thereby prove:
 - that a source-level EvoGuard finalizer approved the artifact;
 - that the release asset is the artifact unless its release association and
   checksum are verified separately;
-- artifact reproducibility, vulnerability status, SBOM completeness, registry
-  state, publication authorization, deployment authorization, or runtime
-  identity; or
+- artifact reproducibility, vulnerability status, SBOM completeness or
+  correctness, registry state, publication authorization, deployment
+  authorization, or runtime identity; or
 - independent review of the workflow, runner, GitHub service, or this project.
 
 This is a concrete prerequisite for the provider-specific portion of issue

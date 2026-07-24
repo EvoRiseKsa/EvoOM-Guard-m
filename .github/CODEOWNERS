@@ -22,8 +22,12 @@
 /tools/ci-vitest/ @MANA-awam @EvoRiseKsa
 /ops/ci/ @MANA-awam @EvoRiseKsa
 /ops/build_pyz.py @MANA-awam @EvoRiseKsa
+/ops/generate_spdx_sbom.py @MANA-awam @EvoRiseKsa
 /tests/test_action_security.py @MANA-awam @EvoRiseKsa
 /tests/test_dependency_lock_policy.py @MANA-awam @EvoRiseKsa
+/tests/test_release_security.py @MANA-awam @EvoRiseKsa
+/tests/test_spdx_sbom.py @MANA-awam @EvoRiseKsa
+/tests/schema/ @MANA-awam @EvoRiseKsa
 /tests/test_zipapp.py @MANA-awam @EvoRiseKsa
 /tests/architecture/ @MANA-awam @EvoRiseKsa
 
@@ -41,4 +45,5 @@
 /docs/TRUSTED_FINALIZER.md @MANA-awam @EvoRiseKsa
 /docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam @EvoRiseKsa
 /docs/DEPENDENCY_POLICY.md @MANA-awam @EvoRiseKsa
+/docs/SBOM.md @MANA-awam @EvoRiseKsa
 /docs/architecture/ @MANA-awam @EvoRiseKsa

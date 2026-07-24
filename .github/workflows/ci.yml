@@ -40,10 +40,18 @@ jobs:
           python -m pip install --no-deps --no-build-isolation -e .
 
       - name: Lint (ruff)
-        run: python -m ruff check evoom_guard/ tests/ tools/ci/
+        run: >-
+          python -m ruff check
+          evoom_guard/ tests/ tools/ci/
+          ops/build_pyz.py ops/generate_spdx_sbom.py
 
       - name: Type-check (mypy)
         run: python -m mypy evoom_guard/
+
+      - name: Type-check release tooling (mypy strict)
+        run: >-
+          python -m mypy --strict
+          ops/build_pyz.py ops/generate_spdx_sbom.py
 
       - name: Type-check domain contracts (mypy strict)
         run: python -m mypy --strict evoom_guard/domain/
@@ -193,8 +201,18 @@ jobs:
         run: |
           test "$(python -I dist/evo-guard.pyz version)" = "evo-guard ${GITHUB_REF_NAME#v}"
           python -I dist/evo-guard.pyz doctor
+      - name: Generate the deterministic external SPDX 2.3 inventory
+        run: |
+          CREATED="$(git show -s --format=%cI "$GITHUB_SHA")"
+          python -I ops/generate_spdx_sbom.py dist/evo-guard.pyz \
+            --version "${GITHUB_REF_NAME#v}" \
+            --created "$CREATED" \
+            --output dist/evo-guard.spdx.json
       - name: Checksums (release integrity)
-        run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
+        run: |
+          ( cd dist && \
+            sha256sum evo-guard.pyz evo-guard.spdx.json > SHA256SUMS && \
+            cat SHA256SUMS )
       - name: Verify the published immutable release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -225,7 +243,26 @@ jobs:
             exit 1
           fi
 
-          EXPECTED_ASSETS="$(printf '%s\n' SHA256SUMS evo-guard.pyz | LC_ALL=C sort)"
+          EXPECTED_ENTRIES="$(printf 'f\t%s\n' \
+            SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
+          ACTUAL_ENTRIES="$(find dist -mindepth 1 -maxdepth 1 \
+            -printf '%y\t%f\n' | LC_ALL=C sort)"
+          if [ "$ACTUAL_ENTRIES" != "$EXPECTED_ENTRIES" ]; then
+            echo "::error::release_asset_set_mismatch: rebuilt top-level name/type set is not exact"
+            printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ENTRIES" "$ACTUAL_ENTRIES"
+            exit 1
+          fi
+          if [ "$(wc -l < dist/SHA256SUMS)" -ne 2 ] || \
+             ! sed -n '1p' dist/SHA256SUMS | \
+               grep -Eq '^[0-9a-f]{64}  evo-guard\.pyz$' || \
+             ! sed -n '2p' dist/SHA256SUMS | \
+               grep -Eq '^[0-9a-f]{64}  evo-guard\.spdx\.json$'; then
+            echo "::error::release_checksum_format_invalid: SHA256SUMS must contain exactly two filename-ordered digests"
+            exit 1
+          fi
+
+          EXPECTED_ASSETS="$(printf '%s\n' \
+            SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
           RELEASE_ASSETS="$(jq -r '.assets[].name' <<<"$RELEASE_JSON" | LC_ALL=C sort)"
           if [ "$RELEASE_ASSETS" != "$EXPECTED_ASSETS" ]; then
             echo "::error::release_asset_set_mismatch: published release asset set is not exact"
@@ -234,7 +271,7 @@ jobs:
           fi
 
           mkdir -p existing-release-assets
-          for asset in evo-guard.pyz SHA256SUMS; do
+          for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
             if printf '%s\n' "$RELEASE_ASSETS" | grep -Fxq "$asset"; then
               gh release download "$GITHUB_REF_NAME" --pattern "$asset" \
                 --dir existing-release-assets

@@ -41,8 +41,13 @@ gate.
 
 7. **Immutable release artifact controls**
    - Tag and release created only from tested commit.
-   - `evo-guard.pyz` + `SHA256SUMS` exact and immutable.
-   - Optional: GitHub release attestation present for uploaded action artifact.
+   - Historical releases retain their recorded immutable asset sets.
+   - For a future SBOM-enabled release, require exactly the three manually
+     uploaded assets `evo-guard.pyz`, `evo-guard.spdx.json`, and `SHA256SUMS`
+     (apart from GitHub-generated source archives), with two filename-ordered
+     checksum lines and byte equality in tag CI.
+   - Verify the build-provenance and SBOM attestations for the exact zipapp
+     subject. Neither attestation is an EvoGuard verdict or independent review.
 
 ## Frozen baseline verification
 

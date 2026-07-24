@@ -5,11 +5,17 @@
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
 # Release: validates the requested version, runs the full test suite, builds the
-# zero-dependency `evo-guard.pyz` (+ SHA256SUMS), and prepares a draft release.
+# zero-dependency `evo-guard.pyz`, its external SPDX 2.3 inventory, and the
+# two-entry SHA256SUMS manifest, then prepares a draft release.
 #
 # The workflow is manual-only and its jobs accept the default branch only.
 # A push to an unprotected release/* branch must never receive the contents:write
 # token used to create a draft release.
+#
+# These job-level ref guards assume this reviewed workflow definition is
+# intact. They are not an external trust root against a maintainer who can
+# alter a workflow on the ref selected for workflow_dispatch. The RAAE release
+# path must add environment branch policy before claiming protected admission.
 #
 # Immutable Releases is enabled for this repository. GitHub's required order is
 # draft -> upload every asset -> publish; publishing locks the tag and assets.
@@ -84,10 +90,18 @@ jobs:
           test "v$V" = "$TAG"
 
       - name: Lint (Ruff)
-        run: python -m ruff check evoom_guard/ tests/
+        run: >-
+          python -m ruff check
+          evoom_guard/ tests/
+          ops/build_pyz.py ops/generate_spdx_sbom.py
 
       - name: Type-check (Mypy)
         run: python -m mypy evoom_guard/
+
+      - name: Type-check release tooling (Mypy strict)
+        run: >-
+          python -m mypy --strict
+          ops/build_pyz.py ops/generate_spdx_sbom.py
 
       - name: Type-check domain contracts (Mypy strict)
         run: python -m mypy --strict evoom_guard/domain/
@@ -178,12 +192,14 @@ jobs:
     needs: [validate-test, release-e2e, release-windows-e2e]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
+    outputs:
+      release-artifact-digest: ${{ steps.upload-release-assets.outputs.artifact-digest }}
+      release-artifact-id: ${{ steps.upload-release-assets.outputs.artifact-id }}
     permissions:
-      # GitHub Artifact Attestations are generated for the exact bytes built
-      # below. This job never receives repository or release write access.
-      attestations: write
+      # Candidate code and the built zipapp execute only in this unprivileged
+      # job. Provider identity and attestation permissions belong to the
+      # separate clean job below.
       contents: read
-      id-token: write
     env:
       TAG: ${{ needs.validate-test.outputs.tag }}
     steps:
@@ -203,30 +219,182 @@ jobs:
           test "$(python -I dist/evo-guard.pyz version)" = "evo-guard ${TAG#v}"
           python -I dist/evo-guard.pyz doctor
 
+      - name: Generate the deterministic external SPDX 2.3 inventory
+        run: |
+          CREATED="$(git show -s --format=%cI "$GITHUB_SHA")"
+          python -I ops/generate_spdx_sbom.py dist/evo-guard.pyz \
+            --version "${TAG#v}" \
+            --created "$CREATED" \
+            --output dist/evo-guard.spdx.json
+
       - name: Checksums (release integrity)
-        run: ( cd dist && sha256sum evo-guard.pyz | tee SHA256SUMS )
+        run: |
+          ( cd dist && \
+            sha256sum evo-guard.pyz evo-guard.spdx.json > SHA256SUMS && \
+            cat SHA256SUMS )
 
-      # This is build provenance for the exact local file, not a release
-      # attestation and not an EvoGuard verdict. It is generated before the
-      # file crosses the job boundary into the release-writing job.
-      - name: Generate GitHub build provenance for the exact artifact
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
-        with:
-          subject-path: dist/evo-guard.pyz
-
-      - name: Transfer the verified release assets
+      - name: Transfer the generated release assets
+        id: upload-release-assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-assets
           path: |
             dist/evo-guard.pyz
+            dist/evo-guard.spdx.json
             dist/SHA256SUMS
           if-no-files-found: error
           overwrite: true
           retention-days: 1
 
-  prepare-draft:
+  attest-release-assets:
     needs: [validate-test, build-artifact]
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    outputs:
+      approved-artifact-digest: ${{ steps.approve-artifact.outputs.artifact-digest }}
+      approved-artifact-id: ${{ steps.approve-artifact.outputs.artifact-id }}
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ needs.validate-test.outputs.tag }}
+    steps:
+      - name: Validate the generated artifact identity
+        env:
+          ARTIFACT_DIGEST: ${{ needs.build-artifact.outputs.release-artifact-digest }}
+          ARTIFACT_ID: ${{ needs.build-artifact.outputs.release-artifact-id }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+
+      # This job deliberately has no checkout, setup, dependency installation,
+      # project-script execution, or zipapp execution. It receives only the
+      # immutable artifact created by the unprivileged build job.
+      - name: Receive the generated release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.build-artifact.outputs.release-artifact-id }}
+          digest-mismatch: error
+          path: dist
+
+      - name: Bind the transferred SBOM and checksums to the exact zipapp
+        run: |
+          set -euo pipefail
+          EXPECTED_ENTRIES="$(printf 'f\t%s\n' \
+            SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
+          ACTUAL_ENTRIES="$(find dist -mindepth 1 -maxdepth 1 \
+            -printf '%y\t%f\n' | LC_ALL=C sort)"
+          if [ "$ACTUAL_ENTRIES" != "$EXPECTED_ENTRIES" ]; then
+            echo "::error::release_asset_set_mismatch: attestation input set is not exact"
+            printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ENTRIES" "$ACTUAL_ENTRIES"
+            exit 1
+          fi
+          PYZ_BYTES="$(stat -c '%s' dist/evo-guard.pyz)"
+          SBOM_BYTES="$(stat -c '%s' dist/evo-guard.spdx.json)"
+          CHECKSUM_BYTES="$(stat -c '%s' dist/SHA256SUMS)"
+          if [ "$PYZ_BYTES" -lt 1 ] || [ "$PYZ_BYTES" -gt 67108864 ] || \
+             [ "$SBOM_BYTES" -lt 1 ] || [ "$SBOM_BYTES" -gt 16777216 ] || \
+             [ "$CHECKSUM_BYTES" -lt 1 ] || [ "$CHECKSUM_BYTES" -gt 512 ]; then
+            echo "::error::release_asset_size_invalid: attestation inputs exceed bounded sizes"
+            exit 1
+          fi
+          if [ "$(wc -l < dist/SHA256SUMS)" -ne 2 ] || \
+             ! sed -n '1p' dist/SHA256SUMS | \
+               grep -Eq '^[0-9a-f]{64}  evo-guard\.pyz$' || \
+             ! sed -n '2p' dist/SHA256SUMS | \
+               grep -Eq '^[0-9a-f]{64}  evo-guard\.spdx\.json$'; then
+            echo "::error::release_checksum_format_invalid: SHA256SUMS must contain exactly two filename-ordered digests"
+            exit 1
+          fi
+          ( cd dist && sha256sum -c SHA256SUMS )
+
+          EXPECTED_VERSION="${TAG#v}" python3 -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          def unique_object(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  result[key] = value
+              return result
+
+          def reject_constant(value):
+              raise ValueError(f"non-finite JSON constant: {value}")
+
+          sbom_path = Path("dist/evo-guard.spdx.json")
+          with sbom_path.open("r", encoding="utf-8") as stream:
+              document = json.load(
+                  stream,
+                  object_pairs_hook=unique_object,
+                  parse_constant=reject_constant,
+              )
+          packages = document.get("packages")
+          if not isinstance(packages, list) or len(packages) != 1:
+              raise SystemExit("expected exactly one SPDX package")
+          package = packages[0]
+          expected_fields = {
+              "SPDXID": "SPDXRef-Package-evoom-guard",
+              "name": "evo-guard",
+              "packageFileName": "evo-guard.pyz",
+              "versionInfo": os.environ["EXPECTED_VERSION"],
+          }
+          for field, expected in expected_fields.items():
+              if package.get(field) != expected:
+                  raise SystemExit(f"unexpected SPDX package {field}")
+          checksums = package.get("checksums")
+          if not isinstance(checksums, list):
+              raise SystemExit("missing SPDX package checksums")
+          sha256_values = [
+              entry.get("checksumValue")
+              for entry in checksums
+              if isinstance(entry, dict) and entry.get("algorithm") == "SHA256"
+          ]
+          if len(sha256_values) != 1:
+              raise SystemExit("expected exactly one SPDX package SHA256")
+          digest = hashlib.sha256()
+          with Path("dist/evo-guard.pyz").open("rb") as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                  digest.update(chunk)
+          if sha256_values[0] != digest.hexdigest():
+              raise SystemExit(
+                  "sbom_subject_digest_mismatch: SPDX package SHA256 "
+                  "does not bind the transferred zipapp"
+              )
+          PY
+
+      # These are provider attestations for the exact transferred files, not
+      # release admission, a vulnerability result, or an EvoGuard verdict.
+      - name: Generate GitHub build provenance for the exact artifact
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        with:
+          subject-path: dist/evo-guard.pyz
+
+      - name: Generate GitHub SBOM attestation for the exact artifact
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        with:
+          subject-path: dist/evo-guard.pyz
+          sbom-path: dist/evo-guard.spdx.json
+
+      - name: Approve the exact artifact identity for publication
+        id: approve-artifact
+        env:
+          ARTIFACT_DIGEST: ${{ needs.build-artifact.outputs.release-artifact-digest }}
+          ARTIFACT_ID: ${{ needs.build-artifact.outputs.release-artifact-id }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          printf 'artifact-id=%s\n' "$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          printf 'artifact-digest=%s\n' "$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+
+  prepare-draft:
+    needs: [validate-test, attest-release-assets]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     permissions:
@@ -235,25 +403,40 @@ jobs:
       GH_REPO: ${{ github.repository }}
       TAG: ${{ needs.validate-test.outputs.tag }}
     steps:
+      - name: Validate the approved artifact identity
+        env:
+          ARTIFACT_DIGEST: ${{ needs.attest-release-assets.outputs.approved-artifact-digest }}
+          ARTIFACT_ID: ${{ needs.attest-release-assets.outputs.approved-artifact-id }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+
       - name: Receive the verified release assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: release-assets
+          artifact-ids: ${{ needs.attest-release-assets.outputs.approved-artifact-id }}
+          digest-mismatch: error
           path: dist
 
       - name: Verify the transferred asset set and checksum
         run: |
           set -euo pipefail
-          EXPECTED_ASSETS="$(printf '%s\n' SHA256SUMS evo-guard.pyz | LC_ALL=C sort)"
-          ACTUAL_ASSETS="$(find dist -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
-          if [ "$ACTUAL_ASSETS" != "$EXPECTED_ASSETS" ]; then
-            echo "::error::release_asset_set_mismatch: transferred asset set is not exact"
-            printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ASSETS" "$ACTUAL_ASSETS"
+          EXPECTED_ENTRIES="$(printf 'f\t%s\n' \
+            SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
+          ACTUAL_ENTRIES="$(find dist -mindepth 1 -maxdepth 1 \
+            -printf '%y\t%f\n' | LC_ALL=C sort)"
+          if [ "$ACTUAL_ENTRIES" != "$EXPECTED_ENTRIES" ]; then
+            echo "::error::release_asset_set_mismatch: transferred top-level name/type set is not exact"
+            printf 'expected:\n%s\nactual:\n%s\n' "$EXPECTED_ENTRIES" "$ACTUAL_ENTRIES"
             exit 1
           fi
-          if [ "$(wc -l < dist/SHA256SUMS)" -ne 1 ] || \
-             ! grep -Eq '^[0-9a-f]{64}  evo-guard\.pyz$' dist/SHA256SUMS; then
-            echo "::error::release_checksum_format_invalid: SHA256SUMS must contain exactly the evo-guard.pyz digest"
+          if [ "$(wc -l < dist/SHA256SUMS)" -ne 2 ] || \
+             ! sed -n '1p' dist/SHA256SUMS | \
+               grep -Eq '^[0-9a-f]{64}  evo-guard\.pyz$' || \
+             ! sed -n '2p' dist/SHA256SUMS | \
+               grep -Eq '^[0-9a-f]{64}  evo-guard\.spdx\.json$'; then
+            echo "::error::release_checksum_format_invalid: SHA256SUMS must contain exactly two filename-ordered digests"
             exit 1
           fi
           ( cd dist && sha256sum -c SHA256SUMS )
@@ -308,9 +491,11 @@ jobs:
             exit 1
           fi
 
-          EXPECTED_ASSETS="$(printf '%s\n' SHA256SUMS evo-guard.pyz | LC_ALL=C sort)"
+          EXPECTED_ASSETS="$(printf '%s\n' \
+            SHA256SUMS evo-guard.pyz evo-guard.spdx.json | LC_ALL=C sort)"
           RELEASE_ASSETS="$(jq -r '.assets[].name' <<<"$RELEASE_JSON" | LC_ALL=C sort)"
-          UNEXPECTED_ASSETS="$(printf '%s\n' "$RELEASE_ASSETS" | awk 'NF && $0 != "SHA256SUMS" && $0 != "evo-guard.pyz"')"
+          UNEXPECTED_ASSETS="$(printf '%s\n' "$RELEASE_ASSETS" | \
+            awk 'NF && $0 != "SHA256SUMS" && $0 != "evo-guard.pyz" && $0 != "evo-guard.spdx.json"')"
           if [ -n "$UNEXPECTED_ASSETS" ]; then
             echo "::error::release_asset_set_mismatch: unexpected existing assets"
             printf '%s\n' "$UNEXPECTED_ASSETS"
@@ -318,7 +503,7 @@ jobs:
           fi
 
           mkdir -p existing-release-assets
-          for asset in evo-guard.pyz SHA256SUMS; do
+          for asset in evo-guard.pyz evo-guard.spdx.json SHA256SUMS; do
             if printf '%s\n' "$RELEASE_ASSETS" | grep -Fxq "$asset"; then
               gh release download "$TAG" --pattern "$asset" \
                 --dir existing-release-assets
