@@ -15,6 +15,7 @@ ROOT = Path(__file__).parents[1]
 CI = ROOT / ".github" / "workflows" / "ci.yml"
 RELEASE = ROOT / ".github" / "workflows" / "release.yml"
 WINDOWS = ROOT / ".github" / "workflows" / "windows.yml"
+ACTION_SMOKE = ROOT / ".github" / "workflows" / "action-resolver-free-smoke.yml"
 PYPROJECT = ROOT / "pyproject.toml"
 CI_INPUT = ROOT / "requirements" / "ci.in"
 CI_LOCK = ROOT / "requirements" / "ci.lock"
@@ -81,7 +82,7 @@ def test_node_ci_lock_is_exact_and_integrity_bound() -> None:
 
 
 def test_workflows_install_only_from_locked_inputs() -> None:
-    workflows = (CI, RELEASE, WINDOWS)
+    workflows = (CI, RELEASE, WINDOWS, ACTION_SMOKE)
     text = "\n".join(path.read_text(encoding="utf-8") for path in workflows)
     assert "npm install -g" not in text
     assert text.count("npm ci --ignore-scripts --prefix tools/ci-vitest") == 4
@@ -92,7 +93,23 @@ def test_workflows_install_only_from_locked_inputs() -> None:
         assert (
             args == "--only-binary=:all: --require-hashes -r requirements/ci.lock"
             or args == "--no-deps --no-build-isolation -e ."
+            or args
+            == (
+                "--only-binary=:all: --require-hashes "
+                "-r .venv/action-source/requirements/docker-pytest.lock"
+            )
+            or args
+            == (
+                "--only-binary=:all: --require-hashes "
+                "-r .venv/action-source/requirements/ci.lock"
+            )
         ), f"unlocked workflow pip command: {args!r}"
+    pip_uninstalls = re.findall(
+        r"^\s*python -m pip uninstall (?P<args>[^\n]+)$",
+        text,
+        flags=re.MULTILINE,
+    )
+    assert pip_uninstalls == ["-y coverage"]
 
     for workflow in (CI, RELEASE):
         workflow_text = workflow.read_text(encoding="utf-8")
@@ -118,8 +135,20 @@ def test_product_and_consumer_boundaries_are_documented() -> None:
     assert project["project"]["dependencies"] == []
     policy = POLICY.read_text(encoding="utf-8")
     assert "github.action_path" in policy
-    assert "not be described as hash-pinned" in policy
+    assert "resolver-free **bootstrap**, not a zero-network Action" in policy
     assert "OpenSSF Scorecard" in policy
+
+
+def test_action_smoke_exercises_only_reviewed_locked_environments() -> None:
+    text = ACTION_SMOKE.read_text(encoding="utf-8")
+    assert "requirements/docker-pytest.lock" in text
+    assert "requirements/ci.lock" in text
+    assert 'PIP_NO_INDEX: "1"' in text
+    assert 'PIP_REQUIRE_VIRTUALENV: "1"' in text
+    assert "core-no-coverage" in text
+    assert "advisory-coverage-missing" in text
+    assert "required-coverage-missing" in text
+    assert "required-coverage-available" in text
 
 
 def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
@@ -128,7 +157,12 @@ def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
         "/requirements/",
         "/tools/ci-vitest/",
         "/ops/ci/",
+        "/ops/build_pyz.py",
+        "/tests/test_action_security.py",
         "/tests/test_dependency_lock_policy.py",
+        "/tests/test_zipapp.py",
         "/docs/DEPENDENCY_POLICY.md",
+        "/docs/EVIDENCE_BUNDLES.md",
+        "/docs/GUARD.md",
     ):
         assert f"{path} @MANA-awam" in codeowners

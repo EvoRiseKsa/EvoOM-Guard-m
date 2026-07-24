@@ -44,10 +44,11 @@ alone:
 `guard_artifact_sha256` must not be a placeholder. In evidence-context v1 its
 portable meaning is the SHA-256 of the exact executable distribution bytes that
 produced the verdict. For the standalone release, use the `evo-guard.pyz` digest
-from `SHA256SUMS` after verifying the download. A source checkout or composite
-Action install does not yet have a canonical cross-platform distribution digest;
-do not claim that binding by inventing a value. Use the released zipapp for this
-workflow until a future digest format and Action output are specified.
+from `SHA256SUMS` after verifying the download. A source checkout does not have
+that distribution identity. The next, unreleased composite Action builds a
+temporary zipapp without a resolver, but does not expose a canonical digest
+output for finalizer binding; do not invent one. Use the released zipapp for
+this workflow until an Action digest contract and output are specified.
 
 `run_attempt` is mandatory because GitHub keeps the same run ID when a workflow
 is re-run. Together the two fields identify one execution attempt rather than

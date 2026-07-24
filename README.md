@@ -336,6 +336,16 @@ steps:
       fail-on: "any-non-pass"          # required on pull_request runs
 ```
 
+> **Next/unreleased Action bootstrap:** current development builds the
+> stdlib-only `evo-guard.pyz` directly from the selected Action revision and
+> runs it with `python -I`; bootstrap does not invoke a package resolver, build
+> backend, or PyPI. This is not a `v4.3.0` claim and is not a whole-Action
+> zero-network claim: interpreter setup, a missing-base fetch, the optional PR
+> comment, and consumer setup/tests remain separate boundaries. Optional
+> `coverage.py` must already exist in the selected Python 3.12 environment;
+> missing advisory measurement stays explicit and a configured minimum fails
+> closed.
+
 For a `pull_request`, the Action materializes `.evoguard.json` from the verified
 base SHA and passes that file as the judge policy. Put policy in that file, for
 example:

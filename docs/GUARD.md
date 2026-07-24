@@ -64,17 +64,29 @@ code.
 
 There are two ways to get Guard, depending on where you run it. EvoGuard is
 proprietary and is **not published to PyPI** (`pip install evoom-guard` will not find
-it) — both paths install it **from this repository**.
+it) — both paths obtain and run it **from this repository**.
 
-**In GitHub Actions — nothing to install.** Reference the composite action; the
-runner fetches it and `pip install`s EvoGuard itself, so the only line your
-workflow adds is the `uses:` (plus a full-history checkout):
+**In GitHub Actions — the core bootstrap needs no package install.** Reference
+the composite action, so a core-only workflow adds the `uses:` (plus a
+full-history checkout). A policy that requests optional changed-line coverage
+must preprovision `coverage.py` as described below:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
   with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
 - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # published release; @<sha> is strictest, @main is latest
 ```
+
+> **Version boundary.** The immutable `v4.3.0` Action bootstraps its local
+> checkout through pip. The next, unreleased Action revision instead builds a
+> temporary stdlib-only zipapp from `github.action_path` and runs it with
+> `python -I`, without a package resolver, build backend, or PyPI access during
+> bootstrap. It does not claim the whole Action is zero-network:
+> `setup-python`, a missing-base fetch, the optional PR comment, and consumer
+> setup/tests retain their documented network boundaries. Optional
+> `coverage.py` must be preprovisioned in the selected Python 3.12 environment;
+> unavailable advisory measurement is explicit, while a configured minimum
+> fails closed.
 
 **As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
 no third-party dependencies, so this is a fast, clean install — no clone needed):

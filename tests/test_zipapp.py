@@ -27,15 +27,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard import __version__
 
+ROOT = Path(__file__).parents[1]
 
-def _build(tmp_path, *, root=None) -> str:
+
+def _build_module():
     # ops/ is not part of the installed package — add it on demand to import the
     # build helper (keeps the module-level import block clean).
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ops"))
     import build_pyz
 
+    return build_pyz
+
+
+def _build(tmp_path, *, root=None) -> str:
+    build_pyz = _build_module()
     kwargs = {} if root is None else {"root": str(root)}
     return build_pyz.build(str(tmp_path / "evo-guard.pyz"), **kwargs)
+
+
+def _minimal_source(root: Path) -> Path:
+    package = root / "evoom_guard"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text('__version__ = "test"\n', encoding="utf-8")
+    (package / "cli.py").write_text("def main():\n    return 0\n", encoding="utf-8")
+    (root / "LICENSE").write_text("test license\n", encoding="utf-8")
+    return package
 
 
 def test_pyz_builds_and_reports_version(tmp_path):
@@ -44,6 +60,191 @@ def test_pyz_builds_and_reports_version(tmp_path):
     r = subprocess.run([sys.executable, out, "version"], capture_output=True, text=True, timeout=90)
     assert r.returncode == 0
     assert __version__ in r.stdout
+
+
+def test_pyz_build_script_is_cwd_independent_with_space_paths(tmp_path):
+    working_directory = tmp_path / "unrelated cwd with spaces"
+    output = tmp_path / "output directory with spaces" / "guard archive.pyz"
+    working_directory.mkdir()
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(ROOT / "ops" / "build_pyz.py"),
+            "-o",
+            str(output),
+        ],
+        cwd=working_directory,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert output.is_file()
+    version = subprocess.run(
+        [sys.executable, "-I", str(output), "version"],
+        cwd=working_directory,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert version.returncode == 0, version.stdout + version.stderr
+    assert __version__ in version.stdout
+
+
+@pytest.mark.parametrize("link_is_directory", [False, True])
+def test_pyz_build_rejects_symbolic_links(tmp_path, link_is_directory):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+    target = tmp_path / ("external-directory" if link_is_directory else "external.py")
+    if link_is_directory:
+        target.mkdir()
+    else:
+        target.write_text("VALUE = 1\n", encoding="utf-8")
+    link = package / ("linked_directory" if link_is_directory else "linked.py")
+    try:
+        os.symlink(target, link, target_is_directory=link_is_directory)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symbolic links are unavailable: {error}")
+
+    with pytest.raises(ValueError, match="link or reparse point"):
+        _build(tmp_path / "build", root=root)
+
+
+@pytest.mark.parametrize("linked_source", ["root", "package", "license", "ignored"])
+def test_pyz_build_rejects_links_at_every_source_boundary(tmp_path, linked_source):
+    target_root = tmp_path / "target"
+    target_package = _minimal_source(target_root)
+    source_root = target_root
+
+    if linked_source == "root":
+        source_root = tmp_path / "linked-root"
+        target_is_directory = True
+        target = target_root
+        link = source_root
+    elif linked_source == "package":
+        source_root = tmp_path / "source"
+        source_root.mkdir()
+        (source_root / "LICENSE").write_text("test license\n", encoding="utf-8")
+        target_is_directory = True
+        target = target_package
+        link = source_root / "evoom_guard"
+    elif linked_source == "license":
+        (target_root / "LICENSE").unlink()
+        external_license = tmp_path / "external-license"
+        external_license.write_text("external\n", encoding="utf-8")
+        target_is_directory = False
+        target = external_license
+        link = target_root / "LICENSE"
+    else:
+        cache = target_package / "__pycache__"
+        cache.mkdir()
+        target_is_directory = False
+        target = tmp_path / "missing.pyc"
+        link = cache / "ignored.pyc"
+
+    try:
+        os.symlink(target, link, target_is_directory=target_is_directory)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symbolic links are unavailable: {error}")
+
+    with pytest.raises(
+        (ValueError, FileNotFoundError),
+        match="real directory|regular file|link",
+    ):
+        _build(tmp_path / "build", root=source_root)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction/reparse-point contract")
+def test_pyz_build_rejects_windows_directory_reparse_points(tmp_path):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+    target = tmp_path / "junction-target"
+    target.mkdir()
+    junction = package / "junction"
+    created = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(target)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if created.returncode != 0:
+        pytest.skip(f"junction creation is unavailable: {created.stdout}{created.stderr}")
+    try:
+        with pytest.raises(ValueError, match="link or reparse point"):
+            _build(tmp_path / "build", root=root)
+    finally:
+        os.rmdir(junction)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+@pytest.mark.parametrize("inside_ignored_directory", [False, True])
+def test_pyz_build_rejects_special_files(tmp_path, inside_ignored_directory):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+    parent = package
+    if inside_ignored_directory:
+        parent = package / "__pycache__"
+        parent.mkdir()
+    os.mkfifo(parent / "named-pipe")
+
+    with pytest.raises(ValueError, match="special file"):
+        _build(tmp_path / "build", root=root)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="backslash is not a legal Windows filename")
+def test_pyz_build_rejects_ambiguous_archive_entry_names(tmp_path):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+    (package / "ambiguous\\name.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsafe source entry name"):
+        _build(tmp_path / "build", root=root)
+
+
+def test_pyz_build_rejects_output_inside_packaged_source(tmp_path):
+    root = tmp_path / "source"
+    package = _minimal_source(root)
+
+    with pytest.raises(ValueError, match="output must not replace"):
+        _build(package, root=root)
+
+
+def test_pyz_build_rejects_an_existing_output_symlink(tmp_path):
+    root = tmp_path / "source"
+    _minimal_source(root)
+    target = tmp_path / "target.pyz"
+    target.write_bytes(b"do not overwrite\n")
+    output = tmp_path / "output.pyz"
+    try:
+        os.symlink(target, output)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symbolic links are unavailable: {error}")
+
+    with pytest.raises(ValueError, match="regular file"):
+        _build_module().build(str(output), root=str(root))
+    assert target.read_bytes() == b"do not overwrite\n"
+
+
+def test_pyz_build_failure_does_not_replace_an_existing_archive(tmp_path, monkeypatch):
+    root = tmp_path / "source"
+    _minimal_source(root)
+    output = tmp_path / "output.pyz"
+    output.write_bytes(b"previous complete archive\n")
+    build_pyz = _build_module()
+
+    def fail_after_partial_write(stage, temporary_output, interpreter):
+        del stage, interpreter
+        Path(temporary_output).write_bytes(b"partial")
+        raise RuntimeError("synthetic archive failure")
+
+    monkeypatch.setattr(build_pyz, "_write_reproducible_archive", fail_after_partial_write)
+    with pytest.raises(RuntimeError, match="synthetic archive failure"):
+        build_pyz.build(str(output), root=str(root))
+    assert output.read_bytes() == b"previous complete archive\n"
+    assert not list(tmp_path.glob(".evo-guard.pyz.*.tmp"))
 
 
 def test_pyz_contains_candidate_domain_and_legacy_facades(tmp_path):
