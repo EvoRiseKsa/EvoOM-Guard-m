@@ -27,7 +27,10 @@ composition into this workspace owner.
 
 from __future__ import annotations
 
+import fnmatch
+import ntpath
 import os
+import posixpath
 import stat
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -240,6 +243,30 @@ def candidate_from_dirs(
     return serialize_blocks(blocks), deleted
 
 
+def _ignored_copy_name(
+    name: str,
+    patterns: Iterable[str],
+    *,
+    platform_name: str | None = None,
+) -> bool:
+    """Match one basename exactly as ``shutil.ignore_patterns`` would.
+
+    ``copy_repo_tree`` delegates to ``fnmatch.filter``. That function applies
+    the host path module's ``normcase`` before wildcard matching, which makes
+    every ignore pattern case-insensitive on Windows but case-sensitive on
+    POSIX. Candidate derivation must classify the same tree that execution
+    copies, especially for the Git control pointer and dependency directories.
+    """
+
+    platform = os.name if platform_name is None else platform_name
+    normalize = ntpath.normcase if platform == "nt" else posixpath.normcase
+    normalized_name = normalize(name)
+    return any(
+        fnmatch.fnmatchcase(normalized_name, normalize(pattern))
+        for pattern in patterns
+    )
+
+
 def walk_tree_entries(
     root: str,
     *,
@@ -250,7 +277,7 @@ def walk_tree_entries(
     """Return every non-ignored path without dropping non-text entries."""
 
     out: dict[str, TreeEntryView] = {}
-    ignore = set(copy_ignore) | {".git"}
+    ignore = tuple(sorted(set(copy_ignore) | {".git"}))
 
     def walk_error(exc: OSError) -> None:
         # ``os.walk`` otherwise silently skips an unreadable directory.
@@ -271,7 +298,9 @@ def walk_tree_entries(
         )
 
     for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error):
-        dirnames[:] = [name for name in dirnames if name not in ignore]
+        dirnames[:] = [
+            name for name in dirnames if not _ignored_copy_name(name, ignore)
+        ]
         traversable_dirs: list[str] = []
         for dirname in dirnames:
             full = os.path.join(dirpath, dirname)
@@ -283,7 +312,7 @@ def walk_tree_entries(
                 traversable_dirs.append(dirname)
         dirnames[:] = traversable_dirs
         for filename in filenames:
-            if filename in ignore:
+            if _ignored_copy_name(filename, ignore):
                 continue
             full = os.path.join(dirpath, filename)
             rel = os.path.relpath(full, root).replace(os.sep, "/")

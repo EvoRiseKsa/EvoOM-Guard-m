@@ -76,8 +76,9 @@ those dynamic seams or replace them with explicit injected contracts.
 The second workspace slice lives in
 `evoom_guard/workspace/candidate_tree.py`. It owns the complete base/head
 filesystem intake transaction: root validation, non-following traversal,
-Windows reparse classification, object/metadata identity, Windows handles that
-deny write/delete sharing, non-blocking no-follow POSIX opens, bounded
+copy-equivalent ignore matching (case-insensitive on Windows), Windows reparse
+classification, object/metadata identity, Windows handles that deny
+write/delete sharing, non-blocking no-follow POSIX opens, bounded
 reads/comparisons, changed-path classification, and canonical FILE-block
 serialization. Guard retains its historical names as thin compatibility
 types/facades and injects every established helper at call time, so private

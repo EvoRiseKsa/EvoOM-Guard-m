@@ -185,8 +185,8 @@ MUTATIONS = (
     Mutation(
         name="candidate-tree-git-ignore-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
-        before='    ignore = set(copy_ignore) | {".git"}\n',
-        after="    ignore = set(copy_ignore)\n",
+        before='    ignore = tuple(sorted(set(copy_ignore) | {".git"}))\n',
+        after="    ignore = tuple(sorted(set(copy_ignore)))\n",
         test=(
             "tests/test_candidate_tree_characterization.py::"
             "test_walk_tree_uses_current_copy_ignore_and_always_ignores_git"
@@ -196,16 +196,29 @@ MUTATIONS = (
         name="candidate-tree-gitfile-ignore-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before=(
-            "            if filename in ignore:\n"
+            "            if _ignored_copy_name(filename, ignore):\n"
             "                continue\n"
         ),
         after=(
-            "            if False and filename in ignore:\n"
+            "            if False and _ignored_copy_name(filename, ignore):\n"
             "                continue\n"
         ),
         test=(
             "tests/test_candidate_tree_characterization.py::"
             "test_gitfile_add_change_delete_is_invisible_without_hiding_git_names"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-windows-ignore-normcase-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            '    normalize = ntpath.normcase if platform == "nt" '
+            "else posixpath.normcase\n"
+        ),
+        after="    normalize = posixpath.normcase\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_copy_ignore_matching_uses_windows_normcase_only_on_windows"
         ),
     ),
     Mutation(

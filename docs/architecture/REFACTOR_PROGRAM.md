@@ -189,13 +189,14 @@ remain in their established facades.
   preserving descriptor/TOCTOU monkeypatch seams. The bounded
   `workspace/candidate_tree.py` owner now contains the complete hardened
   base/head intake transaction: root/reparse validation, captured object and
-  metadata identity, mandatory POSIX `O_NOFOLLOW`/`O_NONBLOCK`, Windows
-  write/delete-share denial, bounded descriptor reads/comparisons,
-  changed-path classification, and canonical serialization. Guard retains its
-  original private value/exception ABI plus live injected helper facades. The
-  guarantee is limited to each bounded read/compare interval; it does not close
-  the classification/open gap or create an atomic whole-tree snapshot. Other
-  containment submodules remain pending.
+  metadata identity, copy-equivalent case-normalized Windows ignore matching,
+  mandatory POSIX `O_NOFOLLOW`/`O_NONBLOCK`, Windows write/delete-share denial,
+  bounded descriptor reads/comparisons, changed-path classification, and
+  canonical serialization. Guard retains its original private value/exception
+  ABI plus live injected helper facades. The guarantee is limited to each
+  bounded read/compare interval; it does not close the classification/open gap
+  or create an atomic whole-tree snapshot. Other containment submodules remain
+  pending.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining repository filesystem, runtime-identity,

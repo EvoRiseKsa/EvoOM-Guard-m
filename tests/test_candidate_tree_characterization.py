@@ -265,6 +265,91 @@ def test_walk_tree_ignores_gitfiles_at_every_depth(tmp_path: Path) -> None:
     assert "nested/visible.txt" in walked
 
 
+def test_copy_ignore_matching_uses_windows_normcase_only_on_windows() -> None:
+    patterns = (".git", "node_modules", ".pytest_cache", "*.cache")
+
+    assert candidate_tree._ignored_copy_name(
+        ".GIT",
+        patterns,
+        platform_name="nt",
+    )
+    assert candidate_tree._ignored_copy_name(
+        "NODE_MODULES",
+        patterns,
+        platform_name="nt",
+    )
+    assert candidate_tree._ignored_copy_name(
+        "BUILD.CACHE",
+        patterns,
+        platform_name="nt",
+    )
+    assert not candidate_tree._ignored_copy_name(
+        ".GIT",
+        patterns,
+        platform_name="posix",
+    )
+    assert not candidate_tree._ignored_copy_name(
+        "NODE_MODULES",
+        patterns,
+        platform_name="posix",
+    )
+    assert not candidate_tree._ignored_copy_name(
+        ".gitignore",
+        patterns,
+        platform_name="nt",
+    )
+    assert not candidate_tree._ignored_copy_name(
+        ".github",
+        patterns,
+        platform_name="nt",
+    )
+
+
+@pytest.mark.skipif(
+    guard_module.os.name != "nt",
+    reason="requires real Windows path normalization",
+)
+def test_windows_case_variant_control_and_dependency_names_are_ignored(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    head.mkdir()
+    for root, marker in ((base, "old"), (head, "new")):
+        (root / ".GIT").write_text(
+            f"gitdir: ../{marker}.git\n",
+            encoding="utf-8",
+        )
+        dependencies = root / "NODE_MODULES"
+        dependencies.mkdir()
+        (dependencies / "candidate.js").write_text(marker, encoding="utf-8")
+        cache = root / ".PYTEST_CACHE"
+        cache.mkdir()
+        (cache / "state").write_text(marker, encoding="utf-8")
+        (root / ".GITIGNORE").write_text(".cache/\n", encoding="utf-8")
+        workflow = root / ".GITHUB" / "workflows"
+        workflow.mkdir(parents=True)
+        (workflow / "guard.yml").write_text("name: guard\n", encoding="utf-8")
+
+    blocks, deleted = guard_module.blocks_from_dirs(str(base), str(head))
+    walked = guard_module._walk_tree_entries(str(head))
+
+    assert blocks == {}
+    assert deleted == []
+    assert ".GIT" not in walked
+    assert not any(
+        path == "NODE_MODULES" or path.startswith("NODE_MODULES/")
+        for path in walked
+    )
+    assert not any(
+        path == ".PYTEST_CACHE" or path.startswith(".PYTEST_CACHE/")
+        for path in walked
+    )
+    assert ".GITIGNORE" in walked
+    assert ".GITHUB/workflows/guard.yml" in walked
+
+
 def test_gitfile_add_change_delete_is_invisible_without_hiding_git_names(
     tmp_path: Path,
 ) -> None:

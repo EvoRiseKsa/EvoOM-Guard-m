@@ -127,12 +127,14 @@ verdict/evidence composition, and remaining pack/CID responsibilities.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package. Its first bounded submodule,
 `workspace/candidate_tree.py`, now owns root validation, reparse-safe walking,
-per-file object/metadata identity, POSIX non-blocking/no-follow opens, Windows
-write/delete-share denial, bounded intake and comparison, changed-path
-classification, and canonical serialization. Guard's thin compatibility
-facade retains the historical private type ABI and resolves helper providers
-at call time. This protects each bounded read/compare interval; it does not
-close the classification/open gap or claim an atomic whole-tree snapshot.
+copy-equivalent ignore matching, per-file object/metadata identity, POSIX
+non-blocking/no-follow opens, Windows write/delete-share denial, bounded intake
+and comparison, changed-path classification, and canonical serialization.
+Windows ignore matching is case-insensitive just like the copied execution
+tree. Guard's thin compatibility facade retains the historical private type
+ABI and resolves helper providers at call time. This protects each bounded
+read/compare interval; it does not close the classification/open gap or claim
+an atomic whole-tree snapshot.
 The flat CLI module has likewise been migrated byte-for-byte into the
 classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`
