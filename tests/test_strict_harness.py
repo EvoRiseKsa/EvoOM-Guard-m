@@ -5,8 +5,10 @@ from __future__ import annotations
 import ast
 import inspect
 import os
+import subprocess
 import sys
 import textwrap
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -245,6 +247,64 @@ def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase(
         ast.parse("self.strict_harness", mode="eval").body,
         include_attributes=False,
     )
+
+
+def test_problem_strict_harness_reaches_every_repo_host_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The problem-level opt-in is one effective policy for setup/suite/pack."""
+
+    source = tmp_path / "source"
+    pack = tmp_path / "pack"
+    source.mkdir()
+    pack.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    (pack / "test_contract.py").write_text(
+        "def test_contract():\n    assert True\n",
+        encoding="utf-8",
+    )
+    cleanup_requirements: list[bool] = []
+
+    def completed_host_phase(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        cleanup_requirements.append(
+            bool(kwargs["require_process_group_cleanup_proof"])
+        )
+        for token in command:
+            if token.startswith("--junitxml="):
+                report = Path(token.split("=", 1)[1])
+                report.parent.mkdir(parents=True, exist_ok=True)
+                report.write_text(
+                    '<testsuite tests="1" failures="0" errors="0" skipped="0">'
+                    '<testcase name="pass"/></testsuite>',
+                    encoding="utf-8",
+                )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(
+        repo_verifier,
+        "_run_bounded_subprocess",
+        completed_host_phase,
+    )
+
+    result = repo_verifier.RepoVerifier(
+        test_command=[sys.executable, "-m", "pytest"],
+        mem_limit_mb=0,
+    ).verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {
+            "repo_path": str(source),
+            "setup_command": [sys.executable, "-c", "pass"],
+            "verifier_pack": str(pack),
+            "strict_harness": True,
+        },
+    )
+
+    assert result.passed, result.diagnostics
+    assert cleanup_requirements == [True, True, True]
 
 
 def test_strict_baseline_requires_group_proof_for_every_host_phase() -> None:
