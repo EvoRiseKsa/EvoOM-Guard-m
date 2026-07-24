@@ -3343,30 +3343,197 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="repo-pack-post-execution-runtime-drift-bypass",
+        name="repo-runtime-required-capture-guard-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="            if runtime_continuity.required:\n",
+        after="            if False and runtime_continuity.required:\n",
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_facade_injects_live_capture_and_verify_providers"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-capture-provider-live-binding-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before=(
-            "                if candidate_changes:\n"
-            "                    return VerdictResult(\n"
-            "                        passed=False,\n"
-            "                        score=0.0,\n"
-            "                        diagnostics=(\n"
-            "                            \"verifier-pack execution modified "
-            "the candidate tree: \"\n"
+            "                    capture_identity=lambda: "
+            "capture_runtime_identity,\n"
         ),
         after=(
-            "                if False and candidate_changes:\n"
-            "                    return VerdictResult(\n"
-            "                        passed=False,\n"
-            "                        score=0.0,\n"
-            "                        diagnostics=(\n"
-            "                            \"verifier-pack execution modified "
-            "the candidate tree: \"\n"
+            "                    capture_identity=(\n"
+            "                        lambda provider=capture_runtime_identity: "
+            "provider\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_facade_injects_live_capture_and_verify_providers"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-verify-provider-live-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    verify_identity=lambda: "
+            "verify_runtime_identity,\n"
+        ),
+        after=(
+            "                    verify_identity=(\n"
+            "                        lambda provider=verify_runtime_identity: "
+            "provider\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_facade_injects_live_capture_and_verify_providers"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-irrelevant-host-trust-lookup",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    trust_setup_on_host=(\n"
+            "                        self.trust_setup_on_host\n"
+            "                        if pack_dir and container_mode "
+            "and bool(setup_cmd_raw)\n"
+            "                        else False\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    trust_setup_on_host="
+            "self.trust_setup_on_host,\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_no_setup_command_performs_no_setup_specific_attribute_lookups"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-suite-drift-bypass",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "        if changes:\n"
+            "            return self._record_failure(\n"
+            "                RepoRuntimeContinuityFailure(\n"
+            "                    kind=\"suite_drift\",\n"
+        ),
+        after=(
+            "        if False and changes:\n"
+            "            return self._record_failure(\n"
+            "                RepoRuntimeContinuityFailure(\n"
+            "                    kind=\"suite_drift\",\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_suite_drift_is_phase_specific_and_keeps_all_changes"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-post-execution-runtime-drift-bypass",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "        if changes:\n"
+            "            return self._record_failure(\n"
+            "                RepoRuntimeContinuityFailure(\n"
+            "                    kind=\"pack_drift\",\n"
+        ),
+        after=(
+            "        if False and changes:\n"
+            "            return self._record_failure(\n"
+            "                RepoRuntimeContinuityFailure(\n"
+            "                    kind=\"pack_drift\",\n"
         ),
         test=(
             "tests/test_repo_pack_characterization.py::"
             "test_pack_or_runtime_drift_precedes_junit_read"
             "[runtime_drift_after_execution]"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-final-continuity-bypass",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "        self.continuity = self.delivery\n"
+            "        self.phase = \"delivered\"\n"
+            "        return None\n"
+        ),
+        after=(
+            "        self.phase = \"delivered\"\n"
+            "        return None\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_capture_suite_and_pack_accumulate_elapsed_and_finalize_continuity"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-elapsed-accumulation-bypass",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "            self.elapsed_ms += observed.elapsed_ms\n"
+            "        except RuntimeIdentityError as exc:\n"
+            "            return None, RepoRuntimeContinuityFailure(\n"
+        ),
+        after=(
+            "            self.elapsed_ms = observed.elapsed_ms\n"
+            "        except RuntimeIdentityError as exc:\n"
+            "            return None, RepoRuntimeContinuityFailure(\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_capture_suite_and_pack_accumulate_elapsed_and_finalize_continuity"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-host-setup-overclaim",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "            if self.request.container_mode\n"
+            "            and not (\n"
+            "                self.request.setup_configured\n"
+            "                and self.request.trust_setup_on_host\n"
+            "            )\n"
+        ),
+        after="            if self.request.container_mode\n",
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_delivery_never_overclaims_host_setup"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-suite-checkpoint-bypass",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "        self._require_phase("
+            "\"suite_verified\", \"verify after the verifier pack\")\n"
+        ),
+        after=(
+            "        self._require_phase("
+            "\"captured\", \"verify after the verifier pack\")\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_pack_verification_cannot_skip_the_suite_checkpoint"
+        ),
+    ),
+    Mutation(
+        name="repo-runtime-sticky-failure-bypass",
+        path="evoom_guard/verifiers/repo_runtime_continuity.py",
+        before=(
+            "        if self.failure is not None:\n"
+            "            return self.failure\n"
+            "        self._require_phase("
+            "\"suite_verified\", \"verify after the verifier pack\")\n"
+        ),
+        after=(
+            "        if False and self.failure is not None:\n"
+            "            return self.failure\n"
+            "        self._require_phase("
+            "\"suite_verified\", \"verify after the verifier pack\")\n"
+        ),
+        test=(
+            "tests/test_repo_runtime_continuity_owner.py::"
+            "test_suite_failure_is_sticky_and_cannot_be_recovered_by_pack_check"
         ),
     ),
     Mutation(

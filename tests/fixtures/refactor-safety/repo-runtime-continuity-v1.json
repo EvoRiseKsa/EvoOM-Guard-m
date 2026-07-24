@@ -1,0 +1,14 @@
+{
+  "cases": {
+    "host_complete": {
+      "sha256": "258c72df75421ccf26a063c7bba96686cc73a01c44705c3e7fff76833c278d16"
+    },
+    "pack_drift": {
+      "sha256": "d8a99a80960d506e0b52dcde5bbc2213eda2eee05b8bb4d9b912809df82096bf"
+    },
+    "read_only_complete": {
+      "sha256": "58b73cfa6242f78f61f6c2a9e87ec1b3d99847dec179672a68383648031a12b0"
+    }
+  },
+  "schema_version": "repo-runtime-continuity-characterization-v1"
+}
