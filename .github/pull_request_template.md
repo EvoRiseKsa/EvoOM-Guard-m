@@ -42,6 +42,7 @@ List the exact commands, CI runs, benchmarks, or evidence used to validate this 
 
 ## Reviewer boundary
 
-`@MANA-awam` and `@EvoRiseKsa` are controlled by the same project owner. Their
-separation provides a GitHub workflow control and prevents self-approval; it is
-not independent or third-party review.
+`@MANA-awam` and `@EvoRiseKsa` are controlled by the same human maintainer.
+Their separation provides a GitHub workflow control and prevents self-approval
+under GitHub's account-level rule; it is not independent review, multi-person
+governance, or third-party validation.

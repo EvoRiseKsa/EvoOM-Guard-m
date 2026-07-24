@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # ─────────────────────────────────────────────────────────────────────────────
-# Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
-# Maintained and released by Mana Alharbi (مانع الحربي).
 # ─────────────────────────────────────────────────────────────────────────────
 """One-command reproduction of docs/CASE-STUDY.md (charset-normalizer #537).
 
