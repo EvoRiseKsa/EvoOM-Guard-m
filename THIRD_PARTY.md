@@ -13,6 +13,7 @@ substitute for checking the exact upstream terms and notices.
 | `tools/ci-vitest/` | Vitest and npm transitive dependencies | `vitest` `4.1.10` and `package-lock.json` | Each package's own license | Development tooling only; the lockfile is the authoritative dependency inventory. |
 | GitHub Actions and hosted runners | `actions/*`, `github/*`, hosted runner images | Exact commit SHAs in workflow files | Each provider's terms/license | Workflow references are deliberately pinned. They are not first-party EvoOM source. |
 | Python container image | Docker/OCI `python:3.12-slim` | Digest pinned in policy/workflows | Image and component notices apply | Used only where the configured isolation model selects it. |
+| `tests/schema/spdx-2.3.schema.json` and its license/notice | [`spdx/spdx-spec`](https://github.com/spdx/spdx-spec) | Official `v2.3`, commit `aadf3b0b8dbbabdb4d880b0fc714255fea436ff7`, schema blob `ee61e6686e885f8139c132647fd0b4f483b8fb81` | Creative Commons Attribution 3.0 Unported | Unmodified test-only schema; exact upstream license and provenance are retained beside it. It is not packaged in the runtime. |
 
 ## Rules
 

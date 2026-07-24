@@ -244,6 +244,12 @@ Release reruns have a separate, stronger immutability rule: an asset already
 attached to a tag is byte-compared and is never replaced—different bytes make
 the workflow fail closed.
 
+The protected source now prepares an external deterministic SPDX 2.3 member
+inventory for the next release that uses the updated workflow. It records every
+regular zipapp member and its hashes; it is not dependency/vulnerability
+scanning, VEX, a security verdict, or cross-platform reproducibility proof. See
+[`docs/SBOM.md`](docs/SBOM.md).
+
 ## Release channel
 
 An exact source version becomes a consumer release only after its immutable
@@ -255,8 +261,10 @@ The current consumer release is
 published as an immutable GitHub Release. The immutable tag identifies the
 exact protected-`main` source commit.
 Its exact `evo-guard.pyz` SHA-256 is published in the release's `SHA256SUMS`
-asset, and the zipapp has a GitHub Actions build-artifact attestation. Under
-the license shipped with that
+asset, and the zipapp has a GitHub Actions build-artifact attestation.
+`v4.3.0` has no `evo-guard.spdx.json` asset or SBOM attestation; those are
+prepared only for a future release and will not be attached retroactively.
+Under the license shipped with that
 exact v4 release, commercial, production, required-CI/merge-gate,
 redistribution, hosted, and managed-service use require a separate commercial
 agreement. Do not use `@main` as a production release channel. A release

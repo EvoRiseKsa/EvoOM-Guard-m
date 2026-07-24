@@ -13,6 +13,22 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ## [Unreleased]
 
+### Added
+
+- Added a stdlib-only deterministic SPDX 2.3 generator for the next release:
+  one package, every regular zipapp member with SHA-1/SHA-256, an SPDX package
+  verification code, the exact embedded license text, and exact
+  `DESCRIBES`/`CONTAINS` relationships.
+- Vendored the unmodified official SPDX 2.3 JSON Schema and license as
+  test-only material with pinned upstream commit, Git blob, and byte-size
+  verification.
+- The future release contract carries exactly `evo-guard.pyz`,
+  `evo-guard.spdx.json`, and `SHA256SUMS`; the two generated-file digests are
+  filename ordered and tag CI byte-compares all three published assets.
+- A separate clean attestation job in the default-branch release workflow
+  requests a GitHub SBOM attestation for the exact zipapp subject in addition
+  to its build-provenance attestation.
+
 ### Changed
 
 - The composite Action builds and runs a temporary stdlib-only zipapp from its
@@ -23,12 +39,26 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 - The zipapp builder rejects links, Windows reparse points, special files, and
   ambiguous source entry names, and replaces a prior output only after a
   complete temporary archive has been written.
+- The release transfer and tag-verification jobs require an exact top-level
+  name-and-file-type set, rejecting directories, links, nested extras, missing
+  assets, unexpected assets, and non-canonical checksum manifests.
+- Candidate code and the built zipapp execute only in the unprivileged release
+  build job. A separate clean job receives the fixed assets, rebinds the SPDX
+  package digest to the zipapp, and alone receives OIDC/attestation authority.
 
 ### Known limitations
 
 - Resolver-free bootstrap is not a whole-Action zero-network or same-user
   anti-tampering claim. Interpreter setup, conditional base fetch, optional PR
   comments, and consumer setup/tests retain their existing boundaries.
+- The current immutable `v4.3.0` release has no SBOM asset; this source prepares
+  the contract only for a later release and does not mutate historical tags,
+  assets, baselines, or ledgers.
+- The SPDX document is an artifact-member inventory, not source composition
+  analysis, dependency or vulnerability scanning, VEX, license legal review,
+  a security verdict, artifact admission, or cross-platform reproducibility
+  proof. The zipapp and SBOM share one build provenance and are not independent
+  evidence merely because attestation occurs on a separate clean runner.
 
 ## [4.3.0] — 2026-07-23
 

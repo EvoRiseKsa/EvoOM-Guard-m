@@ -158,11 +158,16 @@ def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
         "/tools/ci-vitest/",
         "/ops/ci/",
         "/ops/build_pyz.py",
+        "/ops/generate_spdx_sbom.py",
         "/tests/test_action_security.py",
         "/tests/test_dependency_lock_policy.py",
+        "/tests/test_release_security.py",
+        "/tests/test_spdx_sbom.py",
+        "/tests/schema/",
         "/tests/test_zipapp.py",
         "/docs/DEPENDENCY_POLICY.md",
         "/docs/EVIDENCE_BUNDLES.md",
         "/docs/GUARD.md",
+        "/docs/SBOM.md",
     ):
         assert f"{path} @MANA-awam" in codeowners
