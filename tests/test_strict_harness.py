@@ -209,31 +209,36 @@ def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase(
 
     # Repo suite and verifier pack remain direct host phases. Setup now crosses
     # a typed call-through seam and is checked independently below.
-    assert len(calls) == 3
-    direct_calls = [
-        call
-        for call in calls
-        if not any(keyword.arg is None for keyword in call.keywords)
-    ]
-    assert len(direct_calls) == 2
-    for call in direct_calls:
+    assert len(calls) == 2
+    for call in calls:
         _assert_strict_cleanup_keyword(call, "self.strict_harness")
 
-    setup_calls = _calls_named(repo_setup.execute_repo_setup, "run_host_setup")
-    assert len(setup_calls) == 1
-    _assert_strict_cleanup_keyword(setup_calls[0], "request.strict_harness")
-
-    setup_requests = _calls_named(
-        repo_verifier.RepoVerifier._verify,
-        "RepoSetupRequest",
+    setup_tree = ast.parse(
+        textwrap.dedent(inspect.getsource(repo_setup.execute_repo_setup))
     )
-    assert len(setup_requests) == 1
-    request_keywords = {
+    setup_calls = [
+        node
+        for node in ast.walk(setup_tree)
+        if isinstance(node, ast.Call)
+        and any(
+            keyword.arg == "require_process_group_cleanup_proof"
+            for keyword in node.keywords
+        )
+    ]
+    assert len(setup_calls) == 1
+    _assert_strict_cleanup_keyword(setup_calls[0], "services.strict_harness()")
+
+    setup_services = _calls_named(
+        repo_verifier.RepoVerifier._verify,
+        "RepoSetupServices",
+    )
+    assert len(setup_services) == 1
+    service_keywords = {
         keyword.arg: ast.unparse(keyword.value)
-        for keyword in setup_requests[0].keywords
+        for keyword in setup_services[0].keywords
         if keyword.arg is not None
     }
-    assert request_keywords.get("strict_harness") == "self.strict_harness"
+    assert service_keywords.get("strict_harness") == "lambda: self.strict_harness"
 
 
 def test_strict_baseline_requires_group_proof_for_every_host_phase() -> None:

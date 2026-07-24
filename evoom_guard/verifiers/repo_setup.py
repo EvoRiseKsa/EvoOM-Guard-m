@@ -90,6 +90,11 @@ class CaptureSetupAfter(Protocol):
     ) -> FidelitySnapshot: ...
 
 
+SetupFidelityChanges = Callable[
+    [FidelitySnapshot, FidelitySnapshot], list[str]
+]
+
+
 class RunHostSetup(Protocol):
     """Run one bounded host setup command."""
 
@@ -150,14 +155,7 @@ class RepoSetupRequest:
     files_changed: tuple[str, ...]
     environment: Mapping[str, str]
     container_mode: bool
-    requested_isolation: str
-    trust_setup_on_host: bool
-    setup_output_globs: tuple[str, ...]
-    timeout: int
-    strict_harness: bool
     resolved_image: str | None
-    docker_network: str
-    docker_runtime: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,17 +163,24 @@ class RepoSetupServices:
     """Live judge-owned effects needed by setup execution."""
 
     trace: SetupExecutionTrace
-    resolve_host_command: ResolveHostCommand
-    capture_setup_before: CaptureSetupBefore
-    capture_setup_after: CaptureSetupAfter
-    setup_fidelity_changes: Callable[[FidelitySnapshot, FidelitySnapshot], list[str]]
-    run_host_setup: RunHostSetup
-    container_name: Callable[[str], str]
-    build_docker_command: BuildDockerSetupCommand
-    run_docker_setup: RunDockerSetup
+    requested_isolation: Callable[[], str]
+    trust_setup_on_host: Callable[[], bool]
+    setup_output_globs: Callable[[], Sequence[str]]
+    timeout: Callable[[], int]
+    strict_harness: Callable[[], bool]
+    docker_network: Callable[[], str]
+    docker_runtime: Callable[[], str | None]
+    resolve_host_command: Callable[[], ResolveHostCommand]
+    capture_setup_before: Callable[[], CaptureSetupBefore]
+    capture_setup_after: Callable[[], CaptureSetupAfter]
+    setup_fidelity_changes: Callable[[], SetupFidelityChanges]
+    run_host_setup: Callable[[], RunHostSetup]
+    container_name: Callable[[], Callable[[str], str]]
+    build_docker_command: Callable[[], BuildDockerSetupCommand]
+    run_docker_setup: Callable[[], RunDockerSetup]
     limits: Callable[[], Any]
-    phase_isolation_evidence: BuildIsolationEvidence
-    distill_diagnostics: Callable[[str], str]
+    phase_isolation_evidence: Callable[[], BuildIsolationEvidence]
+    distill_diagnostics: Callable[[], Callable[[str], str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,12 +249,14 @@ def execute_repo_setup(
     if isinstance(setup_cmd_raw, str):
         setup_cmd_raw = setup_cmd_raw.split()
     setup_tokens = [str(token) for token in setup_cmd_raw]
-    setup_in_container = request.container_mode and not request.trust_setup_on_host
+    setup_in_container = (
+        request.container_mode and not services.trust_setup_on_host()
+    )
     setup_name: str | None = None
     if setup_in_container:
-        setup_isolation: str | None = request.requested_isolation
-        setup_name = services.container_name("setup")
-        setup_run_cmd = services.build_docker_command(
+        setup_isolation: str | None = services.requested_isolation()
+        setup_name = services.container_name()("setup")
+        setup_run_cmd = services.build_docker_command()(
             setup_tokens,
             request.candidate_copy,
             None,
@@ -263,16 +270,16 @@ def execute_repo_setup(
         setup_run_cmd = setup_tokens
         setup_cwd = request.candidate_copy
         setup_env = dict(request.environment)
-        setup_run_cmd = services.resolve_host_command(
+        setup_run_cmd = services.resolve_host_command()(
             setup_run_cmd,
             cwd=setup_cwd,
             env=setup_env,
         )
 
     try:
-        setup_before = services.capture_setup_before(
+        setup_before = services.capture_setup_before()(
             request.candidate_copy,
-            request.setup_output_globs,
+            services.setup_output_globs(),
         )
     except SetupFidelityError as exc:
         return _terminal(
@@ -285,19 +292,23 @@ def execute_repo_setup(
     try:
         if setup_in_container:
             assert setup_name is not None
-            r_setup = services.run_docker_setup(setup_run_cmd, setup_name)
+            r_setup = services.run_docker_setup()(setup_run_cmd, setup_name)
         else:
-            r_setup = services.run_host_setup(
+            r_setup = services.run_host_setup()(
                 setup_run_cmd,
                 cwd=setup_cwd,
                 env=setup_env,
-                timeout=request.timeout,
+                timeout=services.timeout(),
                 preexec_fn=(services.limits() if os.name == "posix" else None),
-                require_process_group_cleanup_proof=request.strict_harness,
+                require_process_group_cleanup_proof=services.strict_harness(),
             )
     except DockerRunTimeout as exc:
-        delivered = request.requested_isolation if exc.container_started else "not_run"
-        trace.setup_isolation_evidence = services.phase_isolation_evidence(
+        delivered = (
+            services.requested_isolation()
+            if exc.container_started
+            else "not_run"
+        )
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             delivered,
             request.resolved_image,
             note=(
@@ -308,32 +319,33 @@ def execute_repo_setup(
         )
         if exc.container_started:
             trace.execution_state = "started_incomplete"
-            setup_isolation = request.requested_isolation
+            setup_isolation = services.requested_isolation()
         else:
             setup_isolation = None
+        timeout = services.timeout()
         return _terminal(
             request,
-            diagnostics=f"setup command timed out after {request.timeout}s",
+            diagnostics=f"setup command timed out after {timeout}s",
             outcome="setup_timeout",
             setup_isolation=setup_isolation,
-            elapsed=request.timeout,
+            elapsed=services.timeout(),
         )
     except ProcessOutputLimitExceeded as exc:
         docker_failure = isinstance(exc, DockerRunOutputLimit)
         container_started = bool(getattr(exc, "container_started", True))
         delivered = (
-            request.requested_isolation
+            services.requested_isolation()
             if docker_failure and container_started
             else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
         )
         reported_setup_isolation = (
-            request.requested_isolation
+            services.requested_isolation()
             if docker_failure and container_started
             else (None if docker_failure else setup_isolation)
         )
         if container_started:
             trace.execution_state = "started_incomplete"
-        trace.setup_isolation_evidence = services.phase_isolation_evidence(
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             delivered,
             request.resolved_image,
             note=(
@@ -352,18 +364,18 @@ def execute_repo_setup(
         docker_failure = isinstance(exc, DockerRunContainmentError)
         container_started = bool(getattr(exc, "container_started", True))
         delivered = (
-            request.requested_isolation
+            services.requested_isolation()
             if docker_failure and container_started
             else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
         )
         reported_setup_isolation = (
-            request.requested_isolation
+            services.requested_isolation()
             if docker_failure and container_started
             else (None if docker_failure else setup_isolation)
         )
         if container_started:
             trace.execution_state = "started_incomplete"
-        trace.setup_isolation_evidence = services.phase_isolation_evidence(
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             delivered,
             request.resolved_image,
             note=(
@@ -380,26 +392,27 @@ def execute_repo_setup(
         )
     except subprocess.TimeoutExpired:
         trace.execution_state = "started_incomplete"
-        trace.setup_isolation_evidence = services.phase_isolation_evidence(
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             setup_isolation or "subprocess",
             request.resolved_image,
         )
+        timeout = services.timeout()
         return _terminal(
             request,
-            diagnostics=f"setup command timed out after {request.timeout}s",
+            diagnostics=f"setup command timed out after {timeout}s",
             outcome="setup_timeout",
             setup_isolation=setup_isolation,
-            elapsed=request.timeout,
+            elapsed=services.timeout(),
         )
     except FileNotFoundError:
-        trace.setup_isolation_evidence = services.phase_isolation_evidence(
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             "unavailable" if setup_in_container else "not_run",
             request.resolved_image,
         )
         return _terminal(
             request,
             diagnostics=(
-                f"{request.requested_isolation} isolation requested but the "
+                f"{services.requested_isolation()} isolation requested but the "
                 "docker CLI was not found while starting setup_command"
                 if setup_in_container
                 else f"setup command not found: {setup_tokens[0]!r}"
@@ -409,35 +422,39 @@ def execute_repo_setup(
         )
 
     if setup_in_container and r_setup.returncode == 125:
-        diag = services.distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
-        trace.setup_isolation_evidence = services.phase_isolation_evidence(
+        diag = services.distill_diagnostics()(
+            r_setup.stdout + "\n" + r_setup.stderr
+        )
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             "unavailable",
             request.resolved_image,
         )
         return _terminal(
             request,
             diagnostics=(
-                f"the {request.requested_isolation} setup container could not "
+                f"the {services.requested_isolation()} setup container could not "
                 f"be started (docker exit 125): {diag}"
             ),
             outcome="isolation_unavailable",
             setup_isolation="unavailable",
             isolation_evidence={
-                "requested": request.requested_isolation,
+                "requested": services.requested_isolation(),
                 "delivered": "unavailable",
                 "image_digest": request.resolved_image,
-                "network": request.docker_network,
-                "runtime": request.docker_runtime,
+                "network": services.docker_network(),
+                "runtime": services.docker_runtime(),
             },
         )
 
     trace.execution_state = "started_incomplete"
-    trace.setup_isolation_evidence = services.phase_isolation_evidence(
-        setup_isolation or request.requested_isolation,
+    trace.setup_isolation_evidence = services.phase_isolation_evidence()(
+        setup_isolation or services.requested_isolation(),
         request.resolved_image,
     )
     if r_setup.returncode != 0:
-        diag = services.distill_diagnostics(r_setup.stdout + "\n" + r_setup.stderr)
+        diag = services.distill_diagnostics()(
+            r_setup.stdout + "\n" + r_setup.stderr
+        )
         hint = (
             " (setup ran inside the container: the image must contain "
             "the setup tool, and --docker-network none blocks registries)"
@@ -452,9 +469,9 @@ def execute_repo_setup(
         )
 
     try:
-        setup_after = services.capture_setup_after(
+        setup_after = services.capture_setup_after()(
             request.candidate_copy,
-            request.setup_output_globs,
+            services.setup_output_globs(),
             baseline=setup_before,
         )
     except SetupFidelityError as exc:
@@ -465,7 +482,7 @@ def execute_repo_setup(
             setup_isolation=setup_isolation,
         )
 
-    setup_changes = services.setup_fidelity_changes(
+    setup_changes = services.setup_fidelity_changes()(
         setup_before,
         setup_after,
     )

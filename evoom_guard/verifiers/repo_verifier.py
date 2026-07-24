@@ -1134,75 +1134,56 @@ class RepoVerifier:
             # boundary. Every service is a call-through adapter so historical
             # monkeypatch seams remain live at their original operation sites.
             setup_cmd_raw = self.setup_command or problem.get("setup_command")
-            setup_outcome = execute_repo_setup(
-                RepoSetupRequest(
-                    configured_command=setup_cmd_raw,
-                    candidate_copy=copy,
-                    files_changed=tuple(changed),
-                    environment=env,
-                    container_mode=container_mode,
-                    requested_isolation=self.isolation,
-                    trust_setup_on_host=self.trust_setup_on_host,
-                    setup_output_globs=self.setup_output_globs,
-                    timeout=self.timeout,
-                    strict_harness=self.strict_harness,
-                    resolved_image=resolved_image,
-                    docker_network=self.docker_network,
-                    docker_runtime=self.docker_runtime,
-                ),
-                services=RepoSetupServices(
-                    trace=trace,
-                    resolve_host_command=lambda command, *, cwd, env: (
-                        _resolve_host_command(command, cwd=cwd, env=env)
+            setup_isolation: str | None = None
+            if setup_cmd_raw:
+                setup_outcome = execute_repo_setup(
+                    RepoSetupRequest(
+                        configured_command=setup_cmd_raw,
+                        candidate_copy=copy,
+                        files_changed=tuple(changed),
+                        environment=env,
+                        container_mode=container_mode,
+                        resolved_image=resolved_image,
                     ),
-                    capture_setup_before=(
-                        lambda root, output_globs=(): (
-                            _setup_fidelity_snapshot(root, output_globs)
-                        )
+                    services=RepoSetupServices(
+                        trace=trace,
+                        requested_isolation=lambda: self.isolation,
+                        trust_setup_on_host=lambda: self.trust_setup_on_host,
+                        setup_output_globs=lambda: self.setup_output_globs,
+                        timeout=lambda: self.timeout,
+                        strict_harness=lambda: self.strict_harness,
+                        docker_network=lambda: self.docker_network,
+                        docker_runtime=lambda: self.docker_runtime,
+                        resolve_host_command=lambda: cast(
+                            Any, _resolve_host_command
+                        ),
+                        capture_setup_before=lambda: cast(
+                            Any, _setup_fidelity_snapshot
+                        ),
+                        capture_setup_after=lambda: cast(
+                            Any, _setup_fidelity_snapshot
+                        ),
+                        setup_fidelity_changes=lambda: _setup_fidelity_changes,
+                        run_host_setup=lambda: cast(
+                            Any, _run_bounded_subprocess
+                        ),
+                        container_name=lambda: _docker_container_name,
+                        build_docker_command=lambda: cast(
+                            Any, self._docker_command
+                        ),
+                        run_docker_setup=lambda: cast(
+                            Any, self._run_docker_client
+                        ),
+                        limits=lambda: self._limits(),
+                        phase_isolation_evidence=lambda: (
+                            self._phase_isolation_evidence
+                        ),
+                        distill_diagnostics=lambda: distill_diagnostics,
                     ),
-                    capture_setup_after=(
-                        lambda root, output_globs, *, baseline: (
-                            _setup_fidelity_snapshot(
-                                root, output_globs, baseline=baseline
-                            )
-                        )
-                    ),
-                    setup_fidelity_changes=lambda before, after: (
-                        _setup_fidelity_changes(before, after)
-                    ),
-                    run_host_setup=lambda command, **kwargs: (
-                        _run_bounded_subprocess(command, **kwargs)
-                    ),
-                    container_name=lambda label: _docker_container_name(label),
-                    build_docker_command=(
-                        lambda command, candidate_copy, outdir, name, *,
-                        work_writable: self._docker_command(
-                            command,
-                            candidate_copy,
-                            outdir,
-                            name,
-                            work_writable=work_writable,
-                        )
-                    ),
-                    run_docker_setup=lambda command, name: (
-                        self._run_docker_client(command, name)
-                    ),
-                    limits=lambda: self._limits(),
-                    phase_isolation_evidence=(
-                        lambda delivered, image_digest, *, note=None: (
-                            self._phase_isolation_evidence(
-                                delivered,
-                                image_digest,
-                                note=note,
-                            )
-                        )
-                    ),
-                    distill_diagnostics=lambda text: distill_diagnostics(text),
-                ),
-            )
-            setup_isolation = setup_outcome.setup_isolation
-            if setup_outcome.terminal_result is not None:
-                return setup_outcome.terminal_result
+                )
+                setup_isolation = setup_outcome.setup_isolation
+                if setup_outcome.terminal_result is not None:
+                    return setup_outcome.terminal_result
             # A mandatory repo-native pack must judge the exact fully prepared
             # runtime tree the repo suite received. Setup fidelity deliberately
             # permits new dependency/build outputs; this second identity includes

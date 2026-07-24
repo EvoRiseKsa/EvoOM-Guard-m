@@ -90,20 +90,13 @@ def test_repo_setup_owner_exposes_immutable_typed_contracts() -> None:
         files_changed=("app.py",),
         environment={},
         container_mode=False,
-        requested_isolation="subprocess",
-        trust_setup_on_host=False,
-        setup_output_globs=(),
-        timeout=7,
-        strict_harness=False,
         resolved_image=None,
-        docker_network="none",
-        docker_runtime=None,
     )
     outcome = repo_setup.RepoSetupOutcome(requested=False)
 
     assert repo_setup.execute_repo_setup.__module__ == ("evoom_guard.verifiers.repo_setup")
     with pytest.raises(FrozenInstanceError):
-        request.timeout = 99  # type: ignore[misc]
+        request.container_mode = True  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         outcome.requested = True  # type: ignore[misc]
 
@@ -132,6 +125,292 @@ def test_no_setup_command_reaches_the_suite_without_setup_effects(
     assert result.artifact["outcome"] == "test_command_unavailable"
     assert result.artifact["execution_phase"] == "repo_suite"
     assert result.artifact["setup_isolation_evidence"] is None
+
+
+def test_no_setup_command_performs_no_setup_specific_attribute_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A falsey command must not even construct setup's live-service request."""
+
+    source = tmp_path / "source-no-setup-lookups"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    watched = {
+        "trust_setup_on_host",
+        "setup_output_globs",
+        "timeout",
+        "strict_harness",
+        "docker_network",
+        "docker_runtime",
+    }
+
+    class LookupProbe(repo_verifier.RepoVerifier):
+        tracking = False
+        lookups: dict[str, int]
+
+        def __getattribute__(self, name: str):
+            if name in watched and object.__getattribute__(self, "tracking"):
+                lookups = object.__getattribute__(self, "lookups")
+                lookups[name] = lookups.get(name, 0) + 1
+            return super().__getattribute__(name)
+
+    verifier = LookupProbe(test_command=["suite"], mem_limit_mb=0)
+    verifier.lookups = {}
+    verifier.tracking = True
+    monkeypatch.setattr(
+        repo_verifier,
+        "execute_repo_setup",
+        lambda *_args, **_kwargs: pytest.fail(
+            "no-command path invoked repository setup"
+        ),
+    )
+    monkeypatch.setattr(
+        repo_verifier,
+        "_resolve_host_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            FileNotFoundError("controlled suite stop")
+        ),
+    )
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert result.artifact["outcome"] == "test_command_unavailable"
+    assert verifier.lookups == {"strict_harness": 1}
+
+
+def test_host_resolver_can_change_setup_output_globs_before_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-live-output-globs"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = repo_verifier.RepoVerifier(
+        setup_command=["setup"],
+        setup_output_globs=("early/**",),
+        test_command=["suite"],
+        mem_limit_mb=0,
+    )
+    observed: list[tuple[str, ...]] = []
+
+    def resolver(command, *, cwd, env):
+        verifier.setup_output_globs = ("late/**",)
+        return command
+
+    def snapshot(root, output_globs=(), *, baseline=None):
+        observed.append(tuple(output_globs))
+        raise repo_verifier.SetupFidelityError("controlled snapshot stop")
+
+    monkeypatch.setattr(repo_verifier, "_resolve_host_command", resolver)
+    monkeypatch.setattr(repo_verifier, "_setup_fidelity_snapshot", snapshot)
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert result.artifact["outcome"] == "setup_failed"
+    assert observed == [("late/**",)]
+
+
+def test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-live-host-policy"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = repo_verifier.RepoVerifier(
+        timeout=7,
+        strict_harness=False,
+        setup_command=["setup"],
+        test_command=["suite"],
+        mem_limit_mb=0,
+    )
+    observed: dict[str, object] = {}
+
+    def snapshot(root, output_globs=(), *, baseline=None):
+        verifier.timeout = 13
+        verifier.strict_harness = True
+        return {"app.py": ("file", 0, "digest")}
+
+    def runner(command, **kwargs):
+        observed["timeout"] = kwargs["timeout"]
+        observed["strict"] = kwargs[
+            "require_process_group_cleanup_proof"
+        ]
+        raise FileNotFoundError("controlled setup stop")
+
+    monkeypatch.setattr(repo_verifier, "_setup_fidelity_snapshot", snapshot)
+    monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", runner)
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert result.artifact["outcome"] == "setup_failed"
+    assert observed == {"timeout": 13, "strict": True}
+
+
+def test_token_normalization_can_change_container_setup_trust(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-live-trust"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    events: list[str] = []
+    verifier = repo_verifier.RepoVerifier(
+        isolation="docker",
+        docker_image="judge:latest",
+        test_command=["suite"],
+        mem_limit_mb=0,
+    )
+
+    class TrustMutatingToken:
+        def __str__(self) -> str:
+            verifier.trust_setup_on_host = True
+            events.append("token")
+            return "setup"
+
+    verifier.setup_command = [TrustMutatingToken()]  # type: ignore[list-item]
+    monkeypatch.setattr(
+        verifier,
+        "_resolve_docker_image",
+        lambda: "sha256:" + "a" * 64,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_docker_command",
+        lambda *_args, **_kwargs: pytest.fail(
+            "late trust opt-in still selected container setup"
+        ),
+    )
+
+    def resolver(command, *, cwd, env):
+        events.append("host-resolver")
+        return command
+
+    monkeypatch.setattr(repo_verifier, "_resolve_host_command", resolver)
+    monkeypatch.setattr(
+        repo_verifier,
+        "_setup_fidelity_snapshot",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            repo_verifier.SetupFidelityError("controlled snapshot stop")
+        ),
+    )
+
+    verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert events == ["token", "host-resolver"]
+
+
+def test_docker_runner_can_change_isolation_before_timeout_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-live-timeout-isolation"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = repo_verifier.RepoVerifier(
+        isolation="docker",
+        docker_image="judge:latest",
+        setup_command=["setup"],
+        test_command=["suite"],
+        mem_limit_mb=0,
+        timeout=7,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_resolve_docker_image",
+        lambda: "sha256:" + "a" * 64,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_docker_command",
+        lambda *_args, **_kwargs: ["docker", "setup"],
+    )
+
+    def runner(command, name):
+        verifier.isolation = "gvisor"
+        raise repo_verifier._DockerRunTimeout(
+            subprocess.TimeoutExpired(command, 7),
+            container_started=True,
+        )
+
+    monkeypatch.setattr(verifier, "_run_docker_client", runner)
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert result.artifact["setup_isolation"] == "gvisor"
+    assert result.artifact["setup_isolation_evidence"]["requested"] == "gvisor"
+    assert result.artifact["setup_isolation_evidence"]["delivered"] == "gvisor"
+
+
+def test_docker_exit_125_uses_live_network_and_runtime_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-live-container-fields"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = repo_verifier.RepoVerifier(
+        isolation="docker",
+        docker_image="judge:latest",
+        docker_network="none",
+        setup_command=["setup"],
+        test_command=["suite"],
+        mem_limit_mb=0,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_resolve_docker_image",
+        lambda: "sha256:" + "a" * 64,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_docker_command",
+        lambda *_args, **_kwargs: ["docker", "setup"],
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_run_docker_client",
+        lambda command, name: subprocess.CompletedProcess(
+            command, 125, "raw", "error"
+        ),
+    )
+
+    def distill(text: str) -> str:
+        verifier.docker_network = "late-network"
+        verifier.docker_runtime = "late-runtime"
+        return "DISTILLED"
+
+    monkeypatch.setattr(repo_verifier, "distill_diagnostics", distill)
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert result.artifact["isolation_evidence"]["network"] == "late-network"
+    assert result.artifact["isolation_evidence"]["runtime"] == "late-runtime"
+    assert result.artifact["setup_isolation_evidence"]["network"] == (
+        "late-network"
+    )
+    assert result.artifact["setup_isolation_evidence"]["runtime"] == (
+        "late-runtime"
+    )
 
 
 def test_repo_verifier_resolves_host_setup_seams_at_each_operation(
