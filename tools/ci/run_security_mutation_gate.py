@@ -3041,9 +3041,13 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-api-floor-implication-bypass",
-        path="evoom_guard/guard.py",
-        before="    diff_coverage = diff_coverage or min_diff_coverage is not None\n",
-        after="    diff_coverage = diff_coverage\n",
+        path="evoom_guard/application/request_preparation.py",
+        before=(
+            "    collect_diff_coverage = (\n"
+            "        raw.collect_diff_coverage or raw.min_diff_coverage is not None\n"
+            "    )\n"
+        ),
+        after="    collect_diff_coverage = raw.collect_diff_coverage\n",
         test=(
             "tests/test_diff_coverage_trust.py::"
             "test_python_api_coverage_floor_implies_measurement"
@@ -3051,15 +3055,15 @@ MUTATIONS = (
     ),
     Mutation(
         name="diff-coverage-floor-validation-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/request_preparation.py",
         before=(
             "    if (\n"
-            "        min_diff_coverage is not None\n"
+            "        raw.min_diff_coverage is not None\n"
             "        and (\n"
         ),
         after=(
             "    if False and (\n"
-            "        min_diff_coverage is not None\n"
+            "        raw.min_diff_coverage is not None\n"
             "        and (\n"
         ),
         test=(
