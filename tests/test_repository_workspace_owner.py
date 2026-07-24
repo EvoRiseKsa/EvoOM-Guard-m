@@ -47,11 +47,9 @@ def test_repository_workspace_owner_freezes_the_historical_copy_contract() -> No
     )
 
     captured: dict[str, object] = {}
-    ignore_callback = object()
-
-    def fake_ignore_patterns(*patterns: str) -> object:
+    def fake_ignore_patterns(*patterns: str):
         captured["patterns"] = patterns
-        return ignore_callback
+        return lambda _directory, names: [name for name in names if name in patterns]
 
     def fake_copytree(src: str, dst: str, **kwargs: object) -> None:
         captured["copytree"] = (src, dst, kwargs)
@@ -60,16 +58,18 @@ def test_repository_workspace_owner_freezes_the_historical_copy_contract() -> No
         "source",
         "destination",
         copy_ignore=("first-cache", "second-cache"),
+        platform_name="posix",
         copytree=fake_copytree,
         ignore_patterns=fake_ignore_patterns,
     )
 
     assert captured["patterns"] == ("first-cache", "second-cache")
-    assert captured["copytree"] == (
-        "source",
-        "destination",
-        {"symlinks": True, "ignore": ignore_callback},
-    )
+    source, destination, kwargs = captured["copytree"]
+    assert (source, destination) == ("source", "destination")
+    assert kwargs["symlinks"] is True
+    ignore = kwargs["ignore"]
+    assert callable(ignore)
+    assert ignore("source", ["first-cache", "kept.py"]) == ["first-cache"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows normcase semantics")
@@ -166,14 +166,15 @@ def test_repo_verifier_copy_facade_resolves_legacy_globals_at_call_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
-    ignore_callback = object()
-
-    def fake_ignore_patterns(*patterns: str) -> object:
+    def fake_ignore_patterns(*patterns: str):
         captured["patterns"] = patterns
-        return ignore_callback
+        return lambda _directory, names: [name for name in names if name in patterns]
 
     def fake_copytree(src: str, dst: str, **kwargs: object) -> None:
         captured["copytree"] = (src, dst, kwargs)
+        ignore = kwargs["ignore"]
+        assert callable(ignore)
+        captured["ignored"] = ignore(src, ["live-cache"])
 
     monkeypatch.setattr(repo_verifier, "COPY_IGNORE", ("live-cache",))
     monkeypatch.setattr(repo_verifier.shutil, "ignore_patterns", fake_ignore_patterns)
@@ -182,11 +183,10 @@ def test_repo_verifier_copy_facade_resolves_legacy_globals_at_call_time(
     repo_verifier.copy_repo_tree("source", "destination")
 
     assert captured["patterns"] == ("live-cache",)
-    assert captured["copytree"] == (
-        "source",
-        "destination",
-        {"symlinks": True, "ignore": ignore_callback},
-    )
+    source, destination, kwargs = captured["copytree"]
+    assert (source, destination) == ("source", "destination")
+    assert kwargs["symlinks"] is True
+    assert captured["ignored"] == ["live-cache"]
 
 
 def test_existing_consumers_retain_the_exact_repo_verifier_copy_facade() -> None:
