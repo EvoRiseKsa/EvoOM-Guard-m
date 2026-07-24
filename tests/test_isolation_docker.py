@@ -762,6 +762,7 @@ def test_repo_image_facade_preserves_pull_order(
             _completed([], 1, "", "missing"),
             _completed([], 0, "pulled", ""),
             _completed([], 0, _IMAGE_B + "\n", ""),
+            _completed([], 0, _IMAGE_A + "\n", ""),
         ]
     )
 
@@ -780,6 +781,8 @@ def test_repo_image_facade_preserves_pull_order(
     )
 
     assert verifier._resolve_docker_image() == _IMAGE_B
+    verifier.docker_image = "judge:next"
+    assert verifier._resolve_docker_image() == _IMAGE_A
     assert calls == [
         [
             "docker",
@@ -798,7 +801,37 @@ def test_repo_image_facade_preserves_pull_order(
             "{{.Id}}",
             "judge:latest",
         ],
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "judge:next",
+        ],
     ]
+
+
+def test_repo_docker_command_prefers_context_local_image_identity() -> None:
+    verifier = repo_verifier.RepoVerifier(
+        isolation="docker",
+        docker_image="judge:mutable",
+        mem_limit_mb=0,
+    )
+    verifier._resolved_docker_image = _IMAGE_A
+    token = verifier._active_docker_image.set(_IMAGE_B)
+    try:
+        command = verifier._docker_command(
+            ["python", "-m", "pytest"],
+            "/copy",
+            "/out",
+            "judge",
+        )
+    finally:
+        verifier._active_docker_image.reset(token)
+
+    assert _IMAGE_B in command
+    assert _IMAGE_A not in command
 
 
 def test_repo_image_facade_preserves_phase_specific_capture_failure(
