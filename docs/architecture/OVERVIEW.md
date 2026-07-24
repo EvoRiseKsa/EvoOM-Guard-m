@@ -113,15 +113,21 @@ execution is separate; post-snapshot verification and cleanup remain in
 Repository-suite execution and JUnit interpretation now have the focused
 `verifiers.repo_suite` owner. Its two immutable boundaries leave the
 runtime-tree continuity check between process completion and report reading in
-`RepoVerifier`; sticky evidence projection and cleanup also remain there.
+`RepoVerifier`; cleanup also remains there.
 Verifier-pack execution and JUnit interpretation now have the focused
 `verifiers.repo_pack` owner. Its immutable execution boundary freezes
 host/docker/gVisor process evidence; its separate interpretation boundary
 cannot read the judge-owned report until `RepoVerifier` has re-verified both
 the accepted pack snapshot and candidate runtime tree. Pack admission,
-pre/post snapshot checks, runtime continuity, sticky evidence, phase
-composition, final artifact projection, and cleanup remain in
-`RepoVerifier`.
+pre/post snapshot checks, runtime continuity, phase composition, and cleanup
+remain outside this execution owner.
+Repository sticky evidence and completed artifact projection now have the
+focused, effect-free `verifiers.repo_result` owner. It freezes the observed
+pack identity and completed repository phase, projects completed pack fields,
+and owns exact key order, overwrite, and presence-versus-null behavior.
+`RepoVerifier` still records those facts at the same execution points and
+retains provider timing, phase-composer invocation, workspace lifetime, and
+cleanup.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
 classification of changed/deleted paths. It binds local Actions from the base
 tree, preserves the reserved verifier-pack and non-exemptible harness rules,
@@ -129,8 +135,9 @@ and returns the exact safe-deletion set. Guard calls it at the characterized
 post-parse/pre-materialization seam and retains risk, execution, decision, and
 serialization responsibilities.
 `RepoVerifier` still owns workspace allocation, verifier-pack intake and
-snapshot continuity, runtime identity, phase composition, sticky projection,
-and cleanup. Candidate filesystem coordination is delegated to
+snapshot continuity, runtime identity, phase composition, and cleanup.
+Sticky/final result projection is delegated to `repo_result`; candidate
+filesystem coordination is delegated to
 `repo_candidate`; repository-suite and verifier-pack subprocess/container
 operations are coordinated by `repo_suite` and `repo_pack` through live
 injected effects. Lifecycle changes still flow through the typed builder.

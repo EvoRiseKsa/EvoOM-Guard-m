@@ -1,0 +1,20 @@
+{
+  "schema_version": "repo-result-projection-characterization-v1",
+  "cases": {
+    "no_pack_completed": {
+      "sha256": "9c6dc09519ece3520bc5dc01d5af056d8850b469e92222f6e0a4afd9e1a96465"
+    },
+    "pack_command_unavailable": {
+      "sha256": "61185db9e64573bd2ba3063f830352b5031fe896b3141f68d8304e467bf1cc77"
+    },
+    "pack_completed": {
+      "sha256": "59768f04b8baa386798896879f1b3c75c5b2c56b0e01b2689f0e8c791ad834b4"
+    },
+    "pack_invalid_present_file": {
+      "sha256": "26c2ba837dad5928f6825340dcd298b0042a06eabcfe9bb1ddfb8f306e9a6e29"
+    },
+    "pack_missing_path": {
+      "sha256": "c6216d7eb5a8f9d6b5f234823bf8c7a1ce95488da723d08a3282a725db7fb395"
+    }
+  }
+}

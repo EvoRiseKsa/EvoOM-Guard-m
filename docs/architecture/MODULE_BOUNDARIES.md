@@ -285,8 +285,25 @@ continuity after the suite process completes but before judge-owned JUnit is
 read. Host, Docker, and gVisor operations, phase evidence, report readers, and
 the pure phase evaluator are injected as live providers at their historical
 call sites. Terminal execution failures return before any verifier pack can
-start. Runtime-identity policy, sticky artifact projection, phase composition,
-and workspace cleanup stay in `RepoVerifier`.
+start. Runtime-identity policy, phase-composer invocation, and workspace
+cleanup stay in `RepoVerifier`; result projection stays outside this execution
+owner.
+
+Repository result and sticky-evidence projection live in
+`evoom_guard/verifiers/repo_result.py`. Frozen values own the observed pack
+identity, completed repository-suite phase facts, completed verifier-pack
+fields, and the immutable input to final artifact construction. The
+judgment-local builder attaches those sticky facts to every later terminal
+return, then appends the already-observed execution snapshot while preserving
+the historical overwrite and insertion order. Final construction preserves
+the published distinction between always-present nullable pack fields and
+pack-JUnit keys that exist only when a pack was configured. A new
+pre-extraction vector freezes full result values, key order, and present-null
+sets across no-pack, completed-pack, pack-launch-failure, invalid-present-pack,
+and missing-pack paths. This owner performs no provider lookup, trace
+mutation, process/container execution, filesystem access, clock read, or
+cleanup. `RepoVerifier` retains phase/effect ordering, workspace lifetime,
+phase-composer invocation, and primary-exception cleanup precedence.
 
 The third repository-verifier phase slice adds immutable
 `domain.evidence.VerificationEvidence`, `VerifierPackEvidence`,
