@@ -77,7 +77,6 @@ from evoom_guard.application.blackbox_finalization import (
 )
 from evoom_guard.application.diff_verification import (
     DiffVerificationOptions,
-    DiffVerificationReasonCodes,
     DiffVerificationRequest,
     DiffVerificationServices,
     verify_diff,
@@ -1913,18 +1912,22 @@ def guard_from_diff(
                 require_demonstrated_fix=require_demonstrated_fix,
                 strict_harness=strict_harness,
             ),
-            reason_codes=DiffVerificationReasonCodes(
-                empty_diff=REASON_EMPTY_DIFF,
-                binary_patch=REASON_BINARY_PATCH,
-                unsafe_path=REASON_UNSAFE_PATH,
-                verifier_pack_invalid=REASON_VERIFIER_PACK_INVALID,
-                reverse_apply_failed=REASON_REVERSE_APPLY_FAILED,
-                no_verifiable_changes=REASON_NO_VERIFIABLE_CHANGES,
-            ),
         ),
         DiffVerificationServices[GuardResult](
             diff_error_provider=lambda: _diff_error,
             input_error_provider=lambda: input_error_result,
+            empty_diff_reason_code_provider=lambda: REASON_EMPTY_DIFF,
+            binary_patch_reason_code_provider=lambda: REASON_BINARY_PATCH,
+            unsafe_path_reason_code_provider=lambda: REASON_UNSAFE_PATH,
+            verifier_pack_invalid_reason_code_provider=(
+                lambda: REASON_VERIFIER_PACK_INVALID
+            ),
+            reverse_apply_failed_reason_code_provider=(
+                lambda: REASON_REVERSE_APPLY_FAILED
+            ),
+            no_verifiable_changes_reason_code_provider=(
+                lambda: REASON_NO_VERIFIABLE_CHANGES
+            ),
             binary_diff_provider=lambda: _is_binary_diff,
             diff_target_paths_provider=lambda: _diff_target_paths,
             safe_relpath_provider=lambda: is_safe_relpath,

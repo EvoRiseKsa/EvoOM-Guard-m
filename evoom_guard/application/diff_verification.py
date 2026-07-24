@@ -74,18 +74,6 @@ class WorkspaceFactory(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class DiffVerificationReasonCodes:
-    """Stable wire reason codes supplied by the public Guard facade."""
-
-    empty_diff: str
-    binary_patch: str
-    unsafe_path: str
-    verifier_pack_invalid: str
-    reverse_apply_failed: str
-    no_verifiable_changes: str
-
-
-@dataclass(frozen=True, slots=True)
 class DiffVerificationOptions:
     """Exact keyword inputs accepted by ``guard_from_diff()``.
 
@@ -132,7 +120,6 @@ class DiffVerificationRequest:
     head_dir: str
     diff_text: str
     options: DiffVerificationOptions
-    reason_codes: DiffVerificationReasonCodes
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +134,12 @@ class DiffVerificationServices(Generic[ResultT]):
 
     diff_error_provider: Callable[[], DiffErrorFactory[ResultT]]
     input_error_provider: Callable[[], InputErrorFactory[ResultT]]
+    empty_diff_reason_code_provider: Callable[[], str]
+    binary_patch_reason_code_provider: Callable[[], str]
+    unsafe_path_reason_code_provider: Callable[[], str]
+    verifier_pack_invalid_reason_code_provider: Callable[[], str]
+    reverse_apply_failed_reason_code_provider: Callable[[], str]
+    no_verifiable_changes_reason_code_provider: Callable[[], str]
     binary_diff_provider: Callable[[], Callable[[str], bool]]
     diff_target_paths_provider: Callable[[], Callable[[str], list[str]]]
     safe_relpath_provider: Callable[[], Callable[[str], bool]]
@@ -186,13 +179,12 @@ def verify_diff(
 
     diff_text = request.diff_text
     options = request.options
-    codes = request.reason_codes
 
     if not (diff_text or "").strip():
         return DiffVerificationOutcome(
             result=services.diff_error_provider()(
                 "empty diff — nothing to verify",
-                reason_code=codes.empty_diff,
+                reason_code=services.empty_diff_reason_code_provider(),
             ),
             deleted=[],
         )
@@ -201,7 +193,7 @@ def verify_diff(
             result=services.diff_error_provider()(
                 "binary patches are not supported — Guard verifies text source "
                 "changes; the diff contains a binary file change",
-                reason_code=codes.binary_patch,
+                reason_code=services.binary_patch_reason_code_provider(),
             ),
             deleted=[],
         )
@@ -218,7 +210,7 @@ def verify_diff(
                 "the diff references unsafe path(s) outside the repo (absolute, "
                 "'..', or escaping the root) — refusing to apply: "
                 f"{', '.join(unsafe)}",
-                reason_code=codes.unsafe_path,
+                reason_code=services.unsafe_path_reason_code_provider(),
             ),
             deleted=[],
         )
@@ -231,7 +223,9 @@ def verify_diff(
         return DiffVerificationOutcome(
             result=services.input_error_provider()(
                 pack_trust_problem,
-                reason_code=codes.verifier_pack_invalid,
+                reason_code=(
+                    services.verifier_pack_invalid_reason_code_provider()
+                ),
                 source="diff",
                 base_reconstruction="failed",
                 verifier_pack=options.verifier_pack,
@@ -251,7 +245,9 @@ def verify_diff(
                     "the diff did not reverse-apply to the working tree — make "
                     "sure you are in the head checkout and the diff is "
                     "'base...HEAD' (git/patch needed)",
-                    reason_code=codes.reverse_apply_failed,
+                    reason_code=(
+                        services.reverse_apply_failed_reason_code_provider()
+                    ),
                 ),
                 deleted=[],
             )
@@ -265,7 +261,9 @@ def verify_diff(
                 result=services.diff_error_provider()(
                     "the diff includes changed path(s) Guard cannot safely verify: "
                     f"{exc}",
-                    reason_code=codes.no_verifiable_changes,
+                    reason_code=(
+                        services.no_verifiable_changes_reason_code_provider()
+                    ),
                     base_reconstruction="ok",
                 ),
                 deleted=[],
@@ -278,7 +276,9 @@ def verify_diff(
             return DiffVerificationOutcome(
                 result=services.diff_error_provider()(
                     "the diff changed no verifiable source files",
-                    reason_code=codes.no_verifiable_changes,
+                    reason_code=(
+                        services.no_verifiable_changes_reason_code_provider()
+                    ),
                     base_reconstruction="ok",
                 ),
                 deleted=deleted,

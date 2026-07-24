@@ -20,7 +20,6 @@ from evoom_guard.application.decision_gates import (
 from evoom_guard.application.diff_verification import (
     DiffVerificationOptions,
     DiffVerificationOutcome,
-    DiffVerificationReasonCodes,
     DiffVerificationRequest,
     DiffVerificationServices,
     verify_diff,
@@ -48,7 +47,6 @@ __all__ = [
     "compose_repo_decision",
     "DiffVerificationOptions",
     "DiffVerificationOutcome",
-    "DiffVerificationReasonCodes",
     "DiffVerificationRequest",
     "DiffVerificationServices",
     "finalize_blackbox_verification",

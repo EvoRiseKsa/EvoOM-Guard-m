@@ -7326,6 +7326,41 @@ MUTATIONS = (
             "test_live_provider_rebinding_is_preserved"
         ),
     ),
+    Mutation(
+        name="diff-verification-binary-reason-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            binary_patch_reason_code_provider="
+            "lambda: REASON_BINARY_PATCH,\n"
+        ),
+        after=(
+            "            binary_patch_reason_code_provider=(\n"
+            "                lambda value=REASON_BINARY_PATCH: value\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_preflight_reason_code_is_looked_up_after_branch_detection"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-reverse-reason-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            reverse_apply_failed_reason_code_provider=(\n"
+            "                lambda: REASON_REVERSE_APPLY_FAILED\n"
+            "            ),\n"
+        ),
+        after=(
+            "            reverse_apply_failed_reason_code_provider=(\n"
+            "                lambda value=REASON_REVERSE_APPLY_FAILED: value\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_reconstruction_reason_code_is_looked_up_after_runtime_effect"
+        ),
+    ),
 )
 
 

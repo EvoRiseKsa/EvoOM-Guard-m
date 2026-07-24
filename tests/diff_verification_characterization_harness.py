@@ -50,7 +50,9 @@ CASE_NAMES = (
     "empty_preflight",
     "explicit_sha_short_circuit",
     "guard_exception_cleans_up",
+    "live_binary_reason_rebinding",
     "live_provider_rebinding",
+    "live_reverse_reason_rebinding",
     "no_verifiable_changes",
     "pack_trust_preflight",
     "reverse_apply_failure",
@@ -112,6 +114,7 @@ def _spec(case_name: str) -> dict[str, Any]:
         "raise_at": None,
         "explicit_sha": False,
         "live": False,
+        "late_reason": None,
     }
     cases: dict[str, dict[str, Any]] = {
         "empty_preflight": {"diff_text": " \n\t"},
@@ -125,7 +128,15 @@ def _spec(case_name: str) -> dict[str, Any]:
         "no_verifiable_changes": {"blocks": ({}, [])},
         "success_forwards_every_option": {},
         "explicit_sha_short_circuit": {"explicit_sha": True},
+        "live_binary_reason_rebinding": {
+            "diff_text": BINARY_DIFF,
+            "late_reason": "binary",
+        },
         "live_provider_rebinding": {"live": True},
+        "live_reverse_reason_rebinding": {
+            "reverse_ok": False,
+            "late_reason": "reverse",
+        },
         "copy_exception_cleans_up": {"raise_at": "copy"},
         "write_exception_cleans_up": {"raise_at": "write"},
         "guard_exception_cleans_up": {"raise_at": "guard"},
@@ -150,6 +161,13 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
     exception: dict[str, str] | None = None
     workspace_path = str(workspace / "diff-workspace")
     original_join = guard_module.os.path.join
+    original_binary_check = guard_module._is_binary_diff
+
+    def fake_binary_check(value: str) -> bool:
+        if spec["late_reason"] == "binary":
+            timeline.append("reason:rebind:binary")
+            guard_module.REASON_BINARY_PATCH = "late-binary-patch"
+        return bool(original_binary_check(value))
 
     def fake_pack_check(
         head_dir: str,
@@ -189,6 +207,11 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
 
     def early_reverse(_base_dir: str, _diff_file: str) -> bool:
         timeline.append("reverse:early")
+        if spec["late_reason"] == "reverse":
+            timeline.append("reason:rebind:reverse")
+            guard_module.REASON_REVERSE_APPLY_FAILED = (
+                "late-reverse-apply-failed"
+            )
         return bool(spec["reverse_ok"])
 
     def late_reverse(_base_dir: str, _diff_file: str) -> bool:
@@ -317,6 +340,23 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         stack.enter_context(patch.object(guard_module.os.path, "join", fake_join))
         stack.enter_context(patch.object(guard_module, "copy_repo_tree", fake_copy))
         stack.enter_context(patch.object(guard_module, "open", fake_open, create=True))
+        stack.enter_context(
+            patch.object(
+                guard_module,
+                "REASON_BINARY_PATCH",
+                guard_module.REASON_BINARY_PATCH,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                guard_module,
+                "REASON_REVERSE_APPLY_FAILED",
+                guard_module.REASON_REVERSE_APPLY_FAILED,
+            )
+        )
+        stack.enter_context(
+            patch.object(guard_module, "_is_binary_diff", fake_binary_check)
+        )
         stack.enter_context(patch.object(guard_module, "_reverse_apply", early_reverse))
         stack.enter_context(patch.object(guard_module, "blocks_from_dirs", early_blocks))
         stack.enter_context(patch.object(guard_module, "_diff_base_sha", early_base_sha))

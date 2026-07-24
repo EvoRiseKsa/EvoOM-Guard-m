@@ -212,6 +212,30 @@ def test_live_provider_rebinding_is_preserved(tmp_path: Path) -> None:
     assert case["guard_call"]["kwargs"]["head_sha"] == "late-head"
 
 
+def test_preflight_reason_code_is_looked_up_after_branch_detection(
+    tmp_path: Path,
+) -> None:
+    case = capture_case("live_binary_reason_rebinding", tmp_path)
+
+    assert case["exception"] is None
+    assert case["decision"]["reason_code"] == "late-binary-patch"
+    assert case["timeline"] == ["reason:rebind:binary"]
+
+
+def test_reconstruction_reason_code_is_looked_up_after_runtime_effect(
+    tmp_path: Path,
+) -> None:
+    case = capture_case("live_reverse_reason_rebinding", tmp_path)
+
+    assert case["exception"] is None
+    assert case["decision"]["reason_code"] == "late-reverse-apply-failed"
+    assert case["timeline"][-3:] == [
+        "reverse:early",
+        "reason:rebind:reverse",
+        "workspace:cleanup:True:True",
+    ]
+
+
 @pytest.mark.parametrize(
     ("case_name", "message", "required_tail"),
     (

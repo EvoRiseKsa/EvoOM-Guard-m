@@ -12,7 +12,6 @@ import evoom_guard.application as application
 from evoom_guard.application.diff_verification import (
     DiffVerificationOptions,
     DiffVerificationOutcome,
-    DiffVerificationReasonCodes,
     DiffVerificationRequest,
     verify_diff,
 )
@@ -53,19 +52,10 @@ def _options() -> DiffVerificationOptions:
 
 
 def test_diff_owner_is_public_and_contracts_are_frozen_slotted() -> None:
-    reasons = DiffVerificationReasonCodes(
-        empty_diff="empty",
-        binary_patch="binary",
-        unsafe_path="unsafe",
-        verifier_pack_invalid="pack",
-        reverse_apply_failed="reverse",
-        no_verifiable_changes="none",
-    )
     request = DiffVerificationRequest(
         head_dir="head",
         diff_text="diff",
         options=_options(),
-        reason_codes=reasons,
     )
     result = type("Result", (), {"source": None, "base_reconstruction": None})()
     outcome = DiffVerificationOutcome(result=result, deleted=[])
