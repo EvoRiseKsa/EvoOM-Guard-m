@@ -163,9 +163,14 @@ def test_repository_copy_does_not_materialize_a_windows_junction(
 
 
 def test_repo_verifier_copy_facade_resolves_legacy_globals_at_call_time(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
+    source_path = tmp_path / "source"
+    destination_path = tmp_path / "destination"
+    source_path.mkdir()
+
     def fake_ignore_patterns(*patterns: str):
         captured["patterns"] = patterns
         return lambda _directory, names: [name for name in names if name in patterns]
@@ -180,11 +185,11 @@ def test_repo_verifier_copy_facade_resolves_legacy_globals_at_call_time(
     monkeypatch.setattr(repo_verifier.shutil, "ignore_patterns", fake_ignore_patterns)
     monkeypatch.setattr(repo_verifier.shutil, "copytree", fake_copytree)
 
-    repo_verifier.copy_repo_tree("source", "destination")
+    repo_verifier.copy_repo_tree(str(source_path), str(destination_path))
 
     assert captured["patterns"] == ("live-cache",)
     source, destination, kwargs = captured["copytree"]
-    assert (source, destination) == ("source", "destination")
+    assert (source, destination) == (str(source_path), str(destination_path))
     assert kwargs["symlinks"] is True
     assert captured["ignored"] == ["live-cache"]
 
