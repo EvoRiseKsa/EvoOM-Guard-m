@@ -40,6 +40,112 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="candidate-tree-reparse-classification-bypass",
+        path="evoom_guard/guard.py",
+        before="    if _is_windows_reparse(full_path, info):\n",
+        after="    if False and _is_windows_reparse(full_path, info):\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_tree_entry_rejects_a_reparse_directory_before_walk"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-reparse-attribute-bypass",
+        path="evoom_guard/guard.py",
+        before="    if attributes & reparse_flag:\n",
+        after="    if False and attributes & reparse_flag:\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_windows_reparse_attribute_detection_is_python_310_compatible"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-root-kind-bypass",
+        path="evoom_guard/guard.py",
+        before='        if root_entry.kind != "directory":\n',
+        after='        if False and root_entry.kind != "directory":\n',
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_blocks_from_dirs_rejects_a_non_directory_root_before_walk"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-object-identity-bypass",
+        path="evoom_guard/guard.py",
+        before="        or _stat_identity(observed) != entry.identity\n",
+        after="        or False\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_snapshot_verifier_rejects_object_drift_independently_of_times"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-posix-open-support-bypass",
+        path="evoom_guard/guard.py",
+        before="        if no_follow is None or non_block is None:\n",
+        after="        if False and (no_follow is None or non_block is None):\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_posix_open_flags_require_no_follow_and_non_block"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-posix-non-block-bypass",
+        path="evoom_guard/guard.py",
+        before="        flags |= no_follow | non_block\n",
+        after="        flags |= no_follow\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_posix_open_flags_require_no_follow_and_non_block"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-posix-no-follow-bypass",
+        path="evoom_guard/guard.py",
+        before="        flags |= no_follow | non_block\n",
+        after="        flags |= non_block\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_posix_open_flags_require_no_follow_and_non_block"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-path-time-drift-bypass",
+        path="evoom_guard/guard.py",
+        before="                or _stat_path_times(observed) != entry.path_times\n",
+        after="                or False\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_changed_text_rejects_metadata_drift_during_bounded_read"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-post-read-verification-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "        _verify_open_regular_snapshot(\n"
+            "            entry,\n"
+            "            descriptor,\n"
+            '            operation="read",\n'
+            "        )\n"
+        ),
+        after="        pass\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_changed_text_rejects_metadata_drift_during_bounded_read"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-comparison-snapshot-bypass",
+        path="evoom_guard/guard.py",
+        before="                    head_snapshot=head,\n",
+        after="                    head_snapshot=None,\n",
+        test=(
+            "tests/test_candidate_tree_snapshot_hardening.py::"
+            "test_equal_file_comparison_rejects_hardlink_replacement_after_lstat"
+        ),
+    ),
+    Mutation(
         name="guard-request-timeout-validation-bypass",
         path="evoom_guard/application/request_preparation.py",
         before="    if type(raw.timeout) is not int or raw.timeout < 1:\n",
