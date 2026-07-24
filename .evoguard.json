@@ -1,0 +1,27 @@
+{
+  "policy_id": "evoom-guard-protected-release-source",
+  "policy_version": "1",
+  "protected": [
+    ".github/workflows/*",
+    ".github/CODEOWNERS",
+    ".evoguard.json",
+    "LICENSE",
+    "NOTICE",
+    "security/release-pipeline-bootstrap.json",
+    "security/release-source-pack/*",
+    "security/*.lock"
+  ],
+  "allow": [],
+  "allow_new_tests": false,
+  "verifier_pack": "security/release-source-pack",
+  "expect_verifier_pack_sha256": "6d08bfb69dc129054d8eaf6e5da34bf9a5d693bc0148c6f98186d8cc78bf704c",
+  "blackbox": true,
+  "blackbox_only": true,
+  "isolation": "docker",
+  "docker_image": "python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de",
+  "docker_network": "none",
+  "require_report_integrity": "external_process_isolated",
+  "require_candidate_isolation": "docker",
+  "trust_setup_on_host": false,
+  "timeout": 300
+}

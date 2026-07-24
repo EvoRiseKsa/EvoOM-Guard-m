@@ -159,12 +159,20 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
 
 def test_guard_docker_isolation_requires_image(capsys):
     # --isolation docker without --docker-image is a usage error (exit 2).
-    assert cli.main(["guard", ".", "--patch", "-", "--isolation", "docker"]) == 2
+    assert (
+        cli.main(
+            ["guard", ".", "--patch", "-", "--no-config", "--isolation", "docker"]
+        )
+        == 2
+    )
     assert "docker-image" in capsys.readouterr().out
 
 
 def test_blackbox_only_requires_blackbox(capsys):
-    assert cli.main(["guard", ".", "--patch", "-", "--blackbox-only"]) == 2
+    assert (
+        cli.main(["guard", ".", "--patch", "-", "--no-config", "--blackbox-only"])
+        == 2
+    )
     assert "--blackbox-only requires --blackbox" in capsys.readouterr().out
 
 

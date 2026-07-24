@@ -1,0 +1,131 @@
+{
+  "format": "EVOGUARD_RELEASE_PIPELINE_BOOTSTRAP_V1",
+  "activation": {
+    "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": false,
+    "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED": false,
+    "EVOGUARD_RELEASE_PUBLICATION_ENABLED": false
+  },
+  "policy": {
+    "bootstrap_state": "INERT_UNTIL_POST_MERGE_CONFIGURATION",
+    "placeholder_rule": "Every POST_MERGE_REQUIRED value is intentionally invalid and must be resolved from the protected merged tree or reviewed GitHub control plane before any flag is true.",
+    "legacy_release_workflow": "HARD_DISABLED",
+    "publication_mode": "READ_ONLY_APPROVAL_THEN_SINGLE_JOB_DRAFT_AND_IMMUTABLE_PUBLISH"
+  },
+  "activation_prerequisites": {
+    "repository": {
+      "branch": "main",
+      "branch_protection_required": true,
+      "strict_status_checks_required": true,
+      "enforce_admins_required": true,
+      "immutable_releases_required": true,
+      "release_tag_ruleset": "v* CREATE_AND_MUTATION_RESTRICTED_TO_TRUSTED_H_WHERE_SUPPORTED",
+      "concurrent_contents_writers_frozen_during_publication": true,
+      "manual_release_and_tag_operations_frozen_during_publication": true,
+      "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+    },
+    "environments": {
+      "evoguard-release-source-v2": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      },
+      "evoguard-release-artifact-v1": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      },
+      "evoguard-release-publication": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      },
+      "evoguard-release-draft": {
+        "required_reviewer": "MANA-awam",
+        "prevent_self_review": true,
+        "deployment_branches": ["main"],
+        "admin_bypass": "DISABLED_AND_MANUALLY_VERIFIED"
+      }
+    }
+  },
+  "post_merge_required": {
+    "workflow_ids": {
+      "EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_ADMIT_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_BUILD_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_ADMIT_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_ID": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_ID": "POST_MERGE_REQUIRED"
+    },
+    "workflow_blob_shas": {
+      "EVOGUARD_RELEASE_SOURCE_REVERIFY_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_RECEIPT_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_ADMIT_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_BUILD_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_ADMIT_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_BLOB_SHA": "POST_MERGE_REQUIRED"
+    },
+    "runtime_and_pack": {
+      "EVOGUARD_BOOTSTRAP_RUNTIME_URL": "POST_MERGE_REQUIRED",
+      "EVOGUARD_BOOTSTRAP_RUNTIME_SHA256": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_PACK_SHA256": "6d08bfb69dc129054d8eaf6e5da34bf9a5d693bc0148c6f98186d8cc78bf704c",
+      "EVOGUARD_RELEASE_ARTIFACT_RUNTIME_URL": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_RUNTIME_SHA256": "POST_MERGE_REQUIRED"
+    },
+    "toolchain": {
+      "EVOGUARD_GIT_EXECUTABLE_SHA256": "POST_MERGE_REQUIRED",
+      "EVOGUARD_GH_EXECUTABLE_SHA256": "POST_MERGE_REQUIRED",
+      "EVOGUARD_PROVIDER_ISOLATION_UID": 60001,
+      "EVOGUARD_PROVIDER_ISOLATION_GID": 60001,
+      "EVOGUARD_RELEASE_ARTIFACT_GIT_EXECUTABLE_SHA256": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID": 60002,
+      "EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID": 60002
+    },
+    "public_roots": {
+      "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
+      "EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
+      "EVOGUARD_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
+      "EVOGUARD_ARTIFACT_DIGEST_ADMISSION_V2_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_SOURCE_FINALIZER_V1_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED",
+      "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64": "POST_MERGE_REQUIRED"
+    }
+  },
+  "protected_environments": {
+    "evoguard-release-source-v2": {
+      "secret": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64",
+      "purpose": "C source admission only"
+    },
+    "evoguard-release-artifact-v1": {
+      "secret": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64",
+      "purpose": "F artifact admission only"
+    },
+    "evoguard-release-publication": {
+      "secret": null,
+      "purpose": "H final immutable publication approval"
+    },
+    "evoguard-release-draft": {
+      "secret": null,
+      "purpose": "H read-only publication-intent approval; no release creation"
+    }
+  },
+  "post_publication_evidence": {
+    "first_ledger": "v4.4.0",
+    "actions_artifact_retention_is_not_durable_evidence": true,
+    "required_frozen_material": [
+      "two RAAE envelopes",
+      "source RSAE and all external controls",
+      "six public roots and key IDs",
+      "run IDs and attempts",
+      "workflow IDs and raw-Git blob SHAs",
+      "trusted parent SHA/tree and literal builder/generator blob SHAs",
+      "runtime, Git, gh, policy, pack, and dependency pins",
+      "release asset checksums"
+    ],
+    "prohibition": "Do not add trust envelopes to release assets and do not create, move, or rewrite a tag from the ledger step."
+  }
+}
