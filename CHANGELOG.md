@@ -11,6 +11,25 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+## [Unreleased]
+
+### Changed
+
+- The composite Action builds and runs a temporary stdlib-only zipapp from its
+  selected `github.action_path`; bootstrap no longer invokes pip, a package
+  resolver, a build backend, or PyPI.
+- Optional changed-line coverage is caller-preprovisioned. Missing advisory
+  measurement remains explicit; a configured minimum remains fail-closed.
+- The zipapp builder rejects links, Windows reparse points, special files, and
+  ambiguous source entry names, and replaces a prior output only after a
+  complete temporary archive has been written.
+
+### Known limitations
+
+- Resolver-free bootstrap is not a whole-Action zero-network or same-user
+  anti-tampering claim. Interpreter setup, conditional base fetch, optional PR
+  comments, and consumer setup/tests retain their existing boundaries.
+
 ## [4.3.0] — 2026-07-23
 
 ### Added

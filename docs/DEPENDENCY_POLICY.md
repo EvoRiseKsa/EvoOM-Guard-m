@@ -69,13 +69,27 @@ mutable `python:3.12-slim` tag. Both the workflow and
 
 ## Deliberate boundary for Action consumers
 
-`action.yml` installs the Action from `github.action_path` on the consumer's
-runner. That is intentionally outside this repository's CI lock: a composite
-Action must run against the caller's selected Python environment and optional
-features. It must not be described as hash-pinned Python dependency resolution.
-Consumers who need a fixed Action revision should pin the Action itself to a
-release tag or full commit SHA and manage their runner's package policy
-separately.
+On the next, unreleased Action revision, `action.yml` builds the reviewed
+standard-library-only sources from `github.action_path` into a temporary
+`evo-guard.pyz`, then runs that archive with Python isolated mode. The Action
+bootstrap does not invoke a package resolver, build backend, or PyPI. This
+change is not part of the immutable `v4.3.0` Action.
+
+Optional changed-line measurement is deliberately not installed by the Action.
+When a policy requests it, `coverage.py` must already be available in the
+normal site-packages of the same Python 3.12 environment selected by the
+Action; isolated mode does not load user-site packages. Missing advisory
+coverage is recorded as `measured: false`. A configured minimum is a
+requirement, so missing coverage fails closed with `ERROR`.
+
+This is a resolver-free **bootstrap**, not a zero-network Action. The pinned
+`setup-python` action may obtain an interpreter, a shallow checkout may fetch a
+missing base object, the optional PR-comment step calls GitHub, and the
+consumer's own setup or test command may use the network. Consumers who need a
+fixed Action revision should pin the Action itself to a release tag or full
+commit SHA and manage the runner and optional coverage environment separately.
+The temporary Action-built archive is also not a claim of same-user
+anti-tampering between composite steps.
 
 ## Remaining limits
 

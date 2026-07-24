@@ -101,7 +101,7 @@ inputs:
     required: false
     default: ""
   diff-coverage:
-    description: "'true' measures which changed lines the suite actually executed (one extra suite run plus configured setup replay; installs the 'cov' extra). Same-process candidate code can mutate coverage state; use as a non-hostile-code quality signal, not adversarial integrity evidence."
+    description: "'true' measures which changed lines the suite actually executed (one extra suite run plus configured setup replay; the selected Python environment must already provide coverage.py). Same-process candidate code can mutate coverage state; use as a non-hostile-code quality signal, not adversarial integrity evidence."
     required: false
     default: "false"
   min-diff-coverage:
@@ -142,23 +142,18 @@ runs:
       with:
         python-version: "3.12"
 
-    - name: Install EvoGuard
+    - name: Build EvoGuard archive
       shell: bash
       env:
-        INPUT_DIFF_COVERAGE: ${{ inputs.diff-coverage }}
-        INPUT_MIN_DIFF_COVERAGE: ${{ inputs.min-diff-coverage }}
-        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        EVOGUARD_ACTION_PATH: ${{ github.action_path }}
       run: |
-        # A pull_request workflow is candidate-controlled. Install the optional
-        # coverage dependency there unconditionally: the trusted base policy may
-        # require it, while a candidate input must not decide the judge features.
-        if [ -n "$PR_BASE_SHA" ]; then
-          pip install -q "${{ github.action_path }}[cov]"
-        elif [ "$INPUT_DIFF_COVERAGE" = "true" ] || [ -n "$INPUT_MIN_DIFF_COVERAGE" ]; then
-          pip install -q "${{ github.action_path }}[cov]"
-        else
-          pip install -q "${{ github.action_path }}"
-        fi
+        set -euo pipefail
+        # Build the reviewed stdlib-only source that GitHub materialized for
+        # this Action reference. This bootstrap never invokes pip, a package
+        # resolver, a build backend, or PyPI.
+        python -I "$EVOGUARD_ACTION_PATH/ops/build_pyz.py" \
+          -o "$RUNNER_TEMP/evo-guard.pyz"
+        python -I "$RUNNER_TEMP/evo-guard.pyz" version
 
     - name: Run EvoGuard
       id: guard
@@ -223,11 +218,14 @@ runs:
           if [ -z "$BASE" ]; then BASE="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)"; fi
         fi
         echo "Diffing against base: $BASE"
-        # Best-effort deepen (the PR base SHA is usually absent from a default
-        # depth-1 checkout). Failure here is only a warning — the authoritative,
-        # fail-fast check is the rev-parse below.
-        git fetch --no-tags --depth=1 origin "$BASE" \
-          || echo "::warning::EvoGuard: could not fetch base '$BASE' from origin — trying to resolve it locally"
+        # Fetch only when the exact base object is absent. A full-history
+        # checkout stays network-silent here; a shallow checkout gets one
+        # best-effort recovery attempt. The second rev-parse remains the
+        # authoritative fail-closed check.
+        if ! git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null; then
+          git fetch --no-tags --depth=1 origin "$BASE" \
+            || echo "::warning::EvoGuard: could not fetch base '$BASE' from origin — trying to resolve it locally"
+        fi
         git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null \
           || fail_setup "base_ref_unavailable" \
                "cannot resolve the diff base '$BASE' in this checkout. Use actions/checkout with 'fetch-depth: 0', or pass a 'base-ref' that is reachable from this checkout."
@@ -250,7 +248,7 @@ runs:
         # verifier-pack identity accepted in PR mode comes from this already
         # materialized BASE policy, never from INPUT_*.
         read_base_policy_string() {
-          python - "$BASE_POLICY_CONFIG" "$1" <<'PY'
+          python -I - "$BASE_POLICY_CONFIG" "$1" <<'PY'
         import json
         import sys
 
@@ -399,18 +397,18 @@ runs:
         fi
         ARGS+=(--head-sha "$HEAD_COMMIT" --head-tree-sha "$(git rev-parse "HEAD^{tree}")")
         set +e
-        evo-guard "${ARGS[@]}" < "$RUNNER_TEMP/guard.diff"
+        python -I "$RUNNER_TEMP/evo-guard.pyz" "${ARGS[@]}" < "$RUNNER_TEMP/guard.diff"
         GUARD_CODE=$?
         set -e
         # Tolerant reads: if the guard crashed before writing its JSON/report,
         # surface ERROR + the exit code rather than a bash traceback.
-        VERDICT=$(python -c "import json;print(json.load(open('$RUNNER_TEMP/guard.json'))['verdict'])" 2>/dev/null || echo "ERROR")
+        VERDICT=$(python -I -c 'import json,sys;print(json.load(open(sys.argv[1], encoding="utf-8"))["verdict"])' "$RUNNER_TEMP/guard.json" 2>/dev/null || echo "ERROR")
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
         # Surface the evidence (1.7): the attestation is the point of the newer
         # releases — make it reachable without custom steps.
         echo "json-path=$RUNNER_TEMP/guard.json" >> "$GITHUB_OUTPUT"
         echo "report-path=$RUNNER_TEMP/guard-report.md" >> "$GITHUB_OUTPUT"
-        POLICY_SHA=$(python -c "import json;print((json.load(open('$RUNNER_TEMP/guard.json')).get('attestation') or {}).get('policy_sha256') or '')" 2>/dev/null || echo "")
+        POLICY_SHA=$(python -I -c 'import json,sys;print((json.load(open(sys.argv[1], encoding="utf-8")).get("attestation") or {}).get("policy_sha256") or "")' "$RUNNER_TEMP/guard.json" 2>/dev/null || echo "")
         echo "policy-sha=$POLICY_SHA" >> "$GITHUB_OUTPUT"
         echo "head-sha=$HEAD_COMMIT" >> "$GITHUB_OUTPUT"
         if [ -f "$RUNNER_TEMP/guard-report.md" ]; then

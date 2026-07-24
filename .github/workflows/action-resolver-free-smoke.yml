@@ -1,0 +1,148 @@
+# -----------------------------------------------------------------------------
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
+# Source-available — see LICENSE for permitted use.
+# -----------------------------------------------------------------------------
+name: Action resolver-free smoke
+
+# A pull_request event carries the outer repository's base SHA. The Action must
+# keep trusting that SHA, so a synthetic consumer repository cannot truthfully
+# replace it in PR mode. PRs retain the static/unit gates in CI; these real
+# consumer runs execute on path-matched branch pushes (including protected
+# main) and by explicit maintainer dispatch.
+on:
+  push:
+    paths:
+      - action.yml
+      - ops/build_pyz.py
+      - requirements/ci.lock
+      - requirements/docker-pytest.lock
+      - .github/workflows/action-resolver-free-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-consumer:
+    name: ${{ matrix.os }} / ${{ matrix.scenario }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        scenario:
+          - core-no-coverage
+          - advisory-coverage-missing
+          - required-coverage-missing
+          - required-coverage-available
+    steps:
+      - name: Check out the Action outside the synthetic consumer tree
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          path: .venv/action-source
+          persist-credentials: false
+
+      - name: Set up the same Python selected by the composite Action
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Preprovision pytest without coverage.py
+        if: matrix.scenario != 'required-coverage-available'
+        shell: bash
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r .venv/action-source/requirements/docker-pytest.lock
+          python -m pip uninstall -y coverage
+          python -I -c "import importlib.util; assert importlib.util.find_spec('coverage') is None"
+
+      - name: Preprovision the locked coverage environment
+        if: matrix.scenario == 'required-coverage-available'
+        shell: bash
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r .venv/action-source/requirements/ci.lock
+          python -I -c "import coverage; assert coverage.__version__"
+
+      - name: Create a two-commit synthetic consumer repository
+        id: consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q
+          git config user.name "EvoGuard Action smoke"
+          git config user.email "action-smoke@invalid.example"
+          printf '/.venv/\n' > .gitignore
+          cat > app.py <<'PY'
+          def double(value):
+              return value + value + 1
+          PY
+          cat > test_app.py <<'PY'
+          from app import double
+
+
+          def test_double():
+              assert double(3) == 6
+          PY
+          git add .gitignore app.py test_app.py
+          git commit -q -m "synthetic failing base"
+          BASE="$(git rev-parse HEAD)"
+          cat > app.py <<'PY'
+          def double(value):
+              return value + value
+          PY
+          git add app.py
+          git commit -q -m "synthetic candidate fix"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+
+      - name: Run the local composite Action
+        id: guard
+        continue-on-error: true
+        uses: ./.venv/action-source
+        env:
+          # These make an accidental package installation inside the Action fail
+          # even when a runner happens to have network access.
+          PIP_NO_INDEX: "1"
+          PIP_REQUIRE_VIRTUALENV: "1"
+        with:
+          base-ref: ${{ steps.consumer.outputs.base }}
+          test-command: "python -m pytest -q"
+          comment: "false"
+          diff-coverage: ${{ matrix.scenario == 'advisory-coverage-missing' && 'true' || 'false' }}
+          min-diff-coverage: ${{ startsWith(matrix.scenario, 'required-coverage-') && '100' || '' }}
+
+      - name: Verify the exact Action outcome and coverage evidence
+        shell: bash
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          STEP_OUTCOME: ${{ steps.guard.outcome }}
+          VERDICT: ${{ steps.guard.outputs.verdict }}
+          JSON_PATH: ${{ steps.guard.outputs.json-path }}
+        run: |
+          python -I - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          scenario = os.environ["SCENARIO"]
+          expected = {
+              "core-no-coverage": ("success", "PASS", None),
+              "advisory-coverage-missing": ("success", "PASS", False),
+              "required-coverage-missing": ("failure", "ERROR", False),
+              "required-coverage-available": ("success", "PASS", True),
+          }[scenario]
+          actual = (os.environ["STEP_OUTCOME"], os.environ["VERDICT"])
+          assert actual == expected[:2], (scenario, actual, expected)
+          report_path = Path(os.environ["JSON_PATH"])
+          assert report_path.is_file(), report_path
+          report = json.loads(report_path.read_text(encoding="utf-8"))
+          assert report["verdict"] == expected[1]
+          evidence = report.get("diff_coverage")
+          if expected[2] is None:
+              assert evidence is None, evidence
+          else:
+              assert isinstance(evidence, dict), evidence
+              assert evidence.get("measured") is expected[2], evidence
+          if scenario == "required-coverage-missing":
+              assert report["reason_code"] == "assurance_requirement_not_met"
+          PY

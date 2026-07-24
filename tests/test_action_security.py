@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 ACTION = Path(__file__).parents[1] / "action.yml"
+GUARD_CALL = 'python -I "$RUNNER_TEMP/evo-guard.pyz" "${ARGS[@]}"'
 
 
 def _run_blocks(text: str) -> list[str]:
@@ -61,16 +62,26 @@ def test_base_resolution_fails_fast_with_named_causes() -> None:
     assert "::warning::" in text
     assert "2>/dev/null || true" not in text
     # Fail-fast ordering: both named causes appear before the guard invocation.
-    guard_call = text.index('evo-guard "${ARGS[@]}"')
+    guard_call = text.index(GUARD_CALL)
     assert text.index("base_ref_unavailable") < guard_call
     assert text.index("base_diff_failed") < guard_call
+    conditional_check = text.index(
+        'if ! git rev-parse --verify --quiet "${BASE}^{commit}"'
+    )
+    fetch = text.index('git fetch --no-tags --depth=1 origin "$BASE"', conditional_check)
+    conditional_end = text.index("        fi", fetch)
+    authoritative_check = text.index(
+        'git rev-parse --verify --quiet "${BASE}^{commit}"',
+        conditional_end,
+    )
+    assert conditional_check < fetch < conditional_end < authoritative_check < guard_call
 
 
 def test_action_uses_a_verified_base_policy_not_candidate_workspace() -> None:
     text = ACTION.read_text(encoding="utf-8")
     base_check = text.index('git rev-parse --verify --quiet "${BASE}^{commit}"')
     materialize = text.index('git show "${BASE}:.evoguard.json"')
-    guard_call = text.index('evo-guard "${ARGS[@]}"')
+    guard_call = text.index(GUARD_CALL)
     assert base_check < materialize < guard_call
     assert 'BASE_POLICY_CONFIG="$RUNNER_TEMP/evoguard-base-policy.json"' in text
     assert 'ARGS=(guard --diff - --config "$BASE_POLICY_CONFIG"' in text
@@ -85,7 +96,7 @@ def test_pr_action_inputs_cannot_weaken_the_base_or_failure_policy() -> None:
     # The PR guards must execute before resolving the diff and before Guard.
     base_guard = text.index("untrusted_base_ref_override")
     diff = text.index('git diff "$BASE...HEAD"')
-    guard_call = text.index('evo-guard "${ARGS[@]}"')
+    guard_call = text.index(GUARD_CALL)
     assert base_guard < diff < guard_call
 
 
@@ -193,11 +204,46 @@ def test_pr_mode_never_forwards_candidate_judge_inputs() -> None:
     assert "pull_request ignores workflow inputs that shape the judge" in text
 
 
-def test_pr_mode_installs_coverage_without_trusting_candidate_coverage_inputs() -> None:
+def test_action_bootstraps_a_local_zipapp_without_a_package_resolver() -> None:
     text = ACTION.read_text(encoding="utf-8")
-    install_start = text.index("- name: Install EvoGuard")
-    run_start = text.index("- name: Run EvoGuard", install_start)
-    install = text[install_start:run_start]
-    assert "PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in install
-    assert 'if [ -n "$PR_BASE_SHA" ]; then' in install
-    assert 'pip install -q "${{ github.action_path }}[cov]"' in install
+    build_start = text.index("- name: Build EvoGuard archive")
+    run_start = text.index("- name: Run EvoGuard", build_start)
+    bootstrap = text[build_start:run_start]
+    assert "EVOGUARD_ACTION_PATH: ${{ github.action_path }}" in bootstrap
+    assert (
+        'python -I "$EVOGUARD_ACTION_PATH/ops/build_pyz.py" \\\n'
+        '          -o "$RUNNER_TEMP/evo-guard.pyz"'
+    ) in bootstrap
+    assert 'python -I "$RUNNER_TEMP/evo-guard.pyz" version' in bootstrap
+    assert "pip install" not in text
+    assert GUARD_CALL in text
+
+
+def test_action_run_blocks_do_not_invoke_package_tools_or_a_path_command() -> None:
+    blocks = _run_blocks(ACTION.read_text(encoding="utf-8"))
+    commands = "\n".join(
+        line
+        for block in blocks
+        for line in block.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    for pattern in (
+        r"(?m)^\s*(?:pip|pip3|pipx|poetry|pdm)\b",
+        r"\bpython(?:3)?\s+-m\s+pip\b",
+        r"\buv\s+pip\b",
+    ):
+        assert re.search(pattern, commands) is None, pattern
+    assert re.search(r"(?m)^\s*evo-guard\b", commands) is None
+
+
+def test_action_uses_only_preprovisioned_optional_coverage() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    description = text[text.index("diff-coverage:") : text.index("min-diff-coverage:")]
+    assert "must already provide coverage.py" in description
+    assert "[cov]" not in text
+
+
+def test_windows_temp_paths_are_passed_to_python_as_argv() -> None:
+    text = ACTION.read_text(encoding="utf-8")
+    assert 'open(sys.argv[1], encoding="utf-8")' in text
+    assert "'$RUNNER_TEMP/guard.json'" not in text
