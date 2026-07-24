@@ -1,5 +1,9 @@
-<!-- Copyright (c) 2026 Mana Alharbi (مانع الحربي). All rights reserved. -->
-<!-- Source-available — see LICENSE for permitted use. -->
+<!--
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
+  Source-available — see LICENSE for permitted use.
+-->
 
 # Security policy
 
@@ -16,9 +20,10 @@ it makes about itself — are especially welcome.
 - Direct form: <https://github.com/EvoRiseKsa/EvoOM-Guard-m/security/advisories/new>.
 - Include: the version (`evo-guard version`), a minimal repro, and the impact.
 
-This is a solo, best-effort project: there is no bug-bounty and no guaranteed
-response time, but genuine reports will be looked at and credited (with your
-permission) when fixed.
+Mana Alharbi is currently the sole maintainer. Security response is
+best-effort: there is no bug bounty or guaranteed response time. Genuine
+reports will be reviewed and, with the reporter's permission, credited when
+fixed.
 
 For a non-sensitive independent-review starting point, see the frozen
 [v3.7.0 review companion](audit/v3.7.0/). It names the exact release target

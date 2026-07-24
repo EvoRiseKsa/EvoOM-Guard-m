@@ -1,6 +1,7 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
-  Commercial licensing is administered by EvoRise Company.
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -21,7 +22,8 @@ contribution, and submit that contribution to the official repository. Retain
 all notices and do not use that copy for a purpose prohibited by the
 [LICENSE](LICENSE).
 
-By submitting a contribution for inclusion, You grant Mana Alharbi a
+By submitting a contribution for inclusion, You grant the Licensor identified
+in [LICENSE](LICENSE) a
 perpetual, worldwide, royalty-free right to use, reproduce, modify, distribute,
 and relicense that contribution as part of EvoOM Guard. Do not submit
 employer-owned, customer-owned, confidential, export-controlled, or
@@ -31,9 +33,9 @@ separate contributor agreement may be required before acceptance. See
 
 ## Before opening a pull request
 
-1. Start from the current default branch; do not modify an existing release tag
-   or release asset. In particular, `v3.7.0` is an immutable release record,
-   not a moving development branch.
+1. Start from the current default branch. Do not modify or replace any
+   published release tag, asset, checksum, attestation, or frozen evidence
+   ledger; those are immutable records, not moving development branches.
 2. Keep the change narrow and explain the observed problem, intended behaviour,
    and any compatibility effect in the pull request.
 3. Add or update tests for a behavioural change. Do not weaken an existing test,
@@ -65,8 +67,7 @@ Treat the following as security-policy changes, even when the diff is small:
 - `examples/trusted-finalizer/`, including token scopes, artifact names,
   Environment/key controls, or raw-Git derivation logic; and
 - documentation that states a threat model, assurance level, deployment
-  prerequisite, or a limitation of the v3.7.0 Trusted Finalizer or Artifact
-  Admission V1.
+  prerequisite, or a limitation of a finalizer or admission contract.
 
 Such a pull request must include all of the following:
 
@@ -87,10 +88,10 @@ The required controls are explained in
 ## Review and ownership
 
 `.github/CODEOWNERS` designates `@MANA-awam` for the core trust-root paths.
-That account is controlled by the same project owner as `@EvoRiseKsa`; it gives
-the project a technically separate GitHub review identity but is **not** an
-independent reviewer or external validation. Code-owner approval only becomes
-an enforced control after GitHub branch protection/ruleset configuration
+Both accounts are controlled by the same human maintainer; they provide
+technically separate GitHub identities but **not** independent review,
+multi-person governance, or external validation. Code-owner approval only
+becomes an enforced control after GitHub branch protection/ruleset configuration
 requires it. Do not describe the presence of `CODEOWNERS` alone as a security
 guarantee.
 

@@ -1,3 +1,10 @@
+<!--
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
+  Source-available — see LICENSE for permitted use.
+-->
+
 # Commercial licensing
 
 EvoOM Guard is source-available under the
@@ -17,7 +24,8 @@ The following uses require a separate commercial agreement:
 
 ## Contact
 
-Commercial licensing is administered by **EvoRise Company**.
+Commercial licenses are issued by **EvoRise Tech**, the Licensor identified in
+the [LICENSE](LICENSE).
 
 - Website: <https://evoriseksa.com>
 - Email: <evoriseksa@icloud.com>

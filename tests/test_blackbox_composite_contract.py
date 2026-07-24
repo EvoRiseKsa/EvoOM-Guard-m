@@ -1,6 +1,8 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2026 Mana Alharbi. All rights reserved.
-# Source-available - see LICENSE for permitted use.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
+# Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
 """End-to-end contract for black-box invocation and composite evidence."""
 

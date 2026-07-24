@@ -1,7 +1,8 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2026 EvoRise Tech. All rights reserved.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
 # Author / original creator: Mana Alharbi.
-# Source-available - see LICENSE for permitted use.
+# Licensor: EvoRise Tech.
+# Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
 """Fail-closed admission profile for changes proposed by automated agents.
 

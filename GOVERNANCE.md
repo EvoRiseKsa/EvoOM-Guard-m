@@ -1,5 +1,7 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -12,21 +14,28 @@ process that does not exist.
 
 ## Current status
 
-The authoritative repository is currently maintained by one owner.
-`@MANA-awam` is a second GitHub account controlled by that same owner. The
-repository's [`CODEOWNERS`](.github/CODEOWNERS) mapping uses it for a technically
-separate review workflow on trust-root paths; it is **not** independent review,
-third-party validation, or a separate security authority.
+The [LICENSE](LICENSE) identifies **EvoRise Tech** as the copyright holder and
+Licensor, and **Mana Alharbi** as the author and original creator. Mana Alharbi
+is currently the sole maintainer and human controller of both `@EvoRiseKsa`
+and `@MANA-awam`. This repository records that operating identity; it does not
+purport to verify corporate-registration, assignment, or jurisdictional
+documents.
+
+The repository's [`CODEOWNERS`](.github/CODEOWNERS) mapping uses the two
+accounts for a technically separate review workflow on trust-root paths. That
+is **not** independent review, third-party validation, multi-person governance,
+or a separate security authority.
 
 `CODEOWNERS` is a routing file, not a security control by itself. It becomes an
 enforced control only when GitHub branch protection or a ruleset requires code
 owner review, protects `CODEOWNERS` itself, and the listed account retains the
 necessary repository access. It must never be cited as evidence of an
-independent audit. The operational rules for the current v3.7 boundary are in
-[`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
-
-The core repository's v3.7.0 raw-Git Trusted Finalizer remains a reference
-deployment; it is not an active merge requirement here.
+independent audit. The operating rules are in
+[`docs/GOVERNANCE.md`](docs/GOVERNANCE.md). Current implementation and release
+facts are maintained separately in
+[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) and
+[`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md); governance does not copy a
+moving version status.
 
 ## Security-policy changes
 
@@ -54,16 +63,18 @@ requirements.
 
 ## Required state before production finalizer enforcement
 
-- Use `docs/RELEASE_GATE_CHECKLIST.md` as the hardening control ledger for this repository before merge gating.
 Before a repository makes the finalizer a required merge condition, it must have:
 
-1. A protected default branch that also protects policy, pack, and workflow paths.
-2. A protected `evoguard-finalizer` Environment holding the private key, with a
+1. The controls in
+   [`docs/RELEASE_GATE_CHECKLIST.md`](docs/RELEASE_GATE_CHECKLIST.md) have
+   been evaluated for that deployment.
+2. A protected default branch that also protects policy, pack, and workflow paths.
+3. A protected `evoguard-finalizer` Environment holding the private key, with a
    real reviewer distinct from the candidate author.
-3. A protected Guard release SHA and fully pinned GitHub Actions.
-4. A recorded operational audit of repeated Check Run behaviour and raw-Git
+4. A protected Guard release SHA and fully pinned GitHub Actions.
+5. A recorded operational audit of repeated Check Run behaviour and raw-Git
    finalizer evidence for the deployed version.
-5. A policy for re-running every open PR after any security-policy change.
+6. A policy for re-running every open PR after any security-policy change.
 
 Until those conditions are true, finalizer output is a pilot record, not a
 production merge authorization.

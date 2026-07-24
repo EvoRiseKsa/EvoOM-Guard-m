@@ -1,5 +1,7 @@
 # ------------------------------------------------------------------------------
-# Copyright (c) 2026 Mana Alharbi. All rights reserved.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # ------------------------------------------------------------------------------
 """Measure the current fidelity-snapshot cost on a synthetic repository tree.

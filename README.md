@@ -1,6 +1,7 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
-  Commercial licensing is administered by EvoRise Company.
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -107,17 +108,17 @@ correctness or security.
 > data, and future operational-control-plane inputs are not public source
 > inputs. Read [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) and
 > [`CONTRIBUTING.md`](CONTRIBUTING.md) for the review boundary. The designated
-> second account provides technical separation of roles only, not independent
-> review.
+> second account is controlled by the same human maintainer and provides
+> technical separation of roles only, not independent review.
 
-> **v4 licensing and release status.** [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0)
-> is the current published immutable consumer release, carrying the **EvoRise
-> Source-Available License 1.0**. The repository documentation now records that
-> release without implying that later documentation commits move its immutable
-> tag. Commercial licensing is administered by EvoRise Company. See
-> [LICENSE](LICENSE),
-> [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
-> [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md).
+> **Licensing and release status.** Copyright © 2026 EvoRise Tech. The author
+> and original creator is Mana Alharbi; EvoRise Tech is the Licensor. The
+> project is source-available under the **EvoRise Source-Available License
+> 1.0**, not open source. Use [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)
+> and [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) as the canonical,
+> maintained source and published-release state instead of inferring it from a
+> copied version paragraph. See [LICENSE](LICENSE) and
+> [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
 
 > **Repository map and current evidence.** See
 > [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and

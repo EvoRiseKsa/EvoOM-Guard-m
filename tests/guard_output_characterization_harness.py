@@ -1,7 +1,8 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2026 EvoRise Tech. All rights reserved.
-# Source-available - see LICENSE for permitted use.
-# Original creator: Mana Alharbi.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
+# Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
 """Deterministic wire characterization for Guard output publication."""
 

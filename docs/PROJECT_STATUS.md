@@ -1,6 +1,7 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
-  Commercial licensing is administered by EvoRise Company.
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
   Source-available — see LICENSE for permitted use.
 -->
 
@@ -38,7 +39,7 @@ validated security service.
 
 The second GitHub account, [`MANA-awam`](https://github.com/MANA-awam), is used
 for technical separation of review/deployment roles in the pilot. Both accounts
-are controlled by the same owner. The resulting review trail is useful
+are controlled by the same human maintainer. The resulting review trail is useful
 operational evidence, but it is **not** independent review or third-party
 validation. See [governance](GOVERNANCE.md).
 
@@ -86,14 +87,15 @@ operational practice, high-quality private policy/packs and data, trustworthy
 service operation, and customer integrations—not from obscuring already
 published Python or workflow files.
 
-The source tree and latest published immutable consumer release are both
-`4.3.0`. The project cannot
+The canonical source and published-release state is maintained in
+[RELEASE_STATUS.md](RELEASE_STATUS.md). The project cannot
 retract rights already granted with v3.8.0; see
 [LICENSE_HISTORY.md](../LICENSE_HISTORY.md). The v4 license applies only to
-material distributed with it. Commercial licensing is administered by EvoRise
-Company; see [LICENSE](../LICENSE),
-[COMMERCIAL-LICENSING.md](../COMMERCIAL-LICENSING.md), and
+material distributed with it. EvoRise Tech is the Licensor identified in
+[LICENSE](../LICENSE). See
+[COMMERCIAL-LICENSING.md](../COMMERCIAL-LICENSING.md) and
 [RELEASE_STATUS.md](RELEASE_STATUS.md).
+
 ## Evidence still required before stronger claims
 
 The repository has strong automated tests and controlled demonstrations, but it

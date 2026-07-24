@@ -1,3 +1,10 @@
+<!--
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
+  Source-available — see LICENSE for permitted use.
+-->
+
 # ملخص توضيحي لرخصة EvoRise Source-Available License 1.0
 
 > هذا ملخص للسهولة فقط. النص الإنجليزي في [LICENSE](LICENSE) هو النص الحاكم.
@@ -20,4 +27,7 @@ EvoOM Guard **متاح المصدر وليس مفتوح المصدر**.
 
 لا تمنع الرخصة تطوير تقنية مستقلة لا تستخدم الكود أو مشتقاته. لا تمنح الرخصة حق استخدام علامات EvoRise أو EvoOM Guard أو شعاراتها.
 
-الترخيص التجاري تديره **EvoRise Company** عبر <https://evoriseksa.com> أو <evoriseksa@icloud.com>. راجع [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md) و[LICENSE_HISTORY.md](LICENSE_HISTORY.md).
+صاحب حقوق النشر والمرخِّص هو **EvoRise Tech**، والمؤلف والمنشئ الأصلي هو
+**Mana Alharbi**. للتراخيص التجارية: <https://evoriseksa.com> أو
+<evoriseksa@icloud.com>. راجع [LICENSE](LICENSE) و[COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md)
+و[LICENSE_HISTORY.md](LICENSE_HISTORY.md). هذا الملخص لا يغيّر النص الإنجليزي الحاكم.

@@ -1,12 +1,14 @@
-# Copyright (c) 2026 Mana Alharbi. All rights reserved.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 #
-# @MANA-awam and @EvoRiseKsa are operated by the same project owner. Listing
+# @MANA-awam and @EvoRiseKsa are controlled by the same human maintainer. Listing
 # both accounts permits reciprocal, non-self GitHub review for changes authored
 # by either account. This is a workflow control only; it is not independent
-# review, third-party validation, or a separate security authority. It has
-# effect only while branch protection requires Code Owner review and this file
-# remains protected.
+# review, multi-person governance, third-party validation, or a separate
+# security authority. It has effect only while branch protection requires Code
+# Owner review and this file remains protected.
 
 # GitHub configuration, release definition, and published security claims.
 /.github/ @MANA-awam @EvoRiseKsa

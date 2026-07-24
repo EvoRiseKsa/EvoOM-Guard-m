@@ -1,4 +1,6 @@
-# Copyright (c) 2026 Mana Alharbi. All rights reserved.
+# Copyright © 2026 EvoRise Tech. All rights reserved.
+# Author / original creator: Mana Alharbi.
+# Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 """Documentation and runtime version-drift gate.
 
@@ -58,6 +60,22 @@ _RELEASE_STATUS_RE = re.compile(
     r"state:\s*(?P<state>pre-release|published)\s*\n"
     r"---\s*$",
     re.MULTILINE,
+)
+_CANONICAL_IDENTITY = (
+    "Copyright © 2026 EvoRise Tech. All rights reserved.",
+    "Author / original creator: Mana Alharbi.",
+    "Licensor: EvoRise Tech.",
+)
+_LIVE_LICENSE_DOCUMENTS = (
+    ROOT / "LICENSE",
+    ROOT / "NOTICE",
+    ROOT / "COMMERCIAL-LICENSING.md",
+    ROOT / "LICENSE_ARABIC_SUMMARY.md",
+    ROOT / "README.md",
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "GOVERNANCE.md",
+    ROOT / "docs" / "GOVERNANCE.md",
+    ROOT / "docs" / "PROJECT_STATUS.md",
 )
 
 
@@ -248,6 +266,21 @@ class DocsVersionDriftTests(unittest.TestCase):
             )
             self.assertNotIn(
                 obsolete[3], text, f"{path.relative_to(ROOT)} links internal transition notes"
+            )
+
+    def test_live_license_identity_does_not_drift(self) -> None:
+        license_lines = (ROOT / "LICENSE").read_text(encoding="utf-8").splitlines()
+        notice_lines = (ROOT / "NOTICE").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(tuple(license_lines[5:8]), _CANONICAL_IDENTITY)
+        self.assertEqual(tuple(notice_lines[:3]), _CANONICAL_IDENTITY)
+
+        obsolete_identity = "EvoRise Company"
+        for path in _LIVE_LICENSE_DOCUMENTS:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn(
+                obsolete_identity,
+                text,
+                f"{path.relative_to(ROOT)} uses the retired licensing identity",
             )
 
 

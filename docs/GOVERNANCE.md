@@ -1,9 +1,11 @@
 <!--
-  Copyright (c) 2026 Mana Alharbi. All rights reserved.
+  Copyright © 2026 EvoRise Tech. All rights reserved.
+  Author / original creator: Mana Alharbi.
+  Licensor: EvoRise Tech.
   Source-available — see LICENSE for permitted use.
 -->
 
-# Operating the v3.7 trust boundary
+# Operating the trust boundary
 
 This document is the operational companion to the repository-level
 [governance statement](../GOVERNANCE.md). It describes the controls that are
@@ -11,17 +13,21 @@ needed before an EvoOM Guard result is relied on for a merge or release decision
 It deliberately separates implemented mechanisms from controls that a consumer
 must provide.
 
-## What v3.7.0 implements
+## Implemented boundary and current status
 
-The `v3.7.0` release contains the raw-Git Trusted Finalizer derivation contract.
-Before a key-bearing seal job may sign, the reference flow independently derives
-the candidate text, ordered deletions, effective policy, and verifier-pack
-identity from exact base/head Git objects, then compares those values with the
-unprivileged record. The release also contains Artifact Admission V1: a narrow
-binding between one regular-file digest and an externally verified pre-merge
-finalizer `ALLOW`.
+The implementation includes a raw-Git Trusted Finalizer derivation contract.
+Before a key-bearing seal job may sign, the reference flow independently
+derives the candidate text, ordered deletions, effective policy, and
+verifier-pack identity from exact base/head Git objects, then compares those
+values with the unprivileged record. The implementation also includes artifact
+admission contracts with explicitly bounded claims.
 
-Neither feature changes the following facts:
+The canonical current implementation and evidence inventory is
+[PROJECT_STATUS.md](PROJECT_STATUS.md). The canonical source and latest
+published-release state is [RELEASE_STATUS.md](RELEASE_STATUS.md). This
+governance document deliberately does not copy their moving version values.
+
+These mechanisms do not change the following facts:
 
 - this repository does not use the reference finalizer as its own required merge
   gate;
@@ -50,9 +56,10 @@ The full protocol and limitation statements remain canonical in
 
 The protected-path mapping in [`.github/CODEOWNERS`](../.github/CODEOWNERS)
 assigns `@MANA-awam` to the trust-root paths. `@MANA-awam` and `@EvoRiseKsa`
-are controlled by the same project owner. This supplies a separate GitHub
-identity for a technical review workflow; it is not independent review,
-third-party validation, or a substitute for a distinct production approver.
+are controlled by the same human maintainer. This supplies separate GitHub
+identities for a technical review workflow; it is not independent review,
+multi-person governance, third-party validation, or a substitute for a
+distinct production approver.
 
 The mapping has no enforcement effect unless GitHub branch protection or a
 ruleset requires code-owner review and protects `CODEOWNERS` itself. A consumer
@@ -61,7 +68,9 @@ from the candidate author and a protected Environment for the signing key.
 
 ## Evidence discipline
 
-1. Keep the `v3.7.0` tag and its published release asset immutable.
+1. Keep every published release tag, release asset, checksum, attestation, and
+   frozen evidence ledger immutable. Correct a historical description through
+   an explicit erratum or a new release; never replace the recorded object.
 2. Identify a record by the version, source revision, Guard executable digest,
    policy/pack identity, and relevant base/head/run context; a version label
    alone is not enough.
