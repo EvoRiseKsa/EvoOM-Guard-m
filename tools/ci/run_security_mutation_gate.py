@@ -4811,18 +4811,97 @@ MUTATIONS = (
     ),
     Mutation(
         name="assurance-blackbox-eager-mode-inversion",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/application/blackbox_finalization.py",
         before=(
-            "            shortfall_evaluator=_assurance_shortfall,\n"
-            "            eager_shortfall=True,\n"
+            "        shortfall_evaluator="
+            "services.assurance_shortfall_provider(),\n"
+            "        eager_shortfall=True,\n"
         ),
         after=(
-            "            shortfall_evaluator=_assurance_shortfall,\n"
-            "            eager_shortfall=False,\n"
+            "        shortfall_evaluator="
+            "services.assurance_shortfall_provider(),\n"
+            "        eager_shortfall=False,\n"
         ),
         test=(
             "tests/test_assurance_decision_gate_characterization.py::"
             "test_blackbox_gate_is_eager_but_preserves_prior_decisions"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-candidate-invocation-proof-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before="    gradeable = bool(result.ran and invocation_observed)\n",
+        after="    gradeable = bool(result.ran)\n",
+        test=(
+            "tests/test_blackbox_composite_contract.py::"
+            "test_vacuous_blackbox_pack_is_refused_and_repo_phase_is_not_run"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-composite-repo-phase-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before=(
+            "    if not request.blackbox_only and gradeable and result.passed:\n"
+        ),
+        after=(
+            "    if False and not request.blackbox_only "
+            "and gradeable and result.passed:\n"
+        ),
+        test=(
+            "tests/test_blackbox_composite_contract.py::"
+            "test_completed_composite_sums_counts_and_uses_weakest_report_channel"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-profile-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="                assurance_builder_provider=lambda: _assurance_profile,\n",
+        after=(
+            "                assurance_builder_provider=(\n"
+            "                    lambda builder=_assurance_profile: builder\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_finalization_helpers_are_resolved_after_blackbox_cleanup"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-shortfall-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                assurance_shortfall_provider=(\n"
+            "                    lambda: _assurance_shortfall\n"
+            "                ),\n"
+        ),
+        after=(
+            "                assurance_shortfall_provider=(\n"
+            "                    lambda evaluator=_assurance_shortfall: "
+            "evaluator\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_finalization_helpers_are_resolved_after_blackbox_cleanup"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-attestation-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                attestation_builder_provider=(\n"
+            "                    lambda: _build_attestation\n"
+            "                ),\n"
+        ),
+        after=(
+            "                attestation_builder_provider=(\n"
+            "                    lambda builder=_build_attestation: "
+            "builder\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_finalization_helpers_are_resolved_after_blackbox_cleanup"
         ),
     ),
     Mutation(

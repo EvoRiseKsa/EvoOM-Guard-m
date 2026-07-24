@@ -8,8 +8,8 @@
 This module owns only the established sequence after the repository verifier
 has produced its initial decision.  Runtime effects and compatibility helpers
 remain in their existing modules and are resolved through providers at their
-historical call positions.  Black-box orchestration and ``GuardResult`` remain
-outside this boundary.
+historical call positions.  Black-box runtime orchestration and ``GuardResult``
+remain outside this boundary.
 """
 
 from __future__ import annotations

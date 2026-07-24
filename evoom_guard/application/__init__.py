@@ -5,6 +5,12 @@ from evoom_guard.application.assurance import (
     assurance_shortfall,
 )
 from evoom_guard.application.attestation import build_attestation
+from evoom_guard.application.blackbox_finalization import (
+    BlackboxFinalizationInput,
+    BlackboxFinalizationOutcome,
+    BlackboxFinalizationServices,
+    finalize_blackbox_verification,
+)
 from evoom_guard.application.decision_gates import (
     AssuranceShortfallEvaluator,
     apply_assurance_gate,
@@ -28,7 +34,11 @@ __all__ = [
     "apply_demonstrated_fix_gate",
     "apply_diff_coverage_gate",
     "build_attestation",
+    "BlackboxFinalizationInput",
+    "BlackboxFinalizationOutcome",
+    "BlackboxFinalizationServices",
     "compose_repo_decision",
+    "finalize_blackbox_verification",
     "finalize_repo_verification",
     "RepoFinalizationInput",
     "RepoFinalizationOutcome",

@@ -320,10 +320,6 @@ remain in their established facades.
   changes alter observable compatibility behavior and therefore require their
   own threat model, adversarial vectors, migration note, and rollback plan
   after the R2 owner boundary is merged.
-- Pending: move only the remaining black-box and verifier effect sequencing
-  behind separately characterized boundaries. Public `GuardResult` and the
-  black-box branch intentionally remain in Guard. The `_run_baseline_suite`
-  name remains only as a live-wiring compatibility facade.
 - Markdown, JSON, and SARIF output projection/publication is owned by the
   stdlib-only `integrations.guard_output` adapter. Guard retains four exact
   compatibility facades. A pre-extraction vector freezes benign
@@ -337,6 +333,17 @@ remain in their established facades.
   lack of crash/NFS/multi-file durability are explicit. Focused mutations
   protect these boundaries plus URI encoding and non-PASS SARIF emission rather
   than incidental module-global lookup timing.
+- `application.blackbox_finalization.finalize_blackbox_verification` owns the
+  distinct post-cleanup black-box decision/evidence sequence behind public
+  characterization. Guard still runs the judge and injects risk plus the
+  conditional repo verifier; `blackbox.py` still owns workspace/process/
+  container cleanup and the public runtime result. Eager assurance-before-
+  attestation order, composite counts, no-invocation refusal, and fail-loud
+  cleanup boundaries remain unchanged.
+- Pending: extract only the remaining bounded verifier/runtime effects where a
+  characterized boundary reduces ownership, without relocating whole
+  orchestrators. Public `GuardResult` remains in Guard, while
+  `_run_baseline_suite` remains only as a live-wiring compatibility facade.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 
