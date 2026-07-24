@@ -1,9 +1,13 @@
 """Pre-extraction characterization harness for repository result projection.
 
 The vector captures the complete public ``VerdictResult`` plus the artifact's
-insertion order and present-null key set.  Only elapsed measurements and
-workspace-specific paths are normalized.  It intentionally exercises the
-existing ``RepoVerifier`` facade rather than duplicating projection logic.
+insertion order and present-null key set.  Elapsed measurements,
+workspace-specific paths, and platform-dependent repository/accepted-pack
+snapshot digests are normalized.  Snapshot fidelity has its own cross-platform
+contract tests; this vector freezes that observed identities are projected
+and retained rather than freezing one operating system's file-mode digest.
+It intentionally exercises the existing ``RepoVerifier`` facade rather than
+duplicating projection logic.
 """
 
 from __future__ import annotations
@@ -171,6 +175,10 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         missing_pack=missing_pack,
     )
     assert isinstance(normalized_artifact, dict)
+    if normalized_artifact.get("runtime_tree_sha256") is not None:
+        normalized_artifact["runtime_tree_sha256"] = "<RUNTIME_TREE_SHA256>"
+    if normalized_artifact.get("verifier_pack_sha256") is not None:
+        normalized_artifact["verifier_pack_sha256"] = "<PACK_SHA256>"
     return {
         "passed": result.passed,
         "score": result.score,

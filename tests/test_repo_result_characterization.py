@@ -32,6 +32,20 @@ def test_repo_result_projection_vector_metadata_is_exact() -> None:
     assert tuple(frozen["cases"]) == CASE_NAMES  # type: ignore[arg-type]
 
 
+def test_pack_snapshot_identity_is_normalized_only_after_facade_capture(
+    tmp_path: Path,
+) -> None:
+    captured = capture_case("pack_completed", tmp_path)
+
+    assert captured["artifact"]["verifier_pack_sha256"] == "<PACK_SHA256>"
+    assert (
+        captured["artifact"]["runtime_tree_sha256"]
+        == "<RUNTIME_TREE_SHA256>"
+    )
+    assert captured["artifact"]["repo_suite_junit_sha256"] != "<PACK_SHA256>"
+    assert captured["artifact"]["verifier_pack_junit_sha256"] != "<PACK_SHA256>"
+
+
 @pytest.mark.parametrize("case_name", CASE_NAMES)
 def test_frozen_repo_result_projection(
     case_name: str,
