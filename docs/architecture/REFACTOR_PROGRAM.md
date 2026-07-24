@@ -222,8 +222,15 @@ belong to their characterized legacy facades until Stage 8 slices move them.
 - Declarative parser construction is now owned by dependency-free
   `cli/parser.py` behind the unchanged public facade. A frozen snapshot binds
   all 41 subcommands, help pages, representative defaults, immutable-ref
-  validation, and live injected helper lookups. Command-family extraction
-  remains pending.
+  validation, and live injected helper lookups.
+- The first command-family extraction moves only the public `guard` command's
+  policy resolution, input routing, and output publication into the typed,
+  runtime-internal-import-free `cli/guard_command.py` owner. The established
+  `cli.cmd_guard` facade still supplies entry-snapshotted Guard functions and
+  live config/read/path/report/signing providers. A pre-extraction vector
+  freezes config/CLI precedence, patch/diff/base-head routing, fail-closed
+  errors, publication order, and exit codes. Every other handler remains
+  pending; no package-wide debt ceiling is lowered by this slice.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

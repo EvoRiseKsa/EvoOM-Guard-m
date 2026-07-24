@@ -3354,6 +3354,114 @@ MUTATIONS = (
             "test_cli_parser_resolves_dependencies_at_their_original_call_sites"
         ),
     ),
+    Mutation(
+        name="cli-guard-cli-precedence-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before="        if cli_value is not None:\n",
+        after="        if False and cli_value is not None:\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior"
+            "[patch_cli_precedence_and_outputs]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-diff-routing-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before="    if args.diff is not None:\n",
+        after="    if False and args.diff is not None:\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior[diff_policy_defaults]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-unverifiable-reason-substitution",
+        path="evoom_guard/cli/guard_command.py",
+        before="                    reason_code=services.no_verifiable_changes_reason,\n",
+        after="                    reason_code=services.invalid_verifier_pack_reason,\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior[dirs_unverifiable]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-report-publication-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before="        services.write_report(args.report, report)\n",
+        after="        pass\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior"
+            "[patch_cli_precedence_and_outputs]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-json-publication-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before=(
+            "    if args.json_out:\n"
+            "        services.write_json(result, args.json_out, deleted=deleted)\n"
+        ),
+        after=(
+            "    if False and args.json_out:\n"
+            "        services.write_json(result, args.json_out, deleted=deleted)\n"
+        ),
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior"
+            "[patch_cli_precedence_and_outputs]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-sarif-publication-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before="    if args.sarif:\n",
+        after="    if False and args.sarif:\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior"
+            "[patch_cli_precedence_and_outputs]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-live-config-loader-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "        load_config=lambda path, *, required, out: _load_config(\n"
+            "            path, required=required, out=out\n"
+            "        ),\n"
+        ),
+        after="        load_config=_load_config,\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_facade_preserves_entry_snapshot_and_later_global_lookups"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-live-read-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before="        read_text=lambda path: _read_text(path),\n",
+        after="        read_text=_read_text,\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_facade_preserves_entry_snapshot_and_later_global_lookups"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-late-signing-provider-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before="        sign_file_provider=sign_file_provider,\n",
+        after=(
+            "        sign_file_provider=(\n"
+            "            lambda signer=sign_file_provider(): lambda: signer\n"
+            "        )(),\n"
+        ),
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_signing_provider_is_resolved_after_json_publication"
+        ),
+    ),
 )
 
 
