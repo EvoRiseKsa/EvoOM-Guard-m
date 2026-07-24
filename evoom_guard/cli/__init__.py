@@ -81,6 +81,7 @@ from evoom_guard.policy.config import load_config as _load_config
 if TYPE_CHECKING:
     from evoom_guard.evidence_bundle import EvidenceMaterial
     from evoom_guard.github_attestation import GitHubAttestationProviderIsolation
+    from evoom_guard.guard import GuardResult
 
 MAX_OFFLINE_RECORD_BYTES = 8 * 1024 * 1024
 MAX_CONTEXT_INPUT_BYTES = 1 * 1024 * 1024
@@ -446,7 +447,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 
-def _guard_command_services() -> _guard_command_owner.GuardCommandServices:
+def _guard_command_services() -> _guard_command_owner.GuardCommandServices[GuardResult]:
     """Snapshot entry-time Guard imports and inject call-time facade seams."""
 
     from evoom_guard.guard import (

@@ -17,8 +17,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SOURCE_ROOT = Path(
+    os.environ.get("EVOGUARD_CHARACTERIZATION_SOURCE_ROOT", str(ROOT))
+).resolve()
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
 
 from evoom_guard import cli  # noqa: E402
 from evoom_guard import guard as guard_module  # noqa: E402
@@ -30,10 +33,13 @@ SCHEMA_VERSION = "cli-guard-command-characterization-v1"
 CASE_NAMES = (
     "broken_config",
     "diff_policy_defaults",
+    "digest_without_pack",
     "dirs_success",
     "dirs_unverifiable",
     "missing_input",
+    "node_default_memory",
     "patch_cli_precedence_and_outputs",
+    "sign_without_json",
 )
 
 
@@ -118,6 +124,8 @@ def capture_case(case_name: str) -> dict[str, Any]:
         diff_path = os.path.join(root, "candidate.diff")
         Path(patch_path).write_text("PATCH-BYTES", encoding="utf-8")
         Path(diff_path).write_text("DIFF-BYTES", encoding="utf-8")
+        if case_name == "node_default_memory":
+            Path(repo, "package.json").write_text("{}\n", encoding="utf-8")
         report_path = os.path.join(root, "guard.md")
         json_path = os.path.join(root, "guard.json")
         sarif_path = os.path.join(root, "guard.sarif")
@@ -142,7 +150,13 @@ def capture_case(case_name: str) -> dict[str, Any]:
 
         def config_path(_args: object) -> str | None:
             events.append({"op": "config-path"})
-            if case_name in {"diff_policy_defaults", "missing_input"}:
+            if case_name in {
+                "diff_policy_defaults",
+                "digest_without_pack",
+                "missing_input",
+                "node_default_memory",
+                "sign_without_json",
+            }:
                 return None
             if case_name == "broken_config":
                 return os.path.join(root, "broken.json")
@@ -303,8 +317,36 @@ def capture_case(case_name: str) -> dict[str, Any]:
                 ]
             elif case_name == "diff_policy_defaults":
                 argv = ["guard", repo, "--diff", diff_path, "--no-config"]
+            elif case_name == "digest_without_pack":
+                argv = [
+                    "guard",
+                    repo,
+                    "--patch",
+                    patch_path,
+                    "--no-config",
+                    "--expect-verifier-pack-sha256",
+                    "a" * 64,
+                ]
             elif case_name in {"dirs_success", "dirs_unverifiable"}:
                 argv = ["guard", "--base", base, "--head", head]
+            elif case_name == "node_default_memory":
+                argv = [
+                    "guard",
+                    repo,
+                    "--patch",
+                    patch_path,
+                    "--no-config",
+                ]
+            elif case_name == "sign_without_json":
+                argv = [
+                    "guard",
+                    repo,
+                    "--patch",
+                    patch_path,
+                    "--no-config",
+                    "--sign-key",
+                    os.path.join(root, "signing.key"),
+                ]
             elif case_name == "broken_config":
                 argv = [
                     "guard",

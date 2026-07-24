@@ -3386,6 +3386,42 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-guard-digest-without-pack-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before="        if not verifier_pack:\n",
+        after="        if False and not verifier_pack:\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior[digest_without_pack]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-node-memory-adjustment-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before=(
+            "        if services.path_is_file("
+            "services.join_path(node_root, \"package.json\")):\n"
+        ),
+        after=(
+            "        if False and services.path_is_file("
+            "services.join_path(node_root, \"package.json\")):\n"
+        ),
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior[node_default_memory]"
+        ),
+    ),
+    Mutation(
+        name="cli-guard-signing-without-json-bypass",
+        path="evoom_guard/cli/guard_command.py",
+        before="        if not args.json_out:\n",
+        after="        if False and not args.json_out:\n",
+        test=(
+            "tests/test_cli_guard_command_characterization.py::"
+            "test_frozen_cli_guard_command_behavior[sign_without_json]"
+        ),
+    ),
+    Mutation(
         name="cli-guard-report-publication-bypass",
         path="evoom_guard/cli/guard_command.py",
         before="        services.write_report(args.report, report)\n",

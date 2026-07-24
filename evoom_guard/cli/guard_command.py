@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Generic, Protocol, TypeVar
 
 
 class _GuardResult(Protocol):
@@ -24,6 +24,13 @@ class _GuardResult(Protocol):
 
     @property
     def exit_code(self) -> int: ...
+
+
+_ResultT = TypeVar("_ResultT", bound=_GuardResult)
+_ResultCo = TypeVar("_ResultCo", bound=_GuardResult, covariant=True)
+_ResultContra = TypeVar(
+    "_ResultContra", bound=_GuardResult, contravariant=True
+)
 
 
 class _LoadConfig(Protocol):
@@ -36,8 +43,126 @@ class _LoadConfig(Protocol):
     ) -> dict[str, Any]: ...
 
 
+class _JoinPath(Protocol):
+    def __call__(self, *parts: str) -> str: ...
+
+
+class _GuardCall(Protocol[_ResultCo]):
+    def __call__(
+        self,
+        repo_path: str,
+        candidate: str,
+        *,
+        deleted: tuple[str, ...] = ...,
+        test_command: list[str] | None = ...,
+        setup_command: list[str] | None = ...,
+        trust_setup_on_host: bool = ...,
+        setup_output_globs: tuple[str, ...] = ...,
+        protected: tuple[str, ...] = ...,
+        allow: tuple[str, ...] = ...,
+        allow_new_tests: bool = ...,
+        timeout: int = ...,
+        mem_limit_mb: int = ...,
+        isolation: str = ...,
+        docker_image: str | None = ...,
+        docker_network: str = ...,
+        verifier_pack: str | None = ...,
+        expect_verifier_pack_sha256: str | None = ...,
+        diff_coverage: bool = ...,
+        min_diff_coverage: float | None = ...,
+        blackbox: bool = ...,
+        blackbox_only: bool = ...,
+        require_report_integrity: str | None = ...,
+        require_candidate_isolation: str | None = ...,
+        base_sha: str | None = ...,
+        head_sha: str | None = ...,
+        base_tree_sha: str | None = ...,
+        head_tree_sha: str | None = ...,
+        policy_id: str | None = ...,
+        policy_version: str | None = ...,
+        baseline_evidence: bool = ...,
+        require_demonstrated_fix: bool = ...,
+        strict_harness: bool = ...,
+        file_blocks: dict[str, str] | None = ...,
+    ) -> _ResultCo: ...
+
+
+class _GuardFromDiffCall(Protocol[_ResultCo]):
+    def __call__(
+        self,
+        head_dir: str,
+        diff_text: str,
+        *,
+        test_command: list[str] | None = ...,
+        setup_command: list[str] | None = ...,
+        trust_setup_on_host: bool = ...,
+        setup_output_globs: tuple[str, ...] = ...,
+        protected: tuple[str, ...] = ...,
+        allow: tuple[str, ...] = ...,
+        allow_new_tests: bool = ...,
+        timeout: int = ...,
+        mem_limit_mb: int = ...,
+        isolation: str = ...,
+        docker_image: str | None = ...,
+        docker_network: str = ...,
+        verifier_pack: str | None = ...,
+        expect_verifier_pack_sha256: str | None = ...,
+        diff_coverage: bool = ...,
+        min_diff_coverage: float | None = ...,
+        blackbox: bool = ...,
+        blackbox_only: bool = ...,
+        require_report_integrity: str | None = ...,
+        require_candidate_isolation: str | None = ...,
+        base_sha: str | None = ...,
+        head_sha: str | None = ...,
+        base_tree_sha: str | None = ...,
+        head_tree_sha: str | None = ...,
+        policy_id: str | None = ...,
+        policy_version: str | None = ...,
+        baseline_evidence: bool = ...,
+        require_demonstrated_fix: bool = ...,
+        strict_harness: bool = ...,
+    ) -> tuple[_ResultCo, list[str]]: ...
+
+
+class _InputErrorResult(Protocol[_ResultCo]):
+    def __call__(
+        self,
+        reason: str,
+        *,
+        reason_code: str,
+        source: str,
+        base_reconstruction: str | None = ...,
+        verifier_pack: str | None = ...,
+    ) -> _ResultCo: ...
+
+
+class _RenderReport(Protocol[_ResultContra]):
+    def __call__(
+        self,
+        result: _ResultContra,
+        *,
+        deleted: list[str] | None = ...,
+        title: str = ...,
+    ) -> str: ...
+
+
+class _WriteJson(Protocol[_ResultContra]):
+    def __call__(
+        self,
+        result: _ResultContra,
+        path: str,
+        *,
+        deleted: list[str] | None = ...,
+    ) -> None: ...
+
+
+class _WriteSarif(Protocol[_ResultContra]):
+    def __call__(self, result: _ResultContra, path: str) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
-class GuardCommandServices:
+class GuardCommandServices(Generic[_ResultT]):
     """Injected compatibility seams for one ``guard`` command invocation."""
 
     config_path_for_guard: Callable[[argparse.Namespace], str | None]
@@ -47,7 +172,7 @@ class GuardCommandServices:
     path_is_absolute: Callable[[str], bool]
     absolute_path: Callable[[str], str]
     directory_name: Callable[[str], str]
-    join_path: Callable[..., str]
+    join_path: _JoinPath
     current_directory: Callable[[], str]
     path_is_file: Callable[[str], bool]
     is_hex_sha256: Callable[[str], bool]
@@ -56,14 +181,14 @@ class GuardCommandServices:
     invalid_verifier_pack_reason: str
     unverifiable_changed_paths_error: type[Exception]
     blocks_from_dirs: Callable[[str, str], tuple[dict[str, str], list[str]]]
-    guard: Callable[..., _GuardResult]
-    guard_from_diff: Callable[..., tuple[_GuardResult, list[str]]]
-    input_error_result: Callable[..., _GuardResult]
-    render_report: Callable[..., str]
+    guard: _GuardCall[_ResultT]
+    guard_from_diff: _GuardFromDiffCall[_ResultT]
+    input_error_result: _InputErrorResult[_ResultT]
+    render_report: _RenderReport[_ResultT]
     serialize_candidate_blocks: Callable[[Mapping[str, str]], str]
     verifier_pack_trust_error: Callable[[str, str | None, str | None], str | None]
-    write_json: Callable[..., None]
-    write_sarif: Callable[..., None]
+    write_json: _WriteJson[_ResultT]
+    write_sarif: _WriteSarif[_ResultT]
     write_report: Callable[[str, str], None]
     sign_file_provider: Callable[[], Callable[[str, str], str]]
 
@@ -71,7 +196,7 @@ class GuardCommandServices:
 def execute_guard_command(
     args: argparse.Namespace,
     *,
-    services: GuardCommandServices,
+    services: GuardCommandServices[_ResultT],
     out: Callable[[str], None] = print,
 ) -> int:
     """Execute the already-parsed ``guard`` command through typed services."""
