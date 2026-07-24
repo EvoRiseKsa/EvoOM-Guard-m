@@ -75,6 +75,13 @@ from evoom_guard.application.blackbox_finalization import (
     BlackboxFinalizationServices,
     finalize_blackbox_verification,
 )
+from evoom_guard.application.diff_verification import (
+    DiffVerificationOptions,
+    DiffVerificationReasonCodes,
+    DiffVerificationRequest,
+    DiffVerificationServices,
+    verify_diff,
+)
 from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
@@ -1818,6 +1825,12 @@ def _diff_base_sha(diff_text: str) -> str | None:
     return None
 
 
+def _write_diff_file(diff_file: str, diff_text: str) -> None:
+    """Write the normalized unified diff through Guard's effectful facade."""
+    with open(diff_file, "w", encoding="utf-8") as f:
+        f.write(diff_text if diff_text.endswith("\n") else diff_text + "\n")
+
+
 def guard_from_diff(
     head_dir: str,
     diff_text: str,
@@ -1865,98 +1878,75 @@ def guard_from_diff(
     apply against the real tree) when the diff is empty, binary, references an
     unsafe path (absolute / ``..`` / repo escape), or does not reverse-apply.
     """
-    if not (diff_text or "").strip():
-        return _diff_error("empty diff — nothing to verify", reason_code=REASON_EMPTY_DIFF), []
-    if _is_binary_diff(diff_text):
-        return _diff_error(
-            "binary patches are not supported — Guard verifies text source changes; "
-            "the diff contains a binary file change",
-            reason_code=REASON_BINARY_PATCH,
-        ), []
-    unsafe = sorted({p for p in _diff_target_paths(diff_text) if not is_safe_relpath(p)})
-    if unsafe:
-        return _diff_error(
-            "the diff references unsafe path(s) outside the repo (absolute, '..', or "
-            f"escaping the root) — refusing to apply: {', '.join(unsafe)}",
-            reason_code=REASON_UNSAFE_PATH,
-        ), []
-    pack_trust_problem = verifier_pack_trust_error(
-        head_dir, verifier_pack, expect_verifier_pack_sha256
+    outcome = verify_diff(
+        DiffVerificationRequest(
+            head_dir=head_dir,
+            diff_text=diff_text,
+            options=DiffVerificationOptions(
+                test_command=test_command,
+                setup_command=setup_command,
+                trust_setup_on_host=trust_setup_on_host,
+                setup_output_globs=setup_output_globs,
+                protected=protected,
+                allow=allow,
+                allow_new_tests=allow_new_tests,
+                timeout=timeout,
+                mem_limit_mb=mem_limit_mb,
+                isolation=isolation,
+                docker_image=docker_image,
+                docker_network=docker_network,
+                verifier_pack=verifier_pack,
+                expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+                diff_coverage=diff_coverage,
+                min_diff_coverage=min_diff_coverage,
+                blackbox=blackbox,
+                blackbox_only=blackbox_only,
+                require_report_integrity=require_report_integrity,
+                require_candidate_isolation=require_candidate_isolation,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                base_tree_sha=base_tree_sha,
+                head_tree_sha=head_tree_sha,
+                policy_id=policy_id,
+                policy_version=policy_version,
+                baseline_evidence=baseline_evidence,
+                require_demonstrated_fix=require_demonstrated_fix,
+                strict_harness=strict_harness,
+            ),
+            reason_codes=DiffVerificationReasonCodes(
+                empty_diff=REASON_EMPTY_DIFF,
+                binary_patch=REASON_BINARY_PATCH,
+                unsafe_path=REASON_UNSAFE_PATH,
+                verifier_pack_invalid=REASON_VERIFIER_PACK_INVALID,
+                reverse_apply_failed=REASON_REVERSE_APPLY_FAILED,
+                no_verifiable_changes=REASON_NO_VERIFIABLE_CHANGES,
+            ),
+        ),
+        DiffVerificationServices[GuardResult](
+            diff_error_provider=lambda: _diff_error,
+            input_error_provider=lambda: input_error_result,
+            binary_diff_provider=lambda: _is_binary_diff,
+            diff_target_paths_provider=lambda: _diff_target_paths,
+            safe_relpath_provider=lambda: is_safe_relpath,
+            verifier_pack_trust_check_provider=(
+                lambda: verifier_pack_trust_error
+            ),
+            workspace_factory_provider=lambda: tempfile.mkdtemp,
+            path_join_provider=lambda: os.path.join,
+            copy_repo_tree_provider=lambda: copy_repo_tree,
+            diff_writer_provider=lambda: _write_diff_file,
+            reverse_apply_provider=lambda: _reverse_apply,
+            blocks_from_dirs_provider=lambda: blocks_from_dirs,
+            unverifiable_errors_provider=(
+                lambda: (_UnverifiableChangedPathsError,)
+            ),
+            guard_provider=lambda: guard,
+            diff_base_sha_provider=lambda: _diff_base_sha,
+            diff_head_sha_provider=lambda: _diff_head_sha,
+            cleanup_workspace_provider=lambda: shutil.rmtree,
+        ),
     )
-    if pack_trust_problem:
-        return input_error_result(
-            pack_trust_problem,
-            reason_code=REASON_VERIFIER_PACK_INVALID,
-            source="diff",
-            base_reconstruction="failed",
-            verifier_pack=verifier_pack,
-        ), []
-
-    workdir = tempfile.mkdtemp(prefix="evo_guard_diff_")
-    base = os.path.join(workdir, "base")
-    try:
-        # base is a copy of head; head_dir is only ever read, never written.
-        # (copy_repo_tree keeps symlinks as symlinks — a dangling link, e.g. into
-        # an ignored .venv/, must not crash the judge; COPY_IGNORE covers .git.)
-        copy_repo_tree(head_dir, base)
-        diff_file = os.path.join(workdir, "patch.diff")
-        with open(diff_file, "w", encoding="utf-8") as f:
-            f.write(diff_text if diff_text.endswith("\n") else diff_text + "\n")
-        if not _reverse_apply(base, diff_file):
-            return _diff_error(
-                "the diff did not reverse-apply to the working tree — make sure you "
-                "are in the head checkout and the diff is 'base...HEAD' (git/patch needed)",
-                reason_code=REASON_REVERSE_APPLY_FAILED,
-            ), []
-        try:
-            file_blocks, deleted = blocks_from_dirs(base, head_dir)
-        except _UnverifiableChangedPathsError as exc:
-            return _diff_error(
-                "the diff includes changed path(s) Guard cannot safely verify: "
-                f"{exc}",
-                reason_code=REASON_NO_VERIFIABLE_CHANGES,
-                base_reconstruction="ok",
-            ), []
-        candidate = "\n".join(
-            f"<<<FILE: {rel}>>>\n{new}\n<<<END FILE>>>"
-            for rel, new in file_blocks.items()
-        )
-        if not file_blocks and not deleted:
-            return _diff_error(
-                "the diff changed no verifiable source files",
-                reason_code=REASON_NO_VERIFIABLE_CHANGES, base_reconstruction="ok",
-            ), deleted
-        result = guard(
-            base, candidate,
-            deleted=tuple(deleted),
-            test_command=test_command, setup_command=setup_command,
-            trust_setup_on_host=trust_setup_on_host,
-            setup_output_globs=setup_output_globs,
-            protected=protected, allow=allow, allow_new_tests=allow_new_tests, timeout=timeout,
-            mem_limit_mb=mem_limit_mb,
-            isolation=isolation, docker_image=docker_image, docker_network=docker_network,
-            verifier_pack=verifier_pack,
-            expect_verifier_pack_sha256=expect_verifier_pack_sha256,
-            diff_coverage=diff_coverage, min_diff_coverage=min_diff_coverage,
-            blackbox=blackbox, blackbox_only=blackbox_only,
-            require_report_integrity=require_report_integrity,
-            require_candidate_isolation=require_candidate_isolation,
-            # Explicit CI-provided revision identity wins over what the diff
-            # text happens to carry (a plain `git diff` embeds neither SHA).
-            base_sha=base_sha or _diff_base_sha(diff_text),
-            head_sha=head_sha or _diff_head_sha(diff_text),
-            base_tree_sha=base_tree_sha, head_tree_sha=head_tree_sha,
-            policy_id=policy_id, policy_version=policy_version,
-            baseline_evidence=baseline_evidence,
-            require_demonstrated_fix=require_demonstrated_fix,
-            strict_harness=strict_harness,
-            file_blocks=file_blocks,
-        )
-        result.source = "diff"
-        result.base_reconstruction = "ok"
-        return result, deleted
-    finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+    return outcome.result, outcome.deleted
 
 
 _BADGE = _guard_output.DEFAULT_BADGES

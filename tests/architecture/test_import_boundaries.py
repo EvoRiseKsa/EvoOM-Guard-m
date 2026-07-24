@@ -1164,6 +1164,25 @@ def test_guard_request_preparation_has_only_its_public_domain_dependency() -> No
     )
 
 
+def test_diff_verification_has_no_internal_effect_dependencies() -> None:
+    """Diff sequencing consumes injected effects and imports no effect owner."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.application.diff_verification"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == set()
+    assert ("evoom_guard.guard", module) in analysis.internal_edges
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_repo_finalization_has_only_pipeline_and_domain_dependencies() -> None:
     """Finalization sequences injected effects without importing their owners."""
 

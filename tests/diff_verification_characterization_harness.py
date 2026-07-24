@@ -370,4 +370,3 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         "exception": exception,
         "guard_call": normalized_guard,
     }
-

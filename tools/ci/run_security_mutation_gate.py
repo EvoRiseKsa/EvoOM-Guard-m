@@ -7039,6 +7039,293 @@ MUTATIONS = (
             "test_repo_docker_command_prefers_context_local_image_identity"
         ),
     ),
+    Mutation(
+        name="diff-verification-empty-preflight-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before='    if not (diff_text or "").strip():\n',
+        after="    if False:\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_preflight_failures_allocate_nothing"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-binary-preflight-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="    if services.binary_diff_provider()(diff_text):\n",
+        after="    if False:\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_preflight_failures_allocate_nothing"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-unsafe-path-filter-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            if not services.safe_relpath_provider()(path)\n",
+        after="            if False\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_preflight_failures_allocate_nothing"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-pack-trust-preflight-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="    if pack_trust_problem:\n",
+        after="    if False:\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_preflight_failures_allocate_nothing"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-repository-copy-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "        services.copy_repo_tree_provider()(request.head_dir, base)\n"
+        ),
+        after="        None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-diff-write-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="        services.diff_writer_provider()(diff_file, diff_text)\n",
+        after="        None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-reverse-apply-gate-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "        if not services.reverse_apply_provider()(base, diff_file):\n"
+        ),
+        after="        if False:\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_reverse_apply_failure_still_cleans_up"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-unverifiable-path-catch-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "        except services.unverifiable_errors_provider() as exc:\n"
+        ),
+        after="        except () as exc:\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_unverifiable_paths_are_fail_closed_after_reconstruction"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-empty-reconstruction-gate-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="        if not file_blocks and not deleted:\n",
+        after="        if False:\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_empty_reconstruction_does_not_invoke_guard"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-candidate-end-marker-corruption",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            '            f"<<<FILE: {relative_path}>>>\\n{new_content}\\n'
+            '<<<END FILE>>>"\n'
+        ),
+        after=(
+            '            f"<<<FILE: {relative_path}>>>\\n{new_content}\\n'
+            '<<<END EDIT>>>"\n'
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-guard-provider-call-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="        run_guard = services.guard_provider()\n",
+        after="        run_guard = services.guard_provider\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-explicit-base-sha-priority-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "            base_sha=options.base_sha\n"
+            "            or services.diff_base_sha_provider()(diff_text),\n"
+        ),
+        after=(
+            "            base_sha=services.diff_base_sha_provider()(diff_text),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_explicit_revision_identity_short_circuits_diff_parsers"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-explicit-head-sha-priority-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "            head_sha=options.head_sha\n"
+            "            or services.diff_head_sha_provider()(diff_text),\n"
+        ),
+        after=(
+            "            head_sha=services.diff_head_sha_provider()(diff_text),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_explicit_revision_identity_short_circuits_diff_parsers"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-deletion-forwarding-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            deleted=tuple(deleted),\n",
+        after="            deleted=(),\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-coverage-forwarding-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            diff_coverage=options.diff_coverage,\n",
+        after="            diff_coverage=False,\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-baseline-forwarding-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            baseline_evidence=options.baseline_evidence,\n",
+        after="            baseline_evidence=False,\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-file-block-forwarding-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            file_blocks=file_blocks,\n",
+        after="            file_blocks={},\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-source-annotation-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before='        result.source = "diff"\n',
+        after="        result.source = None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-reconstruction-annotation-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before='        result.base_reconstruction = "ok"\n',
+        after="        result.base_reconstruction = None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-workspace-cleanup-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "        services.cleanup_workspace_provider()"
+            "(workdir, ignore_errors=True)\n"
+        ),
+        after="        None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-reverse-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            reverse_apply_provider=lambda: _reverse_apply,\n",
+        after=(
+            "            reverse_apply_provider="
+            "(lambda operation=_reverse_apply: operation),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_live_provider_rebinding_is_preserved"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-block-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            blocks_from_dirs_provider=lambda: blocks_from_dirs,\n",
+        after=(
+            "            blocks_from_dirs_provider="
+            "(lambda operation=blocks_from_dirs: operation),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_live_provider_rebinding_is_preserved"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-guard-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            guard_provider=lambda: guard,\n",
+        after="            guard_provider=(lambda operation=guard: operation),\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_live_provider_rebinding_is_preserved"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-base-sha-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            diff_base_sha_provider=lambda: _diff_base_sha,\n",
+        after=(
+            "            diff_base_sha_provider="
+            "(lambda operation=_diff_base_sha: operation),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_live_provider_rebinding_is_preserved"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-head-sha-provider-snapshot",
+        path="evoom_guard/guard.py",
+        before="            diff_head_sha_provider=lambda: _diff_head_sha,\n",
+        after=(
+            "            diff_head_sha_provider="
+            "(lambda operation=_diff_head_sha: operation),\n"
+        ),
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_live_provider_rebinding_is_preserved"
+        ),
+    ),
 )
 
 

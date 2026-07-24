@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from diff_verification_characterization_harness import CASE_NAMES, capture_case
+from diff_verification_characterization_harness import (
+    CASE_NAMES,
+    TEXT_DIFF,
+    capture_case,
+)
 
 
 @pytest.mark.parametrize("case_name", CASE_NAMES)
@@ -159,7 +163,18 @@ def test_success_serializes_and_forwards_every_historical_input(
         "test_command_identity": True,
         "setup_command_identity": True,
     }
-    assert case["timeline"][-4:] == [
+    assert case["timeline"] == [
+        "pack-check:HEAD:trusted-pack:" + ("b" * 64),
+        "workspace:create:evo_guard_diff_",
+        "path:join:base",
+        "copy:HEAD:True",
+        "path:join:patch.diff",
+        "write:open:True:w:utf-8",
+        "write:enter",
+        f"write:data:{TEXT_DIFF!r}",
+        "write:exit",
+        "reverse:early",
+        "blocks:early",
         "sha:base:early",
         "sha:head:early",
         "guard:early",
