@@ -1201,9 +1201,7 @@ def test_blackbox_finalization_has_only_application_and_domain_dependencies() ->
 
     assert dependencies == {
         "evoom_guard.application.pipeline",
-        "evoom_guard.application.repo_decision",
         "evoom_guard.domain.decision",
-        "evoom_guard.domain.verdict",
     }
     assert ("evoom_guard.guard", module) in analysis.internal_edges
     assert not any(

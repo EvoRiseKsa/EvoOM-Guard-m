@@ -31,6 +31,7 @@ def test_blackbox_finalization_is_public_and_outcome_is_frozen_slotted() -> None
     assurance = {"execution_state": "completed"}
     outcome = BlackboxFinalizationOutcome(
         decision=decision,
+        passed=True,
         risk_level="low",
         risk_score=0.1,
         tests_passed=1,
@@ -56,6 +57,7 @@ def test_blackbox_finalization_is_public_and_outcome_is_frozen_slotted() -> None
         is BlackboxFinalizationOutcome
     )
     assert not hasattr(outcome, "__dict__")
+    assert outcome.passed is True
     assert outcome.baseline is baseline
     assert outcome.diff_coverage is coverage
     assert outcome.attestation is attestation
@@ -104,6 +106,8 @@ def test_blackbox_finalization_owner_has_no_runtime_effect_imports() -> None:
         for module in imported_modules
         if module.startswith(forbidden_prefixes)
     }
+    assert "evoom_guard.application.repo_decision" not in imported_modules
+    assert "evoom_guard.domain.verdict" not in imported_modules
 
 
 def test_guard_delegates_blackbox_finalization_once_after_runtime() -> None:
@@ -218,6 +222,10 @@ def test_final_wire_reads_still_precede_attestation_provider() -> None:
         timeline.append("attestation:build")
         return {"mode": "blackbox"}
 
+    def pass_symbol() -> str:
+        timeline.append("symbol:pass")
+        return "PASS"
+
     outcome = finalize_blackbox_verification(
         BlackboxFinalizationInput(
             runtime_result=RuntimeResult(),
@@ -246,11 +254,26 @@ def test_final_wire_reads_still_precede_attestation_provider() -> None:
             assurance_builder_provider=lambda: assurance,
             assurance_shortfall_provider=lambda: shortfall,
             attestation_builder_provider=lambda: attestation,
+            decision_symbol_providers={
+                "PASS": pass_symbol,
+                "FAIL": lambda: "FAIL",
+                "ERROR": lambda: "ERROR",
+                "TAMPERED": lambda: "TAMPERED",
+                "EXECUTION_COMPLETED": lambda: "completed",
+                "EXECUTION_NOT_STARTED": lambda: "not_started",
+                "EXECUTION_STARTED_INCOMPLETE": (
+                    lambda: "started_incomplete"
+                ),
+                "REASON_TESTS_PASSED": lambda: "tests_passed",
+            },
+            outcome_reason_policy_provider=lambda: {},
+            tamper_outcome_reason_policy_provider=lambda: {},
         ),
     )
 
     assert outcome.attestation == {"mode": "blackbox"}
-    assert timeline[-4:] == [
+    assert timeline[-5:] == [
+        "symbol:pass",
         "risk:level",
         "risk:score",
         "runtime:diagnostics",

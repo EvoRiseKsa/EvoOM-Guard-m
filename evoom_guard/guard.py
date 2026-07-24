@@ -320,6 +320,54 @@ _REPORT_INTEGRITY_RANK = REPORT_INTEGRITY_RANK_POLICY
 _ISOLATION_RANK = ISOLATION_RANK_POLICY
 _pack_assurance = pack_assurance
 
+
+def _blackbox_decision_symbol_providers() -> dict[str, Callable[[], str]]:
+    """Expose Guard's established verdict vocabulary through live lookups."""
+
+    # Deliberately do not bind these names as lambda defaults.  Historical
+    # Guard loaded them only after the risk and optional repo effects returned.
+    return {
+        "PASS": lambda: PASS,
+        "FAIL": lambda: FAIL,
+        "ERROR": lambda: ERROR,
+        "TAMPERED": lambda: TAMPERED,
+        "EXECUTION_COMPLETED": lambda: EXECUTION_COMPLETED,
+        "EXECUTION_NOT_STARTED": lambda: EXECUTION_NOT_STARTED,
+        "EXECUTION_STARTED_INCOMPLETE": (
+            lambda: EXECUTION_STARTED_INCOMPLETE
+        ),
+        "REASON_ASSURANCE_REQUIREMENT_NOT_MET": (
+            lambda: REASON_ASSURANCE_REQUIREMENT_NOT_MET
+        ),
+        "REASON_CANDIDATE_NOT_EXERCISED": (
+            lambda: REASON_CANDIDATE_NOT_EXERCISED
+        ),
+        "REASON_JUNIT_EXIT_MISMATCH": (
+            lambda: REASON_JUNIT_EXIT_MISMATCH
+        ),
+        "REASON_NO_TEST_VERDICT": lambda: REASON_NO_TEST_VERDICT,
+        "REASON_PATCH_APPLY_FAILED": lambda: REASON_PATCH_APPLY_FAILED,
+        "REASON_RUNTIME_CLEANUP_FAILED": (
+            lambda: REASON_RUNTIME_CLEANUP_FAILED
+        ),
+        "REASON_TEST_TIMEOUT": lambda: REASON_TEST_TIMEOUT,
+        "REASON_TESTS_FAILED": lambda: REASON_TESTS_FAILED,
+        "REASON_TESTS_PASSED": lambda: REASON_TESTS_PASSED,
+        "REASON_UNSAFE_PATH": lambda: REASON_UNSAFE_PATH,
+        "REASON_VERIFIER_PACK_IDENTITY_MISMATCH": (
+            lambda: REASON_VERIFIER_PACK_IDENTITY_MISMATCH
+        ),
+        "REASON_VERIFIER_PACK_INVALID": (
+            lambda: REASON_VERIFIER_PACK_INVALID
+        ),
+        "REASON_VERIFIER_PACK_NOT_FOUND": (
+            lambda: REASON_VERIFIER_PACK_NOT_FOUND
+        ),
+        "REASON_VERIFIER_PACK_SNAPSHOT_CHANGED": (
+            lambda: REASON_VERIFIER_PACK_SNAPSHOT_CHANGED
+        ),
+    }
+
 @dataclass
 class GuardResult:
     """The outcome of a Guard run."""
@@ -878,12 +926,19 @@ def guard(
                 attestation_builder_provider=(
                     lambda: _build_attestation
                 ),
+                decision_symbol_providers=(
+                    _blackbox_decision_symbol_providers()
+                ),
+                outcome_reason_policy_provider=lambda: _OUTCOME_REASON,
+                tamper_outcome_reason_policy_provider=(
+                    lambda: _TAMPER_OUTCOME_REASON
+                ),
             ),
         )
         decision_bx = finalization_bx.decision
         return GuardResult(
             verdict=decision_bx.verdict,
-            passed=decision_bx.passed,
+            passed=finalization_bx.passed,
             reason=decision_bx.reason,
             files_changed=changed,
             protected_violations=[],

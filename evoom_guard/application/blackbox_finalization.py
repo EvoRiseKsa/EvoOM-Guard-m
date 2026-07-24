@@ -19,36 +19,11 @@ from dataclasses import dataclass
 from typing import Protocol, cast
 
 from evoom_guard.application.pipeline import VerificationPipeline
-from evoom_guard.application.repo_decision import (
-    OUTCOME_REASON_POLICY,
-    TAMPER_OUTCOME_REASON_POLICY,
-)
 from evoom_guard.domain.decision import GuardDecision
-from evoom_guard.domain.verdict import (
-    ERROR,
-    EXECUTION_COMPLETED,
-    EXECUTION_NOT_STARTED,
-    EXECUTION_STARTED_INCOMPLETE,
-    FAIL,
-    PASS,
-    REASON_ASSURANCE_REQUIREMENT_NOT_MET,
-    REASON_CANDIDATE_NOT_EXERCISED,
-    REASON_JUNIT_EXIT_MISMATCH,
-    REASON_NO_TEST_VERDICT,
-    REASON_PATCH_APPLY_FAILED,
-    REASON_RUNTIME_CLEANUP_FAILED,
-    REASON_TEST_TIMEOUT,
-    REASON_TESTS_FAILED,
-    REASON_TESTS_PASSED,
-    REASON_UNSAFE_PATH,
-    REASON_VERIFIER_PACK_IDENTITY_MISMATCH,
-    REASON_VERIFIER_PACK_INVALID,
-    REASON_VERIFIER_PACK_NOT_FOUND,
-    REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
-    TAMPERED,
-)
 
 EvidenceMapping = Mapping[str, object]
+DecisionSymbolProviders = Mapping[str, Callable[[], str]]
+OutcomeReasonPolicy = Mapping[str, tuple[str, str]]
 
 
 class BlackboxRuntimeResult(Protocol):
@@ -218,6 +193,9 @@ class BlackboxFinalizationServices:
     assurance_builder_provider: Callable[[], BlackboxAssuranceBuilder]
     assurance_shortfall_provider: Callable[[], AssuranceShortfallEvaluator]
     attestation_builder_provider: Callable[[], BlackboxAttestationBuilder]
+    decision_symbol_providers: DecisionSymbolProviders
+    outcome_reason_policy_provider: Callable[[], OutcomeReasonPolicy]
+    tamper_outcome_reason_policy_provider: Callable[[], OutcomeReasonPolicy]
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +203,7 @@ class BlackboxFinalizationOutcome:
     """Final decision and exact wire evidence consumed by ``GuardResult``."""
 
     decision: GuardDecision
+    passed: bool
     risk_level: str
     risk_score: float
     tests_passed: int | None
@@ -250,6 +229,11 @@ def finalize_blackbox_verification(
 
     result = request.runtime_result
 
+    def decision_symbol(name: str) -> str:
+        """Resolve Guard's compatibility vocabulary at the historical use site."""
+
+        return services.decision_symbol_providers[name]()
+
     # ``ran`` means gradeable; start/completion and candidate invocation remain
     # independent facts.  Keep compatibility fallbacks for historical result
     # objects supplied by integrations.
@@ -259,7 +243,11 @@ def finalize_blackbox_verification(
         getattr(
             result,
             "execution_state",
-            EXECUTION_COMPLETED if result.ran else EXECUTION_NOT_STARTED,
+            (
+                decision_symbol("EXECUTION_COMPLETED")
+                if result.ran
+                else decision_symbol("EXECUTION_NOT_STARTED")
+            ),
         )
     )
     execution_phase = str(
@@ -329,7 +317,9 @@ def finalize_blackbox_verification(
     repo_art = repo_verdict.artifact if repo_verdict is not None else {}
     repo_started = bool(repo_art.get("test_command_started"))
     repo_completed = bool(
-        repo_started and repo_art.get("execution_state") == EXECUTION_COMPLETED
+        repo_started
+        and repo_art.get("execution_state")
+        == decision_symbol("EXECUTION_COMPLETED")
     )
     repo_clean_source = bool(repo_art.get("verdict_source"))
     repo_suite_state = (
@@ -345,7 +335,10 @@ def finalize_blackbox_verification(
     )
 
     if result.ran and not invocation_observed:
-        verdict, reason_code = ERROR, REASON_CANDIDATE_NOT_EXERCISED
+        verdict, reason_code = (
+            decision_symbol("ERROR"),
+            decision_symbol("REASON_CANDIDATE_NOT_EXERCISED"),
+        )
         reason = (
             "the black-box pack completed without an observed "
             "$EVOGUARD_EXEC invocation, so it did not prove that it exercised "
@@ -354,42 +347,72 @@ def finalize_blackbox_verification(
         )
     elif not result.ran:
         if result.error == "timeout":
-            verdict, reason_code = ERROR, REASON_TEST_TIMEOUT
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_TEST_TIMEOUT"),
+            )
         elif result.error == "verifier pack identity mismatch":
             verdict, reason_code = (
-                ERROR,
-                REASON_VERIFIER_PACK_IDENTITY_MISMATCH,
+                decision_symbol("ERROR"),
+                decision_symbol(
+                    "REASON_VERIFIER_PACK_IDENTITY_MISMATCH"
+                ),
             )
         elif result.error == "verifier pack invalid":
-            verdict, reason_code = ERROR, REASON_VERIFIER_PACK_INVALID
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_VERIFIER_PACK_INVALID"),
+            )
         elif (result.error or "").startswith("verifier pack not found:"):
-            verdict, reason_code = ERROR, REASON_VERIFIER_PACK_NOT_FOUND
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_VERIFIER_PACK_NOT_FOUND"),
+            )
         elif result.error == "patch did not apply":
-            verdict, reason_code = ERROR, REASON_PATCH_APPLY_FAILED
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_PATCH_APPLY_FAILED"),
+            )
         elif result.error == "unsafe deletion path":
-            verdict, reason_code = ERROR, REASON_UNSAFE_PATH
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_UNSAFE_PATH"),
+            )
         elif result.error == "isolation unavailable":
             verdict, reason_code = (
-                ERROR,
-                REASON_ASSURANCE_REQUIREMENT_NOT_MET,
+                decision_symbol("ERROR"),
+                decision_symbol(
+                    "REASON_ASSURANCE_REQUIREMENT_NOT_MET"
+                ),
             )
         elif result.error in (
             "verifier pack snapshot changed",
             "verifier pack changed while executing",
         ):
             verdict, reason_code = (
-                TAMPERED,
-                REASON_VERIFIER_PACK_SNAPSHOT_CHANGED,
+                decision_symbol("TAMPERED"),
+                decision_symbol(
+                    "REASON_VERIFIER_PACK_SNAPSHOT_CHANGED"
+                ),
             )
         elif result.error == "black-box JUnit/exit mismatch":
-            verdict, reason_code = TAMPERED, REASON_JUNIT_EXIT_MISMATCH
+            verdict, reason_code = (
+                decision_symbol("TAMPERED"),
+                decision_symbol("REASON_JUNIT_EXIT_MISMATCH"),
+            )
         elif result.error in (
             "candidate container cleanup failed",
             "judge process cleanup failed",
         ):
-            verdict, reason_code = ERROR, REASON_RUNTIME_CLEANUP_FAILED
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_RUNTIME_CLEANUP_FAILED"),
+            )
         else:
-            verdict, reason_code = ERROR, REASON_NO_TEST_VERDICT
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_NO_TEST_VERDICT"),
+            )
         reason = (
             result.diagnostics
             or result.error
@@ -397,8 +420,8 @@ def finalize_blackbox_verification(
         )
     elif not result.passed:
         verdict, reason_code, reason = (
-            FAIL,
-            REASON_TESTS_FAILED,
+            decision_symbol("FAIL"),
+            decision_symbol("REASON_TESTS_FAILED"),
             (
                 "the black-box pack failed "
                 f"({result.tests_passed}/{result.tests_total})"
@@ -406,35 +429,49 @@ def finalize_blackbox_verification(
         )
     elif repo_verdict is not None and not repo_verdict.passed:
         repo_outcome = repo_art.get("outcome")
-        if repo_outcome in TAMPER_OUTCOME_REASON_POLICY:
-            reason_code, summary = TAMPER_OUTCOME_REASON_POLICY[
-                cast(str, repo_outcome)
-            ]
-            verdict, repo_cause = TAMPERED, summary
+        if repo_outcome in services.tamper_outcome_reason_policy_provider():
+            reason_code, summary = (
+                services.tamper_outcome_reason_policy_provider()[
+                    cast(str, repo_outcome)
+                ]
+            )
+            verdict, repo_cause = decision_symbol("TAMPERED"), summary
         elif repo_art.get("tamper"):
-            verdict, reason_code = TAMPERED, REASON_JUNIT_EXIT_MISMATCH
+            verdict, reason_code = (
+                decision_symbol("TAMPERED"),
+                decision_symbol("REASON_JUNIT_EXIT_MISMATCH"),
+            )
             repo_cause = (
                 "the repo suite's exit code and JUnit report disagree"
             )
-        elif repo_outcome in OUTCOME_REASON_POLICY:
-            verdict, reason_code = OUTCOME_REASON_POLICY[
+        elif repo_outcome in services.outcome_reason_policy_provider():
+            verdict, reason_code = services.outcome_reason_policy_provider()[
                 cast(str, repo_outcome)
             ]
             repo_cause = repo_verdict.diagnostics or str(repo_outcome)
         elif repo_art.get("tests_total") is not None:
-            verdict, reason_code = FAIL, REASON_TESTS_FAILED
+            verdict, reason_code = (
+                decision_symbol("FAIL"),
+                decision_symbol("REASON_TESTS_FAILED"),
+            )
             repo_cause = (
                 "the repo suite failed "
                 f"({repo_art.get('tests_passed', 0)}/"
                 f"{repo_art.get('tests_total')} passed)"
             )
         elif repo_verdict.score <= 0.08:
-            verdict, reason_code = ERROR, REASON_PATCH_APPLY_FAILED
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_PATCH_APPLY_FAILED"),
+            )
             repo_cause = (
                 repo_verdict.diagnostics or "the patch did not apply"
             )
         else:
-            verdict, reason_code = FAIL, REASON_NO_TEST_VERDICT
+            verdict, reason_code = (
+                decision_symbol("FAIL"),
+                decision_symbol("REASON_NO_TEST_VERDICT"),
+            )
             repo_cause = (
                 repo_verdict.diagnostics or "no clean repo-suite verdict"
             )
@@ -448,8 +485,8 @@ def finalize_blackbox_verification(
             "" if repo_verdict is None else " and the repo's own suite passed"
         )
         verdict, reason_code, reason = (
-            PASS,
-            REASON_TESTS_PASSED,
+            decision_symbol("PASS"),
+            decision_symbol("REASON_TESTS_PASSED"),
             (
                 "the black-box pack passed "
                 f"({result.tests_passed}/{result.tests_total}){extra} — "
@@ -460,11 +497,11 @@ def finalize_blackbox_verification(
 
     repo_state = repo_art.get("execution_state") if repo_art else None
     final_execution_state = (
-        EXECUTION_COMPLETED
+        decision_symbol("EXECUTION_COMPLETED")
         if repo_verdict is not None
-        and repo_state == EXECUTION_COMPLETED
-        and execution_state == EXECUTION_COMPLETED
-        else EXECUTION_STARTED_INCOMPLETE
+        and repo_state == decision_symbol("EXECUTION_COMPLETED")
+        and execution_state == decision_symbol("EXECUTION_COMPLETED")
+        else decision_symbol("EXECUTION_STARTED_INCOMPLETE")
         if repo_verdict is not None
         else execution_state
     )
@@ -493,7 +530,9 @@ def finalize_blackbox_verification(
     tests_passed: int | None
     tests_total: int | None
     if repo_verdict is not None:
-        if final_execution_state == EXECUTION_COMPLETED:
+        if final_execution_state == decision_symbol(
+            "EXECUTION_COMPLETED"
+        ):
             repo_passed_count = repo_art.get("tests_passed")
             repo_total_count = repo_art.get("tests_total")
             if (
@@ -602,6 +641,11 @@ def finalize_blackbox_verification(
             ),
         }
 
+    # Historical Guard evaluated ``passed=(verdict == PASS)`` immediately
+    # before reading the final risk/diagnostic properties and building the
+    # attestation. Keep both the live symbol lookup and that access order.
+    passed = decision.verdict == decision_symbol("PASS")
+
     # GuardResult historically read these properties immediately before the
     # final attestation call.  Keep that exception/access order even though the
     # public wire object is now assembled by the facade after this coordinator.
@@ -682,6 +726,7 @@ def finalize_blackbox_verification(
 
     return BlackboxFinalizationOutcome(
         decision=decision,
+        passed=passed,
         risk_level=risk_level,
         risk_score=risk_score,
         tests_passed=tests_passed,

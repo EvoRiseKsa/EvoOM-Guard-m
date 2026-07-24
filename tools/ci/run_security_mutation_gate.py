@@ -4905,6 +4905,126 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="blackbox-finalization-live-pass-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "PASS": lambda: PASS,\n',
+        after='        "PASS": lambda value=PASS: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-fail-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "FAIL": lambda: FAIL,\n',
+        after='        "FAIL": lambda value=FAIL: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-error-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "ERROR": lambda: ERROR,\n',
+        after='        "ERROR": lambda value=ERROR: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-tampered-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before='        "TAMPERED": lambda: TAMPERED,\n',
+        after='        "TAMPERED": lambda value=TAMPERED: value,\n',
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-pass-reason-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            '        "REASON_TESTS_PASSED": lambda: '
+            "REASON_TESTS_PASSED,\n"
+        ),
+        after=(
+            '        "REASON_TESTS_PASSED": lambda value='
+            "REASON_TESTS_PASSED: value,\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-timeout-reason-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            '        "REASON_TEST_TIMEOUT": lambda: REASON_TEST_TIMEOUT,\n'
+        ),
+        after=(
+            '        "REASON_TEST_TIMEOUT": lambda value='
+            "REASON_TEST_TIMEOUT: value,\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_blackbox_decision_vocabulary_remains_live_after_risk_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-execution-symbol-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "            lambda: EXECUTION_STARTED_INCOMPLETE\n"
+        ),
+        after=(
+            "            lambda value=EXECUTION_STARTED_INCOMPLETE: value\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_execution_vocabulary_remains_live_after_composed_repo_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-outcome-policy-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                outcome_reason_policy_provider="
+            "lambda: _OUTCOME_REASON,\n"
+        ),
+        after=(
+            "                outcome_reason_policy_provider=(\n"
+            "                    lambda policy=_OUTCOME_REASON: policy\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_repo_outcome_policies_remain_live_after_composed_repo_effect"
+        ),
+    ),
+    Mutation(
+        name="blackbox-finalization-live-tamper-policy-snapshot",
+        path="evoom_guard/guard.py",
+        before=(
+            "                tamper_outcome_reason_policy_provider=(\n"
+            "                    lambda: _TAMPER_OUTCOME_REASON\n"
+            "                ),\n"
+        ),
+        after=(
+            "                tamper_outcome_reason_policy_provider=(\n"
+            "                    lambda policy=_TAMPER_OUTCOME_REASON: policy\n"
+            "                ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_finalization_characterization.py::"
+            "test_repo_outcome_policies_remain_live_after_composed_repo_effect"
+        ),
+    ),
+    Mutation(
         name="verification-pipeline-repo-composer-bypass",
         path="evoom_guard/application/pipeline.py",
         before="                has_changes=has_changes,\n",

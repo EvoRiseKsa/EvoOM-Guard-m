@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -247,3 +248,285 @@ def test_finalization_helpers_are_resolved_after_blackbox_cleanup(
         "shortfall:late",
         "attestation:late",
     ]
+
+
+@pytest.mark.parametrize(
+    (
+        "passed",
+        "ran",
+        "error",
+        "verdict_symbol",
+        "reason_symbol",
+    ),
+    (
+        (
+            True,
+            True,
+            None,
+            "PASS",
+            "REASON_TESTS_PASSED",
+        ),
+        (
+            False,
+            True,
+            None,
+            "FAIL",
+            "REASON_TESTS_FAILED",
+        ),
+        (
+            False,
+            False,
+            "timeout",
+            "ERROR",
+            "REASON_TEST_TIMEOUT",
+        ),
+        (
+            False,
+            False,
+            "verifier pack snapshot changed",
+            "TAMPERED",
+            "REASON_VERIFIER_PACK_SNAPSHOT_CHANGED",
+        ),
+    ),
+)
+def test_blackbox_decision_vocabulary_remains_live_after_risk_effect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    passed: bool,
+    ran: bool,
+    error: str | None,
+    verdict_symbol: str,
+    reason_symbol: str,
+) -> None:
+    repo, pack = _inputs(tmp_path)
+    runtime = BlackboxResult(
+        passed=passed,
+        tests_passed=1 if passed else 0,
+        tests_total=1 if ran else 0,
+        diagnostics="",
+        ran=ran,
+        error=error,
+        pack_sha256="a" * 64,
+        pack_manifest={"id": "probe", "version": "1.0.0"},
+        junit_sha256="b" * 64 if ran else None,
+        isolation={
+            "requested": "subprocess",
+            "delivered": "subprocess",
+        },
+        deleted_applied=[],
+        started=True,
+        completed=ran,
+        execution_state="completed" if ran else "started_incomplete",
+        execution_phase="blackbox_pack",
+        pack_present=True,
+        candidate_invocations=1 if ran else 0,
+        candidate_launcher_invocation_observed=ran,
+    )
+    live_verdict = f"LIVE_{verdict_symbol}"
+    live_reason = f"LIVE_{reason_symbol}"
+
+    def rebind_during_risk(
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> SimpleNamespace:
+        monkeypatch.setattr(guard_module, verdict_symbol, live_verdict)
+        monkeypatch.setattr(guard_module, reason_symbol, live_reason)
+        return SimpleNamespace(level="low", score=0.1)
+
+    monkeypatch.setattr(blackbox_module, "run_blackbox", lambda *a, **k: runtime)
+    monkeypatch.setattr(guard_module, "risk_score", rebind_during_risk)
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+        blackbox_only=True,
+    )
+
+    assert result.verdict == live_verdict
+    assert result.reason_code == live_reason
+    assert result.passed is (verdict_symbol == "PASS")
+
+
+@pytest.mark.parametrize(
+    ("policy_name", "expected_verdict", "expected_reason"),
+    (
+        (
+            "_OUTCOME_REASON",
+            "LIVE_POLICY_ERROR",
+            "live_policy_reason",
+        ),
+        (
+            "_TAMPER_OUTCOME_REASON",
+            "LIVE_TAMPERED",
+            "live_tamper_reason",
+        ),
+    ),
+)
+def test_repo_outcome_policies_remain_live_after_composed_repo_effect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    policy_name: str,
+    expected_verdict: str,
+    expected_reason: str,
+) -> None:
+    repo, pack = _inputs(tmp_path)
+    runtime = BlackboxResult(
+        passed=True,
+        tests_passed=1,
+        tests_total=1,
+        diagnostics="",
+        ran=True,
+        error=None,
+        pack_sha256="a" * 64,
+        pack_manifest={"id": "probe", "version": "1.0.0"},
+        junit_sha256="b" * 64,
+        isolation={
+            "requested": "subprocess",
+            "delivered": "subprocess",
+        },
+        deleted_applied=[],
+        started=True,
+        completed=True,
+        execution_state="completed",
+        execution_phase="blackbox_pack",
+        pack_present=True,
+        candidate_invocations=1,
+        candidate_launcher_invocation_observed=True,
+    )
+    outcome = "late_custom_outcome"
+
+    class RebindingRepoVerifier:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        def verify(
+            self,
+            _candidate: str,
+            _problem: dict[str, Any],
+        ) -> VerdictResult:
+            if policy_name == "_OUTCOME_REASON":
+                monkeypatch.setattr(
+                    guard_module,
+                    policy_name,
+                    {outcome: (expected_verdict, expected_reason)},
+                )
+            else:
+                monkeypatch.setattr(
+                    guard_module,
+                    "TAMPERED",
+                    expected_verdict,
+                )
+                monkeypatch.setattr(
+                    guard_module,
+                    policy_name,
+                    {outcome: (expected_reason, "late tamper summary")},
+                )
+            return VerdictResult(
+                passed=False,
+                score=0.5,
+                diagnostics="late repo failure",
+                artifact={
+                    "outcome": outcome,
+                    "execution_state": "completed",
+                    "execution_phase": "repo_suite",
+                    "test_command_started": True,
+                    "verdict_source": "junit+exit",
+                    "tests_passed": 0,
+                    "tests_total": 1,
+                },
+            )
+
+    monkeypatch.setattr(blackbox_module, "run_blackbox", lambda *a, **k: runtime)
+    monkeypatch.setattr(guard_module, "RepoVerifier", RebindingRepoVerifier)
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+    )
+
+    assert result.verdict == expected_verdict
+    assert result.reason_code == expected_reason
+
+
+def test_execution_vocabulary_remains_live_after_composed_repo_effect(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, pack = _inputs(tmp_path)
+    runtime = BlackboxResult(
+        passed=True,
+        tests_passed=1,
+        tests_total=1,
+        diagnostics="",
+        ran=True,
+        error=None,
+        pack_sha256="a" * 64,
+        pack_manifest={"id": "probe", "version": "1.0.0"},
+        junit_sha256="b" * 64,
+        isolation={
+            "requested": "subprocess",
+            "delivered": "subprocess",
+        },
+        deleted_applied=[],
+        started=True,
+        completed=True,
+        execution_state="completed",
+        execution_phase="blackbox_pack",
+        pack_present=True,
+        candidate_invocations=1,
+        candidate_launcher_invocation_observed=True,
+    )
+
+    class RebindingRepoVerifier:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        def verify(
+            self,
+            _candidate: str,
+            _problem: dict[str, Any],
+        ) -> VerdictResult:
+            monkeypatch.setattr(
+                guard_module,
+                "EXECUTION_COMPLETED",
+                "LIVE_COMPLETED",
+            )
+            monkeypatch.setattr(
+                guard_module,
+                "EXECUTION_STARTED_INCOMPLETE",
+                "LIVE_STARTED_INCOMPLETE",
+            )
+            return VerdictResult(
+                passed=True,
+                score=1.0,
+                diagnostics="",
+                artifact={
+                    "execution_state": "completed",
+                    "execution_phase": "repo_suite",
+                    "test_command_started": True,
+                    "verdict_source": "junit+exit",
+                    "tests_passed": 1,
+                    "tests_total": 1,
+                },
+            )
+
+    monkeypatch.setattr(blackbox_module, "run_blackbox", lambda *a, **k: runtime)
+    monkeypatch.setattr(guard_module, "RepoVerifier", RebindingRepoVerifier)
+
+    result = guard(
+        str(repo),
+        _CANDIDATE,
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        verifier_pack=str(pack),
+        blackbox=True,
+    )
+
+    assert result.execution_state == "LIVE_STARTED_INCOMPLETE"
+    assert result.tests_passed is None
+    assert result.tests_total is None
