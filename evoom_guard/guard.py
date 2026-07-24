@@ -40,7 +40,6 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
-import math
 import os
 import shutil
 import stat
@@ -75,6 +74,11 @@ from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.application.repo_decision import (
     OUTCOME_REASON_POLICY,
     TAMPER_OUTCOME_REASON_POLICY,
+)
+from evoom_guard.application.request_preparation import (
+    GuardRequestPreparationInput,
+    GuardRequestPreparationServices,
+    prepare_guard_request,
 )
 from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
 from evoom_guard.domain import (
@@ -519,60 +523,11 @@ def guard(
     coverage state. Executed is also not asserted — see
     :mod:`evoom_guard.evidence`.
     """
-    # Public API inputs must be able to produce a schema-valid record. Python's
-    # type hints do not reject bool/float at runtime, and subprocess accepts
-    # non-positive/float timeouts in inconsistent ways. Refuse those values
-    # before constructing effective_policy or any attestation.
-    if type(timeout) is not int or timeout < 1:
-        raise ValueError("timeout must be a positive integer")
-    if type(mem_limit_mb) is not int or mem_limit_mb < 0:
-        raise ValueError("mem_limit_mb must be a non-negative integer")
-    if type(strict_harness) is not bool:
-        raise ValueError("strict_harness must be a boolean")
-    if (
-        min_diff_coverage is not None
-        and (
-            isinstance(min_diff_coverage, bool)
-            or not isinstance(min_diff_coverage, (int, float))
-            or not 0 <= min_diff_coverage <= 100
-            or not math.isfinite(min_diff_coverage)
-        )
-    ):
-        raise ValueError("min_diff_coverage must be a finite number between 0 and 100")
-    # Keep the Python API and CLI policy semantics identical: a floor cannot
-    # exist without the measurement that proves it. This assignment precedes
-    # every return path so even direct callers cannot create a producer PASS
-    # that the independent record verifier must reject.
-    diff_coverage = diff_coverage or min_diff_coverage is not None
-    # The frozen 1.11 policy contract names these two combinations
-    # contradictory ("blackbox_only requires blackbox"; "an expected pack
-    # digest requires verifier_pack_required"), so any attestation echoing
-    # them is unverifiable by design: verify_record must reject the very
-    # record this call would produce. Refuse the input instead — the CLI
-    # already refuses the first form at the usage boundary.
-    if blackbox_only and not blackbox:
-        raise ValueError("blackbox_only requires blackbox")
-    if expect_verifier_pack_sha256 and not verifier_pack:
-        raise ValueError("expect_verifier_pack_sha256 requires verifier_pack")
-
-    request = GuardRequest(
-        repository=RepositoryInput(path=repo_path),
-        candidate=CandidateInput(
-            text=candidate,
+    prepared_request = prepare_guard_request(
+        GuardRequestPreparationInput(
+            repository_path=repo_path,
+            candidate_text=candidate,
             deleted_paths=deleted,
-            file_blocks=file_blocks,
-        ),
-        source=SourceIdentity(
-            base_sha=base_sha,
-            head_sha=head_sha,
-            base_tree_sha=base_tree_sha,
-            head_tree_sha=head_tree_sha,
-        ),
-        policy=_build_effective_policy_contract(
-            mode="blackbox" if blackbox else "repo",
-            isolation=isolation,
-            docker_image=docker_image,
-            docker_network=docker_network,
             test_command=test_command,
             setup_command=setup_command,
             trust_setup_on_host=trust_setup_on_host,
@@ -582,68 +537,72 @@ def guard(
             allow_new_tests=allow_new_tests,
             timeout=timeout,
             mem_limit_mb=mem_limit_mb,
-            verifier_pack=verifier_pack,
+            isolation=isolation,
+            docker_image=docker_image,
+            docker_network=docker_network,
+            verifier_pack_path=verifier_pack,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+            collect_diff_coverage=diff_coverage,
+            min_diff_coverage=min_diff_coverage,
             blackbox=blackbox,
             blackbox_only=blackbox_only,
             require_report_integrity=require_report_integrity,
             require_candidate_isolation=require_candidate_isolation,
-            min_diff_coverage=min_diff_coverage,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+            policy_id=policy_id,
+            policy_version=policy_version,
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
-            policy_id=policy_id,
-            policy_version=policy_version,
+            file_blocks=file_blocks,
         ),
-        verifier_pack_path=verifier_pack,
-        collect_diff_coverage=diff_coverage,
+        services=GuardRequestPreparationServices(
+            repository_input_provider=lambda: RepositoryInput,
+            candidate_input_provider=lambda: CandidateInput,
+            source_identity_provider=lambda: SourceIdentity,
+            effective_policy_provider=lambda: _build_effective_policy_contract,
+            guard_request_provider=lambda: GuardRequest,
+            effective_policy_payload_provider=lambda: _effective_policy_payload,
+        ),
     )
-    effective_policy = _effective_policy_payload(request.policy)
-    repo_path = request.repository.path
-    candidate = request.candidate.text
-    deleted = request.candidate.deleted_paths
-    file_blocks = (
-        dict(request.candidate.file_blocks)
-        if request.candidate.file_blocks is not None
-        else None
-    )
-    base_sha = request.source.base_sha
-    head_sha = request.source.head_sha
-    base_tree_sha = request.source.base_tree_sha
-    head_tree_sha = request.source.head_tree_sha
-    test_command = (
-        list(request.policy.test_command)
-        if request.policy.test_command is not None
-        else None
-    )
-    setup_command = (
-        list(request.policy.setup_command)
-        if request.policy.setup_command is not None
-        else None
-    )
-    trust_setup_on_host = request.policy.trust_setup_on_host
-    setup_output_globs = request.policy.setup_output_globs
-    protected = request.policy.protected
-    allow = request.policy.allow
-    allow_new_tests = request.policy.allow_new_tests
-    timeout = request.policy.timeout
-    mem_limit_mb = request.policy.mem_limit_mb
-    isolation = request.policy.isolation
-    docker_image = request.policy.docker_image
-    docker_network = request.policy.docker_network
-    verifier_pack = request.verifier_pack_path
-    expect_verifier_pack_sha256 = request.policy.expect_verifier_pack_sha256
-    diff_coverage = request.collect_diff_coverage
-    min_diff_coverage = request.policy.min_diff_coverage
-    blackbox = request.policy.blackbox
-    blackbox_only = request.policy.blackbox_only
-    require_report_integrity = request.policy.require_report_integrity
-    require_candidate_isolation = request.policy.require_candidate_isolation
-    policy_id = request.policy.policy_id
-    policy_version = request.policy.policy_version
-    baseline_evidence = request.policy.baseline_evidence
-    require_demonstrated_fix = request.policy.require_demonstrated_fix
-    strict_harness = request.policy.strict_harness
+    effective_policy = prepared_request.effective_policy
+    compatibility = prepared_request.compatibility
+    repo_path = compatibility.repository_path
+    candidate = compatibility.candidate_text
+    deleted = compatibility.deleted_paths
+    file_blocks = compatibility.file_blocks
+    base_sha = compatibility.base_sha
+    head_sha = compatibility.head_sha
+    base_tree_sha = compatibility.base_tree_sha
+    head_tree_sha = compatibility.head_tree_sha
+    test_command = compatibility.test_command
+    setup_command = compatibility.setup_command
+    trust_setup_on_host = compatibility.trust_setup_on_host
+    setup_output_globs = compatibility.setup_output_globs
+    protected = compatibility.protected
+    allow = compatibility.allow
+    allow_new_tests = compatibility.allow_new_tests
+    timeout = compatibility.timeout
+    mem_limit_mb = compatibility.mem_limit_mb
+    isolation = compatibility.isolation
+    docker_image = compatibility.docker_image
+    docker_network = compatibility.docker_network
+    verifier_pack = compatibility.verifier_pack_path
+    expect_verifier_pack_sha256 = compatibility.expect_verifier_pack_sha256
+    diff_coverage = compatibility.collect_diff_coverage
+    min_diff_coverage = compatibility.min_diff_coverage
+    blackbox = compatibility.blackbox
+    blackbox_only = compatibility.blackbox_only
+    require_report_integrity = compatibility.require_report_integrity
+    require_candidate_isolation = compatibility.require_candidate_isolation
+    policy_id = compatibility.policy_id
+    policy_version = compatibility.policy_version
+    baseline_evidence = compatibility.baseline_evidence
+    require_demonstrated_fix = compatibility.require_demonstrated_fix
+    strict_harness = compatibility.strict_harness
 
     # Fail-closed policy consistency (1.7): a GATE the selected judge cannot
     # enforce must stop the run — "require X" answered with a PASS that never
