@@ -9,6 +9,8 @@ import pytest
 import evoom_guard.verifiers.repo_verifier as repo_verifier
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
 
+_IMAGE_ID = "sha256:" + "e" * 64
+
 
 def _candidate() -> str:
     return "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>\n"
@@ -404,7 +406,7 @@ def test_container_setup_output_limit_is_a_structured_setup_failure(
     overflow = repo_verifier._DockerRunOutputLimit(
         repo_verifier._SubprocessOutputLimitExceeded(123), container_started=True
     )
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(
         verifier,
         "_run_docker_client",
@@ -428,7 +430,7 @@ def test_container_suite_output_limit_preserves_container_delivery_evidence(
     overflow = repo_verifier._DockerRunOutputLimit(
         repo_verifier._SubprocessOutputLimitExceeded(123), container_started=True
     )
-    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: "sha256:judge")
+    monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
     monkeypatch.setattr(
         verifier,
         "_run_docker_client",

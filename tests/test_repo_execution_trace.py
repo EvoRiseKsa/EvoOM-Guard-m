@@ -11,6 +11,8 @@ from unittest import mock
 
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
 
+_IMAGE_ID = "sha256:" + "1" * 64
+
 
 def _write(root: str, rel: str, content: str) -> None:
     path = os.path.join(root, *rel.split("/"))
@@ -124,7 +126,7 @@ class RepoExecutionTraceTests(unittest.TestCase):
         )
         host_xml = os.path.join(self.tmp.name, "not-created.xml")
         with mock.patch.object(
-            verifier, "_resolve_docker_image", return_value="sha256:judge"
+            verifier, "_resolve_docker_image", return_value=_IMAGE_ID
         ), mock.patch.object(
             verifier, "_run_docker", return_value=(host_xml, process, False)
         ):
@@ -163,7 +165,7 @@ class RepoExecutionTraceTests(unittest.TestCase):
             mem_limit_mb=0,
         )
         with mock.patch.object(
-            verifier, "_resolve_docker_image", return_value="sha256:judge"
+            verifier, "_resolve_docker_image", return_value=_IMAGE_ID
         ), mock.patch(
             "evoom_guard.verifiers.repo_verifier._run_bounded_subprocess",
             side_effect=KeyboardInterrupt(),

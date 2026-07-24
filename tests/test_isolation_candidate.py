@@ -50,7 +50,7 @@ def _candidate_plan(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout="sha256:0123456789abcdef\n",
+                stdout=f"sha256:{'0123456789abcdef' * 4}\n",
                 stderr="",
             )
         raise AssertionError(f"unexpected Docker control command: {command!r}")

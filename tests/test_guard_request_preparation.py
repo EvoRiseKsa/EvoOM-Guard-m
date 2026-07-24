@@ -102,6 +102,34 @@ def test_preparation_contracts_are_frozen_and_scoped_before_mode_support() -> No
         prepared.compatibility.timeout = 1  # type: ignore[misc]
 
 
+def test_preparation_rejects_unknown_isolation_before_any_provider() -> None:
+    calls: list[str] = []
+
+    def unexpected(name: str):
+        def provider():
+            calls.append(name)
+            raise AssertionError(f"{name} must not resolve")
+
+        return provider
+
+    services = GuardRequestPreparationServices(
+        repository_input_provider=unexpected("repository"),
+        candidate_input_provider=unexpected("candidate"),
+        source_identity_provider=unexpected("source"),
+        effective_policy_provider=unexpected("policy"),
+        guard_request_provider=unexpected("request"),
+        effective_policy_payload_provider=unexpected("payload"),
+    )
+
+    with pytest.raises(ValueError, match="unsupported isolation mode 'gvisro'"):
+        prepare_guard_request(
+            _raw(isolation="gvisro"),
+            services=services,
+        )
+
+    assert calls == []
+
+
 def test_projection_uses_owned_request_containers_not_caller_containers() -> None:
     deleted = ["old.py"]
     command = ["python", "-m", "pytest"]

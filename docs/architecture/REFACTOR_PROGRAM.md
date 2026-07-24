@@ -143,6 +143,15 @@ remain in their established facades.
 - Typed Docker control/image-identity and container-cleanup contracts were
   extracted in PR #117,
   retaining policy/evidence composition and compatibility facades in callers.
+- Isolation-mode and image-identity admission is now explicit and fail closed.
+  Only `subprocess`, `docker`, and `gvisor` are accepted before any workspace or
+  process effect. Docker inspection must yield a canonical immutable
+  `sha256:` plus 64-lowercase-hex image ID; configured tags and malformed
+  inspection output never reach a run argv. `RepoVerifier` resolves that pin
+  afresh for every verification and keeps it context-local across setup,
+  suite, and pack, so a reused or concurrent verifier cannot inherit another
+  judgment's image identity. This validates the judge's selection and binding;
+  it does not attest the runtime, daemon, host kernel, or executed image.
 - Candidate-boundary preparation was extracted in PR #118 into
   `isolation/candidate.py` behind
   the characterized `candidate_runner.py` compatibility surface.

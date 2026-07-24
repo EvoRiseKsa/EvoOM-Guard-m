@@ -23,6 +23,7 @@ from evoom_guard.isolation import (
     DockerCidScanResult,
     DockerContainerAbsenceObservation,
     DockerControlRequest,
+    DockerImageIdentityError,
     DockerRunContainmentError,
     DockerRunOutputLimit,
     DockerRunRequest,
@@ -37,6 +38,9 @@ from evoom_guard.isolation import (
     run_named_docker_client,
     scan_candidate_container_ids,
 )
+
+_IMAGE_A = "sha256:" + "a" * 64
+_IMAGE_B = "sha256:" + "b" * 64
 
 
 def _completed(
@@ -135,7 +139,7 @@ def test_image_resolution_pulls_only_after_missing_inspection() -> None:
         [
             _completed([], 1, "", "not found"),
             _completed([], 0, "pulled", ""),
-            _completed([], 0, "sha256:immutable\n", ""),
+            _completed([], 0, _IMAGE_A + "\n", ""),
         ]
     )
 
@@ -151,7 +155,7 @@ def test_image_resolution_pulls_only_after_missing_inspection() -> None:
         pull_when_inspection_empty=False,
     )
 
-    assert resolution.image_id == "sha256:immutable"
+    assert resolution.image_id == _IMAGE_A
     assert resolution.pull_attempted is True
     assert calls == [
         (
@@ -178,6 +182,39 @@ def test_image_resolution_pulls_only_after_missing_inspection() -> None:
             DOCKER_CONTROL_TIMEOUT_SECONDS,
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    "reported",
+    [
+        "--privileged",
+        "sha256:abc",
+        "sha256:" + "A" * 64,
+        "sha256:" + "a" * 63,
+        "sha512:" + "a" * 64,
+    ],
+)
+def test_image_resolution_rejects_noncanonical_inspection_output(
+    reported: str,
+) -> None:
+    calls: list[list[str]] = []
+
+    def control(
+        command: list[str], *, timeout: float
+    ) -> subprocess.CompletedProcess[str]:
+        del timeout
+        calls.append(command)
+        return _completed(command, 0, reported + "\n", "")
+
+    with pytest.raises(DockerImageIdentityError, match="non-canonical image ID"):
+        resolve_docker_image(
+            "judge:latest",
+            control_runner=control,
+            pull_when_inspection_empty=False,
+        )
+
+    assert len(calls) == 1
+    assert calls[0][:3] == ["docker", "image", "inspect"]
 
 
 def test_repo_image_policy_does_not_pull_after_empty_successful_inspection() -> None:
@@ -716,7 +753,7 @@ def test_repo_private_docker_exception_seams_are_exact_kernel_aliases() -> None:
     assert repo_verifier._DockerRunContainmentError is DockerRunContainmentError
 
 
-def test_repo_image_facade_preserves_pull_order_and_cache(
+def test_repo_image_facade_preserves_pull_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
@@ -724,7 +761,8 @@ def test_repo_image_facade_preserves_pull_order_and_cache(
         [
             _completed([], 1, "", "missing"),
             _completed([], 0, "pulled", ""),
-            _completed([], 0, "sha256:repo-pinned\n", ""),
+            _completed([], 0, _IMAGE_B + "\n", ""),
+            _completed([], 0, _IMAGE_A + "\n", ""),
         ]
     )
 
@@ -742,8 +780,9 @@ def test_repo_image_facade_preserves_pull_order_and_cache(
         mem_limit_mb=0,
     )
 
-    assert verifier._resolve_docker_image() == "sha256:repo-pinned"
-    assert verifier._resolve_docker_image() == "sha256:repo-pinned"
+    assert verifier._resolve_docker_image() == _IMAGE_B
+    verifier.docker_image = "judge:next"
+    assert verifier._resolve_docker_image() == _IMAGE_A
     assert calls == [
         [
             "docker",
@@ -762,7 +801,37 @@ def test_repo_image_facade_preserves_pull_order_and_cache(
             "{{.Id}}",
             "judge:latest",
         ],
+        [
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            "judge:next",
+        ],
     ]
+
+
+def test_repo_docker_command_prefers_context_local_image_identity() -> None:
+    verifier = repo_verifier.RepoVerifier(
+        isolation="docker",
+        docker_image="judge:mutable",
+        mem_limit_mb=0,
+    )
+    verifier._resolved_docker_image = _IMAGE_A
+    token = verifier._active_docker_image.set(_IMAGE_B)
+    try:
+        command = verifier._docker_command(
+            ["python", "-m", "pytest"],
+            "/copy",
+            "/out",
+            "judge",
+        )
+    finally:
+        verifier._active_docker_image.reset(token)
+
+    assert _IMAGE_B in command
+    assert _IMAGE_A not in command
 
 
 def test_repo_image_facade_preserves_phase_specific_capture_failure(
@@ -796,13 +865,11 @@ def test_candidate_image_identity_facade_preserves_private_control_seam(
         command: list[str], *, timeout: float
     ) -> subprocess.CompletedProcess[str]:
         calls.append((command, timeout))
-        return _completed(command, 0, "sha256:candidate-pinned\n", "")
+        return _completed(command, 0, _IMAGE_A + "\n", "")
 
     monkeypatch.setattr(candidate_runner, "_run_docker_control", control)
 
-    assert CandidateRunner._image_digest("candidate:latest") == (
-        "sha256:candidate-pinned"
-    )
+    assert CandidateRunner._image_digest("candidate:latest") == _IMAGE_A
     assert calls == [
         (
             [

@@ -500,12 +500,26 @@ tests, and the JUnit writer still share a process. A Docker container also share
 the host kernel, so it is defence in depth for semi-trusted code, not a complete
 hostile-code boundary.
 
+Isolation mode admission is closed: only `subprocess`, `docker`, and `gvisor`
+are accepted, and an unknown value is rejected before provider lookup,
+workspace creation, or process launch. For Docker/gVisor, image inspection must
+return a canonical immutable `sha256:` plus 64-lowercase-hex image ID. A tag,
+short digest, malformed digest, or CLI-looking value never reaches the container
+run argv.
+
 **Setup boundary and tree fidelity (3.4).** An optional `setup_command` runs
 before the suite. Under Docker/gVisor it now runs **inside the requested boundary
-by default**, in a separate container using the same resolved image ID,
-network, runtime, and resource policy as the later suite/pack containers. Setup
-alone receives `/work:rw` and no report mount; suite and pack phases receive the
-candidate tree read-only, and the pack snapshot is `/verifier-pack:ro`.
+by default**. The configured image is freshly resolved at the start of each
+verification; its canonical immutable ID is kept judgment-local and used by the
+separate setup, suite, and pack containers with the same network, runtime, and
+resource policy. A reused or concurrent verifier does not share that pin with
+another judgment. Setup alone receives `/work:rw` and no report mount; suite
+and pack phases receive the candidate tree read-only, and the pack snapshot is
+`/verifier-pack:ro`.
+
+This proves validation and consistent use of the judge-selected image ID. It is
+not runtime attestation and does not independently prove the daemon, host
+kernel, OCI runtime, or actually executed image.
 
 This has practical consequences:
 

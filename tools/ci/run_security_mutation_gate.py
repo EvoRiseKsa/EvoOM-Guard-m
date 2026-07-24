@@ -6027,6 +6027,56 @@ MUTATIONS = (
             "[exit_0_pass]"
         ),
     ),
+    Mutation(
+        name="guard-request-isolation-validation-bypass",
+        path="evoom_guard/application/request_preparation.py",
+        before="    validate_isolation_mode(raw.isolation)\n",
+        after="    str(raw.isolation)\n",
+        test=(
+            "tests/test_guard_request_preparation.py::"
+            "test_preparation_rejects_unknown_isolation_before_any_provider"
+        ),
+    ),
+    Mutation(
+        name="docker-image-canonical-identity-validation-bypass",
+        path="evoom_guard/isolation/docker.py",
+        before=(
+            "    if type(value) is not str or "
+            "_DOCKER_IMAGE_ID.fullmatch(value) is None:\n"
+        ),
+        after="    if False:\n",
+        test=(
+            "tests/test_isolation_docker.py::"
+            "test_image_resolution_rejects_noncanonical_inspection_output"
+        ),
+    ),
+    Mutation(
+        name="repo-docker-image-cross-verification-cache-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before='        image = str(self.docker_image or "")\n',
+        after=(
+            "        if self._resolved_docker_image:\n"
+            "            return self._resolved_docker_image\n"
+            '        image = str(self.docker_image or "")\n'
+        ),
+        test=(
+            "tests/test_isolation_docker.py::"
+            "test_repo_image_facade_preserves_pull_order"
+        ),
+    ),
+    Mutation(
+        name="repo-docker-context-local-image-priority-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            str(active_image or self._resolved_docker_image "
+            "or self.docker_image)\n"
+        ),
+        after="            str(self._resolved_docker_image or self.docker_image)\n",
+        test=(
+            "tests/test_isolation_docker.py::"
+            "test_repo_docker_command_prefers_context_local_image_identity"
+        ),
+    ),
 )
 
 

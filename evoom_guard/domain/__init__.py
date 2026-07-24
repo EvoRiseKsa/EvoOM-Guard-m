@@ -10,6 +10,10 @@ from evoom_guard.domain.evidence import (
     VerifierPackEvidence,
 )
 from evoom_guard.domain.execution import ExecutionPhaseResult, IsolationObservation
+from evoom_guard.domain.isolation import (
+    SUPPORTED_ISOLATION_MODES,
+    validate_isolation_mode,
+)
 from evoom_guard.domain.policy import EffectivePolicy
 from evoom_guard.domain.request import (
     CandidateInput,
@@ -43,7 +47,9 @@ __all__ = [
     "RepoPhaseResult",
     "RuntimeIdentityEvidence",
     "SourceIdentity",
+    "SUPPORTED_ISOLATION_MODES",
     "VerificationEvidence",
     "VerifierPackAssurance",
     "VerifierPackEvidence",
+    "validate_isolation_mode",
 ]

@@ -44,6 +44,7 @@ from evoom_guard.isolation.docker import (
     DockerControlRequest,
     execute_docker_control,
     inspect_docker_image,
+    require_canonical_docker_image_id,
 )
 
 CANDIDATE_CID_DIRNAME = _CANDIDATE_CID_DIRNAME
@@ -93,4 +94,5 @@ class CandidateRunner(_CandidateRunner):
         )
         if inspected.returncode != 0:
             return None
-        return inspected.stdout.strip() or None
+        image_id = inspected.stdout.strip()
+        return require_canonical_docker_image_id(image_id) if image_id else None
