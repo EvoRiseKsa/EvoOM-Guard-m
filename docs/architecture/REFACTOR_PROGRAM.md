@@ -165,7 +165,10 @@ belong to their characterized legacy facades until Stage 8 slices move them.
   exact legacy aliases. The contained FILE-then-PATCH transaction and
   judge-manifest restoration now live in `verifiers/repo_materialization.py`
   behind RepoVerifier's dynamic compatibility facade. Repository copying,
-  deletion, execution, and broader snapshots remain pending.
+  deletion, and execution remain pending. Optional verifier-pack intake and its
+  judge-owned snapshot identity now live in the immutable
+  `verifiers/repo_pack_intake.py` contract; later pack execution and
+  post-execution snapshot verification remain in RepoVerifier.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction
