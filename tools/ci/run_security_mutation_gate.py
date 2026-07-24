@@ -1896,23 +1896,22 @@ MUTATIONS = (
         ),
         test=(
             "tests/test_repo_setup_characterization.py::"
-            "test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof"
+            "test_pre_snapshot_can_change_timeout_but_not_effective_strict_policy"
         ),
     ),
     Mutation(
-        name="repo-setup-live-strict-provider-bypass",
+        name="repo-setup-effective-strict-provider-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before=(
             "                        strict_harness=lambda: "
-            "self.strict_harness,\n"
+            "strict_harness,\n"
         ),
         after=(
-            "                        strict_harness=(lambda "
-            "value=self.strict_harness: value),\n"
+            "                        strict_harness=lambda: False,\n"
         ),
         test=(
-            "tests/test_repo_setup_characterization.py::"
-            "test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof"
+            "tests/test_strict_harness.py::"
+            "test_problem_strict_harness_reaches_every_repo_host_phase"
         ),
     ),
     Mutation(
@@ -2187,7 +2186,7 @@ MUTATIONS = (
             "                        env=run_env,\n"
             "                        timeout=self.timeout,\n"
             "                        preexec_fn=self._limits() if os.name == \"posix\" else None,\n"
-            "                        require_process_group_cleanup_proof=self.strict_harness,\n"
+            "                        require_process_group_cleanup_proof=strict_harness,\n"
         ),
         after=(
             "                        env=run_env,\n"
@@ -2210,7 +2209,7 @@ MUTATIONS = (
             "                            preexec_fn=(\n"
             "                                self._limits() if os.name == \"posix\" else None\n"
             "                            ),\n"
-            "                            require_process_group_cleanup_proof=self.strict_harness,\n"
+            "                            require_process_group_cleanup_proof=strict_harness,\n"
         ),
         after=(
             "                            cwd=copy,\n"
