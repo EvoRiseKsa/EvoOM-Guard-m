@@ -187,6 +187,21 @@ changed repository files still remain in the denominator as missed when no
 matching in-repository entry exists. This includes cross-drive absolute paths
 on Windows and prevents an external helper from aborting record production.
 
+In a quiescent tree, base/head derivation rejects symlinks, Windows junctions
+and other reparse objects instead of traversing them. Each regular-file
+comparison/read is bound to the object, type, mode, link count, size and path
+timestamps captured by its `lstat`. POSIX requires `O_NOFOLLOW` and
+`O_NONBLOCK`; the latter makes a
+regular-to-FIFO swap fail without hanging at `open`. Windows verifies the
+opened handle and current path before and after the bounded operation. Drift
+is an unverifiable input error, not an accepted partial candidate. This is a
+**per-file stability check**, not an atomic whole-tree snapshot: Guard does not
+claim that every path in a mutable base/head directory existed at one common
+instant, and Windows cannot make the check atomic against an attacker that
+swaps and restores a name entirely between observations. Derive from a
+quiescent checkout and bind trusted Git object IDs in the finalizer when
+revision identity is an admission requirement.
+
 ### Differential evidence: `--baseline-evidence` (opt-in)
 
 "All tests pass on head" does not by itself show the change **fixed** anything —
