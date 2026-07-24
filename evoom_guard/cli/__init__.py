@@ -66,6 +66,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from evoom_guard import __version__
+from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.pack_manifest import (
@@ -1272,32 +1273,24 @@ def cmd_validate_agent_change_proposal(
         inspect_agent_change_proposal,
     )
 
-    try:
-        proposal = inspect_agent_change_proposal(args.proposal)
-    except (AgentChangeAdmissionError, OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": AGENT_CHANGE_PROPOSAL_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": AGENT_CHANGE_PROPOSAL_FORMAT,
-            "ok": True,
-            "status": "VALID",
-            "source": proposal.payload["source"],
-            "producer": proposal.payload["producer"],
-            "candidate_sha256": proposal.payload["change"]["candidate_sha256"],
-            "touched_paths": proposal.payload["change"]["touched_paths"],
-        },
+    return _agent_change_command_owner.execute_validate_agent_change_proposal(
+        args,
+        services=_agent_change_command_owner.ValidateProposalServices(
+            proposal_format=AGENT_CHANGE_PROPOSAL_FORMAT,
+            expected_errors=(
+                AgentChangeAdmissionError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            inspect_proposal=inspect_agent_change_proposal,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_derive_agent_change_bindings(
@@ -1313,50 +1306,26 @@ def cmd_derive_agent_change_bindings(
         write_agent_change_bindings,
     )
 
-    try:
-        git_executable = git_executable_pin(
-            args.git_executable,
-            args.git_executable_sha256,
-        )
-        bindings = derive_agent_change_bindings(
-            base_repo=args.base_repo,
-            head_repo=args.head_repo,
-            base_sha=args.base_sha,
-            head_sha=args.head_sha,
-            base_tree_sha=args.base_tree_sha,
-            head_tree_sha=args.head_tree_sha,
-            base_is_bare=args.base_bare,
-            head_is_bare=args.head_bare,
-            git_executable=git_executable,
-        )
-        output = write_agent_change_bindings(
-            bindings, bindings_path=args.out, force=args.force
-        )
-    except (FinalizerDerivationError, OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": AGENT_CHANGE_GIT_BINDINGS_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": AGENT_CHANGE_GIT_BINDINGS_FORMAT,
-            "ok": True,
-            "status": "DERIVED",
-            "bindings": output,
-            "candidate_sha256": bindings.candidate_sha256,
-            "touched_paths": list(bindings.touched_paths),
-            "policy_sha256": bindings.policy_sha256,
-            "verifier_pack_sha256": bindings.verifier_pack_sha256,
-        },
+    return _agent_change_command_owner.execute_derive_agent_change_bindings(
+        args,
+        services=_agent_change_command_owner.DeriveBindingsServices(
+            bindings_format=AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+            expected_errors=(
+                FinalizerDerivationError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            git_executable_pin=git_executable_pin,
+            derive_bindings=derive_agent_change_bindings,
+            write_bindings=write_agent_change_bindings,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_agent_change_authorization(
@@ -1370,44 +1339,28 @@ def cmd_seal_agent_change_authorization(
         seal_agent_change_authorization,
     )
 
-    try:
-        source = _read_external_finalizer_object(args.source, label="authorization source")
-        scope = _read_external_finalizer_object(args.scope, label="authorization scope")
-        required = _read_external_finalizer_object(
-            args.required, label="authorization requirements"
-        )
-        sealed = seal_agent_change_authorization(
-            args.out,
-            source=source,
-            scope=scope,
-            required=required,
-            private_key_path=args.sign_key,
-            force=args.force,
-        )
-    except (AgentChangeAdmissionError, OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": AGENT_CHANGE_AUTHORIZATION_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": AGENT_CHANGE_AUTHORIZATION_FORMAT,
-            "ok": True,
-            "status": "SEALED",
-            "authorization": os.path.abspath(args.out),
-            "key_id": sealed.payload["authentication"]["key_id"],
-            "source": sealed.payload["source"],
-            "scope": sealed.payload["scope"],
-        },
+    return _agent_change_command_owner.execute_seal_agent_change_authorization(
+        args,
+        services=_agent_change_command_owner.SealAuthorizationServices(
+            authorization_format=AGENT_CHANGE_AUTHORIZATION_FORMAT,
+            expected_errors=(
+                AgentChangeAdmissionError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            read_external_object=lambda path, *, label: _read_external_finalizer_object(
+                path, label=label
+            ),
+            seal_authorization=seal_agent_change_authorization,
+            absolute_path=lambda path: os.path.abspath(path),
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_agent_change_finalized(
@@ -1426,71 +1379,30 @@ def cmd_seal_agent_change_finalized(
         read_finalizer_bindings,
     )
 
-    try:
-        git_executable = git_executable_pin(
-            args.git_executable,
-            args.git_executable_sha256,
-        )
-        finalizer_bindings = read_finalizer_bindings(args.finalizer_bindings)
-        authorization_source = _read_external_finalizer_object(
-            args.authorization_source, label="authorization source"
-        )
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-        sealed = seal_agent_change_finalizer_bundle(
-            args.proposal,
-            args.authorization,
-            args.handoff,
-            args.verdict,
-            args.out,
-            base_repo=args.base_repo,
-            head_repo=args.head_repo,
-            git_executable=git_executable,
-            base_is_bare=args.base_bare,
-            head_is_bare=args.head_bare,
-            expected_authorization_source=authorization_source,
-            authorization_public_key_path=args.authorization_pub,
-            expected_finalizer_source=expected_source,
-            expected_context=expected_context,
-            finalizer_private_key_path=args.sign_key,
-            finalizer_public_key_path=args.trusted_pub,
-            expected_derivation=finalizer_bindings.payload,
-            force=args.force,
-        )
-    except (
-        AgentChangeAdmissionError,
-        FinalizerDerivationError,
-        OSError,
-        UnicodeError,
-        ValueError,
-    ) as exc:
-        _machine_report(
-            out,
-            {
-                "format": AGENT_CHANGE_PROPOSAL_FORMAT,
-                "ok": False,
-                "status": "DENY",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": AGENT_CHANGE_PROPOSAL_FORMAT,
-            "ok": True,
-            "status": "ALLOW",
-            "decision": sealed.decision,
-            "bundle": sealed.finalized.finalized.bundle_path,
-            "candidate_sha256": sealed.contract.bindings.candidate_sha256,
-            "touched_paths": list(sealed.contract.bindings.touched_paths),
-        },
+    return _agent_change_command_owner.execute_seal_agent_change_finalized(
+        args,
+        services=_agent_change_command_owner.SealFinalizedServices(
+            proposal_format=AGENT_CHANGE_PROPOSAL_FORMAT,
+            expected_errors=(
+                AgentChangeAdmissionError,
+                FinalizerDerivationError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            git_executable_pin=git_executable_pin,
+            read_finalizer_bindings=read_finalizer_bindings,
+            read_external_object=lambda path, *, label: _read_external_finalizer_object(
+                path, label=label
+            ),
+            seal_finalized=seal_agent_change_finalizer_bundle,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_verify_agent_change_finalized(
@@ -1508,56 +1420,29 @@ def cmd_verify_agent_change_finalized(
         read_agent_change_bindings,
     )
 
-    try:
-        bindings = read_agent_change_bindings(args.agent_bindings)
-        authorization_source = _read_external_finalizer_object(
-            args.authorization_source, label="authorization source"
-        )
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-        verified = verify_agent_change_finalized_bundle(
-            args.bundle,
-            trusted_finalizer_public_key_path=args.trusted_pub,
-            authorization_public_key_path=args.authorization_pub,
-            expected_authorization_source=authorization_source,
-            expected_finalizer_source=expected_source,
-            expected_context=expected_context,
-            expected_bindings=bindings,
-        )
-    except (
-        AgentChangeAdmissionError,
-        FinalizerDerivationError,
-        OSError,
-        UnicodeError,
-        ValueError,
-    ) as exc:
-        _machine_report(
-            out,
-            {
-                "format": AGENT_CHANGE_PROPOSAL_FORMAT,
-                "ok": False,
-                "status": "DENY",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": AGENT_CHANGE_PROPOSAL_FORMAT,
-            "ok": True,
-            "status": "ALLOW",
-            "decision": verified.decision,
-            "candidate_sha256": verified.contract.bindings.candidate_sha256,
-            "touched_paths": list(verified.contract.bindings.touched_paths),
-            "claimed_producer": verified.contract.proposal.payload["producer"],
-        },
+    return _agent_change_command_owner.execute_verify_agent_change_finalized(
+        args,
+        services=_agent_change_command_owner.VerifyFinalizedServices(
+            proposal_format=AGENT_CHANGE_PROPOSAL_FORMAT,
+            expected_errors=(
+                AgentChangeAdmissionError,
+                FinalizerDerivationError,
+                OSError,
+                UnicodeError,
+                ValueError,
+            ),
+            read_agent_bindings=read_agent_change_bindings,
+            read_external_object=lambda path, *, label: _read_external_finalizer_object(
+                path, label=label
+            ),
+            verify_finalized=verify_agent_change_finalized_bundle,
+            machine_report=lambda report_out, value: _machine_report(
+                report_out,
+                value,
+            ),
+        ),
+        out=out,
     )
-    return 0
 
 
 def _read_semantic_finalizer_record(path: str) -> dict[str, Any]:
