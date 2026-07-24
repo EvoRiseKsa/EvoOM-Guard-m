@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ import pytest
 
 import evoom_guard.adapters as adapters
 import evoom_guard.guard as guard_module
-from evoom_guard.verifiers import fidelity, repo_verifier
+from evoom_guard.verifiers import fidelity, repo_baseline, repo_verifier
 
 
 def _install_successful_baseline(
@@ -358,3 +359,22 @@ def test_baseline_cleanup_runs_after_unhandled_primary_failure(
         "copy",
         ("cleanup", str(workspace), True),
     ]
+
+
+def test_repo_baseline_owner_exposes_an_immutable_request_contract() -> None:
+    request = repo_baseline.RepoBaselineRequest(
+        repository_path="repository",
+        test_command=["suite"],
+        setup_command=None,
+        setup_output_globs=(),
+        timeout=17,
+        mem_limit_mb=23,
+        strict_harness=True,
+    )
+
+    assert repo_baseline.run_repo_baseline.__module__ == (
+        "evoom_guard.verifiers.repo_baseline"
+    )
+    assert not hasattr(request, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        request.strict_harness = False  # type: ignore[misc]

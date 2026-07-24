@@ -300,10 +300,14 @@ remain in their established facades.
   historical call positions. Baseline-after-coverage behavior, evidence object
   identity, trusted binding precedence, and fail-loud exception order are
   preserved.
+- `verifiers.repo_baseline.run_repo_baseline` owns the pristine-copy
+  setup/suite runtime, bounded host execution, judge-owned JUnit grading, and
+  workspace cleanup behind Guard's unchanged private compatibility facade.
+  Repair-effect policy remains in repo finalization.
 - Pending: move only the remaining black-box and verifier effect sequencing
-  behind separately characterized boundaries. Public `GuardResult`,
-  `_run_baseline_suite`, and the black-box branch intentionally remain in Guard
-  for this slice.
+  behind separately characterized boundaries. Public `GuardResult` and the
+  black-box branch intentionally remain in Guard. The `_run_baseline_suite`
+  name remains only as a live-wiring compatibility facade.
 - Markdown, JSON, and SARIF output projection/publication is owned by the
   stdlib-only `integrations.guard_output` adapter. Guard retains four exact
   compatibility facades. A pre-extraction vector freezes benign

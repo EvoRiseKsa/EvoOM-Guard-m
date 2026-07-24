@@ -3982,17 +3982,25 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-baseline-setup-group-proof-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/verifiers/repo_baseline.py",
         before=(
-            "                    env=setup_env,\n"
-            "                    timeout=timeout,\n"
-            "                    preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
-            "                    require_process_group_cleanup_proof=strict_harness,\n"
+            "                    timeout=request.timeout,\n"
+            "                    preexec_fn=(\n"
+            "                        verifier._limits()\n"
+            "                        if os.name == \"posix\"\n"
+            "                        else None\n"
+            "                    ),\n"
+            "                    require_process_group_cleanup_proof=(\n"
+            "                        request.strict_harness\n"
+            "                    ),\n"
         ),
         after=(
-            "                    env=setup_env,\n"
-            "                    timeout=timeout,\n"
-            "                    preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
+            "                    timeout=request.timeout,\n"
+            "                    preexec_fn=(\n"
+            "                        verifier._limits()\n"
+            "                        if os.name == \"posix\"\n"
+            "                        else None\n"
+            "                    ),\n"
             "                    require_process_group_cleanup_proof=False,\n"
         ),
         test=(
@@ -4002,17 +4010,25 @@ MUTATIONS = (
     ),
     Mutation(
         name="strict-baseline-suite-group-proof-bypass",
-        path="evoom_guard/guard.py",
+        path="evoom_guard/verifiers/repo_baseline.py",
         before=(
-            "                env=run_env,\n"
-            "                preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
-            "                timeout=timeout,\n"
-            "                require_process_group_cleanup_proof=strict_harness,\n"
+            "                preexec_fn=(\n"
+            "                    verifier._limits()\n"
+            "                    if os.name == \"posix\"\n"
+            "                    else None\n"
+            "                ),\n"
+            "                timeout=request.timeout,\n"
+            "                require_process_group_cleanup_proof=(\n"
+            "                    request.strict_harness\n"
+            "                ),\n"
         ),
         after=(
-            "                env=run_env,\n"
-            "                preexec_fn=rv._limits() if os.name == \"posix\" else None,\n"
-            "                timeout=timeout,\n"
+            "                preexec_fn=(\n"
+            "                    verifier._limits()\n"
+            "                    if os.name == \"posix\"\n"
+            "                    else None\n"
+            "                ),\n"
+            "                timeout=request.timeout,\n"
             "                require_process_group_cleanup_proof=False,\n"
         ),
         test=(

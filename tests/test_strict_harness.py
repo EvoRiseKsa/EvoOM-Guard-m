@@ -14,7 +14,6 @@ from types import SimpleNamespace
 import pytest
 
 import evoom_guard.execution.process as process_module
-import evoom_guard.guard as guard_module
 from evoom_guard.guard import (
     ERROR,
     PASS,
@@ -24,6 +23,7 @@ from evoom_guard.guard import (
     guard,
 )
 from evoom_guard.verifiers import (
+    repo_baseline,
     repo_pack,
     repo_phase_contracts,
     repo_setup,
@@ -348,8 +348,11 @@ def test_problem_strict_harness_reaches_every_repo_host_phase(
 
 
 def test_strict_baseline_requires_group_proof_for_every_host_phase() -> None:
-    calls = _calls_named(guard_module._run_baseline_suite, "_run_bounded_subprocess")
+    calls = _calls_named(
+        repo_baseline.run_repo_baseline,
+        "run_bounded_subprocess",
+    )
 
     assert len(calls) == 2
     for call in calls:
-        _assert_strict_cleanup_keyword(call, "strict_harness")
+        _assert_strict_cleanup_keyword(call, "request.strict_harness")
