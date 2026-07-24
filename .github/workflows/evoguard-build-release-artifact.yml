@@ -1,0 +1,1201 @@
+name: EvoGuard Build Release Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_admission_run_id:
+        description: Exact successful protected C run that produced the source RSAE
+        required: true
+        type: string
+      source_admission_run_attempt:
+        description: Exact C run attempt
+        required: true
+        default: "1"
+        type: string
+      expected_version:
+        description: Reviewed stable X.Y.Z version expected from the admitted source
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: evoguard-release-artifact-build-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main' && vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      source_admission_run_id: ${{ steps.bind.outputs.source_admission_run_id }}
+      source_admission_run_attempt: ${{ steps.bind.outputs.source_admission_run_attempt }}
+      target_sha: ${{ steps.bind.outputs.target_sha }}
+      expected_version: ${{ steps.bind.outputs.expected_version }}
+      source_created: ${{ steps.bind.outputs.source_created }}
+      parent_sha: ${{ steps.bind.outputs.parent_sha }}
+      build_tool_blob_sha: ${{ steps.bind.outputs.build_tool_blob_sha }}
+      sbom_tool_blob_sha: ${{ steps.bind.outputs.sbom_tool_blob_sha }}
+    steps:
+      - name: Validate protected C and bind current protected main
+        id: bind
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_admission_run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ inputs.source_admission_run_attempt }}
+          EXPECTED_C_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMIT_WORKFLOW_ID }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        with:
+          script: |
+            const numeric = /^[1-9][0-9]*$/;
+            for (const name of ['SOURCE_RUN_ID', 'SOURCE_RUN_ATTEMPT', 'EXPECTED_C_WORKFLOW_ID']) {
+              if (!numeric.test(process.env[name] || '')) core.setFailed(`invalid ${name}`);
+            }
+            if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(process.env.EXPECTED_VERSION || '')) {
+              core.setFailed('expected_version must be a reviewed stable X.Y.Z version');
+            }
+            if (process.env.GITHUB_SHA !== process.env.GITHUB_WORKFLOW_SHA) {
+              core.setFailed('builder workflow SHA is not the protected source SHA');
+            }
+            const runId = Number(process.env.SOURCE_RUN_ID);
+            const expectedAttempt = Number(process.env.SOURCE_RUN_ATTEMPT);
+            const expectedWorkflow = Number(process.env.EXPECTED_C_WORKFLOW_ID);
+            const {data: run} = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: runId,
+            });
+            if (run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.event !== 'workflow_run' || run.run_attempt !== expectedAttempt ||
+                run.workflow_id !== expectedWorkflow || run.head_branch !== 'main' ||
+                run.head_sha !== context.sha || run.head_repository?.id !== context.payload.repository.id ||
+                run.head_repository?.full_name !== context.payload.repository.full_name) {
+              core.setFailed('source admission run does not match protected C/current main');
+            }
+            const {data: workflow} = await github.rest.actions.getWorkflow({
+              owner: context.repo.owner, repo: context.repo.repo, workflow_id: run.workflow_id,
+            });
+            if (workflow.path !== '.github/workflows/evoguard-admit-release-source.yml') {
+              core.setFailed('source admission workflow path is not protected C');
+            }
+            const {data: branch} = await github.rest.repos.getBranch({
+              owner: context.repo.owner, repo: context.repo.repo, branch: 'main',
+            });
+            if (!branch.protected || branch.commit.sha !== context.sha) {
+              core.setFailed('main is not protected or moved before E');
+            }
+            const {data: sourceCommit} = await github.rest.git.getCommit({
+              owner: context.repo.owner, repo: context.repo.repo, commit_sha: run.head_sha,
+            });
+            if (!Array.isArray(sourceCommit.parents) || sourceCommit.parents.length !== 1 ||
+                !/^[0-9a-f]{40}$/.test(sourceCommit.parents[0]?.sha || '')) {
+              core.setFailed('release target must have exactly one trusted parent');
+            }
+            const parentSha = sourceCommit.parents[0].sha;
+            const trustedTool = async (path) => {
+              const {data} = await github.rest.repos.getContent({
+                owner: context.repo.owner, repo: context.repo.repo, path, ref: parentSha,
+              });
+              if (Array.isArray(data) || data.type !== 'file' ||
+                  !/^[0-9a-f]{40}$/.test(data.sha || '')) {
+                core.setFailed(`trusted parent tool is not one Git blob: ${path}`);
+              }
+              return data.sha;
+            };
+            const buildToolBlob = await trustedTool('ops/build_pyz.py');
+            const sbomToolBlob = await trustedTool('ops/generate_spdx_sbom.py');
+            const rawCreated = sourceCommit.committer?.date;
+            const parsedCreated = new Date(rawCreated);
+            if (typeof rawCreated !== 'string' || Number.isNaN(parsedCreated.valueOf())) {
+              core.setFailed('protected source commit time is not a valid timestamp');
+            }
+            const sourceCreated = parsedCreated.toISOString().replace('.000Z', 'Z');
+            if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(sourceCreated)) {
+              core.setFailed('protected source commit time is not canonical whole-second UTC');
+            }
+            core.setOutput('source_admission_run_id', String(run.id));
+            core.setOutput('source_admission_run_attempt', String(run.run_attempt));
+            core.setOutput('target_sha', run.head_sha);
+            core.setOutput('expected_version', process.env.EXPECTED_VERSION);
+            core.setOutput('source_created', sourceCreated);
+            core.setOutput('parent_sha', parentSha);
+            core.setOutput('build_tool_blob_sha', buildToolBlob);
+            core.setOutput('sbom_tool_blob_sha', sbomToolBlob);
+
+  build:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Set up the no-secret builder Python runtime
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Download the exact protected C source admission
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-source-admission-v2-${{ needs.preflight.outputs.source_admission_run_attempt }}
+          path: ${{ runner.temp }}/source-admission-download
+          run-id: ${{ needs.preflight.outputs.source_admission_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download the exact protected C external controls
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-source-v2-controls-${{ needs.preflight.outputs.source_admission_run_attempt }}
+          path: ${{ runner.temp }}/source-controls-download
+          run-id: ${{ needs.preflight.outputs.source_admission_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Snapshot only bounded regular source-admission inputs
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          test "$GITHUB_SHA" = "$TARGET_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$TARGET_SHA"
+          python - "$RUNNER_TEMP/source-admission-download" "$RUNNER_TEMP/source-controls-download" "$RUNNER_TEMP/e-inputs" <<'PY'
+          import os, pathlib, shutil, stat, sys
+          admission, controls, destination = map(pathlib.Path, sys.argv[1:])
+          destination.mkdir(mode=0o700)
+          wanted = {
+              admission / 'source-allow.rsae': ('source-allow.rsae', 64 * 1024 * 1024),
+              controls / 'source.json': ('source.json', 1024 * 1024),
+              controls / 'context.json': ('context.json', 1024 * 1024),
+              controls / 'producer.json': ('producer.json', 1024 * 1024),
+              controls / 'admitter.json': ('source-admitter.json', 1024 * 1024),
+              controls / 'github-policy.json': ('source-github-policy.json', 1024 * 1024),
+              controls / 'signing-requirements.lock': ('signing-requirements.lock', 1024 * 1024),
+          }
+          for source, (name, limit) in wanted.items():
+              before = source.lstat()
+              if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+                  raise SystemExit(f'unsafe source-admission input: {source}')
+              flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
+              descriptor = os.open(source, flags)
+              try:
+                  opened = os.fstat(descriptor)
+                  if (opened.st_dev, opened.st_ino, opened.st_size) != (before.st_dev, before.st_ino, before.st_size):
+                      raise SystemExit(f'source-admission input changed: {source}')
+                  with os.fdopen(descriptor, 'rb', closefd=False) as stream, (destination / name).open('xb') as output:
+                      shutil.copyfileobj(stream, output, 64 * 1024)
+              finally:
+                  os.close(descriptor)
+          PY
+          test "$(jq -r .target_commit_sha "$RUNNER_TEMP/e-inputs/source.json")" = "$TARGET_SHA"
+          test "$(jq -r .workflow_commit_sha "$RUNNER_TEMP/e-inputs/source-admitter.json")" = "$TARGET_SHA"
+
+      - name: Install hash-locked Ed25519 verification dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --only-binary=:all:
+          --require-hashes -r "$RUNNER_TEMP/e-inputs/signing-requirements.lock"
+
+      - name: Download and pin the reviewed published RAAE runtime
+        env:
+          RUNTIME_URL: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_URL }}
+          RUNTIME_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$RUNTIME_URL"
+          [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/evo-guard.pyz" "$RUNTIME_URL"
+          printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNNER_TEMP/evo-guard.pyz" | sha256sum --check
+          python -I "$RUNNER_TEMP/evo-guard.pyz" version | grep -Eq '^evo-guard [0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'
+
+      - name: Decode external predecessor trust roots
+        env:
+          V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64 }}
+          FINALIZER_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64 }}
+          ARTIFACT_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
+          ARTIFACT_V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_DIGEST_ADMISSION_V2_PUBLIC_KEY_B64 }}
+          SOURCE_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_FINALIZER_V1_PUBLIC_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -m 0700 "$RUNNER_TEMP/e-trust"
+          printf '%s' "$V2_PUBLIC_KEY_B64" | base64 --decode > "$RUNNER_TEMP/e-trust/release-source-admission-v2.pub.pem"
+          printf '%s' "$FINALIZER_PUBLIC_KEY_B64" | base64 --decode > "$RUNNER_TEMP/e-trust/trusted-finalizer.pub.pem"
+          printf '%s' "$ARTIFACT_V1_PUBLIC_KEY_B64" | base64 --decode > "$RUNNER_TEMP/e-trust/artifact-admission-v1.pub.pem"
+          printf '%s' "$ARTIFACT_V2_PUBLIC_KEY_B64" | base64 --decode > "$RUNNER_TEMP/e-trust/artifact-digest-admission-v2.pub.pem"
+          printf '%s' "$SOURCE_V1_PUBLIC_KEY_B64" | base64 --decode > "$RUNNER_TEMP/e-trust/release-source-finalizer-v1.pub.pem"
+
+      - name: Verify the exact RSAE before building
+        env:
+          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
+          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
+          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
+          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
+        run: |
+          set -euo pipefail
+          python -I "$RUNNER_TEMP/evo-guard.pyz" verify-release-source-admission \
+            "$RUNNER_TEMP/e-inputs/source-allow.rsae" \
+            --trusted-pub "$RUNNER_TEMP/e-trust/release-source-admission-v2.pub.pem" \
+            --expected-source "$RUNNER_TEMP/e-inputs/source.json" \
+            --expected-context "$RUNNER_TEMP/e-inputs/context.json" \
+            --expected-producer "$RUNNER_TEMP/e-inputs/producer.json" \
+            --expected-admitter "$RUNNER_TEMP/e-inputs/source-admitter.json" \
+            --expected-bootstrap-guard-sha "$SOURCE_BOOTSTRAP_SHA256" \
+            --expected-github-policy "$RUNNER_TEMP/e-inputs/source-github-policy.json" \
+            --expected-git-executable-sha256 "$SOURCE_GIT_SHA256" \
+            --expected-gh-executable-sha256 "$SOURCE_GH_SHA256" \
+            --expected-provider-isolation-uid "$SOURCE_PROVIDER_UID" \
+            --expected-provider-isolation-gid "$SOURCE_PROVIDER_GID" \
+            --trusted-finalizer-pub "$RUNNER_TEMP/e-trust/trusted-finalizer.pub.pem" \
+            --artifact-admission-v1-pub "$RUNNER_TEMP/e-trust/artifact-admission-v1.pub.pem" \
+            --artifact-digest-admission-v2-pub "$RUNNER_TEMP/e-trust/artifact-digest-admission-v2.pub.pem" \
+            --release-source-finalizer-v1-pub "$RUNNER_TEMP/e-trust/release-source-finalizer-v1.pub.pem" \
+            > "$RUNNER_TEMP/source-verification.json"
+          test "$(jq -r .status "$RUNNER_TEMP/source-verification.json")" = "VERIFIED"
+          test "$(jq -r .decision "$RUNNER_TEMP/source-verification.json")" = "ALLOW"
+
+      - name: Checkout the exact admitted protected-main source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.preflight.outputs.target_sha }}
+          path: admitted-source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout only the one-parent trusted release tools
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.preflight.outputs.parent_sha }}
+          path: trusted-build-tools
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build the actual deterministic release assets without OIDC or write authority
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          SOURCE_RUN_ID: ${{ needs.preflight.outputs.source_admission_run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ needs.preflight.outputs.source_admission_run_attempt }}
+          EXPECTED_VERSION: ${{ needs.preflight.outputs.expected_version }}
+          SOURCE_CREATED: ${{ needs.preflight.outputs.source_created }}
+          PARENT_SHA: ${{ needs.preflight.outputs.parent_sha }}
+          BUILD_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.build_tool_blob_sha }}
+          SBOM_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.sbom_tool_blob_sha }}
+          BUILD_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+        run: |
+          set -euo pipefail
+          test "$(git -C admitted-source rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git -C trusted-build-tools rev-parse HEAD)" = "$PARENT_SHA"
+          parent_tree="$(git -C trusted-build-tools rev-parse 'HEAD^{tree}')"
+          test "$(jq -er .base_sha "$RUNNER_TEMP/e-inputs/context.json")" = "$PARENT_SHA"
+          test "$(jq -er .base_tree_sha "$RUNNER_TEMP/e-inputs/context.json")" = "$parent_tree"
+          build_entry="$(git -C trusted-build-tools ls-tree HEAD -- ops/build_pyz.py)"
+          sbom_entry="$(git -C trusted-build-tools ls-tree HEAD -- ops/generate_spdx_sbom.py)"
+          read -r build_mode build_type build_sha build_path <<< "$build_entry"
+          read -r sbom_mode sbom_type sbom_sha sbom_path <<< "$sbom_entry"
+          test "$build_mode:$build_type:$build_sha:$build_path" = "100644:blob:$BUILD_TOOL_BLOB_SHA:ops/build_pyz.py"
+          test "$sbom_mode:$sbom_type:$sbom_sha:$sbom_path" = "100644:blob:$SBOM_TOOL_BLOB_SHA:ops/generate_spdx_sbom.py"
+          test "$(git -C trusted-build-tools cat-file -t "$BUILD_TOOL_BLOB_SHA")" = "blob"
+          test "$(git -C trusted-build-tools cat-file -t "$SBOM_TOOL_BLOB_SHA")" = "blob"
+          trusted_exec="$RUNNER_TEMP/trusted-exec"
+          mkdir -m 0700 "$trusted_exec"
+          git -C trusted-build-tools cat-file blob "$BUILD_TOOL_BLOB_SHA" > "$trusted_exec/build_pyz.py"
+          git -C trusted-build-tools cat-file blob "$SBOM_TOOL_BLOB_SHA" > "$trusted_exec/generate_spdx_sbom.py"
+          chmod 0444 "$trusted_exec/build_pyz.py" "$trusted_exec/generate_spdx_sbom.py"
+          test -f "$trusted_exec/build_pyz.py" -a ! -L "$trusted_exec/build_pyz.py"
+          test -f "$trusted_exec/generate_spdx_sbom.py" -a ! -L "$trusted_exec/generate_spdx_sbom.py"
+          test "$(git -C trusted-build-tools hash-object --no-filters "$trusted_exec/build_pyz.py")" = "$BUILD_TOOL_BLOB_SHA"
+          test "$(git -C trusted-build-tools hash-object --no-filters "$trusted_exec/generate_spdx_sbom.py")" = "$SBOM_TOOL_BLOB_SHA"
+          [[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_CREATED" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          untrusted="$RUNNER_TEMP/untrusted-release-assets"
+          mkdir -m 0700 "$untrusted"
+          docker pull "$BUILD_IMAGE"
+          # Inner variables expand only inside the container shell.
+          # shellcheck disable=SC2016
+          timeout --signal=KILL 10m docker run --rm \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            --pids-limit 128 \
+            --memory 2g \
+            --cpus 2 \
+            --ulimit fsize=134217728:134217728 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=268435456 \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/admitted-source,dst=/candidate,readonly" \
+            --mount "type=bind,src=$trusted_exec,dst=/trusted-tools,readonly" \
+            --mount "type=bind,src=$untrusted,dst=/output" \
+            --workdir /candidate \
+            --env "EXPECTED_VERSION=$EXPECTED_VERSION" \
+            --env "CREATED=$SOURCE_CREATED" \
+            "$BUILD_IMAGE" \
+            /bin/sh -ceu '
+              umask 077
+              export HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONHASHSEED=0
+              python -I -c '"'"'
+          import importlib.util
+          spec = importlib.util.spec_from_file_location("trusted_build_pyz", "/trusted-tools/build_pyz.py")
+          if spec is None or spec.loader is None:
+              raise SystemExit("trusted parent builder cannot be loaded")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          module.build("/output/evo-guard.pyz", root="/candidate")
+          '"'"' >/dev/null
+              python -I /trusted-tools/generate_spdx_sbom.py /output/evo-guard.pyz \
+                --version "$EXPECTED_VERSION" --created "$CREATED" \
+                --output /output/evo-guard.spdx.json >/dev/null
+            '
+          python - "$untrusted" "$RUNNER_TEMP/release-assets" <<'PY'
+          import os, pathlib, shutil, stat, sys
+          source, destination = map(pathlib.Path, sys.argv[1:])
+          expected = {'evo-guard.pyz': 64 * 1024 * 1024, 'evo-guard.spdx.json': 16 * 1024 * 1024}
+          if {item.name for item in source.iterdir()} != set(expected):
+              raise SystemExit('container build output is not closed')
+          destination.mkdir(mode=0o700)
+          for name, maximum in expected.items():
+              path = source / name
+              before = path.lstat()
+              if (
+                  stat.S_ISLNK(before.st_mode)
+                  or not stat.S_ISREG(before.st_mode)
+                  or before.st_size < 1
+                  or before.st_size > maximum
+              ):
+                  raise SystemExit(f'unsafe container build output: {name}')
+              descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+              try:
+                  opened = os.fstat(descriptor)
+                  if (opened.st_dev, opened.st_ino, opened.st_size) != (
+                      before.st_dev, before.st_ino, before.st_size
+                  ):
+                      raise SystemExit(f'container build output changed: {name}')
+                  with os.fdopen(descriptor, 'rb', closefd=False) as reader, \
+                       (destination / name).open('xb') as writer:
+                      shutil.copyfileobj(reader, writer, 64 * 1024)
+              finally:
+                  os.close(descriptor)
+          PY
+          observed_version="$(
+            timeout --signal=KILL 5m docker run --rm \
+              --network none \
+              --read-only \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --user "$(id -u):$(id -g)" \
+              --pids-limit 64 \
+              --memory 512m \
+              --cpus 1 \
+              --tmpfs /tmp:rw,noexec,nosuid,nodev,size=67108864 \
+              --mount "type=bind,src=$RUNNER_TEMP/release-assets,dst=/artifacts,readonly" \
+              --workdir / \
+              "$BUILD_IMAGE" \
+              /bin/sh -ceu '
+                export HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONHASHSEED=0
+                python -I /artifacts/evo-guard.pyz doctor >/dev/null
+                python -I /artifacts/evo-guard.pyz version
+              '
+          )"
+          test "$observed_version" = "evo-guard $EXPECTED_VERSION"
+          version="$EXPECTED_VERSION"
+          (
+            cd "$RUNNER_TEMP/release-assets"
+            sha256sum evo-guard.pyz evo-guard.spdx.json > SHA256SUMS
+            test "$(wc -l < SHA256SUMS)" -eq 2
+            sha256sum --check --strict SHA256SUMS
+          )
+          RELEASE_VERSION="$version" SOURCE_CREATED="$SOURCE_CREATED" python - \
+            "$RUNNER_TEMP/e-inputs/source-allow.rsae" \
+            "$RUNNER_TEMP/release-assets" \
+            "$RUNNER_TEMP/builder-controls.json" \
+            "$GITHUB_WORKSPACE/admitted-source" <<'PY'
+          import ast, hashlib, json, os, pathlib, stat, sys, unicodedata, zipfile
+          rsae, assets, output, source_root = map(pathlib.Path, sys.argv[1:])
+          def descriptor(path):
+              data = path.read_bytes()
+              return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+          def reject_duplicate_keys(pairs):
+              value = {}
+              for key, item in pairs:
+                  if key in value:
+                      raise ValueError(f'duplicate JSON key: {key}')
+                  value[key] = item
+              return value
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+          def checksum_map(items):
+              require(isinstance(items, list) and len(items) == 2, 'checksum set is not exact')
+              value = {}
+              for item in items:
+                  require(isinstance(item, dict), 'checksum entry is not an object')
+                  algorithm = item.get('algorithm')
+                  require(algorithm in {'SHA1', 'SHA256'}, 'checksum algorithm is not allowed')
+                  require(algorithm not in value, 'checksum algorithm is duplicated')
+                  value[algorithm] = item.get('checksumValue')
+              require(set(value) == {'SHA1', 'SHA256'}, 'checksum algorithms are incomplete')
+              return value
+          def writes_version(node):
+              if isinstance(node, ast.Assign):
+                  targets = node.targets
+              elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+                  targets = [node.target]
+              else:
+                  return False
+              return any(
+                  isinstance(part, ast.Name) and part.id == '__version__'
+                  for target in targets for part in ast.walk(target)
+              )
+          sbom = json.loads(
+              (assets / 'evo-guard.spdx.json').read_text(encoding='utf-8'),
+              object_pairs_hook=reject_duplicate_keys,
+          )
+          packages = sbom.get('packages')
+          require(isinstance(packages, list) and len(packages) == 1, 'SPDX must contain exactly one package')
+          package = packages[0]
+          release_version = os.environ['RELEASE_VERSION']
+          source_created = os.environ['SOURCE_CREATED']
+          package_id = 'SPDXRef-Package-evoom-guard'
+          license_id = 'LicenseRef-EvoRise-Source-Available-1.0'
+          require(set(sbom) == {
+              'SPDXID', 'creationInfo', 'dataLicense', 'documentDescribes',
+              'documentNamespace', 'files', 'hasExtractedLicensingInfos',
+              'name', 'packages', 'relationships', 'spdxVersion',
+          }, 'SPDX document fields are not exact')
+          require(sbom.get('SPDXID') == 'SPDXRef-DOCUMENT', 'document SPDXID is wrong')
+          require(sbom.get('spdxVersion') == 'SPDX-2.3', 'SPDX version is wrong')
+          require(sbom.get('dataLicense') == 'CC0-1.0', 'SPDX dataLicense is wrong')
+          require(sbom.get('name') == f'evo-guard-{release_version}-release-sbom', 'SPDX document name is wrong')
+          require(sbom.get('creationInfo') == {
+              'created': source_created,
+              'creators': [
+                  'Organization: EvoRise Tech',
+                  'Tool: EvoOM Guard deterministic SPDX generator',
+              ],
+          }, 'SPDX creationInfo is not exact')
+          require(sbom.get('documentDescribes') == [package_id], 'documentDescribes is wrong')
+          require(set(package) == {
+              'SPDXID', 'checksums', 'copyrightText', 'downloadLocation',
+              'filesAnalyzed', 'licenseConcluded', 'licenseDeclared', 'name',
+              'packageFileName', 'packageVerificationCode',
+              'primaryPackagePurpose', 'supplier', 'versionInfo',
+          }, 'SPDX package fields are not exact')
+          require(package.get('SPDXID') == package_id, 'package SPDXID is wrong')
+          require(package.get('name') == 'evo-guard', 'package name is wrong')
+          require(package.get('versionInfo') == release_version, 'SPDX version does not match expected version')
+          require(package.get('filesAnalyzed') is True, 'package files are not analyzed')
+          require(package.get('licenseDeclared') == license_id, 'declared license is wrong')
+          require(package.get('licenseConcluded') == 'NOASSERTION', 'concluded license is wrong')
+          require(package.get('packageFileName') == 'evo-guard.pyz', 'package file name is wrong')
+          require(package.get('copyrightText') == 'Copyright © 2026 EvoRise Tech. All rights reserved.', 'package copyright is wrong')
+          require(package.get('downloadLocation') == 'NOASSERTION', 'package download location is wrong')
+          require(package.get('primaryPackagePurpose') == 'APPLICATION', 'package purpose is wrong')
+          require(package.get('supplier') == 'Organization: EvoRise Tech', 'package supplier is wrong')
+          pyz_path = assets / 'evo-guard.pyz'
+          archive_bytes = pyz_path.read_bytes()
+          artifact_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+          document_identity = hashlib.sha256(
+              '\0'.join((release_version, artifact_sha256, source_created)).encode('utf-8')
+          ).hexdigest()
+          require(
+              sbom.get('documentNamespace')
+              == f'https://github.com/EvoRiseKsa/EvoOM-Guard-m/spdx/evo-guard/{release_version}/{document_identity}',
+              'SPDX document namespace is wrong',
+          )
+          shebang = b'#!/usr/bin/env python3\n'
+          require(archive_bytes.startswith(shebang + b'PK\x03\x04'), 'PYZ preamble is not canonical')
+          eocd = archive_bytes.rfind(b'PK\x05\x06')
+          require(eocd >= 0 and eocd + 22 <= len(archive_bytes), 'ZIP EOCD is missing')
+          comment_length = int.from_bytes(archive_bytes[eocd + 20:eocd + 22], 'little')
+          require(eocd + 22 + comment_length == len(archive_bytes), 'ZIP has trailing bytes')
+          require(comment_length == 0, 'ZIP comment is not canonical')
+          with zipfile.ZipFile(pyz_path) as archive:
+              infos = archive.infolist()
+              names = [info.filename for info in infos]
+              require(0 < len(infos) <= 4096, 'ZIP member count is outside bounds')
+              require(names == sorted(names), 'ZIP member order is not canonical')
+              require(len(names) == len(set(names)), 'ZIP member names are duplicated')
+              require(
+                  all(unicodedata.normalize('NFC', name) == name for name in names),
+                  'ZIP member name is not NFC',
+              )
+              require(
+                  len({unicodedata.normalize('NFC', name).casefold() for name in names})
+                  == len(names),
+                  'ZIP member names are not portable-case unique',
+              )
+              contents = {}
+              total = 0
+              for info in infos:
+                  name = info.filename
+                  path = pathlib.PurePosixPath(name)
+                  require(
+                      name and not info.is_dir() and '\\' not in name and '\x00' not in name
+                      and not name.endswith('/')
+                      and not (
+                          len(name) >= 2 and name[0].isascii()
+                          and name[0].isalpha() and name[1] == ':'
+                      )
+                      and all(
+                          ord(character) >= 32 and ord(character) != 127
+                          and not 0xD800 <= ord(character) <= 0xDFFF
+                          for character in name
+                      )
+                      and not path.is_absolute() and path.as_posix() == name
+                      and all(part not in {'', '.', '..'} for part in path.parts),
+                      f'unsafe ZIP member name: {name!r}',
+                  )
+                  require(info.compress_type == zipfile.ZIP_STORED, f'compressed member: {name}')
+                  require(info.compress_size == info.file_size, f'ZIP size ambiguity: {name}')
+                  require(info.date_time == (1980, 1, 1, 0, 0, 0), f'noncanonical timestamp: {name}')
+                  require(info.create_system == 3, f'noncanonical creator: {name}')
+                  require(info.external_attr == 0o100644 << 16, f'noncanonical mode: {name}')
+                  require(info.extra == b'' and info.comment == b'', f'nonempty metadata: {name}')
+                  require(0 <= info.file_size <= 16 * 1024 * 1024, f'member too large: {name}')
+                  total += info.file_size
+                  require(total <= 64 * 1024 * 1024, 'expanded ZIP size is outside bounds')
+                  contents[name] = archive.read(info)
+
+          def read_source(path):
+              before = path.lstat()
+              require(
+                  not stat.S_ISLNK(before.st_mode) and stat.S_ISREG(before.st_mode),
+                  f'packaged source is not a regular file: {path}',
+              )
+              descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+              try:
+                  opened = os.fstat(descriptor)
+                  require(
+                      (opened.st_dev, opened.st_ino, opened.st_size)
+                      == (before.st_dev, before.st_ino, before.st_size),
+                      f'packaged source changed while opening: {path}',
+                  )
+                  chunks = []
+                  while True:
+                      chunk = os.read(descriptor, 1024 * 1024)
+                      if not chunk:
+                          break
+                      chunks.append(chunk)
+                  after = os.fstat(descriptor)
+                  require(
+                      (after.st_dev, after.st_ino, after.st_size)
+                      == (opened.st_dev, opened.st_ino, opened.st_size),
+                      f'packaged source changed while reading: {path}',
+                  )
+              finally:
+                  os.close(descriptor)
+              return b''.join(chunks)
+
+          expected_contents = {}
+
+          def visit_source(directory, prefix, include=True):
+              metadata = directory.lstat()
+              require(
+                  not stat.S_ISLNK(metadata.st_mode) and stat.S_ISDIR(metadata.st_mode),
+                  f'packaged source directory is unsafe: {directory}',
+              )
+              with os.scandir(directory) as scanner:
+                  entries = sorted(scanner, key=lambda entry: entry.name)
+              for entry in entries:
+                  name = entry.name
+                  require(
+                      name not in {'', '.', '..'}
+                      and '/' not in name and '\\' not in name
+                      and unicodedata.normalize('NFC', name) == name
+                      and all(ord(character) >= 32 and ord(character) != 127 for character in name),
+                      f'unsafe packaged source name: {name!r}',
+                  )
+                  entry_metadata = entry.stat(follow_symlinks=False)
+                  require(
+                      not stat.S_ISLNK(entry_metadata.st_mode),
+                      f'packaged source contains a link: {entry.path}',
+                  )
+                  archive_parts = (*prefix, name)
+                  if stat.S_ISDIR(entry_metadata.st_mode):
+                      visit_source(
+                          pathlib.Path(entry.path),
+                          archive_parts,
+                          include and name != '__pycache__',
+                      )
+                  elif stat.S_ISREG(entry_metadata.st_mode):
+                      if include and not name.endswith('.pyc'):
+                          archive_name = '/'.join(archive_parts)
+                          data = read_source(pathlib.Path(entry.path))
+                          if archive_name.endswith('.py') or (
+                              archive_name.startswith('evoom_guard/schemas/')
+                              and archive_name.endswith('.json')
+                          ):
+                              data = data.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+                          expected_contents[archive_name] = data
+                  else:
+                      raise SystemExit(f'packaged source contains a special file: {entry.path}')
+
+          visit_source(source_root / 'evoom_guard', ('evoom_guard',))
+          license_bytes = read_source(source_root / 'LICENSE')
+          expected_contents['LICENSE'] = license_bytes.replace(b'\r\n', b'\n').replace(b'\r', b'\n')
+          expected_contents['__main__.py'] = (
+              b'import sys\nfrom evoom_guard.cli import main\n\nsys.exit(main())\n'
+          )
+          require(
+              len({
+                  unicodedata.normalize('NFC', name).casefold()
+                  for name in expected_contents
+              }) == len(expected_contents),
+              'packaged source members are not portable-case unique',
+          )
+          require(set(contents) == set(expected_contents), 'PYZ members do not equal packaged source')
+          for name, expected_bytes in expected_contents.items():
+              require(contents[name] == expected_bytes, f'PYZ member differs from source: {name}')
+          files = sbom.get('files')
+          require(isinstance(files, list) and len(files) == len(names), 'SPDX file set is not exact')
+          file_ids, file_sha1 = [], []
+          for entry, name in zip(files, names, strict=True):
+              require(set(entry) == {
+                  'SPDXID', 'checksums', 'copyrightText', 'fileName',
+                  'licenseConcluded', 'licenseInfoInFiles',
+              }, f'SPDX file fields are not exact: {name}')
+              require(entry.get('fileName') == f'./{name}', f'fileName is wrong: {name}')
+              spdx_id = entry.get('SPDXID')
+              require(
+                  spdx_id == f"SPDXRef-File-{hashlib.sha256(name.encode('utf-8')).hexdigest()}"
+                  and spdx_id not in file_ids,
+                  f'file SPDXID is invalid: {name}',
+              )
+              file_ids.append(spdx_id)
+              expected = checksum_map(entry.get('checksums'))
+              data = contents[name]
+              sha1 = hashlib.sha1(data).hexdigest()
+              require(expected['SHA1'] == sha1, f'file SHA1 mismatch: {name}')
+              require(expected['SHA256'] == hashlib.sha256(data).hexdigest(), f'file SHA256 mismatch: {name}')
+              require(entry.get('copyrightText') == 'NOASSERTION', f'file copyright is wrong: {name}')
+              require(entry.get('licenseConcluded') == 'NOASSERTION', f'file license is wrong: {name}')
+              require(entry.get('licenseInfoInFiles') == ['NOASSERTION'], f'file license info is wrong: {name}')
+              file_sha1.append(sha1)
+          package_checksums = checksum_map(package.get('checksums'))
+          require(package_checksums['SHA1'] == hashlib.sha1(archive_bytes).hexdigest(), 'package SHA1 is wrong')
+          require(package_checksums['SHA256'] == hashlib.sha256(archive_bytes).hexdigest(), 'package SHA256 is wrong')
+          verification_code = hashlib.sha1(''.join(sorted(file_sha1)).encode('ascii')).hexdigest()
+          require(
+              package.get('packageVerificationCode') == {'packageVerificationCodeValue': verification_code},
+              'package verification code is wrong',
+          )
+          relationships = [
+              {'spdxElementId': 'SPDXRef-DOCUMENT', 'relatedSpdxElement': package_id, 'relationshipType': 'DESCRIBES'},
+              *[
+                  {'spdxElementId': package_id, 'relatedSpdxElement': spdx_id, 'relationshipType': 'CONTAINS'}
+                  for spdx_id in file_ids
+              ],
+          ]
+          require(sbom.get('relationships') == relationships, 'SPDX relationships are not exact')
+          extracted = sbom.get('hasExtractedLicensingInfos')
+          require(
+              isinstance(extracted, list) and len(extracted) == 1
+              and isinstance(extracted[0], dict)
+              and set(extracted[0]) == {'extractedText', 'licenseId', 'name'}
+              and extracted[0].get('licenseId') == license_id
+              and extracted[0].get('name') == 'EvoRise Source-Available License 1.0'
+              and extracted[0].get('extractedText') == contents['LICENSE'].decode('utf-8'),
+              'extracted license does not bind LICENSE',
+          )
+          tree = ast.parse(contents['evoom_guard/__init__.py'].decode('utf-8'))
+          assignments = [node for node in ast.walk(tree) if writes_version(node)]
+          require(len(assignments) == 1, 'release version write is not unique')
+          assignment = assignments[0]
+          require(
+              isinstance(assignment, ast.Assign)
+              and len(assignment.targets) == 1
+              and isinstance(assignment.targets[0], ast.Name)
+              and isinstance(assignment.value, ast.Constant)
+              and assignment.value.value == release_version,
+              'static PYZ version does not match expected version',
+          )
+          payload = {
+              'format': 'EVOGUARD_RELEASE_ASSET_BUILDER_CONTROLS_V1',
+              'artifacts': {
+                  'evo-guard.pyz': descriptor(assets / 'evo-guard.pyz'),
+                  'evo-guard.spdx.json': descriptor(assets / 'evo-guard.spdx.json'),
+              },
+              'checksums': descriptor(assets / 'SHA256SUMS'),
+              'release_source_admission': descriptor(rsae),
+              'release_version': release_version,
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'source_created': os.environ['SOURCE_CREATED'],
+              'source_admission_run_attempt': int(os.environ['SOURCE_RUN_ATTEMPT']),
+              'source_admission_run_id': os.environ['SOURCE_RUN_ID'],
+              'target_sha': os.environ['TARGET_SHA'],
+              'trusted_build_parent_sha': os.environ['PARENT_SHA'],
+              'trusted_build_tool_blobs': {
+                  'ops/build_pyz.py': os.environ['BUILD_TOOL_BLOB_SHA'],
+                  'ops/generate_spdx_sbom.py': os.environ['SBOM_TOOL_BLOB_SHA'],
+              },
+          }
+          output.write_text(json.dumps(payload, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8', newline='\n')
+          PY
+
+      - name: Preserve the closed unprivileged build output
+        run: |
+          set -euo pipefail
+          mkdir -m 0700 "$RUNNER_TEMP/e-build-output"
+          cp "$RUNNER_TEMP/release-assets/evo-guard.pyz" \
+            "$RUNNER_TEMP/release-assets/evo-guard.spdx.json" \
+            "$RUNNER_TEMP/release-assets/SHA256SUMS" \
+            "$RUNNER_TEMP/builder-controls.json" "$RUNNER_TEMP/e-build-output/"
+          cp "$RUNNER_TEMP/e-inputs/source-allow.rsae" "$RUNNER_TEMP/e-build-output/"
+          cp "$RUNNER_TEMP/e-inputs/source.json" "$RUNNER_TEMP/e-inputs/context.json" \
+            "$RUNNER_TEMP/e-inputs/producer.json" "$RUNNER_TEMP/e-inputs/source-admitter.json" \
+            "$RUNNER_TEMP/e-inputs/source-github-policy.json" \
+            "$RUNNER_TEMP/e-inputs/signing-requirements.lock" "$RUNNER_TEMP/e-build-output/"
+          test "$(find "$RUNNER_TEMP/e-build-output" -maxdepth 1 -type f | wc -l)" -eq 11
+
+      - name: Transfer only the unprivileged build output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-assets-unattested-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/e-build-output
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1
+
+  attest:
+    needs: [preflight, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Download only the exact unprivileged build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-assets-unattested-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/e-output
+
+      - name: Validate the closed regular file set without executing source or artifact
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          test "$GITHUB_SHA" = "$TARGET_SHA"
+          test "$GITHUB_WORKFLOW_SHA" = "$TARGET_SHA"
+          python - "$RUNNER_TEMP/e-output" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import stat
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          limits = {
+              'evo-guard.pyz': 64 * 1024 * 1024,
+              'evo-guard.spdx.json': 16 * 1024 * 1024,
+              'SHA256SUMS': 512,
+              'builder-controls.json': 1024 * 1024,
+              'source-allow.rsae': 64 * 1024 * 1024,
+              'source.json': 1024 * 1024,
+              'context.json': 1024 * 1024,
+              'producer.json': 1024 * 1024,
+              'source-admitter.json': 1024 * 1024,
+              'source-github-policy.json': 1024 * 1024,
+              'signing-requirements.lock': 1024 * 1024,
+          }
+          if {item.name for item in root.iterdir()} != set(limits):
+              raise SystemExit('unprivileged build output set is not closed')
+          for name, maximum in limits.items():
+              metadata = (root / name).lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe build output type: {name}')
+              if metadata.st_size < 1 or metadata.st_size > maximum:
+                  raise SystemExit(f'unsafe build output size: {name}')
+          controls = json.loads((root / 'builder-controls.json').read_text(encoding='utf-8'))
+          if controls.get('format') != 'EVOGUARD_RELEASE_ASSET_BUILDER_CONTROLS_V1':
+              raise SystemExit('unexpected builder control format')
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json'):
+              data = (root / name).read_bytes()
+              if controls['artifacts'].get(name) != {
+                  'sha256': hashlib.sha256(data).hexdigest(),
+                  'size': len(data),
+              }:
+                  raise SystemExit(f'builder descriptor mismatch: {name}')
+          sbom = json.loads((root / 'evo-guard.spdx.json').read_text(encoding='utf-8'))
+          packages = sbom.get('packages')
+          if not isinstance(packages, list) or len(packages) != 1:
+              raise SystemExit('SPDX must contain exactly one package')
+          package = packages[0]
+          if package.get('name') != 'evo-guard':
+              raise SystemExit('unexpected SPDX package name')
+          release_version = package.get('versionInfo')
+          if not isinstance(release_version, str) or not re.fullmatch(
+              r'[0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z.-]+)?', release_version
+          ):
+              raise SystemExit('SPDX release version is not canonical')
+          if controls.get('release_version') != release_version:
+              raise SystemExit('builder release version does not match SPDX')
+          import ast
+          import zipfile
+          with zipfile.ZipFile(root / 'evo-guard.pyz') as archive:
+              if archive.namelist().count('evoom_guard/__init__.py') != 1:
+                  raise SystemExit('release version module is not unique')
+              member = archive.getinfo('evoom_guard/__init__.py')
+              if member.compress_type != zipfile.ZIP_STORED:
+                  raise SystemExit('release version module is not stored')
+              tree = ast.parse(
+                  archive.read(member).decode('utf-8'),
+                  filename='evoom_guard/__init__.py',
+              )
+          assignments = [
+              node for node in ast.walk(tree)
+              if isinstance(node, ast.Assign)
+              and any(
+                  isinstance(target, ast.Name) and target.id == '__version__'
+                  for target in node.targets
+              )
+          ]
+          if len(assignments) != 1:
+              raise SystemExit('release version assignment is not unique')
+          assignment = assignments[0]
+          if (
+              len(assignment.targets) != 1
+              or not isinstance(assignment.targets[0], ast.Name)
+              or not isinstance(assignment.value, ast.Constant)
+              or not isinstance(assignment.value.value, str)
+              or assignment.value.value != release_version
+          ):
+              raise SystemExit('PYZ release version does not match SPDX')
+          lines = (root / 'SHA256SUMS').read_text(encoding='ascii').splitlines()
+          if len(lines) != 2:
+              raise SystemExit('SHA256SUMS must have exactly two lines')
+          for line, name in zip(lines, ('evo-guard.pyz', 'evo-guard.spdx.json'), strict=True):
+              digest = hashlib.sha256((root / name).read_bytes()).hexdigest()
+              if line != f'{digest}  {name}':
+                  raise SystemExit(f'checksum mismatch: {name}')
+          PY
+
+      - name: Independently enforce the complete static PYZ and SPDX contract
+        env:
+          EXPECTED_VERSION: ${{ needs.preflight.outputs.expected_version }}
+          SOURCE_CREATED: ${{ needs.preflight.outputs.source_created }}
+          PARENT_SHA: ${{ needs.preflight.outputs.parent_sha }}
+          BUILD_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.build_tool_blob_sha }}
+          SBOM_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.sbom_tool_blob_sha }}
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/e-output/evo-guard.pyz" "$RUNNER_TEMP/e-output/evo-guard.spdx.json" "$RUNNER_TEMP/e-output/builder-controls.json" <<'PY'
+          import ast
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import unicodedata
+          import zipfile
+
+          pyz_path, sbom_path, controls_path = map(pathlib.Path, __import__('sys').argv[1:])
+          expected_version = os.environ['EXPECTED_VERSION']
+          source_created = os.environ['SOURCE_CREATED']
+          if not __import__('re').fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', expected_version):
+              raise SystemExit('trusted expected release version is not stable X.Y.Z')
+          if not 0 < pyz_path.stat().st_size <= 64 * 1024 * 1024:
+              raise SystemExit('PYZ size is outside the static contract')
+          if not 0 < sbom_path.stat().st_size <= 16 * 1024 * 1024:
+              raise SystemExit('SPDX size is outside the static contract')
+
+          def reject_duplicate_keys(pairs):
+              value = {}
+              for key, item in pairs:
+                  if key in value:
+                      raise ValueError(f'duplicate JSON key: {key}')
+                  value[key] = item
+              return value
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          def checksum_map(items):
+              require(isinstance(items, list) and len(items) == 2, 'checksum set is not exact')
+              value = {}
+              for item in items:
+                  require(isinstance(item, dict), 'checksum entry is not an object')
+                  algorithm = item.get('algorithm')
+                  require(algorithm in {'SHA1', 'SHA256'}, 'checksum algorithm is not allowed')
+                  require(algorithm not in value, 'checksum algorithm is duplicated')
+                  digest = item.get('checksumValue')
+                  require(isinstance(digest, str), 'checksum digest is not text')
+                  value[algorithm] = digest
+              require(set(value) == {'SHA1', 'SHA256'}, 'checksum algorithms are incomplete')
+              return value
+
+          def writes_version(node):
+              if isinstance(node, ast.Assign):
+                  targets = node.targets
+              elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+                  targets = [node.target]
+              else:
+                  return False
+              return any(
+                  isinstance(part, ast.Name) and part.id == '__version__'
+                  for target in targets
+                  for part in ast.walk(target)
+              )
+
+          controls = json.loads(
+              controls_path.read_text(encoding='utf-8'),
+              object_pairs_hook=reject_duplicate_keys,
+          )
+          require(
+              controls.get('format') == 'EVOGUARD_RELEASE_ASSET_BUILDER_CONTROLS_V1',
+              'builder controls format is wrong',
+          )
+          require(
+              controls.get('release_version') == expected_version,
+              'builder controls do not bind the trusted expected version',
+          )
+          require(
+              controls.get('source_created') == source_created,
+              'builder controls do not bind the trusted source timestamp',
+          )
+          require(
+              controls.get('trusted_build_parent_sha') == os.environ['PARENT_SHA'],
+              'builder controls do not bind the trusted parent',
+          )
+          require(
+              controls.get('trusted_build_tool_blobs') == {
+                  'ops/build_pyz.py': os.environ['BUILD_TOOL_BLOB_SHA'],
+                  'ops/generate_spdx_sbom.py': os.environ['SBOM_TOOL_BLOB_SHA'],
+              },
+              'builder controls do not bind exact trusted tool blobs',
+          )
+          sbom = json.loads(
+              sbom_path.read_text(encoding='utf-8'),
+              object_pairs_hook=reject_duplicate_keys,
+          )
+          package_id = 'SPDXRef-Package-evoom-guard'
+          license_id = 'LicenseRef-EvoRise-Source-Available-1.0'
+          require(isinstance(sbom, dict), 'SPDX root is not an object')
+          require(set(sbom) == {
+              'SPDXID', 'creationInfo', 'dataLicense', 'documentDescribes',
+              'documentNamespace', 'files', 'hasExtractedLicensingInfos',
+              'name', 'packages', 'relationships', 'spdxVersion',
+          }, 'SPDX document fields are not exact')
+          require(sbom.get('SPDXID') == 'SPDXRef-DOCUMENT', 'document SPDXID is wrong')
+          require(sbom.get('spdxVersion') == 'SPDX-2.3', 'SPDX version is wrong')
+          require(sbom.get('dataLicense') == 'CC0-1.0', 'SPDX dataLicense is wrong')
+          require(sbom.get('name') == f'evo-guard-{expected_version}-release-sbom', 'SPDX document name is wrong')
+          require(sbom.get('creationInfo') == {
+              'created': source_created,
+              'creators': [
+                  'Organization: EvoRise Tech',
+                  'Tool: EvoOM Guard deterministic SPDX generator',
+              ],
+          }, 'SPDX creationInfo is not exact')
+          require(sbom.get('documentDescribes') == [package_id], 'documentDescribes is wrong')
+          packages = sbom.get('packages')
+          require(isinstance(packages, list) and len(packages) == 1, 'package set is not exact')
+          package = packages[0]
+          require(isinstance(package, dict), 'package is not an object')
+          require(set(package) == {
+              'SPDXID', 'checksums', 'copyrightText', 'downloadLocation',
+              'filesAnalyzed', 'licenseConcluded', 'licenseDeclared', 'name',
+              'packageFileName', 'packageVerificationCode',
+              'primaryPackagePurpose', 'supplier', 'versionInfo',
+          }, 'SPDX package fields are not exact')
+          require(package.get('SPDXID') == package_id, 'package SPDXID is wrong')
+          require(package.get('name') == 'evo-guard', 'package name is wrong')
+          require(package.get('versionInfo') == expected_version, 'SPDX does not bind expected version')
+          require(package.get('filesAnalyzed') is True, 'package files are not analyzed')
+          require(package.get('licenseDeclared') == license_id, 'declared license is wrong')
+          require(package.get('licenseConcluded') == 'NOASSERTION', 'concluded license is wrong')
+          require(package.get('packageFileName') == 'evo-guard.pyz', 'package file name is wrong')
+          require(package.get('copyrightText') == 'Copyright © 2026 EvoRise Tech. All rights reserved.', 'package copyright is wrong')
+          require(package.get('downloadLocation') == 'NOASSERTION', 'package download location is wrong')
+          require(package.get('primaryPackagePurpose') == 'APPLICATION', 'package purpose is wrong')
+          require(package.get('supplier') == 'Organization: EvoRise Tech', 'package supplier is wrong')
+
+          archive_bytes = pyz_path.read_bytes()
+          artifact_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+          document_identity = hashlib.sha256(
+              '\0'.join((expected_version, artifact_sha256, source_created)).encode('utf-8')
+          ).hexdigest()
+          require(
+              sbom.get('documentNamespace')
+              == f'https://github.com/EvoRiseKsa/EvoOM-Guard-m/spdx/evo-guard/{expected_version}/{document_identity}',
+              'SPDX document namespace is wrong',
+          )
+          shebang = b'#!/usr/bin/env python3\n'
+          require(archive_bytes.startswith(shebang + b'PK\x03\x04'), 'PYZ preamble is not canonical')
+          eocd = archive_bytes.rfind(b'PK\x05\x06')
+          require(eocd >= 0 and eocd + 22 <= len(archive_bytes), 'ZIP EOCD is missing')
+          comment_length = int.from_bytes(archive_bytes[eocd + 20:eocd + 22], 'little')
+          require(eocd + 22 + comment_length == len(archive_bytes), 'ZIP has trailing bytes')
+          require(comment_length == 0, 'ZIP comment is not canonical')
+          with zipfile.ZipFile(pyz_path) as archive:
+              require(archive.comment == b'', 'ZIP archive comment is not empty')
+              infos = archive.infolist()
+              require(0 < len(infos) <= 4096, 'ZIP member count is outside bounds')
+              names = [info.filename for info in infos]
+              require(names == sorted(names), 'ZIP member order is not canonical')
+              require(len(names) == len(set(names)), 'ZIP member names are duplicated')
+              require(
+                  all(unicodedata.normalize('NFC', name) == name for name in names),
+                  'ZIP member name is not NFC',
+              )
+              require(
+                  len({unicodedata.normalize('NFC', name).casefold() for name in names})
+                  == len(names),
+                  'ZIP member names are not portable-case unique',
+              )
+              contents = {}
+              total = 0
+              for info in infos:
+                  name = info.filename
+                  path = pathlib.PurePosixPath(name)
+                  require(
+                      name
+                      and not info.is_dir()
+                      and '\\' not in name
+                      and '\x00' not in name
+                      and not name.endswith('/')
+                      and not (
+                          len(name) >= 2
+                          and name[0].isascii()
+                          and name[0].isalpha()
+                          and name[1] == ':'
+                      )
+                      and all(
+                          ord(character) >= 32
+                          and ord(character) != 127
+                          and not 0xD800 <= ord(character) <= 0xDFFF
+                          for character in name
+                      )
+                      and not path.is_absolute()
+                      and path.as_posix() == name
+                      and all(part not in {'', '.', '..'} for part in path.parts),
+                      f'unsafe ZIP member name: {name!r}',
+                  )
+                  require(info.compress_type == zipfile.ZIP_STORED, f'compressed member: {name}')
+                  require(info.compress_size == info.file_size, f'ZIP size ambiguity: {name}')
+                  require(info.date_time == (1980, 1, 1, 0, 0, 0), f'noncanonical timestamp: {name}')
+                  require(info.create_system == 3, f'noncanonical ZIP creator: {name}')
+                  require(info.external_attr == 0o100644 << 16, f'noncanonical ZIP mode: {name}')
+                  require(info.extra == b'' and info.comment == b'', f'nonempty ZIP metadata: {name}')
+                  require(0 <= info.file_size <= 16 * 1024 * 1024, f'member too large: {name}')
+                  total += info.file_size
+                  require(total <= 64 * 1024 * 1024, 'expanded ZIP size is outside bounds')
+                  data = archive.read(info)
+                  require(len(data) == info.file_size, f'member length mismatch: {name}')
+                  contents[name] = data
+
+          files = sbom.get('files')
+          require(isinstance(files, list) and len(files) == len(names), 'SPDX file set is not exact')
+          file_ids = []
+          file_sha1 = []
+          for entry, name in zip(files, names, strict=True):
+              require(isinstance(entry, dict), 'SPDX file entry is not an object')
+              require(set(entry) == {
+                  'SPDXID', 'checksums', 'copyrightText', 'fileName',
+                  'licenseConcluded', 'licenseInfoInFiles',
+              }, f'SPDX file fields are not exact: {name}')
+              require(entry.get('fileName') == f'./{name}', f'fileName is wrong: {name}')
+              spdx_id = entry.get('SPDXID')
+              require(
+                  spdx_id == f"SPDXRef-File-{hashlib.sha256(name.encode('utf-8')).hexdigest()}"
+                  and spdx_id not in file_ids,
+                  f'file SPDXID is invalid: {name}',
+              )
+              file_ids.append(spdx_id)
+              expected = checksum_map(entry.get('checksums'))
+              data = contents[name]
+              sha1 = hashlib.sha1(data).hexdigest()
+              require(expected['SHA1'] == sha1, f'file SHA1 mismatch: {name}')
+              require(expected['SHA256'] == hashlib.sha256(data).hexdigest(), f'file SHA256 mismatch: {name}')
+              require(entry.get('copyrightText') == 'NOASSERTION', f'file copyright is wrong: {name}')
+              require(entry.get('licenseConcluded') == 'NOASSERTION', f'file license is wrong: {name}')
+              require(entry.get('licenseInfoInFiles') == ['NOASSERTION'], f'license info is wrong: {name}')
+              file_sha1.append(sha1)
+
+          package_checksums = checksum_map(package.get('checksums'))
+          require(package_checksums['SHA1'] == hashlib.sha1(archive_bytes).hexdigest(), 'package SHA1 is wrong')
+          require(package_checksums['SHA256'] == hashlib.sha256(archive_bytes).hexdigest(), 'package SHA256 is wrong')
+          verification_code = hashlib.sha1(
+              ''.join(sorted(file_sha1)).encode('ascii')
+          ).hexdigest()
+          require(
+              package.get('packageVerificationCode')
+              == {'packageVerificationCodeValue': verification_code},
+              'package verification code is wrong',
+          )
+          expected_relationships = [
+              {
+                  'spdxElementId': 'SPDXRef-DOCUMENT',
+                  'relatedSpdxElement': package_id,
+                  'relationshipType': 'DESCRIBES',
+              },
+              *[
+                  {
+                      'spdxElementId': package_id,
+                      'relatedSpdxElement': spdx_id,
+                      'relationshipType': 'CONTAINS',
+                  }
+                  for spdx_id in file_ids
+              ],
+          ]
+          require(sbom.get('relationships') == expected_relationships, 'SPDX relationships are not exact')
+          extracted = sbom.get('hasExtractedLicensingInfos')
+          require(isinstance(extracted, list) and len(extracted) == 1, 'extracted license set is not exact')
+          require(
+              isinstance(extracted[0], dict)
+              and set(extracted[0]) == {'extractedText', 'licenseId', 'name'},
+              'extracted license fields are not exact',
+          )
+          require(extracted[0].get('licenseId') == license_id, 'extracted license ID is wrong')
+          require(
+              extracted[0].get('name') == 'EvoRise Source-Available License 1.0',
+              'extracted license name is wrong',
+          )
+          require(
+              extracted[0].get('extractedText') == contents['LICENSE'].decode('utf-8'),
+              'extracted license text does not bind LICENSE',
+          )
+          version_tree = ast.parse(
+              contents['evoom_guard/__init__.py'].decode('utf-8'),
+              filename='evoom_guard/__init__.py',
+          )
+          version_writes = [node for node in ast.walk(version_tree) if writes_version(node)]
+          require(len(version_writes) == 1, 'release version write is not unique')
+          assignment = version_writes[0]
+          require(
+              isinstance(assignment, ast.Assign)
+              and len(assignment.targets) == 1
+              and isinstance(assignment.targets[0], ast.Name)
+              and isinstance(assignment.value, ast.Constant)
+              and isinstance(assignment.value.value, str)
+              and assignment.value.value == expected_version,
+              'static PYZ version does not bind the trusted expected version',
+          )
+          PY
+
+      - name: Attest the exact executable bytes
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ runner.temp }}/e-output/evo-guard.pyz
+
+      - name: Attest the exact SPDX bytes
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ runner.temp }}/e-output/evo-guard.spdx.json
+
+      - name: Upload the attested builder output and source expectations
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-artifact-builder-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/e-output
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 30

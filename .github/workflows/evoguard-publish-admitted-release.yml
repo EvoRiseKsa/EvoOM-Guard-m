@@ -1,0 +1,1172 @@
+name: EvoGuard Publish Admitted Release
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] H validates G/F bytes before a protected draft-only write job
+    workflows: ["EvoGuard Verify Release Artifact"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: evoguard-release-publication
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: >-
+      vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED == 'true' &&
+      vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      g_run_id: ${{ steps.bind.outputs.g_run_id }}
+      g_run_attempt: ${{ steps.bind.outputs.g_run_attempt }}
+      target_sha: ${{ steps.bind.outputs.target_sha }}
+      f_run_id: ${{ steps.selector.outputs.f_run_id }}
+      f_run_attempt: ${{ steps.selector.outputs.f_run_attempt }}
+    steps:
+      - name: Bind exact successful G and current protected H
+        id: bind
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EXPECTED_G_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_ID }}
+          EXPECTED_H_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_ID }}
+          EXPECTED_G_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_BLOB_SHA }}
+          EXPECTED_H_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_BLOB_SHA }}
+        with:
+          script: |
+            const numeric = /^[1-9][0-9]*$/;
+            const digest = /^[0-9a-f]{40,64}$/;
+            for (const name of ['EXPECTED_G_WORKFLOW_ID', 'EXPECTED_H_WORKFLOW_ID']) {
+              if (!numeric.test(process.env[name] || '')) throw new Error(`invalid ${name}`);
+            }
+            for (const name of ['EXPECTED_G_WORKFLOW_BLOB', 'EXPECTED_H_WORKFLOW_BLOB']) {
+              if (!digest.test(process.env[name] || '')) throw new Error(`invalid ${name}`);
+            }
+            if (process.env.EXPECTED_G_WORKFLOW_ID === process.env.EXPECTED_H_WORKFLOW_ID ||
+                process.env.EXPECTED_G_WORKFLOW_BLOB === process.env.EXPECTED_H_WORKFLOW_BLOB) {
+              throw new Error('G and H identities must be distinct');
+            }
+            const run = context.payload.workflow_run;
+            if (!run || run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.event !== 'workflow_run' ||
+                String(run.workflow_id) !== process.env.EXPECTED_G_WORKFLOW_ID ||
+                run.path !== '.github/workflows/evoguard-verify-release-artifact.yml' ||
+                run.head_branch !== 'main' || run.head_sha !== context.sha ||
+                run.head_repository?.id !== context.payload.repository.id ||
+                run.head_repository?.full_name !== context.payload.repository.full_name) {
+              throw new Error('trigger is not the configured successful G run');
+            }
+            if (process.env.GITHUB_SHA !== process.env.GITHUB_WORKFLOW_SHA ||
+                process.env.GITHUB_SHA !== run.head_sha) {
+              throw new Error('H workflow revision is not the admitted protected source');
+            }
+            const { owner, repo } = context.repo;
+            const branch = (await github.rest.repos.getBranch({owner, repo, branch: 'main'})).data;
+            if (!branch.protected || branch.commit.sha !== run.head_sha) {
+              throw new Error('protected main moved before H');
+            }
+            const commit = (await github.rest.git.getCommit({
+              owner, repo, commit_sha: run.head_sha,
+            })).data;
+            const tree = (await github.rest.git.getTree({
+              owner, repo, tree_sha: commit.tree.sha, recursive: 'true',
+            })).data.tree;
+            const expected = new Map([
+              ['.github/workflows/evoguard-verify-release-artifact.yml',
+               process.env.EXPECTED_G_WORKFLOW_BLOB],
+              ['.github/workflows/evoguard-publish-admitted-release.yml',
+               process.env.EXPECTED_H_WORKFLOW_BLOB],
+            ]);
+            for (const [path, blob] of expected) {
+              const item = tree.find(entry => entry.path === path);
+              if (!item || item.type !== 'blob' || item.sha !== blob) {
+                throw new Error(`${path} does not match the configured raw-Git blob`);
+              }
+            }
+            const h = (await github.rest.actions.getWorkflow({
+              owner, repo, workflow_id: Number(process.env.EXPECTED_H_WORKFLOW_ID),
+            })).data;
+            if (h.path !== '.github/workflows/evoguard-publish-admitted-release.yml' ||
+                h.state !== 'active') {
+              throw new Error('configured H workflow path/state is incorrect');
+            }
+            core.setOutput('g_run_id', String(run.id));
+            core.setOutput('g_run_attempt', String(run.run_attempt));
+            core.setOutput('target_sha', run.head_sha);
+
+      - name: Download G detached verification results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-artifact-admission-v1-verified-${{ steps.bind.outputs.g_run_attempt }}
+          path: ${{ runner.temp }}/g-results
+          run-id: ${{ steps.bind.outputs.g_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Validate G selector and expose the exact F attempt
+        id: selector
+        env:
+          TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+          G_RUN_ID: ${{ steps.bind.outputs.g_run_id }}
+          G_RUN_ATTEMPT: ${{ steps.bind.outputs.g_run_attempt }}
+          EXPECTED_F_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMIT_WORKFLOW_ID }}
+          EXPECTED_F_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMIT_WORKFLOW_BLOB_SHA }}
+          EXPECTED_G_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_ID }}
+          EXPECTED_G_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_BLOB_SHA }}
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/g-results" "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import stat
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          expected = {
+              'evo-guard.pyz.detached-verification.json',
+              'evo-guard.spdx.json.detached-verification.json',
+              'raae-negative-results.txt',
+              'publication-controls.json',
+          }
+          if {item.name for item in root.iterdir()} != expected:
+              raise SystemExit('G result set is not closed')
+          for item in root.iterdir():
+              metadata = item.lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe G result: {item.name}')
+              if metadata.st_size < 1 or metadata.st_size > 1024 * 1024:
+                  raise SystemExit(f'unsafe G result size: {item.name}')
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json'):
+              result = json.loads(
+                  (root / f'{name}.detached-verification.json').read_text(encoding='utf-8')
+              )
+              if (result.get('status'), result.get('decision'),
+                  result.get('live_provider_reverification')) != ('VERIFIED', 'ALLOW', False):
+                  raise SystemExit(f'G did not preserve detached ALLOW for {name}')
+          negatives = (root / 'raae-negative-results.txt').read_text(encoding='utf-8').splitlines()
+          if len(negatives) != 7 or any(not line.endswith('=REJECTED') for line in negatives):
+              raise SystemExit('G negative matrix is incomplete')
+          controls = json.loads((root / 'publication-controls.json').read_text(encoding='utf-8'))
+          if controls.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_CONTROLS_V1':
+              raise SystemExit('unsupported publication selector')
+          if controls.get('repository') != os.environ['GITHUB_REPOSITORY']:
+              raise SystemExit('publication selector repository mismatch')
+          if controls.get('target_sha') != os.environ['TARGET_SHA']:
+              raise SystemExit('publication selector target mismatch')
+          expected_g = {
+              'workflow_id': os.environ['EXPECTED_G_WORKFLOW_ID'],
+              'workflow_blob_sha': os.environ['EXPECTED_G_WORKFLOW_BLOB'],
+              'workflow_run_id': os.environ['G_RUN_ID'],
+              'workflow_run_attempt': int(os.environ['G_RUN_ATTEMPT']),
+          }
+          if controls.get('g') != expected_g:
+              raise SystemExit('publication selector G identity mismatch')
+          f = controls.get('f')
+          if not isinstance(f, dict):
+              raise SystemExit('publication selector has no F identity')
+          if f.get('workflow_id') != os.environ['EXPECTED_F_WORKFLOW_ID']:
+              raise SystemExit('publication selector F workflow mismatch')
+          if f.get('workflow_blob_sha') != os.environ['EXPECTED_F_WORKFLOW_BLOB']:
+              raise SystemExit('publication selector F blob mismatch')
+          if not re.fullmatch(r'[1-9][0-9]*', str(f.get('workflow_run_id', ''))):
+              raise SystemExit('publication selector F run ID is invalid')
+          if not isinstance(f.get('workflow_run_attempt'), int) or f['workflow_run_attempt'] < 1:
+              raise SystemExit('publication selector F attempt is invalid')
+          with open(sys.argv[2], 'a', encoding='utf-8', newline='\n') as output:
+              output.write(f"f_run_id={f['workflow_run_id']}\n")
+              output.write(f"f_run_attempt={f['workflow_run_attempt']}\n")
+          PY
+
+      - name: Download exact F admitted bytes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-artifact-admission-v1-${{ steps.selector.outputs.f_run_attempt }}
+          path: ${{ runner.temp }}/f-admission
+          run-id: ${{ steps.selector.outputs.f_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download exact F external controls
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-artifact-v1-controls-${{ steps.selector.outputs.f_run_attempt }}
+          path: ${{ runner.temp }}/f-controls
+          run-id: ${{ steps.selector.outputs.f_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Snapshot and bind publication bytes without executing them
+        env:
+          TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          python - \
+            "$RUNNER_TEMP/f-admission" \
+            "$RUNNER_TEMP/f-controls" \
+            "$RUNNER_TEMP/g-results/publication-controls.json" \
+            "$RUNNER_TEMP/publication-inputs" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import shutil
+          import stat
+          import sys
+
+          admission, controls, selector_path, destination = map(pathlib.Path, sys.argv[1:])
+          admission_expected = {
+              'evo-guard.pyz.raae', 'evo-guard.spdx.json.raae',
+              'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
+              'evo-guard.pyz.seal-result.json',
+              'evo-guard.spdx.json.seal-result.json',
+          }
+          controls_expected = {
+              'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
+              'builder-controls.json', 'source-allow.rsae',
+              'source.json', 'context.json', 'producer.json', 'source-admitter.json',
+              'source-github-policy.json', 'signing-requirements.lock',
+              'builder.json', 'admitter.json', 'f-control-manifest.json',
+          }
+          if {item.name for item in admission.iterdir()} != admission_expected:
+              raise SystemExit('F admitted set is not closed')
+          if {item.name for item in controls.iterdir()} != controls_expected:
+              raise SystemExit('F control set is not closed')
+          destination.mkdir(mode=0o700)
+          wanted = {
+              admission / 'evo-guard.pyz': ('evo-guard.pyz', 64 * 1024 * 1024),
+              admission / 'evo-guard.spdx.json': ('evo-guard.spdx.json', 16 * 1024 * 1024),
+              admission / 'SHA256SUMS': ('SHA256SUMS', 512),
+              admission / 'evo-guard.pyz.raae': ('evo-guard.pyz.raae', 64 * 1024 * 1024),
+              admission / 'evo-guard.spdx.json.raae': ('evo-guard.spdx.json.raae', 64 * 1024 * 1024),
+              controls / 'source-allow.rsae': ('source-allow.rsae', 64 * 1024 * 1024),
+              controls / 'source.json': ('source.json', 1024 * 1024),
+              controls / 'context.json': ('context.json', 1024 * 1024),
+              controls / 'producer.json': ('producer.json', 1024 * 1024),
+              controls / 'source-admitter.json': ('source-admitter.json', 1024 * 1024),
+              controls / 'source-github-policy.json': ('source-github-policy.json', 1024 * 1024),
+              controls / 'signing-requirements.lock': ('signing-requirements.lock', 1024 * 1024),
+              controls / 'builder-controls.json': ('builder-controls.json', 1024 * 1024),
+              controls / 'builder.json': ('builder.json', 1024 * 1024),
+              controls / 'admitter.json': ('admitter.json', 1024 * 1024),
+              controls / 'f-control-manifest.json': ('f-control-manifest.json', 1024 * 1024),
+          }
+          for source, (name, maximum) in wanted.items():
+              before = source.lstat()
+              if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+                  raise SystemExit(f'unsafe publication input: {name}')
+              if before.st_size < 1 or before.st_size > maximum:
+                  raise SystemExit(f'unsafe publication input size: {name}')
+              descriptor = os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+              try:
+                  opened = os.fstat(descriptor)
+                  if (opened.st_dev, opened.st_ino, opened.st_size) != (
+                      before.st_dev, before.st_ino, before.st_size
+                  ):
+                      raise SystemExit(f'publication input changed: {name}')
+                  with os.fdopen(descriptor, 'rb', closefd=False) as stream, \
+                       (destination / name).open('xb') as output:
+                      shutil.copyfileobj(stream, output, 64 * 1024)
+              finally:
+                  os.close(descriptor)
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
+              if (admission / name).read_bytes() != (controls / name).read_bytes():
+                  raise SystemExit(f'F admitted/control byte mismatch: {name}')
+          selector = json.loads(selector_path.read_text(encoding='utf-8'))
+          def descriptor(path):
+              data = path.read_bytes()
+              return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
+              if selector['release_assets'].get(name) != descriptor(destination / name):
+                  raise SystemExit(f'G selector release digest mismatch: {name}')
+          for name in ('evo-guard.pyz.raae', 'evo-guard.spdx.json.raae'):
+              if selector['admissions'].get(name) != descriptor(destination / name):
+                  raise SystemExit(f'G selector admission digest mismatch: {name}')
+          PY
+          (
+            cd "$RUNNER_TEMP/publication-inputs"
+            test "$(wc -l < SHA256SUMS)" -eq 2
+            sha256sum --check --strict SHA256SUMS
+          )
+          test "$(jq -r .target_commit_sha "$RUNNER_TEMP/publication-inputs/source.json")" = "$TARGET_SHA"
+
+      - name: Install the hash-locked detached verification dependency set
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install detached verification dependencies
+        run: >-
+          python -m pip install --disable-pip-version-check --only-binary=:all:
+          --require-hashes -r "$RUNNER_TEMP/publication-inputs/signing-requirements.lock"
+
+      - name: Download the reviewed detached verifier runtime
+        env:
+          RUNTIME_URL: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_URL }}
+          RUNTIME_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$RUNTIME_URL"
+          [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/evo-guard-verifier.pyz" "$RUNTIME_URL"
+          printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNNER_TEMP/evo-guard-verifier.pyz" | sha256sum --check
+
+      - name: Decode six external public roots and reverify both RAAE envelopes offline
+        env:
+          RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
+          V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64 }}
+          FINALIZER_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64 }}
+          ARTIFACT_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
+          ARTIFACT_V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_DIGEST_ADMISSION_V2_PUBLIC_KEY_B64 }}
+          SOURCE_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_FINALIZER_V1_PUBLIC_KEY_B64 }}
+          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
+          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
+          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
+          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
+          OUTER_GIT_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GIT_EXECUTABLE_SHA256 }}
+          OUTER_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+          OUTER_PROVIDER_UID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID }}
+          OUTER_PROVIDER_GID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID }}
+        run: |
+          set -euo pipefail
+          mkdir -m 0700 "$RUNNER_TEMP/publication-trust"
+          install_public() {
+            local name="$1" value="$2"
+            test -n "$value"
+            printf '%s' "$value" | base64 --decode > "$RUNNER_TEMP/publication-trust/$name.pub.pem"
+            openssl pkey -pubin -in "$RUNNER_TEMP/publication-trust/$name.pub.pem" -noout
+          }
+          install_public release-artifact-admission-v1 "$RAAE_PUBLIC_KEY_B64"
+          install_public release-source-admission-v2 "$V2_PUBLIC_KEY_B64"
+          install_public trusted-finalizer "$FINALIZER_PUBLIC_KEY_B64"
+          install_public artifact-admission-v1 "$ARTIFACT_V1_PUBLIC_KEY_B64"
+          install_public artifact-digest-admission-v2 "$ARTIFACT_V2_PUBLIC_KEY_B64"
+          install_public release-source-finalizer-v1 "$SOURCE_V1_PUBLIC_KEY_B64"
+          verify_one() {
+            local name="$1"
+            python -I "$RUNNER_TEMP/evo-guard-verifier.pyz" verify-github-release-artifact-admission \
+              "$RUNNER_TEMP/publication-inputs/$name.raae" \
+              "$RUNNER_TEMP/publication-inputs/$name" \
+              --trusted-pub "$RUNNER_TEMP/publication-trust/release-artifact-admission-v1.pub.pem" \
+              --expected-builder "$RUNNER_TEMP/publication-inputs/builder.json" \
+              --expected-admitter "$RUNNER_TEMP/publication-inputs/admitter.json" \
+              --expected-release-source "$RUNNER_TEMP/publication-inputs/source.json" \
+              --expected-release-source-context "$RUNNER_TEMP/publication-inputs/context.json" \
+              --expected-release-source-producer "$RUNNER_TEMP/publication-inputs/producer.json" \
+              --expected-release-source-admitter "$RUNNER_TEMP/publication-inputs/source-admitter.json" \
+              --expected-release-source-bootstrap-guard-sha "$SOURCE_BOOTSTRAP_SHA256" \
+              --expected-release-source-github-policy "$RUNNER_TEMP/publication-inputs/source-github-policy.json" \
+              --expected-release-source-git-executable-sha256 "$SOURCE_GIT_SHA256" \
+              --expected-release-source-gh-executable-sha256 "$SOURCE_GH_SHA256" \
+              --expected-release-source-provider-isolation-uid "$SOURCE_PROVIDER_UID" \
+              --expected-release-source-provider-isolation-gid "$SOURCE_PROVIDER_GID" \
+              --expected-git-executable-sha256 "$OUTER_GIT_SHA256" \
+              --expected-gh-executable-sha256 "$OUTER_GH_SHA256" \
+              --expected-provider-isolation-uid "$OUTER_PROVIDER_UID" \
+              --expected-provider-isolation-gid "$OUTER_PROVIDER_GID" \
+              --trusted-finalizer-pub "$RUNNER_TEMP/publication-trust/trusted-finalizer.pub.pem" \
+              --artifact-admission-v1-pub "$RUNNER_TEMP/publication-trust/artifact-admission-v1.pub.pem" \
+              --artifact-digest-admission-v2-pub "$RUNNER_TEMP/publication-trust/artifact-digest-admission-v2.pub.pem" \
+              --release-source-finalizer-v1-pub "$RUNNER_TEMP/publication-trust/release-source-finalizer-v1.pub.pem" \
+              --release-source-admission-v2-pub "$RUNNER_TEMP/publication-trust/release-source-admission-v2.pub.pem" \
+              > "$RUNNER_TEMP/$name.publication-verification.json"
+            test "$(jq -r .status "$RUNNER_TEMP/$name.publication-verification.json")" = "VERIFIED"
+            test "$(jq -r .decision "$RUNNER_TEMP/$name.publication-verification.json")" = "ALLOW"
+            test "$(jq -r .live_provider_reverification "$RUNNER_TEMP/$name.publication-verification.json")" = "false"
+          }
+          verify_one evo-guard.pyz
+          verify_one evo-guard.spdx.json
+
+      - name: Stage the exact three draft assets and a no-clobber publication record
+        env:
+          TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+          G_RUN_ID: ${{ steps.bind.outputs.g_run_id }}
+          G_RUN_ATTEMPT: ${{ steps.bind.outputs.g_run_attempt }}
+        run: |
+          set -euo pipefail
+          mkdir -m 0700 "$RUNNER_TEMP/publication-ready"
+          cp "$RUNNER_TEMP/publication-inputs/evo-guard.pyz" \
+            "$RUNNER_TEMP/publication-inputs/evo-guard.spdx.json" \
+            "$RUNNER_TEMP/publication-inputs/SHA256SUMS" \
+            "$RUNNER_TEMP/publication-ready/"
+          python - \
+            "$RUNNER_TEMP/publication-ready" \
+            "$RUNNER_TEMP/publication-ready/publication-ready.json" \
+            "$RUNNER_TEMP/publication-inputs/builder-controls.json" <<'PY'
+          import ast
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import sys
+          import zipfile
+
+          root, output, controls_path = map(pathlib.Path, sys.argv[1:])
+          controls = json.loads(controls_path.read_text(encoding='utf-8'))
+          sbom = json.loads((root / 'evo-guard.spdx.json').read_text(encoding='utf-8'))
+          packages = sbom.get('packages')
+          if not isinstance(packages, list) or len(packages) != 1:
+              raise SystemExit('SPDX must contain exactly one package')
+          package = packages[0]
+          version = package.get('versionInfo')
+          if (
+              package.get('name') != 'evo-guard'
+              or not isinstance(version, str)
+              or not re.fullmatch(
+                  r'[0-9]+\.[0-9]+\.[0-9]+', version
+              )
+          ):
+              raise SystemExit('SPDX release version is not canonical')
+          if controls.get('release_version') != version:
+              raise SystemExit('RAAE-bound builder version does not match SPDX')
+          with zipfile.ZipFile(root / 'evo-guard.pyz') as archive:
+              if archive.namelist().count('evoom_guard/__init__.py') != 1:
+                  raise SystemExit('release version module is not unique')
+              member = archive.getinfo('evoom_guard/__init__.py')
+              if member.compress_type != zipfile.ZIP_STORED:
+                  raise SystemExit('release version module is not stored')
+              tree = ast.parse(
+                  archive.read(member).decode('utf-8'),
+                  filename='evoom_guard/__init__.py',
+              )
+          assignments = [
+              node for node in ast.walk(tree)
+              if isinstance(node, ast.Assign)
+              and any(
+                  isinstance(target, ast.Name) and target.id == '__version__'
+                  for target in node.targets
+              )
+          ]
+          if len(assignments) != 1:
+              raise SystemExit('release version assignment is not unique')
+          assignment = assignments[0]
+          if (
+              len(assignment.targets) != 1
+              or not isinstance(assignment.targets[0], ast.Name)
+              or not isinstance(assignment.value, ast.Constant)
+              or not isinstance(assignment.value.value, str)
+              or assignment.value.value != version
+          ):
+              raise SystemExit('PYZ release version does not match SPDX')
+          def descriptor(name):
+              data = (root / name).read_bytes()
+              return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+          value = {
+              'format': 'EVOGUARD_RELEASE_PUBLICATION_READY_V1',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'target_sha': os.environ['TARGET_SHA'],
+              'tag': f'v{version}',
+              'g_run_id': os.environ['G_RUN_ID'],
+              'g_run_attempt': int(os.environ['G_RUN_ATTEMPT']),
+              'assets': {
+                  name: descriptor(name)
+                  for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
+              },
+          }
+          output.write_text(
+              json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n',
+              encoding='utf-8',
+              newline='\n',
+          )
+          PY
+
+      - name: Upload publication-ready bytes for the protected draft job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-publication-ready-${{ steps.bind.outputs.g_run_attempt }}
+          path: ${{ runner.temp }}/publication-ready
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1
+
+  draft:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: evoguard-release-draft
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download only the exact publication-ready artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_attempt }}
+          path: ${{ runner.temp }}/publication-ready
+
+      - name: Recheck the closed release set without checkout, rebuild, or execution
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/publication-ready" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import stat
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          expected = {
+              'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
+              'publication-ready.json',
+          }
+          if {item.name for item in root.iterdir()} != expected:
+              raise SystemExit('publication-ready set is not closed')
+          for item in root.iterdir():
+              metadata = item.lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe publication-ready type: {item.name}')
+          record = json.loads((root / 'publication-ready.json').read_text(encoding='utf-8'))
+          if record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
+              raise SystemExit('unsupported publication-ready record')
+          if record.get('repository') != os.environ['GITHUB_REPOSITORY']:
+              raise SystemExit('publication-ready repository mismatch')
+          if record.get('target_sha') != os.environ['TARGET_SHA']:
+              raise SystemExit('publication-ready target mismatch')
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
+              data = (root / name).read_bytes()
+              if record['assets'].get(name) != {
+                  'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)
+              }:
+                  raise SystemExit(f'publication-ready descriptor mismatch: {name}')
+          PY
+          (
+            cd "$RUNNER_TEMP/publication-ready"
+            test "$(wc -l < SHA256SUMS)" -eq 2
+            sha256sum --check --strict SHA256SUMS
+          )
+
+      - name: Approve the exact intent without creating a tag or release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          record="$RUNNER_TEMP/publication-ready/publication-ready.json"
+          tag="$(jq -er '.tag | select(type == "string")' "$record")"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          test "$current" = "$TARGET_SHA"
+          immutable_enabled="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/immutable-releases" \
+              --jq .enabled
+          )"
+          test "$immutable_enabled" = "true"
+          set +e
+          gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+            > "$RUNNER_TEMP/draft-approval-tag.response" \
+            2> "$RUNNER_TEMP/draft-approval-tag.error"
+          tag_probe_rc=$?
+          set -e
+          tag_status="$(
+            awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
+              "$RUNNER_TEMP/draft-approval-tag.response"
+          )"
+          if test "$tag_probe_rc" -eq 0; then
+            echo "the approval cannot prove a fresh tag because $tag already exists" >&2
+            exit 1
+          fi
+          if test "$tag_status" != "404"; then
+            echo "the approval could not prove tag absence (HTTP ${tag_status:-unknown})" >&2
+            cat "$RUNNER_TEMP/draft-approval-tag.error" >&2
+            exit 1
+          fi
+          if gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id" | grep -q .; then
+            echo "the approval refuses an existing release for $tag" >&2
+            exit 1
+          fi
+  publish:
+    needs: [preflight, draft]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: evoguard-release-publication
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download only the exact approved publication-ready artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_attempt }}
+          path: ${{ runner.temp }}/publication-final
+
+      - name: Recheck the closed release set without checkout, rebuild, or execution
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          python - "$RUNNER_TEMP/publication-final" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import stat
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          expected = {
+              'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
+              'publication-ready.json',
+          }
+          if {item.name for item in root.iterdir()} != expected:
+              raise SystemExit('publication-ready set is not closed')
+          for item in root.iterdir():
+              metadata = item.lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe publication-ready type: {item.name}')
+          record = json.loads((root / 'publication-ready.json').read_text(encoding='utf-8'))
+          if record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
+              raise SystemExit('unsupported publication-ready record')
+          if record.get('repository') != os.environ['GITHUB_REPOSITORY']:
+              raise SystemExit('publication-ready repository mismatch')
+          if record.get('target_sha') != os.environ['TARGET_SHA']:
+              raise SystemExit('publication-ready target mismatch')
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
+              data = (root / name).read_bytes()
+              if record['assets'].get(name) != {
+                  'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)
+              }:
+                  raise SystemExit(f'publication-ready descriptor mismatch: {name}')
+          PY
+          (
+            cd "$RUNNER_TEMP/publication-final"
+            test "$(wc -l < SHA256SUMS)" -eq 2
+            sha256sum --check --strict SHA256SUMS
+          )
+
+      - name: Create one draft release with the exact admitted bytes
+        id: create
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
+          G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
+        run: |
+          set -euo pipefail
+          record="$RUNNER_TEMP/publication-final/publication-ready.json"
+          tag="$(jq -er '.tag | select(type == "string")' "$record")"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          test "$current" = "$TARGET_SHA"
+          immutable_enabled="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/immutable-releases" \
+              --jq .enabled
+          )"
+          test "$immutable_enabled" = "true"
+          prove_tag_absent() {
+            local phase="$1"
+            local response="$RUNNER_TEMP/tag-ref-$phase.response"
+            local error="$RUNNER_TEMP/tag-ref-$phase.error"
+            local probe_rc status
+            [[ "$phase" =~ ^(before|after)$ ]]
+            set +e
+            gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+              >"$response" 2>"$error"
+            probe_rc=$?
+            set -e
+            status="$(
+              awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
+                "$response"
+            )"
+            if test "$probe_rc" -eq 0; then
+              echo "git tag $tag already exists; H never reuses or mutates an existing ref" >&2
+              return 1
+            fi
+            if test "$status" != "404"; then
+              echo "could not prove git tag $tag is absent (HTTP ${status:-unknown})" >&2
+              cat "$error" >&2
+              return 1
+            fi
+          }
+          prove_tag_absent before
+          if gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id" | grep -q .; then
+            echo "a release for $tag already exists; H never mutates an existing release" >&2
+            exit 1
+          fi
+          marker="<!-- EVOGUARD_RELEASE_DRAFT_V1 h_run=$GITHUB_RUN_ID h_attempt=$GITHUB_RUN_ATTEMPT g_run=$G_RUN_ID g_attempt=$G_RUN_ATTEMPT target=$TARGET_SHA -->"
+          body="$(
+            MARKER="$marker" python - "$record" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+          tag = record['tag']
+          target = record['target_sha']
+          assets = record['assets']
+          names = ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
+          lines = [
+              f'# EvoOM Guard {tag}',
+              '',
+              f'Trusted release for commit `{target}`.',
+              '',
+              '## Assets',
+              '',
+              *[
+                  f"- `{name}` — `sha256:{assets[name]['sha256']}` "
+                  f"({assets[name]['size']} bytes)"
+                  for name in names
+              ],
+              '',
+              'Verify the downloaded executable and SPDX inventory:',
+              '',
+              '```sh',
+              'sha256sum --check SHA256SUMS',
+              '```',
+              '',
+              'This title and description are mutable display metadata, not a trust root. '
+              'The exact assets and their digests are authoritative for this release.',
+              'A separate signed evidence ledger is frozen after publication; '
+              'RAAE envelopes are intentionally not release assets.',
+              '',
+              os.environ['MARKER'],
+          ]
+          print('\n'.join(lines), end='')
+          PY
+          )"
+          printf '%s' "$body" > "$RUNNER_TEMP/release-body.md"
+          cleanup_partial_draft() {
+            local failure=$?
+            local cleanup_id
+            trap - ERR
+            set +e
+            gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              > "$RUNNER_TEMP/cleanup-release-pages.json"
+            cleanup_id="$(
+              RELEASE_BODY="$body" python - \
+                "$record" \
+                "$RUNNER_TEMP/cleanup-release-pages.json" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record_path, pages_path = map(pathlib.Path, sys.argv[1:])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          pages = json.loads(pages_path.read_text(encoding='utf-8'))
+          releases = [
+              release
+              for page in pages if isinstance(page, list)
+              for release in page if isinstance(release, dict)
+          ]
+          matches = [
+              release for release in releases
+              if release.get('tag_name') == record['tag']
+              and release.get('name') == record['tag']
+              and release.get('target_commitish') == record['target_sha']
+              and release.get('draft') is True
+              and release.get('body') == os.environ['RELEASE_BODY']
+              and release.get('author', {}).get('login') == 'github-actions[bot]'
+              and release.get('author', {}).get('id') == 41898282
+          ]
+          if len(matches) == 1 and isinstance(matches[0].get('id'), int):
+              print(matches[0]['id'])
+          PY
+            )"
+            if [[ "$cleanup_id" =~ ^[1-9][0-9]*$ ]]; then
+              gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/releases/$cleanup_id" >/dev/null
+              echo "removed only the incomplete draft created by this H run: $cleanup_id" >&2
+            else
+              echo "no uniquely attributable incomplete draft was safe to remove" >&2
+            fi
+            exit "$failure"
+          }
+          trap cleanup_partial_draft ERR
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "$tag" \
+            --draft \
+            --notes-file "$RUNNER_TEMP/release-body.md" \
+            "$RUNNER_TEMP/publication-final/evo-guard.pyz" \
+            "$RUNNER_TEMP/publication-final/evo-guard.spdx.json" \
+            "$RUNNER_TEMP/publication-final/SHA256SUMS"
+          prove_tag_absent after
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RUNNER_TEMP/created-release-pages.json"
+          release_id="$(
+            RELEASE_BODY="$body" python - \
+              "$record" "$RUNNER_TEMP/created-release-pages.json" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record_path, pages_path = map(pathlib.Path, sys.argv[1:])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          pages = json.loads(pages_path.read_text(encoding='utf-8'))
+          if not isinstance(pages, list) or len(pages) > 100:
+              raise SystemExit('release pagination response is outside bounds')
+          releases = [
+              release
+              for page in pages if isinstance(page, list)
+              for release in page if isinstance(release, dict)
+          ]
+          target = record['target_sha']
+          tag = record['tag']
+          matches = [release for release in releases if release.get('tag_name') == tag]
+          if len(matches) != 1:
+              raise SystemExit('created draft release is not unique')
+          release = matches[0]
+          if (
+              release.get('name') != tag
+              or release.get('target_commitish') != target
+              or release.get('draft') is not True
+              or release.get('prerelease') is not False
+              or release.get('body') != os.environ['RELEASE_BODY']
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+          ):
+              raise SystemExit('created release metadata does not match the admitted draft')
+          assets = release.get('assets')
+          if not isinstance(assets, list) or {
+              asset.get('name') for asset in assets if isinstance(asset, dict)
+          } != set(record['assets']):
+              raise SystemExit('created release asset set is not exact')
+          if len(assets) != len(record['assets']):
+              raise SystemExit('created release contains duplicate assets')
+          for asset in assets:
+              name = asset['name']
+              expected = record['assets'][name]
+              if (
+                  asset.get('state') != 'uploaded'
+                  or asset.get('size') != expected['size']
+                  or asset.get('digest') != f"sha256:{expected['sha256']}"
+              ):
+                  raise SystemExit(f'created release asset does not match admitted bytes: {name}')
+          release_id = release.get('id')
+          if not isinstance(release_id, int) or release_id < 1:
+              raise SystemExit('created release ID is invalid')
+          print(release_id)
+          PY
+          )"
+          [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
+          printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
+          trap - ERR
+
+      - name: Revalidate the draft and publish the immutable admitted release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
+          G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
+          RELEASE_ID: ${{ steps.create.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+          root="$RUNNER_TEMP/publication-final"
+          record="$root/publication-ready.json"
+          python - "$root" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import stat
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          expected_names = {
+              'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
+              'publication-ready.json',
+          }
+          if {item.name for item in root.iterdir()} != expected_names:
+              raise SystemExit('final publication set is not closed')
+          for item in root.iterdir():
+              metadata = item.lstat()
+              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+                  raise SystemExit(f'unsafe final publication input: {item.name}')
+          record = json.loads((root / 'publication-ready.json').read_text(encoding='utf-8'))
+          if (
+              record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1'
+              or record.get('repository') != os.environ['GITHUB_REPOSITORY']
+              or record.get('target_sha') != os.environ['TARGET_SHA']
+          ):
+              raise SystemExit('final publication record identity mismatch')
+          for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
+              data = (root / name).read_bytes()
+              if record['assets'].get(name) != {
+                  'sha256': hashlib.sha256(data).hexdigest(),
+                  'size': len(data),
+              }:
+                  raise SystemExit(f'final publication descriptor mismatch: {name}')
+          PY
+          (
+            cd "$root"
+            test "$(wc -l < SHA256SUMS)" -eq 2
+            sha256sum --check --strict SHA256SUMS
+          )
+          tag="$(jq -er '.tag | select(type == "string")' "$record")"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          marker="<!-- EVOGUARD_RELEASE_DRAFT_V1 h_run=$GITHUB_RUN_ID h_attempt=$GITHUB_RUN_ATTEMPT g_run=$G_RUN_ID g_attempt=$G_RUN_ATTEMPT target=$TARGET_SHA -->"
+          body="$(
+            MARKER="$marker" python - "$record" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+          tag = record['tag']
+          target = record['target_sha']
+          assets = record['assets']
+          names = ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
+          lines = [
+              f'# EvoOM Guard {tag}',
+              '',
+              f'Trusted release for commit `{target}`.',
+              '',
+              '## Assets',
+              '',
+              *[
+                  f"- `{name}` — `sha256:{assets[name]['sha256']}` "
+                  f"({assets[name]['size']} bytes)"
+                  for name in names
+              ],
+              '',
+              'Verify the downloaded executable and SPDX inventory:',
+              '',
+              '```sh',
+              'sha256sum --check SHA256SUMS',
+              '```',
+              '',
+              'This title and description are mutable display metadata, not a trust root. '
+              'The exact assets and their digests are authoritative for this release.',
+              'A separate signed evidence ledger is frozen after publication; '
+              'RAAE envelopes are intentionally not release assets.',
+              '',
+              os.environ['MARKER'],
+          ]
+          print('\n'.join(lines), end='')
+          PY
+          )"
+          cleanup_verified_unpublished_draft() {
+            local failure=$?
+            local release_ok=false tag_absent=false
+            trap - ERR
+            set +e
+            gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              > "$RUNNER_TEMP/cleanup-exact-release.json"
+            if test "$?" -eq 0; then
+              release_ok=true
+            fi
+            gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+              > "$RUNNER_TEMP/cleanup-exact-tag.response" \
+              2> "$RUNNER_TEMP/cleanup-exact-tag.error"
+            tag_rc=$?
+            tag_status="$(
+              awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
+                "$RUNNER_TEMP/cleanup-exact-tag.response"
+            )"
+            if test "$tag_rc" -ne 0 -a "$tag_status" = "404"; then
+              tag_absent=true
+            fi
+            if test "$release_ok" = "true" -a "$tag_absent" = "true" \
+              && RELEASE_BODY="$body" python - \
+                "$record" "$RUNNER_TEMP/cleanup-exact-release.json" "$RELEASE_ID" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record_path, release_path = map(pathlib.Path, sys.argv[1:3])
+          expected_id = int(sys.argv[3])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          release = json.loads(release_path.read_text(encoding='utf-8'))
+          if (
+              release.get('id') != expected_id
+              or release.get('tag_name') != record['tag']
+              or release.get('name') != record['tag']
+              or release.get('target_commitish') != record['target_sha']
+              or release.get('draft') is not True
+              or release.get('prerelease') is not False
+              or release.get('body') != os.environ['RELEASE_BODY']
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+          ):
+              raise SystemExit(1)
+          assets = release.get('assets')
+          if not isinstance(assets, list) or len(assets) != len(record['assets']):
+              raise SystemExit(1)
+          for asset in assets:
+              if not isinstance(asset, dict) or asset.get('name') not in record['assets']:
+                  raise SystemExit(1)
+              expected = record['assets'][asset['name']]
+              if (
+                  asset.get('state') != 'uploaded'
+                  or asset.get('size') != expected['size']
+                  or asset.get('digest') != f"sha256:{expected['sha256']}"
+              ):
+                  raise SystemExit(1)
+          PY
+            then
+              gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" >/dev/null
+              echo "removed exact unpublished draft after a pre-PATCH failure: $RELEASE_ID" >&2
+            else
+              echo "pre-PATCH failure left no uniquely verified draft safe to delete" >&2
+            fi
+            exit "$failure"
+          }
+          trap cleanup_verified_unpublished_draft ERR
+          current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          test "$current" = "$TARGET_SHA"
+          immutable_enabled="$(
+            gh api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/immutable-releases" \
+              --jq .enabled
+          )"
+          test "$immutable_enabled" = "true"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            > "$RUNNER_TEMP/release-before-publication.json"
+          set +e
+          gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+            > "$RUNNER_TEMP/tag-before-publication.response" \
+            2> "$RUNNER_TEMP/tag-before-publication.error"
+          tag_probe_rc=$?
+          set -e
+          tag_status="$(
+            awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
+              "$RUNNER_TEMP/tag-before-publication.response"
+          )"
+          if test "$tag_probe_rc" -eq 0; then
+            echo "the publication tag already exists; final publication refuses tag reuse" >&2
+            exit 1
+          fi
+          if test "$tag_status" != "404"; then
+            echo "could not prove the publication tag is absent (HTTP ${tag_status:-unknown})" >&2
+            cat "$RUNNER_TEMP/tag-before-publication.error" >&2
+            exit 1
+          fi
+          RELEASE_BODY="$body" python - \
+            "$record" "$RUNNER_TEMP/release-before-publication.json" "$RELEASE_ID" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record_path, release_path = map(pathlib.Path, sys.argv[1:3])
+          expected_id = int(sys.argv[3])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          release = json.loads(release_path.read_text(encoding='utf-8'))
+          if (
+              release.get('id') != expected_id
+              or release.get('tag_name') != record['tag']
+              or release.get('name') != record['tag']
+              or release.get('target_commitish') != record['target_sha']
+              or release.get('draft') is not True
+              or release.get('prerelease') is not False
+              or release.get('body') != os.environ['RELEASE_BODY']
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+          ):
+              raise SystemExit('approved draft metadata changed before publication')
+          assets = release.get('assets')
+          if not isinstance(assets, list) or len(assets) != len(record['assets']):
+              raise SystemExit('approved draft asset count changed before publication')
+          if {asset.get('name') for asset in assets if isinstance(asset, dict)} != set(record['assets']):
+              raise SystemExit('approved draft asset names changed before publication')
+          for asset in assets:
+              expected = record['assets'][asset['name']]
+              if (
+                  asset.get('state') != 'uploaded'
+                  or asset.get('size') != expected['size']
+                  or asset.get('digest') != f"sha256:{expected['sha256']}"
+              ):
+                  raise SystemExit(f"approved draft asset changed: {asset.get('name')}")
+          PY
+          printf '%s\n' '{"draft":false}' > "$RUNNER_TEMP/publish-request.json"
+          # From this boundary onward a failed PATCH may have mutated GitHub.
+          # Never delete automatically after the publication request begins.
+          trap - ERR
+          gh api \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            --method PATCH \
+            --input "$RUNNER_TEMP/publish-request.json" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            > "$RUNNER_TEMP/publish-response.json"
+          publication_ready=false
+          for attempt in {1..10}; do
+            : "$attempt"
+            if gh api \
+                -H "X-GitHub-Api-Version: 2026-03-10" \
+                "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+                > "$RUNNER_TEMP/release-after-publication.json" \
+              && gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+                > "$RUNNER_TEMP/tag-after-publication.json" \
+              && jq -e '.draft == false and .immutable == true' \
+                "$RUNNER_TEMP/release-after-publication.json" >/dev/null; then
+              publication_ready=true
+              break
+            fi
+            sleep 2
+          done
+          test "$publication_ready" = "true"
+          RELEASE_BODY="$body" python - \
+            "$record" \
+            "$RUNNER_TEMP/release-after-publication.json" \
+            "$RUNNER_TEMP/tag-after-publication.json" \
+            "$RELEASE_ID" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record_path, release_path, ref_path = map(pathlib.Path, sys.argv[1:4])
+          expected_id = int(sys.argv[4])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          release = json.loads(release_path.read_text(encoding='utf-8'))
+          ref = json.loads(ref_path.read_text(encoding='utf-8'))
+          if (
+              release.get('id') != expected_id
+              or release.get('tag_name') != record['tag']
+              or release.get('name') != record['tag']
+              or release.get('target_commitish') != record['target_sha']
+              or release.get('draft') is not False
+              or release.get('prerelease') is not False
+              or release.get('immutable') is not True
+              or release.get('body') != os.environ['RELEASE_BODY']
+              or not isinstance(release.get('published_at'), str)
+              or not release.get('published_at')
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+          ):
+              raise SystemExit('published immutable release metadata is not exact')
+          ref_object = ref.get('object')
+          if (
+              ref.get('ref') != f"refs/tags/{record['tag']}"
+              or not isinstance(ref_object, dict)
+              or ref_object.get('type') != 'commit'
+              or ref_object.get('sha') != record['target_sha']
+          ):
+              raise SystemExit('published tag does not bind the admitted target')
+          assets = release.get('assets')
+          if not isinstance(assets, list) or len(assets) != len(record['assets']):
+              raise SystemExit('published asset count is not exact')
+          if {asset.get('name') for asset in assets if isinstance(asset, dict)} != set(record['assets']):
+              raise SystemExit('published asset names are not exact')
+          for asset in assets:
+              expected = record['assets'][asset['name']]
+              if (
+                  asset.get('state') != 'uploaded'
+                  or asset.get('size') != expected['size']
+                  or asset.get('digest') != f"sha256:{expected['sha256']}"
+              ):
+                  raise SystemExit(f"published asset is not admitted: {asset.get('name')}")
+          PY
