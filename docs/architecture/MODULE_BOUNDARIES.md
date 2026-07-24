@@ -290,6 +290,17 @@ and prevents a structural refactor from introducing new short-circuit or
 exception behavior. The underlying composer and gates remain public,
 independently testable application services.
 
+The first command-family slice adds the typed `cli.guard_command` owner for
+the public `guard` command. It owns only effective-policy resolution, routing
+between patch/diff/base-head inputs, and report/JSON/SARIF/signature
+publication. The `cli` package facade keeps `cmd_guard` public, snapshots the
+same Guard imports at command entry, and injects call-through providers for the
+historical config, path, read, report-write, and late signing seams. The owner
+has no runtime import of another EvoOM module. A pre-extraction vector freezes
+CLI-over-policy precedence, input modes, fail-closed errors, output order, and
+exit codes. All other command handlers and parser dispatch remain in the
+facade; this slice does not claim the broader CLI split is complete.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay
