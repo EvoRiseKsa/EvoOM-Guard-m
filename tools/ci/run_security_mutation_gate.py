@@ -1680,6 +1680,174 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-setup-no-command-guard-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    if not setup_cmd_raw:\n"
+            "        return RepoSetupOutcome(requested=False)\n"
+        ),
+        after=(
+            "    if False and not setup_cmd_raw:\n"
+            "        return RepoSetupOutcome(requested=False)\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_no_setup_command_reaches_the_suite_without_setup_effects"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-string-tokenization-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if isinstance(setup_cmd_raw, str):\n",
+        after="    if False and isinstance(setup_cmd_raw, str):\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_setup_command_precedence_and_token_normalization_are_frozen"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-container-placement-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    if setup_in_container:\n"
+            "        setup_isolation: str | None = request.requested_isolation\n"
+        ),
+        after=(
+            "    if False and setup_in_container:\n"
+            "        setup_isolation: str | None = request.requested_isolation\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_exit_125]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-pre-snapshot-fail-closed-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    except SetupFidelityError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity snapshot failed: {exc}",\n'
+        ),
+        after=(
+            "    except TypeError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity snapshot failed: {exc}",\n'
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[pre_snapshot_error]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-timeout-start-proof-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "        delivered = request.requested_isolation "
+            'if exc.container_started else "not_run"\n'
+        ),
+        after='        delivered = "not_run"\n',
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_timeout_started]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-output-classification-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "        docker_failure = isinstance(exc, DockerRunOutputLimit)\n"
+        ),
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_output_limit_unstarted]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-containment-classification-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "        docker_failure = isinstance(exc, DockerRunContainmentError)\n"
+        ),
+        after="        docker_failure = False\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_containment_unstarted]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-docker-exit-125-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if setup_in_container and r_setup.returncode == 125:\n",
+        after=(
+            "    if False and setup_in_container "
+            "and r_setup.returncode == 125:\n"
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[docker_exit_125]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-nonzero-failure-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if r_setup.returncode != 0:\n",
+        after="    if False and r_setup.returncode != 0:\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[host_nonzero]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-post-snapshot-fail-closed-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before=(
+            "    except SetupFidelityError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity verification failed: {exc}",\n'
+        ),
+        after=(
+            "    except TypeError as exc:\n"
+            "        return _terminal(\n"
+            "            request,\n"
+            '            diagnostics=f"setup fidelity verification failed: {exc}",\n'
+        ),
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[post_snapshot_error]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-fidelity-change-bypass",
+        path="evoom_guard/verifiers/repo_setup.py",
+        before="    if setup_changes:\n",
+        after="    if False and setup_changes:\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_frozen_repo_setup_behavior[fidelity_change]"
+        ),
+    ),
+    Mutation(
+        name="repo-setup-live-pre-snapshot-seam-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                    capture_setup_before=(\n"
+            "                        lambda root, output_globs=(): (\n"
+            "                            _setup_fidelity_snapshot(root, output_globs)\n"
+            "                        )\n"
+            "                    ),\n"
+        ),
+        after="                    capture_setup_before=_setup_fidelity_snapshot,\n",
+        test=(
+            "tests/test_repo_setup_characterization.py::"
+            "test_repo_verifier_resolves_host_setup_seams_at_each_operation"
+        ),
+    ),
+    Mutation(
         name="strict-harness-exit-only-bypass",
         path="evoom_guard/verifiers/repo_phase_contracts.py",
         before=(
