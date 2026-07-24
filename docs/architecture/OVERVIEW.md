@@ -100,8 +100,10 @@ The first
 dependency-free edit grammar and pure patch transform behind exact legacy
 aliases. Candidate materialization now has a focused
 `verifiers.repo_materialization` owner behind the dynamic RepoVerifier facade;
-repository copying, deletion, and later execution effects remain in their
-established owners.
+`verifiers.repo_candidate` now coordinates parsing/admission, repository copy
+plus edit materialization, and post-pack safe deletion through immutable
+contracts and live providers. Workspace allocation, pack intake, execution,
+and final cleanup remain outside that owner.
 Optional repository verifier-pack admission now has the focused
 `verifiers.repo_pack_intake` owner. It checks the required digest pin and
 reserved mount, creates and identifies the judge-owned snapshot through
@@ -126,11 +128,12 @@ tree, preserves the reserved verifier-pack and non-exemptible harness rules,
 and returns the exact safe-deletion set. Guard calls it at the characterized
 post-parse/pre-materialization seam and retains risk, execution, decision, and
 serialization responsibilities.
-`RepoVerifier` still owns repository filesystem coordination, runtime identity,
-pack snapshot continuity, phase composition, and cleanup. Repository-suite and
-verifier-pack subprocess/container operations are coordinated by `repo_suite`
-and `repo_pack` through live injected effects; lifecycle changes still flow
-through the typed builder.
+`RepoVerifier` still owns workspace allocation, verifier-pack intake and
+snapshot continuity, runtime identity, phase composition, sticky projection,
+and cleanup. Candidate filesystem coordination is delegated to
+`repo_candidate`; repository-suite and verifier-pack subprocess/container
+operations are coordinated by `repo_suite` and `repo_pack` through live
+injected effects. Lifecycle changes still flow through the typed builder.
 `verifiers/blackbox_pack.py` now owns the characterized verifier-pack process
 sequence and completed-process report interpretation through immutable
 boundaries plus an explicit mutable cleanup lifecycle. `blackbox.py` retains

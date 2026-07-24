@@ -186,6 +186,13 @@ remain in their established facades.
   immutable contracts and frozen branch/order/provider-timing vectors.
   `RepoVerifier` retains the intervening runtime-tree continuity check plus
   sticky evidence projection and workspace cleanup.
+- Repository-candidate parsing/admission, copy/materialization coordination,
+  and post-pack safe deletion now live in
+  `verifiers/repo_candidate.py`. Immutable XOR contracts and live effect
+  providers preserve the order
+  admission → RepoVerifier allocation → copy/materialization → RepoVerifier
+  pack intake → deletion → execution. Allocation, pack handling, runtime
+  identity, sticky projection, and final cleanup remain in `RepoVerifier`.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction
@@ -219,10 +226,10 @@ remain in their established facades.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: split the remaining repository candidate-admission/deletion
-  coordination, workspace allocation, runtime-identity continuity, and
-  sticky-projection responsibilities in independent characterized slices.
-  Repository-suite and verifier-pack execution owners are complete.
+- Pending: split the remaining repository workspace-allocation,
+  runtime-identity continuity, and sticky-projection responsibilities in
+  independent characterized slices. Candidate coordination, repository-suite,
+  and verifier-pack execution owners are complete.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.

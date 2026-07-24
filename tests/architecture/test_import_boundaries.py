@@ -1208,6 +1208,27 @@ def test_repo_materialization_has_only_public_containment_dependencies() -> None
     )
 
 
+def test_repo_candidate_has_only_public_candidate_and_verdict_dependencies() -> None:
+    """Candidate coordination must not absorb pack, execution, or cleanup owners."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.verifiers.repo_candidate"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == {
+        "evoom_guard.candidate",
+        "evoom_guard.contracts",
+    }
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_repo_pack_intake_has_only_the_public_pack_contract_dependency() -> None:
     """Pack intake may identify a snapshot but must not absorb its execution."""
 
