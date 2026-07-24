@@ -81,6 +81,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextvars import ContextVar
 from typing import Any, TypedDict, cast
 
 from evoom_guard.adapters import instrument_command
@@ -721,6 +722,13 @@ class RepoVerifier:
         self.docker_image = docker_image
         self.docker_network = docker_network
         self.docker_runtime = docker_runtime or ("runsc" if isolation == "gvisor" else None)
+        self._active_docker_image: ContextVar[str | None] = ContextVar(
+            f"evoom_guard_repo_image_{id(self)}",
+            default=None,
+        )
+        # Compatibility/diagnostic seam: the last identity resolved by this
+        # instance. Verification commands use the context-local identity above,
+        # so concurrent or later calls cannot inherit this mutable observation.
         self._resolved_docker_image: str | None = None
         # Explicit compatibility escape hatch. By default candidate-influenced
         # setup runs inside the same requested boundary as the suite.
@@ -801,15 +809,14 @@ class RepoVerifier:
             docker += ["-e", f"{_k}={_v}"]
         if self.mem_limit_mb > 0:
             docker += ["--memory", f"{self.mem_limit_mb}m"]
+        active_image = self._active_docker_image.get()
         image_id = require_canonical_docker_image_id(
-            str(self._resolved_docker_image or self.docker_image)
+            str(active_image or self._resolved_docker_image or self.docker_image)
         )
         return [*docker, image_id, *cmd]
 
     def _resolve_docker_image(self) -> str:
-        """Resolve a tag once so setup and suite use the exact same image bytes."""
-        if self._resolved_docker_image:
-            return self._resolved_docker_image
+        """Resolve the configured tag for one verification session."""
         image = str(self.docker_image or "")
 
         def control(
@@ -909,17 +916,21 @@ class RepoVerifier:
     # ------------------------------------------------------------------ #
     def verify(self, hypothesis: str, problem: RepoProblem | dict) -> VerdictResult:
         """Verify a candidate and attach truthful phase/execution evidence."""
-        trace = RepoExecutionTrace()
-        sticky_evidence: dict[str, Any] = {}
-        pack_dir = str(problem.get("verifier_pack", "") or "")
-        # Presence is not validity: an existing file/symlink is present but the
-        # pack contract will reject it as an invalid root.
-        pack_present = bool(pack_dir and os.path.lexists(pack_dir))
-        result = self._verify(hypothesis, problem, trace, sticky_evidence)
-        result.artifact.update(sticky_evidence)
-        result.artifact.update(execution_phase_payload(trace.snapshot()))
-        result.artifact.setdefault("verifier_pack_present", pack_present)
-        return result
+        image_token = self._active_docker_image.set(None)
+        try:
+            trace = RepoExecutionTrace()
+            sticky_evidence: dict[str, Any] = {}
+            pack_dir = str(problem.get("verifier_pack", "") or "")
+            # Presence is not validity: an existing file/symlink is present but the
+            # pack contract will reject it as an invalid root.
+            pack_present = bool(pack_dir and os.path.lexists(pack_dir))
+            result = self._verify(hypothesis, problem, trace, sticky_evidence)
+            result.artifact.update(sticky_evidence)
+            result.artifact.update(execution_phase_payload(trace.snapshot()))
+            result.artifact.setdefault("verifier_pack_present", pack_present)
+            return result
+        finally:
+            self._active_docker_image.reset(image_token)
 
     def _verify(
         self,
@@ -1088,6 +1099,7 @@ class RepoVerifier:
                     # Tests may stub the resolver; pin its returned ID explicitly
                     # so setup, suite and pack all use the same image reference.
                     self._resolved_docker_image = resolved_image
+                    self._active_docker_image.set(resolved_image)
                 except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
                     return VerdictResult(
                         passed=False,

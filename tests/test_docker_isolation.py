@@ -27,6 +27,7 @@ from evoom_guard.pack_manifest import pack_digest
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
 
 _IMAGE_ID = "sha256:" + "d" * 64
+_SECOND_IMAGE_ID = "sha256:" + "e" * 64
 
 
 def _docker_ok() -> bool:
@@ -343,6 +344,72 @@ def test_setup_suite_and_pack_share_one_resolved_image_id(tmp_path, monkeypatch)
     assert all("python:mutable" not in command for command in docker_commands)
     assert result.artifact["image_digest"] == _IMAGE_ID
     assert result.artifact["runtime_continuity"] == "read_only_enforced"
+
+
+def test_reused_verifier_resolves_and_pins_each_verification_separately(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "app.py").write_text("x = 1\n", encoding="utf-8")
+    verifier = RepoVerifier(
+        isolation="docker",
+        docker_image="python:first",
+        test_command=["python", "-c", "raise SystemExit(0)"],
+        mem_limit_mb=0,
+    )
+    resolved = iter((_IMAGE_ID, _SECOND_IMAGE_ID))
+    resolve_calls: list[str | None] = []
+    docker_commands: list[list[str]] = []
+
+    def resolve_current() -> str:
+        resolve_calls.append(verifier.docker_image)
+        return next(resolved)
+
+    def fake_run(
+        command: list[str],
+        _name: str,
+    ) -> subprocess.CompletedProcess[str]:
+        docker_commands.append(command)
+        out_mount = next(
+            token for token in command if isinstance(token, str) and token.endswith(":/out:rw")
+        )
+        outdir = out_mount.removesuffix(":/out:rw")
+        os.makedirs(outdir, exist_ok=True)
+        with open(
+            os.path.join(outdir, "judge-result.xml"),
+            "w",
+            encoding="utf-8",
+        ) as stream:
+            stream.write(
+                '<testsuite tests="1" failures="0" errors="0">'
+                '<testcase classname="x" name="ok"/></testsuite>'
+            )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(verifier, "_resolve_docker_image", resolve_current)
+    monkeypatch.setattr(verifier, "_run_docker_client", fake_run)
+
+    first = verifier.verify(
+        "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>",
+        {"repo_path": str(repo)},
+    )
+    verifier.docker_image = "python:second"
+    second = verifier.verify(
+        "<<<FILE: app.py>>>\nx = 3\n<<<END FILE>>>",
+        {"repo_path": str(repo)},
+    )
+
+    assert first.passed and second.passed
+    assert resolve_calls == ["python:first", "python:second"]
+    assert _IMAGE_ID in docker_commands[0]
+    assert _SECOND_IMAGE_ID not in docker_commands[0]
+    assert _SECOND_IMAGE_ID in docker_commands[1]
+    assert _IMAGE_ID not in docker_commands[1]
+    assert first.artifact["image_digest"] == _IMAGE_ID
+    assert second.artifact["image_digest"] == _SECOND_IMAGE_ID
+    assert verifier._active_docker_image.get() is None
 
 
 def test_setup_cannot_mutate_source_after_pre_gate(tmp_path):
