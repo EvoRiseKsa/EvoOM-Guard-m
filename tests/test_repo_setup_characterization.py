@@ -217,7 +217,7 @@ def test_host_resolver_can_change_setup_output_globs_before_snapshot(
     assert observed == [("late/**",)]
 
 
-def test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof(
+def test_pre_snapshot_can_change_timeout_but_not_effective_strict_policy(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -254,7 +254,7 @@ def test_pre_snapshot_can_change_host_timeout_and_strict_cleanup_proof(
     )
 
     assert result.artifact["outcome"] == "setup_failed"
-    assert observed == {"timeout": 13, "strict": True}
+    assert observed == {"timeout": 13, "strict": False}
 
 
 def test_token_normalization_can_change_container_setup_trust(

@@ -1151,7 +1151,7 @@ class RepoVerifier:
                         trust_setup_on_host=lambda: self.trust_setup_on_host,
                         setup_output_globs=lambda: self.setup_output_globs,
                         timeout=lambda: self.timeout,
-                        strict_harness=lambda: self.strict_harness,
+                        strict_harness=lambda: strict_harness,
                         docker_network=lambda: self.docker_network,
                         docker_runtime=lambda: self.docker_runtime,
                         resolve_host_command=lambda: cast(
@@ -1255,7 +1255,7 @@ class RepoVerifier:
                         env=run_env,
                         timeout=self.timeout,
                         preexec_fn=self._limits() if os.name == "posix" else None,
-                        require_process_group_cleanup_proof=self.strict_harness,
+                        require_process_group_cleanup_proof=strict_harness,
                     )
             except _DockerRunTimeout as exc:
                 delivered = self.isolation if exc.container_started else "not_run"
@@ -1609,7 +1609,7 @@ class RepoVerifier:
                             preexec_fn=(
                                 self._limits() if os.name == "posix" else None
                             ),
-                            require_process_group_cleanup_proof=self.strict_harness,
+                            require_process_group_cleanup_proof=strict_harness,
                         )
                 except _DockerRunTimeout as exc:
                     delivered = self.isolation if exc.container_started else "not_run"

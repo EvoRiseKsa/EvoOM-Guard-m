@@ -213,7 +213,7 @@ def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase(
     # a typed call-through seam and is checked independently below.
     assert len(calls) == 2
     for call in calls:
-        _assert_strict_cleanup_keyword(call, "self.strict_harness")
+        _assert_strict_cleanup_keyword(call, "strict_harness")
 
     setup_tree = ast.parse(
         textwrap.dedent(inspect.getsource(repo_setup.execute_repo_setup))
@@ -244,7 +244,7 @@ def test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase(
     assert isinstance(strict_harness_provider, ast.Lambda)
     assert not strict_harness_provider.args.args
     assert ast.dump(strict_harness_provider.body, include_attributes=False) == ast.dump(
-        ast.parse("self.strict_harness", mode="eval").body,
+        ast.parse("strict_harness", mode="eval").body,
         include_attributes=False,
     )
 
