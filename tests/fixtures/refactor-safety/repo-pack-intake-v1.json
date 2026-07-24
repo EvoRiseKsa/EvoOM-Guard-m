@@ -1,0 +1,269 @@
+{
+  "cases": {
+    "digest_mismatch": {
+      "events": [
+        {
+          "exists": "true",
+          "op": "lexists",
+          "path": "<PACK_SOURCE>"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "exists": "false",
+          "op": "lexists",
+          "path": "<REPO_COPY>/evoguard_verifier_pack"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_pack_snapshot_"
+        },
+        {
+          "destination": "<PACK_WORKSPACE>/pack",
+          "op": "snapshot-pack",
+          "source": "<PACK_SOURCE>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": "candidate workspace=<CANDIDATE_WORKSPACE>,verifier-pack snapshot=<PACK_WORKSPACE>"
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "expected_verifier_pack_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "files_changed": [
+            "app.py"
+          ],
+          "outcome": "pack_identity_mismatch",
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_manifest": {
+            "description": "characterization",
+            "id": "frozen-pack",
+            "target_type": "repository",
+            "version": "1"
+          },
+          "verifier_pack_present": true,
+          "verifier_pack_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "verifier_pack_started": false
+        },
+        "diagnostics": "verifier-pack identity mismatch: expected aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, observed bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "passed": false,
+        "score": 0.0
+      }
+    },
+    "expected_pin_without_pack": {
+      "events": [
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": "candidate workspace=<CANDIDATE_WORKSPACE>,verifier-pack snapshot=<NONE>"
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "expected_verifier_pack_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "files_changed": [
+            "app.py"
+          ],
+          "outcome": "pack_identity_mismatch",
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": false,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "an expected verifier-pack SHA-256 was configured but no verifier pack was supplied",
+        "passed": false,
+        "score": 0.0
+      }
+    },
+    "invalid_pack_snapshot": {
+      "events": [
+        {
+          "exists": "true",
+          "op": "lexists",
+          "path": "<PACK_SOURCE>"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "exists": "false",
+          "op": "lexists",
+          "path": "<REPO_COPY>/evoguard_verifier_pack"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_pack_snapshot_"
+        },
+        {
+          "destination": "<PACK_WORKSPACE>/pack",
+          "op": "snapshot-pack",
+          "source": "<PACK_SOURCE>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": "candidate workspace=<CANDIDATE_WORKSPACE>,verifier-pack snapshot=<PACK_WORKSPACE>"
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "outcome": "pack_invalid",
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": true,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "controlled invalid verifier pack",
+        "passed": false,
+        "score": 0.0
+      }
+    },
+    "reserved_mount_collision": {
+      "events": [
+        {
+          "exists": "true",
+          "op": "lexists",
+          "path": "<PACK_SOURCE>"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "exists": "true",
+          "op": "lexists",
+          "path": "<REPO_COPY>/evoguard_verifier_pack"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": "candidate workspace=<CANDIDATE_WORKSPACE>,verifier-pack snapshot=<NONE>"
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_present": true,
+          "verifier_pack_started": false
+        },
+        "diagnostics": "the repo already contains 'evoguard_verifier_pack/' — the judge-owned pack mount point must not exist in the tree",
+        "passed": false,
+        "score": 0.05
+      }
+    },
+    "valid_identity_sticky_evidence": {
+      "events": [
+        {
+          "exists": "true",
+          "op": "lexists",
+          "path": "<PACK_SOURCE>"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_repo_"
+        },
+        {
+          "exists": "false",
+          "op": "lexists",
+          "path": "<REPO_COPY>/evoguard_verifier_pack"
+        },
+        {
+          "op": "mkdtemp",
+          "prefix": "evo_pack_snapshot_"
+        },
+        {
+          "destination": "<PACK_WORKSPACE>/pack",
+          "op": "snapshot-pack",
+          "source": "<PACK_SOURCE>"
+        },
+        {
+          "op": "cleanup",
+          "primary": "none",
+          "workspaces": "candidate workspace=<CANDIDATE_WORKSPACE>,verifier-pack snapshot=<PACK_WORKSPACE>"
+        }
+      ],
+      "result": {
+        "artifact": {
+          "delivered_isolation": "not_run",
+          "execution_phase": "preflight",
+          "execution_state": "not_started",
+          "files_changed": [
+            "app.py"
+          ],
+          "isolation_evidence": {
+            "delivered": "unavailable",
+            "image_digest": null,
+            "network": "none",
+            "requested": "docker",
+            "runtime": null
+          },
+          "outcome": "isolation_unavailable",
+          "repo_suite_isolation_evidence": null,
+          "setup_isolation_evidence": null,
+          "test_command_completed": false,
+          "test_command_started": false,
+          "verifier_pack_completed": false,
+          "verifier_pack_isolation_evidence": null,
+          "verifier_pack_manifest": {
+            "description": "characterization",
+            "id": "frozen-pack",
+            "target_type": "repository",
+            "version": "1"
+          },
+          "verifier_pack_present": true,
+          "verifier_pack_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "verifier_pack_started": false
+        },
+        "diagnostics": "docker isolation requires a docker image (--docker-image)",
+        "passed": false,
+        "score": 0.0
+      }
+    }
+  },
+  "schema_version": "repo-pack-intake-characterization-v1"
+}
