@@ -91,8 +91,11 @@ composition remain outside this owner.
 
 The third workspace slice lives in
 `evoom_guard/workspace/repository.py`. It owns the historical `COPY_IGNORE`
-tuple, faithful `copytree(..., symlinks=True)` operation, and multi-workspace
-cleanup sequencing with explicit primary-exception precedence. The
+tuple, filtered `copytree(..., symlinks=True)` operation, Windows
+junction/non-symlink-reparse rejection at each observed directory visit, and
+multi-workspace cleanup sequencing with explicit primary-exception precedence.
+Repository copying still requires a quiescent source and does not claim an
+atomic scan-to-open snapshot. The
 `repo_verifier` compatibility facades inject their current `COPY_IGNORE`,
 `shutil.copytree`, `shutil.ignore_patterns`, `shutil.rmtree`, and cleanup-note
 provider on every invocation. This preserves the established module-level

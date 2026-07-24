@@ -72,8 +72,8 @@ MUTATIONS = (
     Mutation(
         name="repository-copy-ignore-bypass",
         path="evoom_guard/workspace/repository.py",
-        before="        ignore=ignore_patterns_provider(*copy_ignore),\n",
-        after="        ignore=ignore_patterns_provider(),\n",
+        before="    ignore = ignore_patterns_provider(*copy_ignore)\n",
+        after="    ignore = ignore_patterns_provider()\n",
         test=(
             "tests/test_repository_workspace_owner.py::"
             "test_repository_workspace_owner_freezes_the_historical_copy_contract"

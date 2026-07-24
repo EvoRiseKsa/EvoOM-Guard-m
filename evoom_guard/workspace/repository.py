@@ -14,10 +14,12 @@ historical timing.
 
 from __future__ import annotations
 
+import os
 import shutil
+import stat
 from collections.abc import Callable, Iterable
 
-# Directories never copied into a throwaway candidate working copy.
+# Basenames never copied into a throwaway candidate working copy.
 COPY_IGNORE = (
     ".git",
     "__pycache__",
@@ -36,6 +38,62 @@ CopyIgnore = Callable[[str, list[str]], Iterable[str]]
 IgnorePatterns = Callable[..., CopyIgnore]
 RemoveTree = Callable[[str], object]
 NoteFailure = Callable[[BaseException, str], None]
+UnsafeReparseProbe = Callable[[str], bool]
+
+
+class UnsafeRepositoryTree(ValueError):
+    """A source tree cannot be copied without following an unsafe path."""
+
+
+def _unsafe_windows_copy_reparse(path: str) -> bool:
+    """Whether ``copytree`` could dereference one non-symlink reparse object."""
+
+    is_junction = getattr(os.path, "isjunction", None)
+    try:
+        if callable(is_junction) and is_junction(path):
+            return True
+        info = os.lstat(path)
+    except OSError as exc:
+        raise UnsafeRepositoryTree(
+            f"cannot classify repository path before copying: {path!r} ({exc})"
+        ) from exc
+
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    if not getattr(info, "st_file_attributes", 0) & reparse_flag:
+        return False
+
+    # A real Windows symlink is preserved by copytree(symlinks=True). Junctions
+    # and other reparse tags are not guaranteed that treatment and therefore
+    # must fail closed instead of materializing their targets.
+    symlink_tag = getattr(stat, "IO_REPARSE_TAG_SYMLINK", 0xA000000C)
+    return not (
+        stat.S_ISLNK(info.st_mode)
+        or getattr(info, "st_reparse_tag", None) == symlink_tag
+    )
+
+
+def _guard_windows_copy_ignore(
+    ignore: CopyIgnore,
+    *,
+    unsafe_reparse_probe: UnsafeReparseProbe,
+) -> CopyIgnore:
+    """Reject non-ignored reparse objects at each ``copytree`` directory visit."""
+
+    def guarded(directory: str, names: list[str]) -> Iterable[str]:
+        ignored = list(ignore(directory, names))
+        ignored_names = set(ignored)
+        for name in names:
+            if name in ignored_names:
+                continue
+            path = os.path.join(directory, name)
+            if unsafe_reparse_probe(path):
+                raise UnsafeRepositoryTree(
+                    "refusing to copy a Windows junction or non-symlink "
+                    f"reparse object: {path!r}"
+                )
+        return ignored
+
+    return guarded
 
 
 def copy_repo_tree(
@@ -43,26 +101,51 @@ def copy_repo_tree(
     dst: str,
     *,
     copy_ignore: tuple[str, ...] = COPY_IGNORE,
+    platform_name: str | None = None,
+    unsafe_reparse_probe: UnsafeReparseProbe | None = None,
     copytree: CopyTree | None = None,
     ignore_patterns: IgnorePatterns | None = None,
 ) -> None:
-    """Copy a repository faithfully into one throwaway working tree.
+    """Copy retained repository entries into one throwaway working tree.
 
     ``symlinks=True`` preserves dangling links and prevents copying the contents
     of an absolute link target into the candidate tree. Regular-file metadata,
     including executable bits, continues to be copied through ``copytree``'s
-    default ``copy2`` operation.
+    default ``copy2`` operation. On Windows, each visited directory rejects
+    junctions and other non-symlink reparse objects before ``copytree`` can
+    follow them.
+
+    The source must remain quiescent for the duration of this operation. These
+    path checks run at each ``copytree`` visit but are not an atomic filesystem
+    snapshot and do not close a hostile scan-to-open replacement race.
     """
 
     copytree_provider: CopyTree = shutil.copytree if copytree is None else copytree
     ignore_patterns_provider: IgnorePatterns = (
         shutil.ignore_patterns if ignore_patterns is None else ignore_patterns
     )
+    platform = os.name if platform_name is None else platform_name
+    ignore = ignore_patterns_provider(*copy_ignore)
+    if platform == "nt":
+        probe = (
+            _unsafe_windows_copy_reparse
+            if unsafe_reparse_probe is None
+            else unsafe_reparse_probe
+        )
+        if probe(src):
+            raise UnsafeRepositoryTree(
+                "refusing to copy a Windows junction or non-symlink "
+                f"reparse repository root: {src!r}"
+            )
+        ignore = _guard_windows_copy_ignore(
+            ignore,
+            unsafe_reparse_probe=probe,
+        )
     copytree_provider(
         src,
         dst,
         symlinks=True,
-        ignore=ignore_patterns_provider(*copy_ignore),
+        ignore=ignore,
     )
 
 
@@ -149,6 +232,7 @@ def cleanup_repo_workspaces(
 
 __all__ = (
     "COPY_IGNORE",
+    "UnsafeRepositoryTree",
     "cleanup_repo_workspaces",
     "copy_repo_tree",
     "note_cleanup_failure",

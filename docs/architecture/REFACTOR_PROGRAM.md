@@ -208,10 +208,11 @@ remain in their established facades.
   bounded read/compare interval; it does not close the classification/open gap
   or create an atomic whole-tree snapshot.
 - The dependency-free `workspace/repository.py` owner now contains the
-  historical copy-ignore tuple, faithful symlink-preserving repository copy,
-  Windows reparse-object rejection, and all-workspace cleanup sequencing.
-  `repo_verifier` keeps live compatibility facades and retains workspace
-  allocation plus higher-level repository orchestration.
+  historical copy-ignore tuple, filtered symlink-preserving repository copy,
+  observed Windows junction/non-symlink-reparse rejection, and all-workspace
+  cleanup sequencing. Repository copying requires a quiescent source and makes
+  no atomic-snapshot claim. `repo_verifier` keeps live compatibility facades
+  and retains workspace allocation plus higher-level repository orchestration.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.

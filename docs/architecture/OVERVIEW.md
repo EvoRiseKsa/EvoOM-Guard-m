@@ -148,10 +148,13 @@ tree. Guard's thin compatibility facade retains the historical private type
 ABI and resolves helper providers at call time. This protects each bounded
 read/compare interval; it does not close the classification/open gap or claim
 an atomic whole-tree snapshot.
-The dependency-free `workspace/repository.py` owner now contains faithful
-repository-copy semantics and cleanup exception precedence. `repo_verifier`
-retains call-time facades, so Guard, black-box, evidence, and monkeypatch-based
-adopters keep the same callable identities and dynamic effect seams.
+The dependency-free `workspace/repository.py` owner now contains filtered,
+symlink-preserving repository-copy semantics and cleanup exception precedence.
+It rejects Windows junctions and other observed non-symlink reparse objects at
+each directory visit, while explicitly requiring a quiescent source rather
+than claiming an atomic snapshot. `repo_verifier` retains call-time facades, so
+Guard, black-box, evidence, and monkeypatch-based adopters keep the same
+callable identities and dynamic effect seams.
 The flat CLI module has likewise been migrated byte-for-byte into the
 classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`

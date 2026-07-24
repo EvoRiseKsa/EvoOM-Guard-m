@@ -111,7 +111,9 @@ symlink-preserving repository copying, and cleanup exception precedence.
 `repo_verifier` remains the compatibility facade and injects its live
 filesystem and note providers at every call. No policy, execution, evidence,
 or verdict dependency enters the workspace layer, and no measured baseline
-ceiling changes.
+ceiling changes. Windows copy visits reject observed junctions and other
+non-symlink reparse objects, but the source must remain quiescent: this is not
+an atomic source-tree snapshot.
 
 The bounded verifier-pack intake slice gives
 `verifiers.repo_pack_intake` ownership of optional pack admission and its
