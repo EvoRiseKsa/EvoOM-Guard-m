@@ -89,6 +89,19 @@ identity still requires a quiescent checkout or raw-Git finalization.
 Candidate admission, repository mutation, execution, evidence, and verdict
 composition remain outside this owner.
 
+The third workspace slice lives in
+`evoom_guard/workspace/repository.py`. It owns the historical `COPY_IGNORE`
+tuple, faithful `copytree(..., symlinks=True)` operation, and multi-workspace
+cleanup sequencing with explicit primary-exception precedence. The
+`repo_verifier` compatibility facades inject their current `COPY_IGNORE`,
+`shutil.copytree`, `shutil.ignore_patterns`, `shutil.rmtree`, and cleanup-note
+provider on every invocation. This preserves the established module-level
+monkeypatch timing used by repository verification and by the exact facade
+objects already imported into Guard, black-box, and coverage evidence.
+Workspace allocation, candidate edit/deletion policy, pack intake, execution,
+runtime identity, evidence, and verdict composition remain in their existing
+owners.
+
 The first CLI slice is the same kind of atomic compatibility migration:
 `evoom_guard/cli/__init__.py` contains the exact implementation bytes formerly
 stored in `cli.py`. The import path, `evoom_guard.cli:main` console entry point,

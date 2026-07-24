@@ -314,6 +314,7 @@ from evoom_guard.workspace import (
     read_text_within_root,
     write_text_within_root,
 )
+from evoom_guard.workspace import repository as _repository_workspace
 
 _BLOCK_RE = _candidate_edits._BLOCK_RE
 _LENIENT_FILE_RE = _candidate_edits._LENIENT_FILE_RE
@@ -333,11 +334,9 @@ try:  # POSIX-only; absent on Windows.
 except ImportError:  # pragma: no cover - platform dependent
     resource = None  # type: ignore[assignment]
 
-# Directories never copied into the throwaway working copy.
-COPY_IGNORE = (
-    ".git", "__pycache__", ".venv", "venv", "node_modules",
-    ".evo_runs", ".pytest_cache", ".mypy_cache", "dist", "build",
-)
+# Stable compatibility constant. The facade below still injects this module's
+# current value on every call so existing monkeypatch seams remain live.
+COPY_IGNORE = _repository_workspace.COPY_IGNORE
 
 
 def judge_subprocess_env(workdir: str) -> dict[str, str]:
@@ -492,7 +491,7 @@ def _read_text_or_none(path: str) -> str | None:
 
 
 def copy_repo_tree(src: str, dst: str) -> None:
-    """Copy a repository into a throwaway working copy, faithfully.
+    """Compatibility facade for faithful throwaway repository copying.
 
     ``symlinks=True`` keeps symlinks *as symlinks* (and regular files keep their
     permission bits via ``copy2``), which matters twice:
@@ -508,7 +507,14 @@ def copy_repo_tree(src: str, dst: str) -> None:
     Writing *through* a symlink is prevented separately by the descriptor-bound
     workspace helpers used in :func:`apply_blocks_to_copy`.
     """
-    shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns(*COPY_IGNORE))
+
+    _repository_workspace.copy_repo_tree(
+        src,
+        dst,
+        copy_ignore=COPY_IGNORE,
+        copytree=shutil.copytree,
+        ignore_patterns=shutil.ignore_patterns,
+    )
 
 
 def apply_blocks_to_copy(
@@ -621,24 +627,9 @@ def _cleanup_docker_container(name: str) -> bool:
 
 
 def _note_repo_cleanup_failure(primary: BaseException, message: str) -> None:
-    """Attach cleanup diagnostics without ever replacing ``primary``."""
+    """Compatibility facade for secondary cleanup diagnostics."""
 
-    try:
-        add_note = getattr(primary, "add_note", None)
-        if callable(add_note):
-            add_note(message)
-            return
-        notes = getattr(primary, "__notes__", None)
-        if isinstance(notes, list):
-            notes.append(message)
-        else:
-            # Python 3.10 does not expose add_note(), but BaseException still
-            # permits a machine-readable notes attribute for callers/tests.
-            primary.__dict__["__notes__"] = [message]
-    except BaseException:
-        # Cleanup diagnostics are secondary by contract.  Even a hostile or
-        # unusually constrained exception object cannot replace the primary.
-        pass
+    _repository_workspace.note_cleanup_failure(primary, message)
 
 
 def _cleanup_repo_workspaces(
@@ -646,51 +637,15 @@ def _cleanup_repo_workspaces(
     *,
     primary: BaseException | None,
 ) -> None:
-    """Remove every judge-owned workspace with explicit exception precedence.
+    """Compatibility facade for repository-workspace cleanup sequencing."""
 
-    All paths are attempted.  With no active exception, the first cleanup
-    failure remains visible (and any later failures are attached as notes).
-    While another exception is unwinding, that exact exception remains primary
-    and receives one note per cleanup failure instead of being masked.
-    """
-
-    failures: list[tuple[str, BaseException]] = []
-    for label, path in workspaces:
-        if path is None:
-            continue
-        try:
-            shutil.rmtree(path)
-        except FileNotFoundError:
-            # Absence is the cleanup postcondition, so a raced prior removal is
-            # a successful/idempotent outcome rather than a failure.
-            continue
-        except BaseException as exc:
-            failures.append((label, exc))
-
-    if not failures:
-        return
-
-    if primary is not None:
-        for label, cleanup_error in failures:
-            _note_repo_cleanup_failure(
-                primary,
-                f"RepoVerifier {label} cleanup failed while preserving the "
-                f"primary exception: {type(cleanup_error).__name__}: {cleanup_error}",
-            )
-        return
-
-    first_label, first_error = failures[0]
-    _note_repo_cleanup_failure(
-        first_error,
-        f"RepoVerifier {first_label} cleanup failed",
+    _repository_workspace.cleanup_repo_workspaces(
+        workspaces,
+        primary=primary,
+        remove_tree=shutil.rmtree,
+        note_failure=_note_repo_cleanup_failure,
+        owner_name="RepoVerifier",
     )
-    for label, cleanup_error in failures[1:]:
-        _note_repo_cleanup_failure(
-            first_error,
-            f"Additional RepoVerifier {label} cleanup failure: "
-            f"{type(cleanup_error).__name__}: {cleanup_error}",
-        )
-    raise first_error
 
 
 class RepoVerifier:

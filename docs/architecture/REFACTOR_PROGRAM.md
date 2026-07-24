@@ -206,14 +206,19 @@ remain in their established facades.
   canonical serialization. Guard retains its original private value/exception
   ABI plus live injected helper facades. The guarantee is limited to each
   bounded read/compare interval; it does not close the classification/open gap
-  or create an atomic whole-tree snapshot. Other containment submodules remain
-  pending.
+  or create an atomic whole-tree snapshot.
+- The dependency-free `workspace/repository.py` owner now contains the
+  historical copy-ignore tuple, faithful symlink-preserving repository copy,
+  Windows reparse-object rejection, and all-workspace cleanup sequencing.
+  `repo_verifier` keeps live compatibility facades and retains workspace
+  allocation plus higher-level repository orchestration.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: split the remaining repository filesystem, runtime-identity,
-  sticky-projection, and cleanup responsibilities in independent characterized
-  slices.
+- Pending: split the remaining repository candidate-admission/deletion
+  coordination, workspace allocation, runtime-identity continuity, and
+  sticky-projection responsibilities in independent characterized slices.
+  Repository-suite and verifier-pack execution owners are complete.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.

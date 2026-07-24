@@ -9,10 +9,15 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
+from pathlib import Path
 from types import ModuleType
 
 import pytest
 
+import evoom_guard.blackbox as blackbox
+import evoom_guard.evidence as evidence
+import evoom_guard.guard as guard
 import evoom_guard.verifiers.repo_verifier as repo_verifier
 
 
@@ -66,6 +71,29 @@ def test_repository_workspace_owner_freezes_the_historical_copy_contract() -> No
     )
 
 
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows normcase semantics")
+def test_repository_copy_ignore_is_case_insensitive_on_windows(tmp_path: Path) -> None:
+    owner = _repository_workspace()
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    (source / ".GIT").write_text("gitdir: C:/untrusted.git\n", encoding="utf-8")
+    dependencies = source / "NODE_MODULES"
+    dependencies.mkdir()
+    (dependencies / "candidate.js").write_text("ignored\n", encoding="utf-8")
+    (source / ".GITIGNORE").write_text(".cache/\n", encoding="utf-8")
+    workflows = source / ".GITHUB" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "guard.yml").write_text("name: guard\n", encoding="utf-8")
+
+    owner.copy_repo_tree(str(source), str(destination))
+
+    assert not (destination / ".GIT").exists()
+    assert not (destination / "NODE_MODULES").exists()
+    assert (destination / ".GITIGNORE").is_file()
+    assert (destination / ".GITHUB" / "workflows" / "guard.yml").is_file()
+
+
 def test_repo_verifier_copy_facade_resolves_legacy_globals_at_call_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -91,6 +119,13 @@ def test_repo_verifier_copy_facade_resolves_legacy_globals_at_call_time(
         "destination",
         {"symlinks": True, "ignore": ignore_callback},
     )
+
+
+def test_existing_consumers_retain_the_exact_repo_verifier_copy_facade() -> None:
+    assert guard.copy_repo_tree is repo_verifier.copy_repo_tree
+    assert blackbox.copy_repo_tree is repo_verifier.copy_repo_tree
+    assert evidence.copy_repo_tree is repo_verifier.copy_repo_tree
+    assert guard.COPY_IGNORE is repo_verifier.COPY_IGNORE
 
 
 def test_repo_verifier_cleanup_facade_resolves_note_provider_at_call_time(
