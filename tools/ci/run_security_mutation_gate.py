@@ -40,6 +40,46 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="repository-copy-symlink-fidelity-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        symlinks=True,\n",
+        after="        symlinks=False,\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_owner_freezes_the_historical_copy_contract"
+        ),
+    ),
+    Mutation(
+        name="repository-copy-ignore-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        ignore=ignore_patterns(*copy_ignore),\n",
+        after="        ignore=ignore_patterns(),\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_owner_freezes_the_historical_copy_contract"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-primary-precedence-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    if primary is not None:\n",
+        after="    if False and primary is not None:\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_cleanup_attempts_every_path_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-stop-after-first-failure",
+        path="evoom_guard/workspace/repository.py",
+        before="            failures.append((label, exc))\n",
+        after="            failures.append((label, exc)); break\n",
+        test=(
+            "tests/test_repository_workspace_owner.py::"
+            "test_repository_workspace_cleanup_attempts_every_path_and_preserves_primary"
+        ),
+    ),
+    Mutation(
         name="candidate-tree-reparse-classification-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before="    if is_windows_reparse(full_path, info):\n",
