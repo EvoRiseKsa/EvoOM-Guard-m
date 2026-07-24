@@ -42,13 +42,13 @@ import hashlib
 import json
 import os
 import shutil
-import stat
 import subprocess
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+import evoom_guard.workspace.candidate_tree as _candidate_tree
 from evoom_guard import __version__
 from evoom_guard.application.assurance import (
     ISOLATION_RANK_POLICY,
@@ -1561,35 +1561,14 @@ def _build_attestation(
     )
 
 
-@dataclass(frozen=True)
-class _TreeEntry:
-    """A non-ignored filesystem entry used by ``blocks_from_dirs``.
-
-    Metadata is retained even for entries that cannot become text edit blocks.
-    Otherwise a changed oversized or binary harness file could disappear before
-    the static gate saw it.
-    """
-
-    full_path: str
-    kind: str
-    mode: int | None
-    size: int | None
-    link_target: str | None = None
-    problem: str | None = None
-    identity: tuple[int, ...] | None = None
-    path_times: tuple[int, int] | None = None
+class _TreeEntry(_candidate_tree.TreeEntry):
+    """Historical private value type backed by the workspace owner."""
 
 
-class _UnverifiableChangedPathsError(ValueError):
-    """A base/head change cannot be represented safely as Guard file blocks."""
-
-    def __init__(self, problems: list[tuple[str, str]]) -> None:
-        self.problems = tuple(problems)
-        listed = "; ".join(f"{path}: {reason}" for path, reason in problems)
-        super().__init__(
-            "changed path(s) cannot be safely represented for verification "
-            f"({listed})"
-        )
+class _UnverifiableChangedPathsError(
+    _candidate_tree.UnverifiableChangedPathsError
+):
+    """Historical private exception type backed by the workspace owner."""
 
 
 def blocks_from_dirs(
@@ -1608,56 +1587,26 @@ def blocks_from_dirs(
     ``<<<FILE>>>`` text format, so content containing literal block markers
     survives intact.
     """
-    if max_bytes < 0:
-        raise ValueError("max_bytes must be non-negative")
-
-    root_problems: list[tuple[str, str]] = []
-    for label, root in (("<base-root>", base_dir), ("<head-root>", head_dir)):
-        root_entry = _tree_entry(root)
-        if root_entry.kind != "directory":
-            root_problems.append((label, _entry_problem(root_entry)))
-    if root_problems:
-        raise _UnverifiableChangedPathsError(root_problems)
-
-    base_entries = _walk_tree_entries(base_dir)
-    head_entries = _walk_tree_entries(head_dir)
-    blocks: dict[str, str] = {}
-    deleted = sorted(set(base_entries) - set(head_entries))
-    problems: list[tuple[str, str]] = []
-
-    for rel in sorted(head_entries):
-        head = head_entries[rel]
-        base = base_entries.get(rel)
-        # Writing a file creates its parent directories, so a new directory
-        # with a regular-file descendant is faithfully implied by ``blocks``.
-        # Git cannot serialize an empty directory through the FILE-block
-        # format, however; accepting it would recreate the old silent-drop
-        # class of bypass for filesystem-sensitive projects.
-        if head.kind == "directory" and base is None:
-            if not _directory_has_regular_descendant(head_entries, rel):
-                problems.append((rel, "new empty directory cannot be represented"))
-            continue
-        changed, comparison_problem = _entries_changed(base, head)
-        if comparison_problem:
-            problems.append((rel, comparison_problem))
-            continue
-        if not changed:
-            continue
-        if head.kind != "regular":
-            problems.append((rel, _entry_problem(head)))
-            continue
-        try:
-            blocks[rel] = _read_changed_text(head, max_bytes)
-        except OSError as exc:
-            problems.append((rel, f"cannot read changed file ({exc.strerror or exc})"))
-        except UnicodeDecodeError:
-            problems.append((rel, "changed file is not valid UTF-8 text"))
-        except ValueError as exc:
-            problems.append((rel, str(exc)))
-
-    if problems:
-        raise _UnverifiableChangedPathsError(problems)
-    return blocks, deleted
+    return _candidate_tree.blocks_from_dirs(
+        base_dir,
+        head_dir,
+        max_bytes=max_bytes,
+        tree_entry_lookup=lambda path: _tree_entry(path),
+        walk_tree_entries=lambda root: _walk_tree_entries(root),
+        directory_has_regular_descendant=(
+            lambda entries, directory: _directory_has_regular_descendant(
+                cast(dict[str, _TreeEntry], entries), directory
+            )
+        ),
+        entries_changed=lambda base, head: _entries_changed(
+            cast(_TreeEntry | None, base), cast(_TreeEntry, head)
+        ),
+        entry_problem=lambda entry: _entry_problem(cast(_TreeEntry, entry)),
+        read_changed_text=lambda entry, limit: _read_changed_text(
+            cast(_TreeEntry, entry), limit
+        ),
+        unverifiable_error=_UnverifiableChangedPathsError,
+    )
 
 
 def serialize_candidate_blocks(blocks: Mapping[str, str]) -> str:
@@ -1671,10 +1620,7 @@ def serialize_candidate_blocks(blocks: Mapping[str, str]) -> str:
     bindings carry their identity separately.
     """
 
-    return "\n".join(
-        f"<<<FILE: {rel}>>>\n{blocks[rel]}\n<<<END FILE>>>"
-        for rel in sorted(blocks)
-    )
+    return _candidate_tree.serialize_candidate_blocks(blocks)
 
 
 def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
@@ -1687,96 +1633,47 @@ def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_
     re-parsing this text — content containing a literal ``<<<END FILE>>>`` line
     would terminate its own block in the parse.
     """
-    blocks, deleted = blocks_from_dirs(base_dir, head_dir, max_bytes=max_bytes)
-    text = serialize_candidate_blocks(blocks)
-    return text, deleted
+    def derive_blocks(
+        base_dir: str,
+        head_dir: str,
+        *,
+        max_bytes: int = 1_000_000,
+    ) -> tuple[dict[str, str], list[str]]:
+        return blocks_from_dirs(base_dir, head_dir, max_bytes=max_bytes)
+
+    return _candidate_tree.candidate_from_dirs(
+        base_dir,
+        head_dir,
+        max_bytes=max_bytes,
+        derive_blocks=derive_blocks,
+        serialize_blocks=lambda blocks: serialize_candidate_blocks(blocks),
+    )
 
 
 def _walk_tree_entries(root: str) -> dict[str, _TreeEntry]:
     """Return every non-ignored path without dropping non-text entries."""
-    out: dict[str, _TreeEntry] = {}
-    ignore = set(COPY_IGNORE) | {".git"}
-    def walk_error(exc: OSError) -> None:
-        # ``os.walk`` otherwise silently skips an unreadable directory. Keep a
-        # sentinel so a change cannot vanish merely because it became
-        # inaccessible between the base/head walks.
-        if not exc.filename:
-            return
-        try:
-            rel = os.path.relpath(exc.filename, root).replace(os.sep, "/")
-        except ValueError:
-            return
-        if rel in (".", "") or rel.startswith("../"):
-            return
-        out[rel] = _TreeEntry(
-            exc.filename, "unreadable", None, None,
-            problem=f"cannot walk directory ({exc.strerror or exc})",
-        )
-
-    for dirpath, dirnames, filenames in os.walk(root, onerror=walk_error):
-        dirnames[:] = [d for d in dirnames if d not in ignore]
-        traversable_dirs: list[str] = []
-        for dirname in dirnames:
-            full = os.path.join(dirpath, dirname)
-            rel = os.path.relpath(full, root).replace(os.sep, "/")
-            entry = _tree_entry(full)
-            out[rel] = entry
-            # ``os.walk`` normally avoids symlink recursion, but explicitly
-            # removing every non-directory protects against platform-specific
-            # reparse/special behaviour and prevents an escape on followlinks.
-            if entry.kind == "directory":
-                traversable_dirs.append(dirname)
-        dirnames[:] = traversable_dirs
-        for fn in filenames:
-            full = os.path.join(dirpath, fn)
-            rel = os.path.relpath(full, root).replace(os.sep, "/")
-            out[rel] = _tree_entry(full)
-    return out
+    return cast(
+        dict[str, _TreeEntry],
+        _candidate_tree.walk_tree_entries(
+            root,
+            copy_ignore=COPY_IGNORE,
+            tree_entry_lookup=lambda path: _tree_entry(path),
+            entry_factory=_TreeEntry,
+        ),
+    )
 
 
 def _tree_entry(full_path: str) -> _TreeEntry:
     """Describe a path without following a symlink or reading its payload."""
-    try:
-        info = os.lstat(full_path)
-    except OSError as exc:
-        return _TreeEntry(
-            full_path, "unreadable", None, None,
-            problem=f"cannot stat path ({exc.strerror or exc})",
-        )
-
-    mode = stat.S_IMODE(info.st_mode)
-    if stat.S_ISLNK(info.st_mode):
-        try:
-            return _TreeEntry(
-                full_path, "symlink", mode, None, os.readlink(full_path)
-            )
-        except OSError as exc:
-            return _TreeEntry(
-                full_path, "unreadable", mode, None,
-                problem=f"cannot read symlink ({exc.strerror or exc})",
-            )
-    if _is_windows_reparse(full_path, info):
-        return _TreeEntry(
+    return cast(
+        _TreeEntry,
+        _candidate_tree.tree_entry(
             full_path,
-            "special",
-            mode,
-            None,
-            problem="path is a Windows reparse point",
-        )
-    if stat.S_ISREG(info.st_mode):
-        return _TreeEntry(
-            full_path,
-            "regular",
-            mode,
-            int(info.st_size),
-            identity=_stat_identity(info),
-            path_times=_stat_path_times(info),
-        )
-    if stat.S_ISDIR(info.st_mode):
-        return _TreeEntry(full_path, "directory", mode, None)
-    return _TreeEntry(
-        full_path, "special", mode, None,
-        problem="path is not a regular file or symlink",
+            entry_factory=_TreeEntry,
+            is_windows_reparse=lambda path, info: _is_windows_reparse(path, info),
+            stat_identity=lambda info: _stat_identity(info),
+            stat_path_times=lambda info: _stat_path_times(info),
+        ),
     )
 
 
@@ -1792,32 +1689,17 @@ def _is_windows_reparse(
     ``st_file_attributes`` exposes the reparse flag throughout Python
     3.10-3.12. ``os.path.isjunction`` is supplemental when available.
     """
-    platform = os.name if platform_name is None else platform_name
-    if platform != "nt":
-        return False
-    reparse_flag = int(getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
-    attributes = int(getattr(info, "st_file_attributes", 0))
-    if attributes & reparse_flag:
-        return True
-    probe = (
-        getattr(os.path, "isjunction", None)
-        if junction_probe is None
-        else junction_probe
+    return _candidate_tree.is_windows_reparse(
+        full_path,
+        info,
+        platform_name=platform_name,
+        junction_probe=junction_probe,
     )
-    return bool(probe is not None and probe(full_path))
 
 
 def _stat_identity(info: os.stat_result) -> tuple[int, ...]:
     """Return object/type/mode/size identity stable across path/handle APIs."""
-    return (
-        int(info.st_dev),
-        int(info.st_ino),
-        int(info.st_mode),
-        int(info.st_nlink),
-        int(info.st_size),
-        int(getattr(info, "st_file_attributes", 0)),
-        int(getattr(info, "st_reparse_tag", 0)),
-    )
+    return _candidate_tree.stat_identity(info)
 
 
 def _stat_path_times(info: os.stat_result) -> tuple[int, int]:
@@ -1827,7 +1709,7 @@ def _stat_path_times(info: os.stat_result) -> tuple[int, int]:
     ``fstat``. Keeping times out of descriptor identity prevents false drift
     while path-before/path-after checks still detect same-object writes.
     """
-    return (int(info.st_mtime_ns), int(info.st_ctime_ns))
+    return _candidate_tree.stat_path_times(info)
 
 
 def _verify_regular_snapshot(
@@ -1838,57 +1720,32 @@ def _verify_regular_snapshot(
     path_observation: bool,
 ) -> None:
     """Reject a path/descriptor that no longer matches its captured ``lstat``."""
-    if (
-        entry.identity is None
-        or not stat.S_ISREG(observed.st_mode)
-        or _stat_identity(observed) != entry.identity
-        or (
-            path_observation
-            and (
-                entry.path_times is None
-                or _stat_path_times(observed) != entry.path_times
-            )
-        )
-    ):
-        raise OSError(problem)
+    _candidate_tree.verify_regular_snapshot(
+        entry,
+        observed,
+        problem=problem,
+        path_observation=path_observation,
+        stat_identity_provider=lambda info: _stat_identity(info),
+        stat_path_times_provider=lambda info: _stat_path_times(info),
+    )
 
 
 def _open_regular_snapshot(entry: _TreeEntry) -> int:
     """Open one classified regular file without accepting a name swap."""
-    before = os.lstat(entry.full_path)
-    if _is_windows_reparse(entry.full_path, before):
-        raise OSError("candidate file identity changed after it was classified")
-    _verify_regular_snapshot(
+    return _candidate_tree.open_regular_snapshot(
         entry,
-        before,
-        problem="candidate file identity changed after it was classified",
-        path_observation=True,
-    )
-    flags = _regular_snapshot_open_flags()
-    descriptor = os.open(entry.full_path, flags)
-    try:
-        opened = os.fstat(descriptor)
-        current = os.lstat(entry.full_path)
-        if _is_windows_reparse(entry.full_path, current):
-            raise OSError(
-                "candidate file identity changed after it was classified"
+        is_windows_reparse=lambda path, info: _is_windows_reparse(path, info),
+        verify_regular_snapshot_provider=(
+            lambda candidate, observed, problem, path_observation:
+            _verify_regular_snapshot(
+                cast(_TreeEntry, candidate),
+                observed,
+                problem=problem,
+                path_observation=path_observation,
             )
-        _verify_regular_snapshot(
-            entry,
-            opened,
-            problem="candidate file identity changed after it was classified",
-            path_observation=False,
-        )
-        _verify_regular_snapshot(
-            entry,
-            current,
-            problem="candidate file identity changed after it was classified",
-            path_observation=True,
-        )
-    except BaseException:
-        os.close(descriptor)
-        raise
-    return descriptor
+        ),
+        open_flags=lambda: _regular_snapshot_open_flags(),
+    )
 
 
 def _regular_snapshot_open_flags(
@@ -1902,26 +1759,10 @@ def _regular_snapshot_open_flags(
     path observation and descriptor verification. Missing POSIX primitives are
     an unverifiable runtime, never a silent downgrade.
     """
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_BINARY", 0)
-        | getattr(os, "O_CLOEXEC", 0)
+    return _candidate_tree.regular_snapshot_open_flags(
+        platform_name=platform_name,
+        flag_provider=flag_provider,
     )
-    platform = os.name if platform_name is None else platform_name
-    if platform == "posix":
-        provider = (
-            (lambda name: getattr(os, name, None))
-            if flag_provider is None
-            else flag_provider
-        )
-        no_follow = provider("O_NOFOLLOW")
-        non_block = provider("O_NONBLOCK")
-        if no_follow is None or non_block is None:
-            raise OSError(
-                "POSIX runtime lacks no-follow/non-blocking file-open support"
-            )
-        flags |= no_follow | non_block
-    return flags
 
 
 def _verify_open_regular_snapshot(
@@ -1931,22 +1772,20 @@ def _verify_open_regular_snapshot(
     operation: str,
 ) -> None:
     """Bind a completed read/compare to both its descriptor and path name."""
-    problem = f"candidate file changed while it was being {operation}"
-    opened = os.fstat(descriptor)
-    current = os.lstat(entry.full_path)
-    if _is_windows_reparse(entry.full_path, current):
-        raise OSError(problem)
-    _verify_regular_snapshot(
+    _candidate_tree.verify_open_regular_snapshot(
         entry,
-        opened,
-        problem=problem,
-        path_observation=False,
-    )
-    _verify_regular_snapshot(
-        entry,
-        current,
-        problem=problem,
-        path_observation=True,
+        descriptor,
+        operation=operation,
+        is_windows_reparse=lambda path, info: _is_windows_reparse(path, info),
+        verify_regular_snapshot_provider=(
+            lambda candidate, observed, problem, path_observation:
+            _verify_regular_snapshot(
+                cast(_TreeEntry, candidate),
+                observed,
+                problem=problem,
+                path_observation=path_observation,
+            )
+        ),
     )
 
 
@@ -1954,38 +1793,20 @@ def _entries_changed(
     base: _TreeEntry | None, head: _TreeEntry
 ) -> tuple[bool, str | None]:
     """Return whether a path changed and whether that fact is unverifiable."""
-    if base is None:
-        return True, None
-    if base.kind == "unreadable":
-        return True, _entry_problem(base)
-    if head.kind == "unreadable":
-        return True, _entry_problem(head)
-    if base.kind != head.kind:
-        return True, f"path type changed from {base.kind} to {head.kind}"
-    if base.mode != head.mode:
-        return True, "path mode changed; Guard file blocks cannot preserve modes"
-    if head.kind == "regular":
-        try:
-            return (
-                not _regular_files_equal(
-                    base.full_path,
-                    head.full_path,
-                    base_snapshot=base,
-                    head_snapshot=head,
-                )
-            ), None
-        except OSError as exc:
-            return True, f"cannot compare file content ({exc.strerror or exc})"
-    if head.kind == "symlink":
-        return base.link_target != head.link_target, None
-    if head.kind == "directory":
-        # Existing directories carry no independent payload. Their descendant
-        # file blocks (or explicit deletion paths) reconstruct membership; the
-        # only unrepresentable directory state is a mode change above.
-        return False, None
-    # A special path is never a safe candidate representation, even if two
-    # filesystem objects superficially look alike.
-    return True, _entry_problem(head)
+    return _candidate_tree.entries_changed(
+        base,
+        head,
+        regular_files_equal=(
+            lambda base_path, head_path, base_snapshot, head_snapshot:
+            _regular_files_equal(
+                base_path,
+                head_path,
+                base_snapshot=cast(_TreeEntry | None, base_snapshot),
+                head_snapshot=cast(_TreeEntry | None, head_snapshot),
+            )
+        ),
+        entry_problem=lambda entry: _entry_problem(cast(_TreeEntry, entry)),
+    )
 
 
 def _regular_files_equal(
@@ -1996,103 +1817,69 @@ def _regular_files_equal(
     head_snapshot: _TreeEntry | None = None,
 ) -> bool:
     """Compare two stable regular-file snapshots with bounded memory."""
-    base_entry = base_snapshot or _tree_entry(base_path)
-    head_entry = head_snapshot or _tree_entry(head_path)
-    if base_entry.kind != "regular" or head_entry.kind != "regular":
-        raise OSError("candidate file identity changed after it was classified")
-
-    base_descriptor = _open_regular_snapshot(base_entry)
-    try:
-        head_descriptor = _open_regular_snapshot(head_entry)
-    except BaseException:
-        os.close(base_descriptor)
-        raise
-    try:
-        equal = base_entry.size == head_entry.size
-        while equal:
-            left = os.read(base_descriptor, 1024 * 1024)
-            right = os.read(head_descriptor, 1024 * 1024)
-            if left != right:
-                equal = False
-                break
-            if not left:
-                break
-        _verify_open_regular_snapshot(
-            base_entry,
-            base_descriptor,
-            operation="compared",
-        )
-        _verify_open_regular_snapshot(
-            head_entry,
-            head_descriptor,
-            operation="compared",
-        )
-        return equal
-    finally:
-        os.close(head_descriptor)
-        os.close(base_descriptor)
+    return _candidate_tree.regular_files_equal(
+        base_path,
+        head_path,
+        base_snapshot=base_snapshot,
+        head_snapshot=head_snapshot,
+        tree_entry_lookup=lambda path: _tree_entry(path),
+        open_regular_snapshot_provider=(
+            lambda candidate: _open_regular_snapshot(
+                cast(_TreeEntry, candidate)
+            )
+        ),
+        verify_open_regular_snapshot_provider=(
+            lambda candidate, descriptor, operation:
+            _verify_open_regular_snapshot(
+                cast(_TreeEntry, candidate),
+                descriptor,
+                operation=operation,
+            )
+        ),
+    )
 
 
 def _entry_problem(entry: _TreeEntry) -> str:
-    if entry.problem:
-        return entry.problem
-    if entry.kind == "symlink":
-        return "path is a symlink, which Guard file blocks cannot represent"
-    if entry.kind == "special":
-        return "path is not a regular file"
-    return "path cannot be represented safely"
+    return _candidate_tree.entry_problem(entry)
 
 
 def _directory_has_regular_descendant(
     entries: dict[str, _TreeEntry], directory: str
 ) -> bool:
     """Whether FILE blocks implicitly recreate a newly added directory."""
-    prefix = directory.rstrip("/") + "/"
-    return any(
-        path.startswith(prefix) and entry.kind == "regular"
-        for path, entry in entries.items()
+    return _candidate_tree.directory_has_regular_descendant(
+        cast(dict[str, _candidate_tree.TreeEntry], entries),
+        directory,
     )
 
 
 def _read_changed_text(entry: _TreeEntry, max_bytes: int) -> str:
     """Read one changed regular text file, failing before it can be dropped."""
-    if entry.size is None:
-        raise ValueError("changed file has no stable size")
-    if entry.size > max_bytes:
-        raise ValueError(
-            f"changed file is {entry.size} bytes, above the {max_bytes}-byte limit"
-        )
-    # Read one extra byte so enlargement cannot become silent truncation.
-    # Descriptor and current path must still identify the captured lstat object
-    # before and after this bounded intake.
-    descriptor = _open_regular_snapshot(entry)
-    try:
-        data = _read_fd_bounded(descriptor, max_bytes + 1)
-        if len(data) > max_bytes:
-            raise ValueError(
-                f"changed file grew above the {max_bytes}-byte limit while being read"
+    return _candidate_tree.read_changed_text(
+        entry,
+        max_bytes,
+        open_regular_snapshot_provider=(
+            lambda candidate: _open_regular_snapshot(
+                cast(_TreeEntry, candidate)
             )
-        _verify_open_regular_snapshot(
-            entry,
-            descriptor,
-            operation="read",
-        )
-    finally:
-        os.close(descriptor)
-    return data.decode("utf-8")
+        ),
+        read_fd_bounded_provider=(
+            lambda descriptor, maximum: _read_fd_bounded(descriptor, maximum)
+        ),
+        verify_open_regular_snapshot_provider=(
+            lambda candidate, descriptor, operation:
+            _verify_open_regular_snapshot(
+                cast(_TreeEntry, candidate),
+                descriptor,
+                operation=operation,
+            )
+        ),
+    )
 
 
 def _read_fd_bounded(descriptor: int, maximum: int) -> bytes:
     """Read at most ``maximum`` bytes from a regular-file descriptor."""
-    chunks: list[bytes] = []
-    remaining = maximum
-    while remaining:
-        chunk = os.read(descriptor, min(remaining, 1024 * 1024))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
+    return _candidate_tree.read_fd_bounded(descriptor, maximum)
 
 
 def _reverse_apply(work_dir: str, diff_file: str) -> bool:

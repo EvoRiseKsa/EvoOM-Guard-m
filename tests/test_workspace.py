@@ -25,6 +25,7 @@ import tempfile
 import pytest
 
 import evoom_guard.workspace as workspace
+import evoom_guard.workspace.candidate_tree as candidate_tree
 from evoom_guard.workspace import (
     UnsafeWorkspacePath,
     _is_safe_relative_path,
@@ -57,6 +58,7 @@ def test_module_to_package_move_preserves_the_legacy_surface_and_globals() -> No
         "_verify_best_effort_parent",
         "_verify_parent_still_bound",
         "annotations",
+        "candidate_tree",
         "contextlib",
         "delete_path_within_root",
         "os",
@@ -67,6 +69,7 @@ def test_module_to_package_move_preserves_the_legacy_surface_and_globals() -> No
         "tempfile",
         "write_text_within_root",
     }
+    assert workspace.candidate_tree is candidate_tree
     assert UnsafeWorkspacePath.__module__ == "evoom_guard.workspace"
     for function in (
         delete_path_within_root,

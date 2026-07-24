@@ -186,8 +186,14 @@ remain in their established facades.
   composition remain in their existing owners.
 - The flat `workspace.py` surface is now the classified
   `workspace/__init__.py` package with identical implementation bytes,
-  preserving descriptor/TOCTOU monkeypatch seams. Internal containment
-  submodules remain pending.
+  preserving descriptor/TOCTOU monkeypatch seams. The bounded
+  `workspace/candidate_tree.py` owner now contains the complete hardened
+  base/head intake transaction: root/reparse validation, captured object and
+  metadata identity, mandatory POSIX `O_NOFOLLOW`/`O_NONBLOCK`, bounded
+  descriptor reads/comparisons, changed-path classification, and canonical
+  serialization. Guard retains thin private compatibility classes plus live
+  injected helper facades. This is a per-file stability guarantee, not an
+  atomic whole-tree snapshot; other containment submodules remain pending.
 - Pending: split the remaining `blackbox.py` pack/CID/evidence
   responsibilities behind characterized compatibility boundaries.
 - Pending: split the remaining repository filesystem, runtime-identity,
