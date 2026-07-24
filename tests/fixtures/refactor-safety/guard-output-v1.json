@@ -1,0 +1,186 @@
+{
+  "cases": {
+    "incomplete_error": {
+      "json_text": "{\n  \"schema_version\": \"1.11\",\n  \"tool\": \"evoguard\",\n  \"tool_version\": \"4.3.0\",\n  \"verdict\": \"ERROR\",\n  \"passed\": false,\n  \"exit_code\": 1,\n  \"reason_code\": \"runtime_cleanup_failed\",\n  \"reason\": \"setup began but cleanup could not be proved\",\n  \"files_changed\": [\n    \"src/bootstrap.py\"\n  ],\n  \"protected_violations\": [],\n  \"risk_level\": \"medium\",\n  \"risk_score\": 0.5,\n  \"tests_passed\": null,\n  \"tests_total\": null,\n  \"test_command_ran\": true,\n  \"execution_state\": \"started_incomplete\",\n  \"execution_phase\": \"setup\",\n  \"verdict_source\": null,\n  \"isolation\": \"subprocess\",\n  \"source\": null,\n  \"base_reconstruction\": null,\n  \"assurance\": null,\n  \"diff_coverage\": null,\n  \"baseline\": null,\n  \"attestation\": null,\n  \"diagnostics\": \"cleanup proof unavailable\"\n}",
+      "report": "## EvoGuard — ⚠️ ERROR\n\n**setup began but cleanup could not be proved**\n\n| | |\n|---|---|\n| Verdict | **ERROR** |\n| Tests passed | — |\n| Files changed | 1 |\n| Blast radius | **medium** (0.50) |\n| Execution | `started_incomplete` · phase `setup` |\n| Test command started | yes |\n| Verdict source | — |\n\n<details><summary>Files changed</summary>\n\n`src/bootstrap.py`\n</details>\n\n<details><summary>Diagnostics</summary>\n\n```\ncleanup proof unavailable\n```\n</details>\n\n<sub>A verification command started but the required execution sequence did not complete (furthest phase: setup); therefore there is no clean verdict source. See docs/GUARD.md.</sub>",
+      "sarif": {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+          {
+            "results": [
+              {
+                "level": "error",
+                "locations": [
+                  {
+                    "physicalLocation": {
+                      "artifactLocation": {
+                        "uri": "src/bootstrap.py"
+                      }
+                    }
+                  }
+                ],
+                "message": {
+                  "text": "EvoGuard ERROR: setup began but cleanup could not be proved"
+                },
+                "properties": {
+                  "execution_phase": "setup",
+                  "execution_state": "started_incomplete",
+                  "isolation": "subprocess",
+                  "risk_level": "medium",
+                  "test_command_ran": true,
+                  "verdict": "ERROR",
+                  "verdict_source": null
+                },
+                "ruleId": "runtime_cleanup_failed"
+              }
+            ],
+            "tool": {
+              "driver": {
+                "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+                "name": "EvoGuard",
+                "rules": [
+                  {
+                    "id": "runtime_cleanup_failed",
+                    "name": "ERROR"
+                  }
+                ],
+                "version": "4.3.0"
+              }
+            }
+          }
+        ],
+        "version": "2.1.0"
+      },
+      "sarif_text": "{\n  \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n  \"version\": \"2.1.0\",\n  \"runs\": [\n    {\n      \"tool\": {\n        \"driver\": {\n          \"name\": \"EvoGuard\",\n          \"version\": \"4.3.0\",\n          \"informationUri\": \"https://github.com/EvoRiseKsa/EvoOM-Guard-m\",\n          \"rules\": [\n            {\n              \"id\": \"runtime_cleanup_failed\",\n              \"name\": \"ERROR\"\n            }\n          ]\n        }\n      },\n      \"results\": [\n        {\n          \"ruleId\": \"runtime_cleanup_failed\",\n          \"level\": \"error\",\n          \"message\": {\n            \"text\": \"EvoGuard ERROR: setup began but cleanup could not be proved\"\n          },\n          \"properties\": {\n            \"verdict\": \"ERROR\",\n            \"risk_level\": \"medium\",\n            \"verdict_source\": null,\n            \"isolation\": \"subprocess\",\n            \"test_command_ran\": true,\n            \"execution_state\": \"started_incomplete\",\n            \"execution_phase\": \"setup\"\n          },\n          \"locations\": [\n            {\n              \"physicalLocation\": {\n                \"artifactLocation\": {\n                  \"uri\": \"src/bootstrap.py\"\n                }\n              }\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+    },
+    "pass_full_evidence": {
+      "json_text": "{\n  \"schema_version\": \"1.11\",\n  \"tool\": \"evoguard\",\n  \"tool_version\": \"4.3.0\",\n  \"verdict\": \"PASS\",\n  \"passed\": true,\n  \"exit_code\": 0,\n  \"reason_code\": \"tests_passed\",\n  \"reason\": \"the selected judge accepted the candidate\",\n  \"files_changed\": [\n    \"src/module_00.py\",\n    \"src/module_01.py\",\n    \"src/module_02.py\",\n    \"src/module_03.py\",\n    \"src/module_04.py\",\n    \"src/module_05.py\",\n    \"src/module_06.py\",\n    \"src/module_07.py\",\n    \"src/module_08.py\",\n    \"src/module_09.py\",\n    \"src/module_10.py\",\n    \"src/module_11.py\",\n    \"src/module_12.py\",\n    \"src/module_13.py\",\n    \"src/module_14.py\",\n    \"src/module_15.py\"\n  ],\n  \"protected_violations\": [],\n  \"risk_level\": \"medium\",\n  \"risk_score\": 0.457,\n  \"tests_passed\": 17,\n  \"tests_total\": 17,\n  \"test_command_ran\": true,\n  \"execution_state\": \"completed\",\n  \"execution_phase\": \"complete\",\n  \"verdict_source\": \"junit+exit\",\n  \"isolation\": \"docker\",\n  \"source\": \"diff\",\n  \"base_reconstruction\": \"ok\",\n  \"assurance\": {\n    \"harness_integrity\": \"protected\",\n    \"report_integrity\": \"same_process_candidate_writable\",\n    \"candidate_isolation\": \"container\"\n  },\n  \"diff_coverage\": {\n    \"measured\": true,\n    \"executed\": 8,\n    \"total\": 10,\n    \"percent\": 80.0,\n    \"caveat\": \"branch evidence is scoped to changed executable lines\",\n    \"files\": {\n      \"src/module_00.py\": {\n        \"missed\": [\n          7,\n          11\n        ]\n      },\n      \"src/module_01.py\": {\n        \"missed\": []\n      }\n    }\n  },\n  \"baseline\": {\n    \"verdict\": \"FAIL\",\n    \"tests_passed\": 16,\n    \"tests_total\": 17,\n    \"repair_effect\": \"demonstrated\"\n  },\n  \"attestation\": {\n    \"policy_id\": \"org/default\",\n    \"policy_version\": \"9\",\n    \"verifier_pack_sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n  },\n  \"diagnostics\": \"not rendered on PASS\",\n  \"deleted\": [\n    \"src/removed.py\"\n  ]\n}",
+      "report": "## EvoGuard Characterization — ✅ PASS\n\n**the selected judge accepted the candidate**\n\n| | |\n|---|---|\n| Verdict | **PASS** |\n| Tests passed | 17/17 |\n| Files changed | 16 |\n| Blast radius | **medium** (0.46) |\n| Execution | `completed` · phase `complete` |\n| Test command started | yes |\n| Verdict source | junit+exit |\n| Input | diff |\n| Base reconstruction | ok |\n| Changed lines executed | 8/10 (80.0%) |\n| Baseline (pristine base) | FAIL (16/17) |\n| Repair effect | **demonstrated** |\n| Policy | `org/default` v9 |\n| Verifier pack | `aaaaaaaaaaaa…` |\n| Assurance | harness `protected` · report `same_process_candidate_writable` · isolation `container` |\n\n> <sub>**Assurance note:** this PASS means the repo's suite passed and the test harness was left untouched. The result is read from a judge-owned report, which resists stdout forgery — but the code under test runs in the same process as the reporter, so a *deliberate* in-process forgery is not caught here (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)). For untrusted authors, gate on this in review.</sub>\n\n<details><summary>Changed lines the suite never executed</summary>\n\n- `src/module_00.py`: lines 7, 11\n\n<sub>branch evidence is scoped to changed executable lines</sub>\n</details>\n\n> Note: these files were **deleted** in head and applied to the verified tree (a deletion of a test/config/CI/auto-exec file is instead **REJECTED**): `src/removed.py`\n\n<details><summary>Files changed</summary>\n\n`src/module_00.py`, `src/module_01.py`, `src/module_02.py`, `src/module_03.py`, `src/module_04.py`, `src/module_05.py`, `src/module_06.py`, `src/module_07.py`, `src/module_08.py`, `src/module_09.py`, `src/module_10.py`, `src/module_11.py`, `src/module_12.py`, `src/module_13.py`, `src/module_14.py` (+1 more)\n</details>\n\n<sub>EvoGuard reads the verdict from a judge-owned JUnit report + the process exit code (not stdout), and rejects any edit to the tests or their config. The judge runs the suite in a network-less, read-only container (defence in depth — but a container shares the host kernel, so not a complete boundary). See docs/GUARD.md.</sub>",
+      "sarif": {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+          {
+            "results": [],
+            "tool": {
+              "driver": {
+                "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+                "name": "EvoGuard",
+                "rules": [],
+                "version": "4.3.0"
+              }
+            }
+          }
+        ],
+        "version": "2.1.0"
+      },
+      "sarif_text": "{\n  \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n  \"version\": \"2.1.0\",\n  \"runs\": [\n    {\n      \"tool\": {\n        \"driver\": {\n          \"name\": \"EvoGuard\",\n          \"version\": \"4.3.0\",\n          \"informationUri\": \"https://github.com/EvoRiseKsa/EvoOM-Guard-m\",\n          \"rules\": []\n        }\n      },\n      \"results\": []\n    }\n  ]\n}"
+    },
+    "static_rejection": {
+      "json_text": "{\n  \"schema_version\": \"1.11\",\n  \"tool\": \"evoguard\",\n  \"tool_version\": \"4.3.0\",\n  \"verdict\": \"REJECTED\",\n  \"passed\": false,\n  \"exit_code\": 1,\n  \"reason_code\": \"protected_harness_edit\",\n  \"reason\": \"candidate changed the judging harness\",\n  \"files_changed\": [\n    \"tests/test_gate.py\"\n  ],\n  \"protected_violations\": [\n    \"tests/test_gate.py\"\n  ],\n  \"risk_level\": \"high\",\n  \"risk_score\": 0.91,\n  \"tests_passed\": null,\n  \"tests_total\": null,\n  \"test_command_ran\": false,\n  \"execution_state\": \"static_gate\",\n  \"execution_phase\": \"pre_gate\",\n  \"verdict_source\": null,\n  \"isolation\": \"not_run\",\n  \"source\": null,\n  \"base_reconstruction\": null,\n  \"assurance\": {\n    \"harness_integrity\": \"violated\",\n    \"report_integrity\": \"not_run\",\n    \"candidate_isolation\": \"not_run\"\n  },\n  \"diff_coverage\": null,\n  \"baseline\": null,\n  \"attestation\": null,\n  \"diagnostics\": \"\"\n}",
+      "report": "## EvoGuard — ⛔ REJECTED\n\n**candidate changed the judging harness**\n\n| | |\n|---|---|\n| Verdict | **REJECTED** |\n| Tests passed | — |\n| Files changed | 1 |\n| Blast radius | **high** (0.91) |\n| Execution | `static_gate` · phase `pre_gate` |\n| Test command started | no |\n| Verdict source | — |\n| Assurance | harness `violated` · report `not_run` · isolation `not_run` |\n\n### ⛔ Reward-hack: the patch tried to edit the judging harness\n\n- `tests/test_gate.py`\n\nA patch must fix the **source under test**, never the tests or their configuration. This is rejected before the suite runs.\n\n<sub>EvoGuard decided this result from the pre-execution diff gate; the suite was not started, so no test command, JUnit report, or runtime isolation was delivered. See docs/GUARD.md.</sub>",
+      "sarif": {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+          {
+            "results": [
+              {
+                "level": "error",
+                "locations": [
+                  {
+                    "physicalLocation": {
+                      "artifactLocation": {
+                        "uri": "tests/test_gate.py"
+                      }
+                    }
+                  }
+                ],
+                "message": {
+                  "text": "EvoGuard REJECTED: candidate changed the judging harness"
+                },
+                "properties": {
+                  "execution_phase": "pre_gate",
+                  "execution_state": "static_gate",
+                  "isolation": "not_run",
+                  "risk_level": "high",
+                  "test_command_ran": false,
+                  "verdict": "REJECTED",
+                  "verdict_source": null
+                },
+                "ruleId": "protected_harness_edit"
+              }
+            ],
+            "tool": {
+              "driver": {
+                "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+                "name": "EvoGuard",
+                "rules": [
+                  {
+                    "id": "protected_harness_edit",
+                    "name": "REJECTED"
+                  }
+                ],
+                "version": "4.3.0"
+              }
+            }
+          }
+        ],
+        "version": "2.1.0"
+      },
+      "sarif_text": "{\n  \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n  \"version\": \"2.1.0\",\n  \"runs\": [\n    {\n      \"tool\": {\n        \"driver\": {\n          \"name\": \"EvoGuard\",\n          \"version\": \"4.3.0\",\n          \"informationUri\": \"https://github.com/EvoRiseKsa/EvoOM-Guard-m\",\n          \"rules\": [\n            {\n              \"id\": \"protected_harness_edit\",\n              \"name\": \"REJECTED\"\n            }\n          ]\n        }\n      },\n      \"results\": [\n        {\n          \"ruleId\": \"protected_harness_edit\",\n          \"level\": \"error\",\n          \"message\": {\n            \"text\": \"EvoGuard REJECTED: candidate changed the judging harness\"\n          },\n          \"properties\": {\n            \"verdict\": \"REJECTED\",\n            \"risk_level\": \"high\",\n            \"verdict_source\": null,\n            \"isolation\": \"not_run\",\n            \"test_command_ran\": false,\n            \"execution_state\": \"static_gate\",\n            \"execution_phase\": \"pre_gate\"\n          },\n          \"locations\": [\n            {\n              \"physicalLocation\": {\n                \"artifactLocation\": {\n                  \"uri\": \"tests/test_gate.py\"\n                }\n              }\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+    },
+    "tampered_gvisor": {
+      "json_text": "{\n  \"schema_version\": \"1.11\",\n  \"tool\": \"evoguard\",\n  \"tool_version\": \"4.3.0\",\n  \"verdict\": \"TAMPERED\",\n  \"passed\": false,\n  \"exit_code\": 1,\n  \"reason_code\": \"junit_exit_mismatch\",\n  \"reason\": \"the process exit and judge-owned report disagree\",\n  \"files_changed\": [\n    \"src/service.py\"\n  ],\n  \"protected_violations\": [],\n  \"risk_level\": \"critical\",\n  \"risk_score\": 1.0,\n  \"tests_passed\": 4,\n  \"tests_total\": 4,\n  \"test_command_ran\": true,\n  \"execution_state\": \"completed\",\n  \"execution_phase\": \"complete\",\n  \"verdict_source\": \"junit+exit\",\n  \"isolation\": \"gvisor\",\n  \"source\": null,\n  \"base_reconstruction\": null,\n  \"assurance\": {\n    \"harness_integrity\": \"protected\",\n    \"report_integrity\": \"judge_owned\",\n    \"candidate_isolation\": \"gvisor\"\n  },\n  \"diff_coverage\": null,\n  \"baseline\": null,\n  \"attestation\": null,\n  \"diagnostics\": \"exit=1\\njunit failures=0\\ncandidate marker: <untrusted>\"\n}",
+      "report": "## EvoGuard — 🚨 TAMPERED\n\n**the process exit and judge-owned report disagree**\n\n| | |\n|---|---|\n| Verdict | **TAMPERED** |\n| Tests passed | 4/4 |\n| Files changed | 1 |\n| Blast radius | **critical** (1.00) |\n| Execution | `completed` · phase `complete` |\n| Test command started | yes |\n| Verdict source | junit+exit |\n| Assurance | harness `protected` · report `judge_owned` · isolation `gvisor` |\n\n<details><summary>Files changed</summary>\n\n`src/service.py`\n</details>\n\n### 🚨 Tamper signature: exit code ⟷ JUnit report disagree\n\nThe process exit code and the judge-owned JUnit report — the two signals the candidate cannot forge via stdout — **disagree**. This is treated as tampering and is never read as a pass.\n\n<details><summary>Diagnostics</summary>\n\n```\nexit=1\njunit failures=0\ncandidate marker: <untrusted>\n```\n</details>\n\n<sub>EvoGuard reads the verdict from a judge-owned JUnit report + the process exit code (not stdout), and rejects any edit to the tests or their config. The judge runs the suite in a network-less container under the gVisor (runsc) runtime — a separate user-space guest kernel (for untrusted code). See docs/GUARD.md.</sub>",
+      "sarif": {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [
+          {
+            "results": [
+              {
+                "level": "error",
+                "locations": [
+                  {
+                    "physicalLocation": {
+                      "artifactLocation": {
+                        "uri": "src/service.py"
+                      }
+                    }
+                  }
+                ],
+                "message": {
+                  "text": "EvoGuard TAMPERED: the process exit and judge-owned report disagree"
+                },
+                "properties": {
+                  "execution_phase": "complete",
+                  "execution_state": "completed",
+                  "isolation": "gvisor",
+                  "risk_level": "critical",
+                  "test_command_ran": true,
+                  "verdict": "TAMPERED",
+                  "verdict_source": "junit+exit"
+                },
+                "ruleId": "junit_exit_mismatch"
+              }
+            ],
+            "tool": {
+              "driver": {
+                "informationUri": "https://github.com/EvoRiseKsa/EvoOM-Guard-m",
+                "name": "EvoGuard",
+                "rules": [
+                  {
+                    "id": "junit_exit_mismatch",
+                    "name": "TAMPERED"
+                  }
+                ],
+                "version": "4.3.0"
+              }
+            }
+          }
+        ],
+        "version": "2.1.0"
+      },
+      "sarif_text": "{\n  \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n  \"version\": \"2.1.0\",\n  \"runs\": [\n    {\n      \"tool\": {\n        \"driver\": {\n          \"name\": \"EvoGuard\",\n          \"version\": \"4.3.0\",\n          \"informationUri\": \"https://github.com/EvoRiseKsa/EvoOM-Guard-m\",\n          \"rules\": [\n            {\n              \"id\": \"junit_exit_mismatch\",\n              \"name\": \"TAMPERED\"\n            }\n          ]\n        }\n      },\n      \"results\": [\n        {\n          \"ruleId\": \"junit_exit_mismatch\",\n          \"level\": \"error\",\n          \"message\": {\n            \"text\": \"EvoGuard TAMPERED: the process exit and judge-owned report disagree\"\n          },\n          \"properties\": {\n            \"verdict\": \"TAMPERED\",\n            \"risk_level\": \"critical\",\n            \"verdict_source\": \"junit+exit\",\n            \"isolation\": \"gvisor\",\n            \"test_command_ran\": true,\n            \"execution_state\": \"completed\",\n            \"execution_phase\": \"complete\"\n          },\n          \"locations\": [\n            {\n              \"physicalLocation\": {\n                \"artifactLocation\": {\n                  \"uri\": \"src/service.py\"\n                }\n              }\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+    }
+  },
+  "schema_version": "guard-output-characterization-v1"
+}
