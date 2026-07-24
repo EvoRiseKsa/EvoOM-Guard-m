@@ -534,6 +534,81 @@ def observe_live_provider_timing(
     return events
 
 
+def observe_live_container_provider_timing(workspace: Path) -> list[str]:
+    """Observe late instance-method lookup on the container suite path."""
+
+    source = workspace / "source-live-container-provider-timing"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    events: list[str] = []
+    verifier = repo_verifier.RepoVerifier(
+        isolation="docker",
+        docker_image="judge:latest",
+        mem_limit_mb=0,
+        test_command=["suite"],
+        timeout=7,
+    )
+    original_phase_evidence = verifier._phase_isolation_evidence
+
+    def fail_docker(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("snapshotted early docker suite runner")
+
+    verifier._run_docker = fail_docker  # type: ignore[method-assign]
+
+    def late_phase(
+        _self: repo_verifier.RepoVerifier,
+        delivered: str,
+        image_digest: str | None,
+        *,
+        note: str | None = None,
+    ) -> Any:
+        events.append("phase:late")
+        return original_phase_evidence(
+            delivered,
+            image_digest,
+            note=note,
+        )
+
+    def late_docker(
+        _self: repo_verifier.RepoVerifier,
+        _base_command: list[str],
+        _copy_path: str,
+        workdir: str,
+        *,
+        pack_dir: str | None = None,
+    ) -> tuple[str, subprocess.CompletedProcess[str], bool]:
+        del pack_dir
+        events.append("docker:late")
+        verifier._phase_isolation_evidence = types.MethodType(  # type: ignore[method-assign]
+            late_phase,
+            verifier,
+        )
+        return (
+            os.path.join(workdir, "judge-result.xml"),
+            subprocess.CompletedProcess(["suite"], 0, "", ""),
+            False,
+        )
+
+    def command(
+        _self: repo_verifier.RepoVerifier,
+        _problem: repo_verifier.RepoProblem | dict,
+    ) -> list[str]:
+        events.append("command")
+        verifier._run_docker = types.MethodType(  # type: ignore[method-assign]
+            late_docker,
+            verifier,
+        )
+        return ["suite"]
+
+    verifier._resolve_docker_image = (  # type: ignore[method-assign]
+        lambda: _IMAGE_ID
+    )
+    verifier._command = types.MethodType(command, verifier)  # type: ignore[method-assign]
+    result = verifier.verify(_APP_EDIT, {"repo_path": str(source)})
+    assert result.passed
+    return events
+
+
 def capture_all(workspace: Path) -> dict[str, Any]:
     """Capture all reviewed suite cases in one versioned envelope."""
 

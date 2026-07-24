@@ -12,6 +12,7 @@ from repo_suite_characterization_harness import (
     SCHEMA_VERSION,
     canonical_json,
     capture_case,
+    observe_live_container_provider_timing,
     observe_live_provider_timing,
 )
 
@@ -138,4 +139,14 @@ def test_suite_dependencies_are_resolved_live_in_historical_order(
         "read:late",
         "parse:late",
         "evaluate:late",
+    ]
+
+
+def test_container_runner_and_trace_builder_are_resolved_live(
+    tmp_path: Path,
+) -> None:
+    assert observe_live_container_provider_timing(tmp_path) == [
+        "command",
+        "docker:late",
+        "phase:late",
     ]
