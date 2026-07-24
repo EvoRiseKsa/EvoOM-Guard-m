@@ -2379,8 +2379,16 @@ MUTATIONS = (
     Mutation(
         name="repo-pack-intake-sticky-identity-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
-        before="            if pack_identity is not None:\n",
-        after="            if False and pack_identity is not None:\n",
+        before=(
+            "            if pack_identity is not None:\n"
+            "                # Once accepted, bind every later early-return "
+            "artifact to the\n"
+        ),
+        after=(
+            "            if False and pack_identity is not None:\n"
+            "                # Once accepted, bind every later early-return "
+            "artifact to the\n"
+        ),
         test=(
             "tests/test_repo_pack_intake_characterization.py::"
             "test_frozen_repo_pack_intake_behavior[valid_identity_sticky_evidence]"
@@ -3284,62 +3292,105 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-pack-pre-execution-snapshot-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_pack_continuity.py",
         before=(
-            "                try:\n"
-            "                    verify_pack_snapshot(pack_snapshot, pack_identity)\n"
-            "                except PackManifestError as exc:\n"
-            "                    return VerdictResult(\n"
-            "                        passed=False,\n"
-            "                        score=0.0,\n"
-            "                        diagnostics=f\"verifier pack was changed "
-            "before execution: {exc}\",\n"
+            "        return self._verify(\n"
+            "            checkpoint=\"before_execution\",\n"
+            "            expected_phase=\"accepted\",\n"
+            "            delivered_phase=\"pre_execution_verified\",\n"
+            "            diagnostics_prefix=\"verifier pack was changed "
+            "before execution\",\n"
+            "        )\n"
         ),
-        after=(
-            "                try:\n"
-            "                    if False:\n"
-            "                        verify_pack_snapshot(pack_snapshot, pack_identity)\n"
-            "                except PackManifestError as exc:\n"
-            "                    return VerdictResult(\n"
-            "                        passed=False,\n"
-            "                        score=0.0,\n"
-            "                        diagnostics=f\"verifier pack was changed "
-            "before execution: {exc}\",\n"
-        ),
+        after="        return None\n",
         test=(
-            "tests/test_repo_pack_characterization.py::"
-            "test_pack_or_runtime_drift_precedes_junit_read"
-            "[pack_drift_before_execution]"
+            "tests/test_repo_pack_continuity_characterization.py::"
+            "test_frozen_repo_pack_continuity_behavior"
+            "[pre_execution_drift]"
         ),
     ),
     Mutation(
         name="repo-pack-post-execution-snapshot-bypass",
+        path="evoom_guard/verifiers/repo_pack_continuity.py",
+        before=(
+            "        return self._verify(\n"
+            "            checkpoint=\"after_execution\",\n"
+            "            expected_phase=\"pre_execution_verified\",\n"
+            "            delivered_phase=\"delivered\",\n"
+            "            diagnostics_prefix=\"verifier pack changed while "
+            "executing\",\n"
+            "        )\n"
+        ),
+        after="        return None\n",
+        test=(
+            "tests/test_repo_pack_continuity_characterization.py::"
+            "test_frozen_repo_pack_continuity_behavior"
+            "[post_execution_drift]"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-continuity-live-provider-binding-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before=(
-            "                try:\n"
-            "                    verify_pack_snapshot(pack_snapshot, pack_identity)\n"
-            "                except PackManifestError as exc:\n"
-            "                    return VerdictResult(\n"
-            "                        passed=False,\n"
-            "                        score=0.0,\n"
-            "                        diagnostics=f\"verifier pack changed while "
-            "executing: {exc}\",\n"
+            "                        verify_snapshot=lambda: "
+            "verify_pack_snapshot,\n"
         ),
         after=(
-            "                try:\n"
-            "                    if False:\n"
-            "                        verify_pack_snapshot(pack_snapshot, pack_identity)\n"
-            "                except PackManifestError as exc:\n"
-            "                    return VerdictResult(\n"
-            "                        passed=False,\n"
-            "                        score=0.0,\n"
-            "                        diagnostics=f\"verifier pack changed while "
-            "executing: {exc}\",\n"
+            "                        verify_snapshot=(\n"
+            "                            lambda provider=verify_pack_snapshot: "
+            "provider\n"
+            "                        ),\n"
         ),
         test=(
-            "tests/test_repo_pack_characterization.py::"
-            "test_pack_or_runtime_drift_precedes_junit_read"
-            "[pack_drift_after_execution]"
+            "tests/test_repo_pack_continuity_owner.py::"
+            "test_facade_injects_a_live_provider_at_both_checkpoints"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-continuity-checkpoint-skip-bypass",
+        path="evoom_guard/verifiers/repo_pack_continuity.py",
+        before=(
+            "            expected_phase=\"pre_execution_verified\",\n"
+        ),
+        after="            expected_phase=\"accepted\",\n",
+        test=(
+            "tests/test_repo_pack_continuity_owner.py::"
+            "test_after_execution_cannot_skip_the_pre_execution_checkpoint"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-continuity-sticky-failure-bypass",
+        path="evoom_guard/verifiers/repo_pack_continuity.py",
+        before="        if self.failure is not None:\n",
+        after="        if False and self.failure is not None:\n",
+        test=(
+            "tests/test_repo_pack_continuity_owner.py::"
+            "test_pre_execution_snapshot_failure_is_typed_and_sticky"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-continuity-provider-terminal-bypass",
+        path="evoom_guard/verifiers/repo_pack_continuity.py",
+        before="            self.provider_failure = exc\n",
+        after="            self.provider_failure = None\n",
+        test=(
+            "tests/test_repo_pack_continuity_owner.py::"
+            "test_unexpected_provider_failure_is_re_raised_and_terminal"
+        ),
+    ),
+    Mutation(
+        name="repo-pack-continuity-identity-deepcopy-bypass",
+        path="evoom_guard/verifiers/repo_pack_continuity.py",
+        before=(
+            "        frozen = MappingProxyType("
+            "copy.deepcopy(dict(self.manifest)))\n"
+        ),
+        after=(
+            "        frozen = MappingProxyType(dict(self.manifest))\n"
+        ),
+        test=(
+            "tests/test_repo_pack_continuity_owner.py::"
+            "test_accepted_identity_is_an_immutable_isolated_snapshot"
         ),
     ),
     Mutation(

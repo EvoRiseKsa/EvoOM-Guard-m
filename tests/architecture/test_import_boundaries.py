@@ -1275,6 +1275,28 @@ def test_repo_pack_has_only_public_execution_and_evidence_dependencies() -> None
     )
 
 
+def test_repo_pack_continuity_depends_only_on_the_public_pack_contract() -> None:
+    """Pack continuity must not absorb execution, JUnit, wire, or cleanup."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.verifiers.repo_pack_continuity"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == {"evoom_guard.pack_manifest"}
+    assert (
+        "evoom_guard.verifiers.repo_verifier",
+        module,
+    ) in analysis.internal_edges
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_repo_setup_has_only_public_execution_and_fidelity_dependencies() -> None:
     """Setup policy must not absorb suite, pack, or verifier orchestration."""
 

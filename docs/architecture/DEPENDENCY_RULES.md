@@ -130,10 +130,20 @@ The bounded verifier-pack execution slice gives
 `verifiers.repo_pack` ownership of host/docker/gVisor launch and later
 judge-owned JUnit interpretation through separate immutable contracts.
 `repo_verifier` injects all effects through live providers and retains pack
-admission, pre/post pack-snapshot verification, candidate runtime continuity,
-sticky evidence, phase composition, final projection, and cleanup. The owner
-may depend only on public contracts, domain execution/verification values, and
-the public execution/isolation exception vocabulary. This
+admission, sticky evidence, phase composition, final projection, and cleanup.
+The owner may depend only on public contracts, domain execution/verification
+values, and the public execution/isolation exception vocabulary. This
+classified-to-classified extraction changes no baseline count and therefore
+adds no ratchet revision.
+
+The accepted-pack continuity slice gives
+`verifiers.repo_pack_continuity` ownership of the defensively frozen accepted
+identity, live pre-execution/post-completion snapshot verification, and
+monotonic checkpoint/failure state. It may depend only on the public
+`pack_manifest` contract and must not
+import execution, JUnit, verdict, evidence-projection, or workspace-cleanup
+owners. `repo_verifier` maps its typed drift failure to the existing wire
+artifact and retains unexpected-provider cleanup precedence. This
 classified-to-classified extraction changes no baseline count and therefore
 adds no ratchet revision.
 

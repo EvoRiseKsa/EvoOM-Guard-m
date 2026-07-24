@@ -161,7 +161,6 @@ from evoom_guard.isolation import (
     run_named_docker_client,
 )
 from evoom_guard.pack_manifest import (
-    PackManifestError,
     snapshot_pack,
     verify_pack_snapshot,
 )
@@ -301,6 +300,12 @@ from evoom_guard.verifiers.repo_pack import (
     RepoPackInterpretationServices,
     execute_repo_pack,
     interpret_repo_pack,
+)
+from evoom_guard.verifiers.repo_pack_continuity import (
+    AcceptedRepoPackIdentity,
+    RepoPackContinuity,
+    RepoPackContinuityRequest,
+    RepoPackContinuityServices,
 )
 from evoom_guard.verifiers.repo_pack_intake import (
     RepoPackIntakeRequest,
@@ -986,6 +991,7 @@ class RepoVerifier:
         copy = os.path.join(workdir, "repo")
         pack_workdir: str | None = None
         pack_snapshot: str | None = None
+        pack_continuity: RepoPackContinuity | None = None
         try:
             materialization = materialize_repo_candidate(
                 RepoCandidateMaterializationRequest(
@@ -1054,6 +1060,21 @@ class RepoVerifier:
                     score=pack_intake.failure.score,
                     diagnostics=pack_intake.failure.diagnostics,
                     artifact=rejection_artifact(pack_request, pack_intake),
+                )
+            if pack_identity is not None:
+                assert pack_snapshot is not None
+                accepted_pack_identity = AcceptedRepoPackIdentity(
+                    sha256=pack_identity[0],
+                    manifest=pack_identity[1],
+                )
+                pack_continuity = RepoPackContinuity(
+                    RepoPackContinuityRequest(
+                        pack_snapshot=pack_snapshot,
+                        identity=accepted_pack_identity,
+                    ),
+                    RepoPackContinuityServices(
+                        verify_snapshot=lambda: verify_pack_snapshot,
+                    ),
                 )
 
             deletion = apply_repo_candidate_deletions(
@@ -1379,7 +1400,7 @@ class RepoVerifier:
             # narrowed (for example ``pytest tests/``) or is a custom command.
             if pack_dir:
                 trace.execution_phase = "verifier_pack"
-                assert pack_snapshot is not None and pack_identity is not None
+                assert pack_snapshot is not None and pack_continuity is not None
                 pack_execution_request = RepoPackExecutionRequest(
                     candidate_copy=copy,
                     workdir=workdir,
@@ -1417,13 +1438,14 @@ class RepoVerifier:
                     isolation_payload=lambda: isolation_observation_payload,
                     distill_diagnostics=lambda: distill_diagnostics,
                 )
-                try:
-                    verify_pack_snapshot(pack_snapshot, pack_identity)
-                except PackManifestError as exc:
+                pack_continuity_failure = (
+                    pack_continuity.verify_before_execution()
+                )
+                if pack_continuity_failure is not None:
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"verifier pack was changed before execution: {exc}",
+                        diagnostics=pack_continuity_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "pack_snapshot_changed",
@@ -1443,13 +1465,14 @@ class RepoVerifier:
                 assert pack_execution.completed is not None
                 completed_pack = pack_execution.completed
                 trace.execution_phase = "runtime_verification"
-                try:
-                    verify_pack_snapshot(pack_snapshot, pack_identity)
-                except PackManifestError as exc:
+                pack_continuity_failure = (
+                    pack_continuity.verify_after_execution()
+                )
+                if pack_continuity_failure is not None:
                     return VerdictResult(
                         passed=False,
                         score=0.0,
-                        diagnostics=f"verifier pack changed while executing: {exc}",
+                        diagnostics=pack_continuity_failure.diagnostics,
                         artifact={
                             "files_changed": changed,
                             "outcome": "pack_snapshot_changed",
