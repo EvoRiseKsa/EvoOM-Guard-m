@@ -130,7 +130,8 @@ The bounded verifier-pack execution slice gives
 `verifiers.repo_pack` ownership of host/docker/gVisor launch and later
 judge-owned JUnit interpretation through separate immutable contracts.
 `repo_verifier` injects all effects through live providers and retains pack
-admission, sticky evidence, phase composition, final projection, and cleanup.
+admission, phase composition, and cleanup; `repo_result` owns sticky/final
+projection.
 The owner may depend only on public contracts, domain execution/verification
 values, and the public execution/isolation exception vocabulary. This
 classified-to-classified extraction changes no baseline count and therefore
@@ -146,6 +147,18 @@ owners. `repo_verifier` maps its typed drift failure to the existing wire
 artifact and retains unexpected-provider cleanup precedence. This
 classified-to-classified extraction changes no baseline count and therefore
 adds no ratchet revision.
+
+The repository-result slice gives `verifiers.repo_result` ownership of typed
+sticky pack/repository-phase facts and completed artifact construction. It may
+depend only on public contracts, dependency-free domain execution/verification
+values, and the public `verifiers.repo_execution` projection. It must not
+import workspace, pack intake/continuity, runtime-identity providers,
+subprocess/container launchers, clocks, or cleanup owners. `repo_verifier`
+records facts at the historical operation points and retains phase composition,
+workspace lifetime, live provider timing, and primary-exception cleanup.
+Presence-versus-null behavior is a frozen wire-compatibility contract, not a
+new schema. This classified-to-classified extraction changes no baseline count
+and therefore adds no ratchet revision.
 
 Revision 5 performs the atomic `workspace.py` to `workspace/__init__.py`
 migration without changing the import name, implementation bytes, or

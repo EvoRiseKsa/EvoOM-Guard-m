@@ -3394,6 +3394,93 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-result-pack-identity-deepcopy-bypass",
+        path="evoom_guard/verifiers/repo_result.py",
+        before=(
+            "        frozen = MappingProxyType("
+            "copy.deepcopy(dict(self.manifest)))\n"
+        ),
+        after="        frozen = MappingProxyType(dict(self.manifest))\n",
+        test=(
+            "tests/test_repo_result_owner.py::"
+            "test_pack_identity_is_sticky_and_defensively_owned"
+        ),
+    ),
+    Mutation(
+        name="repo-result-sticky-pack-identity-bypass",
+        path="evoom_guard/verifiers/repo_result.py",
+        before="        if self.pack_identity is not None:\n",
+        after="        if False and self.pack_identity is not None:\n",
+        test=(
+            "tests/test_repo_result_owner.py::"
+            "test_pack_identity_is_sticky_and_defensively_owned"
+        ),
+    ),
+    Mutation(
+        name="repo-result-sticky-repo-phase-bypass",
+        path="evoom_guard/verifiers/repo_result.py",
+        before="        if self.repo_suite_phase is not None:\n",
+        after="        if False and self.repo_suite_phase is not None:\n",
+        test=(
+            "tests/test_repo_result_owner.py::"
+            "test_repo_phase_sticky_projection_does_not_invent_a_clean_verdict"
+        ),
+    ),
+    Mutation(
+        name="repo-result-explicit-pack-presence-overwrite",
+        path="evoom_guard/verifiers/repo_result.py",
+        before=(
+            "        result.artifact.setdefault(\n"
+            "            \"verifier_pack_present\",\n"
+            "            verifier_pack_present,\n"
+            "        )\n"
+        ),
+        after=(
+            "        result.artifact[\"verifier_pack_present\"] = "
+            "verifier_pack_present\n"
+        ),
+        test=(
+            "tests/test_repo_result_owner.py::"
+            "test_finalization_preserves_overwrite_order_and_explicit_presence"
+        ),
+    ),
+    Mutation(
+        name="repo-result-pack-junit-presence-bypass",
+        path="evoom_guard/verifiers/repo_result.py",
+        before="    if request.pack_configured:\n",
+        after="    if True:\n",
+        test=(
+            "tests/test_repo_result_owner.py::"
+            "test_no_pack_final_artifact_keeps_nullable_fields_but_omits_pack_junit"
+        ),
+    ),
+    Mutation(
+        name="repo-result-facade-pack-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                result_projection.bind_pack_identity(\n",
+        after="                RepoResultProjection().bind_pack_identity(\n",
+        test=(
+            "tests/test_repo_result_characterization.py::"
+            "test_frozen_repo_result_projection[pack_command_unavailable]"
+        ),
+    ),
+    Mutation(
+        name="repo-result-facade-repo-phase-binding-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "                result_projection.bind_repo_suite_phase("
+            "repo_phase)\n"
+        ),
+        after=(
+            "                RepoResultProjection().bind_repo_suite_phase("
+            "repo_phase)\n"
+        ),
+        test=(
+            "tests/test_repo_result_characterization.py::"
+            "test_frozen_repo_result_projection[pack_command_unavailable]"
+        ),
+    ),
+    Mutation(
         name="repo-runtime-required-capture-guard-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
         before="            if runtime_continuity.required:\n",
@@ -4524,13 +4611,12 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-pack-phase-snapshot-pass-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/verifiers/repo_result.py",
         before=(
-            "                    repo_suite_passed=(\n"
-            "                        passed if verdict_source is not None else None\n"
-            "                    ),\n"
+            "            passed=phase.passed "
+            "if phase.verdict_source is not None else None,\n"
         ),
-        after="                    repo_suite_passed=False,\n",
+        after="            passed=False,\n",
         test=(
             "tests/test_record_verifier.py::"
             "test_pack_failure_preserves_repo_suite_baseline_effect"

@@ -289,7 +289,6 @@ from evoom_guard.verifiers.repo_candidate import (
 )
 from evoom_guard.verifiers.repo_execution import (
     RepoExecutionTrace,
-    execution_phase_payload,
     isolation_observation_payload,
 )
 from evoom_guard.verifiers.repo_materialization import materialize_candidate_edits
@@ -317,6 +316,13 @@ from evoom_guard.verifiers.repo_phase_contracts import (
     compose_repo_and_pack,
     evaluate_pack_phase,
     evaluate_repo_phase,
+)
+from evoom_guard.verifiers.repo_result import (
+    FinalRepoPhase,
+    RepoFinalArtifactRequest,
+    RepoPackPhaseArtifact,
+    RepoResultProjection,
+    build_final_repo_artifact,
 )
 from evoom_guard.verifiers.repo_runtime_continuity import (
     RepoRuntimeContinuity,
@@ -924,16 +930,22 @@ class RepoVerifier:
         image_token = self._active_docker_image.set(None)
         try:
             trace = RepoExecutionTrace()
-            sticky_evidence: dict[str, Any] = {}
+            result_projection = RepoResultProjection()
             pack_dir = str(problem.get("verifier_pack", "") or "")
             # Presence is not validity: an existing file/symlink is present but the
             # pack contract will reject it as an invalid root.
             pack_present = bool(pack_dir and os.path.lexists(pack_dir))
-            result = self._verify(hypothesis, problem, trace, sticky_evidence)
-            result.artifact.update(sticky_evidence)
-            result.artifact.update(execution_phase_payload(trace.snapshot()))
-            result.artifact.setdefault("verifier_pack_present", pack_present)
-            return result
+            result = self._verify(
+                hypothesis,
+                problem,
+                trace,
+                result_projection,
+            )
+            return result_projection.finalize(
+                result,
+                execution=trace.snapshot(),
+                verifier_pack_present=pack_present,
+            )
         finally:
             self._active_docker_image.reset(image_token)
 
@@ -942,7 +954,7 @@ class RepoVerifier:
         hypothesis: str,
         problem: RepoProblem | dict,
         trace: RepoExecutionTrace,
-        sticky_evidence: dict[str, Any],
+        result_projection: RepoResultProjection,
     ) -> VerdictResult:
         repo_path = str(problem.get("repo_path", ""))
         admission = admit_repo_candidate(
@@ -1050,9 +1062,10 @@ class RepoVerifier:
                 # Once accepted, bind every later early-return artifact to the
                 # exact judge-owned snapshot. Individual return sites must not
                 # accidentally erase this delivered evidence.
-                sticky_evidence.update(
-                    verifier_pack_sha256=pack_sha256,
-                    verifier_pack_manifest=pack_manifest,
+                assert pack_sha256 is not None
+                result_projection.bind_pack_identity(
+                    sha256=pack_sha256,
+                    manifest=pack_manifest,
                 )
             if pack_intake.failure is not None:
                 return VerdictResult(
@@ -1356,15 +1369,6 @@ class RepoVerifier:
                     ),
                 ),
             )
-            passed = repo_phase.passed
-            score = repo_phase.score
-            tests_passed = repo_phase.tests_passed
-            tests_total = repo_phase.tests_total
-            tampered = repo_phase.tampered
-            output = repo_phase.output
-            junit_sha256 = repo_phase.junit_sha256
-            junit_digest_format = repo_phase.junit_digest_format
-            verdict_source = repo_phase.verdict_source
             # Preserve the repo phase before a verifier pack is composed into
             # the top-level result. Baseline evidence is explicitly scoped to
             # this phase, so a later pack failure must not turn repo PASS into
@@ -1372,27 +1376,9 @@ class RepoVerifier:
             # the attestation (and any configured detached signature) and bound
             # to the composite count remainder.
             if pack_dir:
-                sticky_evidence.update(
-                    repo_suite_started=True,
-                    repo_suite_completed=True,
-                    repo_suite_state="repo_phase_completed",
-                    repo_suite_passed=(
-                        passed if verdict_source is not None else None
-                    ),
-                    repo_suite_tests_passed=tests_passed,
-                    repo_suite_tests_total=tests_total,
-                    repo_suite_verdict_source=verdict_source,
-                    repo_suite_returncode=completed_suite.returncode,
-                    repo_suite_junit_sha256=repo_phase.junit_sha256,
-                    repo_suite_junit_digest_format=(
-                        repo_phase.junit_digest_format
-                    ),
-                )
-            pack_tests_passed: int | None = None
-            pack_tests_total: int | None = None
-            pack_junit_sha256: str | None = None
-            pack_junit_digest_format: str | None = None
-            outcome = repo_phase.outcome
+                result_projection.bind_repo_suite_phase(repo_phase)
+            pack_phase_artifact: RepoPackPhaseArtifact | None = None
+            final_phase: FinalRepoPhase = repo_phase
 
             # A copied pack is not evidence that its checks ran. Execute it as a
             # separate mandatory phase, explicitly addressed by path, then
@@ -1535,67 +1521,40 @@ class RepoVerifier:
                     repo_phase,
                     pack_phase_result,
                 )
-                pack_tests_passed = pack_phase_result.tests_passed
-                pack_tests_total = pack_phase_result.tests_total
-                pack_junit_sha256 = pack_phase_result.junit_sha256
-                pack_junit_digest_format = pack_phase_result.junit_digest_format
-                passed = composite_phase.passed
-                score = composite_phase.score
-                tampered = composite_phase.tampered
-                tests_passed = composite_phase.tests_passed
-                tests_total = composite_phase.tests_total
-                output = composite_phase.output
-                outcome = composite_phase.outcome
-                junit_sha256 = composite_phase.junit_sha256
-                junit_digest_format = composite_phase.junit_digest_format
-                verdict_source = composite_phase.verdict_source
+                pack_phase_artifact = RepoPackPhaseArtifact.from_phase(
+                    pack_phase_result
+                )
+                final_phase = composite_phase
                 trace.execution_phase = "verifier_pack"
 
             if not pack_dir:
                 trace.execution_phase = "repo_suite"
 
+            diagnostics = distill_diagnostics(final_phase.output)
+            final_runtime_evidence = runtime_evidence()
             return VerdictResult(
-                passed=passed,
-                score=score,
-                diagnostics=distill_diagnostics(output),
-                artifact={
-                    "returncode": completed_suite.returncode,
-                    "elapsed": elapsed,
-                    "tests_passed": tests_passed,
-                    "tests_total": tests_total,
-                    "files_changed": changed,
-                    "files_deleted": deleted_paths,
-                    "verdict_source": verdict_source,
-                    "outcome": outcome,
-                    "tamper": tampered,
-                    "junit_sha256": junit_sha256,
-                    "junit_digest_format": junit_digest_format,
-                    "verifier_pack_sha256": pack_sha256,
-                    "expected_verifier_pack_sha256": expected_pack_sha256 or None,
-                    "verifier_pack_manifest": pack_manifest,
-                    "verifier_pack_tests_passed": pack_tests_passed,
-                    "verifier_pack_tests_total": pack_tests_total,
-                    **(
-                        {
-                            "verifier_pack_junit_sha256": pack_junit_sha256,
-                            "verifier_pack_junit_digest_format": (
-                                pack_junit_digest_format
-                            ),
-                        }
-                        if pack_dir
-                        else {}
-                    ),
-                    "setup_isolation": setup_isolation,
-                    "setup_fidelity": "verified" if setup_cmd_raw else "not_applicable",
-                    "candidate_fidelity": "verified" if pack_dir else "not_applicable",
-                    **runtime_evidence(),
-                    "image_digest": resolved_image,
-                    "isolation_evidence": (
-                        isolation_observation_payload(suite_isolation_evidence)
-                        if container_mode
-                        else None
-                    ),
-                },
+                passed=final_phase.passed,
+                score=final_phase.score,
+                diagnostics=diagnostics,
+                artifact=build_final_repo_artifact(
+                    RepoFinalArtifactRequest(
+                        returncode=completed_suite.returncode,
+                        elapsed_seconds=elapsed,
+                        phase=final_phase,
+                        files_changed=tuple(changed),
+                        files_deleted=tuple(deleted_paths),
+                        pack_identity=result_projection.pack_identity,
+                        expected_pack_sha256=expected_pack_sha256,
+                        pack_phase=pack_phase_artifact,
+                        pack_configured=bool(pack_dir),
+                        setup_isolation=setup_isolation,
+                        setup_configured=bool(setup_cmd_raw),
+                        runtime_evidence=final_runtime_evidence,
+                        resolved_image=resolved_image,
+                        suite_isolation_evidence=suite_isolation_evidence,
+                        container_mode=container_mode,
+                    )
+                ),
             )
         finally:
             _cleanup_repo_workspaces(

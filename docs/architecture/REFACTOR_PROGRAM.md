@@ -194,14 +194,16 @@ remain in their established facades.
   interpretation now live in `verifiers/repo_suite.py` behind separate
   immutable contracts and frozen branch/order/provider-timing vectors.
   Runtime-tree continuity is delegated to the owner described below;
-  `RepoVerifier` retains sticky evidence projection and workspace cleanup.
+  `RepoVerifier` retains workspace cleanup, while sticky projection is
+  delegated to the result owner described below.
 - Repository-candidate parsing/admission, copy/materialization coordination,
   and post-pack safe deletion now live in
   `verifiers/repo_candidate.py`. Immutable XOR contracts and live effect
   providers preserve the order
   admission → RepoVerifier allocation → copy/materialization → RepoVerifier
   pack intake → deletion → execution. Allocation, pack handling, runtime
-  identity, sticky projection, and final cleanup remain in `RepoVerifier`.
+  identity, and final cleanup remain in `RepoVerifier`; result projection is
+  delegated below.
 - The mandatory-pack runtime-tree baseline, suite/pack drift checks, elapsed
   identity-scan accounting, continuity state, and immutable runtime evidence
   projection now live in `verifiers/repo_runtime_continuity.py`. Its providers
@@ -209,8 +211,8 @@ remain in their established facades.
   identity lookup, its phase state cannot skip the suite checkpoint or recover
   from failure, and trusted host setup cannot be mislabeled as a read-only
   container boundary. Pack-snapshot continuity is delegated to the owner
-  described below; sticky evidence projection, final composition, and
-  workspace cleanup remain in `RepoVerifier`.
+  described below; phase composition and workspace cleanup remain in
+  `RepoVerifier`, while sticky/final artifact projection is delegated below.
 - The accepted verifier-pack identity plus pre-execution and post-completion
   snapshot checks now live in `verifiers/repo_pack_continuity.py`. Its defensively frozen
   identity and monotonic state prevent checkpoint skip/repeat/recovery, while
@@ -220,6 +222,16 @@ remain in their established facades.
   exception contracts remain authoritative. Pack launch, JUnit reading,
   sticky/wire projection, verdict composition, and cleanup remain outside this
   owner.
+- Repository sticky evidence and final artifact construction now live in
+  `verifiers/repo_result.py`. Its typed judgment-local builder defensively
+  owns an observed pack identity and completed repository phase; immutable
+  inputs project completed pack evidence and the exact final artifact. A new
+  pre-extraction vector freezes full results, key order, present-null sets, and
+  invalid-present versus missing-pack presence. Focused mutations cover lost
+  sticky identity, lost repository phase, manifest aliasing, explicit-presence
+  overwrite, accidental no-pack JUnit-key emission, and facade binding of both
+  sticky evidence classes. The owner has no effects; `RepoVerifier` retains
+  observation timing, phase composition, workspace lifetime, and cleanup.
 - Candidate path admission now lives in the immutable
   `verifiers/candidate_preflight.py` contract. Guard invokes it after parsing
   but before candidate materialization or process launch; a pre-extraction
@@ -253,11 +265,11 @@ remain in their established facades.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: split the remaining repository workspace allocation, sticky
-  projection, final composition, and cleanup responsibilities in independent
-  characterized slices. Candidate coordination, repository-suite,
-  verifier-pack execution, accepted-pack continuity, and runtime continuity
-  owners are complete.
+- Pending: split the remaining repository workspace allocation and cleanup
+  responsibilities in independent characterized slices. Candidate
+  coordination, repository-suite/verifier-pack execution, accepted-pack and
+  runtime continuity, phase-composition algorithm, sticky projection, and
+  completed artifact construction have focused owners.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.
