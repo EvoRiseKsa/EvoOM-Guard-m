@@ -74,6 +74,9 @@ from evoom_guard.cli import (
 )
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import (
+    github_attestation_admission_commands as _github_attestation_admission_command_owner,
+)
+from evoom_guard.cli import (
     github_attestation_receipt_commands as _github_attestation_receipt_command_owner,
 )
 from evoom_guard.cli import guard_command as _guard_command_owner
@@ -2762,112 +2765,32 @@ def cmd_seal_github_attestation_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    regular_paths = (
-        args.artifact,
-        args.finalizer_bundle,
-        args.receipt_out,
-        args.raw_output_out,
-        args.out,
-        args.finalizer_pub,
-        args.sign_key,
-    )
-    if any(value == "-" for value in regular_paths):
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": (
-                    "artifact, finalizer bundle, receipt, raw output, binding, and key "
-                    "paths must be regular files, not standard input/output"
-                ),
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        sealed = seal_github_attestation_admission(
-            args.artifact,
-            args.receipt_out,
-            args.raw_output_out,
-            args.finalizer_bundle,
-            args.out,
-            **_github_attestation_policy_kwargs(args),
-            trusted_finalizer_public_key_path=args.finalizer_pub,
-            expected_finalizer_source=expected_source,
-            expected_finalizer_context=expected_context,
-            private_key_path=args.sign_key,
-            gh_executable=args.gh_executable,
-            timeout_seconds=args.timeout_seconds,
-            provider_isolation=_github_attestation_provider_isolation(args),
-        )
-    except GitHubAttestationError as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-            "ok": True,
-            "sealed": True,
-            "status": "SEALED",
-            "decision": "ALLOW",
-            "verification_scope": (
-                "fresh-provider-gh-attestation-verify-plus-trusted-finalizer-allow"
+    return (
+        _github_attestation_admission_command_owner.execute_seal_github_attestation_admission(
+            args,
+            services=(
+                _github_attestation_admission_command_owner.SealGitHubAttestationAdmissionServices(
+                    binding_format=ARTIFACT_DIGEST_BINDING_FORMAT,
+                    github_error=GitHubAttestationError,
+                    signing_unavailable_error=SigningUnavailableError,
+                    seal_github_attestation_admission=(
+                        seal_github_attestation_admission
+                    ),
+                    read_external_object_provider=lambda: (
+                        _read_external_finalizer_object
+                    ),
+                    policy_kwargs_provider=lambda: (
+                        _github_attestation_policy_kwargs
+                    ),
+                    provider_isolation_provider=lambda: (
+                        _github_attestation_provider_isolation
+                    ),
+                    machine_report_provider=lambda: _machine_report,
+                )
             ),
-            "receipt": sealed.receipt.receipt_path,
-            "raw_output": sealed.receipt.raw_output_path,
-            "binding": sealed.admission.binding_path,
-            "artifact": sealed.receipt.artifact.as_dict(),
-            "verification_policy": sealed.receipt.policy.as_dict(),
-            "subject": sealed.admission.subject.as_dict(),
-            "provenance_reference": sealed.admission.provenance_reference.as_dict(),
-            "finalizer": sealed.admission.payload["finalizer"],
-            "key_id": sealed.admission.payload["authentication"]["key_id"],
-        },
+            out=out,
+        )
     )
-    return 0
 
 
 def cmd_verify_github_attestation_admission(
@@ -2884,105 +2807,29 @@ def cmd_verify_github_attestation_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    regular_paths = (
-        args.binding,
-        args.artifact,
-        args.receipt,
-        args.raw_output,
-        args.finalizer_bundle,
-        args.trusted_pub,
-        args.finalizer_pub,
+    return (
+        _github_attestation_admission_command_owner.execute_verify_github_attestation_admission(
+            args,
+            services=(
+                _github_attestation_admission_command_owner.VerifyGitHubAttestationAdmissionServices(
+                    binding_format=ARTIFACT_DIGEST_BINDING_FORMAT,
+                    github_error=GitHubAttestationError,
+                    signing_unavailable_error=SigningUnavailableError,
+                    verify_github_attestation_admission=(
+                        verify_github_attestation_admission
+                    ),
+                    read_external_object_provider=lambda: (
+                        _read_external_finalizer_object
+                    ),
+                    policy_kwargs_provider=lambda: (
+                        _github_attestation_policy_kwargs
+                    ),
+                    machine_report_provider=lambda: _machine_report,
+                )
+            ),
+            out=out,
+        )
     )
-    if any(value == "-" for value in regular_paths):
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": (
-                    "binding, artifact, receipt, raw output, finalizer bundle, and key "
-                    "paths must be regular files, not standard input/output"
-                ),
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        verified = verify_github_attestation_admission(
-            args.binding,
-            args.artifact,
-            args.receipt,
-            args.raw_output,
-            args.finalizer_bundle,
-            **_github_attestation_policy_kwargs(args),
-            trusted_public_key_path=args.trusted_pub,
-            trusted_finalizer_public_key_path=args.finalizer_pub,
-            expected_finalizer_source=expected_source,
-            expected_finalizer_context=expected_context,
-        )
-    except GitHubAttestationError as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "VERIFIED",
-            "decision": "ALLOW",
-            "verification_scope": "retained-provider-bytes-plus-trusted-finalizer-allow",
-            "live_provider_reverification": False,
-            "artifact": verified.receipt.artifact.as_dict(),
-            "verification_policy": verified.receipt.policy.as_dict(),
-            "subject": verified.admission.subject.as_dict(),
-            "provenance_reference": verified.admission.provenance_reference.as_dict(),
-            "finalizer": verified.admission.inspection.finalizer,
-            "key_id": verified.admission.inspection.payload["authentication"]["key_id"],
-        },
-    )
-    return 0
 
 
 def cmd_verify_bundle(

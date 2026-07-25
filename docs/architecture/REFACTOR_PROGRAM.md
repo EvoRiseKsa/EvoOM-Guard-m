@@ -452,8 +452,16 @@ remain in their established facades.
   and the retained verifier's closed-world offline surface. The shared policy
   and isolation helpers remain in the facade; the retained verifier service
   has no connected provider seam.
-- The remaining source, release-artifact, and GitHub-attestation admission
-  command families remain pending.
+- GitHub attestation admission sealing and retained verification now live in
+  the strictly typed, stdlib-only
+  `cli/github_attestation_admission_commands.py` owner. Separate seal/verify
+  service contracts preserve function-local entry snapshots and live
+  reader/policy/reporting providers; only sealing receives the live provider
+  isolation seam. The reviewed 70-case vector and at least sixteen focused
+  mutations freeze seven-path eager guards, metadata/domain boundaries,
+  exception precedence and identity, partial output, repeated projections,
+  isolation timing, and the verifier's closed-world offline surface.
+- The remaining source and release-artifact command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

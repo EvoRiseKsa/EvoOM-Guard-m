@@ -620,6 +620,22 @@ retained verifier's environment-independent closed-world offline boundary. A
 slice. GitHub attestation admission, release-source, and release-artifact
 commands remain in the facade.
 
+The seventh command-family slice adds the separate strictly typed,
+stdlib-only `cli.github_attestation_admission_commands` owner for only the
+GitHub attestation admission seal/retained-verify pair. The facade keeps the
+binding format, domain callable, domain exception, and signing exception as
+function-local entry snapshots. External source/context readers, policy
+construction, sealing-only provider isolation, and reporting remain live at
+their exact historical use sites. Seal and verify use independent service
+contracts rather than a generic executor; the verify contract structurally
+contains no GitHub executable, timeout, provider-isolation, network,
+signing-key, or output-mutation seam. The owner preserves the eager seven-path
+guards, separate metadata/domain catches, GitHub-error precedence, repeated
+result projections, partial-output residue, and success projection outside the
+domain `try`. A 70-case cross-parent vector and at least sixteen focused
+reviewed mutations protect the slice. Release-source and release-artifact
+command families remain in the facade.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay
