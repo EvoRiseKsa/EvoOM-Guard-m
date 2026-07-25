@@ -141,6 +141,12 @@ jobs:
           OUTER_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
           OUTER_PROVIDER_UID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID }}
           OUTER_PROVIDER_GID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID }}
+          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
+          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
+          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
+          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
+          TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
           RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
           V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64 }}
           FINALIZER_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64 }}
@@ -156,6 +162,7 @@ jobs:
           [[ "$OUTER_RUNTIME_URL" =~ ^https://[^[:space:]]+$ ]]
           for value in "$OUTER_RUNTIME_SHA256" "$OUTER_GIT_SHA256" "$OUTER_GH_SHA256"; do [[ "$value" =~ ^[0-9a-f]{64}$ ]]; done
           for value in "$OUTER_PROVIDER_UID" "$OUTER_PROVIDER_GID"; do [[ "$value" =~ ^[1-9][0-9]*$ ]]; test "$value" -ne 65534; test "$value" -le 2147483647; done
+          [[ "$TAG_DEPLOY_KEY_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
           mkdir -m 0700 "$RUNNER_TEMP/g-trust"
           install_public() {
             local name="$1" value="$2"
@@ -239,7 +246,12 @@ jobs:
           ]
           for path, name, limit in sources:
               before = path.lstat()
-              if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+              if (
+                  stat.S_ISLNK(before.st_mode)
+                  or not stat.S_ISREG(before.st_mode)
+                  or before.st_nlink != 1
+                  or before.st_size > limit
+              ):
                   raise SystemExit(f'unsafe G input: {name}')
               descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
               try:
@@ -248,8 +260,20 @@ jobs:
                       raise SystemExit(f'G input changed: {name}')
                   with os.fdopen(descriptor, 'rb', closefd=False) as stream, (destination / name).open('xb') as output:
                       shutil.copyfileobj(stream, output, 64 * 1024)
+                  final_fd = os.fstat(descriptor)
               finally:
                   os.close(descriptor)
+              final_path = path.lstat()
+              identity = lambda value: (
+                  value.st_dev, value.st_ino, value.st_size,
+                  value.st_mtime_ns, value.st_ctime_ns, value.st_nlink,
+              )
+              if (
+                  identity(opened) != identity(final_fd)
+                  or identity(opened) != identity(final_path)
+                  or final_path.st_nlink != 1
+              ):
+                  raise SystemExit(f'G input changed after copy: {name}')
           for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
               sealed = destination / f'sealed-{name}'
               control = destination / name
@@ -283,6 +307,7 @@ jobs:
               return hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
           builder = load('builder.json')
           admitter = load('admitter.json')
+          builder_controls = load('builder-controls.json')
           manifest = load('f-control-manifest.json')
           fixed = {
               'workflow_repository': os.environ['GITHUB_REPOSITORY'],
@@ -324,6 +349,7 @@ jobs:
               },
               'checksums': descriptor('SHA256SUMS'),
               'release_source_admission': descriptor('source-allow.rsae'),
+              'release_version': builder_controls.get('release_version'),
               'attestation_evidence': {
                   name: descriptor(name)
                   for name in (
@@ -348,6 +374,18 @@ jobs:
                       'gh_sha256': os.environ['OUTER_GH_SHA256'],
                       'provider_uid': int(os.environ['OUTER_PROVIDER_UID']),
                       'provider_gid': int(os.environ['OUTER_PROVIDER_GID']),
+                  },
+                  'source_admission': {
+                      'bootstrap_sha256': os.environ['SOURCE_BOOTSTRAP_SHA256'],
+                      'git_sha256': os.environ['SOURCE_GIT_SHA256'],
+                      'gh_sha256': os.environ['SOURCE_GH_SHA256'],
+                      'provider_uid': int(os.environ['SOURCE_PROVIDER_UID']),
+                      'provider_gid': int(os.environ['SOURCE_PROVIDER_GID']),
+                  },
+                  'publication': {
+                      'tag_deploy_key_fingerprint': os.environ[
+                          'TAG_DEPLOY_KEY_FINGERPRINT'
+                      ],
                   },
                   'public_key_ids': {
                       'release_artifact_admission_v1': os.environ['RAAE_PUBLIC_KEY_ID'],
@@ -469,11 +507,6 @@ jobs:
           TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
           REPOSITORY_ID: ${{ steps.bind.outputs.repository_id }}
           REPOSITORY_OWNER_ID: ${{ steps.bind.outputs.repository_owner_id }}
-          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
-          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
-          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
-          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
-          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
         run: |
           set -euo pipefail
           manifest="/run/evoguard-raae-detached-approved/inputs/f-control-manifest.json"
@@ -482,6 +515,11 @@ jobs:
           OUTER_GH_SHA256="$(jq -er '.external_settings.toolchain.gh_sha256 | select(type == "string")' "$manifest")"
           OUTER_PROVIDER_UID="$(jq -er '.external_settings.toolchain.provider_uid | select(type == "number")' "$manifest")"
           OUTER_PROVIDER_GID="$(jq -er '.external_settings.toolchain.provider_gid | select(type == "number")' "$manifest")"
+          SOURCE_BOOTSTRAP_SHA256="$(jq -er '.external_settings.source_admission.bootstrap_sha256 | select(type == "string")' "$manifest")"
+          SOURCE_GIT_SHA256="$(jq -er '.external_settings.source_admission.git_sha256 | select(type == "string")' "$manifest")"
+          SOURCE_GH_SHA256="$(jq -er '.external_settings.source_admission.gh_sha256 | select(type == "string")' "$manifest")"
+          SOURCE_PROVIDER_UID="$(jq -er '.external_settings.source_admission.provider_uid | select(type == "number")' "$manifest")"
+          SOURCE_PROVIDER_GID="$(jq -er '.external_settings.source_admission.provider_gid | select(type == "number")' "$manifest")"
           BUILDER_RUN_ID="$(jq -er '.workflows.E.workflow_run_id' "$manifest")"
           BUILDER_RUN_ATTEMPT="$(jq -er '.workflows.E.workflow_run_attempt' "$manifest")"
           python3 -I \
@@ -616,10 +654,14 @@ jobs:
           def descriptor(name):
               data = (root / name).read_bytes()
               return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+          f_manifest = json.loads(
+              (root / 'f-control-manifest.json').read_text(encoding='utf-8')
+          )
           value = {
               'format': 'EVOGUARD_RELEASE_PUBLICATION_CONTROLS_V1',
               'repository': os.environ['GITHUB_REPOSITORY'],
               'target_sha': os.environ['TARGET_SHA'],
+              'release_version': f_manifest['release_version'],
               'f': {
                   'workflow_id': os.environ['F_WORKFLOW_ID'],
                   'workflow_blob_sha': os.environ['F_WORKFLOW_BLOB'],
@@ -632,6 +674,10 @@ jobs:
                   'workflow_run_id': os.environ['GITHUB_RUN_ID'],
                   'workflow_run_attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
               },
+              'f_control_manifest': descriptor('f-control-manifest.json'),
+              'f_external_settings': f_manifest['external_settings'],
+              'f_trusted_tools': f_manifest['trusted_tools'],
+              'f_workflows': f_manifest['workflows'],
               'release_assets': {
                   name: descriptor(name)
                   for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')

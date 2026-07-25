@@ -41,6 +41,70 @@ def _job(path: Path, name: str) -> str:
     return match.group(0)
 
 
+def _literal_run_blocks(path: Path) -> list[str]:
+    """Return YAML literal run scalars without adding a YAML test dependency."""
+
+    lines = _text(path).splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(?P<indent> +)run:\s+\|\s*$", lines[index])
+        if match is None:
+            index += 1
+            continue
+        parent_indent = len(match.group("indent"))
+        end = index + 1
+        raw: list[str] = []
+        while end < len(lines):
+            line = lines[end]
+            indentation = len(line) - len(line.lstrip(" "))
+            if line.strip() and indentation <= parent_indent:
+                break
+            raw.append(line)
+            end += 1
+        content_indents = [
+            len(line) - len(line.lstrip(" ")) for line in raw if line.strip()
+        ]
+        assert content_indents, f"empty literal run block in {path.name}"
+        content_indent = min(content_indents)
+        blocks.append(
+            "\n".join(
+                line[content_indent:] if line.strip() else ""
+                for line in raw
+            )
+        )
+        index = end
+    return blocks
+
+
+def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
+    count = 0
+    for path in (F, G, H):
+        for block_index, run in enumerate(_literal_run_blocks(path)):
+            lines = run.splitlines()
+            index = 0
+            while index < len(lines):
+                if "<<'PY'" not in lines[index]:
+                    index += 1
+                    continue
+                end = index + 1
+                source: list[str] = []
+                while end < len(lines) and lines[end] != "PY":
+                    source.append(lines[end])
+                    end += 1
+                assert end < len(lines), (
+                    f"unclosed Python heredoc in {path.name} run block {block_index}"
+                )
+                compile(
+                    "\n".join(source) + "\n",
+                    f"{path.name}:run:{block_index}",
+                    "exec",
+                )
+                count += 1
+                index = end + 1
+    assert count == 33
+
+
 def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() -> None:
     bootstrap = json.loads(
         (ROOT / "security" / "release-pipeline-bootstrap.json").read_text(
@@ -407,7 +471,11 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "cleanup_verified_unpublished_draft" in publish
     assert "removed exact unpublished draft after a pre-PATCH failure" in publish
     assert "secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY" in publish
-    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in publish
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in _text(F)
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in _text(G)
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" not in publish
+    assert "tag_deploy_key_fingerprint" in preflight
+    assert "expected_tag_deploy_key_fingerprint" in publish
     assert "actual_tag_key_fingerprint" in publish
     assert "HostKeyAlgorithms=ssh-ed25519" in publish
     assert "IdentityAgent=none" in publish
@@ -455,6 +523,11 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "evo-guard.pyz.raae" not in draft
     assert "evoguard-release-artifact-v1-complete-controls-" in preflight
     assert "G selector attestation digest mismatch" in preflight
+    assert "host_tools" in preflight
+    assert preflight.count("--no-new-privs") >= 1
+    assert "--reuid=\"$OUTER_PROVIDER_UID\"" in preflight
+    assert "publication host tool changed" in draft
+    assert "publication host tool changed" in publish
     assert publish.count("$RUNNER_TEMP/publication-final/") >= 3
 
 

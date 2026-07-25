@@ -27,7 +27,7 @@ def _fixture() -> tuple[bytes, bytes, bytes]:
     artifact = b"synthetic pyz\n"
     spdx_value = {"SPDXID": "SPDXRef-DOCUMENT", "spdxVersion": "SPDX-2.3"}
     spdx = verifier._canonical(spdx_value)
-    signer = f"https://github.com/{REPOSITORY}/{WORKFLOW}@{SOURCE}"
+    signer = f"https://github.com/{REPOSITORY}/{WORKFLOW}@refs/heads/main"
     run = f"https://github.com/{REPOSITORY}/actions/runs/{RUN_ID}/attempts/2"
     value: list[dict[str, Any]] = [
         {
@@ -64,7 +64,7 @@ def _fixture() -> tuple[bytes, bytes, bytes]:
                 "verifiedIdentity": {
                     "subjectAlternativeName": {
                         "subjectAlternativeName": "",
-                        "regexp": f"^{signer}$",
+                        "regexp": f"^https://github.com/{REPOSITORY}/{WORKFLOW}",
                     },
                     "issuer": {"issuer": "", "regexp": ".*"},
                     "runnerEnvironment": "github-hosted",

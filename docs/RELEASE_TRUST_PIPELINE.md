@@ -98,9 +98,10 @@ admission.
     Environment secret-name-list observations for those exact names; these are
     same-owner point-in-time observations and do not prove absence of external
     key copies or prevent re-addition. Keep the publication deploy-key secret
-    and exact write deploy key only until a valid committed release ledger
-    records their public ID/fingerprint and explicitly marks retirement pending.
-    Then delete both and freeze a separate signed retirement receipt;
+    and exact write deploy key until the operator has committed and revalidated
+    a signed release ledger that records their public ID/fingerprint and
+    explicitly marks retirement pending. Then delete both and freeze a separate
+    signed retirement receipt;
     create a fresh deploy key for the next release window. If an operational
     exception keeps it temporarily, it must remain only in the no-admin-bypass
     publication Environment and the repository must still have exactly one
@@ -119,9 +120,11 @@ admission.
     `tools/ci/validate_release_ledger_v2.py`. The schema and validator existing
     before publication do not themselves constitute a `v4.4.0` ledger.
     Validate with the independently retrieved key via
-    `--trusted-ledger-pub`, commit the ledger, validate the committed bytes
-    again. Retain the offline ledger private key only through the separate
-    retirement-receipt signature and validation, then destroy it.
+    `--trusted-ledger-pub`, commit the ledger, and validate the committed bytes
+    again. This ordering is an operator procedure: the retirement receipt proves
+    signed observation timestamps after the ledger's `created_utc`, not that a
+    Git commit existed first. Retain the offline ledger private key only through
+    the separate retirement-receipt signature and validation, then destroy it.
     GitHub permits editing an immutable release's title and description, so
     neither field is authoritative trust metadata. The immutable tag, exact
     assets and digests, attestations, and separately frozen signed ledger are

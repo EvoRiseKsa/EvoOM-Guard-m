@@ -74,7 +74,9 @@ python tools/ci/assemble_release_ledger_v2.py `
 
 Both output files are canonical JSON. The provenance manifest inventories
 every exact input and explicitly records that no signing, network collection,
-external ledger-key authentication, or post-commit validation occurred.
+external ledger-key authentication, or post-commit validation occurred. It
+therefore establishes no later Git commit ordering; that remains a separate
+operator procedure.
 
 The unsigned draft is not a release ledger. After human review it must be
 signed with the separately held per-release ledger private key, installed as

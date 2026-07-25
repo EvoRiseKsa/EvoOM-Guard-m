@@ -100,6 +100,12 @@ jobs:
           BUILD_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
           OUTER_PROVIDER_UID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID }}
           OUTER_PROVIDER_GID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID }}
+          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
+          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
+          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
+          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
+          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
+          TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
           RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
           V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64 }}
           FINALIZER_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64 }}
@@ -115,8 +121,9 @@ jobs:
           for value in "$E_WORKFLOW_BLOB" "$F_WORKFLOW_BLOB"; do [[ "$value" =~ ^[0-9a-f]{40,64}$ ]]; done
           test -n "$OUTER_RUNTIME_URL"
           [[ "$OUTER_RUNTIME_URL" =~ ^https://[^[:space:]]+$ ]]
-          for value in "$OUTER_RUNTIME_SHA256" "$OUTER_GIT_SHA256" "$OUTER_GH_SHA256"; do [[ "$value" =~ ^[0-9a-f]{64}$ ]]; done
-          for value in "$OUTER_PROVIDER_UID" "$OUTER_PROVIDER_GID"; do [[ "$value" =~ ^[1-9][0-9]*$ ]]; test "$value" -ne 65534; test "$value" -le 2147483647; done
+          for value in "$OUTER_RUNTIME_SHA256" "$OUTER_GIT_SHA256" "$OUTER_GH_SHA256" "$SOURCE_BOOTSTRAP_SHA256" "$SOURCE_GIT_SHA256" "$SOURCE_GH_SHA256"; do [[ "$value" =~ ^[0-9a-f]{64}$ ]]; done
+          for value in "$OUTER_PROVIDER_UID" "$OUTER_PROVIDER_GID" "$SOURCE_PROVIDER_UID" "$SOURCE_PROVIDER_GID"; do [[ "$value" =~ ^[1-9][0-9]*$ ]]; test "$value" -ne 65534; test "$value" -le 2147483647; done
+          [[ "$TAG_DEPLOY_KEY_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
           test "$E_WORKFLOW_ID" != "$F_WORKFLOW_ID"
           test "$E_WORKFLOW_BLOB" != "$F_WORKFLOW_BLOB"
 
@@ -168,7 +175,12 @@ jobs:
           for name, limit in limits.items():
               path = source / name
               before = path.lstat()
-              if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+              if (
+                  stat.S_ISLNK(before.st_mode)
+                  or not stat.S_ISREG(before.st_mode)
+                  or before.st_nlink != 1
+                  or before.st_size > limit
+              ):
                   raise SystemExit(f'unsafe E output: {name}')
               descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
               try:
@@ -177,8 +189,20 @@ jobs:
                       raise SystemExit(f'E output changed: {name}')
                   with os.fdopen(descriptor, 'rb', closefd=False) as stream, (destination / name).open('xb') as output:
                       shutil.copyfileobj(stream, output, 64 * 1024)
+                  final_fd = os.fstat(descriptor)
               finally:
                   os.close(descriptor)
+              final_path = path.lstat()
+              identity = lambda value: (
+                  value.st_dev, value.st_ino, value.st_size,
+                  value.st_mtime_ns, value.st_ctime_ns, value.st_nlink,
+              )
+              if (
+                  identity(opened) != identity(final_fd)
+                  or identity(opened) != identity(final_path)
+                  or final_path.st_nlink != 1
+              ):
+                  raise SystemExit(f'E output changed after copy: {name}')
           PY
 
           git_executable="$(readlink -f "$(command -v git)")"
@@ -351,6 +375,18 @@ jobs:
                       'provider_uid': int(os.environ['OUTER_PROVIDER_UID']),
                       'provider_gid': int(os.environ['OUTER_PROVIDER_GID']),
                   },
+                  'source_admission': {
+                      'bootstrap_sha256': os.environ['SOURCE_BOOTSTRAP_SHA256'],
+                      'git_sha256': os.environ['SOURCE_GIT_SHA256'],
+                      'gh_sha256': os.environ['SOURCE_GH_SHA256'],
+                      'provider_uid': int(os.environ['SOURCE_PROVIDER_UID']),
+                      'provider_gid': int(os.environ['SOURCE_PROVIDER_GID']),
+                  },
+                  'publication': {
+                      'tag_deploy_key_fingerprint': os.environ[
+                          'TAG_DEPLOY_KEY_FINGERPRINT'
+                      ],
+                  },
                   'public_key_ids': {
                       'release_artifact_admission_v1': os.environ['RAAE_PUBLIC_KEY_ID'],
                       'release_source_admission_v2': os.environ['V2_PUBLIC_KEY_ID'],
@@ -437,8 +473,20 @@ jobs:
                       destination / path.name
                   ).open('xb') as output:
                       shutil.copyfileobj(stream, output, 64 * 1024)
+                  final_fd = os.fstat(descriptor)
               finally:
                   os.close(descriptor)
+              final_path = path.lstat()
+              identity = lambda value: (
+                  value.st_dev, value.st_ino, value.st_size,
+                  value.st_mtime_ns, value.st_ctime_ns, value.st_nlink,
+              )
+              if (
+                  identity(opened) != identity(final_fd)
+                  or identity(opened) != identity(final_path)
+                  or final_path.st_nlink != 1
+              ):
+                  raise SystemExit(f'F SPDX control changed after copy: {path.name}')
           PY
           manifest="$RUNNER_TEMP/f-sbom-controls/f-control-manifest.json"
           test "$(jq -er .repository "$manifest")" = "$GITHUB_REPOSITORY"
@@ -678,8 +726,20 @@ jobs:
                       raise SystemExit(f'F control changed: {path.name}')
                   with os.fdopen(descriptor, 'rb', closefd=False) as stream, (destination / path.name).open('xb') as output:
                       shutil.copyfileobj(stream, output, 64 * 1024)
+                  final_fd = os.fstat(descriptor)
               finally:
                   os.close(descriptor)
+              final_path = path.lstat()
+              identity = lambda value: (
+                  value.st_dev, value.st_ino, value.st_size,
+                  value.st_mtime_ns, value.st_ctime_ns, value.st_nlink,
+              )
+              if (
+                  identity(opened) != identity(final_fd)
+                  or identity(opened) != identity(final_path)
+                  or final_path.st_nlink != 1
+              ):
+                  raise SystemExit(f'F control changed after copy: {path.name}')
           PY
           test "$(jq -r .target_sha "$RUNNER_TEMP/f-controls-safe/f-control-manifest.json")" = "$TARGET_SHA"
           python - "$RUNNER_TEMP/f-controls-safe" <<'PY'
@@ -749,6 +809,7 @@ jobs:
           ARTIFACT_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
           ARTIFACT_V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_DIGEST_ADMISSION_V2_PUBLIC_KEY_B64 }}
           SOURCE_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_FINALIZER_V1_PUBLIC_KEY_B64 }}
+          TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
         run: |
           set -euo pipefail
           manifest="$RUNNER_TEMP/f-controls-safe/f-control-manifest.json"
@@ -778,6 +839,11 @@ jobs:
           python - "$manifest" <<'PY'
           import json, os, pathlib, re, sys
           manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+          source_settings = manifest.get('external_settings', {}).get(
+              'source_admission'
+          )
+          if not isinstance(source_settings, dict):
+              raise SystemExit('reviewed F source settings are missing')
           expected = {
               'runtime': {
                   'url': os.environ['OUTER_RUNTIME_URL'],
@@ -788,6 +854,12 @@ jobs:
                   'gh_sha256': os.environ['OUTER_GH_SHA256'],
                   'provider_uid': int(os.environ['OUTER_PROVIDER_UID']),
                   'provider_gid': int(os.environ['OUTER_PROVIDER_GID']),
+              },
+              'source_admission': source_settings,
+              'publication': {
+                  'tag_deploy_key_fingerprint': os.environ[
+                      'TAG_DEPLOY_KEY_FINGERPRINT'
+                  ],
               },
               'public_key_ids': {
                   'release_artifact_admission_v1': os.environ['RAAE_PUBLIC_KEY_ID'],
@@ -806,10 +878,24 @@ jobs:
           if (not re.fullmatch(r'https://\S+', expected['runtime']['url']) or
               any(not re.fullmatch(r'[0-9a-f]{64}', expected['toolchain'][name])
                   for name in ('git_sha256', 'gh_sha256')) or
+              any(not re.fullmatch(r'[0-9a-f]{64}', source_settings[name])
+                  for name in ('bootstrap_sha256', 'git_sha256', 'gh_sha256')) or
               not re.fullmatch(r'[0-9a-f]{64}', expected['runtime']['sha256']) or
               any(not 1 <= expected['toolchain'][name] <= 2147483647 or
-                  expected['toolchain'][name] == 65534
-                  for name in ('provider_uid', 'provider_gid'))):
+                   expected['toolchain'][name] == 65534
+                  for name in ('provider_uid', 'provider_gid')) or
+               any(not isinstance(source_settings[name], int) or
+                  not 1 <= source_settings[name] <= 2147483647 or
+                  source_settings[name] == 65534
+                  for name in ('provider_uid', 'provider_gid')) or
+              set(source_settings) != {
+                  'bootstrap_sha256', 'git_sha256', 'gh_sha256',
+                   'provider_uid', 'provider_gid',
+               } or
+               not re.fullmatch(
+                   r'SHA256:[A-Za-z0-9+/]{43}',
+                   expected['publication']['tag_deploy_key_fingerprint'],
+               )):
               raise SystemExit('reviewed F runtime/tool/provider settings are not canonical')
           PY
           sudo install -d -m 0700 -o root -g root \
@@ -965,11 +1051,6 @@ jobs:
 
       - name: Freshly verify both E subject-provenance attestations and seal two detached RAAE ALLOW envelopes
         env:
-          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
-          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
-          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
-          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
-          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -978,6 +1059,11 @@ jobs:
           OUTER_GH_SHA256="$(jq -er '.external_settings.toolchain.gh_sha256 | select(type == "string")' "$manifest")"
           OUTER_PROVIDER_UID="$(jq -er '.external_settings.toolchain.provider_uid | select(type == "number")' "$manifest")"
           OUTER_PROVIDER_GID="$(jq -er '.external_settings.toolchain.provider_gid | select(type == "number")' "$manifest")"
+          SOURCE_BOOTSTRAP_SHA256="$(jq -er '.external_settings.source_admission.bootstrap_sha256 | select(type == "string")' "$manifest")"
+          SOURCE_GIT_SHA256="$(jq -er '.external_settings.source_admission.git_sha256 | select(type == "string")' "$manifest")"
+          SOURCE_GH_SHA256="$(jq -er '.external_settings.source_admission.gh_sha256 | select(type == "string")' "$manifest")"
+          SOURCE_PROVIDER_UID="$(jq -er '.external_settings.source_admission.provider_uid | select(type == "number")' "$manifest")"
+          SOURCE_PROVIDER_GID="$(jq -er '.external_settings.source_admission.provider_gid | select(type == "number")' "$manifest")"
           git_executable="$(cat "$RUNNER_TEMP/outer-git.path")"
           gh_executable="$(cat "$RUNNER_TEMP/outer-gh.path")"
           python_executable="$(readlink -f "$(command -v python3)")"

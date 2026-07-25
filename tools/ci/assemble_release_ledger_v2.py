@@ -915,21 +915,18 @@ def _trusted_git(
         }
     )
     try:
-        result = subprocess.run(  # noqa: S603 - fixed local Git, no shell
+        returncode, stdout, _stderr = validator._run_bounded_subprocess(
             ["git", "-C", str(repository), *arguments],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            check=False,
+            environment=environment,
+            output_limit=output_limit,
             timeout=15,
-            env=environment,
+            label=f"trusted parent {label}",
         )
-    except (OSError, subprocess.SubprocessError) as exc:
+    except (OSError, subprocess.SubprocessError, validator.LedgerValidationError) as exc:
         raise LedgerAssemblyError(f"cannot inspect trusted parent {label}") from exc
-    if result.returncode != 0:
+    if returncode != 0:
         _fail(f"trusted parent {label} is unavailable or invalid")
-    if len(result.stdout) > output_limit:
-        _fail(f"trusted parent {label} exceeds its bounded output limit")
-    return result.stdout
+    return bytes(stdout)
 
 
 def _trusted_blob(
@@ -1114,6 +1111,72 @@ def _trusted_contracts(
             contract,
             label="schema_contracts",
         )
+    toolchain = _as_mapping(ledger.get("toolchain"), label="toolchain")
+    trusted_inputs = _as_mapping(
+        toolchain.get("trusted_build_inputs"),
+        label="toolchain.trusted_build_inputs",
+    )
+    _set_derived(
+        trusted_inputs,
+        "source_parent_sha",
+        parent,
+        label="toolchain.trusted_build_inputs",
+    )
+    _set_derived(
+        trusted_inputs,
+        "source_parent_tree_sha",
+        parent_tree,
+        label="toolchain.trusted_build_inputs",
+    )
+    for field, path in validator.TRUSTED_BUILD_INPUT_PATHS.items():
+        entry = _trusted_git(
+            repository,
+            "ls-tree",
+            "-z",
+            parent,
+            "--",
+            path,
+            label=f"trusted build input {path} tree entry",
+            output_limit=4096,
+        )
+        prefix = b"100644 blob "
+        suffix = f"\t{path}\0".encode()
+        if not entry.startswith(prefix) or not entry.endswith(suffix):
+            _fail(f"trusted parent build input {path} is not one exact regular blob")
+        object_id = entry[len(prefix) : -len(suffix)].decode("ascii", "strict")
+        executing_path = ROOT.joinpath(*PurePosixPath(path).parts)
+        try:
+            executing_bytes = validator._read_regular(
+                executing_path,
+                limit=validator.MAX_JSON_BYTES,
+                label=f"executing trusted build input {path}",
+            )
+        except validator.LedgerValidationError as exc:
+            raise LedgerAssemblyError(str(exc)) from exc
+        blob = _trusted_blob(
+            repository,
+            object_id,
+            label=f"trusted build input {path}",
+            limit=validator.MAX_JSON_BYTES,
+        )
+        if (
+            blob != executing_bytes
+            or validator._git_blob_sha(blob) != object_id
+        ):
+            _fail(f"trusted parent build input {path} bytes are not exact")
+        _set_derived(
+            trusted_inputs,
+            field,
+            object_id,
+            label="toolchain.trusted_build_inputs",
+        )
+        values[f"trusted_build_input:{path}"] = {
+            "path": path,
+            "sha256": hashlib.sha256(blob).hexdigest(),
+            "git_blob_sha": object_id,
+            "trusted_parent_commit_sha": parent,
+            "trusted_parent_tree_sha": parent_tree,
+        }
     return {
         "commit_sha": parent,
         "tree_sha": parent_tree,
@@ -1135,7 +1198,9 @@ def _validate_completed_evidence(
         expected_files = set(inventory)
         expected_directories = validator._expected_directories(expected_files)
         actual_files, actual_directories, identities = validator._actual_inventory(
-            evidence_root
+            evidence_root,
+            expected_files=expected_files,
+            expected_directories=expected_directories,
         )
         if actual_files != expected_files:
             _fail(

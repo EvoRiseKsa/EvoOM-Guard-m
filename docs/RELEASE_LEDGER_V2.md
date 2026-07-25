@@ -214,12 +214,13 @@ and must fail validation. Placeholders are never accepted as release evidence.
    same-owner, point-in-time name-list observations: they do not prove that no
    external copy exists and do not prevent a later re-addition. The release
    ledger must record publication authority retirement as pending, never as
-   already completed. Only after its committed bytes validate, remove the
-   publication deploy-key secret and exact write deploy key, create and validate
-   the separately signed `KEY_RETIREMENT.json`, then destroy the per-release
-   ledger private key. The receipt and its detached signature live outside the
-   already closed ledger directory and are verified under the same independently
-   pinned ledger public key:
+   already completed. As an operator procedure, commit and revalidate the signed
+   ledger before removing the publication deploy-key secret and exact write
+   deploy key. Then create and validate the separately signed
+   `KEY_RETIREMENT.json` and destroy the per-release ledger private key. The
+   receipt and its detached signature live outside the already closed ledger
+   directory and are verified under the same independently pinned ledger public
+   key:
 
    ```powershell
    python tools/ci/validate_release_ledger_v2.py validate-retirement `
@@ -228,7 +229,10 @@ and must fail validation. Placeholders are never accepted as release evidence.
      --trusted-parent-repo .\trusted-parent-checkout
    ```
 
-   A `404`, denied API call, incomplete page sequence, or unsigned JSON is not
+   A valid receipt proves that its signed observation timestamps are later than
+   the signed ledger's `created_utc`; it does not cryptographically prove Git
+   commit ordering. Commit-before-retirement remains an operator procedure. A
+   `404`, denied API call, incomplete page sequence, or unsigned JSON is not
    retirement evidence. The receipt remains a same-owner point-in-time
    observation; it does not prove destruction of copies outside GitHub and does
    not prevent a new key or secret from being added later.

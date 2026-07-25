@@ -24,11 +24,15 @@ import hashlib
 import json
 import os
 import re
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -45,6 +49,11 @@ OFFICIAL_SCHEMA_REPOSITORY_PATH = (
     "tests/baseline/schema/release-ledger-v2.schema.json"
 )
 VALIDATOR_REPOSITORY_PATH = "tools/ci/validate_release_ledger_v2.py"
+TRUSTED_BUILD_INPUT_PATHS = {
+    "build_pyz_blob_sha": "ops/build_pyz.py",
+    "spdx_generator_blob_sha": "ops/generate_spdx_sbom.py",
+    "spdx_attestation_verifier_blob_sha": "tools/ci/verify_spdx_attestation.py",
+}
 LEDGER_NAME = "RELEASE_LEDGER.json"
 SIGNATURE_NAME = "RELEASE_LEDGER.json.sig"
 README_NAME = "README.md"
@@ -498,6 +507,7 @@ def _trusted_git(
     repository: Path,
     *arguments: str,
     label: str,
+    output_limit: int,
 ) -> bytes:
     environment = {
         key: os.environ[key]
@@ -524,19 +534,146 @@ def _trusted_git(
         }
     )
     try:
-        result = subprocess.run(  # noqa: S603 - fixed Git operations, no shell
+        returncode, stdout, _stderr = _run_bounded_subprocess(
             ["git", "-C", str(repository), *arguments],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            check=False,
+            environment=environment,
+            output_limit=output_limit,
             timeout=15,
-            env=environment,
+            label=f"trusted parent {label}",
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise LedgerValidationError(f"cannot inspect trusted parent {label}") from exc
-    if result.returncode != 0:
+    if returncode != 0:
         _fail(f"trusted parent {label} is unavailable or invalid")
-    return result.stdout
+    return stdout
+
+
+def _run_bounded_subprocess(
+    command: Sequence[str],
+    *,
+    environment: Mapping[str, str],
+    output_limit: int,
+    timeout: int,
+    label: str,
+) -> tuple[int, bytes, bytes]:
+    """Run one fixed command while bounding combined stdout and stderr bytes."""
+
+    if output_limit < 1:
+        _fail(f"{label} output limit must be positive")
+    started = time.monotonic()
+    popen_options: dict[str, Any] = {}
+    if os.name == "nt":
+        popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_options["start_new_session"] = True
+    process = subprocess.Popen(  # noqa: S603 - caller supplies a fixed argv
+        list(command),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=dict(environment),
+        **popen_options,
+    )
+    if process.stdout is None or process.stderr is None:
+        with suppress(OSError):
+            process.kill()
+        _fail(f"{label} did not expose bounded output pipes")
+    output_fds = (process.stdout.fileno(), process.stderr.fileno())
+    stdout_chunks: list[bytes] = []
+    stderr_chunks: list[bytes] = []
+    total = [0]
+    exceeded = threading.Event()
+    lock = threading.Lock()
+
+    def kill_process_tree() -> None:
+        if os.name == "nt":
+            break_signal = getattr(signal, "CTRL_BREAK_EVENT", None)
+            if break_signal is not None:
+                with suppress(OSError):
+                    os.kill(process.pid, break_signal)
+            with suppress(OSError):
+                process.kill()
+        else:
+            kill_process_group = getattr(os, "killpg", None)
+            kill_signal = getattr(signal, "SIGKILL", None)
+            if kill_process_group is None or kill_signal is None:
+                with suppress(OSError):
+                    process.kill()
+                return
+            with suppress(OSError, ProcessLookupError):
+                kill_process_group(process.pid, kill_signal)
+
+    def close_output_pipes() -> None:
+        for file_descriptor in output_fds:
+            with suppress(OSError, ValueError):
+                os.close(file_descriptor)
+
+    def close_output_pipes_bounded() -> None:
+        closer = threading.Thread(target=close_output_pipes, daemon=True)
+        closer.start()
+        closer.join(timeout=0.25)
+
+    def drain(stream: Any, chunks: list[bytes]) -> None:
+        while True:
+            try:
+                chunk = stream.read(64 * 1024)
+            except (OSError, ValueError):
+                return
+            if not chunk:
+                return
+            with lock:
+                remaining = max(0, output_limit - total[0])
+                if remaining:
+                    chunks.append(chunk[:remaining])
+                total[0] += len(chunk)
+                if total[0] > output_limit:
+                    exceeded.set()
+            if exceeded.is_set():
+                kill_process_tree()
+                return
+
+    readers = (
+        threading.Thread(
+            target=drain,
+            args=(process.stdout, stdout_chunks),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=drain,
+            args=(process.stderr, stderr_chunks),
+            daemon=True,
+        ),
+    )
+    for reader in readers:
+        reader.start()
+    try:
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        kill_process_tree()
+        with suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=1)
+        for reader in readers:
+            reader.join(timeout=0.25)
+        if any(reader.is_alive() for reader in readers):
+            close_output_pipes_bounded()
+            for reader in readers:
+                reader.join(timeout=0.25)
+        raise LedgerValidationError(f"{label} timed out") from exc
+    for reader in readers:
+        remaining = max(0.0, started + timeout - time.monotonic())
+        reader.join(timeout=remaining)
+    if any(reader.is_alive() for reader in readers):
+        kill_process_tree()
+        for reader in readers:
+            reader.join(timeout=0.25)
+        if any(reader.is_alive() for reader in readers):
+            close_output_pipes_bounded()
+            for reader in readers:
+                reader.join(timeout=0.25)
+        _fail(f"{label} left bounded output pipes open after process exit")
+    if exceeded.is_set():
+        _fail(f"{label} exceeded its bounded combined output limit")
+    return returncode, b"".join(stdout_chunks), b"".join(stderr_chunks)
 
 
 def _validate_trusted_parent_contracts(
@@ -563,6 +700,7 @@ def _validate_trusted_parent_contracts(
         "--verify",
         f"{parent}^{{commit}}",
         label="commit",
+        output_limit=128,
     ).decode("ascii", "strict").strip()
     resolved_tree = _trusted_git(
         repository,
@@ -570,6 +708,7 @@ def _validate_trusted_parent_contracts(
         "--verify",
         f"{parent}^{{tree}}",
         label="tree",
+        output_limit=128,
     ).decode("ascii", "strict").strip()
     if resolved_commit != parent or resolved_tree != parent_tree:
         _fail("trusted parent commit/tree identity is not exact")
@@ -600,6 +739,7 @@ def _validate_trusted_parent_contracts(
             "--",
             path,
             label=f"{label} tree entry",
+            output_limit=4096,
         )
         expected_prefix = f"100644 blob {contract['git_blob_sha']}\t{path}\0".encode()
         if entry != expected_prefix:
@@ -610,6 +750,7 @@ def _validate_trusted_parent_contracts(
             "-s",
             contract["git_blob_sha"],
             label=f"{label} blob size",
+            output_limit=128,
         ).decode("ascii", "strict").strip()
         if not blob_size_text.isdigit() or int(blob_size_text) != len(current_bytes):
             _fail(f"trusted parent {label} blob size is not exact")
@@ -619,6 +760,7 @@ def _validate_trusted_parent_contracts(
             "blob",
             contract["git_blob_sha"],
             label=f"{label} blob",
+            output_limit=len(current_bytes) + 1,
         )
         if (
             parent_bytes != current_bytes
@@ -628,6 +770,41 @@ def _validate_trusted_parent_contracts(
             or contract["trusted_parent_tree_sha"] != parent_tree
         ):
             _fail(f"trusted parent {label} bytes do not equal the executing contract")
+    trusted_inputs = ledger["toolchain"]["trusted_build_inputs"]
+    for field, path in TRUSTED_BUILD_INPUT_PATHS.items():
+        expected_blob = trusted_inputs[field]
+        current_path = ROOT.joinpath(*PurePosixPath(path).parts)
+        current_bytes = _read_regular(
+            current_path,
+            limit=MAX_JSON_BYTES,
+            label=f"trusted build input {path}",
+        )
+        entry = _trusted_git(
+            repository,
+            "ls-tree",
+            "-z",
+            parent,
+            "--",
+            path,
+            label=f"trusted build input {path} tree entry",
+            output_limit=4096,
+        )
+        expected_entry = f"100644 blob {expected_blob}\t{path}\0".encode()
+        if entry != expected_entry:
+            _fail(f"trusted parent build input {path} tree entry is not exact")
+        parent_bytes = _trusted_git(
+            repository,
+            "cat-file",
+            "blob",
+            expected_blob,
+            label=f"trusted build input {path} blob",
+            output_limit=len(current_bytes) + 1,
+        )
+        if (
+            parent_bytes != current_bytes
+            or _git_blob_sha(parent_bytes) != expected_blob
+        ):
+            _fail(f"trusted parent build input {path} bytes are not exact")
 
 
 def _schema_errors(
@@ -1014,7 +1191,10 @@ def _validate_controls(ledger: Mapping[str, Any]) -> None:
         ),
         "publication_ready": (
             "H",
-            f"evoguard-release-publication-ready-{phases['G']['run_attempt']}",
+            (
+                f"evoguard-release-publication-ready-{phases['G']['run_id']}-"
+                f"{phases['G']['run_attempt']}"
+            ),
             1,
             "publication-ready.json",
         ),
@@ -1606,6 +1786,9 @@ def _safe_retained_path(root: Path, relative: str) -> Path:
 
 def _actual_inventory(
     root: Path,
+    *,
+    expected_files: set[str],
+    expected_directories: set[str],
 ) -> tuple[
     set[str],
     set[str],
@@ -1615,9 +1798,20 @@ def _actual_inventory(
     directories_found: set[str] = {"."}
     identities: dict[str, tuple[int, int, int, int, int]] = {}
     file_objects: dict[tuple[int, int], str] = {}
-    for current, directories, names in os.walk(root, topdown=True, followlinks=False):
-        current_path = Path(current)
-        current_relative = current_path.relative_to(root).as_posix() or "."
+    if (
+        len(expected_files) > MAX_RETAINED_FILES + 2
+        or len(expected_directories) > (MAX_RETAINED_FILES * 8) + 1
+    ):
+        _fail("expected ledger inventory exceeds its bounded scan budget")
+    pending: list[tuple[Path, str]] = [(root, ".")]
+    total_bytes = 0
+    while pending:
+        current_path, current_relative = pending.pop()
+        if current_relative not in expected_directories:
+            _fail(
+                "ledger directory set is not exact; unexpected directory: "
+                f"{current_relative}"
+            )
         current_metadata = current_path.lstat()
         if _is_link_like(current_metadata) or not stat.S_ISDIR(
             current_metadata.st_mode
@@ -1625,29 +1819,62 @@ def _actual_inventory(
             _fail(f"ledger directory contains an unsafe directory: {current_path}")
         directories_found.add(current_relative)
         identities[f"d:{current_relative}"] = _inventory_identity(current_metadata)
-        for directory in list(directories):
-            path = current_path / directory
-            metadata = path.lstat()
-            if _is_link_like(metadata) or not stat.S_ISDIR(metadata.st_mode):
-                _fail(f"ledger directory contains an unsafe directory: {path}")
-            relative = path.relative_to(root).as_posix()
-            directories_found.add(relative)
-            identities[f"d:{relative}"] = _inventory_identity(metadata)
-        for name in names:
-            path = current_path / name
-            metadata = path.lstat()
-            if _is_link_like(metadata) or not stat.S_ISREG(metadata.st_mode):
-                _fail(f"ledger directory contains an unsafe file: {path}")
-            if metadata.st_nlink != 1:
-                _fail(f"ledger directory contains a hard-linked file: {path}")
-            relative = path.relative_to(root).as_posix()
-            object_id = (metadata.st_dev, metadata.st_ino)
-            prior = file_objects.get(object_id)
-            if prior is not None:
-                _fail(f"ledger files share one filesystem object: {prior}, {relative}")
-            file_objects[object_id] = relative
-            files.add(relative)
-            identities[f"f:{relative}"] = _inventory_identity(metadata)
+        try:
+            entries = os.scandir(current_path)
+        except OSError as exc:
+            raise LedgerValidationError(
+                f"cannot scan ledger directory: {current_path}"
+            ) from exc
+        with entries:
+            for entry in entries:
+                path = current_path / entry.name
+                relative = (
+                    entry.name
+                    if current_relative == "."
+                    else f"{current_relative}/{entry.name}"
+                )
+                try:
+                    metadata = path.lstat()
+                except OSError as exc:
+                    raise LedgerValidationError(
+                        f"cannot inspect ledger inventory entry: {path}"
+                    ) from exc
+                if _is_link_like(metadata):
+                    _fail(f"ledger directory contains a link-like entry: {path}")
+                if stat.S_ISDIR(metadata.st_mode):
+                    if relative not in expected_directories:
+                        _fail(
+                            "ledger directory set is not exact; unexpected directory: "
+                            f"{relative}"
+                        )
+                    if len(directories_found) + len(pending) >= len(
+                        expected_directories
+                    ):
+                        _fail("ledger directory count exceeds its expected budget")
+                    pending.append((path, relative))
+                    continue
+                if not stat.S_ISREG(metadata.st_mode):
+                    _fail(f"ledger directory contains an unsafe file: {path}")
+                if metadata.st_nlink != 1:
+                    _fail(f"ledger directory contains a hard-linked file: {path}")
+                if relative not in expected_files:
+                    _fail(f"ledger file set is not exact; unexpected file: {relative}")
+                if len(files) >= len(expected_files):
+                    _fail("ledger file count exceeds its expected budget")
+                total_bytes += metadata.st_size
+                if total_bytes > (
+                    MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+                ):
+                    _fail("ledger inventory exceeds its total byte scan budget")
+                object_id = (metadata.st_dev, metadata.st_ino)
+                prior = file_objects.get(object_id)
+                if prior is not None:
+                    _fail(
+                        f"ledger files share one filesystem object: {prior}, {relative}"
+                    )
+                file_objects[object_id] = relative
+                files.add(relative)
+                identities[f"f:{relative}"] = _inventory_identity(metadata)
     return files, directories_found, identities
 
 
@@ -1738,7 +1965,11 @@ def _materialize_snapshot(
         target = _safe_retained_path(root, relative)
         _write_snapshot_file(target, data)
 
-    actual_files, actual_directories, identities = _actual_inventory(root)
+    actual_files, actual_directories, identities = _actual_inventory(
+        root,
+        expected_files=expected_files,
+        expected_directories=expected_directories,
+    )
     if actual_files != expected_files or actual_directories != expected_directories:
         _fail("protected evidence snapshot inventory is not exact")
     return actual_files, actual_directories, identities
@@ -1797,7 +2028,11 @@ def _require_inventory_unchanged(
     directories: set[str],
     identities: Mapping[str, tuple[int, int, int, int, int]],
 ) -> None:
-    current_files, current_directories, current_identities = _actual_inventory(root)
+    current_files, current_directories, current_identities = _actual_inventory(
+        root,
+        expected_files=files,
+        expected_directories=directories,
+    )
     if (
         current_files != files
         or current_directories != directories
@@ -1868,8 +2103,13 @@ def _validate_control_bytes(
             "format",
             "repository",
             "target_sha",
+            "release_version",
             "f",
             "g",
+            "f_control_manifest",
+            "f_external_settings",
+            "f_trusted_tools",
+            "f_workflows",
             "release_assets",
             "admissions",
             "attestation_evidence",
@@ -1881,6 +2121,8 @@ def _validate_control_bytes(
             "tag",
             "g_run_id",
             "g_run_attempt",
+            "tag_deploy_key_fingerprint",
+            "host_tools",
             "assets",
         },
     }
@@ -2033,6 +2275,22 @@ def _validate_control_bytes(
                         "artifact_admission"
                     ]["gid"],
                 },
+                "source_admission": {
+                    "bootstrap_sha256": toolchain["bootstrap_guard"]["sha256"],
+                    "git_sha256": toolchain["git"]["sha256"],
+                    "gh_sha256": toolchain["github_cli"]["sha256"],
+                    "provider_uid": toolchain["provider_identities"][
+                        "source_admission"
+                    ]["uid"],
+                    "provider_gid": toolchain["provider_identities"][
+                        "source_admission"
+                    ]["gid"],
+                },
+                "publication": {
+                    "tag_deploy_key_fingerprint": ledger["repository_controls"][
+                        "release_deploy_key"
+                    ]["fingerprint"],
+                },
                 "public_key_ids": expected_roots,
             }
             expected_trusted_tools = {
@@ -2145,6 +2403,17 @@ def _validate_control_bytes(
                     "container, assets, source, and trusted tools"
                 )
         elif name == "publication_controls":
+            artifact_bundle = ledger["control_evidence"]["artifact_external_controls"]
+            f_manifest_descriptor = artifact_bundle["manifest"]
+            f_manifest_bytes = _read_regular(
+                _safe_retained_path(root, f_manifest_descriptor["path"]),
+                limit=MAX_JSON_BYTES,
+                label="F control manifest cross-binding",
+            )
+            f_manifest = _load_json_bytes(
+                f_manifest_bytes,
+                label="F control manifest cross-binding",
+            )
             for phase in ("F", "G"):
                 value = manifest.get(phase.lower())
                 run = phases[phase]
@@ -2189,7 +2458,18 @@ def _validate_control_bytes(
                         "size": descriptor["size_bytes"],
                     }
             if (
-                manifest.get("release_assets") != expected_assets
+                manifest.get("release_version") != ledger["project"]["version"]
+                or manifest.get("f_control_manifest")
+                != {
+                    "sha256": f_manifest_descriptor["sha256"],
+                    "size": f_manifest_descriptor["size_bytes"],
+                }
+                or manifest.get("f_external_settings")
+                != f_manifest.get("external_settings")
+                or manifest.get("f_trusted_tools")
+                != f_manifest.get("trusted_tools")
+                or manifest.get("f_workflows") != f_manifest.get("workflows")
+                or manifest.get("release_assets") != expected_assets
                 or manifest.get("admissions") != expected_admissions
                 or manifest.get("attestation_evidence")
                 != publication_attestation_evidence
@@ -2205,8 +2485,43 @@ def _validate_control_bytes(
                 or manifest.get("tag") != release["tag"]
                 or manifest.get("g_run_id") != str(phases["G"]["run_id"])
                 or manifest.get("g_run_attempt") != phases["G"]["run_attempt"]
+                or manifest.get("tag_deploy_key_fingerprint")
+                != ledger["repository_controls"]["release_deploy_key"]["fingerprint"]
             ):
                 _fail("publication-ready record does not bind the reviewed G attempt")
+            host_tools = manifest.get("host_tools")
+            if not isinstance(host_tools, dict) or set(host_tools) != {
+                "git",
+                "gh",
+                "ssh",
+                "ssh_keygen",
+            }:
+                _fail("publication-ready host tool set is not exact")
+            for tool_name, descriptor in host_tools.items():
+                if not isinstance(descriptor, dict):
+                    _fail(f"publication-ready host tool is not an object: {tool_name}")
+                _require_exact_keys(
+                    descriptor,
+                    {"path", "sha256", "size"},
+                    label=f"publication-ready host tool {tool_name}",
+                )
+                if (
+                    not isinstance(descriptor.get("path"), str)
+                    or not descriptor["path"].startswith("/")
+                    or not re.fullmatch(r"[0-9a-f]{64}", str(descriptor.get("sha256")))
+                    or not isinstance(descriptor.get("size"), int)
+                    or isinstance(descriptor.get("size"), bool)
+                    or not 1 <= descriptor["size"] <= 64 * 1024 * 1024
+                ):
+                    _fail(
+                        f"publication-ready host tool descriptor is invalid: {tool_name}"
+                    )
+            if (
+                host_tools["git"]["sha256"] != toolchain["git"]["sha256"]
+                or host_tools["gh"]["sha256"]
+                != toolchain["github_cli"]["sha256"]
+            ):
+                _fail("publication-ready host tools differ from the reviewed pins")
             expected_assets = {
                 item["name"]: {
                     "sha256": item["sha256"],
@@ -2470,7 +2785,20 @@ def _strict_attestation_parts(
         _fail(f"{label} certificate issuer metadata must be a string")
     if certificate.get("sourceRepositoryOwnerIdentifier") != repository_owner_id:
         _fail(f"{label} certificate repository owner ID is not exact")
-    if identity.get("runnerEnvironment") != "github-hosted":
+    expected_san_pattern = f"^https://github.com/{workflow}"
+    san_matches = identity_san == {
+        "subjectAlternativeName": "",
+        "regexp": expected_san_pattern,
+    }
+    issuer_matches = identity_issuer == {
+        "issuer": "",
+        "regexp": ".*",
+    }
+    if (
+        identity.get("runnerEnvironment") != "github-hosted"
+        or not san_matches
+        or not issuer_matches
+    ):
         _fail(f"{label} verified identity is not GitHub-hosted")
     _require_exact_keys(
         statement,
@@ -3346,7 +3674,11 @@ def validate_directory(
     _require_retained_budget(inventory)
     expected_files = set(inventory) | {LEDGER_NAME, SIGNATURE_NAME}
     expected_directories = _expected_directories(expected_files)
-    actual_files, actual_directories, inventory_identities = _actual_inventory(root)
+    actual_files, actual_directories, inventory_identities = _actual_inventory(
+        root,
+        expected_files=expected_files,
+        expected_directories=expected_directories,
+    )
     if actual_files != expected_files:
         missing = sorted(expected_files - actual_files)
         unexpected = sorted(actual_files - expected_files)

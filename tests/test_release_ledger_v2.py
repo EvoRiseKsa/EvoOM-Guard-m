@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import os
 import subprocess
+import sys
+import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -593,7 +596,7 @@ def _valid_ledger() -> dict[str, Any]:
                 phase="H",
                 run_id=by_phase["H"]["run_id"],
                 artifact_id=4004,
-                artifact_name="evoguard-release-publication-ready-1",
+                artifact_name="evoguard-release-publication-ready-1006-1",
                 retention_days=1,
                 manifest_path="controls/publication-ready/publication-ready.json",
                 materials=publication_ready_materials,
@@ -1029,6 +1032,11 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     validator_target.parent.mkdir(parents=True)
     schema_target.write_bytes(SCHEMA_PATH.read_bytes())
     validator_target.write_bytes(Path(validator.__file__).read_bytes())
+    for _field, relative in validator.TRUSTED_BUILD_INPUT_PATHS.items():
+        source = ROOT.joinpath(*PurePosixPath(relative).parts)
+        target = repository.joinpath(*PurePosixPath(relative).parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
     git("add", ".")
     git("commit", "-q", "-m", "trusted parent")
     parent = git("rev-parse", "HEAD")
@@ -1043,6 +1051,12 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     )
     ledger["source"]["parent_commit_sha"] = parent
     ledger["source"]["parent_tree_sha"] = parent_tree
+    ledger["toolchain"]["trusted_build_inputs"].update(
+        {
+            field: git("rev-parse", f"HEAD:{relative}")
+            for field, relative in validator.TRUSTED_BUILD_INPUT_PATHS.items()
+        }
+    )
     for contract in (
         ledger["schema_contracts"]["release_ledger"],
         ledger["schema_contracts"]["validator"],
@@ -1087,6 +1101,90 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
             ledger,
             repository,
             trusted,
+        )
+
+    validator_target.write_bytes(Path(validator.__file__).read_bytes())
+    missing_tool = repository / "ops" / "build_pyz.py"
+    missing_tool.unlink()
+    git("add", ".")
+    git("commit", "-q", "-m", "parent missing trusted build input")
+    missing_parent = git("rev-parse", "HEAD")
+    missing_tree = git("rev-parse", "HEAD^{tree}")
+    ledger["source"]["parent_commit_sha"] = missing_parent
+    ledger["source"]["parent_tree_sha"] = missing_tree
+    for contract in (
+        ledger["schema_contracts"]["release_ledger"],
+        ledger["schema_contracts"]["validator"],
+        ledger["ledger_signature"]["trusted_parent_anchor"],
+    ):
+        contract["trusted_parent_commit_sha"] = missing_parent
+        contract["trusted_parent_tree_sha"] = missing_tree
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match=r"build input ops/build_pyz\.py tree entry is not exact",
+    ):
+        validator._validate_trusted_parent_contracts(
+            ledger_root,
+            ledger,
+            repository,
+            trusted,
+        )
+
+
+def test_trusted_git_output_is_bounded_before_aggregation() -> None:
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="bounded combined output limit",
+    ):
+        validator._run_bounded_subprocess(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.buffer.write(b'x' * 1048576)",
+            ],
+            environment=dict(os.environ),
+            output_limit=128,
+            timeout=5,
+            label="adversarial Git output",
+        )
+
+
+def test_bounded_subprocess_rejects_descendant_inherited_output_pipes() -> None:
+    started = time.monotonic()
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="left bounded output pipes open",
+    ):
+        validator._run_bounded_subprocess(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import subprocess,sys;"
+                    "subprocess.Popen([sys.executable,'-c',"
+                    "'import time;time.sleep(5)'])"
+                ),
+            ],
+            environment=dict(os.environ),
+            output_limit=128,
+            timeout=1,
+            label="adversarial inherited output",
+        )
+    assert time.monotonic() - started < 3
+
+
+def test_inventory_rejects_unexpected_entry_during_bounded_scan(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "unexpected").write_text("x", encoding="utf-8")
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="unexpected file",
+    ):
+        validator._actual_inventory(
+            tmp_path,
+            expected_files=set(),
+            expected_directories={"."},
         )
 
 
@@ -1449,7 +1547,9 @@ def _raw_attestation(
         "workflow_run" if name == "source_producer" else "workflow_dispatch"
     )
     repository_id = ledger["release"]["repository_id"]
-    signer_uri = f"https://github.com/{repository}/{workflow_path}@{source}"
+    signer_uri = (
+        f"https://github.com/{repository}/{workflow_path}@refs/heads/main"
+    )
     run_uri = (
         f"https://github.com/{repository}/actions/runs/{attestation['run_id']}/"
         f"attempts/{attestation['run_attempt']}"
@@ -1532,7 +1632,9 @@ def _raw_attestation(
                 "verifiedIdentity": {
                     "subjectAlternativeName": {
                         "subjectAlternativeName": "",
-                        "regexp": f"^{signer_uri}$",
+                        "regexp": (
+                            f"^https://github.com/{repository}/{workflow_path}"
+                        ),
                     },
                     "issuer": {
                         "issuer": "",
@@ -1810,6 +1912,18 @@ def test_attestation_receipts_bind_subject_policy_and_output(
             ].update({"sourceRepositoryOwnerIdentifier": "1003"}),
             "certificate repository owner ID is not exact",
         ),
+        (
+            lambda value: value[0]["verificationResult"]["verifiedIdentity"][
+                "subjectAlternativeName"
+            ].update({"regexp": r"^https://attacker\.invalid/.*$"}),
+            "verified identity is not GitHub-hosted",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["verifiedIdentity"][
+                "issuer"
+            ].update({"regexp": r"^https://attacker\.invalid$"}),
+            "verified identity is not GitHub-hosted",
+        ),
     ],
 )
 def test_strict_slsa_raw_attestation_rejects_ambiguity(
@@ -1929,6 +2043,32 @@ def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
             spdx_predicate={"SPDXID": "SPDXRef-OTHER"},
             label="test SPDX output",
         )
+    forged = json.loads(data)
+    forged[0]["verificationResult"]["verifiedIdentity"]["subjectAlternativeName"][
+        "regexp"
+    ] = r"^https://attacker\.invalid/.*$"
+    forged_data = (
+        json.dumps(forged, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="verified identity is not GitHub-hosted",
+    ):
+        validator._validate_spdx_raw_output(
+            forged_data,
+            repository=ledger["release"]["repository"],
+            repository_id=ledger["release"]["repository_id"],
+            repository_owner_id=ledger["release"]["repository_owner_id"],
+            workflow_path=attestation["signer_workflow"],
+            source_digest=ledger["source"]["candidate_commit_sha"],
+            run_id=attestation["run_id"],
+            run_attempt=attestation["run_attempt"],
+            expected_event="workflow_dispatch",
+            subject_name=attestation["subject_name"],
+            subject_sha256=artifact["sha256"],
+            spdx_predicate=predicate,
+            label="test SPDX output",
+        )
 
 
 def test_publication_control_bytes_bind_assets_admissions_and_target(
@@ -1937,12 +2077,104 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
     ledger = _valid_ledger()
     bundle = ledger["control_evidence"]["publication_controls"]
     artifact_controls = ledger["control_evidence"]["artifact_external_controls"]
-    ledger["control_evidence"] = {"publication_controls": bundle}
     phases = validator._phase_map(ledger)
+    roots = {item["domain"]: item["key_id"] for item in ledger["trust_roots"]}
+    toolchain = ledger["toolchain"]
+    f_manifest = {
+        "external_settings": {
+            "runtime": {
+                "url": toolchain["bootstrap_guard"]["url"],
+                "sha256": toolchain["bootstrap_guard"]["sha256"],
+            },
+            "toolchain": {
+                "git_sha256": toolchain["git"]["sha256"],
+                "gh_sha256": toolchain["github_cli"]["sha256"],
+                "provider_uid": toolchain["provider_identities"][
+                    "artifact_admission"
+                ]["uid"],
+                "provider_gid": toolchain["provider_identities"][
+                    "artifact_admission"
+                ]["gid"],
+            },
+            "source_admission": {
+                "bootstrap_sha256": toolchain["bootstrap_guard"]["sha256"],
+                "git_sha256": toolchain["git"]["sha256"],
+                "gh_sha256": toolchain["github_cli"]["sha256"],
+                "provider_uid": toolchain["provider_identities"]["source_admission"][
+                    "uid"
+                ],
+                "provider_gid": toolchain["provider_identities"]["source_admission"][
+                    "gid"
+                ],
+            },
+            "publication": {
+                "tag_deploy_key_fingerprint": ledger["repository_controls"][
+                    "release_deploy_key"
+                ]["fingerprint"],
+            },
+            "public_key_ids": {
+                "release_artifact_admission_v1": roots[
+                    "release-artifact-admission-v1"
+                ],
+                "release_source_admission_v2": roots[
+                    "release-source-admission-v2"
+                ],
+                "trusted_finalizer": roots["trusted-finalizer"],
+                "artifact_admission_v1": roots["artifact-admission-v1"],
+                "artifact_digest_admission_v2": roots[
+                    "artifact-digest-admission-v2"
+                ],
+                "release_source_finalizer_v1": roots[
+                    "release-source-finalizer-v1"
+                ],
+            },
+        },
+        "trusted_tools": {
+            "tools/ci/verify_spdx_attestation.py": toolchain[
+                "trusted_build_inputs"
+            ]["spdx_attestation_verifier_blob_sha"]
+        },
+        "workflows": {
+            phase: {
+                "workflow_repository": ledger["release"]["repository"],
+                "workflow_repository_id": ledger["release"]["repository_id"],
+                "workflow_id": str(phases[phase]["workflow_id"]),
+                "workflow_path": phases[phase]["workflow_path"],
+                "workflow_blob_sha": phases[phase]["workflow_blob_sha"],
+                "workflow_run_id": str(phases[phase]["run_id"]),
+                "workflow_run_attempt": phases[phase]["run_attempt"],
+                "workflow_event": phases[phase]["event"],
+                "workflow_ref": "refs/heads/main",
+                "workflow_commit_sha": ledger["source"]["candidate_commit_sha"],
+                "runner_class": "github-hosted",
+            }
+            for phase in ("E", "F")
+        },
+    }
+    f_manifest_path = tmp_path / Path(
+        *PurePosixPath(artifact_controls["manifest"]["path"]).parts
+    )
+    f_manifest_path.parent.mkdir(parents=True)
+    f_manifest_bytes = validator.canonical_json_bytes(f_manifest)
+    f_manifest_path.write_bytes(f_manifest_bytes)
+    artifact_controls["manifest"]["size_bytes"] = len(f_manifest_bytes)
+    artifact_controls["manifest"]["sha256"] = hashlib.sha256(
+        f_manifest_bytes
+    ).hexdigest()
+
+    class PublicationOnlyControls(dict[str, Any]):
+        def items(self) -> Any:
+            return [("publication_controls", bundle)]
+
+    ledger["control_evidence"] = PublicationOnlyControls(
+        publication_controls=bundle,
+        artifact_external_controls=artifact_controls,
+    )
     manifest = {
         "format": bundle["format"],
         "repository": ledger["release"]["repository"],
         "target_sha": ledger["source"]["candidate_commit_sha"],
+        "release_version": ledger["project"]["version"],
         "f": {
             "workflow_id": str(phases["F"]["workflow_id"]),
             "workflow_blob_sha": phases["F"]["workflow_blob_sha"],
@@ -1955,6 +2187,13 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
             "workflow_run_id": str(phases["G"]["run_id"]),
             "workflow_run_attempt": phases["G"]["run_attempt"],
         },
+        "f_control_manifest": {
+            "sha256": artifact_controls["manifest"]["sha256"],
+            "size": artifact_controls["manifest"]["size_bytes"],
+        },
+        "f_external_settings": f_manifest["external_settings"],
+        "f_trusted_tools": f_manifest["trusted_tools"],
+        "f_workflows": f_manifest["workflows"],
         "release_assets": {
             item["name"]: {
                 "sha256": item["sha256"],
@@ -1993,6 +2232,32 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
     manifest_path.write_bytes(validator.canonical_json_bytes(manifest))
 
     validator._validate_control_bytes(tmp_path, ledger)
+
+    mutations = (
+        lambda value: value.__setitem__("release_version", "0.0.0"),
+        lambda value: value["f_control_manifest"].__setitem__(
+            "sha256", _sha("wrong-F-manifest")
+        ),
+        lambda value: value["f_external_settings"]["runtime"].__setitem__(
+            "sha256", _sha("wrong-runtime")
+        ),
+        lambda value: value["f_trusted_tools"].__setitem__(
+            "tools/ci/verify_spdx_attestation.py", "0" * 40
+        ),
+        lambda value: value["f_workflows"]["E"].__setitem__(
+            "workflow_blob_sha", "0" * 40
+        ),
+    )
+    for mutate in mutations:
+        forged = copy.deepcopy(manifest)
+        mutate(forged)
+        manifest_path.write_bytes(validator.canonical_json_bytes(forged))
+        with pytest.raises(
+            validator.LedgerValidationError,
+            match="publication controls do not bind",
+        ):
+            validator._validate_control_bytes(tmp_path, ledger)
+    manifest_path.write_bytes(validator.canonical_json_bytes(manifest))
 
     manifest["admissions"]["evo-guard.pyz.raae"]["sha256"] = _sha(
         "wrong-admission"

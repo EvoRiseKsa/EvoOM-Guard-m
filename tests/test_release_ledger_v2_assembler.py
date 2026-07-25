@@ -57,6 +57,13 @@ def _trusted_parent(
             Path(validator.__file__),
             validator.VALIDATOR_REPOSITORY_PATH,
         ),
+        *(
+            (
+                ROOT.joinpath(*PurePosixPath(relative).parts),
+                relative,
+            )
+            for relative in validator.TRUSTED_BUILD_INPUT_PATHS.values()
+        ),
     ):
         target = repository / Path(*PurePosixPath(relative).parts)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -80,6 +87,12 @@ def _trusted_parent(
     ledger["source"]["parent_tree_sha"] = tree
     ledger["toolchain"]["trusted_build_inputs"]["source_parent_sha"] = parent
     ledger["toolchain"]["trusted_build_inputs"]["source_parent_tree_sha"] = tree
+    ledger["toolchain"]["trusted_build_inputs"].update(
+        {
+            field: _git(repository, "rev-parse", f"HEAD:{relative}")
+            for field, relative in validator.TRUSTED_BUILD_INPUT_PATHS.items()
+        }
+    )
     return repository
 
 
@@ -111,6 +124,8 @@ def _remove_derived_claims(ledger: dict[str, Any]) -> None:
         root.pop("key_id")
     ledger["ledger_signature"].pop("key_id")
     ledger["ledger_signature"].pop("trusted_parent_anchor")
+    for field in validator.TRUSTED_BUILD_INPUT_PATHS:
+        ledger["toolchain"]["trusted_build_inputs"].pop(field)
 
 
 def _evidence_directory(
@@ -330,3 +345,28 @@ def test_cli_failure_does_not_create_outputs_for_claims_inside_evidence(
     )
     assert not output.exists()
     assert not provenance.exists()
+
+
+def test_assembler_rejects_parent_missing_trusted_build_input(
+    tmp_path: Path,
+) -> None:
+    ledger = _valid_ledger()
+    root, _contents = _evidence_directory(tmp_path, ledger)
+    trusted_parent = _trusted_parent(tmp_path, ledger, root)
+    (trusted_parent / "tools" / "ci" / "verify_spdx_attestation.py").unlink()
+    _git(trusted_parent, "add", ".")
+    _git(trusted_parent, "commit", "-q", "-m", "remove trusted verifier")
+    ledger["source"]["parent_commit_sha"] = _git(trusted_parent, "rev-parse", "HEAD")
+    ledger["source"]["parent_tree_sha"] = _git(
+        trusted_parent, "rev-parse", "HEAD^{tree}"
+    )
+    _remove_derived_claims(ledger)
+    trusted_inputs = ledger["toolchain"]["trusted_build_inputs"]
+    trusted_inputs.pop("source_parent_sha")
+    trusted_inputs.pop("source_parent_tree_sha")
+
+    with pytest.raises(
+        assembler.LedgerAssemblyError,
+        match=r"build input tools/ci/verify_spdx_attestation\.py",
+    ):
+        assembler._trusted_contracts(ledger, root, trusted_parent)

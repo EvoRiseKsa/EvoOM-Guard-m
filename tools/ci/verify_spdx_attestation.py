@@ -17,7 +17,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import stat
 import sys
 from collections.abc import Mapping, Sequence
@@ -230,21 +229,14 @@ def verify(
         {"issuer", "regexp"},
         label="verified identity issuer",
     )
-    san_pattern = identity_san.get("regexp")
-    issuer_pattern = identity_issuer.get("regexp")
-    try:
-        san_matches = (
-            identity_san.get("subjectAlternativeName") == ""
-            and isinstance(san_pattern, str)
-            and re.fullmatch(san_pattern, signer_uri) is not None
-        )
-        issuer_matches = (
-            identity_issuer.get("issuer") == ""
-            and isinstance(issuer_pattern, str)
-            and re.fullmatch(issuer_pattern, OIDC_ISSUER) is not None
-        )
-    except re.error as exc:
-        raise VerificationError("verified identity contains an invalid regexp") from exc
+    san_matches = identity_san == {
+        "subjectAlternativeName": "",
+        "regexp": f"^https://github.com/{repository}/{workflow_path}",
+    }
+    issuer_matches = identity_issuer == {
+        "issuer": "",
+        "regexp": ".*",
+    }
     if (
         identity.get("runnerEnvironment") != "github-hosted"
         or not san_matches
