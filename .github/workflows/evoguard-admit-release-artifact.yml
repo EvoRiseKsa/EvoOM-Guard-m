@@ -621,7 +621,7 @@ jobs:
             exit 1
           fi
 
-      - name: Freshly verify both E attestations and seal two detached RAAE ALLOW envelopes
+      - name: Freshly verify both E subject-provenance attestations and seal two detached RAAE ALLOW envelopes
         env:
           SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
           SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}

@@ -46,8 +46,9 @@ gate.
      uploaded assets `evo-guard.pyz`, `evo-guard.spdx.json`, and `SHA256SUMS`
      (apart from GitHub-generated source archives), with two filename-ordered
      checksum lines and byte equality in tag CI.
-   - Verify the build-provenance and SBOM attestations for the exact zipapp
-     subject. Neither attestation is an EvoGuard verdict or independent review.
+   - Verify build-provenance attestations for the exact zipapp and SPDX
+     subjects, plus the SBOM attestation that binds the SPDX predicate to the
+     zipapp subject. None is an EvoGuard verdict or independent review.
 
 ## Frozen baseline verification
 

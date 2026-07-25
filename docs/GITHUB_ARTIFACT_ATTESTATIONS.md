@@ -100,14 +100,18 @@ a distinct SBOM attestation with:
 - `sbom-path: dist/evo-guard.spdx.json`.
 
 The same exact zipapp is therefore the subject of both the build-provenance and
-SBOM attestations. The release workflow creates the inventory and checksums in
-an unprivileged build job, transfers the three files to a clean attestation
-job, verifies their exact set and digest binding there, and only then requests
-both attestations. A separate write-capable job later receives those same
-files for the draft release. This split prevents candidate execution from
-sharing provider identity, but it is **not independent construction or
-review**: the zipapp and inventory still share one workflow and build
-provenance.
+SBOM attestations. The clean job also requests a third, build-provenance
+attestation whose subject is `evo-guard.spdx.json` itself. Release Artifact
+Admission uses the two subject-specific build-provenance attestations to
+freshly verify each published asset; the SBOM attestation separately binds the
+inventory predicate to the zipapp subject. The release workflow creates the
+inventory and checksums in an unprivileged build job, transfers the three files
+to a clean attestation job, verifies their exact set and digest binding there,
+and only then requests all three attestations. A separate write-capable job
+later receives those same files for the draft release. This split prevents
+candidate execution from sharing provider identity, but it is **not independent
+construction or review**: the zipapp and inventory still share one workflow
+and build provenance.
 
 The in-workflow default-branch condition is a fail-closed operational guard,
 not an external trust root against a maintainer who can alter the workflow at

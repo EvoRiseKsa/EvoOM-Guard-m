@@ -74,13 +74,16 @@ sha256sum --check SHA256SUMS
 
 Validate the document with a reviewed SPDX 2.3 validator or the exact vendored
 schema. After a separate clean job receives and rechecks the exact generated
-files, the release workflow asks GitHub to create two provider attestations:
+files, the release workflow asks GitHub to create three provider attestations:
 
 - build provenance whose subject is `evo-guard.pyz`; and
 - an SBOM attestation whose subject is the same zipapp and whose predicate is
-  `evo-guard.spdx.json`.
+  `evo-guard.spdx.json`; and
+- build provenance whose subject is `evo-guard.spdx.json` itself, so artifact
+  admission can freshly verify those exact inventory bytes as an independent
+  release asset.
 
-Verify each provider attestation against the exact repository, release
+Verify all three provider attestations against the exact repository, release
 workflow, source ref, source commit, and GitHub-hosted-runner boundary. See
 [GitHub Artifact Attestations](GITHUB_ARTIFACT_ATTESTATIONS.md).
 

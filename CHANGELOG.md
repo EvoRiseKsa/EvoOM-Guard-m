@@ -27,7 +27,8 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   filename ordered and tag CI byte-compares all three published assets.
 - A separate clean attestation job in the default-branch release workflow
   requests a GitHub SBOM attestation for the exact zipapp subject in addition
-  to its build-provenance attestation.
+  to its build-provenance attestation, and a separate build-provenance
+  attestation for the exact SPDX asset bytes required by artifact admission.
 
 ### Changed
 
