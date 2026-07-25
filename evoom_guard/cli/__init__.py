@@ -73,6 +73,7 @@ from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.cli import record_commands as _record_command_owner
+from evoom_guard.cli import signing_commands as _signing_command_owner
 from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
@@ -622,13 +623,13 @@ def cmd_keygen(args: argparse.Namespace, *, out: Callable[[str], None] = print) 
     """Execute ``evo-guard keygen`` — generate an Ed25519 signing keypair."""
     from evoom_guard.signing import generate_keypair
 
-    try:
-        generate_keypair(args.key, args.pub)
-    except FileExistsError as exc:
-        out(str(exc))
-        return 2
-    out(f"wrote {args.key} (private — keep it a CI secret) and {args.pub} (public)")
-    return 0
+    return _signing_command_owner.execute_keygen(
+        args,
+        services=_signing_command_owner.KeygenServices(
+            generate_keypair=generate_keypair,
+        ),
+        out=out,
+    )
 
 
 def cmd_verify_verdict(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
