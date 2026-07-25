@@ -770,9 +770,8 @@ def _git_blob_sha(data: bytes) -> str:
     framed = f"blob {len(data)}\0".encode("ascii") + data
     # Git's SHA-1 object ID is a protocol identifier here, never a
     # confidentiality or integrity proof.
-    # codeql[py/weak-sensitive-data-hashing]
     return hashlib.sha1(  # noqa: S324 - Git protocol identity
-        framed,
+        framed,  # lgtm[py/weak-sensitive-data-hashing]
         usedforsecurity=False,
     ).hexdigest()
 
@@ -1214,9 +1213,8 @@ def _matches_git_blob_object_id(data: bytes, object_id: str) -> bool:
     if len(object_id) == 40:
         # This reproduces Git's protocol-mandated object ID; trusted SHA-256
         # bindings provide the security property.
-        # codeql[py/weak-sensitive-data-hashing]
         observed = hashlib.sha1(  # noqa: S324 - Git protocol identity
-            framed,
+            framed,  # lgtm[py/weak-sensitive-data-hashing]
             usedforsecurity=False,
         ).hexdigest()
     elif len(object_id) == 64:
