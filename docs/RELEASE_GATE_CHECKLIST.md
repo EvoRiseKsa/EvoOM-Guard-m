@@ -123,8 +123,9 @@ gate.
   the directory being validated.
   The trusted-parent repository must contain the exact admitted parent
   commit/tree; the validator resolves and byte-compares its schema, validator,
-  and per-release ledger-public-key anchor Git blobs, so self-reported parent
-  fields or a newly supplied self-signed key are insufficient.
+  repository-control collector, and per-release ledger-public-key anchor Git
+  blobs, so self-reported parent fields or a newly supplied self-signed key are
+  insufficient.
   Schema-only validation is insufficient: the command verifies cross-phase run
   bindings, the exact three-asset set and checksum bytes, retained controls,
   RSAE/RAAE signatures and subjects, all public-key identities, closed file
@@ -149,11 +150,24 @@ gate.
   ID/blob pins (C and D share one run), tool/runtime/container pins, six
   admission roots, a distinct ledger-signing root, protected repository
   controls, the tag ruleset, and the sole write deploy-key fingerprint.
+- Run `tools/ci/collect_repository_controls_v2.py` only after H. Its exact 19
+  ordered logical observations retain all pages for repository/main
+  protection, Actions, immutable releases, tag rules, deploy keys,
+  Environments/policies, activation variables, the repository Actions-secret
+  list, and the two Environment admission-secret lists. More than 19 HTTP calls
+  are valid when pagination requires them.
+- Require the repository metadata body to remain public and user-owned with
+  repository ID `1293651176`, owner login/type `EvoRiseKsa`/`User`, and owner
+  ID `231647061`. A rename, transfer, deletion/recreation, or namespace-ID
+  change requires an explicit trusted-parent policy migration.
 - The two admission signing-secret names have post-H, successful, fully
-  paginated Environment API observations with `present=false`. These are
-  owner-collected point-in-time observations, not proof that no external copy
-  exists. Publication deploy-key retirement remains an explicit post-ledger
-  action and is never claimed complete inside the ledger.
+  paginated repository and Environment API observations with `present=false`.
+  `EvoRiseKsa/EvoOM-Guard-m` is user-owned, so no organization-secret scope
+  exists to query for this repository. The complete record is an unsigned
+  owner-collected bounded, non-atomic window, not proof of simultaneous state,
+  absence of external copies, or absence from another repository. Publication
+  deploy-key retirement remains an explicit post-ledger action and is never
+  claimed complete inside the ledger.
 - E must have produced three independently verified receipts: pyz SLSA
   provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
   A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.

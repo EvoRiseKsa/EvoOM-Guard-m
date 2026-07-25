@@ -26,9 +26,15 @@ file, then derives or cross-checks:
   manifests actually contain;
 - attestation subject, predicate, signer workflow, source, run/attempt, receipt
   digest, and raw-output digest;
+- repository identity, exact protected-main check context/app pairs, Actions
+  permissions, immutable-release owner state, tag ruleset include/exclude and
+  bypass, the sole verified Ed25519 write deploy key and pure-Python
+  fingerprint, four stable Environment/reviewer/rule/policy ID bindings, three
+  activation flags, and the repository plus both Environment fully paginated
+  post-H secret absences from the retained 19-observation V2 record;
 - all retained admission and ledger public-key IDs;
-- schema, validator, and per-release ledger-key Git blob IDs and SHA-256
-  values from the exact admitted parent commit/tree.
+- schema, validator, repository-control collector, and per-release ledger-key
+  Git blob IDs and SHA-256 values from the exact admitted parent commit/tree.
 
 If a reviewed claim already supplies one of those fields, it must equal the
 derived value. The assembler rejects rather than silently replacing a
@@ -50,16 +56,18 @@ bytes. The claims file must still record reviewed:
   except for identities already embedded in retained evidence;
 - GitHub Actions artifact IDs, digests, URLs, retention periods, and
   observation times;
-- branch protection, ruleset, Environment, deploy-key, activation-flag, and
-  secret-name-list observations;
+- the repository-control observation path plus publication-window freeze and
+  pending post-ledger retirement assertions that the GitHub APIs cannot prove;
 - tag CI and Marketplace observations;
 - bootstrap, runner-image, executable, and trusted-build-input pins not
   recoverable from an authenticated retained manifest;
 - post-publication observation times and the ledger creation time.
 
-Those are claims because the assembler deliberately does not contact GitHub.
-They become acceptable only when the official validator can cross-bind them to
-the retained evidence and contract rules.
+The repository-control bodies are also owner-collected claims because the
+assembler deliberately does not contact GitHub. They are retained as one
+unsigned bounded, non-atomic window. The assembler derives their normalized
+ledger projection; it never treats the window as simultaneous state or an
+independent attestation.
 
 ## Command
 

@@ -90,9 +90,12 @@ admission.
     Marketplace listing remains a separate, non-admission step.
 12. Immediately after H, return all flags to false and remove both admission
     signing private-key Environment secrets. Record successful, fully paginated
-    Environment secret-name-list observations for those exact names; these are
-    same-owner point-in-time observations and do not prove absence of external
-    key copies or prevent re-addition. Keep the publication deploy-key secret
+    repository and Environment secret-name-list observations for those exact
+    names. The repository is owned by the `EvoRiseKsa` user account, not an
+    organization, so there is no organization-secret scope to query. These are
+    same-owner observations in one bounded non-atomic API window and do not
+    prove simultaneous state, absence from another repository, absence of
+    external key copies, or prevent re-addition. Keep the publication deploy-key secret
     and exact write deploy key until the operator has committed and revalidated
     a signed release ledger that records their public ID/fingerprint and
     explicitly marks retirement pending. Then delete both and freeze a separate

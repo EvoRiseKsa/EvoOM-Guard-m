@@ -10,6 +10,8 @@ The schema is
 [`tests/baseline/schema/release-ledger-v2.schema.json`](../tests/baseline/schema/release-ledger-v2.schema.json).
 The offline validator is
 [`tools/ci/validate_release_ledger_v2.py`](../tools/ci/validate_release_ledger_v2.py).
+The read-only recorder is
+[`tools/ci/collect_repository_controls_v2.py`](../tools/ci/collect_repository_controls_v2.py).
 Validation is not self-authenticating: the caller must supply the release's
 ledger public key from a previously trusted channel outside the evidence
 directory. The retained copy is evidence, not the trust anchor.
@@ -67,8 +69,16 @@ The validator therefore also requires:
   parent commit/tree, and exact parent-tree build tool blobs;
 - canonical whole-second UTC timestamps, non-overlapping Aâ€“H phase order, and
   post-publication observations bounded by the signed ledger timestamp;
-- protected-main, Environment, immutable-release, tag-ruleset, sole write
-  deploy-key, and post-publication flag observations;
+- one canonical 19-observation repository-control record: public repository
+  identity, including trusted namespace IDs `1293651176` (repository) and
+  `231647061` (the `EvoRiseKsa` user owner),
+  main ref/protection (including all nine check context/app identities),
+  Actions permissions and SHA pinning, immutable-release owner state, tag
+  ruleset include/exclude/rules/bypass, every deploy-key page, all four
+  Environments and stable reviewer/rule/policy identities, all three activation
+  variables, the repository Actions-secret list, and both post-H Environment
+  admission-secret lists. The normalized ledger claims are derived from those
+  retained bodies rather than supplied as unbound assertions;
 - every retained file (including `README.md`) to be signed by a descriptor,
   regular, single-link, uniquely backed, and byte-exact; every directory is
   also closed-world. The authenticated inventory is bounded, copied from one
@@ -153,13 +163,23 @@ and must fail validation. Placeholders are never accepted as release evidence.
 2. Do not create the directory from source-tree expectations. Download the
    exact immutable release assets and all recorded A–H artifacts by their
    reviewed run IDs and attempts.
-3. Query the release, tag target, workflow runs, tag CI, Marketplace state,
-   branch protection, Environments, immutable-release setting, tag ruleset,
-   and exact sole write deploy key. Record observations rather than inferred
-   values. The two admission-secret checks must be successful, fully paginated
-   GitHub Environment secret-name-list API calls made after H; an API denial is
-   an error, never an empty list. Retain their canonical bounded observation as
-   `controls/repository/repository-controls-observation.json`.
+3. Query the release, tag target, workflow runs, tag CI, and Marketplace state.
+   After H, run the reviewed trusted-parent repository-control recorder:
+
+   ```powershell
+   python -I tools/ci/collect_repository_controls_v2.py `
+     --repo EvoRiseKsa/EvoOM-Guard-m `
+     --ruleset <reviewed-tag-ruleset-id> `
+     --output .\controls\repository\repository-controls-observation.json
+   ```
+
+   The recorder performs exactly 19 ordered logical observations; pagination
+   may require more than 19 HTTP requests. It retains complete parsed page
+   bodies and validated completion metadata. An API denial, incomplete page
+   sequence, duplicate identity, changed total/last-page bound, or non-200
+   response fails closed. Its output is unsigned owner-collected evidence over
+   a bounded **non-atomic** window, not a GitHub snapshot or independent
+   attestation.
 4. Copy the signed README, RSAE, both RAAEs, controls, detached results, negative matrices,
    all three E attestation receipts and outputs, and seven public keys into a
    new directory. Never modify a prior ledger or baseline. Do not proceed if E
@@ -169,16 +189,20 @@ and must fail validation. Placeholders are never accepted as release evidence.
    `evoguard-release-artifact-v1-complete-controls-<attempt>`; the earlier
    preflight artifact is incomplete and is not ledger evidence.
 5. Assemble a complete draft whose schema descriptor hashes the exact
-   repository schema bytes. Both the schema and validator descriptors record
-   SHA-256, Git blob ID, and the same trusted-parent commit/tree admitted by A;
-   run the validator bytes extracted from that parent, never a candidate
-   replacement. Canonicalization validates only that schema and cross-field
-   bindings but does not collect or invent evidence:
+   repository schema bytes. The schema, validator, and repository-control
+   collector descriptors record SHA-256, Git blob ID, and the same
+   trusted-parent commit/tree admitted by A; run those bytes from that parent,
+   never candidate replacements. The assembler derives API-provable normalized
+   controls from the retained V2 bodies, rejects contradictory operator claims,
+   performs no network request, and emits no signature:
 
    ```powershell
-   python -I tools/ci/validate_release_ledger_v2.py canonicalize `
-     .\RELEASE_LEDGER.draft.json `
-     .\vX.Y.Z\RELEASE_LEDGER.json
+   python -I tools/ci/assemble_release_ledger_v2.py `
+     .\vX.Y.Z `
+     .\reviewed\vX.Y.Z.claims.json `
+     .\reviewed\RELEASE_LEDGER.unsigned.json `
+     --provenance .\reviewed\RELEASE_LEDGER.assembly-provenance.json `
+     --trusted-parent-repo .\trusted-parent-checkout
    ```
 
 6. Review the canonical bytes, then sign that exact file with the dedicated
@@ -199,9 +223,10 @@ and must fail validation. Placeholders are never accepted as release evidence.
    in-root, linked, hard-linked, changed, or byte-different anchor.
    `--trusted-parent-repo` must be a disjoint trusted checkout/object store
    containing the admitted parent commit. The validator resolves the exact
-   `100644` schema, validator, and per-release ledger-public-key anchor blobs
-   from that commit/tree and compares their bytes, Git object IDs, and SHA-256
-   values; descriptor fields alone are not accepted as proof. Git repository,
+   `100644` schema, validator, repository-control collector, and per-release
+   ledger-public-key anchor blobs from that commit/tree and compares their
+   bytes, Git object IDs, and SHA-256 values; descriptor fields alone are not
+   accepted as proof. Git repository,
    worktree, object-directory, alternate-object, and replace-ref environment
    redirections are not inherited by this check.
 8. Commit the new directory only after the command reports
@@ -210,9 +235,13 @@ and must fail validation. Placeholders are never accepted as release evidence.
    committed tree. Keep the offline per-release ledger private key only long
    enough to sign the separate publication-authority retirement receipt.
 9. The two admission private-key Environment secrets must already have been
-   removed immediately after H. Their recorded `present=false` values are
-   same-owner, point-in-time name-list observations: they do not prove that no
-   external copy exists and do not prevent a later re-addition. The release
+   removed immediately after H. Their recorded repository-scope and
+   Environment-scope `present=false` values are same-owner observations within
+   one bounded non-atomic collection window. Because the repository is owned by
+   the `EvoRiseKsa` user account rather than a GitHub organization, there is no
+   organization-secret scope to query. These observations do not prove that no
+   external copy exists, do not prove simultaneous repository state, and do not
+   prevent a later re-addition. The release
    ledger must record publication authority retirement as pending, never as
    already completed. As an operator procedure, commit and revalidate the signed
    ledger before removing the publication deploy-key secret and exact write
@@ -237,12 +266,14 @@ and must fail validation. Placeholders are never accepted as release evidence.
    observation; it does not prove destruction of copies outside GitHub and does
    not prevent a new key or secret from being added later.
 
-There is intentionally no evidence collector or “generate from GitHub”
-command. Collection combines mutable external state, expiring artifacts, and
-human approval boundaries; automating it as an authoritative generator would
-turn unchecked API responses into claimed truth. The canonicalizer only
-serializes a reviewed, already-complete draft; it does not authenticate the
-draft or establish an EvoRise signing identity.
+The former absence of a collection command has been replaced by the bounded
+repository-control recorder. The recorder is a transport recorder, not an
+authoritative generator: it has no
+mutation or signing authority and does not convert mutable GitHub API bodies
+into independent truth. Its exact trusted-parent bytes, complete page bodies,
+endpoint order, time window, and normalization rules are bound by the ledger;
+the observation still remains unsigned same-owner evidence. The assembler and
+canonicalizer do not establish an EvoRise signing identity.
 
 ## Evidence boundary
 
