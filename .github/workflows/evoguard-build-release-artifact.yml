@@ -38,6 +38,7 @@ jobs:
       expected_version: ${{ steps.bind.outputs.expected_version }}
       source_created: ${{ steps.bind.outputs.source_created }}
       parent_sha: ${{ steps.bind.outputs.parent_sha }}
+      parent_tree_sha: ${{ steps.bind.outputs.parent_tree_sha }}
       build_tool_blob_sha: ${{ steps.bind.outputs.build_tool_blob_sha }}
       sbom_tool_blob_sha: ${{ steps.bind.outputs.sbom_tool_blob_sha }}
     steps:
@@ -94,6 +95,13 @@ jobs:
               core.setFailed('release target must have exactly one trusted parent');
             }
             const parentSha = sourceCommit.parents[0].sha;
+            const {data: parentCommit} = await github.rest.git.getCommit({
+              owner: context.repo.owner, repo: context.repo.repo, commit_sha: parentSha,
+            });
+            const parentTreeSha = parentCommit.tree?.sha;
+            if (!/^[0-9a-f]{40}$/.test(parentTreeSha || '')) {
+              core.setFailed('trusted parent tree is not one Git tree');
+            }
             const trustedTool = async (path) => {
               const {data} = await github.rest.repos.getContent({
                 owner: context.repo.owner, repo: context.repo.repo, path, ref: parentSha,
@@ -121,6 +129,7 @@ jobs:
             core.setOutput('expected_version', process.env.EXPECTED_VERSION);
             core.setOutput('source_created', sourceCreated);
             core.setOutput('parent_sha', parentSha);
+            core.setOutput('parent_tree_sha', parentTreeSha);
             core.setOutput('build_tool_blob_sha', buildToolBlob);
             core.setOutput('sbom_tool_blob_sha', sbomToolBlob);
 
@@ -279,6 +288,7 @@ jobs:
           EXPECTED_VERSION: ${{ needs.preflight.outputs.expected_version }}
           SOURCE_CREATED: ${{ needs.preflight.outputs.source_created }}
           PARENT_SHA: ${{ needs.preflight.outputs.parent_sha }}
+          PARENT_TREE_SHA: ${{ needs.preflight.outputs.parent_tree_sha }}
           BUILD_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.build_tool_blob_sha }}
           SBOM_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.sbom_tool_blob_sha }}
           BUILD_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
@@ -287,6 +297,7 @@ jobs:
           test "$(git -C admitted-source rev-parse HEAD)" = "$TARGET_SHA"
           test "$(git -C trusted-build-tools rev-parse HEAD)" = "$PARENT_SHA"
           parent_tree="$(git -C trusted-build-tools rev-parse 'HEAD^{tree}')"
+          test "$parent_tree" = "$PARENT_TREE_SHA"
           test "$(jq -er .base_sha "$RUNNER_TEMP/e-inputs/context.json")" = "$PARENT_SHA"
           test "$(jq -er .base_tree_sha "$RUNNER_TEMP/e-inputs/context.json")" = "$parent_tree"
           build_entry="$(git -C trusted-build-tools ls-tree HEAD -- ops/build_pyz.py)"
@@ -712,6 +723,11 @@ jobs:
           )
           payload = {
               'format': 'EVOGUARD_RELEASE_ASSET_BUILDER_CONTROLS_V1',
+              'build_container': {
+                  'reference': os.environ['BUILD_IMAGE'],
+                  'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1],
+                  'network': 'none',
+              },
               'artifacts': {
                   'evo-guard.pyz': descriptor(assets / 'evo-guard.pyz'),
                   'evo-guard.spdx.json': descriptor(assets / 'evo-guard.spdx.json'),
@@ -725,6 +741,7 @@ jobs:
               'source_admission_run_id': os.environ['SOURCE_RUN_ID'],
               'target_sha': os.environ['TARGET_SHA'],
               'trusted_build_parent_sha': os.environ['PARENT_SHA'],
+              'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA'],
               'trusted_build_tool_blobs': {
                   'ops/build_pyz.py': os.environ['BUILD_TOOL_BLOB_SHA'],
                   'ops/generate_spdx_sbom.py': os.environ['SBOM_TOOL_BLOB_SHA'],
@@ -882,8 +899,10 @@ jobs:
           EXPECTED_VERSION: ${{ needs.preflight.outputs.expected_version }}
           SOURCE_CREATED: ${{ needs.preflight.outputs.source_created }}
           PARENT_SHA: ${{ needs.preflight.outputs.parent_sha }}
+          PARENT_TREE_SHA: ${{ needs.preflight.outputs.parent_tree_sha }}
           BUILD_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.build_tool_blob_sha }}
           SBOM_TOOL_BLOB_SHA: ${{ needs.preflight.outputs.sbom_tool_blob_sha }}
+          BUILD_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
         run: |
           set -euo pipefail
           python - "$RUNNER_TEMP/e-output/evo-guard.pyz" "$RUNNER_TEMP/e-output/evo-guard.spdx.json" "$RUNNER_TEMP/e-output/builder-controls.json" <<'PY'
@@ -963,6 +982,19 @@ jobs:
           require(
               controls.get('trusted_build_parent_sha') == os.environ['PARENT_SHA'],
               'builder controls do not bind the trusted parent',
+          )
+          require(
+              controls.get('trusted_build_parent_tree_sha')
+              == os.environ['PARENT_TREE_SHA'],
+              'builder controls do not bind the trusted parent tree',
+          )
+          require(
+              controls.get('build_container') == {
+                  'reference': os.environ['BUILD_IMAGE'],
+                  'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1],
+                  'network': 'none',
+              },
+              'builder controls do not bind the exact networkless container',
           )
           require(
               controls.get('trusted_build_tool_blobs') == {

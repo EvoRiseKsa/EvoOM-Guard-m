@@ -129,7 +129,8 @@
     "required_frozen_material": [
       "two RAAE envelopes",
       "source RSAE and all external controls",
-      "six public roots and key IDs",
+      "six admission public roots and key IDs",
+      "one distinct release-ledger signing public root and key ID",
       "run IDs and attempts",
       "workflow IDs and raw-Git blob SHAs",
       "trusted parent SHA/tree and literal builder/generator blob SHAs",

@@ -20,6 +20,7 @@
 /CONTRIBUTING.md @MANA-awam @EvoRiseKsa
 /requirements/ @MANA-awam @EvoRiseKsa
 /tools/ci-vitest/ @MANA-awam @EvoRiseKsa
+/tools/ci/ @MANA-awam @EvoRiseKsa
 /ops/ci/ @MANA-awam @EvoRiseKsa
 /ops/build_pyz.py @MANA-awam @EvoRiseKsa
 /ops/generate_spdx_sbom.py @MANA-awam @EvoRiseKsa
@@ -32,6 +33,9 @@
 /tests/schema/ @MANA-awam @EvoRiseKsa
 /tests/test_zipapp.py @MANA-awam @EvoRiseKsa
 /tests/architecture/ @MANA-awam @EvoRiseKsa
+/tests/baseline/ @MANA-awam @EvoRiseKsa
+/tests/test_release_ledger_v2.py @MANA-awam @EvoRiseKsa
+/evidence/release-ledgers/ @MANA-awam @EvoRiseKsa
 
 # Core verification, finalizer, and artifact-admission implementation.
 /evoom_guard/ @MANA-awam @EvoRiseKsa
@@ -48,4 +52,8 @@
 /docs/TRUSTED_FINALIZER_HARDENING.md @MANA-awam @EvoRiseKsa
 /docs/DEPENDENCY_POLICY.md @MANA-awam @EvoRiseKsa
 /docs/SBOM.md @MANA-awam @EvoRiseKsa
+/docs/RELEASE_LEDGER_V2.md @MANA-awam @EvoRiseKsa
+/docs/RELEASE_GATE_CHECKLIST.md @MANA-awam @EvoRiseKsa
+/docs/RELEASE_TRUST_PIPELINE.md @MANA-awam @EvoRiseKsa
+/docs/adr/ @MANA-awam @EvoRiseKsa
 /docs/architecture/ @MANA-awam @EvoRiseKsa

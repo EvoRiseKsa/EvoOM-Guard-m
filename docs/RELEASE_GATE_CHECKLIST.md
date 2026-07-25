@@ -104,5 +104,64 @@ gate.
   claim a required production gate, hostile-runner proof, single-use
   authorization, or independent validation.
 
+## Protected A-H release-ledger v2 readiness
+
+- `tests/baseline/schema/release-ledger-v2.schema.json` is the contract for a
+  future post-publication protected A-H ledger. It does not apply retroactively
+  to v1 ledgers and must not be used to rewrite a frozen baseline.
+- Before a v2 ledger is committed, run
+  `python tools/ci/validate_release_ledger_v2.py validate <ledger-directory>
+  --trusted-ledger-pub <independently-obtained-public-key>
+  --trusted-parent-repo <disjoint-trusted-parent-repository>`. The trusted key
+  path must be outside the ledger and must come from a pinned parent tree,
+  immutable tag, or other previously authenticated channel; never copy it from
+  the directory being validated.
+  The trusted-parent repository must contain the exact admitted parent
+  commit/tree; the validator resolves and byte-compares its schema, validator,
+  and per-release ledger-public-key anchor Git blobs, so self-reported parent
+  fields or a newly supplied self-signed key are insufficient.
+  Schema-only validation is insufficient: the command verifies cross-phase run
+  bindings, the exact three-asset set and checksum bytes, retained controls,
+  RSAE/RAAE signatures and subjects, all public-key identities, closed file
+  inventory, and the detached signature over canonical ledger bytes under that
+  external EvoRise trust anchor.
+- The v2 schema is not caller-selectable. The signed ledger binds the exact
+  repository schema digest and the exact validator digest/Git blob; both
+  descriptors bind the admitted trusted-parent commit/tree. Execute the
+  validator extracted from that parent, not candidate-controlled bytes.
+  `README.md`, all directories, and all retained
+  regular files are part of the closed, bounded inventory. Validation uses a
+  private immutable byte snapshot; hard links, extra empty directories, path
+  swaps, same-size restored-mtime changes, and post-read mutations fail closed.
+- C/D and F/G result objects and both negative matrices must be retained in the
+  exact formats emitted by the protected workflows. GitHub verifier outputs
+  must bind one subject, one source dependency, the exact run/attempt, and the
+  exact SPDX predicate where applicable.
+- A complete ledger is assembled only after the immutable release, tag CI, and
+  Marketplace observation exist. A template, schema, candidate source version,
+  or successful pre-publication workflow is not a release ledger.
+- The ledger records the exact A-H run IDs and attempts, all seven workflow
+  ID/blob pins (C and D share one run), tool/runtime/container pins, six
+  admission roots, a distinct ledger-signing root, protected repository
+  controls, the tag ruleset, and the sole write deploy-key fingerprint.
+- The two admission signing-secret names have post-H, successful, fully
+  paginated Environment API observations with `present=false`. These are
+  owner-collected point-in-time observations, not proof that no external copy
+  exists. Publication deploy-key retirement remains an explicit post-ledger
+  action and is never claimed complete inside the ledger.
+- E must have produced three independently verified receipts: pyz SLSA
+  provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
+  A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.
+  F must verify all three in its no-secret `verify-attestations` job and retain
+  the exact receipt/raw-output pairs in
+  `evoguard-release-artifact-v1-complete-controls-<attempt>`. The protected seal,
+  both RAAEs, G controls, H preflight, and the ledger must preserve those byte
+  identities.
+- The ledger step is data-only. It must not have release or tag write authority,
+  and it must not publish RSAE/RAAE envelopes as GitHub Release assets.
+
+See [Protected release ledger v2](RELEASE_LEDGER_V2.md) for the retained
+directory, canonicalization, validation, and exact non-claims.
+
 Update this file with every major process change (workflow templates, policy schema,
 attestation format, or check ownership mapping).

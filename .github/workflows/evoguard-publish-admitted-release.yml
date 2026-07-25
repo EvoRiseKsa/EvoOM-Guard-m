@@ -24,6 +24,8 @@ jobs:
     outputs:
       g_run_id: ${{ steps.bind.outputs.g_run_id }}
       g_run_attempt: ${{ steps.bind.outputs.g_run_attempt }}
+      g_workflow_id: ${{ steps.bind.outputs.g_workflow_id }}
+      g_workflow_blob: ${{ steps.bind.outputs.g_workflow_blob }}
       target_sha: ${{ steps.bind.outputs.target_sha }}
       f_run_id: ${{ steps.selector.outputs.f_run_id }}
       f_run_attempt: ${{ steps.selector.outputs.f_run_attempt }}
@@ -31,29 +33,13 @@ jobs:
       - name: Bind exact successful G and current protected H
         id: bind
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          EXPECTED_G_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_ID }}
-          EXPECTED_H_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_ID }}
-          EXPECTED_G_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_BLOB_SHA }}
-          EXPECTED_H_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PUBLISH_WORKFLOW_BLOB_SHA }}
         with:
           script: |
             const numeric = /^[1-9][0-9]*$/;
-            const digest = /^[0-9a-f]{40,64}$/;
-            for (const name of ['EXPECTED_G_WORKFLOW_ID', 'EXPECTED_H_WORKFLOW_ID']) {
-              if (!numeric.test(process.env[name] || '')) throw new Error(`invalid ${name}`);
-            }
-            for (const name of ['EXPECTED_G_WORKFLOW_BLOB', 'EXPECTED_H_WORKFLOW_BLOB']) {
-              if (!digest.test(process.env[name] || '')) throw new Error(`invalid ${name}`);
-            }
-            if (process.env.EXPECTED_G_WORKFLOW_ID === process.env.EXPECTED_H_WORKFLOW_ID ||
-                process.env.EXPECTED_G_WORKFLOW_BLOB === process.env.EXPECTED_H_WORKFLOW_BLOB) {
-              throw new Error('G and H identities must be distinct');
-            }
             const run = context.payload.workflow_run;
             if (!run || run.status !== 'completed' || run.conclusion !== 'success' ||
-                run.event !== 'workflow_run' ||
-                String(run.workflow_id) !== process.env.EXPECTED_G_WORKFLOW_ID ||
+                 run.event !== 'workflow_run' ||
+                !numeric.test(String(run.workflow_id)) ||
                 run.path !== '.github/workflows/evoguard-verify-release-artifact.yml' ||
                 run.head_branch !== 'main' || run.head_sha !== context.sha ||
                 run.head_repository?.id !== context.payload.repository.id ||
@@ -75,27 +61,40 @@ jobs:
             const tree = (await github.rest.git.getTree({
               owner, repo, tree_sha: commit.tree.sha, recursive: 'true',
             })).data.tree;
-            const expected = new Map([
-              ['.github/workflows/evoguard-verify-release-artifact.yml',
-               process.env.EXPECTED_G_WORKFLOW_BLOB],
-              ['.github/workflows/evoguard-publish-admitted-release.yml',
-               process.env.EXPECTED_H_WORKFLOW_BLOB],
-            ]);
-            for (const [path, blob] of expected) {
-              const item = tree.find(entry => entry.path === path);
-              if (!item || item.type !== 'blob' || item.sha !== blob) {
-                throw new Error(`${path} does not match the configured raw-Git blob`);
+            const paths = [
+              '.github/workflows/evoguard-verify-release-artifact.yml',
+              '.github/workflows/evoguard-publish-admitted-release.yml',
+            ];
+            const blobs = new Map();
+            for (const path of paths) {
+              const matches = tree.filter(entry => entry.path === path);
+              if (matches.length !== 1 || matches[0].type !== 'blob' ||
+                  !/^[0-9a-f]{40}$/.test(matches[0].sha || '')) {
+                throw new Error(`${path} is not one exact raw-Git blob`);
               }
+              blobs.set(path, matches[0].sha);
             }
-            const h = (await github.rest.actions.getWorkflow({
-              owner, repo, workflow_id: Number(process.env.EXPECTED_H_WORKFLOW_ID),
-            })).data;
+            if (blobs.get(paths[0]) === blobs.get(paths[1])) {
+              throw new Error('G and H raw workflow identities must be distinct');
+            }
+            const workflows = await github.paginate(
+              github.rest.actions.listRepoWorkflows, {owner, repo, per_page: 100}
+            );
+            const hMatches = workflows.filter(
+              item => item.path === '.github/workflows/evoguard-publish-admitted-release.yml'
+            );
+            if (hMatches.length !== 1) throw new Error('H workflow identity is ambiguous');
+            const h = hMatches[0];
             if (h.path !== '.github/workflows/evoguard-publish-admitted-release.yml' ||
-                h.state !== 'active') {
-              throw new Error('configured H workflow path/state is incorrect');
+                h.state !== 'active' || h.id === run.workflow_id) {
+              throw new Error('current H workflow path/state is incorrect');
             }
             core.setOutput('g_run_id', String(run.id));
             core.setOutput('g_run_attempt', String(run.run_attempt));
+            core.setOutput('g_workflow_id', String(run.workflow_id));
+            core.setOutput('g_workflow_blob', blobs.get(paths[0]));
+            core.setOutput('h_workflow_id', String(h.id));
+            core.setOutput('h_workflow_blob', blobs.get(paths[1]));
             core.setOutput('target_sha', run.head_sha);
 
       - name: Download G detached verification results
@@ -112,10 +111,8 @@ jobs:
           TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
           G_RUN_ID: ${{ steps.bind.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ steps.bind.outputs.g_run_attempt }}
-          EXPECTED_F_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMIT_WORKFLOW_ID }}
-          EXPECTED_F_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMIT_WORKFLOW_BLOB_SHA }}
-          EXPECTED_G_WORKFLOW_ID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_ID }}
-          EXPECTED_G_WORKFLOW_BLOB: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_VERIFY_WORKFLOW_BLOB_SHA }}
+          G_WORKFLOW_ID: ${{ steps.bind.outputs.g_workflow_id }}
+          G_WORKFLOW_BLOB: ${{ steps.bind.outputs.g_workflow_blob }}
         run: |
           set -euo pipefail
           python - "$RUNNER_TEMP/g-results" "$GITHUB_OUTPUT" <<'PY'
@@ -152,15 +149,20 @@ jobs:
           if len(negatives) != 7 or any(not line.endswith('=REJECTED') for line in negatives):
               raise SystemExit('G negative matrix is incomplete')
           controls = json.loads((root / 'publication-controls.json').read_text(encoding='utf-8'))
-          if controls.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_CONTROLS_V1':
+          if set(controls) != {
+              'format', 'repository', 'target_sha', 'release_version',
+              'f', 'g', 'f_control_manifest', 'f_external_settings',
+              'f_trusted_tools', 'f_workflows', 'release_assets',
+              'admissions', 'attestation_evidence',
+          } or controls.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_CONTROLS_V1':
               raise SystemExit('unsupported publication selector')
           if controls.get('repository') != os.environ['GITHUB_REPOSITORY']:
               raise SystemExit('publication selector repository mismatch')
           if controls.get('target_sha') != os.environ['TARGET_SHA']:
               raise SystemExit('publication selector target mismatch')
           expected_g = {
-              'workflow_id': os.environ['EXPECTED_G_WORKFLOW_ID'],
-              'workflow_blob_sha': os.environ['EXPECTED_G_WORKFLOW_BLOB'],
+              'workflow_id': os.environ['G_WORKFLOW_ID'],
+              'workflow_blob_sha': os.environ['G_WORKFLOW_BLOB'],
               'workflow_run_id': os.environ['G_RUN_ID'],
               'workflow_run_attempt': int(os.environ['G_RUN_ATTEMPT']),
           }
@@ -169,10 +171,15 @@ jobs:
           f = controls.get('f')
           if not isinstance(f, dict):
               raise SystemExit('publication selector has no F identity')
-          if f.get('workflow_id') != os.environ['EXPECTED_F_WORKFLOW_ID']:
-              raise SystemExit('publication selector F workflow mismatch')
-          if f.get('workflow_blob_sha') != os.environ['EXPECTED_F_WORKFLOW_BLOB']:
-              raise SystemExit('publication selector F blob mismatch')
+          if set(f) != {
+              'workflow_id', 'workflow_blob_sha',
+              'workflow_run_id', 'workflow_run_attempt',
+          }:
+              raise SystemExit('publication selector F identity is not exact')
+          if not re.fullmatch(r'[1-9][0-9]*', str(f.get('workflow_id', ''))):
+              raise SystemExit('publication selector F workflow ID is invalid')
+          if not re.fullmatch(r'[0-9a-f]{40}', str(f.get('workflow_blob_sha', ''))):
+              raise SystemExit('publication selector F workflow blob is invalid')
           if not re.fullmatch(r'[1-9][0-9]*', str(f.get('workflow_run_id', ''))):
               raise SystemExit('publication selector F run ID is invalid')
           if not isinstance(f.get('workflow_run_attempt'), int) or f['workflow_run_attempt'] < 1:
@@ -193,7 +200,7 @@ jobs:
       - name: Download exact F external controls
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: evoguard-release-artifact-v1-controls-${{ steps.selector.outputs.f_run_attempt }}
+          name: evoguard-release-artifact-v1-complete-controls-${{ steps.selector.outputs.f_run_attempt }}
           path: ${{ runner.temp }}/f-controls
           run-id: ${{ steps.selector.outputs.f_run_id }}
           github-token: ${{ github.token }}
@@ -212,6 +219,7 @@ jobs:
           import json
           import os
           import pathlib
+          import re
           import shutil
           import stat
           import sys
@@ -222,6 +230,12 @@ jobs:
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
               'evo-guard.pyz.seal-result.json',
               'evo-guard.spdx.json.seal-result.json',
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
           }
           controls_expected = {
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
@@ -229,6 +243,13 @@ jobs:
               'source.json', 'context.json', 'producer.json', 'source-admitter.json',
               'source-github-policy.json', 'signing-requirements.lock',
               'builder.json', 'admitter.json', 'f-control-manifest.json',
+              'verify_spdx_attestation.py',
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
           }
           if {item.name for item in admission.iterdir()} != admission_expected:
               raise SystemExit('F admitted set is not closed')
@@ -252,10 +273,21 @@ jobs:
               controls / 'builder.json': ('builder.json', 1024 * 1024),
               controls / 'admitter.json': ('admitter.json', 1024 * 1024),
               controls / 'f-control-manifest.json': ('f-control-manifest.json', 1024 * 1024),
+              controls / 'verify_spdx_attestation.py': ('verify_spdx_attestation.py', 1024 * 1024),
+              controls / 'build-provenance-verification.json': ('build-provenance-verification.json', 1024 * 1024),
+              controls / 'build-provenance-verification-output.json': ('build-provenance-verification-output.json', 16 * 1024 * 1024),
+              controls / 'spdx-provenance-verification.json': ('spdx-provenance-verification.json', 1024 * 1024),
+              controls / 'spdx-provenance-verification-output.json': ('spdx-provenance-verification-output.json', 16 * 1024 * 1024),
+              controls / 'sbom-attestation-receipt.json': ('sbom-attestation-receipt.json', 1024 * 1024),
+              controls / 'sbom-attestation-output.json': ('sbom-attestation-output.json', 16 * 1024 * 1024),
           }
           for source, (name, maximum) in wanted.items():
               before = source.lstat()
-              if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+              if (
+                  stat.S_ISLNK(before.st_mode)
+                  or not stat.S_ISREG(before.st_mode)
+                  or before.st_nlink != 1
+              ):
                   raise SystemExit(f'unsafe publication input: {name}')
               if before.st_size < 1 or before.st_size > maximum:
                   raise SystemExit(f'unsafe publication input size: {name}')
@@ -269,8 +301,20 @@ jobs:
                   with os.fdopen(descriptor, 'rb', closefd=False) as stream, \
                        (destination / name).open('xb') as output:
                       shutil.copyfileobj(stream, output, 64 * 1024)
+                  final_fd = os.fstat(descriptor)
               finally:
                   os.close(descriptor)
+              final_path = source.lstat()
+              identity = lambda value: (
+                  value.st_dev, value.st_ino, value.st_size,
+                  value.st_mtime_ns, value.st_ctime_ns, value.st_nlink,
+              )
+              if (
+                  identity(opened) != identity(final_fd)
+                  or identity(opened) != identity(final_path)
+                  or final_path.st_nlink != 1
+              ):
+                  raise SystemExit(f'publication input changed after copy: {name}')
           for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
               if (admission / name).read_bytes() != (controls / name).read_bytes():
                   raise SystemExit(f'F admitted/control byte mismatch: {name}')
@@ -284,6 +328,125 @@ jobs:
           for name in ('evo-guard.pyz.raae', 'evo-guard.spdx.json.raae'):
               if selector['admissions'].get(name) != descriptor(destination / name):
                   raise SystemExit(f'G selector admission digest mismatch: {name}')
+          for name in (
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
+          ):
+              if (admission / name).read_bytes() != (controls / name).read_bytes():
+                  raise SystemExit(f'F attestation evidence mismatch: {name}')
+              if selector['attestation_evidence'].get(name) != descriptor(
+                  controls / name
+              ):
+                  raise SystemExit(f'G selector attestation digest mismatch: {name}')
+          f_manifest_path = destination / 'f-control-manifest.json'
+          f_manifest_bytes = f_manifest_path.read_bytes()
+          f_manifest = json.loads(f_manifest_bytes)
+          if (
+              json.dumps(f_manifest, sort_keys=True, separators=(',', ':')).encode()
+              + b'\n'
+          ) != f_manifest_bytes:
+              raise SystemExit('F control manifest is not canonical JSON')
+          if selector['f_control_manifest'] != descriptor(f_manifest_path):
+              raise SystemExit('G selector does not bind the exact F manifest')
+          if selector['release_version'] != f_manifest.get('release_version'):
+              raise SystemExit('G selector release version differs from F')
+          if selector['f_external_settings'] != f_manifest.get('external_settings'):
+              raise SystemExit('G selector external settings differ from F')
+          if selector['f_trusted_tools'] != f_manifest.get('trusted_tools'):
+              raise SystemExit('G selector trusted tools differ from F')
+          if selector['f_workflows'] != f_manifest.get('workflows'):
+              raise SystemExit('G selector workflow identities differ from F')
+          f_workflow = f_manifest.get('workflows', {}).get('F')
+          if not isinstance(f_workflow, dict):
+              raise SystemExit('F manifest has no exact F workflow identity')
+          expected_f_selector = {
+              'workflow_id': f_workflow.get('workflow_id'),
+              'workflow_blob_sha': f_workflow.get('workflow_blob_sha'),
+              'workflow_run_id': f_workflow.get('workflow_run_id'),
+              'workflow_run_attempt': f_workflow.get('workflow_run_attempt'),
+          }
+          if selector['f'] != expected_f_selector:
+              raise SystemExit('G selector F identity differs from F manifest')
+          trusted_tools = f_manifest.get('trusted_tools')
+          if set(trusted_tools or {}) != {'tools/ci/verify_spdx_attestation.py'}:
+              raise SystemExit('F trusted verifier set is not exact')
+          verifier_bytes = (destination / 'verify_spdx_attestation.py').read_bytes()
+          verifier_blob = hashlib.sha1(
+              f'blob {len(verifier_bytes)}\0'.encode() + verifier_bytes
+          ).hexdigest()
+          if verifier_blob != trusted_tools['tools/ci/verify_spdx_attestation.py']:
+              raise SystemExit('F trusted verifier blob is not exact')
+          settings = f_manifest.get('external_settings')
+          if set(settings or {}) != {
+              'runtime', 'toolchain', 'source_admission', 'publication',
+              'public_key_ids',
+          }:
+              raise SystemExit('F external settings set is not exact')
+          if set(settings['runtime']) != {'url', 'version', 'sha256'} or not re.fullmatch(
+              r'https://\S+', str(settings['runtime'].get('url', ''))
+          ) or settings['runtime'].get('version') != '4.3.0':
+              raise SystemExit('F runtime settings are not exact')
+          if not re.fullmatch(
+              r'[0-9a-f]{64}', str(settings['runtime'].get('sha256', ''))
+          ):
+              raise SystemExit('F runtime digest is not exact')
+          if set(settings['toolchain']) != {
+              'git_sha256', 'gh_sha256', 'provider_uid', 'provider_gid',
+          }:
+              raise SystemExit('F outer toolchain settings are not exact')
+          if set(settings['source_admission']) != {
+              'bootstrap_sha256', 'git_sha256', 'gh_sha256',
+              'provider_uid', 'provider_gid',
+          }:
+              raise SystemExit('F source admission settings are not exact')
+          if (
+              set(settings['publication']) != {'tag_deploy_key_fingerprint'}
+              or not re.fullmatch(
+                  r'SHA256:[A-Za-z0-9+/]{43}',
+                  str(settings['publication'].get('tag_deploy_key_fingerprint', '')),
+              )
+          ):
+              raise SystemExit('F publication authority is not exact')
+          for section, names in (
+              ('toolchain', ('git_sha256', 'gh_sha256')),
+              ('source_admission', ('bootstrap_sha256', 'git_sha256', 'gh_sha256')),
+          ):
+              if any(
+                  not re.fullmatch(r'[0-9a-f]{64}', str(settings[section].get(name, '')))
+                  for name in names
+              ):
+                  raise SystemExit(f'F {section} hashes are not exact')
+          for section, expected_identity in (
+              ('toolchain', 60002),
+              ('source_admission', 60001),
+          ):
+              if (
+                  not isinstance(settings[section]['provider_uid'], int)
+                  or isinstance(settings[section]['provider_uid'], bool)
+                  or not isinstance(settings[section]['provider_gid'], int)
+                  or isinstance(settings[section]['provider_gid'], bool)
+                  or settings[section]['provider_uid'] != expected_identity
+                  or settings[section]['provider_gid'] != expected_identity
+              ):
+                  raise SystemExit(f'F {section} provider identity is not exact')
+          if set(settings['public_key_ids']) != {
+              'release_artifact_admission_v1',
+              'release_source_admission_v2',
+              'trusted_finalizer',
+              'artifact_admission_v1',
+              'artifact_digest_admission_v2',
+              'release_source_finalizer_v1',
+          }:
+              raise SystemExit('F public root identity set is not exact')
+          if len(set(settings['public_key_ids'].values())) != 6 or any(
+              not re.fullmatch(r'sha256:[0-9a-f]{64}', str(value))
+              for value in settings['public_key_ids'].values()
+          ):
+              raise SystemExit('F public root identities are not exact')
           PY
           (
             cd "$RUNNER_TEMP/publication-inputs"
@@ -291,6 +454,118 @@ jobs:
             sha256sum --check --strict SHA256SUMS
           )
           test "$(jq -r .target_commit_sha "$RUNNER_TEMP/publication-inputs/source.json")" = "$TARGET_SHA"
+
+      - name: Bind all public roots and freeze publication inputs before execution
+        env:
+          RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
+          V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64 }}
+          FINALIZER_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64 }}
+          ARTIFACT_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
+          ARTIFACT_V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_DIGEST_ADMISSION_V2_PUBLIC_KEY_B64 }}
+          SOURCE_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_FINALIZER_V1_PUBLIC_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/publication-inputs/f-control-manifest.json"
+          mkdir -m 0700 "$RUNNER_TEMP/publication-trust"
+          install_public() {
+            local field="$1" stem="$2" value="$3"
+            local pem="$RUNNER_TEMP/publication-trust/$stem.pub.pem"
+            local der="$RUNNER_TEMP/publication-trust/$stem.pub.der"
+            local digest expected
+            test -n "$value"
+            printf '%s' "$value" | base64 --decode > "$pem"
+            chmod 0600 "$pem"
+            openssl pkey -pubin -in "$pem" -outform DER -out "$der"
+            chmod 0600 "$der"
+            digest="$(sha256sum "$der")"
+            digest="${digest%% *}"
+            expected="$(jq -er --arg field "$field" \
+              '.external_settings.public_key_ids[$field] | select(type == "string")' \
+              "$manifest")"
+            test "sha256:$digest" = "$expected"
+          }
+          install_public release_artifact_admission_v1 release-artifact-admission-v1 "$RAAE_PUBLIC_KEY_B64"
+          install_public release_source_admission_v2 release-source-admission-v2 "$V2_PUBLIC_KEY_B64"
+          install_public trusted_finalizer trusted-finalizer "$FINALIZER_PUBLIC_KEY_B64"
+          install_public artifact_admission_v1 artifact-admission-v1 "$ARTIFACT_V1_PUBLIC_KEY_B64"
+          install_public artifact_digest_admission_v2 artifact-digest-admission-v2 "$ARTIFACT_V2_PUBLIC_KEY_B64"
+          install_public release_source_finalizer_v1 release-source-finalizer-v1 "$SOURCE_V1_PUBLIC_KEY_B64"
+          test "$(find "$RUNNER_TEMP/publication-trust" -maxdepth 1 -type f | wc -l)" -eq 12
+          test "$(
+            for der in "$RUNNER_TEMP"/publication-trust/*.pub.der; do
+              sha256sum "$der" | cut -d' ' -f1
+            done | sort -u | wc -l
+          )" -eq 6
+
+          git_executable="$(readlink -f "$(command -v git)")"
+          gh_executable="$(readlink -f "$(command -v gh)")"
+          ssh_executable="$(readlink -f "$(command -v ssh)")"
+          ssh_keygen_executable="$(readlink -f "$(command -v ssh-keygen)")"
+          for executable in "$git_executable" "$gh_executable" "$ssh_executable" "$ssh_keygen_executable"; do
+            test -f "$executable" -a ! -L "$executable"
+          done
+          printf '%s  %s\n' \
+            "$(jq -er '.external_settings.toolchain.git_sha256' "$manifest")" \
+            "$git_executable" | sha256sum --check
+          printf '%s  %s\n' \
+            "$(jq -er '.external_settings.toolchain.gh_sha256' "$manifest")" \
+            "$gh_executable" | sha256sum --check
+          export git_executable gh_executable ssh_executable ssh_keygen_executable
+          python - "$RUNNER_TEMP/host-tool-observation.json" <<'PY'
+          import hashlib, json, os, pathlib, stat, sys
+          value = {}
+          for name in ('git', 'gh', 'ssh', 'ssh_keygen'):
+              path = pathlib.Path(os.environ[f'{name}_executable'])
+              before = path.lstat()
+              if (
+                  not stat.S_ISREG(before.st_mode)
+                  or stat.S_ISLNK(before.st_mode)
+                  or before.st_nlink != 1
+                  or before.st_size < 1
+                  or before.st_size > 64 * 1024 * 1024
+              ):
+                  raise SystemExit(f'unsafe publication host tool: {name}')
+              data = path.read_bytes()
+              final = path.lstat()
+              if (
+                  before.st_dev, before.st_ino, before.st_size,
+                  before.st_mtime_ns, before.st_ctime_ns, before.st_nlink,
+              ) != (
+                  final.st_dev, final.st_ino, final.st_size,
+                  final.st_mtime_ns, final.st_ctime_ns, final.st_nlink,
+              ):
+                  raise SystemExit(f'publication host tool changed: {name}')
+              value[name] = {
+                  'path': str(path),
+                  'sha256': hashlib.sha256(data).hexdigest(),
+                  'size': len(data),
+              }
+          pathlib.Path(sys.argv[1]).write_text(
+              json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n',
+              encoding='utf-8',
+              newline='\n',
+          )
+          PY
+
+          sudo install -d -m 0700 -o root -g root \
+            /run/evoguard-publication-approved \
+            /run/evoguard-publication-approved/inputs \
+            /run/evoguard-publication-approved/trust \
+            /run/evoguard-publication-approved/runtime
+          sudo install -m 0444 -o root -g root \
+            "$RUNNER_TEMP"/publication-inputs/* \
+            /run/evoguard-publication-approved/inputs/
+          sudo install -m 0444 -o root -g root \
+            "$RUNNER_TEMP"/publication-trust/* \
+            /run/evoguard-publication-approved/trust/
+          sudo install -m 0444 -o root -g root \
+            "$RUNNER_TEMP/host-tool-observation.json" \
+            /run/evoguard-publication-approved/host-tool-observation.json
+          sudo chmod 0555 \
+            /run/evoguard-publication-approved \
+            /run/evoguard-publication-approved/inputs \
+            /run/evoguard-publication-approved/trust
+          rm -rf -- "$RUNNER_TEMP/publication-inputs" "$RUNNER_TEMP/publication-trust"
 
       - name: Install the hash-locked detached verification dependency set
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
@@ -300,66 +575,171 @@ jobs:
       - name: Install detached verification dependencies
         run: >-
           python -m pip install --disable-pip-version-check --only-binary=:all:
-          --require-hashes -r "$RUNNER_TEMP/publication-inputs/signing-requirements.lock"
+          --require-hashes -r
+          /run/evoguard-publication-approved/inputs/signing-requirements.lock
 
       - name: Download the reviewed detached verifier runtime
-        env:
-          RUNTIME_URL: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_URL }}
-          RUNTIME_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_SHA256 }}
         run: |
           set -euo pipefail
+          manifest="/run/evoguard-publication-approved/inputs/f-control-manifest.json"
+          RUNTIME_URL="$(jq -er '.external_settings.runtime.url | select(type == "string")' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version | select(type == "string")' "$manifest")"
+          RUNTIME_SHA256="$(jq -er '.external_settings.runtime.sha256 | select(type == "string")' "$manifest")"
           test -n "$RUNTIME_URL"
+          test "$RUNTIME_VERSION" = "4.3.0"
           [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$RUNNER_TEMP/evo-guard-verifier.pyz" "$RUNTIME_URL"
           printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNNER_TEMP/evo-guard-verifier.pyz" | sha256sum --check
+          sudo install -m 0444 -o root -g root \
+            "$RUNNER_TEMP/evo-guard-verifier.pyz" \
+            /run/evoguard-publication-approved/runtime/evo-guard.pyz
+          rm -f -- "$RUNNER_TEMP/evo-guard-verifier.pyz"
+          sudo python - /run/evoguard-publication-approved <<'PY'
+          import hashlib, json, os, pathlib, stat, sys
+          root = pathlib.Path(sys.argv[1])
+          expected = {
+              'host-tool-observation.json',
+              *{f'inputs/{path.name}' for path in (root / 'inputs').iterdir()},
+              *{f'trust/{path.name}' for path in (root / 'trust').iterdir()},
+              'runtime/evo-guard.pyz',
+          }
+          observed = {}
+          for relative in sorted(expected):
+              path = root / relative
+              metadata = path.lstat()
+              if (
+                  not stat.S_ISREG(metadata.st_mode)
+                  or stat.S_ISLNK(metadata.st_mode)
+                  or metadata.st_nlink != 1
+                  or metadata.st_uid != 0
+                  or metadata.st_gid != 0
+                  or stat.S_IMODE(metadata.st_mode) != 0o444
+              ):
+                  raise SystemExit(f'unsafe immutable publication snapshot: {relative}')
+              data = path.read_bytes()
+              final = path.lstat()
+              observed[relative] = {
+                  'dev': metadata.st_dev, 'ino': metadata.st_ino,
+                  'size': metadata.st_size, 'mtime_ns': metadata.st_mtime_ns,
+                  'ctime_ns': metadata.st_ctime_ns, 'nlink': metadata.st_nlink,
+                  'uid': metadata.st_uid, 'gid': metadata.st_gid,
+                  'mode': stat.S_IMODE(metadata.st_mode),
+                  'sha256': hashlib.sha256(data).hexdigest(),
+              }
+              if (
+                  metadata.st_dev, metadata.st_ino, metadata.st_size,
+                  metadata.st_mtime_ns, metadata.st_ctime_ns,
+              ) != (
+                  final.st_dev, final.st_ino, final.st_size,
+                  final.st_mtime_ns, final.st_ctime_ns,
+              ):
+                  raise SystemExit(f'publication snapshot changed while hashed: {relative}')
+          (root / 'snapshot-state.json').write_text(
+              json.dumps(observed, sort_keys=True, separators=(',', ':')) + '\n',
+              encoding='utf-8',
+              newline='\n',
+          )
+          PY
+          sudo chown root:root /run/evoguard-publication-approved/snapshot-state.json
+          sudo chmod 0444 /run/evoguard-publication-approved/snapshot-state.json
+          sudo chmod 0555 \
+            /run/evoguard-publication-approved \
+            /run/evoguard-publication-approved/inputs \
+            /run/evoguard-publication-approved/trust \
+            /run/evoguard-publication-approved/runtime
 
-      - name: Decode six external public roots and reverify both RAAE envelopes offline
+      - name: Reverify retained SPDX evidence and both RAAE envelopes offline
         env:
-          RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
-          V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PUBLIC_KEY_B64 }}
-          FINALIZER_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_TRUSTED_FINALIZER_PUBLIC_KEY_B64 }}
-          ARTIFACT_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
-          ARTIFACT_V2_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_ARTIFACT_DIGEST_ADMISSION_V2_PUBLIC_KEY_B64 }}
-          SOURCE_V1_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_SOURCE_FINALIZER_V1_PUBLIC_KEY_B64 }}
-          SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
-          SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
-          SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
-          SOURCE_PROVIDER_UID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_UID }}
-          SOURCE_PROVIDER_GID: ${{ vars.EVOGUARD_PROVIDER_ISOLATION_GID }}
-          OUTER_GIT_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GIT_EXECUTABLE_SHA256 }}
-          OUTER_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
-          OUTER_PROVIDER_UID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID }}
-          OUTER_PROVIDER_GID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID }}
+          REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
         run: |
           set -euo pipefail
-          mkdir -m 0700 "$RUNNER_TEMP/publication-trust"
-          install_public() {
-            local name="$1" value="$2"
-            test -n "$value"
-            printf '%s' "$value" | base64 --decode > "$RUNNER_TEMP/publication-trust/$name.pub.pem"
-            openssl pkey -pubin -in "$RUNNER_TEMP/publication-trust/$name.pub.pem" -noout
-          }
-          install_public release-artifact-admission-v1 "$RAAE_PUBLIC_KEY_B64"
-          install_public release-source-admission-v2 "$V2_PUBLIC_KEY_B64"
-          install_public trusted-finalizer "$FINALIZER_PUBLIC_KEY_B64"
-          install_public artifact-admission-v1 "$ARTIFACT_V1_PUBLIC_KEY_B64"
-          install_public artifact-digest-admission-v2 "$ARTIFACT_V2_PUBLIC_KEY_B64"
-          install_public release-source-finalizer-v1 "$SOURCE_V1_PUBLIC_KEY_B64"
+          root=/run/evoguard-publication-approved
+          output=/run/evoguard-publication-output
+          manifest="$root/inputs/f-control-manifest.json"
+          SOURCE_BOOTSTRAP_SHA256="$(jq -er '.external_settings.source_admission.bootstrap_sha256' "$manifest")"
+          SOURCE_GIT_SHA256="$(jq -er '.external_settings.source_admission.git_sha256' "$manifest")"
+          SOURCE_GH_SHA256="$(jq -er '.external_settings.source_admission.gh_sha256' "$manifest")"
+          SOURCE_PROVIDER_UID="$(jq -er '.external_settings.source_admission.provider_uid' "$manifest")"
+          SOURCE_PROVIDER_GID="$(jq -er '.external_settings.source_admission.provider_gid' "$manifest")"
+          OUTER_GIT_SHA256="$(jq -er '.external_settings.toolchain.git_sha256' "$manifest")"
+          OUTER_GH_SHA256="$(jq -er '.external_settings.toolchain.gh_sha256' "$manifest")"
+          OUTER_PROVIDER_UID="$(jq -er '.external_settings.toolchain.provider_uid' "$manifest")"
+          OUTER_PROVIDER_GID="$(jq -er '.external_settings.toolchain.provider_gid' "$manifest")"
+          BUILDER_RUN_ID="$(jq -er '.workflows.E.workflow_run_id' "$manifest")"
+          BUILDER_RUN_ATTEMPT="$(jq -er '.workflows.E.workflow_run_attempt' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version | select(type == "string")' "$manifest")"
+          test "$RUNTIME_VERSION" = "4.3.0"
+          for value in "$OUTER_PROVIDER_UID" "$OUTER_PROVIDER_GID"; do
+            [[ "$value" =~ ^[1-9][0-9]*$ ]]
+            test "$value" -ne 65534
+            test "$value" -le 2147483647
+            test "$value" = "60002"
+          done
+          sudo groupadd --gid "$OUTER_PROVIDER_GID" evoguard-publication-verifier
+          sudo useradd \
+            --uid "$OUTER_PROVIDER_UID" \
+            --gid "$OUTER_PROVIDER_GID" \
+            --no-create-home \
+            --no-user-group \
+            --shell /usr/sbin/nologin \
+            evoguard-publication-verifier
+          test "$(id -u evoguard-publication-verifier)" = "$OUTER_PROVIDER_UID"
+          test "$(id -g evoguard-publication-verifier)" = "$OUTER_PROVIDER_GID"
+          test "$(id -G evoguard-publication-verifier)" = "$OUTER_PROVIDER_GID"
+          sudo install -d -m 0700 \
+            -o "$OUTER_PROVIDER_UID" -g "$OUTER_PROVIDER_GID" "$output"
+          python_executable="$(readlink -f "$(command -v python3)")"
+          test -f "$python_executable" -a ! -L "$python_executable"
+          isolated=(
+            sudo /usr/bin/setpriv
+            --reuid="$OUTER_PROVIDER_UID"
+            --regid="$OUTER_PROVIDER_GID"
+            --clear-groups
+            --no-new-privs
+          )
+          test "$(
+            "${isolated[@]}" "$python_executable" -I \
+              "$root/runtime/evo-guard.pyz" version
+          )" = "evo-guard $RUNTIME_VERSION"
+          "${isolated[@]}" "$python_executable" -I \
+            "$root/inputs/verify_spdx_attestation.py" \
+            "$root/inputs/sbom-attestation-output.json" \
+            "$root/inputs/evo-guard.pyz" \
+            "$root/inputs/evo-guard.spdx.json" \
+            --receipt "$output/h-sbom-attestation-receipt.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$(jq -er .repository_id "$manifest")" \
+            --repository-owner-id "$REPOSITORY_OWNER_ID" \
+            --workflow-path .github/workflows/evoguard-build-release-artifact.yml \
+            --source-digest "$(jq -er .target_sha "$manifest")" \
+            --run-id "$BUILDER_RUN_ID" \
+            --run-attempt "$BUILDER_RUN_ATTEMPT" \
+            --event workflow_dispatch
+          sudo cmp --silent \
+            "$root/inputs/sbom-attestation-receipt.json" \
+            "$output/h-sbom-attestation-receipt.json"
           verify_one() {
             local name="$1"
-            python -I "$RUNNER_TEMP/evo-guard-verifier.pyz" verify-github-release-artifact-admission \
-              "$RUNNER_TEMP/publication-inputs/$name.raae" \
-              "$RUNNER_TEMP/publication-inputs/$name" \
-              --trusted-pub "$RUNNER_TEMP/publication-trust/release-artifact-admission-v1.pub.pem" \
-              --expected-builder "$RUNNER_TEMP/publication-inputs/builder.json" \
-              --expected-admitter "$RUNNER_TEMP/publication-inputs/admitter.json" \
-              --expected-release-source "$RUNNER_TEMP/publication-inputs/source.json" \
-              --expected-release-source-context "$RUNNER_TEMP/publication-inputs/context.json" \
-              --expected-release-source-producer "$RUNNER_TEMP/publication-inputs/producer.json" \
-              --expected-release-source-admitter "$RUNNER_TEMP/publication-inputs/source-admitter.json" \
+            "${isolated[@]}" /bin/sh -ceu '
+              destination="$1"
+              shift
+              exec "$@" > "$destination"
+            ' _ "$output/$name.publication-verification.json" \
+              "$python_executable" -I \
+              "$root/runtime/evo-guard.pyz" \
+              verify-github-release-artifact-admission \
+              "$root/inputs/$name.raae" \
+              "$root/inputs/$name" \
+              --trusted-pub "$root/trust/release-artifact-admission-v1.pub.pem" \
+              --expected-builder "$root/inputs/builder.json" \
+              --expected-admitter "$root/inputs/admitter.json" \
+              --expected-release-source "$root/inputs/source.json" \
+              --expected-release-source-context "$root/inputs/context.json" \
+              --expected-release-source-producer "$root/inputs/producer.json" \
+              --expected-release-source-admitter "$root/inputs/source-admitter.json" \
               --expected-release-source-bootstrap-guard-sha "$SOURCE_BOOTSTRAP_SHA256" \
-              --expected-release-source-github-policy "$RUNNER_TEMP/publication-inputs/source-github-policy.json" \
+              --expected-release-source-github-policy "$root/inputs/source-github-policy.json" \
               --expected-release-source-git-executable-sha256 "$SOURCE_GIT_SHA256" \
               --expected-release-source-gh-executable-sha256 "$SOURCE_GH_SHA256" \
               --expected-release-source-provider-isolation-uid "$SOURCE_PROVIDER_UID" \
@@ -368,18 +748,92 @@ jobs:
               --expected-gh-executable-sha256 "$OUTER_GH_SHA256" \
               --expected-provider-isolation-uid "$OUTER_PROVIDER_UID" \
               --expected-provider-isolation-gid "$OUTER_PROVIDER_GID" \
-              --trusted-finalizer-pub "$RUNNER_TEMP/publication-trust/trusted-finalizer.pub.pem" \
-              --artifact-admission-v1-pub "$RUNNER_TEMP/publication-trust/artifact-admission-v1.pub.pem" \
-              --artifact-digest-admission-v2-pub "$RUNNER_TEMP/publication-trust/artifact-digest-admission-v2.pub.pem" \
-              --release-source-finalizer-v1-pub "$RUNNER_TEMP/publication-trust/release-source-finalizer-v1.pub.pem" \
-              --release-source-admission-v2-pub "$RUNNER_TEMP/publication-trust/release-source-admission-v2.pub.pem" \
-              > "$RUNNER_TEMP/$name.publication-verification.json"
-            test "$(jq -r .status "$RUNNER_TEMP/$name.publication-verification.json")" = "VERIFIED"
-            test "$(jq -r .decision "$RUNNER_TEMP/$name.publication-verification.json")" = "ALLOW"
-            test "$(jq -r .live_provider_reverification "$RUNNER_TEMP/$name.publication-verification.json")" = "false"
+              --trusted-finalizer-pub "$root/trust/trusted-finalizer.pub.pem" \
+              --artifact-admission-v1-pub "$root/trust/artifact-admission-v1.pub.pem" \
+              --artifact-digest-admission-v2-pub "$root/trust/artifact-digest-admission-v2.pub.pem" \
+              --release-source-finalizer-v1-pub "$root/trust/release-source-finalizer-v1.pub.pem" \
+              --release-source-admission-v2-pub "$root/trust/release-source-admission-v2.pub.pem"
+            test "$(
+              sudo jq -r .status "$output/$name.publication-verification.json"
+            )" = "VERIFIED"
+            test "$(
+              sudo jq -r .decision "$output/$name.publication-verification.json"
+            )" = "ALLOW"
+            test "$(
+              sudo jq -r .live_provider_reverification \
+                "$output/$name.publication-verification.json"
+            )" = "false"
           }
           verify_one evo-guard.pyz
           verify_one evo-guard.spdx.json
+
+      - name: Recheck immutable snapshot identities after verification
+        run: |
+          set -euo pipefail
+          sudo python - /run/evoguard-publication-approved <<'PY'
+          import hashlib, json, pathlib, stat, sys
+          root = pathlib.Path(sys.argv[1])
+          if {path.name for path in root.iterdir()} != {
+              'inputs', 'trust', 'runtime', 'host-tool-observation.json',
+              'snapshot-state.json',
+          }:
+              raise SystemExit('publication snapshot root inventory changed')
+          for name in ('inputs', 'trust', 'runtime'):
+              directory = root / name
+              metadata = directory.lstat()
+              if (
+                  not stat.S_ISDIR(metadata.st_mode)
+                  or stat.S_IMODE(metadata.st_mode) != 0o555
+                  or metadata.st_uid != 0
+                  or metadata.st_gid != 0
+              ):
+                  raise SystemExit(f'publication snapshot directory changed: {name}')
+          state = json.loads(
+              (root / 'snapshot-state.json').read_text(encoding='utf-8')
+          )
+          actual = {
+              'host-tool-observation.json',
+              *{f'inputs/{path.name}' for path in (root / 'inputs').iterdir()},
+              *{f'trust/{path.name}' for path in (root / 'trust').iterdir()},
+              *{f'runtime/{path.name}' for path in (root / 'runtime').iterdir()},
+          }
+          if actual != set(state):
+              raise SystemExit('publication snapshot file inventory changed')
+          for relative, expected in state.items():
+              path = root / relative
+              metadata = path.lstat()
+              data = path.read_bytes()
+              observed = {
+                  'dev': metadata.st_dev, 'ino': metadata.st_ino,
+                  'size': metadata.st_size, 'mtime_ns': metadata.st_mtime_ns,
+                  'ctime_ns': metadata.st_ctime_ns, 'nlink': metadata.st_nlink,
+                  'uid': metadata.st_uid, 'gid': metadata.st_gid,
+                  'mode': stat.S_IMODE(metadata.st_mode),
+                  'sha256': hashlib.sha256(data).hexdigest(),
+              }
+              final = path.lstat()
+              if observed != expected or (
+                  metadata.st_dev, metadata.st_ino, metadata.st_size,
+                  metadata.st_mtime_ns, metadata.st_ctime_ns,
+              ) != (
+                  final.st_dev, final.st_ino, final.st_size,
+                  final.st_mtime_ns, final.st_ctime_ns,
+              ):
+                  raise SystemExit(
+                      f'publication snapshot identity changed: {relative}'
+                  )
+          tools = json.loads(
+              (root / 'host-tool-observation.json').read_text(encoding='utf-8')
+          )
+          for name, expected in tools.items():
+              path = pathlib.Path(expected['path'])
+              data = path.read_bytes()
+              if (
+                  len(data) != expected['size']
+                  or hashlib.sha256(data).hexdigest() != expected['sha256']
+              ):
+                  raise SystemExit(f'host executable changed after binding: {name}')
+          PY
 
       - name: Stage the exact three draft assets and a no-clobber publication record
         env:
@@ -389,14 +843,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -m 0700 "$RUNNER_TEMP/publication-ready"
-          cp "$RUNNER_TEMP/publication-inputs/evo-guard.pyz" \
-            "$RUNNER_TEMP/publication-inputs/evo-guard.spdx.json" \
-            "$RUNNER_TEMP/publication-inputs/SHA256SUMS" \
+          cp "/run/evoguard-publication-approved/inputs/evo-guard.pyz" \
+            "/run/evoguard-publication-approved/inputs/evo-guard.spdx.json" \
+            "/run/evoguard-publication-approved/inputs/SHA256SUMS" \
             "$RUNNER_TEMP/publication-ready/"
           python - \
             "$RUNNER_TEMP/publication-ready" \
             "$RUNNER_TEMP/publication-ready/publication-ready.json" \
-            "$RUNNER_TEMP/publication-inputs/builder-controls.json" <<'PY'
+            "/run/evoguard-publication-approved/inputs/builder-controls.json" \
+            "/run/evoguard-publication-approved/inputs/f-control-manifest.json" \
+            "/run/evoguard-publication-approved/host-tool-observation.json" <<'PY'
           import ast
           import hashlib
           import json
@@ -406,8 +862,35 @@ jobs:
           import sys
           import zipfile
 
-          root, output, controls_path = map(pathlib.Path, sys.argv[1:])
+          root, output, controls_path, manifest_path, tools_path = map(
+              pathlib.Path, sys.argv[1:]
+          )
           controls = json.loads(controls_path.read_text(encoding='utf-8'))
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          host_tools = json.loads(tools_path.read_text(encoding='utf-8'))
+          if set(host_tools) != {'git', 'gh', 'ssh', 'ssh_keygen'}:
+              raise SystemExit('publication host tool set is not exact')
+          for name, value in host_tools.items():
+              if (
+                  set(value) != {'path', 'sha256', 'size'}
+                  or not isinstance(value['path'], str)
+                  or not value['path'].startswith('/')
+                  or not re.fullmatch(r'[0-9a-f]{64}', str(value['sha256']))
+                  or not isinstance(value['size'], int)
+                  or isinstance(value['size'], bool)
+                  or value['size'] < 1
+              ):
+                  raise SystemExit(f'publication host tool descriptor is invalid: {name}')
+          publication = manifest.get('external_settings', {}).get('publication')
+          if (
+              not isinstance(publication, dict)
+              or set(publication) != {'tag_deploy_key_fingerprint'}
+              or not re.fullmatch(
+                  r'SHA256:[A-Za-z0-9+/]{43}',
+                  str(publication.get('tag_deploy_key_fingerprint', '')),
+              )
+          ):
+              raise SystemExit('publication authority is not F/G-bound')
           sbom = json.loads((root / 'evo-guard.spdx.json').read_text(encoding='utf-8'))
           packages = sbom.get('packages')
           if not isinstance(packages, list) or len(packages) != 1:
@@ -463,6 +946,10 @@ jobs:
               'tag': f'v{version}',
               'g_run_id': os.environ['G_RUN_ID'],
               'g_run_attempt': int(os.environ['G_RUN_ATTEMPT']),
+              'tag_deploy_key_fingerprint': publication[
+                  'tag_deploy_key_fingerprint'
+              ],
+              'host_tools': host_tools,
               'assets': {
                   name: descriptor(name)
                   for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
@@ -478,12 +965,19 @@ jobs:
       - name: Upload publication-ready bytes for the protected draft job
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: evoguard-release-publication-ready-${{ steps.bind.outputs.g_run_attempt }}
+          name: evoguard-release-publication-ready-${{ steps.bind.outputs.g_run_id }}-${{ steps.bind.outputs.g_run_attempt }}
           path: ${{ runner.temp }}/publication-ready
           if-no-files-found: error
           include-hidden-files: false
           overwrite: false
           retention-days: 1
+
+      - name: Remove root-owned publication snapshot
+        if: always()
+        run: >-
+          sudo rm -rf --
+          /run/evoguard-publication-approved
+          /run/evoguard-publication-output
 
   draft:
     needs: preflight
@@ -497,12 +991,14 @@ jobs:
       - name: Download only the exact publication-ready artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_attempt }}
+          name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_id }}-${{ needs.preflight.outputs.g_run_attempt }}
           path: ${{ runner.temp }}/publication-ready
 
       - name: Recheck the closed release set without checkout, rebuild, or execution
         env:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
+          G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
         run: |
           set -euo pipefail
           python - "$RUNNER_TEMP/publication-ready" <<'PY'
@@ -510,6 +1006,8 @@ jobs:
           import json
           import os
           import pathlib
+          import re
+          import shutil
           import stat
           import sys
 
@@ -522,15 +1020,70 @@ jobs:
               raise SystemExit('publication-ready set is not closed')
           for item in root.iterdir():
               metadata = item.lstat()
-              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+              if (
+                  stat.S_ISLNK(metadata.st_mode)
+                  or not stat.S_ISREG(metadata.st_mode)
+                  or metadata.st_nlink != 1
+              ):
                   raise SystemExit(f'unsafe publication-ready type: {item.name}')
           record = json.loads((root / 'publication-ready.json').read_text(encoding='utf-8'))
-          if record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
+          if set(record) != {
+              'format', 'repository', 'target_sha', 'tag',
+              'g_run_id', 'g_run_attempt',
+              'tag_deploy_key_fingerprint', 'host_tools', 'assets',
+          } or record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
               raise SystemExit('unsupported publication-ready record')
           if record.get('repository') != os.environ['GITHUB_REPOSITORY']:
               raise SystemExit('publication-ready repository mismatch')
           if record.get('target_sha') != os.environ['TARGET_SHA']:
               raise SystemExit('publication-ready target mismatch')
+          if (
+              record.get('g_run_id') != os.environ['G_RUN_ID']
+              or record.get('g_run_attempt') != int(os.environ['G_RUN_ATTEMPT'])
+          ):
+              raise SystemExit('publication-ready G identity mismatch')
+          if not re.fullmatch(
+              r'SHA256:[A-Za-z0-9+/]{43}',
+              str(record.get('tag_deploy_key_fingerprint', '')),
+          ):
+              raise SystemExit('publication-ready tag authority is invalid')
+          expected_tools = record.get('host_tools')
+          if not isinstance(expected_tools, dict) or set(expected_tools) != {
+              'git', 'gh', 'ssh', 'ssh_keygen',
+          }:
+              raise SystemExit('publication-ready host tool set is not exact')
+          commands = {
+              'git': 'git', 'gh': 'gh', 'ssh': 'ssh', 'ssh_keygen': 'ssh-keygen',
+          }
+          for name, command in commands.items():
+              located = shutil.which(command)
+              if located is None:
+                  raise SystemExit(f'publication host tool is missing: {name}')
+              path = pathlib.Path(located).resolve(strict=True)
+              before = path.lstat()
+              if (
+                  not stat.S_ISREG(before.st_mode)
+                  or stat.S_ISLNK(before.st_mode)
+                  or before.st_nlink != 1
+                  or before.st_size < 1
+                  or before.st_size > 64 * 1024 * 1024
+              ):
+                  raise SystemExit(f'publication host tool is unsafe: {name}')
+              data = path.read_bytes()
+              final = path.lstat()
+              observed = {
+                  'path': str(path),
+                  'sha256': hashlib.sha256(data).hexdigest(),
+                  'size': len(data),
+              }
+              if (
+                  observed != expected_tools.get(name)
+                  or (before.st_dev, before.st_ino, before.st_size,
+                      before.st_mtime_ns, before.st_ctime_ns, before.st_nlink)
+                  != (final.st_dev, final.st_ino, final.st_size,
+                      final.st_mtime_ns, final.st_ctime_ns, final.st_nlink)
+              ):
+                  raise SystemExit(f'publication host tool changed: {name}')
           for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
               data = (root / name).read_bytes()
               if record['assets'].get(name) != {
@@ -598,12 +1151,14 @@ jobs:
       - name: Download only the exact approved publication-ready artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_attempt }}
+          name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_id }}-${{ needs.preflight.outputs.g_run_attempt }}
           path: ${{ runner.temp }}/publication-final
 
       - name: Recheck the closed release set without checkout, rebuild, or execution
         env:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
+          G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
         run: |
           set -euo pipefail
           python - "$RUNNER_TEMP/publication-final" <<'PY'
@@ -611,6 +1166,8 @@ jobs:
           import json
           import os
           import pathlib
+          import re
+          import shutil
           import stat
           import sys
 
@@ -623,15 +1180,70 @@ jobs:
               raise SystemExit('publication-ready set is not closed')
           for item in root.iterdir():
               metadata = item.lstat()
-              if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+              if (
+                  stat.S_ISLNK(metadata.st_mode)
+                  or not stat.S_ISREG(metadata.st_mode)
+                  or metadata.st_nlink != 1
+              ):
                   raise SystemExit(f'unsafe publication-ready type: {item.name}')
           record = json.loads((root / 'publication-ready.json').read_text(encoding='utf-8'))
-          if record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
+          if set(record) != {
+              'format', 'repository', 'target_sha', 'tag',
+              'g_run_id', 'g_run_attempt',
+              'tag_deploy_key_fingerprint', 'host_tools', 'assets',
+          } or record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
               raise SystemExit('unsupported publication-ready record')
           if record.get('repository') != os.environ['GITHUB_REPOSITORY']:
               raise SystemExit('publication-ready repository mismatch')
           if record.get('target_sha') != os.environ['TARGET_SHA']:
               raise SystemExit('publication-ready target mismatch')
+          if (
+              record.get('g_run_id') != os.environ['G_RUN_ID']
+              or record.get('g_run_attempt') != int(os.environ['G_RUN_ATTEMPT'])
+          ):
+              raise SystemExit('publication-ready G identity mismatch')
+          if not re.fullmatch(
+              r'SHA256:[A-Za-z0-9+/]{43}',
+              str(record.get('tag_deploy_key_fingerprint', '')),
+          ):
+              raise SystemExit('publication-ready tag authority is invalid')
+          expected_tools = record.get('host_tools')
+          if not isinstance(expected_tools, dict) or set(expected_tools) != {
+              'git', 'gh', 'ssh', 'ssh_keygen',
+          }:
+              raise SystemExit('publication-ready host tool set is not exact')
+          commands = {
+              'git': 'git', 'gh': 'gh', 'ssh': 'ssh', 'ssh_keygen': 'ssh-keygen',
+          }
+          for name, command in commands.items():
+              located = shutil.which(command)
+              if located is None:
+                  raise SystemExit(f'publication host tool is missing: {name}')
+              path = pathlib.Path(located).resolve(strict=True)
+              before = path.lstat()
+              if (
+                  not stat.S_ISREG(before.st_mode)
+                  or stat.S_ISLNK(before.st_mode)
+                  or before.st_nlink != 1
+                  or before.st_size < 1
+                  or before.st_size > 64 * 1024 * 1024
+              ):
+                  raise SystemExit(f'publication host tool is unsafe: {name}')
+              data = path.read_bytes()
+              final = path.lstat()
+              observed = {
+                  'path': str(path),
+                  'sha256': hashlib.sha256(data).hexdigest(),
+                  'size': len(data),
+              }
+              if (
+                  observed != expected_tools.get(name)
+                  or (before.st_dev, before.st_ino, before.st_size,
+                      before.st_mtime_ns, before.st_ctime_ns, before.st_nlink)
+                  != (final.st_dev, final.st_ino, final.st_size,
+                      final.st_mtime_ns, final.st_ctime_ns, final.st_nlink)
+              ):
+                  raise SystemExit(f'publication host tool changed: {name}')
           for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
               data = (root / name).read_bytes()
               if record['assets'].get(name) != {
@@ -864,7 +1476,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_DEPLOY_KEY: ${{ secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY }}
-          EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
@@ -874,6 +1485,10 @@ jobs:
           [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
           root="$RUNNER_TEMP/publication-final"
           record="$root/publication-ready.json"
+          expected_tag_deploy_key_fingerprint="$(
+            jq -er '.tag_deploy_key_fingerprint | select(type == "string")' "$record"
+          )"
+          [[ "$expected_tag_deploy_key_fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
           python - "$root" <<'PY'
           import hashlib
           import json
@@ -1069,18 +1684,25 @@ jobs:
           tag_key="$RUNNER_TEMP/release-tag-authority.key"
           tag_known_hosts="$RUNNER_TEMP/release-tag-known-hosts"
           tag_remote="git@github.com:$GITHUB_REPOSITORY.git"
+          cleanup_tag_credentials() {
+            rm -f -- \
+              "$tag_key" \
+              "$tag_known_hosts" \
+              "$RUNNER_TEMP/release-tag-authority.pub"
+            unset TAG_DEPLOY_KEY
+          }
+          trap cleanup_tag_credentials EXIT
           umask 077
           printf '%s\n' "$TAG_DEPLOY_KEY" > "$tag_key"
           unset TAG_DEPLOY_KEY
           grep -q '^-----BEGIN OPENSSH PRIVATE KEY-----$' "$tag_key"
           grep -q '^-----END OPENSSH PRIVATE KEY-----$' "$tag_key"
-          [[ "$EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
           ssh-keygen -y -f "$tag_key" > "$RUNNER_TEMP/release-tag-authority.pub"
           actual_tag_key_fingerprint="$(
             ssh-keygen -lf "$RUNNER_TEMP/release-tag-authority.pub" -E sha256 \
               | awk 'NR == 1 { print $2 }'
           )"
-          test "$actual_tag_key_fingerprint" = "$EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT"
+          test "$actual_tag_key_fingerprint" = "$expected_tag_deploy_key_fingerprint"
           cat > "$tag_known_hosts" <<'EOF'
           github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
           EOF
@@ -1197,9 +1819,61 @@ jobs:
             --arg target "$TARGET_SHA" \
             '.ref == $tag and .object.type == "commit" and .object.sha == $target' \
             "$RUNNER_TEMP/tag-created-by-deploy-key.json" >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            > "$RUNNER_TEMP/release-immediately-before-patch.json"
+          RELEASE_BODY="$body" python - \
+            "$record" \
+            "$RUNNER_TEMP/release-immediately-before-patch.json" \
+            "$RUNNER_TEMP/tag-created-by-deploy-key.json" \
+            "$RELEASE_ID" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          record_path, release_path, ref_path = map(pathlib.Path, sys.argv[1:4])
+          expected_id = int(sys.argv[4])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          release = json.loads(release_path.read_text(encoding='utf-8'))
+          ref = json.loads(ref_path.read_text(encoding='utf-8'))
+          if (
+              release.get('id') != expected_id
+              or release.get('tag_name') != record['tag']
+              or release.get('name') != record['tag']
+              or release.get('target_commitish') != record['target_sha']
+              or release.get('draft') is not True
+              or release.get('prerelease') is not False
+              or release.get('body') != os.environ['RELEASE_BODY']
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+              or ref.get('ref') != f"refs/tags/{record['tag']}"
+              or ref.get('object', {}).get('type') != 'commit'
+              or ref.get('object', {}).get('sha') != record['target_sha']
+          ):
+              raise SystemExit('draft or tag changed immediately before PATCH')
+          assets = release.get('assets')
+          if (
+              not isinstance(assets, list)
+              or len(assets) != len(record['assets'])
+              or {item.get('name') for item in assets} != set(record['assets'])
+          ):
+              raise SystemExit('draft assets changed immediately before PATCH')
+          for asset in assets:
+              expected = record['assets'][asset['name']]
+              if (
+                  asset.get('state') != 'uploaded'
+                  or asset.get('size') != expected['size']
+                  or asset.get('digest') != f"sha256:{expected['sha256']}"
+              ):
+                  raise SystemExit(
+                      f"draft asset changed immediately before PATCH: {asset['name']}"
+                  )
+          PY
           printf '%s\n' '{"draft":false}' > "$RUNNER_TEMP/publish-request.json"
           # From this boundary onward a failed PATCH may have mutated GitHub.
           # Never delete automatically after the publication request begins.
+          # GitHub documents no conditional/CAS precondition for this PATCH.
+          # Correctness therefore still depends on the frozen publication window.
           trap - ERR
           gh api \
             -H "X-GitHub-Api-Version: 2026-03-10" \

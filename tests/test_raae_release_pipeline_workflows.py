@@ -41,6 +41,70 @@ def _job(path: Path, name: str) -> str:
     return match.group(0)
 
 
+def _literal_run_blocks(path: Path) -> list[str]:
+    """Return YAML literal run scalars without adding a YAML test dependency."""
+
+    lines = _text(path).splitlines()
+    blocks: list[str] = []
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(?P<indent> +)run:\s+\|\s*$", lines[index])
+        if match is None:
+            index += 1
+            continue
+        parent_indent = len(match.group("indent"))
+        end = index + 1
+        raw: list[str] = []
+        while end < len(lines):
+            line = lines[end]
+            indentation = len(line) - len(line.lstrip(" "))
+            if line.strip() and indentation <= parent_indent:
+                break
+            raw.append(line)
+            end += 1
+        content_indents = [
+            len(line) - len(line.lstrip(" ")) for line in raw if line.strip()
+        ]
+        assert content_indents, f"empty literal run block in {path.name}"
+        content_indent = min(content_indents)
+        blocks.append(
+            "\n".join(
+                line[content_indent:] if line.strip() else ""
+                for line in raw
+            )
+        )
+        index = end
+    return blocks
+
+
+def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
+    count = 0
+    for path in (F, G, H):
+        for block_index, run in enumerate(_literal_run_blocks(path)):
+            lines = run.splitlines()
+            index = 0
+            while index < len(lines):
+                if "<<'PY'" not in lines[index]:
+                    index += 1
+                    continue
+                end = index + 1
+                source: list[str] = []
+                while end < len(lines) and lines[end] != "PY":
+                    source.append(lines[end])
+                    end += 1
+                assert end < len(lines), (
+                    f"unclosed Python heredoc in {path.name} run block {block_index}"
+                )
+                compile(
+                    "\n".join(source) + "\n",
+                    f"{path.name}:run:{block_index}",
+                    "exec",
+                )
+                count += 1
+                index = end + 1
+    assert count == 33
+
+
 def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() -> None:
     bootstrap = json.loads(
         (ROOT / "security" / "release-pipeline-bootstrap.json").read_text(
@@ -107,6 +171,10 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
         "release_tag_ruleset"
     ]
     assert bootstrap["post_publication_evidence"]["first_ledger"] == "v4.4.0"
+    frozen = bootstrap["post_publication_evidence"]["required_frozen_material"]
+    assert "six admission public roots and key IDs" in frozen
+    assert "one distinct release-ledger signing public root and key ID" in frozen
+    assert "six public roots and key IDs" not in frozen
 
 
 def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
@@ -188,9 +256,13 @@ def test_a_b_c_separate_candidate_execution_provider_and_key_access() -> None:
 
 
 def test_e_build_and_attestation_are_capability_separated() -> None:
+    preflight = _job(E, "preflight")
     build = _job(E, "build")
     attest = _job(E, "attest")
 
+    assert "parent_tree_sha: ${{ steps.bind.outputs.parent_tree_sha }}" in preflight
+    assert "github.rest.git.getCommit" in preflight
+    assert "core.setOutput('parent_tree_sha', parentTreeSha)" in preflight
     assert "actions/checkout@" in build
     assert "ops/build_pyz.py" in build
     assert "ops/generate_spdx_sbom.py" in build
@@ -208,6 +280,12 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "secrets." not in build
     assert "python -I admitted-source/ops/build_pyz.py" not in build
     assert "--network none" in build
+    assert "test \"$parent_tree\" = \"$PARENT_TREE_SHA\"" in build
+    assert "'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA']" in build
+    assert "'build_container': {" in build
+    assert "'reference': os.environ['BUILD_IMAGE']" in build
+    assert "'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1]" in build
+    assert "'network': 'none'" in build
     assert "--read-only" in build
     assert "--cap-drop ALL" in build
     assert "--security-opt no-new-privileges" in build
@@ -253,10 +331,13 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "ZIP has trailing bytes" in attest
     assert "SPDX relationships are not exact" in attest
     assert "static PYZ version does not bind the trusted expected version" in attest
+    assert "builder controls do not bind the trusted parent tree" in attest
+    assert "builder controls do not bind the exact networkless container" in attest
 
 
 def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     preflight = _job(F, "preflight")
+    attestations = _job(F, "verify-attestations")
     seal = _job(F, "seal")
 
     assert "environment:" not in preflight
@@ -266,8 +347,35 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     assert (
         "'evo-guard.spdx.json': descriptor('evo-guard.spdx.json')" in preflight
     )
+    assert "PARENT_TREE_SHA=\"$parent_tree\"" in preflight
+    assert "export PARENT_SHA PARENT_TREE_SHA" in preflight
+    assert "'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA']" in preflight
+    assert "'build_container': {" in preflight
+    assert "'reference': os.environ['BUILD_IMAGE']" in preflight
+    assert "'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1]" in preflight
+    assert "'network': 'none'" in preflight
+    assert "environment:" not in attestations
+    assert "secrets." not in attestations
+    assert "attestations: read" in attestations
+    assert "github-attestation-receipt" in attestations
+    assert "create_slsa_receipt evo-guard.pyz build-provenance" in attestations
+    assert (
+        "create_slsa_receipt evo-guard.spdx.json spdx-provenance"
+        in attestations
+    )
+    assert "verify_spdx_attestation.py" in attestations
+    assert "'version': '4.3.0'" in preflight
+    assert ".external_settings.runtime.version" in attestations
+    assert "evo-guard $RUNTIME_VERSION" in attestations
+    assert "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64" not in attestations
+    assert "evoguard-release-artifact-v1-complete-controls-" in attestations
+    assert "complete F control inventory" not in attestations
+    assert "find \"$RUNNER_TEMP/f-controls-complete\"" in attestations
 
     assert "environment: evoguard-release-artifact-v1" in seal
+    assert "needs: [preflight, verify-attestations]" in _text(F)
+    assert "verify-github-attestation-receipt" in seal
+    assert "complete F manifest does not bind all attestation bytes" in seal
     assert (
         "secrets.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
         in seal
@@ -279,6 +387,9 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     assert "$RUNNER_TEMP/evo-guard.spdx.json.raae" in seal
     assert "outer provider can read the RAAE signing key" in seal
     assert "live_provider_reverification" in seal
+    assert "provider/github-attestation-receipt.json" in seal
+    assert "RAAE provider evidence size is unsafe" in seal
+    assert "cmp --silent" in seal
     assert "actions/checkout@" not in seal
 
 
@@ -303,6 +414,12 @@ def test_g_verifies_both_envelopes_and_required_negative_matrix() -> None:
     assert "live_provider_reverification" in g
     assert "= \"false\"" in g
     assert "publication-controls.json" in g
+    assert "evoguard-release-artifact-v1-complete-controls-" in g
+    assert "verify-github-attestation-receipt" in g
+    assert "verify_slsa_receipt evo-guard.pyz build-provenance" in g
+    assert "verify_slsa_receipt evo-guard.spdx.json spdx-provenance" in g
+    assert "verify_spdx_attestation.py" in g
+    assert "'attestation_evidence': {" in g
 
 
 def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
@@ -335,6 +452,10 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "the approval refuses an existing release" in draft
     assert "RAAE-bound builder version does not match SPDX" in whole
     assert "PYZ release version does not match SPDX" in whole
+    assert "'version': '4.3.0'" in _text(G)
+    assert ".external_settings.runtime.version" in preflight
+    assert "evo-guard $RUNTIME_VERSION" in preflight
+    assert "evo-guard $RELEASE_VERSION" not in preflight
     assert "environment: evoguard-release-publication" in publish
     assert "contents: write" in publish
     assert "immutable-releases" in draft
@@ -356,7 +477,11 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "cleanup_verified_unpublished_draft" in publish
     assert "removed exact unpublished draft after a pre-PATCH failure" in publish
     assert "secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY" in publish
-    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in publish
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in _text(F)
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" in _text(G)
+    assert "vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT" not in publish
+    assert "tag_deploy_key_fingerprint" in preflight
+    assert "expected_tag_deploy_key_fingerprint" in publish
     assert "actual_tag_key_fingerprint" in publish
     assert "HostKeyAlgorithms=ssh-ed25519" in publish
     assert "IdentityAgent=none" in publish
@@ -402,6 +527,15 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "gh release upload" not in whole
     assert "--latest" not in whole
     assert "evo-guard.pyz.raae" not in draft
+    assert "evoguard-release-artifact-v1-complete-controls-" in preflight
+    assert "G selector attestation digest mismatch" in preflight
+    assert "host_tools" in preflight
+    assert preflight.count("--no-new-privs") >= 1
+    assert "--reuid=\"$OUTER_PROVIDER_UID\"" in preflight
+    assert "publication host tool changed" in draft
+    assert "publication host tool changed" in publish
+    assert "observed != expected_tools.get(name)" in draft
+    assert "observed != expected_tools.get(name)" in publish
     assert publish.count("$RUNNER_TEMP/publication-final/") >= 3
 
 
