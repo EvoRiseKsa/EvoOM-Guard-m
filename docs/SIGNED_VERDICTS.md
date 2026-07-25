@@ -15,12 +15,14 @@ emits a **detached signature** next to every verdict; anyone holding the public
 key can verify — offline, years later — that the verdict bytes are exactly what
 the judge wrote.
 
-Requires the `sign` extra (the core gate stays stdlib-only). `v4.3.0` is the
-published immutable GitHub Release:
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
+Requires the `sign` extra (the core gate stays stdlib-only). Install it from
+ledger-recorded release `v4.3.0`:
 
 ```bash
 pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.3.0"
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 
 ## Usage
 

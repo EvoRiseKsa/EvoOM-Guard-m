@@ -26,9 +26,19 @@ validated security service.
 
 ## Public repository map
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
+[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
+`b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
+records the release assets `evo-guard.pyz`, `SHA256SUMS`, plus release and
+build-provenance attestation evidence. The ledger records no SBOM release asset.
+Canonical ledger: `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+<!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
+
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
 | --- | --- | --- | --- |
-| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest published immutable consumer release. See [release status](RELEASE_STATUS.md). Consumers must inspect [Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases) before adopting a different version pin. | External adoption, independent security review, or universal correctness. |
+| [`EvoOM-Guard-m`](https://github.com/EvoRiseKsa/EvoOM-Guard-m) | Authoritative source-available CLI, Action, releases, threat model, and security policy. | The generated summary above separates source and published-release identity. See [release status](RELEASE_STATUS.md). | External adoption, independent security review, or universal correctness. |
 | [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) *(public archive)* | Frozen reproducible demonstration of honest fixes, protected-harness tampering, stdout forgery, and black-box evidence. | Its public scenario is pinned to **v3.5.2** and frozen at [`proof-v3.5.2`](https://github.com/EvoRiseKsa/evoom-guard-demo/releases/tag/proof-v3.5.2). | Any capability added in v3.6 or v3.7, including the raw-Git Trusted Finalizer. |
 | [`evoom-guard-eval`](https://github.com/EvoRiseKsa/evoom-guard-eval) *(public archive)* | Historical evaluation protocol and reproducibility record. | Its public record is pinned to **v3.5.2**, frozen at [`historical-v3.5.2-evaluation`](https://github.com/EvoRiseKsa/evoom-guard-eval/releases/tag/historical-v3.5.2-evaluation), and explicitly records both conformance and infrastructure failures. | A general accuracy rate, an independent evaluation, or a v3.7 result. |
 | [`evoom-guard-finalizer-pilot`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot) *(historical v3.7 pilot)* | Frozen operational evidence for the v3.7 Trusted Finalizer reference. | It records a same-owner, cross-account v3.7.0 raw-Git `ALLOW` exercise and public verification inputs in [`ROUND2_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-finalizer-pilot/blob/main/ROUND2_RESULTS.md). | A v4 result, deployed production merge gate, independent audit, hostile-runner boundary, or software-release provenance claim. |
@@ -45,6 +55,23 @@ validation. See [governance](GOVERNANCE.md).
 
 ## Assurance status by mechanism
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_PIPELINE -->
+The protected A-H release pipeline is implemented in source and **disabled by default**.
+The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
+records a completed protected A-H operation. No externally anchored signed v2 ledger
+records publication by this pipeline. An admitted release is contracted to exactly
+`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
+evidence that those assets were published.
+<!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_PIPELINE -->
+
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_EVIDENCE_ROWS -->
+Release evidence: validated ledger `tests/baseline/v4.3.0/RELEASE_LEDGER.json` records
+`v4.3.0` assets `evo-guard.pyz`, `SHA256SUMS` and build provenance under
+`.github/workflows/release.yml`. It records no SBOM release asset. These attestations
+establish bounded provenance, not correctness, security, deployment, or independent
+review.
+<!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_EVIDENCE_ROWS -->
+
 | Mechanism | Publicly supported statement | Boundary that remains |
 | --- | --- | --- |
 | Basic Guard | Rejects edits/deletions to configured protected harness paths before the suite runs; uses a structured judge-owned JUnit/exit-code verdict. | The default in-process report channel is deliberately forgeable by malicious candidate code. |
@@ -52,8 +79,6 @@ validation. See [governance](GOVERNANCE.md).
 | `--blackbox-only` | Adds a judge-owned external process/protocol report and can fail closed on delivered isolation. | It is a narrowly supported target model, not a universal sandbox or proof of artifact provenance. |
 | Trusted Finalizer reference | Separates untrusted re-verification from a signing job that re-derives specified raw-Git bindings before key access. | It is a reference template and pilot, not enabled as this repository's merge requirement or proof of an unbreakable runner boundary. |
 | Artifact admission V1 | Can bind one observed regular-file digest and size to a verified finalizer `ALLOW`. The v4 pilot exercised this with a fresh, identity-constrained GitHub provider check and retained evidence. | It does not prove how that file was built, published, deployed, or secured, and the completed round is PR-head-bound rather than protected-main release authorization. |
-| GitHub artifact attestations | [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) publishes `evo-guard.pyz`, its exact `SHA256SUMS`, and a GitHub Actions build-artifact attestation. | [`v3.7.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.7.0) predates that workflow and has no such GitHub Actions artifact attestation. An attestation is provenance evidence, not a correctness or security verdict. |
-| Release SBOM source contract | Protected source prepares a deterministic external SPDX 2.3 inventory and a separate GitHub SBOM attestation for the next release that uses the updated workflow. | The current immutable v4.3.0 release has no SBOM. The future inventory is not scanning, VEX, a security verdict, artifact admission, independent evidence, or cross-platform reproducibility proof. |
 | GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. Published `v4.1.0` additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. Release Source Admission V2 Round 1 exercised that path for one authenticated producer receipt; Release Artifact Admission Round 2 later freshly verified one exact 290-byte JSON descriptor before sealing. | The adapter remains same-repository only. The observed objects are not evidence for an arbitrary package, image, release asset, general supply-chain guarantee, production gate, or independent provider implementation. |
 | Authenticated producer receipt pilot | In the clean round, B created one bounded receipt and C freshly verified one GitHub Artifact Attestation for its exact bytes. The moved-`main` control failed before receipt creation/download. The final matrix then rejected wrong-workflow, wrong-run-attempt, and altered-receipt substitutions; the altered-byte control included a positive provider baseline for the original bytes on the same runner. | These are non-admitting observations only. They do not independently prove A executed Guard and do not authorize a release, deployment, merge, artifact admission, or `ALLOW`. |
 | Release Source Admission V2 | Implements a signed protected-main source `ALLOW` binding A/B/C workflow blobs and run attempts, strong receipt evidence, semantic provider output, externally checked Git/`gh` digests and UID/GID pins, a provider-inaccessible signing-key path, and five distinct key domains. The separate pilot completed one source-only Round 1 and the A/B/C/D source phase of Round 2 with separately frozen targets and fail-closed observations. | Each observed `ALLOW` applies only to its recorded source and attempts. A source result alone does not bind a release artifact or publication, is not a production gate, and has no independent review. |
@@ -88,8 +113,9 @@ operational practice, high-quality private policy/packs and data, trustworthy
 service operation, and customer integrations—not from obscuring already
 published Python or workflow files.
 
-The canonical source and published-release state is maintained in
-[RELEASE_STATUS.md](RELEASE_STATUS.md). The project cannot
+The canonical machine-readable lifecycle state is maintained in
+[`PROJECT_STATUS.json`](../PROJECT_STATUS.json); [RELEASE_STATUS.md](RELEASE_STATUS.md)
+is a generated view. The project cannot
 retract rights already granted with v3.8.0; see
 [LICENSE_HISTORY.md](../LICENSE_HISTORY.md). The v4 license applies only to
 material distributed with it. EvoRise Tech is the Licensor identified in

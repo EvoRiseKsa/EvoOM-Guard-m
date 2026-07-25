@@ -501,6 +501,12 @@ remain in their established facades.
    output-mutation capability.
 - All 41 CLI handlers now delegate through typed owners; this behavior-preserving
   command-family extraction phase is complete.
+
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
+Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
+is **complete**; the overall refactor program is **in-progress**. Source version
+`4.4.0.dev0` remains unreleased.
+<!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

@@ -6,19 +6,14 @@ been configured, or that any key currently exists.
 
 ## Current state
 
-- All three activation variables must remain absent or literal `false`.
-- The bootstrap template contains deliberately invalid `POST_MERGE_REQUIRED`
-  values for every GitHub workflow ID, raw-Git workflow blob, runtime pin,
-  executable pin, and public root that cannot exist before merge.
-- The historical `.github/workflows/release.yml` jobs are hard-disabled.
-- With all flags false, no workflow in this change creates a tag, release,
-  Marketplace update, ledger entry, deployment, or production gate.
-- When deliberately activated, H uses two approvals: `evoguard-release-draft`
-  is a read-only intent approval, then `evoguard-release-publication` alone
-  creates, reads back, and publishes the draft in one protected job. Immediately
-  before publication, that job alone creates the exact `v*` tag with the sole
-  write-enabled deploy key allowed by the active tag ruleset. Immutable Releases
-  must already be enabled.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
+The protected A-H release pipeline is implemented in source and **disabled by default**.
+The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
+records a completed protected A-H operation. No externally anchored signed v2 ledger
+records publication by this pipeline. An admitted release is contracted to exactly
+`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
+evidence that those assets were published.
+<!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 
 ## Phase contracts
 

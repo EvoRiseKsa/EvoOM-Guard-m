@@ -1,22 +1,21 @@
----
-source_version: 4.3.0
-latest_published_version: 4.3.0
-state: published
----
-
 # Release status
 
-The repository source declares **v4.3.0**, the current published, immutable
-consumer release:
-[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0).
-The immutable tag identifies the exact protected-`main` source commit. The
-release's `SHA256SUMS` asset identifies the exact `evo-guard.pyz` bytes. GitHub
-provides a release attestation for the immutable release and a separate GitHub
-Actions build-artifact attestation for those bytes.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
+[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
+`b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
+records the release assets `evo-guard.pyz`, `SHA256SUMS`, plus release and
+build-provenance attestation evidence. The ledger records no SBOM release asset.
+Canonical ledger: `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 
-`v4.3.0` has no SPDX SBOM asset or SBOM attestation. Protected source now
-prepares that three-asset contract for a future release, but no historical
-tag, asset, baseline, or release ledger is changed. See [Release SBOM](SBOM.md).
+The protected A-H release pipeline is implemented in source and **disabled by default**.
+The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
+records a completed protected A-H operation. No externally anchored signed v2 ledger
+records publication by this pipeline. An admitted release is contracted to exactly
+`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
+evidence that those assets were published.
+<!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
 
 The `v4.3.0` release adds Agent Change Admission V1. Its archived public
 same-owner pilot retained one permitted run, one ignored tracked-path
@@ -53,15 +52,13 @@ That later evidence does not change the frozen release, bind a release artifact
 or publication, establish production readiness, or constitute independent
 security review.
 
-Consumer usage should pin to `v4.3.0` only when aligned with your acceptance
-policy (typically strict SHA pinning in production). This release contains the
-source-available baseline and hardening changes intended for general evaluation
-and early adoption; it is not yet a third-party audited service.
-
-`evo-guard init` now requires `--ref` explicitly. Supply an independently
-inspected existing release tag such as `--ref v4.3.0`, or a full 40-hex commit
-SHA for the strictest pin. It deliberately refuses a moving branch name and
-does not guess a "latest" release.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CONSUMER_PIN -->
+Consumer usage should use ledger-recorded release `v4.3.0` only when aligned with the
+acceptance policy; pin commit `b8c61315a22741415c75e4e8828feb60c0ad5149` for the
+strictest reviewed identity. `evo-guard init` requires `--ref` explicitly: supply
+`v4.3.0` or that full commit SHA. It refuses a moving branch and does not guess a latest
+release.
+<!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CONSUMER_PIN -->
 
 Historical releases retain the license and notices that shipped with them. The
 EvoRise Source-Available License 1.0 applies only to material first
@@ -69,23 +66,14 @@ distributed with a published v4 release carrying that license.
 
 ## Baseline artifacts
 
-The latest committed minimal release ledger is `v4.3.0`. It records the
-post-publication source identity, exact downloaded release asset bytes,
-release/build attestations, propagated Marketplace version, and successful tag
-CI:
-
-- `tests/baseline/v4.3.0/RELEASE_LEDGER.json`
-- `tests/baseline/v4.3.0/SHA256SUMS`
-- `tests/baseline/v4.3.0/pyz/evo-guard.pyz`
-
-It is deliberately not described as a full behavioral capture: no v4.3.0
-command, verdict, signed-evidence, verifier-pack, benchmark, Agent Change
-Admission pilot fixture, or live Release Artifact Admission V1 fixture was
-created merely by copying historical evidence. Shipping those implementations
-does not make this release ledger a required production gate, hostile-runner
-proof, live E/F/G pilot, artifact admission decision, or publication
-authorization. The separate later pilot evidence described above does not turn
-this release ledger into any of those things.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CURRENT_LEDGER -->
+The protected source tree selects `tests/baseline/v4.3.0/RELEASE_LEDGER.json` as the
+latest ledger. Its validated `evoguard-release-ledger-v1` record binds release `v4.3.0`,
+commit `b8c61315a22741415c75e4e8828feb60c0ad5149`, and assets `evo-guard.pyz`,
+`SHA256SUMS`. It records no SBOM asset. This bounded identity/provenance record is not a
+full behavioral capture, correctness verdict, production-readiness claim, independent
+review, or deployment authorization.
+<!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_CURRENT_LEDGER -->
 
 The same bounded identity/provenance records for earlier immutable releases
 remain available at:

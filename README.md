@@ -114,10 +114,11 @@ correctness or security.
 > **Licensing and release status.** Copyright © 2026 EvoRise Tech. The author
 > and original creator is Mana Alharbi; EvoRise Tech is the Licensor. The
 > project is source-available under the **EvoRise Source-Available License
-> 1.0**, not open source. Use [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)
-> and [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) as the canonical,
-> maintained source and published-release state instead of inferring it from a
-> copied version paragraph. See [LICENSE](LICENSE) and
+> 1.0**, not open source. Machine-readable lifecycle state is maintained in
+> [`PROJECT_STATUS.json`](PROJECT_STATUS.json); the human pages
+> [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) and
+> [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) are generated views. See
+> [LICENSE](LICENSE) and
 > [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
 
 > **Repository map and current evidence.** See
@@ -256,14 +257,23 @@ An exact source version becomes a consumer release only after its immutable
 GitHub Release is published. **Before copying any versioned pin, confirm that
 exact tag exists in [GitHub Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases).**
 
-The current consumer release is
-[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0),
-published as an immutable GitHub Release. The immutable tag identifies the
-exact protected-`main` source commit.
-Its exact `evo-guard.pyz` SHA-256 is published in the release's `SHA256SUMS`
-asset, and the zipapp has a GitHub Actions build-artifact attestation.
-`v4.3.0` has no `evo-guard.spdx.json` asset or SBOM attestation; those are
-prepared only for a future release and will not be attached retroactively.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
+[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
+`b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
+records the release assets `evo-guard.pyz`, `SHA256SUMS`, plus release and
+build-provenance attestation evidence. The ledger records no SBOM release asset.
+Canonical ledger: `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+
+The protected A-H release pipeline is implemented in source and **disabled by default**.
+The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
+records a completed protected A-H operation. No externally anchored signed v2 ledger
+records publication by this pipeline. An admitted release is contracted to exactly
+`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
+evidence that those assets were published.
+<!-- END EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
+
 Under the license shipped with that
 exact v4 release, commercial, production, required-CI/merge-gate,
 redistribution, hosted, and managed-service use require a separate commercial
@@ -272,23 +282,27 @@ requires successful validation on the protected default branch, reviewed
 publication, and Marketplace publication where applicable. Do not cut a release
 merely to exercise artifact attestation.
 
-`v3.7.0` has a GitHub **release** attestation but no GitHub Actions
-build-artifact attestation for `evo-guard.pyz`. That distinction matters: a
-release attestation is not build provenance. Neither the v4.3.0 attestation nor
-any historical attestation is an EvoGuard verdict, an artifact-admission
-decision, or proof of deployment. See
-[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md)
-for exact verification commands and their scope.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
+Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
+build-artifact attestation. The validated `v4.3.0` ledger records build provenance for
+its release artifacts under `.github/workflows/release.yml`; it records no SBOM release
+asset. Provider attestations are provenance evidence, not an EvoGuard verdict,
+artifact-admission decision, or proof of deployment. See
+[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the
+bounded procedure.
+<!-- END EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
 
 ## Try it in two minutes
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.3.0"   # published release; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.3.0"   # ledger-recorded release; pin a SHA for strictest CI
 
-# From the branch you want checked (the diff is reverse-applied to a throwaway
-# copy — your working tree is never modified):
+# From the branch you want checked (the diff is reverse-applied to a
+# throwaway copy; your working tree is never modified):
 git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 
 You get a PR-ready Markdown report and a CI-friendly exit code:
 
@@ -319,9 +333,11 @@ SARIF 2.1.0 report (`--sarif`) for GitHub code scanning — see
 
 The fastest path — scaffold the workflow from inside your repo:
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 ```bash
 evo-guard init --ref v4.3.0 --test-command "python -m pytest -q"
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 
 This writes two files when they do not already exist: the workflow and the
 base-owned judge policy `.evoguard.json`. Commit **both**. The policy, not the
@@ -330,6 +346,7 @@ the judge belong.
 
 or drop the composite action in yourself:
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ACTION_PIN -->
 ```yaml
 permissions:
   contents: read
@@ -337,12 +354,13 @@ permissions:
 
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-    with: { fetch-depth: 0 }          # Guard needs the base commit to diff
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # published release; pin a SHA for strictest CI
+    with: { fetch-depth: 0 }
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # ledger-recorded release; pin a SHA for strictest CI
     with:
-      comment: "true"                 # sticky comment on same-repo PRs; forks keep the job summary
-      fail-on: "any-non-pass"          # required on pull_request runs
+      comment: "true"
+      fail-on: "any-non-pass"
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:README_ACTION_PIN -->
 
 > **Next/unreleased Action bootstrap:** current development builds the
 > stdlib-only `evo-guard.pyz` directly from the selected Action revision and
@@ -444,7 +462,7 @@ evo-guard guard ./repo --patch candidate.txt
 
 # Environment checkup / workflow scaffolding / version:
 evo-guard doctor
-evo-guard init --ref v4.3.0 --test-command "npm test"
+evo-guard init --ref vX.Y.Z --test-command "npm test"
 evo-guard version
 ```
 
@@ -686,17 +704,17 @@ remains governed by the license shipped with that exact release. In particular,
 the published v3.8.0 license permitted commercial internal use, including the
 user's own CI, subject to its terms.
 
-### Current published v4.3.0 release
+### Current v4 licensing model
 
-[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0)
-is published under the **EvoRise Source-Available License 1.0**. It permits
+Published v4 material carrying the **EvoRise Source-Available License 1.0**
+permits
 non-commercial study and research, good-faith security research, and a limited
 internal non-production evaluation. Commercial, production, required-CI,
 merge-gate, redistribution, hosted, and managed-service use require a separate
 commercial agreement.
 
-This release is published at `v4.3.0`; adopt it from GitHub Releases with the
-exact tag and pin to the corresponding commit or SHA for production. See
+Use the generated [release status](docs/RELEASE_STATUS.md) to identify the
+latest immutable consumer release, then pin its corresponding commit SHA. See
 [LICENSE](LICENSE),
 [LICENSE_HISTORY.md](LICENSE_HISTORY.md),
 [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
