@@ -118,6 +118,18 @@ verdict composition remain in their existing owners. Candidate
 admission/materialization/deletion coordination belongs to
 `verifiers/repo_candidate.py`.
 
+The fourth workspace slice lives in
+`evoom_guard/workspace/repository_lifetime.py`. Its mutable judgment-local
+value records the candidate root/copy and optional verifier-pack root, registers
+the pack root before snapshotting starts, preserves the historical
+`intake-result or callback-created` reconciliation, and returns the exact
+candidate-then-pack cleanup target order. Temporary-directory and path-join
+effects remain injected. `RepoVerifier` still resolves those live providers and
+invokes its existing cleanup facade from `finally`, so primary-exception
+precedence and compatibility monkeypatch timing do not move into this owner.
+Pack admission, execution, evidence, verdict composition, and cleanup effects
+remain outside the lifetime value.
+
 The first CLI slice is the same kind of atomic compatibility migration:
 `evoom_guard/cli/__init__.py` contains the exact implementation bytes formerly
 stored in `cli.py`. The import path, `evoom_guard.cli:main` console entry point,
@@ -249,16 +261,16 @@ composition do not cross this boundary.
 Repository candidate coordination lives in
 `evoom_guard/verifiers/repo_candidate.py`. Its immutable XOR outcomes separate
 terminal policy/materialization/deletion verdicts from admitted candidates.
-Admission completes before workspace allocation; `RepoVerifier` then allocates
-the candidate workspace and calls the owner to copy and materialize it. The
-verifier performs pack intake next and only then calls the owner to apply
-admitted deletions. All filesystem and policy operations are live providers,
-preserving the historical facade lookup and exception order. Workspace
-allocation, verifier-pack intake, runtime identity, process/container
-execution, sticky evidence, final projection, and `finally` cleanup do not
-cross this boundary. A structured `file_blocks` mapping is authoritative by
-presence, including an empty mapping; textual marker parsing is used only when
-the structured transport is absent.
+Admission completes before `RepoVerifier` asks the workspace-lifetime owner to
+allocate and record the candidate workspace, then calls the candidate owner to
+copy and materialize it. The verifier performs pack intake next and only then
+calls the candidate owner to apply admitted deletions. All filesystem and
+policy operations are live providers, preserving the historical facade lookup
+and exception order. Workspace lifetime, verifier-pack intake, runtime
+identity, process/container execution, sticky evidence, final projection, and
+`finally` cleanup do not cross this boundary. A structured `file_blocks`
+mapping is authoritative by presence, including an empty mapping; textual
+marker parsing is used only when the structured transport is absent.
 
 Repository verifier-pack admission lives in
 `evoom_guard/verifiers/repo_pack_intake.py`. Its immutable request/result and
@@ -266,10 +278,10 @@ service contracts own no-pack/required-pin consistency, the reserved mount
 collision, snapshot validation, digest matching, and the exact rejection
 evidence. `RepoVerifier` supplies call-through `lexists`, workspace-allocation,
 and `snapshot_pack` operations so an earlier operation can still replace a
-later historical seam. `RepoVerifier` also records the workspace before
-snapshotting so its existing `finally` cleanup covers unexpected exceptions.
-Pack execution and the accepted-snapshot continuity state stay outside this
-boundary.
+later historical seam. The workspace-lifetime owner records the returned root
+before snapshotting and reconciles the immutable intake result afterward, so
+the existing `finally` cleanup covers unexpected exceptions. Pack execution
+and the accepted-snapshot continuity state stay outside this boundary.
 
 Verifier-pack execution and interpretation live in
 `evoom_guard/verifiers/repo_pack.py`. Immutable execution and interpretation
@@ -317,8 +329,9 @@ pre-extraction vector freezes full result values, key order, and present-null
 sets across no-pack, completed-pack, pack-launch-failure, invalid-present-pack,
 and missing-pack paths. This owner performs no provider lookup, trace
 mutation, process/container execution, filesystem access, clock read, or
-cleanup. `RepoVerifier` retains phase/effect ordering, workspace lifetime,
-phase-composer invocation, and primary-exception cleanup precedence.
+cleanup. `RepoVerifier` retains phase/effect ordering, live provider supply,
+phase-composer invocation, and primary-exception cleanup precedence; workspace
+path lifetime bookkeeping belongs to `workspace.repository_lifetime`.
 
 The third repository-verifier phase slice adds immutable
 `domain.evidence.VerificationEvidence`, `VerifierPackEvidence`,

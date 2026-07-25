@@ -266,13 +266,20 @@ remain in their established facades.
   root-absence observation. Repository copying requires a quiescent source and
   makes no atomic-snapshot claim; cleanup does not claim stable absence against
   later recreation. `repo_verifier` keeps live compatibility facades and
-  retains workspace allocation plus higher-level repository orchestration.
+  retains higher-level repository orchestration.
+- The dependency-free `workspace/repository_lifetime.py` owner now records one
+  judgment's candidate root/copy and optional verifier-pack root. It registers
+  the pack root before snapshotting can start, preserves the historical
+  `intake-result or callback-created` reconciliation, and returns the exact
+  candidate-then-pack cleanup target order. `RepoVerifier` still supplies live
+  allocation/path providers and invokes its existing cleanup facade in
+  `finally`, so no primary-exception or monkeypatch timing changes.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: split the remaining repository workspace allocation and cleanup
-  responsibilities in independent characterized slices. Candidate
-  coordination, repository-suite/verifier-pack execution, accepted-pack and
+- Pending: extract the remaining repository cleanup effect/provider facade
+  behind its own characterized boundary. Candidate coordination, workspace
+  path lifetime, repository-suite/verifier-pack execution, accepted-pack and
   runtime continuity, phase-composition algorithm, sticky projection, and
   completed artifact construction have focused owners.
 - Delivered-assurance evaluation is owned by `application.assurance`.
