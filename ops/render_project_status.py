@@ -20,7 +20,8 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -61,7 +62,7 @@ _MARKER_LINE_RE = re.compile(
     r"<!-- (BEGIN|END) EVOGUARD_PROJECT_STATUS:([A-Z0-9_]+) -->\Z"
 )
 _RAW_HTML_RE = re.compile(
-    r"<(?:/?[A-Za-z][A-Za-z0-9-]*(?:\s|/?>)|!--|!DOCTYPE\b|\?|!\[CDATA\[)",
+    r"<(?:/?[A-Za-z][A-Za-z0-9-]*(?:\s|/?>|\Z)|!--|!DOCTYPE\b|\?|!\[CDATA\[)",
     re.IGNORECASE,
 )
 _MARKER_FILES = {
@@ -175,12 +176,8 @@ class _FileIdentity:
 class _PendingWrite:
     target: Path
     staged: Path
-    backup: Path
     original: _FileIdentity
-    staged_identity: _FileIdentity
-    original_bytes: bytes
     expected_bytes: bytes
-    committed_identity: _FileIdentity | None = None
 
 
 _SOURCE_GATE = "vars.EVOGUARD_RELEASE_SOURCE_V2_ENABLED == 'true'"
@@ -1984,6 +1981,15 @@ def _strip_complete_inline_code_spans(line: str) -> str:
             break
         opener_start = cursor + opener.start()
         opener_end = cursor + opener.end()
+        backslashes = 0
+        escape_cursor = opener_start - 1
+        while escape_cursor >= 0 and line[escape_cursor] == "\\":
+            backslashes += 1
+            escape_cursor -= 1
+        if backslashes % 2:
+            visible.append(line[cursor:opener_end])
+            cursor = opener_end
+            continue
         delimiter = opener.group(0)
         closer = re.search(
             rf"(?<!`){re.escape(delimiter)}(?!`)",
@@ -2281,7 +2287,99 @@ def _cleanup_temporary(root: Path, path: Path) -> str | None:
         return None
 
 
+def _renderer_lock_path(root: Path) -> Path:
+    identity = os.path.normcase(os.fspath(_absolute(root))).encode(
+        "utf-8",
+        errors="surrogatepass",
+    )
+    digest = hashlib.sha256(identity).hexdigest()
+    return Path(tempfile.gettempdir()) / f"evoguard-project-status-{digest}.lock"
+
+
+@contextmanager
+def _exclusive_renderer_lock(root: Path) -> Iterator[None]:
+    """Serialize cooperating writers; this is not a filesystem-wide CAS.
+
+    Atomic exclusive creation excludes other renderer processes using this
+    function. A crash can leave a stale lock which must be inspected and
+    removed manually. External, non-cooperating writers remain outside the
+    contract.
+    """
+
+    lock_path = _renderer_lock_path(root)
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
+    )
+    descriptor: int | None = None
+    created_identity: tuple[int, int] | None = None
+    try:
+        try:
+            descriptor = os.open(lock_path, flags, 0o600)
+        except FileExistsError as exc:
+            raise ProjectStatusError(
+                "another project-status writer holds the exclusive renderer lock, "
+                f"or a stale lock requires manual inspection: {lock_path}"
+            ) from exc
+        metadata = os.fstat(descriptor)
+        created_identity = (metadata.st_dev, metadata.st_ino)
+        if not stat.S_ISREG(metadata.st_mode) or _is_reparse_point(metadata):
+            raise ProjectStatusError("renderer lock is not a regular file")
+        yield
+    except ProjectStatusError:
+        raise
+    except OSError as exc:
+        raise ProjectStatusError("cannot acquire the exclusive renderer lock") from exc
+    finally:
+        cleanup_error: str | None = None
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                cleanup_error = f"cannot close renderer lock: {exc}"
+        if created_identity is not None:
+            try:
+                current = os.lstat(lock_path)
+                if (
+                    stat.S_ISREG(current.st_mode)
+                    and not stat.S_ISLNK(current.st_mode)
+                    and not _is_reparse_point(current)
+                    and (current.st_dev, current.st_ino) == created_identity
+                ):
+                    os.unlink(lock_path)
+                else:
+                    cleanup_error = (
+                        "renderer lock identity changed; manual inspection is required: "
+                        f"{lock_path}"
+                    )
+            except FileNotFoundError:
+                cleanup_error = f"renderer lock disappeared unexpectedly: {lock_path}"
+            except OSError as exc:
+                cleanup_error = f"cannot remove renderer lock {lock_path}: {exc}"
+        if cleanup_error is not None and sys.exc_info()[0] is None:
+            raise ProjectStatusError(cleanup_error)
+
+
 def _write_transaction(
+    root: Path,
+    rendered: Mapping[Path, bytes],
+    *,
+    replace: Callable[[Path, Path], None] | None = None,
+) -> None:
+    """Write under a cooperating-writer lock with fail-stop commit semantics.
+
+    There is no portable atomic compare-and-swap for this multi-file operation.
+    A commit-phase failure is therefore never followed by automatic rollback:
+    callers must inspect the possibly partial result and rerun ``--write``.
+    """
+
+    with _exclusive_renderer_lock(root):
+        _write_transaction_locked(root, rendered, replace=replace)
+
+
+def _write_transaction_locked(
     root: Path,
     rendered: Mapping[Path, bytes],
     *,
@@ -2293,7 +2391,7 @@ def _write_transaction(
     try:
         for target in sorted(rendered, key=lambda item: item.as_posix()):
             expected = rendered[target]
-            original_bytes, original = _read_stable_bytes(root, target)
+            _, original = _read_stable_bytes(root, target)
             staged = _stage_bytes(
                 root,
                 target,
@@ -2301,22 +2399,11 @@ def _write_transaction(
                 "new",
                 register=loose_temporaries,
             )
-            backup = _stage_bytes(
-                root,
-                target,
-                original_bytes,
-                "backup",
-                register=loose_temporaries,
-            )
-            _, staged_identity = _read_stable_bytes(root, staged)
             pending.append(
                 _PendingWrite(
                     _absolute(target),
                     staged,
-                    backup,
                     original,
-                    staged_identity,
-                    original_bytes,
                     expected,
                 )
             )
@@ -2337,7 +2424,6 @@ def _write_transaction(
             raise
         raise ProjectStatusError("cannot stage project-status transaction") from exc
 
-    committed: list[_PendingWrite] = []
     try:
         for item in pending:
             _, current = _read_stable_bytes(root, item.target)
@@ -2345,88 +2431,32 @@ def _write_transaction(
                 raise ProjectStatusError(
                     f"target changed before transaction commit: {item.target}"
                 )
-            committed.append(item)
             replacer(item.staged, item.target)
-            actual, committed_identity = _read_stable_bytes(root, item.target)
+            actual, _ = _read_stable_bytes(root, item.target)
             if actual != item.expected_bytes:
                 raise ProjectStatusError(
                     f"committed bytes differ for {item.target}"
                 )
-            item.committed_identity = committed_identity
     except BaseException as commit_error:
-        rollback_errors: list[str] = []
-        for item in reversed(committed):
-            try:
-                actual, current_identity = _read_stable_bytes(root, item.target)
-                if actual == item.original_bytes and current_identity == item.original:
-                    continue
-                expected_identity = item.committed_identity
-                if expected_identity is None:
-                    expected_staged_identity = item.staged_identity
-                    replacement_identity_matches = (
-                        current_identity.device,
-                        current_identity.inode,
-                        current_identity.mode,
-                        current_identity.size,
-                        current_identity.modified_ns,
-                    ) == (
-                        expected_staged_identity.device,
-                        expected_staged_identity.inode,
-                        expected_staged_identity.mode,
-                        expected_staged_identity.size,
-                        expected_staged_identity.modified_ns,
-                    )
-                else:
-                    replacement_identity_matches = current_identity == expected_identity
-                if (
-                    actual != item.expected_bytes
-                    or not replacement_identity_matches
-                ):
-                    rollback_errors.append(
-                        f"{item.target}: target changed after transaction write; "
-                        "concurrent bytes were left untouched"
-                    )
-                    continue
-                replacer(item.backup, item.target)
-            except BaseException as exc:
-                rollback_errors.append(
-                    f"{item.target}: {_failure_label(exc)}"
-                )
-        for item in pending:
-            try:
-                actual, _ = _read_stable_bytes(root, item.target)
-                if actual != item.original_bytes:
-                    rollback_errors.append(f"{item.target}: original bytes not restored")
-            except BaseException as exc:
-                rollback_errors.append(
-                    f"{item.target}: {_failure_label(exc)}"
-                )
-        for item in pending:
-            for temporary in (item.staged, item.backup):
-                error = _cleanup_temporary(root, temporary)
-                if error is not None:
-                    rollback_errors.append(error)
-        if rollback_errors:
+        cleanup_errors = [
+            error
+            for item in pending
+            if (error := _cleanup_temporary(root, item.staged)) is not None
+        ]
+        if cleanup_errors:
             raise ProjectStatusError(
-                "project-status transaction failed and rollback was incomplete: "
-                + "; ".join(rollback_errors)
+                "project-status multi-file commit failed; no automatic rollback was "
+                "attempted and temporary cleanup was incomplete: "
+                + "; ".join(cleanup_errors)
             ) from commit_error
         if not isinstance(commit_error, Exception):
             raise commit_error
         raise ProjectStatusError(
-            "project-status transaction failed; all original files were restored"
+            "project-status multi-file commit failed; no automatic rollback was "
+            "attempted because no portable atomic CAS exists. Inspect the partial "
+            "outputs and rerun --write"
         ) from commit_error
 
-    success_cleanup_errors: list[str] = []
-    for item in pending:
-        error = _cleanup_temporary(root, item.backup)
-        if error is not None:
-            success_cleanup_errors.append(error)
-    if success_cleanup_errors:
-        raise ProjectStatusError(
-            "project-status transaction committed but backup cleanup failed: "
-            + "; ".join(success_cleanup_errors)
-        )
     for item in pending:
         actual, _ = _read_stable_bytes(root, item.target)
         if actual != item.expected_bytes:

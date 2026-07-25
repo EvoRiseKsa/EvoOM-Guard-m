@@ -124,18 +124,56 @@ class ProjectStatusTests(unittest.TestCase):
                 "run: python -I ops/render_project_status.py --check",
                 jobs["test"].active_text,
             )
+            status_steps = list(
+                re.finditer(
+                    r"(?m)^      - name: Verify project status against source, "
+                    r"ledger, workflows, and Git[ \t]*$\n"
+                    r"(?P<body>(?:        [^\n]*\n)*)",
+                    test_block.group("body"),
+                )
+            )
+            self.assertEqual(len(status_steps), 1)
+            self.assertEqual(
+                status_steps[0].group("body"),
+                "        run: python -I ops/render_project_status.py --check\n",
+            )
+            self.assertNotRegex(
+                test_block.group("body"),
+                r"(?m)^    continue-on-error:",
+            )
             aggregate = jobs["project-status"]
             self.assertEqual(aggregate.needs, frozenset({"test"}))
             self.assertEqual(aggregate.gate, "always()")
-            self.assertNotRegex(
-                aggregate_block.group("body"),
-                r"(?m)^\s+strategy:\s*$",
+            self.assertEqual(
+                aggregate_block.group("body").rstrip(),
+                (
+                    "    if: always()\n"
+                    "    needs: [test]\n"
+                    "    runs-on: ubuntu-latest\n"
+                    "    steps:\n"
+                    "      - name: Aggregate matrix project-status result\n"
+                    "        env:\n"
+                    "          MATRIX_RESULT: ${{ needs.test.result }}\n"
+                    '        run: test "$MATRIX_RESULT" = "success"'
+                ),
             )
 
         assert_contract(workflow)
         command = "        run: python -I ops/render_project_status.py --check"
         for replacement in (
             "        # run: python -I ops/render_project_status.py --check",
+            (
+                '        run: echo "run: python -I '
+                'ops/render_project_status.py --check"'
+            ),
+            (
+                "        if: ${{ false }}\n"
+                "        run: python -I ops/render_project_status.py --check"
+            ),
+            (
+                "        continue-on-error: true\n"
+                "        run: python -I ops/render_project_status.py --check"
+            ),
             "",
         ):
             mutated = workflow.replace(command, replacement, 1)
@@ -144,6 +182,14 @@ class ProjectStatusTests(unittest.TestCase):
                 AssertionError
             ):
                 assert_contract(mutated)
+        aggregate_bypass = workflow.replace(
+            '        run: test "$MATRIX_RESULT" = "success"',
+            "        run: true",
+            1,
+        )
+        self.assertNotEqual(aggregate_bypass, workflow)
+        with self.assertRaises(AssertionError):
+            assert_contract(aggregate_bypass)
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
@@ -483,6 +529,8 @@ class ProjectStatusTests(unittest.TestCase):
             f"visible prefix <div hidden>\n{begin}\n{end}\n</div>\n",
             f"<section style=\"display:none\">\n{begin}\n{end}\n</section>\n",
             f"<table>\n{begin}\n{end}\n</table>\n",
+            f"<details\nhidden>\n{begin}\n{end}\n</details>\n",
+            f"\\`<details>\\`\n{begin}\n{end}\n\\`</details>\\`\n",
         )
         for text in invalid:
             with self.subTest(text=text), self.assertRaises(
@@ -1178,7 +1226,7 @@ class ProjectStatusTests(unittest.TestCase):
                 nonlocal first
                 if first:
                     first = False
-                    self.assertEqual(len(list(root.rglob("*.tmp"))), 6)
+                    self.assertEqual(len(list(root.rglob("*.tmp"))), 3)
                 render_project_status._replace_path(root, source, target)
 
             render_project_status._write_transaction(
@@ -1188,7 +1236,7 @@ class ProjectStatusTests(unittest.TestCase):
             )
             self.assertFalse(first)
 
-    def test_replace_failure_at_every_position_rolls_back_all_files(self) -> None:
+    def test_replace_failure_at_every_position_is_fail_stop(self) -> None:
         for failure_position in range(1, 4):
             with self.subTest(failure_position=failure_position), TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -1224,18 +1272,26 @@ class ProjectStatusTests(unittest.TestCase):
                         target,
                     )
 
-                with self.assertRaises(render_project_status.ProjectStatusError):
+                with self.assertRaises(
+                    render_project_status.ProjectStatusError
+                ) as caught:
                     render_project_status._write_transaction(
                         root,
                         rendered,
                         replace=fail_once,
                     )
                 self.assertTrue(failed)
-                for path, expected in originals.items():
+                self.assertIn("no automatic rollback was attempted", str(caught.exception))
+                for index, path in enumerate(paths):
+                    expected = (
+                        rendered[path]
+                        if index < failure_position - 1
+                        else originals[path]
+                    )
                     self.assertEqual(path.read_bytes(), expected)
                 self.assertEqual(list(root.rglob("*.tmp")), [])
 
-    def test_rollback_never_overwrites_a_concurrent_external_update(self) -> None:
+    def test_fail_stop_never_rolls_back_a_late_external_update(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             first = root / "first.md"
@@ -1264,13 +1320,66 @@ class ProjectStatusTests(unittest.TestCase):
                     rendered,
                     replace=fail_after_external_update,
                 )
-            self.assertIn("rollback was incomplete", str(caught.exception))
-            self.assertIn("concurrent bytes were left untouched", str(caught.exception))
+            self.assertIn("no automatic rollback was attempted", str(caught.exception))
             self.assertEqual(first.read_bytes(), b"external-concurrent-update\n")
             self.assertEqual(second.read_bytes(), b"old-second\n")
             self.assertEqual(list(root.rglob("*.tmp")), [])
 
-    def test_control_baseexception_at_every_replace_rolls_back_with_identity(self) -> None:
+    def test_second_cooperating_writer_is_rejected(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "status.md"
+            target.write_bytes(b"old\n")
+            with (
+                render_project_status._exclusive_renderer_lock(root),
+                self.assertRaises(
+                    render_project_status.ProjectStatusError
+                ) as caught,
+            ):
+                render_project_status._write_transaction(
+                    root,
+                    {target: b"new\n"},
+                )
+            self.assertIn("exclusive renderer lock", str(caught.exception))
+            self.assertEqual(target.read_bytes(), b"old\n")
+
+    def test_preexisting_lock_fails_closed_without_mutating_it(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            lock_path = render_project_status._renderer_lock_path(root)
+            sentinel = b"preexisting-lock\n"
+            lock_path.write_bytes(sentinel)
+            try:
+                with self.assertRaises(
+                    render_project_status.ProjectStatusError
+                ) as caught:
+                    with render_project_status._exclusive_renderer_lock(root):
+                        self.fail("preexisting lock must not be acquired")
+                self.assertIn("stale lock requires manual inspection", str(caught.exception))
+                self.assertEqual(lock_path.read_bytes(), sentinel)
+            finally:
+                lock_path.unlink(missing_ok=True)
+
+    def test_preexisting_lock_symlink_never_writes_its_target(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "empty-target"
+            target.write_bytes(b"")
+            lock_path = render_project_status._renderer_lock_path(root)
+            try:
+                os.symlink(target, lock_path)
+            except OSError:
+                return
+            try:
+                with self.assertRaises(render_project_status.ProjectStatusError):
+                    with render_project_status._exclusive_renderer_lock(root):
+                        self.fail("symlink lock must not be acquired")
+                self.assertEqual(target.read_bytes(), b"")
+                self.assertTrue(lock_path.is_symlink())
+            finally:
+                lock_path.unlink(missing_ok=True)
+
+    def test_control_baseexception_at_every_replace_is_fail_stop(self) -> None:
         for error_type in (KeyboardInterrupt, SystemExit):
             for interrupt_after_replace in (False, True):
                 for failure_position in range(1, 4):
@@ -1340,12 +1449,20 @@ class ProjectStatusTests(unittest.TestCase):
                     replace=interrupt_once,
                 )
             self.assertIs(caught.exception, injected)
-            for path, expected in originals.items():
+            committed_count = (
+                failure_position if interrupt_after_replace else failure_position - 1
+            )
+            for index, path in enumerate(paths):
+                expected = (
+                    rendered[path]
+                    if index < committed_count
+                    else originals[path]
+                )
                 self.assertEqual(path.read_bytes(), expected)
             self.assertEqual(list(root.rglob("*.tmp")), [])
 
     def test_control_baseexception_at_every_staging_point_cleans_and_preserves(self) -> None:
-        for failure_position in range(1, 7):
+        for failure_position in range(1, 4):
             with (
                 self.subTest(failure_position=failure_position),
                 TemporaryDirectory() as directory,
@@ -1394,7 +1511,7 @@ class ProjectStatusTests(unittest.TestCase):
                     self.assertEqual(path.read_bytes(), expected)
                 self.assertEqual(list(root.rglob("*.tmp")), [])
 
-    def test_baseexception_during_rollback_is_reported_as_incomplete(self) -> None:
+    def test_commit_baseexception_does_not_trigger_rollback_replacements(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
             paths = tuple(root / f"{index}.md" for index in range(3))
@@ -1405,32 +1522,26 @@ class ProjectStatusTests(unittest.TestCase):
             for path in paths:
                 path.write_bytes(b"old\n")
             commit_interrupt = KeyboardInterrupt()
-            rollback_interrupt = SystemExit(17)
             calls = 0
-            commit_failed = False
-            rollback_failed = False
 
-            def interrupt_commit_and_rollback(source: Path, target: Path) -> None:
-                nonlocal calls, commit_failed, rollback_failed
+            def interrupt_second_commit(source: Path, target: Path) -> None:
+                nonlocal calls
                 calls += 1
-                if not commit_failed and calls == 2:
-                    commit_failed = True
+                if calls == 2:
                     raise commit_interrupt
-                if commit_failed and not rollback_failed:
-                    rollback_failed = True
-                    raise rollback_interrupt
                 render_project_status._replace_path(root, source, target)
 
-            with self.assertRaises(
-                render_project_status.ProjectStatusError
-            ) as caught:
+            with self.assertRaises(BaseException) as caught:
                 render_project_status._write_transaction(
                     root,
                     rendered,
-                    replace=interrupt_commit_and_rollback,
+                    replace=interrupt_second_commit,
                 )
-            self.assertIn("rollback was incomplete", str(caught.exception))
-            self.assertIs(caught.exception.__cause__, commit_interrupt)
+            self.assertIs(caught.exception, commit_interrupt)
+            self.assertEqual(calls, 2)
+            self.assertEqual(paths[0].read_bytes(), rendered[paths[0]])
+            self.assertEqual(paths[1].read_bytes(), b"old\n")
+            self.assertEqual(paths[2].read_bytes(), b"old\n")
             self.assertEqual(list(root.rglob("*.tmp")), [])
 
     def test_cleanup_retry_preserves_original_control_exception_identity(self) -> None:
