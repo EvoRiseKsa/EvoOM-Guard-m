@@ -193,9 +193,11 @@ and must fail validation. Placeholders are never accepted as release evidence.
    in-root, linked, hard-linked, changed, or byte-different anchor.
    `--trusted-parent-repo` must be a disjoint trusted checkout/object store
    containing the admitted parent commit. The validator resolves the exact
-   `100644` schema and validator blobs from that commit/tree and compares their
-   bytes, Git object IDs, and SHA-256 values; descriptor fields alone are not
-   accepted as proof.
+   `100644` schema, validator, and per-release ledger-public-key anchor blobs
+   from that commit/tree and compares their bytes, Git object IDs, and SHA-256
+   values; descriptor fields alone are not accepted as proof. Git repository,
+   worktree, object-directory, alternate-object, and replace-ref environment
+   redirections are not inherited by this check.
 8. Commit the new directory only after the command reports
    `release-ledger-v2: VALID`. The ledger step must not create, move, delete, or
    rewrite a tag or GitHub Release. Re-run external-key validation from the

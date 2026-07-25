@@ -929,6 +929,13 @@ def _valid_ledger() -> dict[str, Any]:
             "signature_path": "RELEASE_LEDGER.json.sig",
             "signature_encoding": "base64",
             "public_key": _file("trust/release-ledger-v2.pub.pem"),
+            "trusted_parent_anchor": {
+                "path": "security/release-ledger-roots/v9.9.9.pub.pem",
+                "sha256": _sha("ledger-parent-anchor"),
+                "git_blob_sha": _git("ledger-parent-anchor"),
+                "trusted_parent_commit_sha": parent,
+                "trusted_parent_tree_sha": parent_tree,
+            },
         },
     }
 
@@ -983,6 +990,7 @@ def test_signed_validator_descriptor_binds_trusted_parent_and_exact_bytes() -> N
 
 def test_external_trusted_parent_rejects_candidate_contract_mutation(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repository = tmp_path / "trusted-parent"
     repository.mkdir()
@@ -1001,6 +1009,10 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     git("config", "user.email", "ledger@example.invalid")
     schema_target = repository / validator.OFFICIAL_SCHEMA_REPOSITORY_PATH
     validator_target = repository / validator.VALIDATOR_REPOSITORY_PATH
+    private = tmp_path / "ledger-anchor.private.pem"
+    public = repository / "security/release-ledger-roots/v9.9.9.pub.pem"
+    public.parent.mkdir(parents=True)
+    generate_keypair(str(private), str(public))
     schema_target.parent.mkdir(parents=True)
     validator_target.parent.mkdir(parents=True)
     schema_target.write_bytes(SCHEMA_PATH.read_bytes())
@@ -1010,21 +1022,35 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     parent = git("rev-parse", "HEAD")
     parent_tree = git("rev-parse", "HEAD^{tree}")
     ledger = _valid_ledger()
+    ledger["ledger_signature"]["key_id"] = public_key_id(str(public))
+    ledger["ledger_signature"]["trusted_parent_anchor"].update(
+        {
+            "sha256": hashlib.sha256(public.read_bytes()).hexdigest(),
+            "git_blob_sha": validator._git_blob_sha(public.read_bytes()),
+        }
+    )
     ledger["source"]["parent_commit_sha"] = parent
     ledger["source"]["parent_tree_sha"] = parent_tree
     for contract in (
         ledger["schema_contracts"]["release_ledger"],
         ledger["schema_contracts"]["validator"],
+        ledger["ledger_signature"]["trusted_parent_anchor"],
     ):
         contract["trusted_parent_commit_sha"] = parent
         contract["trusted_parent_tree_sha"] = parent_tree
     ledger_root = tmp_path / "ledger"
     ledger_root.mkdir()
+    trusted = validator._load_trusted_ledger_key(ledger_root, public)
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "malicious.git"))
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(tmp_path / "malicious-objects"))
     validator._validate_trusted_parent_contracts(
         ledger_root,
         ledger,
         repository,
+        trusted,
     )
+    monkeypatch.delenv("GIT_DIR")
+    monkeypatch.delenv("GIT_OBJECT_DIRECTORY")
 
     validator_target.write_bytes(Path(validator.__file__).read_bytes() + b"\n# mutation\n")
     git("add", ".")
@@ -1036,6 +1062,7 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     for contract in (
         ledger["schema_contracts"]["release_ledger"],
         ledger["schema_contracts"]["validator"],
+        ledger["ledger_signature"]["trusted_parent_anchor"],
     ):
         contract["trusted_parent_commit_sha"] = candidate
         contract["trusted_parent_tree_sha"] = candidate_tree
@@ -1047,6 +1074,7 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
             ledger_root,
             ledger,
             repository,
+            trusted,
         )
 
 
@@ -2146,6 +2174,12 @@ def _signed_directory(
     ledger["ledger_signature"]["key_id"] = public_key_id(str(signing_public))
     contents[ledger["ledger_signature"]["public_key"]["path"]] = (
         signing_public.read_bytes()
+    )
+    ledger["ledger_signature"]["trusted_parent_anchor"].update(
+        {
+            "sha256": hashlib.sha256(signing_public.read_bytes()).hexdigest(),
+            "git_blob_sha": validator._git_blob_sha(signing_public.read_bytes()),
+        }
     )
 
     # Preserve the semantic key bindings after the synthetic roots receive real

@@ -117,8 +117,9 @@ gate.
   immutable tag, or other previously authenticated channel; never copy it from
   the directory being validated.
   The trusted-parent repository must contain the exact admitted parent
-  commit/tree; the validator resolves and byte-compares its schema and validator
-  Git blobs, so self-reported parent fields are insufficient.
+  commit/tree; the validator resolves and byte-compares its schema, validator,
+  and per-release ledger-public-key anchor Git blobs, so self-reported parent
+  fields or a newly supplied self-signed key are insufficient.
   Schema-only validation is insufficient: the command verifies cross-phase run
   bindings, the exact three-asset set and checksum bytes, retained controls,
   RSAE/RAAE signatures and subjects, all public-key identities, closed file

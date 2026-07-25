@@ -493,12 +493,28 @@ def _trusted_git(
     label: str,
 ) -> bytes:
     environment = {
-        **os.environ,
+        key: os.environ[key]
+        for key in (
+            "PATH",
+            "PATHEXT",
+            "SystemRoot",
+            "SYSTEMROOT",
+            "WINDIR",
+            "COMSPEC",
+            "TEMP",
+            "TMP",
+        )
+        if key in os.environ
+    }
+    environment.update(
+        {
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_NO_REPLACE_OBJECTS": "1",
         "LC_ALL": "C",
-    }
+        }
+    )
     try:
         result = subprocess.run(  # noqa: S603 - fixed Git operations, no shell
             ["git", "-C", str(repository), *arguments],
@@ -519,6 +535,7 @@ def _validate_trusted_parent_contracts(
     ledger_root: Path,
     ledger: Mapping[str, Any],
     trusted_parent_repo: Path | None,
+    trusted_key: _TrustedLedgerKey,
 ) -> None:
     if trusted_parent_repo is None:
         _fail("an external trusted parent repository is required")
@@ -558,6 +575,11 @@ def _validate_trusted_parent_contracts(
             ledger["schema_contracts"]["validator"],
             Path(__file__).read_bytes(),
             "validator",
+        ),
+        (
+            ledger["ledger_signature"]["trusted_parent_anchor"],
+            trusted_key.pem,
+            "ledger signing anchor",
         ),
     )
     for contract, current_bytes, label in contracts:
@@ -1373,6 +1395,14 @@ def _validate_semantics(
     }
     if ledger["schema_contracts"]["validator"] != expected_validator:
         _fail("signed ledger does not bind the exact trusted-parent validator bytes")
+    parent_anchor = ledger["ledger_signature"]["trusted_parent_anchor"]
+    if (
+        parent_anchor["path"]
+        != f"security/release-ledger-roots/{release['tag']}.pub.pem"
+        or parent_anchor["trusted_parent_commit_sha"] != source["parent_commit_sha"]
+        or parent_anchor["trusted_parent_tree_sha"] != source["parent_tree_sha"]
+    ):
+        _fail("ledger signing anchor is not bound to the exact trusted parent")
     if release["repository"] != EXPECTED_REPOSITORY:
         _fail(f"ledger repository must be {EXPECTED_REPOSITORY}")
     if release["tag"] != f"v{project['version']}":
@@ -3140,7 +3170,12 @@ def validate_directory(
         schema,
         schema_sha256=schema_sha256,
     )
-    _validate_trusted_parent_contracts(root, ledger, trusted_parent_repo)
+    _validate_trusted_parent_contracts(
+        root,
+        ledger,
+        trusted_parent_repo,
+        trusted_key,
+    )
 
     inventory = _collect_descriptors(ledger)
     _require_retained_budget(inventory)

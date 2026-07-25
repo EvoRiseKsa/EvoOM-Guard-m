@@ -1334,7 +1334,8 @@
         "signed_path",
         "signature_path",
         "signature_encoding",
-        "public_key"
+        "public_key",
+        "trusted_parent_anchor"
       ],
       "properties": {
         "algorithm": {
@@ -1357,6 +1358,34 @@
         },
         "public_key": {
           "$ref": "#/$defs/fileDescriptor"
+        },
+        "trusted_parent_anchor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "git_blob_sha",
+            "trusted_parent_commit_sha",
+            "trusted_parent_tree_sha"
+          ],
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/relativePath"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "git_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_commit_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_tree_sha": {
+              "$ref": "#/$defs/gitSha"
+            }
+          }
         }
       }
     }
