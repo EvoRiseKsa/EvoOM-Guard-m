@@ -128,12 +128,14 @@ Optional repository verifier-pack admission now has the focused
 `verifiers.repo_pack_intake` owner. It checks the required digest pin and
 reserved mount, creates and identifies the judge-owned snapshot through
 injected live operations, and returns immutable intake evidence. Pack
-execution is separate; post-snapshot verification and cleanup remain in
-`RepoVerifier`.
+execution is separate; post-snapshot verification remains in `RepoVerifier`,
+whose final cleanup facade delegates effect/provider coordination to
+`verifiers.repo_cleanup`.
 Repository-suite execution and JUnit interpretation now have the focused
 `verifiers.repo_suite` owner. Its two immutable boundaries leave the
 runtime-tree continuity check between process completion and report reading in
-`RepoVerifier`; candidate-workspace cleanup also remains there.
+`RepoVerifier`; its candidate-workspace cleanup facade delegates to
+`verifiers.repo_cleanup`.
 Pristine-base execution now has the separate `verifiers.repo_baseline` owner.
 It preserves setup fidelity, bounded subprocess and strict process-group
 requirements, the judge-owned report path, JUnit/exit grading, and final
@@ -151,7 +153,9 @@ focused, effect-free `verifiers.repo_result` owner. It freezes the observed
 pack identity and completed repository phase, projects completed pack fields,
 and owns exact key order, overwrite, and presence-versus-null behavior.
 `RepoVerifier` still records those facts at the same execution points and
-retains provider timing, phase-composer invocation, and live cleanup.
+retains provider timing, phase-composer invocation, and the live cleanup
+facade/`finally`; `verifiers.repo_cleanup` coordinates the injected cleanup
+effects.
 `workspace.repository_lifetime` records the candidate/pack roots and cleanup
 target order without importing or executing cleanup.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
@@ -162,8 +166,9 @@ post-parse/pre-materialization seam and retains risk, execution, decision, and
 serialization responsibilities.
 `RepoVerifier` still supplies the live workspace factories and owns
 verifier-pack intake and snapshot continuity, runtime identity, phase
-composition, and cleanup. Candidate/pack workspace path registration delegates
-to `workspace.repository_lifetime`.
+composition, and the final cleanup call site. Candidate/pack workspace path
+registration delegates to `workspace.repository_lifetime`; cleanup
+effect/provider coordination delegates to `verifiers.repo_cleanup`.
 Sticky/final result projection is delegated to `repo_result`; candidate
 filesystem coordination is delegated to
 `repo_candidate`; repository-suite and verifier-pack subprocess/container
@@ -201,7 +206,9 @@ registers the pack root before snapshotting can begin, retains the historical
 `intake-result or callback-created` reconciliation, and returns the exact
 candidate-then-pack cleanup target order. `RepoVerifier` still supplies the
 live temporary-directory factories and invokes its existing cleanup facade in
-`finally`, preserving provider timing and primary-exception precedence.
+`finally`, preserving provider timing and primary-exception precedence. The
+facade delegates the bounded effect/provider sequence to the dependency-free
+`verifiers.repo_cleanup` owner.
 The flat CLI module has likewise been migrated byte-for-byte into the
 classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`

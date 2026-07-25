@@ -1,0 +1,214 @@
+{
+  "cases": {
+    "all_success": {
+      "events": [
+        {
+          "op": "remove",
+          "path": "candidate"
+        },
+        {
+          "op": "remove",
+          "path": "pack"
+        }
+      ],
+      "exception": null,
+      "notes": [],
+      "primary": null
+    },
+    "file_not_found_absent": {
+      "events": [
+        {
+          "op": "remove",
+          "path": "candidate"
+        },
+        {
+          "op": "prove-absent",
+          "path": "candidate"
+        },
+        {
+          "op": "remove",
+          "path": "pack"
+        }
+      ],
+      "exception": null,
+      "notes": [],
+      "primary": null
+    },
+    "file_not_found_present": {
+      "events": [
+        {
+          "op": "remove",
+          "path": "candidate"
+        },
+        {
+          "op": "prove-absent",
+          "path": "candidate"
+        },
+        {
+          "op": "remove",
+          "path": "pack"
+        }
+      ],
+      "exception": {
+        "message": "raced child disappeared",
+        "token": "candidate_failure",
+        "type": "FileNotFoundError"
+      },
+      "notes": [
+        {
+          "error": "candidate_failure",
+          "message": "RepoVerifier candidate workspace cleanup failed"
+        }
+      ],
+      "primary": null
+    },
+    "no_primary_multiple_failures": {
+      "events": [
+        {
+          "op": "remove",
+          "path": "candidate"
+        },
+        {
+          "op": "remove",
+          "path": "pack"
+        }
+      ],
+      "exception": {
+        "message": "candidate busy",
+        "token": "candidate_failure",
+        "type": "OSError"
+      },
+      "notes": [
+        {
+          "error": "candidate_failure",
+          "message": "RepoVerifier candidate workspace cleanup failed"
+        },
+        {
+          "error": "candidate_failure",
+          "message": "Additional RepoVerifier verifier-pack snapshot cleanup failure: SystemExit: pack cleanup interrupted"
+        }
+      ],
+      "primary": null
+    },
+    "note_facade_live_provider": {
+      "events": [
+        {
+          "op": "lookup-note-provider"
+        },
+        {
+          "error_is_primary": "true",
+          "message": "diagnostic",
+          "op": "call-note-provider"
+        }
+      ]
+    },
+    "outer_finally_callable_capture": {
+      "events": [
+        {
+          "op": "create-lifetime",
+          "prefix": "evo_repo_"
+        },
+        {
+          "destination": "candidate-copy",
+          "op": "copy",
+          "source_is_expected": "true"
+        },
+        {
+          "op": "evaluate-cleanup-targets"
+        },
+        {
+          "op": "early-cleanup",
+          "primary_is_failure": "true",
+          "workspaces": "(('candidate workspace', 'candidate-root'), ('verifier-pack snapshot', None))"
+        }
+      ],
+      "exception": {
+        "message": "controlled copy failure",
+        "token": "copy_failure",
+        "type": "RuntimeError"
+      }
+    },
+    "primary_baseexception_multiple_failures": {
+      "events": [
+        {
+          "op": "remove",
+          "path": "candidate"
+        },
+        {
+          "op": "remove",
+          "path": "pack"
+        }
+      ],
+      "exception": null,
+      "notes": [
+        {
+          "error": "primary",
+          "message": "RepoVerifier candidate workspace cleanup failed while preserving the primary exception: OSError: candidate busy"
+        },
+        {
+          "error": "primary",
+          "message": "RepoVerifier verifier-pack snapshot cleanup failed while preserving the primary exception: SystemExit: pack cleanup interrupted"
+        }
+      ],
+      "primary": {
+        "message": "operator interruption",
+        "token": "primary",
+        "type": "KeyboardInterrupt"
+      }
+    },
+    "proof_baseexception": {
+      "events": [
+        {
+          "op": "remove",
+          "path": "candidate"
+        },
+        {
+          "op": "prove-absent",
+          "path": "candidate"
+        },
+        {
+          "op": "remove",
+          "path": "pack"
+        }
+      ],
+      "exception": {
+        "message": "absence proof interrupted",
+        "token": "proof_failure",
+        "type": "SystemExit"
+      },
+      "notes": [
+        {
+          "error": "proof_failure",
+          "message": "RepoVerifier candidate workspace cleanup failed"
+        }
+      ],
+      "primary": null
+    },
+    "provider_capture_order": {
+      "events": [
+        {
+          "op": "lookup-cleanup-owner"
+        },
+        {
+          "op": "lookup-late-remove"
+        },
+        {
+          "op": "call-cleanup-owner",
+          "owner_name": "RepoVerifier",
+          "primary": "RuntimeError",
+          "workspaces": "3"
+        },
+        {
+          "op": "call-late-remove",
+          "path": "captured-path"
+        },
+        {
+          "error_is_primary": "true",
+          "message": "captured-note",
+          "op": "call-late-note"
+        }
+      ]
+    }
+  },
+  "schema_version": "repo-cleanup-characterization-v1"
+}

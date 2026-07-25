@@ -864,6 +864,29 @@ def test_repository_workspace_lifetime_is_dependency_free() -> None:
     )
 
 
+def test_repository_cleanup_effect_owner_is_dependency_free() -> None:
+    """Cleanup effect coordination must not absorb verifier orchestration."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    owner = "evoom_guard.verifiers.repo_cleanup"
+
+    assert owner in analysis.modules
+    assert owner not in analysis.violations["unclassified_modules"]
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == owner and target != owner
+    } == set()
+    assert (
+        "evoom_guard.verifiers.repo_verifier",
+        owner,
+    ) in analysis.internal_edges
+    assert not any(
+        violation.startswith(f"{owner} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_cli_package_is_classified_and_preserves_the_console_surface() -> None:
     """The CLI facade and parser owner must retain the public entry point."""
 

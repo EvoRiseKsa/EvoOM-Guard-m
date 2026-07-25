@@ -277,11 +277,12 @@ remain in their established facades.
 - Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
   responsibilities behind characterized compatibility boundaries. The pack
   execution and interpretation slice is complete.
-- Pending: extract the remaining repository cleanup effect/provider facade
-  behind its own characterized boundary. Candidate coordination, workspace
-  path lifetime, repository-suite/verifier-pack execution, accepted-pack and
-  runtime continuity, phase-composition algorithm, sticky projection, and
-  completed artifact construction have focused owners.
+- The dependency-free `verifiers/repo_cleanup.py` owner now coordinates the
+  remaining repository cleanup effect/provider boundary. A parent-frozen
+  vector binds provider lookup order, exact exception identity, note order,
+  fresh absence proof, all-target attempts, and the outer facade-before-argument
+  lookup rule. `RepoVerifier` retains both compatibility facades and its
+  `finally`; `workspace.repository` retains the cleanup algorithm.
 - Delivered-assurance evaluation is owned by `application.assurance`.
   Exact 57-key attestation assembly is now owned by the pure
   `application.attestation` builder behind Guard's unchanged private facade.
