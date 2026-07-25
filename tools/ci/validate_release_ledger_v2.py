@@ -51,6 +51,9 @@ OFFICIAL_SCHEMA_REPOSITORY_PATH = (
     "tests/baseline/schema/release-ledger-v2.schema.json"
 )
 VALIDATOR_REPOSITORY_PATH = "tools/ci/validate_release_ledger_v2.py"
+REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH = (
+    "tools/ci/collect_repository_controls_v2.py"
+)
 TRUSTED_BUILD_INPUT_PATHS = {
     "build_pyz_blob_sha": "ops/build_pyz.py",
     "spdx_generator_blob_sha": "ops/generate_spdx_sbom.py",
@@ -127,6 +130,8 @@ _CANONICAL_UTC = re.compile(
 )
 
 EXPECTED_REPOSITORY = "EvoRiseKsa/EvoOM-Guard-m"
+EXPECTED_REPOSITORY_ID = 1293651176
+EXPECTED_REPOSITORY_OWNER_ID = 231647061
 PHASES = ("A", "B", "C", "D", "E", "F", "G", "H")
 ROOT_DOMAINS = (
     "release-source-admission-v2",
@@ -137,15 +142,15 @@ ROOT_DOMAINS = (
     "release-artifact-admission-v1",
 )
 REQUIRED_MAIN_CHECKS = {
-    "test (3.10)",
-    "test (3.11)",
-    "test (3.12)",
-    "e2e-runners",
-    "blackbox-docker-e2e",
-    "smoke",
-    "analyze",
-    "CodeQL",
-    "project-status",
+    ("test (3.10)", 15368),
+    ("test (3.11)", 15368),
+    ("test (3.12)", 15368),
+    ("e2e-runners", 15368),
+    ("blackbox-docker-e2e", 15368),
+    ("smoke", 15368),
+    ("analyze", 15368),
+    ("CodeQL", 57789),
+    ("project-status", 15368),
 }
 EXPECTED_TAG_JOBS = (
     "blackbox-docker-e2e",
@@ -1016,6 +1021,11 @@ def _validate_trusted_parent_contracts(
             ledger["schema_contracts"]["validator"],
             Path(__file__).read_bytes(),
             "validator",
+        ),
+        (
+            ledger["schema_contracts"]["repository_controls_collector"],
+            (ROOT / REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH).read_bytes(),
+            "repository-controls collector",
         ),
         (
             ledger["ledger_signature"]["trusted_parent_anchor"],
@@ -2482,9 +2492,13 @@ def _validate_repository_controls(ledger: Mapping[str, Any]) -> None:
     main = controls["main_branch"]
     if main["head_sha"] != source["candidate_commit_sha"]:
         _fail("recorded protected-main head does not equal the admitted candidate")
-    missing = REQUIRED_MAIN_CHECKS - set(main["required_checks"])
-    if missing:
-        _fail(f"protected main is missing required checks: {sorted(missing)}")
+    checks = {
+        (item["context"], item["app_id"]) for item in main["required_checks"]
+    }
+    if checks != REQUIRED_MAIN_CHECKS or len(main["required_checks"]) != len(
+        REQUIRED_MAIN_CHECKS
+    ):
+        _fail("protected main required check context/app identities are not exact")
 
     environments = controls["environments"]
     ids = [item["id"] for item in environments]
@@ -2531,6 +2545,25 @@ def _validate_repository_controls(ledger: Mapping[str, Any]) -> None:
     ]
     if controls["admission_secret_absence_after_publication"] != expected_absence:
         _fail("admission signing-secret absence observations are not exact")
+    repository_absence = controls[
+        "repository_admission_secret_absence_after_publication"
+    ]
+    expected_repository_absence = [
+        {
+            "secret_name": secret_name,
+            "present": False,
+            "observed_utc": repository_absence[index]["observed_utc"],
+            "observation_scope": "github-repository-secret-name-list",
+        }
+        for index, secret_name in enumerate(
+            (
+                "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64",
+                "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64",
+            )
+        )
+    ]
+    if repository_absence != expected_repository_absence:
+        _fail("repository admission signing-secret absence observations are not exact")
     if controls["observation_evidence"]["path"] != (
         "controls/repository/repository-controls-observation.json"
     ):
@@ -2542,6 +2575,1150 @@ def _validate_repository_controls(ledger: Mapping[str, Any]) -> None:
         or retirement["proof_boundary"] != "not-claimed-by-release-ledger"
     ):
         _fail("publication authority retirement must remain pending after the ledger")
+
+
+_REPOSITORY_CONTROL_OBSERVATION_NAMES = (
+    "repository-metadata",
+    "main-ref",
+    "main-protection",
+    "actions-permissions",
+    "workflow-permissions",
+    "immutable-releases",
+    "tag-ruleset",
+    "deploy-keys",
+    "environments",
+    "source-deployment-branch-policies",
+    "artifact-deployment-branch-policies",
+    "draft-deployment-branch-policies",
+    "publication-deployment-branch-policies",
+    "activation-variable-1",
+    "activation-variable-2",
+    "activation-variable-3",
+    "post-h-repository-secrets",
+    "post-h-source-environment-secrets",
+    "post-h-artifact-environment-secrets",
+)
+_REPOSITORY_CONTROL_ENVIRONMENTS = (
+    ("source", "evoguard-release-source-v2"),
+    ("artifact", "evoguard-release-artifact-v1"),
+    ("draft", "evoguard-release-draft"),
+    ("publication", "evoguard-release-publication"),
+)
+_REPOSITORY_CONTROL_VARIABLES = (
+    "EVOGUARD_RELEASE_SOURCE_V2_ENABLED",
+    "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED",
+    "EVOGUARD_RELEASE_PUBLICATION_ENABLED",
+)
+_REPOSITORY_CONTROL_ENVIRONMENT_IDENTITIES = {
+    "evoguard-release-source-v2": {
+        "id": 18718844374,
+        "reviewer_id": 304223352,
+        "required_reviewers_rule_id": 60851006,
+        "branch_policy_rule_id": 60851007,
+        "deployment_branch_policy_id": 55562429,
+    },
+    "evoguard-release-artifact-v1": {
+        "id": 18718845035,
+        "reviewer_id": 304223352,
+        "required_reviewers_rule_id": 60851009,
+        "branch_policy_rule_id": 60851010,
+        "deployment_branch_policy_id": 55562431,
+    },
+    "evoguard-release-draft": {
+        "id": 18718845676,
+        "reviewer_id": 304223352,
+        "required_reviewers_rule_id": 60851011,
+        "branch_policy_rule_id": 60851012,
+        "deployment_branch_policy_id": 55562435,
+    },
+    "evoguard-release-publication": {
+        "id": 18718846349,
+        "reviewer_id": 304223352,
+        "required_reviewers_rule_id": 60851015,
+        "branch_policy_rule_id": 60851016,
+        "deployment_branch_policy_id": 55562438,
+    },
+}
+_REPOSITORY_CONTROL_LINK_ENTRY = re.compile(
+    r'\s*<([^<>\s]+)>\s*;\s*rel="([^"]+)"\s*(?:,|\Z)'
+)
+
+
+def _control_object(value: Any, *, label: str) -> Mapping[str, Any]:
+    if not isinstance(value, dict):
+        _fail(f"{label} must be an object")
+    return value
+
+
+def _control_array(value: Any, *, label: str) -> list[Any]:
+    if not isinstance(value, list):
+        _fail(f"{label} must be an array")
+    return value
+
+
+def _control_positive_id(value: Any, *, label: str) -> int:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value <= 0
+        or value > 2**63 - 1
+    ):
+        _fail(f"{label} must be a positive 64-bit integer")
+    return value
+
+
+def _control_bool(value: Any, *, label: str) -> bool:
+    if not isinstance(value, bool):
+        _fail(f"{label} must be boolean")
+    return value
+
+
+def _control_int(
+    value: Any,
+    *,
+    label: str,
+    minimum: int = 0,
+) -> int:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value < minimum
+    ):
+        _fail(f"{label} must be an integer not below {minimum}")
+    return value
+
+
+def _control_query(
+    value: Any,
+    expected: Mapping[str, int],
+    *,
+    label: str,
+) -> None:
+    query = _control_object(value, label=label)
+    if set(query) != set(expected):
+        _fail(f"{label} keys are not exact")
+    for key, expected_value in expected.items():
+        actual = _control_int(query[key], label=f"{label}.{key}", minimum=1)
+        if actual != expected_value:
+            _fail(f"{label}.{key} is not exact")
+
+
+def _control_observation_plan(
+    repository: str,
+    ruleset_id: int,
+) -> tuple[tuple[str, str, str, str | None, str | None], ...]:
+    base = f"/repos/{repository}"
+    values: list[tuple[str, str, str, str | None, str | None]] = [
+        ("repository-metadata", base, "single", None, None),
+        ("main-ref", f"{base}/git/ref/heads/main", "single", None, None),
+        ("main-protection", f"{base}/branches/main/protection", "single", None, None),
+        ("actions-permissions", f"{base}/actions/permissions", "single", None, None),
+        (
+            "workflow-permissions",
+            f"{base}/actions/permissions/workflow",
+            "single",
+            None,
+            None,
+        ),
+        ("immutable-releases", f"{base}/immutable-releases", "single", None, None),
+        ("tag-ruleset", f"{base}/rulesets/{ruleset_id}", "single", None, None),
+        ("deploy-keys", f"{base}/keys", "array", None, "id"),
+        ("environments", f"{base}/environments", "object", "environments", "id"),
+    ]
+    values.extend(
+        (
+            f"{role}-deployment-branch-policies",
+            f"{base}/environments/{name}/deployment-branch-policies",
+            "object",
+            "branch_policies",
+            "id",
+        )
+        for role, name in _REPOSITORY_CONTROL_ENVIRONMENTS
+    )
+    values.extend(
+        (
+            f"activation-variable-{index}",
+            f"{base}/actions/variables/{name}",
+            "single",
+            None,
+            None,
+        )
+        for index, name in enumerate(_REPOSITORY_CONTROL_VARIABLES, start=1)
+    )
+    values.append(
+        (
+            "post-h-repository-secrets",
+            f"{base}/actions/secrets",
+            "object",
+            "secrets",
+            "name",
+        )
+    )
+    values.extend(
+        (
+            f"post-h-{role}-environment-secrets",
+            f"{base}/environments/{name}/secrets",
+            "object",
+            "secrets",
+            "name",
+        )
+        for role, name in _REPOSITORY_CONTROL_ENVIRONMENTS[:2]
+    )
+    return tuple(values)
+
+
+def _control_link_paths(endpoint: str, repository_id: int) -> set[str]:
+    parts = endpoint.split("/")
+    if len(parts) < 5 or parts[:2] != ["", "repos"]:
+        _fail("repository-control endpoint cannot bind a GitHub Link header")
+    suffix = "/" + "/".join(parts[4:])
+    return {endpoint, f"/repositories/{repository_id}{suffix}"}
+
+
+def _control_link_relations(
+    link_header: Any,
+    *,
+    endpoint: str,
+    page_number: int,
+    repository_id: int,
+    expected_last_page: int | None,
+) -> tuple[set[str], int | None]:
+    """Independently revalidate the collector's literal GitHub Link contract."""
+
+    if link_header is None:
+        return set(), expected_last_page
+    if not isinstance(link_header, str):
+        _fail("repository-control GitHub Link header must be text or null")
+    relations: set[str] = set()
+    linked_pages: dict[str, int] = {}
+    position = 0
+    allowed_paths = _control_link_paths(endpoint, repository_id)
+    for match in _REPOSITORY_CONTROL_LINK_ENTRY.finditer(link_header):
+        if match.start() != position:
+            _fail("repository-control GitHub Link header has non-canonical syntax")
+        position = match.end()
+        url, relation_text = match.groups()
+        relation_parts = relation_text.split()
+        if len(relation_parts) != 1:
+            _fail("repository-control GitHub Link relation is not singular")
+        relation = relation_parts[0]
+        if relation not in {"next", "prev", "first", "last"}:
+            _fail("repository-control GitHub Link contains an unknown relation")
+        if relation in relations:
+            _fail("repository-control GitHub Link contains a duplicate relation")
+        relations.add(relation)
+        prefix = "https://api.github.com"
+        if not url.startswith(prefix):
+            _fail("repository-control GitHub Link URL is outside the API endpoint")
+        target = url[len(prefix) :]
+        if target.count("?") != 1:
+            _fail("repository-control GitHub Link query is not exact")
+        raw_path, raw_query = target.split("?", 1)
+        if raw_path not in allowed_paths:
+            _fail("repository-control GitHub Link URL is outside the API endpoint")
+        query_match = re.fullmatch(
+            r"page=([1-9][0-9]*)&per_page=100",
+            raw_query,
+            flags=re.ASCII,
+        )
+        if query_match is None:
+            _fail("repository-control GitHub Link pagination is not canonical")
+        linked_page = int(query_match.group(1))
+        linked_pages[relation] = linked_page
+        if relation == "next" and linked_page != page_number + 1:
+            _fail("repository-control GitHub Link next page skips or repeats")
+        if relation == "prev" and (
+            page_number <= 1 or linked_page != page_number - 1
+        ):
+            _fail("repository-control GitHub Link prev page is inconsistent")
+        if relation == "first" and linked_page != 1:
+            _fail("repository-control GitHub Link first page is inconsistent")
+        if relation == "last" and linked_page < page_number:
+            _fail("repository-control GitHub Link last page is inconsistent")
+    if position != len(link_header):
+        _fail("repository-control GitHub Link has trailing non-canonical syntax")
+    if not relations:
+        _fail("repository-control GitHub Link contains no relations")
+    next_page = linked_pages.get("next")
+    last_page = linked_pages.get("last")
+    if next_page is not None:
+        if last_page is None:
+            _fail("repository-control GitHub Link next has no last-page bound")
+        if last_page < next_page:
+            _fail("repository-control GitHub Link last precedes next")
+    elif last_page is not None and last_page != page_number:
+        _fail("repository-control terminal GitHub Link last is not current")
+    if expected_last_page is not None:
+        if last_page is not None and last_page != expected_last_page:
+            _fail("repository-control GitHub Link last changed between pages")
+        if page_number > expected_last_page:
+            _fail("repository-control pagination exceeded its stable last page")
+        return relations, expected_last_page
+    return relations, last_page
+
+
+def _control_pages(
+    observation: Mapping[str, Any],
+    *,
+    expected_name: str,
+    expected_endpoint: str,
+    pagination_kind: str,
+    window_start: datetime,
+    window_end: datetime,
+    prior_time: datetime,
+    repository_id: int,
+) -> tuple[list[Mapping[str, Any]], datetime]:
+    _require_exact_keys(
+        observation,
+        {
+            "endpoint",
+            "method",
+            "name",
+            "observed_utc",
+            "pages",
+            "pagination",
+            "query",
+        },
+        label=f"repository-control observation {expected_name}",
+    )
+    if (
+        observation["name"] != expected_name
+        or observation["endpoint"] != expected_endpoint
+        or observation["method"] != "GET"
+    ):
+        _fail(f"repository-control observation {expected_name} identity is not exact")
+    observed = _parse_time(
+        observation["observed_utc"],
+        label=f"repository-control observation {expected_name}.observed_utc",
+    )
+    if not (window_start <= observed <= window_end) or observed < prior_time:
+        _fail(
+            f"repository-control observation {expected_name} time is outside or "
+            "out of order in the bounded window"
+        )
+    pages_value = _control_array(
+        observation["pages"], label=f"{expected_name}.pages"
+    )
+    if not pages_value:
+        _fail(f"{expected_name} has no retained response page")
+    pages: list[Mapping[str, Any]] = []
+    for number, page_value in enumerate(pages_value, start=1):
+        page = _control_object(page_value, label=f"{expected_name}.pages[{number}]")
+        _require_exact_keys(
+            page,
+            {"body", "http_status", "link_header", "number", "query"},
+            label=f"{expected_name}.pages[{number}]",
+        )
+        status = _control_int(
+            page["http_status"],
+            label=f"{expected_name}.pages[{number}].http_status",
+            minimum=100,
+        )
+        observed_number = _control_int(
+            page["number"],
+            label=f"{expected_name}.pages[{number}].number",
+            minimum=1,
+        )
+        if (
+            status != 200
+            or observed_number != number
+            or page["link_header"] is not None
+            and not isinstance(page["link_header"], str)
+        ):
+            _fail(f"{expected_name} page {number} response metadata is not exact")
+        pages.append(page)
+    pagination = _control_object(
+        observation["pagination"], label=f"{expected_name}.pagination"
+    )
+    if pagination_kind == "single":
+        _require_exact_keys(
+            pagination,
+            {
+                "completion_basis",
+                "complete",
+                "kind",
+                "observed_item_count",
+                "page_count",
+                "per_page",
+                "reported_total_count",
+                "termination",
+            },
+            label=f"{expected_name}.pagination",
+        )
+        _control_int(
+            pagination["page_count"],
+            label=f"{expected_name}.pagination.page_count",
+            minimum=1,
+        )
+        if (
+            observation["query"] != {}
+            or len(pages) != 1
+            or pages[0]["query"] != {}
+            or pages[0]["link_header"] is not None
+            or pagination
+            != {
+                "completion_basis": "single-successful-response",
+                "complete": True,
+                "kind": "single",
+                "observed_item_count": None,
+                "page_count": 1,
+                "per_page": None,
+                "reported_total_count": None,
+                "termination": "single-response",
+            }
+        ):
+            _fail(f"{expected_name} single-response completion is not exact")
+    else:
+        _require_exact_keys(
+            pagination,
+            {
+                "completion_basis",
+                "complete",
+                "kind",
+                "link_complete",
+                "linked_last_page",
+                "observed_item_count",
+                "page_count",
+                "per_page",
+                "reported_total_count",
+                "termination",
+            },
+            label=f"{expected_name}.pagination",
+        )
+        for field in ("page_count", "observed_item_count"):
+            if (
+                isinstance(pagination[field], bool)
+                or not isinstance(pagination[field], int)
+                or pagination[field] < 0
+            ):
+                _fail(f"{expected_name}.pagination.{field} is not canonical")
+        linked_last = pagination["linked_last_page"]
+        if linked_last is not None:
+            _control_int(
+                linked_last,
+                label=f"{expected_name}.pagination.linked_last_page",
+                minimum=1,
+            )
+        reported_total = pagination["reported_total_count"]
+        if reported_total is not None:
+            _control_int(
+                reported_total,
+                label=f"{expected_name}.pagination.reported_total_count",
+            )
+        _control_int(
+            pagination["per_page"],
+            label=f"{expected_name}.pagination.per_page",
+            minimum=1,
+        )
+        _control_query(
+            observation["query"],
+            {"per_page": 100},
+            label=f"{expected_name}.query",
+        )
+        for index, page in enumerate(pages, start=1):
+            _control_query(
+                page["query"],
+                {"page": index, "per_page": 100},
+                label=f"{expected_name}.pages[{index}].query",
+            )
+        if (
+            pagination["completion_basis"] != "validated-link-traversal"
+            or pagination["complete"] is not True
+            or pagination["kind"] != "page-number"
+            or pagination["link_complete"] is not True
+            or pagination["page_count"] != len(pages)
+            or pagination["per_page"] != 100
+            or pagination["termination"]
+            != (
+                "link-terminal"
+                if pagination_kind == "array"
+                else "reported-total-link-terminal"
+            )
+        ):
+            _fail(f"{expected_name} paginated completion is not exact")
+        stable_last_page: int | None = None
+        for index, page in enumerate(pages, start=1):
+            relations, stable_last_page = _control_link_relations(
+                page["link_header"],
+                endpoint=expected_endpoint,
+                page_number=index,
+                repository_id=repository_id,
+                expected_last_page=stable_last_page,
+            )
+            if index < len(pages) and "next" not in relations:
+                _fail(f"{expected_name} page {index} has no retained next link")
+            if index == len(pages) and "next" in relations:
+                _fail(f"{expected_name} terminal page still has a next link")
+        if (
+            pagination["linked_last_page"] != stable_last_page
+            or stable_last_page is not None
+            and stable_last_page != len(pages)
+        ):
+            _fail(f"{expected_name} linked last-page metadata is not exact")
+    return pages, observed
+
+
+def _control_single_body(
+    pages: Sequence[Mapping[str, Any]],
+    *,
+    label: str,
+) -> Mapping[str, Any]:
+    if len(pages) != 1:
+        _fail(f"{label} must contain one response body")
+    return _control_object(pages[0]["body"], label=f"{label} body")
+
+
+def _control_paged_items(
+    observation: Mapping[str, Any],
+    pages: Sequence[Mapping[str, Any]],
+    *,
+    root_kind: str,
+    items_field: str | None,
+    identity_field: str,
+    label: str,
+) -> list[Mapping[str, Any]]:
+    pagination = _control_object(observation["pagination"], label=f"{label}.pagination")
+    values: list[Mapping[str, Any]] = []
+    identities: set[tuple[type[Any], Any]] = set()
+    reported_total: int | None = None
+    for page in pages:
+        if root_kind == "array":
+            raw_items = _control_array(page["body"], label=f"{label} page body")
+        else:
+            body = _control_object(page["body"], label=f"{label} page body")
+            assert items_field is not None
+            raw_items = _control_array(
+                body.get(items_field), label=f"{label}.{items_field}"
+            )
+            current_total = body.get("total_count")
+            if (
+                isinstance(current_total, bool)
+                or not isinstance(current_total, int)
+                or current_total < 0
+            ):
+                _fail(f"{label}.total_count is not a non-negative integer")
+            if reported_total is None:
+                reported_total = current_total
+            elif current_total != reported_total:
+                _fail(f"{label}.total_count changed between pages")
+        if len(raw_items) > 100:
+            _fail(f"{label} page exceeds the frozen per-page bound")
+        for raw_item in raw_items:
+            item = _control_object(raw_item, label=f"{label} item")
+            identity = item.get(identity_field)
+            if isinstance(identity, bool) or not isinstance(identity, (int, str)):
+                _fail(f"{label} item has no canonical {identity_field}")
+            if isinstance(identity, str) and not identity:
+                _fail(f"{label} item has an empty {identity_field}")
+            key = (type(identity), identity)
+            if key in identities:
+                _fail(f"{label} contains a duplicate item identity")
+            identities.add(key)
+            values.append(item)
+    if (
+        pagination["observed_item_count"] != len(values)
+        or pagination["reported_total_count"] != reported_total
+        or reported_total is not None
+        and reported_total != len(values)
+    ):
+        _fail(f"{label} pagination count does not bind all retained pages")
+    return values
+
+
+def _ssh_ed25519_fingerprint(value: Any) -> str:
+    if not isinstance(value, str):
+        _fail("write-enabled deploy key has no OpenSSH public-key text")
+    parts = value.split()
+    if len(parts) not in {2, 3} or parts[0] != "ssh-ed25519":
+        _fail("release deploy key is not canonical ssh-ed25519")
+    try:
+        blob = base64.b64decode(parts[1], validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise LedgerValidationError("release deploy key base64 is invalid") from exc
+    algorithm = b"ssh-ed25519"
+    expected = (
+        len(algorithm).to_bytes(4, "big")
+        + algorithm
+        + (32).to_bytes(4, "big")
+    )
+    if len(blob) != len(expected) + 32 or not blob.startswith(expected):
+        _fail("release deploy key blob is not one canonical Ed25519 key")
+    digest = base64.b64encode(hashlib.sha256(blob).digest()).decode("ascii")
+    return f"SHA256:{digest.rstrip('=')}"
+
+
+def _validate_deploy_key_item(value: Mapping[str, Any]) -> None:
+    key_id = _control_positive_id(value.get("id"), label="deploy key ID")
+    title = value.get("title")
+    if not isinstance(title, str) or not title or len(title) > 256:
+        _fail(f"deploy key {key_id} title is not canonical")
+    for field in ("read_only", "verified", "enabled"):
+        _control_bool(value.get(field), label=f"deploy key {key_id}.{field}")
+    key_text = value.get("key")
+    if not isinstance(key_text, str) or "\n" in key_text or "\r" in key_text:
+        _fail(f"deploy key {key_id} public key text is not canonical")
+    parts = key_text.split()
+    if (
+        len(parts) not in {2, 3}
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9@._+-]*", parts[0]) is None
+    ):
+        _fail(f"deploy key {key_id} OpenSSH shape is not canonical")
+    try:
+        blob = base64.b64decode(parts[1], validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise LedgerValidationError(
+            f"deploy key {key_id} public-key base64 is invalid"
+        ) from exc
+    if not blob or len(blob) > 16 * 1024:
+        _fail(f"deploy key {key_id} public-key blob is outside its bound")
+
+
+def _environment_control(
+    environment: Mapping[str, Any],
+    policies: Sequence[Mapping[str, Any]],
+    *,
+    expected_name: str,
+) -> dict[str, Any]:
+    if environment.get("name") != expected_name:
+        _fail(f"environment observation is not {expected_name}")
+    environment_id = _control_positive_id(
+        environment.get("id"), label=f"{expected_name}.id"
+    )
+    protection_rules = _control_array(
+        environment.get("protection_rules"),
+        label=f"{expected_name}.protection_rules",
+    )
+    reviewer_rules = [
+        _control_object(item, label=f"{expected_name} protection rule")
+        for item in protection_rules
+        if isinstance(item, dict) and item.get("type") == "required_reviewers"
+    ]
+    branch_rules = [
+        _control_object(item, label=f"{expected_name} branch rule")
+        for item in protection_rules
+        if isinstance(item, dict) and item.get("type") == "branch_policy"
+    ]
+    if len(reviewer_rules) != 1 or len(branch_rules) != 1:
+        _fail(f"{expected_name} must have one reviewer rule and one branch-policy rule")
+    reviewer_rule = reviewer_rules[0]
+    reviewers = _control_array(
+        reviewer_rule.get("reviewers"), label=f"{expected_name}.reviewers"
+    )
+    if len(reviewers) != 1:
+        _fail(f"{expected_name} must have exactly one reviewer")
+    reviewer_entry = _control_object(
+        reviewers[0], label=f"{expected_name}.reviewer entry"
+    )
+    reviewer = _control_object(
+        reviewer_entry.get("reviewer"), label=f"{expected_name}.reviewer"
+    )
+    if reviewer_entry.get("type") != "User" or reviewer.get("login") != "MANA-awam":
+        _fail(f"{expected_name} reviewer identity is not exact")
+    branch_policy = _control_object(
+        environment.get("deployment_branch_policy"),
+        label=f"{expected_name}.deployment_branch_policy",
+    )
+    if branch_policy != {
+        "protected_branches": False,
+        "custom_branch_policies": True,
+    }:
+        _fail(f"{expected_name} deployment branch mode is not exact")
+    if len(policies) != 1 or policies[0].get("name") != "main":
+        _fail(f"{expected_name} must contain only the main deployment policy")
+    policy = policies[0]
+    if policy.get("type") != "branch":
+        _fail(f"{expected_name} deployment policy is not a branch policy")
+    if (
+        _control_bool(
+            reviewer_rule.get("prevent_self_review"),
+            label=f"{expected_name}.prevent_self_review",
+        )
+        is not True
+        or _control_bool(
+            environment.get("can_admins_bypass"),
+            label=f"{expected_name}.can_admins_bypass",
+        )
+        is not False
+    ):
+        _fail(f"{expected_name} approval bypass protections are not exact")
+    normalized: dict[str, Any] = {
+        "id": environment_id,
+        "name": expected_name,
+        "reviewer": "MANA-awam",
+        "reviewer_id": _control_positive_id(
+            reviewer.get("id"), label=f"{expected_name}.reviewer_id"
+        ),
+        "required_reviewers_rule_id": _control_positive_id(
+            reviewer_rule.get("id"),
+            label=f"{expected_name}.required_reviewers_rule_id",
+        ),
+        "branch_policy_rule_id": _control_positive_id(
+            branch_rules[0].get("id"),
+            label=f"{expected_name}.branch_policy_rule_id",
+        ),
+        "prevent_self_review": True,
+        "can_admins_bypass": False,
+        "deployment_branch": "main",
+        "deployment_branch_policy_id": _control_positive_id(
+            policy.get("id"), label=f"{expected_name}.deployment_branch_policy_id"
+        ),
+    }
+    expected_identity = _REPOSITORY_CONTROL_ENVIRONMENT_IDENTITIES[expected_name]
+    for field, expected in expected_identity.items():
+        if normalized[field] != expected:
+            _fail(f"{expected_name}.{field} is not the trusted stable identity")
+    return normalized
+
+
+def _repository_control_facts(
+    value: Any,
+    ledger: Mapping[str, Any],
+) -> dict[str, Any]:
+    document = _control_object(
+        value, label="repository-control observation evidence"
+    )
+    _require_exact_keys(
+        document,
+        {
+            "format",
+            "repository",
+            "repository_id",
+            "repository_owner_id",
+            "collector",
+            "github_api_version",
+            "observed_window",
+            "observations",
+            "evidence_boundary",
+        },
+        label="repository-control observation evidence",
+    )
+    release = ledger["release"]
+    observed_repository_id = _control_positive_id(
+        document.get("repository_id"), label="observed repository ID"
+    )
+    observed_owner_id = _control_positive_id(
+        document.get("repository_owner_id"), label="observed repository owner ID"
+    )
+    if (
+        document["format"] != "EVOGUARD_REPOSITORY_CONTROL_OBSERVATION_V2"
+        or document["repository"] != release["repository"]
+        or str(observed_repository_id) != release["repository_id"]
+        or str(observed_owner_id) != release["repository_owner_id"]
+        or observed_repository_id != EXPECTED_REPOSITORY_ID
+        or observed_owner_id != EXPECTED_REPOSITORY_OWNER_ID
+        or document["collector"]
+        != {"name": "evoguard-release-ledger", "version": "2"}
+        or document["github_api_version"] != "2022-11-28"
+        or document["evidence_boundary"]
+        != "owner-collected-bounded-window-github-api-observation"
+    ):
+        _fail("repository-control observation V2 identity is not exact")
+    repository = release["repository"]
+    window = _control_object(
+        document["observed_window"], label="repository-control observed_window"
+    )
+    _require_exact_keys(
+        window,
+        {"started_utc", "completed_utc"},
+        label="repository-control observed_window",
+    )
+    window_start = _parse_time(
+        window["started_utc"], label="repository-control observed_window.started_utc"
+    )
+    window_end = _parse_time(
+        window["completed_utc"],
+        label="repository-control observed_window.completed_utc",
+    )
+    if window_end < window_start:
+        _fail("repository-control observed window ends before it starts")
+    h_completed = _parse_time(
+        _phase_map(ledger)["H"]["completed_utc"],
+        label="workflow_chain phase H completed_utc",
+    )
+    ledger_created = _parse_time(
+        ledger["ledger_scope"]["created_utc"], label="ledger_scope.created_utc"
+    )
+    if not (h_completed <= window_start <= window_end <= ledger_created):
+        _fail(
+            "repository-control observation window must be after phase H and "
+            "before ledger creation"
+        )
+    observations_value = _control_array(
+        document["observations"], label="repository-control observations"
+    )
+    if (
+        len(observations_value) != 19
+        or tuple(
+            item.get("name") if isinstance(item, dict) else None
+            for item in observations_value
+        )
+        != _REPOSITORY_CONTROL_OBSERVATION_NAMES
+    ):
+        _fail("repository-control observation must contain the exact ordered 19 results")
+    tag_endpoint = observations_value[6].get("endpoint")
+    match = (
+        re.fullmatch(
+            rf"/repos/{re.escape(repository)}/rulesets/([1-9][0-9]*)",
+            tag_endpoint,
+        )
+        if isinstance(tag_endpoint, str)
+        else None
+    )
+    if match is None:
+        _fail("repository-control tag-ruleset endpoint is not canonical")
+    ruleset_id = _control_positive_id(
+        int(match.group(1)), label="tag ruleset endpoint ID"
+    )
+    plan = _control_observation_plan(repository, ruleset_id)
+    bodies: dict[str, Mapping[str, Any]] = {}
+    paged: dict[str, list[Mapping[str, Any]]] = {}
+    prior_time = window_start
+    observation_times: dict[str, str] = {}
+    for raw, (name, endpoint, kind, items_field, identity_field) in zip(
+        observations_value, plan, strict=True
+    ):
+        observation = _control_object(
+            raw, label=f"repository-control observation {name}"
+        )
+        pages, prior_time = _control_pages(
+            observation,
+            expected_name=name,
+            expected_endpoint=endpoint,
+            pagination_kind=kind,
+            window_start=window_start,
+            window_end=window_end,
+            prior_time=prior_time,
+            repository_id=observed_repository_id,
+        )
+        observation_times[name] = observation["observed_utc"]
+        if kind == "single":
+            bodies[name] = _control_single_body(pages, label=name)
+        else:
+            assert identity_field is not None
+            paged[name] = _control_paged_items(
+                observation,
+                pages,
+                root_kind=kind,
+                items_field=items_field,
+                identity_field=identity_field,
+                label=name,
+            )
+
+    metadata = bodies["repository-metadata"]
+    owner = _control_object(metadata.get("owner"), label="repository owner")
+    metadata_repository_id = _control_positive_id(
+        metadata.get("id"), label="repository metadata repository ID"
+    )
+    metadata_owner_id = _control_positive_id(
+        owner.get("id"), label="repository metadata owner ID"
+    )
+    if (
+        metadata.get("full_name") != repository
+        or str(metadata_repository_id) != release["repository_id"]
+        or str(metadata_owner_id) != release["repository_owner_id"]
+        or metadata.get("private") is not False
+        or metadata.get("visibility") != "public"
+        or owner.get("login") != repository.split("/", 1)[0]
+        or owner.get("type") != "User"
+        or release["source_repository_visibility_at_signing"] != "public"
+    ):
+        _fail(
+            "repository metadata body contradicts the public release identity"
+        )
+    main_ref = bodies["main-ref"]
+    main_object = _control_object(main_ref.get("object"), label="main ref object")
+    if (
+        main_ref.get("ref") != "refs/heads/main"
+        or main_object.get("type") != "commit"
+        or main_object.get("sha") != ledger["source"]["candidate_commit_sha"]
+    ):
+        _fail("main ref body does not bind the admitted candidate commit")
+
+    protection = bodies["main-protection"]
+    status_checks = _control_object(
+        protection.get("required_status_checks"), label="required_status_checks"
+    )
+    raw_checks = _control_array(
+        status_checks.get("checks"), label="required_status_checks.checks"
+    )
+    checks: list[dict[str, Any]] = []
+    for raw_check in raw_checks:
+        check = _control_object(raw_check, label="required check")
+        _require_exact_keys(check, {"context", "app_id"}, label="required check")
+        context = check["context"]
+        app_id = check["app_id"]
+        if (
+            not isinstance(context, str)
+            or not context
+            or len(context) > 256
+        ):
+            _fail("required check context is invalid")
+        _control_positive_id(app_id, label=f"required check {context} app_id")
+        checks.append({"context": context, "app_id": app_id})
+    checks.sort(key=lambda item: (item["context"], item["app_id"]))
+    if {(item["context"], item["app_id"]) for item in checks} != REQUIRED_MAIN_CHECKS:
+        _fail("main-protection body has a non-exact required check/app set")
+    enforce_admins = _control_object(
+        protection.get("enforce_admins"), label="enforce_admins"
+    )
+    reviews = _control_object(
+        protection.get("required_pull_request_reviews"),
+        label="required_pull_request_reviews",
+    )
+    linear = _control_object(
+        protection.get("required_linear_history"),
+        label="required_linear_history",
+    )
+    force = _control_object(
+        protection.get("allow_force_pushes"), label="allow_force_pushes"
+    )
+    deletions = _control_object(
+        protection.get("allow_deletions"), label="allow_deletions"
+    )
+    main_branch = {
+        "ref": "refs/heads/main",
+        "head_sha": main_object["sha"],
+        "protected": True,
+        "strict_required_checks": _control_bool(
+            status_checks.get("strict"), label="required_status_checks.strict"
+        ),
+        "enforce_admins": _control_bool(
+            enforce_admins.get("enabled"), label="enforce_admins.enabled"
+        ),
+        "required_checks": checks,
+        "required_approving_reviews": reviews.get("required_approving_review_count"),
+        "code_owner_reviews": _control_bool(
+            reviews.get("require_code_owner_reviews"),
+            label="required_pull_request_reviews.require_code_owner_reviews",
+        ),
+        "dismiss_stale_reviews": _control_bool(
+            reviews.get("dismiss_stale_reviews"),
+            label="required_pull_request_reviews.dismiss_stale_reviews",
+        ),
+        "last_push_approval": _control_bool(
+            reviews.get("require_last_push_approval"),
+            label="required_pull_request_reviews.require_last_push_approval",
+        ),
+        "linear_history": _control_bool(
+            linear.get("enabled"), label="required_linear_history.enabled"
+        ),
+        "allow_force_pushes": _control_bool(
+            force.get("enabled"), label="allow_force_pushes.enabled"
+        ),
+        "allow_deletions": _control_bool(
+            deletions.get("enabled"), label="allow_deletions.enabled"
+        ),
+    }
+    _control_positive_id(
+        main_branch["required_approving_reviews"],
+        label="required approving review count",
+    )
+
+    actions_body = bodies["actions-permissions"]
+    workflow_body = bodies["workflow-permissions"]
+    allowed_actions = actions_body.get("allowed_actions")
+    if allowed_actions not in {"all", "local_only", "selected"}:
+        _fail("actions allowed_actions is not canonical")
+    actions = {
+        "enabled": _control_bool(actions_body.get("enabled"), label="actions.enabled"),
+        "allowed_actions": allowed_actions,
+        "sha_pinning_required": _control_bool(
+            actions_body.get("sha_pinning_required"),
+            label="actions.sha_pinning_required",
+        ),
+        "default_workflow_permissions": workflow_body.get(
+            "default_workflow_permissions"
+        ),
+        "can_approve_pull_requests": _control_bool(
+            workflow_body.get("can_approve_pull_request_reviews"),
+            label="workflow permissions PR approval",
+        ),
+    }
+    immutable_body = bodies["immutable-releases"]
+    immutable = {
+        "enabled": _control_bool(
+            immutable_body.get("enabled"), label="immutable releases enabled"
+        ),
+        "enforced_by_owner": _control_bool(
+            immutable_body.get("enforced_by_owner"),
+            label="immutable releases owner enforcement",
+        ),
+    }
+
+    ruleset_body = bodies["tag-ruleset"]
+    conditions = _control_object(
+        ruleset_body.get("conditions"), label="tag ruleset conditions"
+    )
+    ref_name = _control_object(
+        conditions.get("ref_name"), label="tag ruleset ref-name condition"
+    )
+    include = _control_array(ref_name.get("include"), label="tag ruleset include")
+    exclude = _control_array(ref_name.get("exclude"), label="tag ruleset exclude")
+    rule_types: list[str] = []
+    for raw_rule in _control_array(
+        ruleset_body.get("rules"), label="tag ruleset rules"
+    ):
+        rule = _control_object(raw_rule, label="tag ruleset rule")
+        rule_type = rule.get("type")
+        if not isinstance(rule_type, str) or not rule_type:
+            _fail("tag ruleset rule type is not canonical")
+        rule_types.append(rule_type)
+    bypass_actors = _control_array(
+        ruleset_body.get("bypass_actors"), label="tag ruleset bypass actors"
+    )
+    normalized_bypass: list[dict[str, Any]] = []
+    for actor_value in bypass_actors:
+        actor = _control_object(actor_value, label="tag ruleset bypass actor")
+        normalized_bypass.append(
+            {
+                "actor_type": actor.get("actor_type"),
+                "actor_id": actor.get("actor_id"),
+                "bypass_mode": actor.get("bypass_mode"),
+            }
+        )
+    tag_ruleset = {
+        "id": _control_positive_id(
+            ruleset_body.get("id"), label="tag ruleset body ID"
+        ),
+        "name": ruleset_body.get("name"),
+        "target": ruleset_body.get("target"),
+        "enforcement": ruleset_body.get("enforcement"),
+        "include": include,
+        "exclude": exclude,
+        "rules": rule_types,
+        "bypass_actor_classes": normalized_bypass,
+    }
+    if tag_ruleset["id"] != ruleset_id:
+        _fail("tag ruleset endpoint and body IDs differ")
+
+    deploy_keys = paged["deploy-keys"]
+    for deploy_key_item in deploy_keys:
+        _validate_deploy_key_item(deploy_key_item)
+    write_keys = [
+        item for item in deploy_keys if item.get("read_only") is False
+    ]
+    if len(write_keys) != 1:
+        _fail("repository must have exactly one write-enabled deploy key")
+    write_key = write_keys[0]
+    if write_key.get("enabled") is not True:
+        _fail("release write-enabled deploy key is not enabled")
+    release_deploy_key = {
+        "id": _control_positive_id(
+            write_key.get("id"), label="release deploy key ID"
+        ),
+        "title": write_key.get("title"),
+        "fingerprint": _ssh_ed25519_fingerprint(write_key.get("key")),
+        "algorithm": "ssh-ed25519",
+        "verified": _control_bool(
+            write_key.get("verified"), label="release deploy key verified"
+        ),
+        "read_only": False,
+        "sole_write_enabled": True,
+    }
+
+    environment_items = paged["environments"]
+    environment_by_name = {
+        item.get("name"): item
+        for item in environment_items
+        if isinstance(item.get("name"), str)
+    }
+    if set(environment_by_name) != {
+        name for _role, name in _REPOSITORY_CONTROL_ENVIRONMENTS
+    } or len(environment_items) != 4:
+        _fail("environment list is not the exact four release environments")
+    environments = [
+        _environment_control(
+            environment_by_name[name],
+            paged[f"{role}-deployment-branch-policies"],
+            expected_name=name,
+        )
+        for role, name in _REPOSITORY_CONTROL_ENVIRONMENTS
+    ]
+
+    activation_values: list[bool] = []
+    for index, expected_name in enumerate(_REPOSITORY_CONTROL_VARIABLES, start=1):
+        variable = bodies[f"activation-variable-{index}"]
+        if variable.get("name") != expected_name or variable.get("value") not in {
+            "true",
+            "false",
+        }:
+            _fail(f"activation variable {expected_name} body is not exact")
+        activation_values.append(variable["value"] == "true")
+    activation_flags = {
+        "source_admission": activation_values[0],
+        "artifact_admission": activation_values[1],
+        "publication": activation_values[2],
+    }
+
+    secret_names = (
+        "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64",
+        "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64",
+    )
+    repository_secret_names: set[str] = set()
+    for item in paged["post-h-repository-secrets"]:
+        repository_secret_name = item.get("name")
+        if (
+            not isinstance(repository_secret_name, str)
+            or re.fullmatch(r"[A-Z][A-Z0-9_]*", repository_secret_name) is None
+            or len(repository_secret_name) > 256
+        ):
+            _fail("post-h-repository-secrets contains a non-canonical secret name")
+        repository_secret_names.add(repository_secret_name)
+    repository_absence: list[dict[str, Any]] = []
+    repository_observed_utc = observation_times["post-h-repository-secrets"]
+    for secret_name in secret_names:
+        if secret_name in repository_secret_names:
+            _fail(
+                f"admission secret {secret_name} is still present at repository scope"
+            )
+        repository_absence.append(
+            {
+                "secret_name": secret_name,
+                "present": False,
+                "observed_utc": repository_observed_utc,
+                "observation_scope": "github-repository-secret-name-list",
+            }
+        )
+
+    absence: list[dict[str, Any]] = []
+    for (role, environment), secret_name in zip(
+        _REPOSITORY_CONTROL_ENVIRONMENTS[:2], secret_names, strict=True
+    ):
+        observation_name = f"post-h-{role}-environment-secrets"
+        observed_names: set[str] = set()
+        for item in paged[observation_name]:
+            environment_secret_name = item.get("name")
+            if (
+                not isinstance(environment_secret_name, str)
+                or re.fullmatch(r"[A-Z][A-Z0-9_]*", environment_secret_name) is None
+                or len(environment_secret_name) > 256
+            ):
+                _fail(f"{observation_name} contains a non-canonical secret name")
+            observed_names.add(environment_secret_name)
+        if secret_name in observed_names:
+            _fail(f"admission secret {secret_name} is still present after publication")
+        absence.append(
+            {
+                "environment": environment,
+                "secret_name": secret_name,
+                "present": False,
+                "observed_utc": observation_times[observation_name],
+                "observation_scope": "github-environment-secret-name-list",
+            }
+        )
+    return {
+        "observed_utc": window["completed_utc"],
+        "main_branch": main_branch,
+        "tag_ruleset": tag_ruleset,
+        "release_deploy_key": release_deploy_key,
+        "immutable_releases": immutable,
+        "actions": actions,
+        "environments": environments,
+        "repository_admission_secret_absence_after_publication": repository_absence,
+        "admission_secret_absence_after_publication": absence,
+        "activation_flags_after_publication": activation_flags,
+        "observed_window": dict(window),
+    }
 
 
 def _validate_repository_control_observation_bytes(
@@ -2558,96 +3735,21 @@ def _validate_repository_control_observation_bytes(
     value = _load_json_bytes(data, label="repository-control observation evidence")
     if canonical_json_bytes(value) != data:
         _fail("repository-control observation evidence is not canonical JSON")
-    _require_exact_keys(
-        value,
-        {
-            "format",
-            "repository",
-            "repository_id",
-            "repository_owner_id",
-            "collector",
-            "github_api_version",
-            "observations",
-            "evidence_boundary",
-        },
-        label="repository-control observation evidence",
-    )
-    if (
-        value["format"] != "EVOGUARD_REPOSITORY_CONTROL_OBSERVATION_V1"
-        or value["repository"] != ledger["release"]["repository"]
-        or value["repository_id"] != ledger["release"]["repository_id"]
-        or value["repository_owner_id"]
-        != ledger["release"]["repository_owner_id"]
-        or value["collector"]
-        != {
-            "name": "evoguard-release-ledger",
-            "version": "2",
-        }
-        or value["github_api_version"] != "2022-11-28"
-        or value["evidence_boundary"]
-        != "owner-collected-point-in-time-github-api-observation"
+    facts = _repository_control_facts(value, ledger)
+    for key in (
+        "observed_utc",
+        "main_branch",
+        "tag_ruleset",
+        "release_deploy_key",
+        "immutable_releases",
+        "actions",
+        "environments",
+        "repository_admission_secret_absence_after_publication",
+        "admission_secret_absence_after_publication",
+        "activation_flags_after_publication",
     ):
-        _fail("repository-control observation identity is not exact")
-    observations = value["observations"]
-    if not isinstance(observations, list) or len(observations) != 2:
-        _fail("repository-control observation must contain exactly two API results")
-    environments = {
-        item["name"]: item["id"] for item in controls["environments"]
-    }
-    for index, (observed, expected) in enumerate(
-        zip(
-            observations,
-            controls["admission_secret_absence_after_publication"],
-            strict=True,
-        )
-    ):
-        if not isinstance(observed, dict):
-            _fail(f"repository-control observation {index} must be an object")
-        _require_exact_keys(
-            observed,
-            {
-                "environment_id",
-                "environment",
-                "api_action",
-                "request_method",
-                "endpoint",
-                "http_status",
-                "pagination_complete",
-                "per_page",
-                "page_count",
-                "total_count",
-                "queried_secret_name",
-                "present",
-                "observed_utc",
-            },
-            label=f"repository-control observation {index}",
-        )
-        expected_endpoint = (
-            f"/repos/{ledger['release']['repository']}/environments/"
-            f"{expected['environment']}/secrets"
-        )
-        if (
-            observed["environment_id"] != environments[expected["environment"]]
-            or observed["environment"] != expected["environment"]
-            or observed["api_action"] != "list-environment-secrets"
-            or observed["request_method"] != "GET"
-            or observed["endpoint"] != expected_endpoint
-            or observed["http_status"] != 200
-            or observed["pagination_complete"] is not True
-            or observed["per_page"] != 100
-            or not isinstance(observed["page_count"], int)
-            or isinstance(observed["page_count"], bool)
-            or observed["page_count"] < 1
-            or not isinstance(observed["total_count"], int)
-            or isinstance(observed["total_count"], bool)
-            or observed["total_count"] < 0
-            or observed["page_count"]
-            != max(1, (observed["total_count"] + 99) // 100)
-            or observed["queried_secret_name"] != expected["secret_name"]
-            or observed["present"] is not False
-            or observed["observed_utc"] != expected["observed_utc"]
-        ):
-            _fail(f"repository-control observation {index} is not exact")
+        if controls[key] != facts[key]:
+            _fail(f"repository-controls claim {key} contradicts retained API bodies")
 
 
 def _validate_semantics(
@@ -2678,6 +3780,24 @@ def _validate_semantics(
     }
     if ledger["schema_contracts"]["validator"] != expected_validator:
         _fail("signed ledger does not bind the exact trusted-parent validator bytes")
+    collector_bytes = (
+        ROOT / REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH
+    ).read_bytes()
+    expected_collector = {
+        "path": REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH,
+        "sha256": _sha256(collector_bytes),
+        "git_blob_sha": _git_blob_sha(collector_bytes),
+        "trusted_parent_commit_sha": source["parent_commit_sha"],
+        "trusted_parent_tree_sha": source["parent_tree_sha"],
+    }
+    if (
+        ledger["schema_contracts"]["repository_controls_collector"]
+        != expected_collector
+    ):
+        _fail(
+            "signed ledger does not bind the exact trusted-parent "
+            "repository-controls collector bytes"
+        )
     parent_anchor = ledger["ledger_signature"]["trusted_parent_anchor"]
     if (
         parent_anchor["path"]
@@ -2688,6 +3808,11 @@ def _validate_semantics(
         _fail("ledger signing anchor is not bound to the exact trusted parent")
     if release["repository"] != EXPECTED_REPOSITORY:
         _fail(f"ledger repository must be {EXPECTED_REPOSITORY}")
+    if (
+        release["repository_id"] != str(EXPECTED_REPOSITORY_ID)
+        or release["repository_owner_id"] != str(EXPECTED_REPOSITORY_OWNER_ID)
+    ):
+        _fail("ledger repository and owner IDs must match the trusted namespace")
     if release["tag"] != f"v{project['version']}":
         _fail("project version and release tag differ")
     if (

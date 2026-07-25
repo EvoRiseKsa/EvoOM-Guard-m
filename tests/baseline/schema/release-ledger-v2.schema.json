@@ -190,6 +190,7 @@
       "required": [
         "release_ledger",
         "validator",
+        "repository_controls_collector",
         "verdict_record",
         "sarif",
         "verifier_pack",
@@ -244,6 +245,34 @@
           "properties": {
             "path": {
               "const": "tools/ci/validate_release_ledger_v2.py"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "git_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_commit_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_tree_sha": {
+              "$ref": "#/$defs/gitSha"
+            }
+          }
+        },
+        "repository_controls_collector": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "git_blob_sha",
+            "trusted_parent_commit_sha",
+            "trusted_parent_tree_sha"
+          ],
+          "properties": {
+            "path": {
+              "const": "tools/ci/collect_repository_controls_v2.py"
             },
             "sha256": {
               "$ref": "#/$defs/sha256"
@@ -980,6 +1009,7 @@
         "actions",
         "environments",
         "observation_evidence",
+        "repository_admission_secret_absence_after_publication",
         "admission_secret_absence_after_publication",
         "publication_authority_retirement",
         "activation_flags_after_publication",
@@ -999,13 +1029,27 @@
           "$ref": "#/$defs/deployKey"
         },
         "immutable_releases": {
-          "const": true
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "enforced_by_owner"
+          ],
+          "properties": {
+            "enabled": {
+              "const": true
+            },
+            "enforced_by_owner": {
+              "type": "boolean"
+            }
+          }
         },
         "actions": {
           "type": "object",
           "additionalProperties": false,
           "required": [
             "enabled",
+            "allowed_actions",
             "sha_pinning_required",
             "default_workflow_permissions",
             "can_approve_pull_requests"
@@ -1013,6 +1057,13 @@
           "properties": {
             "enabled": {
               "const": true
+            },
+            "allowed_actions": {
+              "enum": [
+                "all",
+                "local_only",
+                "selected"
+              ]
             },
             "sha_pinning_required": {
               "const": true
@@ -1039,9 +1090,6 @@
                   "properties": {
                     "name": {
                       "const": "evoguard-release-source-v2"
-                    },
-                    "secret_required": {
-                      "const": true
                     }
                   }
                 }
@@ -1056,9 +1104,6 @@
                   "properties": {
                     "name": {
                       "const": "evoguard-release-artifact-v1"
-                    },
-                    "secret_required": {
-                      "const": true
                     }
                   }
                 }
@@ -1073,9 +1118,6 @@
                   "properties": {
                     "name": {
                       "const": "evoguard-release-draft"
-                    },
-                    "secret_required": {
-                      "const": false
                     }
                   }
                 }
@@ -1090,9 +1132,6 @@
                   "properties": {
                     "name": {
                       "const": "evoguard-release-publication"
-                    },
-                    "secret_required": {
-                      "const": true
                     }
                   }
                 }
@@ -1103,6 +1142,42 @@
         },
         "observation_evidence": {
           "$ref": "#/$defs/fileDescriptor"
+        },
+        "repository_admission_secret_absence_after_publication": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/repositorySecretAbsenceObservation"
+                },
+                {
+                  "properties": {
+                    "secret_name": {
+                      "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/repositorySecretAbsenceObservation"
+                },
+                {
+                  "properties": {
+                    "secret_name": {
+                      "const": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
         },
         "admission_secret_absence_after_publication": {
           "type": "array",
@@ -2500,6 +2575,32 @@
         }
       }
     },
+    "repositorySecretAbsenceObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "secret_name",
+        "present",
+        "observed_utc",
+        "observation_scope"
+      ],
+      "properties": {
+        "secret_name": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 256
+        },
+        "present": {
+          "const": false
+        },
+        "observed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "observation_scope": {
+          "const": "github-repository-secret-name-list"
+        }
+      }
+    },
     "mainBranchControls": {
       "type": "object",
       "additionalProperties": false,
@@ -2536,15 +2637,27 @@
         },
         "required_checks": {
           "type": "array",
-          "minItems": 1,
+          "minItems": 9,
+          "maxItems": 9,
           "uniqueItems": true,
-          "contains": {
-            "const": "project-status"
-          },
           "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 256
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "context",
+              "app_id"
+            ],
+            "properties": {
+              "context": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "app_id": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
           }
         },
         "required_approving_reviews": {
@@ -2580,6 +2693,7 @@
         "target",
         "enforcement",
         "include",
+        "exclude",
         "rules",
         "bypass_actor_classes"
       ],
@@ -2609,6 +2723,10 @@
             }
           ],
           "items": false
+        },
+        "exclude": {
+          "type": "array",
+          "maxItems": 0
         },
         "rules": {
           "type": "array",
@@ -2668,6 +2786,8 @@
         "id",
         "title",
         "fingerprint",
+        "algorithm",
+        "verified",
         "read_only",
         "sole_write_enabled"
       ],
@@ -2685,6 +2805,12 @@
           "type": "string",
           "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
         },
+        "algorithm": {
+          "const": "ssh-ed25519"
+        },
+        "verified": {
+          "const": true
+        },
         "read_only": {
           "const": false
         },
@@ -2700,10 +2826,13 @@
         "id",
         "name",
         "reviewer",
+        "reviewer_id",
+        "required_reviewers_rule_id",
+        "branch_policy_rule_id",
         "prevent_self_review",
         "can_admins_bypass",
         "deployment_branch",
-        "secret_required"
+        "deployment_branch_policy_id"
       ],
       "properties": {
         "id": {
@@ -2719,6 +2848,18 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
         },
+        "reviewer_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "required_reviewers_rule_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "branch_policy_rule_id": {
+          "type": "integer",
+          "minimum": 1
+        },
         "prevent_self_review": {
           "const": true
         },
@@ -2728,8 +2869,9 @@
         "deployment_branch": {
           "const": "main"
         },
-        "secret_required": {
-          "type": "boolean"
+        "deployment_branch_policy_id": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

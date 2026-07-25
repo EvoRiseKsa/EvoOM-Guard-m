@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 import types
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -28,6 +29,7 @@ from evoom_guard.signing import (
     public_key_id,
     sign_file,
 )
+from tools.ci import collect_repository_controls_v2 as controls_collector
 from tools.ci import validate_release_ledger_v2 as validator
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,44 +92,200 @@ def _retained_file(value: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _release_deploy_public_key() -> str:
+    algorithm = b"ssh-ed25519"
+    raw_key = bytes(range(1, 33))
+    blob = (
+        len(algorithm).to_bytes(4, "big")
+        + algorithm
+        + len(raw_key).to_bytes(4, "big")
+        + raw_key
+    )
+    return f"ssh-ed25519 {base64.b64encode(blob).decode('ascii')} release-test"
+
+
+def _release_deploy_fingerprint() -> str:
+    blob = base64.b64decode(_release_deploy_public_key().split()[1], validate=True)
+    digest = base64.b64encode(hashlib.sha256(blob).digest()).decode("ascii")
+    return f"SHA256:{digest.rstrip('=')}"
+
+
 def _repository_control_observation(ledger: dict[str, Any]) -> dict[str, Any]:
     controls = ledger["repository_controls"]
-    environments = {
-        item["name"]: item["id"] for item in controls["environments"]
-    }
-    return {
-        "format": "EVOGUARD_REPOSITORY_CONTROL_OBSERVATION_V1",
-        "repository": ledger["release"]["repository"],
-        "repository_id": ledger["release"]["repository_id"],
-        "repository_owner_id": ledger["release"]["repository_owner_id"],
-        "collector": {
-            "name": "evoguard-release-ledger",
-            "version": "2",
-        },
-        "github_api_version": "2022-11-28",
-        "observations": [
-            {
-                "environment_id": environments[item["environment"]],
-                "environment": item["environment"],
-                "api_action": "list-environment-secrets",
-                "request_method": "GET",
-                "endpoint": (
-                    f"/repos/{ledger['release']['repository']}/environments/"
-                    f"{item['environment']}/secrets"
-                ),
-                "http_status": 200,
-                "pagination_complete": True,
-                "per_page": 100,
-                "page_count": 1,
-                "total_count": 0,
-                "queried_secret_name": item["secret_name"],
-                "present": False,
-                "observed_utc": item["observed_utc"],
+    release = ledger["release"]
+    repository = release["repository"]
+    base = f"/repos/{repository}"
+    by_environment = {item["name"]: item for item in controls["environments"]}
+
+    def runner(
+        method: str,
+        endpoint: str,
+        query: dict[str, int | str],
+    ) -> controls_collector.ApiResponse:
+        assert method == "GET"
+        if endpoint == base:
+            body: Any = {
+                "full_name": repository,
+                "id": int(release["repository_id"]),
+                "private": False,
+                "visibility": "public",
+                "owner": {
+                    "id": int(release["repository_owner_id"]),
+                    "login": "EvoRiseKsa",
+                    "type": "User",
+                },
             }
-            for item in controls["admission_secret_absence_after_publication"]
-        ],
-        "evidence_boundary": "owner-collected-point-in-time-github-api-observation",
-    }
+        elif endpoint.endswith("/git/ref/heads/main"):
+            body = {
+                "ref": "refs/heads/main",
+                "object": {
+                    "sha": ledger["source"]["candidate_commit_sha"],
+                    "type": "commit",
+                },
+            }
+        elif endpoint.endswith("/branches/main/protection"):
+            main = controls["main_branch"]
+            body = {
+                "required_status_checks": {
+                    "strict": main["strict_required_checks"],
+                    "checks": main["required_checks"],
+                },
+                "enforce_admins": {"enabled": main["enforce_admins"]},
+                "required_pull_request_reviews": {
+                    "dismiss_stale_reviews": main["dismiss_stale_reviews"],
+                    "require_code_owner_reviews": main["code_owner_reviews"],
+                    "required_approving_review_count": main[
+                        "required_approving_reviews"
+                    ],
+                    "require_last_push_approval": main["last_push_approval"],
+                },
+                "required_linear_history": {"enabled": main["linear_history"]},
+                "allow_force_pushes": {"enabled": main["allow_force_pushes"]},
+                "allow_deletions": {"enabled": main["allow_deletions"]},
+            }
+        elif endpoint.endswith("/actions/permissions/workflow"):
+            body = {
+                "default_workflow_permissions": controls["actions"][
+                    "default_workflow_permissions"
+                ],
+                "can_approve_pull_request_reviews": controls["actions"][
+                    "can_approve_pull_requests"
+                ],
+            }
+        elif endpoint.endswith("/actions/permissions"):
+            body = {
+                "enabled": controls["actions"]["enabled"],
+                "allowed_actions": controls["actions"]["allowed_actions"],
+                "sha_pinning_required": controls["actions"]["sha_pinning_required"],
+            }
+        elif endpoint.endswith("/immutable-releases"):
+            body = controls["immutable_releases"]
+        elif "/rulesets/" in endpoint:
+            ruleset = controls["tag_ruleset"]
+            body = {
+                "id": ruleset["id"],
+                "name": ruleset["name"],
+                "target": ruleset["target"],
+                "enforcement": ruleset["enforcement"],
+                "conditions": {
+                    "ref_name": {
+                        "include": ruleset["include"],
+                        "exclude": ruleset["exclude"],
+                    }
+                },
+                "rules": [{"type": item} for item in ruleset["rules"]],
+                "bypass_actors": ruleset["bypass_actor_classes"],
+            }
+        elif endpoint.endswith("/keys"):
+            key = controls["release_deploy_key"]
+            body = [
+                {
+                    "id": key["id"],
+                    "title": key["title"],
+                    "key": _release_deploy_public_key(),
+                    "verified": key["verified"],
+                    "read_only": key["read_only"],
+                    "enabled": True,
+                }
+            ]
+        elif endpoint.endswith("/environments"):
+            values = []
+            for item in controls["environments"]:
+                values.append(
+                    {
+                        "id": item["id"],
+                        "name": item["name"],
+                        "can_admins_bypass": item["can_admins_bypass"],
+                        "protection_rules": [
+                            {
+                                "id": item["required_reviewers_rule_id"],
+                                "type": "required_reviewers",
+                                "prevent_self_review": item["prevent_self_review"],
+                                "reviewers": [
+                                    {
+                                        "type": "User",
+                                        "reviewer": {
+                                            "id": item["reviewer_id"],
+                                            "login": item["reviewer"],
+                                        },
+                                    }
+                                ],
+                            },
+                            {
+                                "id": item["branch_policy_rule_id"],
+                                "type": "branch_policy",
+                            },
+                        ],
+                        "deployment_branch_policy": {
+                            "protected_branches": False,
+                            "custom_branch_policies": True,
+                        },
+                    }
+                )
+            body = {"total_count": len(values), "environments": values}
+        elif endpoint.endswith("/deployment-branch-policies"):
+            environment_name = endpoint.split("/environments/", 1)[1].split("/", 1)[0]
+            item = by_environment[environment_name]
+            body = {
+                "total_count": 1,
+                "branch_policies": [
+                    {
+                        "id": item["deployment_branch_policy_id"],
+                        "name": "main",
+                        "type": "branch",
+                    }
+                ],
+            }
+        elif "/actions/variables/" in endpoint:
+            name = endpoint.rsplit("/", 1)[1]
+            body = {"name": name, "value": "false"}
+        elif endpoint.endswith("/secrets"):
+            body = {"total_count": 0, "secrets": []}
+        else:
+            raise AssertionError(f"unexpected repository-control endpoint: {endpoint}")
+        return controls_collector.ApiResponse(
+            json.dumps(body, separators=(",", ":")).encode("utf-8")
+        )
+
+    times = iter(
+        [
+            datetime(2030, 1, 1, 0, 23, tzinfo=timezone.utc),
+            *[
+                datetime(2030, 1, 1, 0, 23, tzinfo=timezone.utc)
+                for _ in range(16)
+            ],
+            datetime(2030, 1, 1, 0, 25, tzinfo=timezone.utc),
+            datetime(2030, 1, 1, 0, 26, tzinfo=timezone.utc),
+            datetime(2030, 1, 1, 0, 27, tzinfo=timezone.utc),
+            datetime(2030, 1, 1, 0, 27, tzinfo=timezone.utc),
+        ]
+    )
+    return controls_collector.collect(
+        repository,
+        controls["tag_ruleset"]["id"],
+        api_runner=runner,
+        clock=lambda: next(times),
+    )
 
 
 def _key_retirement_value(
@@ -484,8 +642,8 @@ def _valid_ledger() -> dict[str, Any]:
         },
         "release": {
             "repository": "EvoRiseKsa/EvoOM-Guard-m",
-            "repository_id": "999999",
-            "repository_owner_id": "1002",
+            "repository_id": str(validator.EXPECTED_REPOSITORY_ID),
+            "repository_owner_id": str(validator.EXPECTED_REPOSITORY_OWNER_ID),
             "source_repository_visibility_at_signing": "public",
             "tag": "v9.9.9",
             "commit_sha": candidate,
@@ -524,6 +682,23 @@ def _valid_ledger() -> dict[str, Any]:
                 ).hexdigest(),
                 "git_blob_sha": validator._git_blob_sha(
                     Path(validator.__file__).read_bytes()
+                ),
+                "trusted_parent_commit_sha": parent,
+                "trusted_parent_tree_sha": parent_tree,
+            },
+            "repository_controls_collector": {
+                "path": validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH,
+                "sha256": hashlib.sha256(
+                    (
+                        ROOT
+                        / validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH
+                    ).read_bytes()
+                ).hexdigest(),
+                "git_blob_sha": validator._git_blob_sha(
+                    (
+                        ROOT
+                        / validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH
+                    ).read_bytes()
                 ),
                 "trusted_parent_commit_sha": parent,
                 "trusted_parent_tree_sha": parent_tree,
@@ -788,14 +963,17 @@ def _valid_ledger() -> dict[str, Any]:
             },
         },
         "repository_controls": {
-            "observed_utc": "2030-01-01T00:23:00Z",
+            "observed_utc": "2030-01-01T00:27:00Z",
             "main_branch": {
                 "ref": "refs/heads/main",
                 "head_sha": candidate,
                 "protected": True,
                 "strict_required_checks": True,
                 "enforce_admins": True,
-                "required_checks": sorted(validator.REQUIRED_MAIN_CHECKS),
+                "required_checks": [
+                    {"context": context, "app_id": app_id}
+                    for context, app_id in sorted(validator.REQUIRED_MAIN_CHECKS)
+                ],
                 "required_approving_reviews": 1,
                 "code_owner_reviews": True,
                 "dismiss_stale_reviews": True,
@@ -810,6 +988,7 @@ def _valid_ledger() -> dict[str, Any]:
                 "target": "tag",
                 "enforcement": "active",
                 "include": ["refs/tags/v*"],
+                "exclude": [],
                 "rules": [
                     "creation",
                     "update",
@@ -827,58 +1006,94 @@ def _valid_ledger() -> dict[str, Any]:
             "release_deploy_key": {
                 "id": 5002,
                 "title": "release tag authority",
-                "fingerprint": f"SHA256:{'A' * 43}",
+                "fingerprint": _release_deploy_fingerprint(),
+                "algorithm": "ssh-ed25519",
+                "verified": True,
                 "read_only": False,
                 "sole_write_enabled": True,
             },
-            "immutable_releases": True,
+            "immutable_releases": {
+                "enabled": True,
+                "enforced_by_owner": False,
+            },
             "actions": {
                 "enabled": True,
+                "allowed_actions": "all",
                 "sha_pinning_required": True,
                 "default_workflow_permissions": "read",
                 "can_approve_pull_requests": False,
             },
             "environments": [
                 {
-                    "id": 6001,
+                    "id": 18718844374,
                     "name": "evoguard-release-source-v2",
                     "reviewer": "MANA-awam",
+                    "reviewer_id": 304223352,
+                    "required_reviewers_rule_id": 60851006,
+                    "branch_policy_rule_id": 60851007,
                     "prevent_self_review": True,
                     "can_admins_bypass": False,
                     "deployment_branch": "main",
-                    "secret_required": True,
+                    "deployment_branch_policy_id": 55562429,
                 },
                 {
-                    "id": 6002,
+                    "id": 18718845035,
                     "name": "evoguard-release-artifact-v1",
                     "reviewer": "MANA-awam",
+                    "reviewer_id": 304223352,
+                    "required_reviewers_rule_id": 60851009,
+                    "branch_policy_rule_id": 60851010,
                     "prevent_self_review": True,
                     "can_admins_bypass": False,
                     "deployment_branch": "main",
-                    "secret_required": True,
+                    "deployment_branch_policy_id": 55562431,
                 },
                 {
-                    "id": 6003,
+                    "id": 18718845676,
                     "name": "evoguard-release-draft",
                     "reviewer": "MANA-awam",
+                    "reviewer_id": 304223352,
+                    "required_reviewers_rule_id": 60851011,
+                    "branch_policy_rule_id": 60851012,
                     "prevent_self_review": True,
                     "can_admins_bypass": False,
                     "deployment_branch": "main",
-                    "secret_required": False,
+                    "deployment_branch_policy_id": 55562435,
                 },
                 {
-                    "id": 6004,
+                    "id": 18718846349,
                     "name": "evoguard-release-publication",
                     "reviewer": "MANA-awam",
+                    "reviewer_id": 304223352,
+                    "required_reviewers_rule_id": 60851015,
+                    "branch_policy_rule_id": 60851016,
                     "prevent_self_review": True,
                     "can_admins_bypass": False,
                     "deployment_branch": "main",
-                    "secret_required": True,
+                    "deployment_branch_policy_id": 55562438,
                 },
             ],
             "observation_evidence": _file(
                 "controls/repository/repository-controls-observation.json"
             ),
+            "repository_admission_secret_absence_after_publication": [
+                {
+                    "secret_name": (
+                        "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+                    ),
+                    "present": False,
+                    "observed_utc": "2030-01-01T00:25:00Z",
+                    "observation_scope": "github-repository-secret-name-list",
+                },
+                {
+                    "secret_name": (
+                        "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
+                    ),
+                    "present": False,
+                    "observed_utc": "2030-01-01T00:25:00Z",
+                    "observation_scope": "github-repository-secret-name-list",
+                },
+            ],
             "admission_secret_absence_after_publication": [
                 {
                     "environment": "evoguard-release-source-v2",
@@ -970,9 +1185,11 @@ def test_v2_schema_is_valid_and_synthetic_contract_passes() -> None:
 
 def test_project_status_is_a_schema_required_main_check_and_tag_job() -> None:
     ledger = _valid_ledger()
-    ledger["repository_controls"]["main_branch"]["required_checks"].remove(
-        "project-status"
-    )
+    ledger["repository_controls"]["main_branch"]["required_checks"] = [
+        item
+        for item in ledger["repository_controls"]["main_branch"]["required_checks"]
+        if item["context"] != "project-status"
+    ]
     with pytest.raises(
         validator.LedgerValidationError,
         match="schema validation failed",
@@ -1047,6 +1264,9 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     git("config", "user.email", "ledger@example.invalid")
     schema_target = repository / validator.OFFICIAL_SCHEMA_REPOSITORY_PATH
     validator_target = repository / validator.VALIDATOR_REPOSITORY_PATH
+    collector_target = (
+        repository / validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH
+    )
     private = tmp_path / "ledger-anchor.private.pem"
     public = repository / "security/release-ledger-roots/v9.9.9.pub.pem"
     public.parent.mkdir(parents=True)
@@ -1055,6 +1275,11 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     validator_target.parent.mkdir(parents=True)
     schema_target.write_bytes(SCHEMA_PATH.read_bytes())
     validator_target.write_bytes(Path(validator.__file__).read_bytes())
+    collector_target.write_bytes(
+        (
+            ROOT / validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH
+        ).read_bytes()
+    )
     for _field, relative in validator.TRUSTED_BUILD_INPUT_PATHS.items():
         source = ROOT.joinpath(*PurePosixPath(relative).parts)
         target = repository.joinpath(*PurePosixPath(relative).parts)
@@ -1083,6 +1308,7 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     for contract in (
         ledger["schema_contracts"]["release_ledger"],
         ledger["schema_contracts"]["validator"],
+        ledger["schema_contracts"]["repository_controls_collector"],
         ledger["ledger_signature"]["trusted_parent_anchor"],
     ):
         contract["trusted_parent_commit_sha"] = parent
@@ -1111,6 +1337,7 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     for contract in (
         ledger["schema_contracts"]["release_ledger"],
         ledger["schema_contracts"]["validator"],
+        ledger["schema_contracts"]["repository_controls_collector"],
         ledger["ledger_signature"]["trusted_parent_anchor"],
     ):
         contract["trusted_parent_commit_sha"] = candidate
@@ -1138,6 +1365,7 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
     for contract in (
         ledger["schema_contracts"]["release_ledger"],
         ledger["schema_contracts"]["validator"],
+        ledger["schema_contracts"]["repository_controls_collector"],
         ledger["ledger_signature"]["trusted_parent_anchor"],
     ):
         contract["trusted_parent_commit_sha"] = missing_parent
@@ -2239,7 +2467,9 @@ def _raw_attestation(
                     "github": {
                         "event_name": expected_event,
                         "repository_id": repository_id,
-                        "repository_owner_id": "1002",
+                        "repository_owner_id": ledger["release"][
+                            "repository_owner_id"
+                        ],
                         "runner_environment": "github-hosted",
                     }
                 },
@@ -2284,7 +2514,9 @@ def _raw_attestation(
                         "sourceRepositoryOwnerURI": (
                             "https://github.com/EvoRiseKsa"
                         ),
-                        "sourceRepositoryOwnerIdentifier": "1002",
+                        "sourceRepositoryOwnerIdentifier": ledger["release"][
+                            "repository_owner_id"
+                        ],
                         "buildConfigURI": signer_uri,
                         "buildConfigDigest": source,
                         "buildTrigger": expected_event,
@@ -3208,22 +3440,449 @@ def test_repository_control_observation_is_closed_and_cross_bound(
     path.write_bytes(validator.canonical_json_bytes(value))
     validator._validate_repository_control_observation_bytes(tmp_path, ledger)
 
-    value["observations"][0]["http_status"] = 403
+    value["observations"][0]["pages"][0]["http_status"] = 403
     path.write_bytes(validator.canonical_json_bytes(value))
     with pytest.raises(
         validator.LedgerValidationError,
-        match="observation 0 is not exact",
+        match="response metadata is not exact",
     ):
         validator._validate_repository_control_observation_bytes(tmp_path, ledger)
 
     value = _repository_control_observation(ledger)
-    value["observations"][0]["total_count"] = 101
+    value["observations"][8]["pagination"]["observed_item_count"] = 101
     path.write_bytes(validator.canonical_json_bytes(value))
     with pytest.raises(
         validator.LedgerValidationError,
-        match="observation 0 is not exact",
+        match="pagination count",
     ):
         validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "window-before-h",
+        "window-after-ledger",
+        "observation-order",
+        "repository-id",
+        "consistent-repository-identity-substitution",
+        "repository-id-string",
+        "repository-owner-id-bool",
+        "repository-owner-id-float",
+        "repository-owner-login",
+        "repository-owner-type",
+        "repository-private",
+        "repository-visibility",
+        "repository-visibility-missing",
+        "required-check-app",
+        "actions-allowed",
+        "immutable-disabled",
+        "tag-exclude",
+        "tag-rule-non-object",
+        "deploy-key-algorithm",
+        "deploy-key-unverified",
+        "deploy-key-read-only-int",
+        "deploy-key-enabled-int",
+        "deploy-key-disabled",
+        "second-deploy-key-read-only-int",
+        "deploy-key-title-empty",
+        "environment-reviewer-id",
+        "environment-id",
+        "environment-reviewer-rule-id",
+        "environment-branch-rule-id",
+        "environment-reviewer-type",
+        "environment-policy-id",
+        "activation-enabled",
+        "page-status-float",
+        "page-number-bool",
+        "observation-query-float",
+        "page-query-float",
+        "pagination-page-count-float",
+        "pagination-linked-last-bool",
+        "repository-secret-present-first-page",
+        "repository-secret-present-later-page",
+        "secret-present-first-page",
+        "secret-present-later-page",
+        "secret-invalid-link-later-page",
+    ],
+)
+def test_repository_control_v2_mutations_fail_closed(
+    tmp_path: Path,
+    case: str,
+) -> None:
+    ledger = _valid_ledger()
+    value = _repository_control_observation(ledger)
+    if case == "window-before-h":
+        value["observed_window"]["started_utc"] = "2030-01-01T00:21:59Z"
+    elif case == "window-after-ledger":
+        value["observed_window"]["completed_utc"] = "2030-01-01T00:31:00Z"
+    elif case == "observation-order":
+        value["observations"][0], value["observations"][1] = (
+            value["observations"][1],
+            value["observations"][0],
+        )
+    elif case == "repository-id":
+        value["observations"][0]["pages"][0]["body"]["id"] += 1
+    elif case == "consistent-repository-identity-substitution":
+        replacement_repository_id = validator.EXPECTED_REPOSITORY_ID + 1
+        replacement_owner_id = validator.EXPECTED_REPOSITORY_OWNER_ID + 1
+        ledger["release"]["repository_id"] = str(replacement_repository_id)
+        ledger["release"]["repository_owner_id"] = str(replacement_owner_id)
+        value["repository_id"] = replacement_repository_id
+        value["repository_owner_id"] = replacement_owner_id
+        value["observations"][0]["pages"][0]["body"]["id"] = (
+            replacement_repository_id
+        )
+        value["observations"][0]["pages"][0]["body"]["owner"]["id"] = (
+            replacement_owner_id
+        )
+    elif case == "repository-id-string":
+        value["observations"][0]["pages"][0]["body"]["id"] = str(
+            value["observations"][0]["pages"][0]["body"]["id"]
+        )
+    elif case == "repository-owner-id-bool":
+        value["observations"][0]["pages"][0]["body"]["owner"]["id"] = True
+    elif case == "repository-owner-id-float":
+        value["observations"][0]["pages"][0]["body"]["owner"]["id"] = float(
+            value["observations"][0]["pages"][0]["body"]["owner"]["id"]
+        )
+    elif case == "repository-owner-login":
+        value["observations"][0]["pages"][0]["body"]["owner"]["login"] = "another"
+    elif case == "repository-owner-type":
+        value["observations"][0]["pages"][0]["body"]["owner"]["type"] = "Organization"
+    elif case == "repository-private":
+        value["observations"][0]["pages"][0]["body"]["private"] = True
+    elif case == "repository-visibility":
+        value["observations"][0]["pages"][0]["body"]["visibility"] = "internal"
+    elif case == "repository-visibility-missing":
+        del value["observations"][0]["pages"][0]["body"]["visibility"]
+    elif case == "required-check-app":
+        value["observations"][2]["pages"][0]["body"][
+            "required_status_checks"
+        ]["checks"][0]["app_id"] += 1
+    elif case == "actions-allowed":
+        value["observations"][3]["pages"][0]["body"]["allowed_actions"] = "selected"
+    elif case == "immutable-disabled":
+        value["observations"][5]["pages"][0]["body"]["enabled"] = False
+    elif case == "tag-exclude":
+        value["observations"][6]["pages"][0]["body"]["conditions"]["ref_name"][
+            "exclude"
+        ] = ["refs/tags/v0.*"]
+    elif case == "tag-rule-non-object":
+        value["observations"][6]["pages"][0]["body"]["rules"][0] = "creation"
+    elif case == "deploy-key-algorithm":
+        value["observations"][7]["pages"][0]["body"][0]["key"] = (
+            "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7"
+        )
+    elif case == "deploy-key-unverified":
+        value["observations"][7]["pages"][0]["body"][0]["verified"] = False
+    elif case == "deploy-key-read-only-int":
+        value["observations"][7]["pages"][0]["body"][0]["read_only"] = 0
+    elif case == "deploy-key-enabled-int":
+        value["observations"][7]["pages"][0]["body"][0]["enabled"] = 1
+    elif case == "deploy-key-disabled":
+        value["observations"][7]["pages"][0]["body"][0]["enabled"] = False
+    elif case == "second-deploy-key-read-only-int":
+        deploy_observation = value["observations"][7]
+        second = copy.deepcopy(deploy_observation["pages"][0]["body"][0])
+        second.update({"id": 5003, "title": "second key", "read_only": 0})
+        deploy_observation["pages"][0]["body"].append(second)
+        deploy_observation["pagination"]["observed_item_count"] = 2
+    elif case == "deploy-key-title-empty":
+        value["observations"][7]["pages"][0]["body"][0]["title"] = ""
+    elif case == "environment-reviewer-id":
+        value["observations"][8]["pages"][0]["body"]["environments"][0][
+            "protection_rules"
+        ][0]["reviewers"][0]["reviewer"]["id"] += 1
+    elif case == "environment-id":
+        value["observations"][8]["pages"][0]["body"]["environments"][0]["id"] += 1
+    elif case == "environment-reviewer-rule-id":
+        value["observations"][8]["pages"][0]["body"]["environments"][0][
+            "protection_rules"
+        ][0]["id"] += 1
+    elif case == "environment-branch-rule-id":
+        value["observations"][8]["pages"][0]["body"]["environments"][0][
+            "protection_rules"
+        ][1]["id"] += 1
+    elif case == "environment-reviewer-type":
+        value["observations"][8]["pages"][0]["body"]["environments"][0][
+            "protection_rules"
+        ][0]["reviewers"][0]["type"] = "Team"
+    elif case == "environment-policy-id":
+        value["observations"][9]["pages"][0]["body"]["branch_policies"][0]["id"] += 1
+    elif case == "activation-enabled":
+        value["observations"][13]["pages"][0]["body"]["value"] = "true"
+    elif case == "page-status-float":
+        value["observations"][0]["pages"][0]["http_status"] = 200.0
+    elif case == "page-number-bool":
+        value["observations"][0]["pages"][0]["number"] = True
+    elif case == "observation-query-float":
+        value["observations"][7]["query"]["per_page"] = 100.0
+    elif case == "page-query-float":
+        value["observations"][7]["pages"][0]["query"]["page"] = 1.0
+    elif case == "pagination-page-count-float":
+        value["observations"][7]["pagination"]["page_count"] = 1.0
+    elif case == "pagination-linked-last-bool":
+        value["observations"][7]["pagination"]["linked_last_page"] = True
+    elif case == "repository-secret-present-first-page":
+        observation = value["observations"][16]
+        observation["pages"][0]["body"] = {
+            "total_count": 1,
+            "secrets": [
+                {
+                    "name": (
+                        "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+                    )
+                }
+            ],
+        }
+        observation["pagination"]["observed_item_count"] = 1
+        observation["pagination"]["reported_total_count"] = 1
+    elif case == "repository-secret-present-later-page":
+        observation = value["observations"][16]
+        secret_name = "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+        endpoint = observation["endpoint"]
+        observation["pages"][0]["body"] = {
+            "total_count": 101,
+            "secrets": [{"name": f"OTHER_{index:03d}"} for index in range(100)],
+        }
+        observation["pages"][0]["link_header"] = (
+            f'<https://api.github.com{endpoint}?page=2&per_page=100>; rel="next", '
+            f'<https://api.github.com{endpoint}?page=2&per_page=100>; rel="last"'
+        )
+        observation["pages"].append(
+            {
+                "body": {
+                    "total_count": 101,
+                    "secrets": [{"name": secret_name}],
+                },
+                "http_status": 200,
+                "link_header": (
+                    f'<https://api.github.com{endpoint}?page=1&per_page=100>; '
+                    'rel="prev", '
+                    f'<https://api.github.com{endpoint}?page=1&per_page=100>; '
+                    'rel="first"'
+                ),
+                "number": 2,
+                "query": {"page": 2, "per_page": 100},
+            }
+        )
+        observation["pagination"].update(
+            {
+                "linked_last_page": 2,
+                "observed_item_count": 101,
+                "page_count": 2,
+                "reported_total_count": 101,
+            }
+        )
+    elif case == "secret-present-first-page":
+        observation = value["observations"][17]
+        observation["pages"][0]["body"] = {
+            "total_count": 1,
+            "secrets": [
+                {
+                    "name": (
+                        "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+                    )
+                }
+            ],
+        }
+        observation["pagination"]["observed_item_count"] = 1
+        observation["pagination"]["reported_total_count"] = 1
+    elif case == "secret-present-later-page":
+        observation = value["observations"][17]
+        secret_name = "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+        first_secrets = [{"name": f"OTHER_{index:03d}"} for index in range(100)]
+        observation["pages"][0]["body"] = {
+            "total_count": 101,
+            "secrets": first_secrets,
+        }
+        endpoint = observation["endpoint"]
+        observation["pages"][0]["link_header"] = (
+            f'<https://api.github.com{endpoint}?page=2&per_page=100>; rel="next", '
+            f'<https://api.github.com{endpoint}?page=2&per_page=100>; rel="last"'
+        )
+        observation["pages"].append(
+            {
+                "body": {
+                    "total_count": 101,
+                    "secrets": [{"name": secret_name}],
+                },
+                "http_status": 200,
+                "link_header": (
+                    f'<https://api.github.com{endpoint}?page=1&per_page=100>; '
+                    'rel="prev", '
+                    f'<https://api.github.com{endpoint}?page=1&per_page=100>; '
+                    'rel="first"'
+                ),
+                "number": 2,
+                "query": {"page": 2, "per_page": 100},
+            }
+        )
+        observation["pagination"].update(
+            {
+                "linked_last_page": 2,
+                "observed_item_count": 101,
+                "page_count": 2,
+                "reported_total_count": 101,
+            }
+        )
+    elif case == "secret-invalid-link-later-page":
+        observation = value["observations"][17]
+        first_secrets = [{"name": f"OTHER_{index:03d}"} for index in range(100)]
+        observation["pages"][0]["body"] = {
+            "total_count": 101,
+            "secrets": first_secrets,
+        }
+        observation["pages"][0]["link_header"] = 'garbage; rel="next"'
+        observation["pages"].append(
+            {
+                "body": {
+                    "total_count": 101,
+                    "secrets": [{"name": "OTHER_100"}],
+                },
+                "http_status": 200,
+                "link_header": None,
+                "number": 2,
+                "query": {"page": 2, "per_page": 100},
+            }
+        )
+        observation["pagination"].update(
+            {
+                "linked_last_page": 2,
+                "observed_item_count": 101,
+                "page_count": 2,
+                "reported_total_count": 101,
+            }
+        )
+    else:  # pragma: no cover - parametrization is closed above
+        raise AssertionError(case)
+
+    path = tmp_path / Path(
+        *PurePosixPath(
+            ledger["repository_controls"]["observation_evidence"]["path"]
+        ).parts
+    )
+    path.parent.mkdir(parents=True)
+    path.write_bytes(validator.canonical_json_bytes(value))
+    with pytest.raises(validator.LedgerValidationError):
+        validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+
+def test_repository_control_v2_accepts_exact_two_page_secret_traversal(
+    tmp_path: Path,
+) -> None:
+    ledger = _valid_ledger()
+    value = _repository_control_observation(ledger)
+    observation = value["observations"][17]
+    endpoint = observation["endpoint"]
+    observation["pages"][0]["body"] = {
+        "total_count": 101,
+        "secrets": [{"name": f"OTHER_{index:03d}"} for index in range(100)],
+    }
+    observation["pages"][0]["link_header"] = (
+        f'<https://api.github.com{endpoint}?page=2&per_page=100>; rel="next", '
+        f'<https://api.github.com{endpoint}?page=2&per_page=100>; rel="last"'
+    )
+    observation["pages"].append(
+        {
+            "body": {
+                "total_count": 101,
+                "secrets": [{"name": "OTHER_100"}],
+            },
+            "http_status": 200,
+            "link_header": (
+                f'<https://api.github.com{endpoint}?page=1&per_page=100>; '
+                'rel="prev", '
+                f'<https://api.github.com{endpoint}?page=1&per_page=100>; '
+                'rel="first"'
+            ),
+            "number": 2,
+            "query": {"page": 2, "per_page": 100},
+        }
+    )
+    observation["pagination"].update(
+        {
+            "linked_last_page": 2,
+            "observed_item_count": 101,
+            "page_count": 2,
+            "reported_total_count": 101,
+        }
+    )
+    path = tmp_path / Path(
+        *PurePosixPath(
+            ledger["repository_controls"]["observation_evidence"]["path"]
+        ).parts
+    )
+    path.parent.mkdir(parents=True)
+    path.write_bytes(validator.canonical_json_bytes(value))
+
+    validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        (
+            "HTTPS://api.github.com/repos/EvoRiseKsa/EvoOM-Guard-m/"
+            "actions/secrets?page=2&per_page=100"
+        ),
+        (
+            "https://evil.example/repos/EvoRiseKsa/EvoOM-Guard-m/"
+            "actions/secrets?page=2&per_page=100"
+        ),
+        (
+            "https://api.github.com/repos/EvoRiseKsa/EvoOM-Guard-m/"
+            "keys?page=2&per_page=100"
+        ),
+        (
+            "https://api.github.com/repos/EvoRiseKsa/EvoOM-Guard-m/"
+            "actions/secrets?per_page=100&page=2"
+        ),
+        (
+            "https://api.github.com/repos/EvoRiseKsa/EvoOM-Guard-m/"
+            "actions/secrets?page=02&per_page=100"
+        ),
+        (
+            "https://api.github.com/repos/EvoRiseKsa/EvoOM-Guard-m/"
+            "actions/secrets?page=2&per_page=100&token=secret"
+        ),
+    ],
+)
+def test_repository_control_v2_independently_rejects_nonliteral_links(
+    url: str,
+) -> None:
+    endpoint = "/repos/EvoRiseKsa/EvoOM-Guard-m/actions/secrets"
+    with pytest.raises(validator.LedgerValidationError):
+        validator._control_link_relations(
+            (
+                f'<{url}>; rel="next", '
+                f'<https://api.github.com{endpoint}?page=2&per_page=100>; '
+                'rel="last"'
+            ),
+            endpoint=endpoint,
+            page_number=1,
+            repository_id=123456789,
+            expected_last_page=None,
+        )
+
+
+def test_repository_control_v2_accepts_repository_id_link_alias() -> None:
+    endpoint = "/repos/EvoRiseKsa/EvoOM-Guard-m/actions/secrets"
+    relations, last = validator._control_link_relations(
+        (
+            "<https://api.github.com/repositories/123456789/actions/secrets"
+            '?page=2&per_page=100>; rel="next", '
+            "<https://api.github.com/repositories/123456789/actions/secrets"
+            '?page=2&per_page=100>; rel="last"'
+        ),
+        endpoint=endpoint,
+        page_number=1,
+        repository_id=123456789,
+        expected_last_page=None,
+    )
+    assert relations == {"next", "last"}
+    assert last == 2
 
 
 def test_key_retirement_is_post_ledger_cross_bound_and_signed(
