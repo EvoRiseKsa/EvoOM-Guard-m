@@ -130,6 +130,18 @@ from evoom_guard.pack_manifest import (
     snapshot_pack,
     verify_pack_snapshot,
 )
+from evoom_guard.verifiers.blackbox_candidate_runtime import (
+    CandidateCidScanResultFactory,
+    CandidateCleanupRequestFactory,
+    CandidateContainerCleanupKernel,
+    CandidateContainerCleanupRequest,
+    CandidateContainerCleanupServices,
+    CandidateExecutionEvidenceRequest,
+    CandidateExecutionEvidenceServices,
+    DockerControlRunner,
+    attach_candidate_execution_evidence,
+    cleanup_candidate_containers,
+)
 from evoom_guard.verifiers.blackbox_pack import (
     BlackboxPackExecutionRequest,
     BlackboxPackExecutionServices,
@@ -238,72 +250,26 @@ def _attach_candidate_execution_evidence(
     The reported invocation count is therefore the conjunction (minimum) of the
     two independent observations for container modes.
     """
-    isolation = dict(result.isolation or {})
-    delivered = str(isolation.get("delivered") or "")
-    attempts = (
-        10
-        if wait_for_late_container_evidence and delivered in {"docker", "gvisor"}
-        else 1
-    )
-    launcher_events = 0
-    container_ids: list[str] = []
-    for attempt in range(attempts):
-        launcher_events = recorder.drain() if recorder is not None else 0
-        container_ids = _candidate_container_ids(cidfile_dir)
-        if observed_container_ids is not None:
-            # Evidence is monotonic. Once a genuine runtime-written CID has
-            # been observed, a later transient/empty directory scan cannot
-            # erase the fact that this container existed and still requires
-            # an absence proof during strict cleanup.
-            observed_container_ids.update(container_ids)
-            container_ids = sorted(observed_container_ids)
-        if delivered == "subprocess":
-            candidate_invocations = launcher_events
-        elif delivered in {"docker", "gvisor"}:
-            candidate_invocations = min(launcher_events, len(container_ids))
-        else:
-            candidate_invocations = 0
-        if candidate_invocations > 0 or attempt + 1 == attempts:
-            break
-        time.sleep(0.05)
-
-    candidate_launcher_invocation_observed = candidate_invocations > 0
-    if (
-        not candidate_launcher_invocation_observed
-        and delivered not in {"", "not_run", "unavailable"}
-    ):
-        preparation_note = isolation.get("note")
-        isolation["prepared"] = delivered
-        isolation["delivered"] = "not_run"
-        if preparation_note:
-            isolation["preparation_note"] = preparation_note
-        isolation["note"] = (
-            "the boundary was prepared, but the required launcher/runtime "
-            "invocation evidence was not observed; no candidate isolation is "
-            "claimed"
-        )
-    isolation.update(
-        {
-            "candidate_launcher_events": launcher_events,
-            "candidate_container_ids_observed": len(container_ids),
-            "candidate_invocations": candidate_invocations,
-            "candidate_launcher_invocation_observed": (
-                candidate_launcher_invocation_observed
+    evidence = attach_candidate_execution_evidence(
+        CandidateExecutionEvidenceRequest(
+            isolation=result.isolation,
+            recorder=recorder,
+            cidfile_dir=cidfile_dir,
+            wait_for_late_container_evidence=(
+                wait_for_late_container_evidence
             ),
-            "candidate_invocation_evidence_note": (
-                "proves the trusted pack invoked EVOGUARD_EXEC; it does not by "
-                "itself prove that the pack-supplied argv exercised candidate code. "
-                "Only the zero/nonzero fact is security-relevant; same-host code "
-                "could discover the sidecar after its first invocation, so the raw "
-                "receipt count is not an audited exact call count"
-            ),
-        }
+            observed_container_ids=observed_container_ids,
+        ),
+        services=CandidateExecutionEvidenceServices(
+            container_ids_provider=lambda: _candidate_container_ids,
+            sleeper_provider=lambda: time.sleep,
+        ),
     )
     return result._replace(
-        isolation=isolation,
-        candidate_invocations=candidate_invocations,
+        isolation=evidence.isolation,
+        candidate_invocations=evidence.candidate_invocations,
         candidate_launcher_invocation_observed=(
-            candidate_launcher_invocation_observed
+            evidence.candidate_launcher_invocation_observed
         ),
     )
 
@@ -325,30 +291,41 @@ def _cleanup_candidate_containers(
     containers. In ``strict`` mode any container whose absence cannot be proven
     becomes an explicit infrastructure failure rather than allowing PASS.
     """
-    def scan(path: str) -> DockerCidScanResult:
-        try:
-            return DockerCidScanResult(
-                tuple(_candidate_container_ids(path, strict=strict))
-            )
-        except CandidateContainerCleanupError as exc:
-            return DockerCidScanResult((), (str(exc),))
-
-    cleanup = _cleanup_candidate_containers_kernel(
-        DockerCandidateCleanupRequest(
+    cleanup_candidate_containers(
+        CandidateContainerCleanupRequest(
             cidfile_dir=cidfile_dir,
             wait_for_late_cidfiles=wait_for_late_cidfiles,
-            known_container_ids=frozenset(known_container_ids or ()),
+            strict=strict,
+            known_container_ids=known_container_ids,
         ),
-        scanner=scan,
-        control_runner=_run_docker_control,
-        sleeper=time.sleep,
-        path_exists=os.path.lexists,
+        services=CandidateContainerCleanupServices(
+            cleanup_kernel_provider=lambda: cast(
+                CandidateContainerCleanupKernel,
+                _cleanup_candidate_containers_kernel,
+            ),
+            cleanup_request_factory_provider=lambda: cast(
+                CandidateCleanupRequestFactory,
+                DockerCandidateCleanupRequest,
+            ),
+            scan_result_factory_provider=lambda: cast(
+                CandidateCidScanResultFactory,
+                DockerCidScanResult,
+            ),
+            container_ids_provider=lambda: _candidate_container_ids,
+            control_runner_provider=lambda: cast(
+                DockerControlRunner,
+                _run_docker_control,
+            ),
+            sleeper_provider=lambda: time.sleep,
+            path_exists_provider=lambda: os.path.lexists,
+            scan_failure_type_provider=lambda: (
+                CandidateContainerCleanupError
+            ),
+            cleanup_error_factory_provider=lambda: (
+                CandidateContainerCleanupError
+            ),
+        ),
     )
-    if strict and cleanup.failures:
-        raise CandidateContainerCleanupError(
-            "candidate container cleanup could not prove absence: "
-            + "; ".join(cleanup.failures)
-        )
 
 
 def _pack_digest_and_manifest(pack_dir: str) -> tuple[str, dict | None]:

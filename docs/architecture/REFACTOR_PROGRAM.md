@@ -172,8 +172,17 @@ remain in their established facades.
   Pre/post snapshot identity, runner-before-command lookup timing, process
   failure mapping, raw-JUnit hashing, exit/report coherence, and zero-test
   rejection are frozen by a pre-extraction vector and focused mutations.
-  `blackbox.py` retains command construction, `BlackboxResult`, candidate
-  invocation/CID evidence, cleanup precedence, and workspace lifetime.
+  `blackbox.py` retains command construction, `BlackboxResult`, outer cleanup
+  precedence, and workspace lifetime.
+- The R2-2 candidate-runtime slice now owns launcher/CID evidence retries and
+  candidate-container cleanup coordination in the strict-typed, stdlib-only
+  `verifiers/blackbox_candidate_runtime.py` module. The facade retains its exact
+  private signatures, live concrete Docker adapters,
+  `CandidateContainerCleanupError` identity, result projection, and outer
+  primary-versus-cleanup exception policy. The frozen 12-case/23-test vector
+  and focused mutations bind provider lookup timing, immediate monotonic CID
+  mutation, one-time known-ID freezing, failure ordering, and exact
+  `BaseException` propagation.
 - Pure repository/pack interpretation and composition were extracted in PR
   #133 into the
   typed `verifiers/repo_phase_contracts.py` module behind frozen vectors; keep
@@ -274,9 +283,12 @@ remain in their established facades.
   candidate-then-pack cleanup target order. `RepoVerifier` still supplies live
   allocation/path providers and invokes its existing cleanup facade in
   `finally`, so no primary-exception or monkeypatch timing changes.
-- Pending: split the remaining `blackbox.py` candidate/CID/evidence/cleanup
-  responsibilities behind characterized compatibility boundaries. The pack
-  execution and interpretation slice is complete.
+- Complete: split the bounded `blackbox.py` candidate/CID evidence and
+  container-cleanup coordination behind the characterized R2-2 compatibility
+  boundary. Pack execution and interpretation remain in their separate
+  completed owner. `blackbox.py` deliberately retains top-level workspace,
+  process, and public-result orchestration; no further behavior-preserving
+  extraction is pending there.
 - The dependency-free `verifiers/repo_cleanup.py` owner now coordinates the
   remaining repository cleanup effect/provider boundary. A parent-frozen
   vector binds provider lookup order, exact exception identity, note order,
@@ -355,10 +367,12 @@ remain in their established facades.
 - `application.blackbox_finalization.finalize_blackbox_verification` owns the
   distinct post-cleanup black-box decision/evidence sequence behind public
   characterization. Guard still runs the judge and injects risk plus the
-  conditional repo verifier; `blackbox.py` still owns workspace/process/
-  container cleanup and the public runtime result. Eager assurance-before-
-  attestation order, composite counts, no-invocation refusal, and fail-loud
-  cleanup boundaries remain unchanged.
+  conditional repo verifier; `blackbox.py` still owns workspace/process
+  orchestration, outer cleanup precedence, compatibility identities, and the
+  public runtime result while candidate evidence/container-cleanup sequencing
+  delegates to its focused owner. Eager assurance-before-attestation order,
+  composite counts, no-invocation refusal, and fail-loud cleanup boundaries
+  remain unchanged.
 - `application.diff_verification.verify_diff` owns the unified-diff
   application sequence behind the unchanged `guard_from_diff()` facade:
   fail-closed preflight, throwaway base reconstruction, changed-path
@@ -370,10 +384,15 @@ remain in their established facades.
   absence of an eager runtime `GuardResult` lookup. Baseline, coverage,
   verifier execution, black-box finalization, and CLI policy loading remain
   outside this owner.
-- Pending: extract only the remaining bounded verifier/runtime effects where a
-  characterized boundary reduces ownership, without relocating whole
-  orchestrators. Public `GuardResult` remains in Guard, while
+- Boundary: extract a bounded verifier/runtime effect only where a
+  characterized boundary reduces ownership without relocating whole
+  orchestrators. Public `GuardResult` remains in Guard and
   `_run_baseline_suite` remains only as a live-wiring compatibility facade.
+  After the candidate-runtime slice no additional behavior-preserving `R2`
+  split is currently justified inside Guard/RepoVerifier/black-box runtime.
+  Their remaining orchestrators and facades are intentional. Any shared
+  `IsolationSession` or comparable trust-model redesign is `R3` work and
+  requires a separate invariant, threat model, migration, and rollback plan.
 
 ## Later stages (9+): CLI/application split, evidence/finalizer domains, Action/release hardening, QA gates
 

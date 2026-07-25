@@ -239,7 +239,16 @@ process interpretation into `verifiers.blackbox_pack`. That owner may import
 the public `execution` and `pack_manifest` contracts only; it must never import
 `blackbox`, candidate/isolation owners, evidence, or cleanup facilities.
 `blackbox` depends one-way on this owner and retains command construction,
-candidate evidence, cleanup, workspace lifetime, and compatibility projection.
+workspace lifetime, outer cleanup precedence, and compatibility projection.
+
+The candidate-runtime slice moves only launcher/CID evidence retries and
+candidate-container cleanup coordination into the stdlib-only
+`verifiers.blackbox_candidate_runtime` owner. That module imports no internal
+runtime owner: concrete Docker request/result/kernel types, the live scanner,
+control/sleep/path effects, and the historical cleanup-error class are injected
+by `blackbox`. The facade retains the exact private signatures, `BlackboxResult`
+projection, `CandidateContainerCleanupError` identity, and the outer
+primary-versus-cleanup exception policy.
 
 Release Source Admission V2 enters the real `admission.release_source`
 package. The extracted module imports only explicit public contracts from the

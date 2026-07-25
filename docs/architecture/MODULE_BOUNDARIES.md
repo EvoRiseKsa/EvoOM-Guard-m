@@ -215,7 +215,9 @@ plans, and preparation evidence. `evoom_guard/candidate_runner.py` remains the
 compatibility surface: its public evidence/error identities are exact aliases,
 and its `CandidateRunner` subclass delegates to the typed implementation while
 preserving the historical bounded-Docker monkeypatch seam. Actual launcher/CID
-observation and verdict interpretation remain in `blackbox.py`.
+observation sequencing is injected into
+`verifiers/blackbox_candidate_runtime.py`; the compatibility facade and verdict
+interpretation remain in `blackbox.py`.
 
 The fourth isolation slice lives in `evoom_guard/isolation/invocation.py`. It
 owns the judge-side one-way AF_UNIX datagram receiver, exact-token filtering,
@@ -240,8 +242,22 @@ error mapping, post-snapshot check, raw-JUnit digest, exit/report coherence,
 and zero-test rejection. The module imports only the public execution and pack
 contracts. It does not own candidate preparation, invocation/CID observation,
 container cleanup, workspace lifetime, `BlackboxResult`, or evidence
-attachment. Those remain in `blackbox.py`, which supplies live compatibility
-providers and performs the final projection without changing the public ABI.
+attachment. Candidate runtime evidence and cleanup coordination instead live in
+the separate stdlib-only `verifiers/blackbox_candidate_runtime.py` owner.
+`blackbox.py` supplies live compatibility providers, retains concrete Docker
+adapters and public/private identities, and performs the final projection
+without changing the public ABI.
+
+The candidate-runtime owner preserves two intentionally different lookup
+schedules. Evidence resolves the scanner and sleeper live on every retry after
+the current receipt drain, mutates the caller-owned observed-CID set
+immediately, and only then sorts it. Cleanup captures its kernel before
+freezing known IDs once, then resolves control, sleep, and path providers after
+request construction. Only the historical
+`blackbox.CandidateContainerCleanupError` is converted into scan-failure facts;
+all other exceptions and every `BaseException` retain exact identity. The
+facade retains that error class, both private function signatures, outer
+cleanup-result precedence, and workspace lifetime.
 
 Host-command ownership lives in `evoom_guard/execution/command.py`. It resolves
 Windows `PATHEXT` shims without a shell and refuses candidate-controlled
@@ -488,9 +504,11 @@ repo-native composition, decision and aggregate-count projection, pack and
 phase evidence, the eager assurance gate, unsupported baseline/coverage
 markers, and attestation placement. Guard injects live risk, repo-verifier,
 profile, shortfall, and attestation services and still constructs the public
-`GuardResult`. `blackbox.py` remains the runtime owner for workspaces, process
-and container cleanup, invocation receipts, and `BlackboxResult`; primary or
-cleanup `BaseException` values therefore exit before finalization begins.
+`GuardResult`. `blackbox.py` remains the runtime facade for workspaces, process
+cleanup, outer container-cleanup precedence, invocation receipts, and
+`BlackboxResult`; bounded candidate evidence/cleanup sequencing delegates to
+its injected owner. Primary or cleanup `BaseException` values therefore exit
+before finalization begins.
 
 The tenth application slice adds
 `application.diff_verification.verify_diff`. It owns the established
