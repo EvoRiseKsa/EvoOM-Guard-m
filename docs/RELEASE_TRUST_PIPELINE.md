@@ -94,9 +94,13 @@ admission.
     target, marker, author, and assets; never use the Publish UI to recover.
     Marketplace listing remains a separate, non-admission step.
 12. Immediately after H, return all flags to false and remove both admission
-    signing private-key Environment secrets. Keep the publication deploy-key
-    secret and exact write deploy key only until the release ledger records
-    their public ID/fingerprint. Then delete both;
+    signing private-key Environment secrets. Record successful, fully paginated
+    Environment secret-name-list observations for those exact names; these are
+    same-owner point-in-time observations and do not prove absence of external
+    key copies or prevent re-addition. Keep the publication deploy-key secret
+    and exact write deploy key only until a valid committed release ledger
+    records their public ID/fingerprint and explicitly marks retirement pending.
+    Then delete both and freeze a separate signed retirement receipt;
     create a fresh deploy key for the next release window. If an operational
     exception keeps it temporarily, it must remain only in the no-admin-bypass
     publication Environment and the repository must still have exactly one
@@ -116,7 +120,8 @@ admission.
     before publication do not themselves constitute a `v4.4.0` ledger.
     Validate with the independently retrieved key via
     `--trusted-ledger-pub`, commit the ledger, validate the committed bytes
-    again, then destroy the per-release ledger private key.
+    again. Retain the offline ledger private key only through the separate
+    retirement-receipt signature and validation, then destroy it.
     GitHub permits editing an immutable release's title and description, so
     neither field is authoritative trust metadata. The immutable tag, exact
     assets and digests, attestations, and separately frozen signed ledger are

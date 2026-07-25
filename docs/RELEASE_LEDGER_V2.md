@@ -152,7 +152,10 @@ and must fail validation. Placeholders are never accepted as release evidence.
 3. Query the release, tag target, workflow runs, tag CI, Marketplace state,
    branch protection, Environments, immutable-release setting, tag ruleset,
    and exact sole write deploy key. Record observations rather than inferred
-   values.
+   values. The two admission-secret checks must be successful, fully paginated
+   GitHub Environment secret-name-list API calls made after H; an API denial is
+   an error, never an empty list. Retain their canonical bounded observation as
+   `controls/repository/repository-controls-observation.json`.
 4. Copy the signed README, RSAE, both RAAEs, controls, detached results, negative matrices,
    all three E attestation receipts and outputs, and seven public keys into a
    new directory. Never modify a prior ledger or baseline. Do not proceed if E
@@ -187,11 +190,17 @@ and must fail validation. Placeholders are never accepted as release evidence.
 8. Commit the new directory only after the command reports
    `release-ledger-v2: VALID`. The ledger step must not create, move, delete, or
    rewrite a tag or GitHub Release. Re-run external-key validation from the
-   committed tree, then destroy the per-release ledger private key.
+   committed tree. Keep the offline per-release ledger private key only long
+   enough to sign the separate publication-authority retirement receipt.
 9. The two admission private-key Environment secrets must already have been
-   removed immediately after H. After the public deploy-key ID/fingerprint is
-   frozen in the valid ledger, remove the publication deploy-key secret and the
-   exact write deploy key according to the release runbook.
+   removed immediately after H. Their recorded `present=false` values are
+   same-owner, point-in-time name-list observations: they do not prove that no
+   external copy exists and do not prevent a later re-addition. The release
+   ledger must record publication authority retirement as pending, never as
+   already completed. Only after its committed bytes validate, remove the
+   publication deploy-key secret and exact write deploy key, create and validate
+   the separately signed `KEY_RETIREMENT.json`, then destroy the per-release
+   ledger private key.
 
 There is intentionally no evidence collector or “generate from GitHub”
 command. Collection combines mutable external state, expiring artifacts, and

@@ -619,6 +619,12 @@ def _collect_descriptors(ledger: Mapping[str, Any]) -> dict[str, tuple[int, str]
                 label=f"{name} {evidence_name}",
             )
 
+    _add_descriptor(
+        inventory,
+        ledger["repository_controls"]["observation_evidence"],
+        label="repository-control observation evidence",
+    )
+
     for root in ledger["trust_roots"]:
         _add_descriptor(
             inventory,
@@ -799,6 +805,24 @@ def _validate_timeline(ledger: Mapping[str, Any]) -> None:
         )
         for name, value in ledger["control_evidence"].items()
     )
+    observations.extend(
+        (
+            f"repository_controls.admission_secret_absence_after_publication[{index}]"
+            ".observed_utc",
+            _parse_time(
+                value["observed_utc"],
+                label=(
+                    "repository_controls."
+                    f"admission_secret_absence_after_publication[{index}].observed_utc"
+                ),
+            ),
+        )
+        for index, value in enumerate(
+            ledger["repository_controls"][
+                "admission_secret_absence_after_publication"
+            ]
+        )
+    )
     for label, observed in observations:
         if not (published <= observed <= ledger_created):
             _fail(f"{label} is outside publication/ledger time")
@@ -806,6 +830,11 @@ def _validate_timeline(ledger: Mapping[str, Any]) -> None:
     tag_observed = dict(observations)["tag_ci.observed_utc"]
     if tag_observed < tag_completed:
         _fail("tag CI was observed before it completed")
+    for label, observed in observations:
+        if label.startswith(
+            "repository_controls.admission_secret_absence_after_publication"
+        ) and observed < windows["H"][1]:
+            _fail(f"{label} predates phase H completion")
 
 
 def _validate_controls(ledger: Mapping[str, Any]) -> None:
@@ -1060,6 +1089,147 @@ def _validate_repository_controls(ledger: Mapping[str, Any]) -> None:
         _fail("tag ruleset bypass must remain the generic DeployKey actor class")
     if deploy_key["sole_write_enabled"] is not True:
         _fail("the release deploy key must be the sole write-enabled deploy key")
+    expected_absence = [
+        {
+            "environment": "evoguard-release-source-v2",
+            "secret_name": (
+                "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+            ),
+            "present": False,
+            "observed_utc": controls[
+                "admission_secret_absence_after_publication"
+            ][0]["observed_utc"],
+            "observation_scope": "github-environment-secret-name-list",
+        },
+        {
+            "environment": "evoguard-release-artifact-v1",
+            "secret_name": (
+                "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
+            ),
+            "present": False,
+            "observed_utc": controls[
+                "admission_secret_absence_after_publication"
+            ][1]["observed_utc"],
+            "observation_scope": "github-environment-secret-name-list",
+        },
+    ]
+    if controls["admission_secret_absence_after_publication"] != expected_absence:
+        _fail("admission signing-secret absence observations are not exact")
+    if controls["observation_evidence"]["path"] != (
+        "controls/repository/repository-controls-observation.json"
+    ):
+        _fail("repository-control observation evidence path is not exact")
+    retirement = controls["publication_authority_retirement"]
+    if (
+        retirement["deploy_key_id"] != deploy_key["id"]
+        or retirement["status"] != "pending-post-ledger"
+        or retirement["proof_boundary"] != "not-claimed-by-release-ledger"
+    ):
+        _fail("publication authority retirement must remain pending after the ledger")
+
+
+def _validate_repository_control_observation_bytes(
+    root: Path,
+    ledger: Mapping[str, Any],
+) -> None:
+    controls = ledger["repository_controls"]
+    descriptor = controls["observation_evidence"]
+    data = _read_regular(
+        _safe_retained_path(root, descriptor["path"]),
+        limit=1024 * 1024,
+        label="repository-control observation evidence",
+    )
+    value = _load_json_bytes(data, label="repository-control observation evidence")
+    if canonical_json_bytes(value) != data:
+        _fail("repository-control observation evidence is not canonical JSON")
+    _require_exact_keys(
+        value,
+        {
+            "format",
+            "repository",
+            "repository_id",
+            "repository_owner_id",
+            "collector",
+            "observations",
+            "evidence_boundary",
+        },
+        label="repository-control observation evidence",
+    )
+    if (
+        value["format"] != "EVOGUARD_REPOSITORY_CONTROL_OBSERVATION_V1"
+        or value["repository"] != ledger["release"]["repository"]
+        or value["repository_id"] != ledger["release"]["repository_id"]
+        or value["repository_owner_id"]
+        != ledger["release"]["repository_owner_id"]
+        or value["collector"]
+        != {
+            "name": "evoguard-release-ledger",
+            "version": "2",
+        }
+        or value["evidence_boundary"]
+        != "owner-collected-point-in-time-github-api-observation"
+    ):
+        _fail("repository-control observation identity is not exact")
+    observations = value["observations"]
+    if not isinstance(observations, list) or len(observations) != 2:
+        _fail("repository-control observation must contain exactly two API results")
+    environments = {
+        item["name"]: item["id"] for item in controls["environments"]
+    }
+    for index, (observed, expected) in enumerate(
+        zip(
+            observations,
+            controls["admission_secret_absence_after_publication"],
+            strict=True,
+        )
+    ):
+        if not isinstance(observed, dict):
+            _fail(f"repository-control observation {index} must be an object")
+        _require_exact_keys(
+            observed,
+            {
+                "environment_id",
+                "environment",
+                "api_action",
+                "request_method",
+                "endpoint",
+                "http_status",
+                "pagination_complete",
+                "per_page",
+                "page_count",
+                "total_count",
+                "queried_secret_name",
+                "present",
+                "observed_utc",
+            },
+            label=f"repository-control observation {index}",
+        )
+        expected_endpoint = (
+            f"/repos/{ledger['release']['repository']}/environments/"
+            f"{expected['environment']}/secrets"
+        )
+        if (
+            observed["environment_id"] != environments[expected["environment"]]
+            or observed["environment"] != expected["environment"]
+            or observed["api_action"] != "list-environment-secrets"
+            or observed["request_method"] != "GET"
+            or observed["endpoint"] != expected_endpoint
+            or observed["http_status"] != 200
+            or observed["pagination_complete"] is not True
+            or observed["per_page"] != 100
+            or not isinstance(observed["page_count"], int)
+            or isinstance(observed["page_count"], bool)
+            or observed["page_count"] < 1
+            or not isinstance(observed["total_count"], int)
+            or isinstance(observed["total_count"], bool)
+            or observed["total_count"] < 0
+            or observed["page_count"]
+            != max(1, (observed["total_count"] + 99) // 100)
+            or observed["queried_secret_name"] != expected["secret_name"]
+            or observed["present"] is not False
+            or observed["observed_utc"] != expected["observed_utc"]
+        ):
+            _fail(f"repository-control observation {index} is not exact")
 
 
 def _validate_semantics(
@@ -1174,12 +1344,12 @@ def _validate_semantics(
     artifact_identity = toolchain["provider_identities"]["artifact_admission"]
     if source_identity == artifact_identity:
         _fail("source and artifact provider identities must be distinct")
-    for label, identity in (
-        ("source", source_identity),
-        ("artifact", artifact_identity),
-    ):
-        if identity["uid"] in {0, 65534} or identity["gid"] in {0, 65534}:
-            _fail(f"{label} provider identity is forbidden")
+    expected_provider_identities = {
+        "source_admission": {"platform": "posix", "uid": 60001, "gid": 60001},
+        "artifact_admission": {"platform": "posix", "uid": 60002, "gid": 60002},
+    }
+    if toolchain["provider_identities"] != expected_provider_identities:
+        _fail("provider identities do not equal the protected workflow identities")
 
     tag_ci = ledger["tag_ci"]
     expected_tag_ref = f"refs/tags/{release['tag']}"
@@ -1943,6 +2113,7 @@ def _strict_attestation_parts(
     *,
     repository: str,
     repository_id: str,
+    repository_owner_id: str,
     workflow_path: str,
     source_digest: str,
     run_id: int,
@@ -2019,6 +2190,10 @@ def _strict_attestation_parts(
         repository_id != "0" and repository_id.startswith("0")
     ):
         _fail(f"{label} repository ID is not canonical decimal")
+    if not repository_owner_id.isdigit() or (
+        repository_owner_id != "0" and repository_owner_id.startswith("0")
+    ):
+        _fail(f"{label} repository owner ID is not canonical decimal")
     workflow = f"{repository}/{workflow_path}"
     signer_base = f"https://github.com/{workflow}@"
     signer_uri = certificate.get("buildSignerURI")
@@ -2032,7 +2207,6 @@ def _strict_attestation_parts(
         f"attempts/{run_attempt}"
     )
     expected_certificate = {
-        "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
         "subjectAlternativeName": signer_uri,
         "issuer": "https://token.actions.githubusercontent.com",
         "githubWorkflowTrigger": expected_event,
@@ -2046,6 +2220,7 @@ def _strict_attestation_parts(
         "sourceRepositoryDigest": source_digest,
         "sourceRepositoryRef": "refs/heads/main",
         "sourceRepositoryIdentifier": repository_id,
+        "sourceRepositoryVisibilityAtSigning": "public",
         "buildConfigURI": signer_uri,
         "buildConfigDigest": source_digest,
         "buildTrigger": expected_event,
@@ -2058,13 +2233,11 @@ def _strict_attestation_parts(
     )
     if any(certificate.get(key) != value for key, value in expected_certificate.items()):
         _fail(f"{label} certificate does not bind the exact workflow run")
-    owner_id = certificate.get("sourceRepositoryOwnerIdentifier")
-    if (
-        not isinstance(owner_id, str)
-        or not owner_id.isdigit()
-        or (owner_id != "0" and owner_id.startswith("0"))
-    ):
-        _fail(f"{label} certificate repository owner ID is not canonical decimal")
+    certificate_issuer = certificate.get("certificateIssuer")
+    if certificate_issuer is not None and not isinstance(certificate_issuer, str):
+        _fail(f"{label} certificate issuer metadata must be a string")
+    if certificate.get("sourceRepositoryOwnerIdentifier") != repository_owner_id:
+        _fail(f"{label} certificate repository owner ID is not exact")
     if identity.get("runnerEnvironment") != "github-hosted":
         _fail(f"{label} verified identity is not GitHub-hosted")
     _require_exact_keys(
@@ -2109,6 +2282,7 @@ def _validate_slsa_raw_output(
     *,
     repository: str,
     repository_id: str,
+    repository_owner_id: str,
     workflow_path: str,
     source_digest: str,
     run_id: int,
@@ -2153,6 +2327,7 @@ def _validate_slsa_raw_output(
         data,
         repository=repository,
         repository_id=repository_id,
+        repository_owner_id=repository_owner_id,
         workflow_path=workflow_path,
         source_digest=source_digest,
         run_id=run_id,
@@ -2232,7 +2407,7 @@ def _validate_slsa_raw_output(
         or github.get("event_name") != expected_event
         or str(github.get("repository_id", "")) != repository_id
         or str(github.get("repository_owner_id", ""))
-        != certificate["sourceRepositoryOwnerIdentifier"]
+        != repository_owner_id
     ):
         _fail(f"{label} SLSA GitHub identity is not exact")
     expected_dependency = {
@@ -2268,6 +2443,7 @@ def _validate_spdx_raw_output(
     *,
     repository: str,
     repository_id: str,
+    repository_owner_id: str,
     workflow_path: str,
     source_digest: str,
     run_id: int,
@@ -2282,6 +2458,7 @@ def _validate_spdx_raw_output(
         data,
         repository=repository,
         repository_id=repository_id,
+        repository_owner_id=repository_owner_id,
         workflow_path=workflow_path,
         source_digest=source_digest,
         run_id=run_id,
@@ -2302,6 +2479,7 @@ def _validate_attestation_bytes(
 ) -> None:
     repository = ledger["release"]["repository"]
     repository_id = ledger["release"]["repository_id"]
+    repository_owner_id = ledger["release"]["repository_owner_id"]
     candidate = ledger["source"]["candidate_commit_sha"]
     descriptors = _collect_descriptors(ledger)
     producer_matches = [
@@ -2442,6 +2620,7 @@ def _validate_attestation_bytes(
             "data": output_bytes,
             "repository": repository,
             "repository_id": repository_id,
+            "repository_owner_id": repository_owner_id,
             "workflow_path": attestation["signer_workflow"],
             "source_digest": candidate,
             "run_id": attestation["run_id"],
@@ -2896,6 +3075,7 @@ def validate_directory(
         if checksum_bytes != expected_checksum:
             _fail("SHA256SUMS is not the exact two-line filename-ordered manifest")
 
+        _validate_repository_control_observation_bytes(snapshot_root, ledger)
         _validate_control_bytes(snapshot_root, ledger)
         _validate_attestation_bytes(snapshot_root, ledger)
         _validate_envelopes(snapshot_root, ledger)

@@ -91,6 +91,8 @@
       "required": [
         "repository",
         "repository_id",
+        "repository_owner_id",
+        "source_repository_visibility_at_signing",
         "tag",
         "commit_sha",
         "tree_sha",
@@ -108,6 +110,12 @@
         },
         "repository_id": {
           "$ref": "#/$defs/numericId"
+        },
+        "repository_owner_id": {
+          "$ref": "#/$defs/numericId"
+        },
+        "source_repository_visibility_at_signing": {
+          "const": "public"
         },
         "tag": {
           "$ref": "#/$defs/tag"
@@ -812,6 +820,7 @@
             "url": {
               "type": "string",
               "format": "uri",
+              "pattern": "^https://",
               "maxLength": 2048
             },
             "version": {
@@ -925,6 +934,9 @@
         "immutable_releases",
         "actions",
         "environments",
+        "observation_evidence",
+        "admission_secret_absence_after_publication",
+        "publication_authority_retirement",
         "activation_flags_after_publication",
         "publication_window"
       ],
@@ -1043,6 +1055,80 @@
             }
           ],
           "items": false
+        },
+        "observation_evidence": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "admission_secret_absence_after_publication": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/secretAbsenceObservation"
+                },
+                {
+                  "properties": {
+                    "environment": {
+                      "const": "evoguard-release-source-v2"
+                    },
+                    "secret_name": {
+                      "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/secretAbsenceObservation"
+                },
+                {
+                  "properties": {
+                    "environment": {
+                      "const": "evoguard-release-artifact-v1"
+                    },
+                    "secret_name": {
+                      "const": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "publication_authority_retirement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "deploy_key_id",
+            "environment",
+            "secret_name",
+            "proof_boundary"
+          ],
+          "properties": {
+            "status": {
+              "const": "pending-post-ledger"
+            },
+            "deploy_key_id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "environment": {
+              "const": "evoguard-release-publication"
+            },
+            "secret_name": {
+              "const": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY"
+            },
+            "proof_boundary": {
+              "const": "not-claimed-by-release-ledger"
+            }
+          }
         },
         "activation_flags_after_publication": {
           "type": "object",
@@ -2301,6 +2387,38 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 2147483647
+        }
+      }
+    },
+    "secretAbsenceObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "secret_name",
+        "present",
+        "observed_utc",
+        "observation_scope"
+      ],
+      "properties": {
+        "environment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "secret_name": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "maxLength": 256
+        },
+        "present": {
+          "const": false
+        },
+        "observed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "observation_scope": {
+          "const": "github-environment-secret-name-list"
         }
       }
     },

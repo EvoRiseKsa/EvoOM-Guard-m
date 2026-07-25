@@ -28,6 +28,21 @@ SCHEMA_PATH = (
 )
 
 
+def test_release_ledger_contract_paths_are_code_owned() -> None:
+    codeowners = (ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
+    for path in (
+        "/tools/ci/",
+        "/tests/baseline/",
+        "/tests/test_release_ledger_v2.py",
+        "/evidence/release-ledgers/",
+        "/docs/RELEASE_LEDGER_V2.md",
+        "/docs/RELEASE_GATE_CHECKLIST.md",
+        "/docs/RELEASE_TRUST_PIPELINE.md",
+        "/docs/adr/",
+    ):
+        assert f"{path} @MANA-awam @EvoRiseKsa" in codeowners
+
+
 def _sha(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
@@ -64,6 +79,45 @@ def _retained_file(value: dict[str, Any]) -> dict[str, Any]:
         "path": value["path"],
         "size_bytes": value["size_bytes"],
         "sha256": value["sha256"],
+    }
+
+
+def _repository_control_observation(ledger: dict[str, Any]) -> dict[str, Any]:
+    controls = ledger["repository_controls"]
+    environments = {
+        item["name"]: item["id"] for item in controls["environments"]
+    }
+    return {
+        "format": "EVOGUARD_REPOSITORY_CONTROL_OBSERVATION_V1",
+        "repository": ledger["release"]["repository"],
+        "repository_id": ledger["release"]["repository_id"],
+        "repository_owner_id": ledger["release"]["repository_owner_id"],
+        "collector": {
+            "name": "evoguard-release-ledger",
+            "version": "2",
+        },
+        "observations": [
+            {
+                "environment_id": environments[item["environment"]],
+                "environment": item["environment"],
+                "api_action": "list-environment-secrets",
+                "request_method": "GET",
+                "endpoint": (
+                    f"/repos/{ledger['release']['repository']}/environments/"
+                    f"{item['environment']}/secrets"
+                ),
+                "http_status": 200,
+                "pagination_complete": True,
+                "per_page": 100,
+                "page_count": 1,
+                "total_count": 0,
+                "queried_secret_name": item["secret_name"],
+                "present": False,
+                "observed_utc": item["observed_utc"],
+            }
+            for item in controls["admission_secret_absence_after_publication"]
+        ],
+        "evidence_boundary": "owner-collected-point-in-time-github-api-observation",
     }
 
 
@@ -341,6 +395,8 @@ def _valid_ledger() -> dict[str, Any]:
         "release": {
             "repository": "EvoRiseKsa/EvoOM-Guard-m",
             "repository_id": "999999",
+            "repository_owner_id": "1002",
+            "source_repository_visibility_at_signing": "public",
             "tag": "v9.9.9",
             "commit_sha": candidate,
             "tree_sha": candidate_tree,
@@ -711,6 +767,36 @@ def _valid_ledger() -> dict[str, Any]:
                     "secret_required": True,
                 },
             ],
+            "observation_evidence": _file(
+                "controls/repository/repository-controls-observation.json"
+            ),
+            "admission_secret_absence_after_publication": [
+                {
+                    "environment": "evoguard-release-source-v2",
+                    "secret_name": (
+                        "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2_PRIVATE_KEY_B64"
+                    ),
+                    "present": False,
+                    "observed_utc": "2030-01-01T00:26:00Z",
+                    "observation_scope": "github-environment-secret-name-list",
+                },
+                {
+                    "environment": "evoguard-release-artifact-v1",
+                    "secret_name": (
+                        "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
+                    ),
+                    "present": False,
+                    "observed_utc": "2030-01-01T00:27:00Z",
+                    "observation_scope": "github-environment-secret-name-list",
+                },
+            ],
+            "publication_authority_retirement": {
+                "status": "pending-post-ledger",
+                "deploy_key_id": 5002,
+                "environment": "evoguard-release-publication",
+                "secret_name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+                "proof_boundary": "not-claimed-by-release-ledger",
+            },
             "activation_flags_after_publication": {
                 "source_admission": False,
                 "artifact_admission": False,
@@ -1445,7 +1531,7 @@ def test_attestation_receipts_bind_subject_policy_and_output(
             lambda value: value[0]["verificationResult"]["signature"][
                 "certificate"
             ].update({"sourceRepositoryOwnerIdentifier": "1003"}),
-            "GitHub identity is not exact",
+            "certificate repository owner ID is not exact",
         ),
     ],
 )
@@ -1472,6 +1558,7 @@ def test_strict_slsa_raw_attestation_rejects_ambiguity(
             data,
             repository=ledger["release"]["repository"],
             repository_id=ledger["release"]["repository_id"],
+            repository_owner_id=ledger["release"]["repository_owner_id"],
             workflow_path=attestation["signer_workflow"],
             source_digest=ledger["source"]["candidate_commit_sha"],
             run_id=attestation["run_id"],
@@ -1510,6 +1597,7 @@ def test_gh_2_90_provider_metadata_shape_is_accepted() -> None:
         data,
         repository=ledger["release"]["repository"],
         repository_id=ledger["release"]["repository_id"],
+        repository_owner_id=ledger["release"]["repository_owner_id"],
         workflow_path=attestation["signer_workflow"],
         source_digest=ledger["source"]["candidate_commit_sha"],
         run_id=attestation["run_id"],
@@ -1537,6 +1625,7 @@ def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
         data,
         repository=ledger["release"]["repository"],
         repository_id=ledger["release"]["repository_id"],
+        repository_owner_id=ledger["release"]["repository_owner_id"],
         workflow_path=attestation["signer_workflow"],
         source_digest=ledger["source"]["candidate_commit_sha"],
         run_id=attestation["run_id"],
@@ -1552,6 +1641,7 @@ def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
             data,
             repository=ledger["release"]["repository"],
             repository_id=ledger["release"]["repository_id"],
+            repository_owner_id=ledger["release"]["repository_owner_id"],
             workflow_path=attestation["signer_workflow"],
             source_digest=ledger["source"]["candidate_commit_sha"],
             run_id=attestation["run_id"],
@@ -1663,6 +1753,38 @@ def test_canonicalize_refuses_missing_output_parent(tmp_path: Path) -> None:
         )
 
 
+def test_repository_control_observation_is_closed_and_cross_bound(
+    tmp_path: Path,
+) -> None:
+    ledger = _valid_ledger()
+    value = _repository_control_observation(ledger)
+    path = tmp_path / Path(
+        *PurePosixPath(
+            ledger["repository_controls"]["observation_evidence"]["path"]
+        ).parts
+    )
+    path.parent.mkdir(parents=True)
+    path.write_bytes(validator.canonical_json_bytes(value))
+    validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+    value["observations"][0]["http_status"] = 403
+    path.write_bytes(validator.canonical_json_bytes(value))
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="observation 0 is not exact",
+    ):
+        validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+    value = _repository_control_observation(ledger)
+    value["observations"][0]["total_count"] = 101
+    path.write_bytes(validator.canonical_json_bytes(value))
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="observation 0 is not exact",
+    ):
+        validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+
 def _replace_file_descriptors(value: object, contents: dict[str, bytes]) -> None:
     if isinstance(value, dict):
         path = value.get("path")
@@ -1701,6 +1823,10 @@ def _signed_directory(
         f"{hashlib.sha256(contents[asset_paths[name]]).hexdigest()}  {name}\n"
         for name in ("evo-guard.pyz", "evo-guard.spdx.json")
     ).encode("ascii")
+    observation_path = ledger["repository_controls"]["observation_evidence"]["path"]
+    contents[observation_path] = validator.canonical_json_bytes(
+        _repository_control_observation(ledger)
+    )
 
     key_directory = tmp_path / "_keys"
     key_directory.mkdir()

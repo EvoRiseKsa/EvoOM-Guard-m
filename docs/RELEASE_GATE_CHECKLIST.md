@@ -136,6 +136,11 @@ gate.
   ID/blob pins (C and D share one run), tool/runtime/container pins, six
   admission roots, a distinct ledger-signing root, protected repository
   controls, the tag ruleset, and the sole write deploy-key fingerprint.
+- The two admission signing-secret names have post-H, successful, fully
+  paginated Environment API observations with `present=false`. These are
+  owner-collected point-in-time observations, not proof that no external copy
+  exists. Publication deploy-key retirement remains an explicit post-ledger
+  action and is never claimed complete inside the ledger.
 - E must have produced three independently verified receipts: pyz SLSA
   provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
   A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.
