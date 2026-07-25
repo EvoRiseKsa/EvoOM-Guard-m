@@ -503,10 +503,8 @@ def _git_blob_sha(data: bytes) -> str:
     # Git's object format mandates SHA-1 here. This identifier is never accepted
     # as standalone content authentication: trusted-parent bytes are also
     # compared exactly and their retained descriptors are bound with SHA-256.
-    return hashlib.sha1(  # codeql[py/weak-sensitive-data-hashing]
-        payload,  # codeql[py/weak-sensitive-data-hashing]
-        usedforsecurity=False,
-    ).hexdigest()
+    # codeql[py/weak-sensitive-data-hashing]
+    return hashlib.sha1(payload, usedforsecurity=False).hexdigest()
 
 
 def _trusted_git(
