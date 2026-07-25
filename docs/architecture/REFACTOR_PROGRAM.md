@@ -487,7 +487,20 @@ remain in their established facades.
   vector freezes eager inputs, key separation, no-clobber/alias preflight,
   provider ordering, exception identity, partial evidence, exact projections,
   and the verifier's closed-world offline surface.
-- The remaining release-artifact admission command family remains pending.
+- Release Artifact Admission online sealing and detached verification now live
+  in the strictly typed, stdlib-only
+  `cli/release_artifact_admission_commands.py` owner. Separate service
+  contracts preserve function-entry domain/pin/isolation snapshots and
+  live-per-use environment, preflight, nested-expectation, reader,
+  key-separation, and reporting seams. The reviewed 45-case vector freezes
+  eager reads, exception order and identity, exact projections/exits,
+  partial-output residue, and the online-seal versus offline-verify boundary.
+  Twelve focused mutations protect the highest-risk authority and timing seams.
+   The detached verifier contract has no environment, Git/gh executable,
+   repository, provider-isolation, private-key, signing-operation, or
+   output-mutation capability.
+- All 41 CLI handlers now delegate through typed owners; this behavior-preserving
+  command-family extraction phase is complete.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

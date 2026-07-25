@@ -329,6 +329,7 @@ def test_verify_facade_does_not_import_online_provider_or_git_capabilities() -> 
             verify_names
             & {
                 "environment",
+                "environment_provider",
                 "environ",
                 "gh_executable",
                 "git_executable",

@@ -670,10 +670,10 @@ opt-in behavior, exception identity, and source-before-context publication
 with its historical partial-source residue if the second publication fails.
 An 82-case cross-parent vector plus focused reviewed mutations protect these
 contracts. The extraction adds no checkout, network, provider, admission,
-transaction, or cleanup semantics; release-source producer/admission and
-release-artifact command families remain in the facade.
+transaction, or cleanup semantics; the release-source admission command family
+remains in the facade.
 
-The eighth command-family slice adds the strictly typed, stdlib-only
+The ninth command-family slice adds the strictly typed, stdlib-only
 `cli.release_source_producer_receipt_commands` owner for unsigned canonical
 claim creation, local/raw-Git verification, and fresh GitHub provider
 re-verification. The facade keeps each function-local format, domain exception,
@@ -688,8 +688,27 @@ projection order, provider-output residue, and archive-only opt-in exits.
 Successful verification remains `verified=true`, `ok=false`, `decision=NONE`,
 and `admission=false`; the slice adds no signing key, admission capability,
 provider-isolation builder, or executable pin. A 66-case cross-parent vector
-plus focused reviewed mutations protect these contracts. Release-source and
-release-artifact admission command families remain in the facade.
+plus focused reviewed mutations protect these contracts. The release-source
+admission command family remains in the facade.
+
+The tenth command-family slice adds the strictly typed, stdlib-only
+`cli.release_artifact_admission_commands` owner for the Release Artifact
+Admission online-seal and detached-offline verification pair. The facade keeps
+the format, domain operations, domain/signing exceptions, signing-key identity,
+Git pin, and provider-isolation builder as function-entry snapshots.
+Environment lookup, destructive-alias preflight, nested release-source
+expectations, external trust readers, key separation, and machine reporting
+remain call-through providers at their historical use sites. Independent
+service contracts make the authority split structural: sealing receives the
+live GitHub, Git, environment, isolation, and private-key seams; verification
+receives only retained-byte verification, expected digests/identities, public
+roots, trust readers, and reporting. The verifier therefore cannot initiate a
+provider call, inspect a repository, construct execution isolation, or sign an
+output. A 45-case cross-parent vector freezes eager reads, live-versus-snapshot
+timing, error order, exact projections/exits, partial-output residue, and the
+online/offline boundary. Focused reviewed mutations protect the highest-risk
+seams through twelve explicit regressions. The release-source admission command
+family remains in the facade.
 
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
