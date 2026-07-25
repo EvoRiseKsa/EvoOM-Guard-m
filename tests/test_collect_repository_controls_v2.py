@@ -27,6 +27,7 @@ REPOSITORY_OWNER_ID = 987654321
 FIXED_TIME = datetime(2030, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 
 EXPECTED_NAMES = [
+    "repository-metadata",
     "main-ref",
     "main-protection",
     "actions-permissions",
@@ -81,6 +82,12 @@ def _minimal_body(
     endpoint: str,
     query: Mapping[str, int | str],
 ) -> Any:
+    if endpoint == f"/repos/{REPOSITORY}":
+        return {
+            "full_name": REPOSITORY,
+            "id": REPOSITORY_ID,
+            "owner": {"id": REPOSITORY_OWNER_ID, "login": "EvoRiseKsa"},
+        }
     if endpoint.endswith("/git/ref/heads/main"):
         return {
             "ref": "refs/heads/main",
@@ -163,8 +170,6 @@ def _collect(runner: FakeRunner | None = None) -> dict[str, Any]:
     return collector.collect(
         REPOSITORY,
         RULESET_ID,
-        repository_id=REPOSITORY_ID,
-        repository_owner_id=REPOSITORY_OWNER_ID,
         api_runner=runner or FakeRunner(),
         clock=lambda: FIXED_TIME,
     )
@@ -203,9 +208,9 @@ def test_collects_exact_ordered_read_only_observations_and_full_bodies() -> None
         == "owner-collected-bounded-window-github-api-observation"
     )
     assert [item["name"] for item in document["observations"]] == EXPECTED_NAMES
-    assert len(runner.calls) == 17
+    assert len(runner.calls) == 18
     assert all(method == "GET" for method, _, _ in runner.calls)
-    assert len({endpoint for _, endpoint, _ in runner.calls}) == 17
+    assert len({endpoint for _, endpoint, _ in runner.calls}) == 18
 
     for observation, (_, endpoint, query) in zip(
         document["observations"], runner.calls, strict=True
@@ -225,8 +230,8 @@ def test_collector_documents_its_non_atomic_trusted_operator_boundaries() -> Non
     documentation = " ".join((collector.__doc__ or "").split())
 
     for statement in (
-        "17 ordered observation definitions/endpoints",
-        "do not imply 17 HTTP calls",
+        "18 ordered observation definitions/endpoints",
+        "do not imply 18 HTTP calls",
         "observed window is non-atomic",
         "validated Link traversal",
         "trusted operator host",
@@ -272,9 +277,9 @@ def test_paginates_array_and_object_bodies_without_losing_pages() -> None:
     runner = FakeRunner(handler)
     document = _collect(runner)
 
-    assert len(document["observations"]) == 17
-    assert len(runner.calls) == 19
-    deploy_keys = document["observations"][6]
+    assert len(document["observations"]) == 18
+    assert len(runner.calls) == 20
+    deploy_keys = document["observations"][7]
     assert deploy_keys["pagination"] == {
         "completion_basis": "validated-link-traversal",
         "complete": True,
@@ -290,7 +295,7 @@ def test_paginates_array_and_object_bodies_without_losing_pages() -> None:
     assert deploy_keys["pages"][0]["body"][99]["id"] == 99
     assert deploy_keys["pages"][1]["body"] == [{"id": 100, "title": "key-100"}]
 
-    source_secrets = document["observations"][15]
+    source_secrets = document["observations"][16]
     assert source_secrets["pagination"]["page_count"] == 2
     assert source_secrets["pagination"]["reported_total_count"] == 101
     assert (
@@ -313,6 +318,37 @@ def test_denied_response_fails_without_retaining_error_body() -> None:
 
     with pytest.raises(collector.CollectionError, match="denied or incomplete"):
         _collect(FakeRunner(denied))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("full_name", "EvoRiseKsa/another-repository"),
+        ("id", 0),
+        ("id", True),
+        ("owner.id", 0),
+        ("owner.id", True),
+    ],
+)
+def test_repository_identity_is_derived_from_exact_metadata(
+    field: str,
+    value: Any,
+) -> None:
+    def mutated(
+        method: str,
+        endpoint: str,
+        query: Mapping[str, int | str],
+    ) -> collector.ApiResponse:
+        body = _minimal_body(endpoint, query)
+        if endpoint == f"/repos/{REPOSITORY}":
+            if field == "owner.id":
+                body["owner"]["id"] = value
+            else:
+                body[field] = value
+        return collector.ApiResponse(_json(body))
+
+    with pytest.raises(collector.CollectionError, match="repository|ID"):
+        _collect(FakeRunner(mutated))
 
 
 @pytest.mark.parametrize(
@@ -402,6 +438,33 @@ def test_link_header_accepts_the_repository_id_canonicalization() -> None:
 
     assert relations == {"next", "last"}
     assert stable_last == 2
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"HTTPS://api.github.com/repos/{REPOSITORY}/keys?page=2&per_page=100",
+        f"https://API.GITHUB.COM/repos/{REPOSITORY}/keys?page=2&per_page=100",
+        f"https://api.github.com:443/repos/{REPOSITORY}/keys?page=2&per_page=100",
+        f"https://api.github.com/repos/{REPOSITORY}/%6beys?page=2&per_page=100",
+        f"https://api.github.com/repos/{REPOSITORY}/keys?p%61ge=2&per_page=100",
+        f"https://api.github.com/repos/{REPOSITORY}/keys?page=%32&per_page=100",
+        f"https://api.github.com/repos/{REPOSITORY}/keys?page=02&per_page=100",
+        f"https://api.github.com/repos/{REPOSITORY}/keys?page=+2&per_page=100",
+        f"https://api.github.com/repos/{REPOSITORY}/keys?per_page=100&page=2",
+        f"https://api.github.com/repos/{REPOSITORY}/keys?page=2&per_page=%31%30%30",
+    ],
+)
+def test_link_header_requires_literal_canonical_url_and_query(url: str) -> None:
+    with pytest.raises(collector.CollectionError):
+        collector._link_relations(
+            f'<{url}>; rel="next", '
+            f"<https://api.github.com/repos/{REPOSITORY}/keys"
+            '?page=2&per_page=100>; rel="last"',
+            endpoint=f"/repos/{REPOSITORY}/keys",
+            page_number=1,
+            repository_id=REPOSITORY_ID,
+        )
 
 
 def test_link_header_rejects_duplicate_relations() -> None:
@@ -594,6 +657,32 @@ def test_link_like_output_parent_is_refused_when_supported(tmp_path: Path) -> No
         collector.write_new_output(link_parent / "observation.json", b"{}\n")
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Win32 path semantics")
+@pytest.mark.parametrize(
+    "path",
+    [
+        r"C:\safe\record.json:payload",
+        "C:\\safe\\trailing.\\record.json",
+        "C:\\safe\\trailing \\record.json",
+        r"C:\safe\CON\record.json",
+        r"C:\safe\aux.txt",
+        r"C:\safe\LPT9.log",
+        r"C:\safe\COM¹.txt",
+        r"C:\safe\CLOCK$",
+        r"C:\PROGRA~1\GitHub CLI\gh.exe",
+        r"\\?\C:\safe\record.json",
+        r"\\.\C:\safe\record.json",
+        r"\??\C:\safe\record.json",
+        r"\\server\share\record.json",
+    ],
+)
+def test_windows_output_path_rejects_alias_and_reserved_components(
+    path: str,
+) -> None:
+    with pytest.raises(collector.CollectionError):
+        collector._validate_windows_path_syntax(path, label="output path")
+
+
 def test_output_is_exact_deterministic_canonical_json(tmp_path: Path) -> None:
     first = _collect()
     second = _collect()
@@ -701,8 +790,6 @@ def test_noncanonical_cli_identities_fail(
         collector.collect(
             repository,
             ruleset,
-            repository_id=REPOSITORY_ID,
-            repository_owner_id=REPOSITORY_OWNER_ID,
             api_runner=FakeRunner(),
             clock=lambda: FIXED_TIME,
         )
@@ -723,27 +810,34 @@ def test_reviewed_repository_numeric_identities_are_canonical(
     repository_id: int,
     repository_owner_id: int,
 ) -> None:
+    def metadata(
+        method: str,
+        endpoint: str,
+        query: Mapping[str, int | str],
+    ) -> collector.ApiResponse:
+        body = _minimal_body(endpoint, query)
+        if endpoint == f"/repos/{REPOSITORY}":
+            body["id"] = repository_id
+            body["owner"]["id"] = repository_owner_id
+        return collector.ApiResponse(_json(body))
+
     with pytest.raises(collector.CollectionError, match="ID"):
         collector.collect(
             REPOSITORY,
             RULESET_ID,
-            repository_id=repository_id,
-            repository_owner_id=repository_owner_id,
-            api_runner=FakeRunner(),
+            api_runner=FakeRunner(metadata),
             clock=lambda: FIXED_TIME,
         )
 
 
 def test_observation_timestamps_must_remain_inside_completed_window() -> None:
     earlier = datetime(2029, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
-    times = iter([FIXED_TIME] * 18 + [earlier])
+    times = iter([FIXED_TIME] * 19 + [earlier])
 
     with pytest.raises(collector.CollectionError, match="moved backwards"):
         collector.collect(
             REPOSITORY,
             RULESET_ID,
-            repository_id=REPOSITORY_ID,
-            repository_owner_id=REPOSITORY_OWNER_ID,
             api_runner=FakeRunner(),
             clock=lambda: next(times),
         )
@@ -887,6 +981,64 @@ def test_gh_runner_oversized_stdout_cleans_the_process_tree(
     assert cleaned == [process]
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Win32 system-directory semantics")
+def test_windows_system_directory_ignores_polluted_systemroot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SystemRoot", r"C:\attacker-controlled")
+    monkeypatch.setenv("SYSTEMROOT", r"C:\attacker-controlled")
+
+    resolved = collector._windows_system_directory()
+
+    assert "attacker-controlled" not in str(resolved).lower()
+    assert resolved.is_absolute()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Win32 process-tree cleanup")
+def test_windows_cleanup_helper_uses_minimal_token_free_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system_directory = tmp_path / "System32"
+    system_directory.mkdir()
+    taskkill = system_directory / "taskkill.exe"
+    taskkill.write_bytes(b"fixed trusted taskkill bytes")
+    captured: dict[str, Any] = {}
+
+    class Process:
+        pid = 12347
+
+        def kill(self) -> None:
+            captured["killed"] = True
+
+        def wait(self, timeout: float | None = None) -> int:
+            captured["wait_timeout"] = timeout
+            return 0
+
+    def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setenv("GH_TOKEN", "must-never-reach-taskkill")
+    monkeypatch.setenv("SystemRoot", r"C:\attacker-controlled")
+    monkeypatch.setattr(
+        collector,
+        "_windows_system_directory",
+        lambda: system_directory,
+    )
+    monkeypatch.setattr(subprocess, "run", run)
+
+    collector._terminate_process_tree(Process())  # type: ignore[arg-type]
+
+    environment = captured["kwargs"]["env"]
+    assert set(environment) == {"PATH", "SystemRoot", "WINDIR"}
+    assert "GH_TOKEN" not in environment
+    assert "must-never-reach-taskkill" not in repr(captured)
+    assert captured["command"][0] == str(taskkill)
+    assert captured["kwargs"]["cwd"] == system_directory
+
+
 def test_gh_resolution_accepts_only_safe_absolute_path_entries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -945,6 +1097,21 @@ def test_gh_resolution_rejects_relative_path_and_current_directory(
     monkeypatch.setenv("PATH", str(tmp_path.absolute()))
     with pytest.raises(collector.CollectionError, match="no safe absolute"):
         collector._resolve_gh_executable()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Win32 executable aliases")
+@pytest.mark.parametrize(
+    "path",
+    [
+        r"\\?\C:\Program Files\GitHub CLI\gh.exe",
+        r"\\.\C:\Program Files\GitHub CLI\gh.exe",
+        r"\\server\share\gh.exe",
+        r"C:\PROGRA~1\GitHub CLI\gh.exe",
+    ],
+)
+def test_gh_snapshot_rejects_windows_path_aliases(path: str) -> None:
+    with pytest.raises(collector.CollectionError):
+        collector._snapshot_gh_executable(Path(path))
 
 
 @pytest.mark.parametrize("path_relation", ["ancestor", "descendant"])

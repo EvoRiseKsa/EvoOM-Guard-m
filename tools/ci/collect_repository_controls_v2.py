@@ -5,9 +5,9 @@
 """Collect a bounded, unsigned window of GitHub repository-control API bodies.
 
 The collector is intentionally a transport recorder, not a verifier.  Its plan
-contains exactly 17 ordered observation definitions/endpoints.  A paginated
-observation can issue multiple bounded GET page requests, so 17 observations do
-not imply 17 HTTP calls.  It retains parsed JSON page bodies and deterministic
+contains exactly 18 ordered observation definitions/endpoints.  A paginated
+observation can issue multiple bounded GET page requests, so 18 observations do
+not imply 18 HTTP calls.  It retains parsed JSON page bodies and deterministic
 canonical JSON, but does not derive protection claims, mutate GitHub state, or
 sign the result.  From ``gh api --include`` it retains only validated HTTP
 status and Link values; every other response header is discarded before the
@@ -32,6 +32,7 @@ race-safe writer against an attacker replacing parent path components.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import math
@@ -48,7 +49,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
-from urllib.parse import parse_qsl, urlsplit
 
 FORMAT = "EVOGUARD_REPOSITORY_CONTROL_OBSERVATION_V2"
 GITHUB_API_VERSION = "2022-11-28"
@@ -97,6 +97,10 @@ _FORBIDDEN_HEADER_KEYS = frozenset(
 _HTTP_STATUS_LINE = re.compile(rb"HTTP/[0-9](?:\.[0-9])? ([0-9]{3})(?: [^\r\n]*)?\Z")
 _HTTP_HEADER_NAME = re.compile(rb"[!#$%&'*+\-.^_`|~0-9A-Za-z]+\Z")
 _LINK_ENTRY = re.compile(r'\s*<([^<>\s]+)>\s*;\s*rel="([^"]+)"\s*(?:,|\Z)')
+_WINDOWS_RESERVED_COMPONENT = re.compile(
+    r"(?i)(?:CON|PRN|AUX|NUL|CLOCK\$|COM[1-9¹²³]|LPT[1-9¹²³]|"
+    r"CONIN\$|CONOUT\$)(?:\..*)?\Z"
+)
 
 
 class CollectionError(ValueError):
@@ -261,7 +265,7 @@ def _validate_ruleset_id(ruleset_id: int) -> int:
     return ruleset_id
 
 
-def _validate_github_id(value: int, *, label: str) -> int:
+def _validate_github_id(value: Any, *, label: str) -> int:
     if (
         isinstance(value, bool)
         or not isinstance(value, int)
@@ -283,9 +287,18 @@ def _parse_positive_id(value: str) -> int:
     return parsed
 
 
+def _parse_output_path(value: str) -> Path:
+    try:
+        _validate_windows_path_syntax(value, label="output path")
+    except CollectionError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return Path(value)
+
+
 def _specs(repository: str, ruleset_id: int) -> tuple[_ObservationSpec, ...]:
     base = f"/repos/{repository}"
     specs: list[_ObservationSpec] = [
+        _ObservationSpec("repository-metadata", base),
         _ObservationSpec("main-ref", f"{base}/git/ref/heads/main"),
         _ObservationSpec("main-protection", f"{base}/branches/main/protection"),
         _ObservationSpec("actions-permissions", f"{base}/actions/permissions"),
@@ -339,9 +352,9 @@ def _specs(repository: str, ruleset_id: int) -> tuple[_ObservationSpec, ...]:
         )
         for role, environment in ENVIRONMENTS[:2]
     )
-    if len(specs) != 17 or len({spec.name for spec in specs}) != 17:
-        _fail("internal observation plan is not the frozen 17-entry contract")
-    if len({spec.endpoint for spec in specs}) != 17:
+    if len(specs) != 18 or len({spec.name for spec in specs}) != 18:
+        _fail("internal observation plan is not the frozen 18-entry contract")
+    if len({spec.endpoint for spec in specs}) != 18:
         _fail("internal observation plan contains duplicate endpoints")
     return tuple(specs)
 
@@ -357,6 +370,98 @@ def _path_within(path: Path, root: Path) -> bool:
 
 def _paths_overlap(first: Path, second: Path) -> bool:
     return _path_within(first, second) or _path_within(second, first)
+
+
+def _validate_windows_path_syntax(path: Path | str, *, label: str) -> None:
+    """Reject Win32 aliases and names that can resolve unlike their spelling."""
+
+    if os.name != "nt":
+        return
+    raw = str(path)
+    lowered = raw.lower()
+    if lowered.startswith(("\\\\?\\", "\\\\.\\", "\\??\\")) or raw.startswith("\\\\"):
+        _fail(f"{label} uses a device, extended, or UNC path alias")
+    drive, tail = os.path.splitdrive(raw)
+    if ":" in tail:
+        _fail(f"{label} contains an NTFS alternate data stream")
+    for component in re.split(r"[\\/]", tail):
+        if not component:
+            continue
+        if component in {".", ".."}:
+            _fail(f"{label} contains a relative path component")
+        if component.endswith((" ", ".")):
+            _fail(f"{label} contains a trailing dot or space")
+        if "~" in component:
+            _fail(f"{label} contains a possible 8.3 path alias")
+        if _WINDOWS_RESERVED_COMPONENT.fullmatch(component) is not None:
+            _fail(f"{label} contains a reserved Win32 name")
+    if drive and re.fullmatch(r"[A-Za-z]:", drive) is None:
+        _fail(f"{label} has a non-canonical drive prefix")
+
+
+def _windows_final_path(path: Path, *, label: str) -> Path:
+    """Return the DOS final path of an existing object, rejecting aliases."""
+
+    if os.name != "nt":
+        return Path(os.path.abspath(path))
+    _validate_windows_path_syntax(path, label=label)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    create_file.restype = ctypes.c_void_p
+    get_final_path = kernel32.GetFinalPathNameByHandleW
+    get_final_path.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+    ]
+    get_final_path.restype = ctypes.c_uint32
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [ctypes.c_void_p]
+    close_handle.restype = ctypes.c_int
+    handle = create_file(
+        str(path),
+        0,
+        0x00000001 | 0x00000002 | 0x00000004,
+        None,
+        3,
+        0x02000000,
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if handle in {None, invalid_handle}:
+        raise CollectionError(f"cannot open {label} for final-path validation")
+    try:
+        size = get_final_path(handle, None, 0, 0)
+        if size == 0 or size > 32768:
+            _fail(f"cannot obtain a bounded final path for {label}")
+        buffer = ctypes.create_unicode_buffer(size + 1)
+        written = get_final_path(handle, buffer, len(buffer), 0)
+        if written == 0 or written >= len(buffer):
+            _fail(f"cannot obtain the final path for {label}")
+        raw_final = buffer.value
+    finally:
+        close_handle(handle)
+    if raw_final.lower().startswith("\\\\?\\unc\\"):
+        _fail(f"{label} resolves through a UNC path")
+    if not raw_final.lower().startswith("\\\\?\\"):
+        _fail(f"{label} has a non-DOS final path")
+    final = Path(raw_final[4:])
+    _validate_windows_path_syntax(final, label=f"{label} final path")
+    requested = os.path.normcase(os.path.normpath(os.path.abspath(path)))
+    canonical = os.path.normcase(os.path.normpath(str(final)))
+    if requested != canonical:
+        _fail(f"{label} spelling is not its canonical final path")
+    return final
 
 
 def _require_no_link_ancestry(path: Path, *, label: str) -> None:
@@ -385,6 +490,7 @@ def _executable_identity(metadata: os.stat_result) -> tuple[int, int, int, int, 
 
 
 def _snapshot_gh_executable(path: Path) -> _ExecutableSnapshot:
+    path = _windows_final_path(path, label="resolved GitHub CLI")
     try:
         before = path.lstat()
     except OSError as exc:
@@ -435,8 +541,8 @@ def _resolve_gh_executable() -> _ExecutableSnapshot:
     if not path_value:
         _fail("PATH is unavailable for absolute GitHub CLI resolution")
     names = ("gh.exe",) if os.name == "nt" else ("gh",)
-    cwd = Path.cwd().absolute()
-    repository_root = ROOT.absolute()
+    cwd = _windows_final_path(Path.cwd(), label="current working directory")
+    repository_root = _windows_final_path(ROOT, label="repository root")
     for raw_directory in path_value.split(os.pathsep):
         raw_directory = raw_directory.strip()
         if len(raw_directory) >= 2 and raw_directory[0] == raw_directory[-1] == '"':
@@ -447,6 +553,12 @@ def _resolve_gh_executable() -> _ExecutableSnapshot:
         if not candidate_directory.is_absolute():
             continue
         directory = Path(os.path.abspath(candidate_directory))
+        try:
+            directory = _windows_final_path(
+                directory, label="GitHub CLI PATH directory"
+            )
+        except CollectionError:
+            continue
         if _paths_overlap(directory, cwd) or _paths_overlap(
             directory, repository_root
         ):
@@ -460,6 +572,10 @@ def _resolve_gh_executable() -> _ExecutableSnapshot:
             try:
                 snapshot = _snapshot_gh_executable(candidate)
             except CollectionError:
+                continue
+            if _paths_overlap(snapshot.path.parent, cwd) or _paths_overlap(
+                snapshot.path.parent, repository_root
+            ):
                 continue
             if not os.access(candidate, os.X_OK):
                 continue
@@ -522,40 +638,60 @@ class _BoundedReadState:
     error: Exception | None = None
 
 
+def _windows_system_directory() -> Path:
+    """Resolve System32 from the kernel, never from caller-controlled env."""
+
+    if os.name != "nt":
+        _fail("Windows system directory requested on a non-Windows host")
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_system_directory = kernel32.GetSystemDirectoryW
+    get_system_directory.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32]
+    get_system_directory.restype = ctypes.c_uint32
+    capacity = 32768
+    buffer = ctypes.create_unicode_buffer(capacity)
+    written = get_system_directory(buffer, capacity)
+    if written == 0 or written >= capacity:
+        _fail("cannot resolve the bounded Windows system directory")
+    directory = Path(buffer.value)
+    if not directory.is_absolute():
+        _fail("Windows system directory is not absolute")
+    return _windows_final_path(directory, label="Windows system directory")
+
+
 def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
     """Best-effort bounded cleanup for the isolated ``gh`` process tree."""
 
     if os.name == "nt":
-        system_root = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT")
-        if system_root:
-            taskkill = Path(system_root) / "System32" / "taskkill.exe"
-            try:
-                metadata = taskkill.lstat()
-                _require_no_link_ancestry(
-                    taskkill.parent, label="Windows process-tree cleanup directory"
-                )
-                if (
-                    taskkill.is_absolute()
-                    and stat.S_ISREG(metadata.st_mode)
-                    and not _is_link_like(metadata)
-                ):
-                    subprocess.run(
-                        [
-                            str(taskkill),
-                            "/PID",
-                            str(process.pid),
-                            "/T",
-                            "/F",
-                        ],
-                        check=False,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        cwd=taskkill.parent,
-                        timeout=GH_TREE_CLEANUP_TIMEOUT_SECONDS,
-                    )
-            except (OSError, subprocess.SubprocessError, CollectionError):
-                pass
+        try:
+            system_directory = _windows_system_directory()
+            taskkill = system_directory / "taskkill.exe"
+            before = _snapshot_gh_executable(taskkill)
+            windows_root = system_directory.parent
+            subprocess.run(
+                [
+                    str(before.path),
+                    "/PID",
+                    str(process.pid),
+                    "/T",
+                    "/F",
+                ],
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=system_directory,
+                env={
+                    "PATH": str(system_directory),
+                    "SystemRoot": str(windows_root),
+                    "WINDIR": str(windows_root),
+                },
+                timeout=GH_TREE_CLEANUP_TIMEOUT_SECONDS,
+            )
+            after = _snapshot_gh_executable(taskkill)
+            if before.identity != after.identity or before.sha256 != after.sha256:
+                _fail("Windows process-tree cleanup helper changed during execution")
+        except (OSError, subprocess.SubprocessError, CollectionError):
+            pass
     else:
         try:
             kill_group = getattr(os, "killpg", None)
@@ -792,39 +928,23 @@ def _link_relations(
         if relation in relations:
             _fail("GitHub Link header contains a duplicate relation")
         relations.add(relation)
-        try:
-            parsed = urlsplit(url)
-            port = parsed.port
-            query_pairs = parse_qsl(
-                parsed.query,
-                keep_blank_values=True,
-                strict_parsing=True,
-                max_num_fields=4,
-            )
-        except ValueError as exc:
-            raise CollectionError("GitHub Link header URL is malformed") from exc
-        if (
-            parsed.scheme != "https"
-            or parsed.hostname != "api.github.com"
-            or port not in {None, 443}
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.fragment
-            or parsed.path not in allowed_paths
-        ):
+        prefix = "https://api.github.com"
+        if not url.startswith(prefix):
             _fail("GitHub Link header URL is outside the exact API endpoint")
-        if len(query_pairs) != 2 or {key for key, _ in query_pairs} != {
-            "page",
-            "per_page",
-        }:
+        target = url[len(prefix) :]
+        if target.count("?") != 1:
             _fail("GitHub Link header query is not exact")
-        query_values = dict(query_pairs)
-        page_text = query_values["page"]
-        if (
-            re.fullmatch(r"[1-9][0-9]*", page_text) is None
-            or query_values["per_page"] != str(PER_PAGE)
-        ):
+        raw_path, raw_query = target.split("?", 1)
+        if raw_path not in allowed_paths:
+            _fail("GitHub Link header URL is outside the exact API endpoint")
+        query_match = re.fullmatch(
+            rf"page=([1-9][0-9]*)&per_page={PER_PAGE}",
+            raw_query,
+            flags=re.ASCII,
+        )
+        if query_match is None:
             _fail("GitHub Link header pagination values are not canonical")
+        page_text = query_match.group(1)
         linked_page = int(page_text)
         linked_pages[relation] = linked_page
         if relation == "next" and linked_page != page_number + 1:
@@ -870,14 +990,32 @@ def _require_object(value: Any, *, label: str) -> dict[str, Any]:
     return value
 
 
+def _repository_metadata_identity(
+    body: Mapping[str, Any],
+    *,
+    repository: str,
+) -> tuple[int, int]:
+    owner = body.get("owner")
+    if body.get("full_name") != repository or not isinstance(owner, dict):
+        _fail("repository-metadata response is not the exact requested repository")
+    repository_id = _validate_github_id(body.get("id"), label="repository API ID")
+    repository_owner_id = _validate_github_id(
+        owner.get("id"), label="repository owner API ID"
+    )
+    return repository_id, repository_owner_id
+
+
 def _validate_single_body(
     spec: _ObservationSpec,
     value: Any,
     *,
+    repository: str,
     ruleset_id: int,
 ) -> None:
     body = _require_object(value, label=spec.name)
-    if spec.name == "main-ref":
+    if spec.name == "repository-metadata":
+        _repository_metadata_identity(body, repository=repository)
+    elif spec.name == "main-ref":
         target = body.get("object")
         if (
             body.get("ref") != "refs/heads/main"
@@ -943,13 +1081,19 @@ def _collect_single(
     spec: _ObservationSpec,
     *,
     runner: ApiRunner,
+    repository: str,
     ruleset_id: int,
     observed_utc: str,
 ) -> dict[str, Any]:
     value, response = _invoke(runner, spec.endpoint, {}, label=spec.name)
     if response.link_header is not None:
         _fail(f"{spec.name} returned a Link header for a non-paginated endpoint")
-    _validate_single_body(spec, value, ruleset_id=ruleset_id)
+    _validate_single_body(
+        spec,
+        value,
+        repository=repository,
+        ruleset_id=ruleset_id,
+    )
     return {
         "endpoint": spec.endpoint,
         "method": "GET",
@@ -1107,8 +1251,6 @@ def collect(
     repository: str,
     ruleset_id: int,
     *,
-    repository_id: int,
-    repository_owner_id: int,
     api_runner: ApiRunner = _run_gh_api,
     clock: Clock = _now,
 ) -> dict[str, Any]:
@@ -1116,10 +1258,6 @@ def collect(
 
     repository = _validate_repository(repository)
     ruleset_id = _validate_ruleset_id(ruleset_id)
-    repository_id = _validate_github_id(repository_id, label="repository ID")
-    repository_owner_id = _validate_github_id(
-        repository_owner_id, label="repository owner ID"
-    )
     started_utc = _format_utc(clock())
     observations: list[dict[str, Any]] = []
     document: dict[str, Any] = {
@@ -1138,9 +1276,9 @@ def collect(
         },
         "observations": observations,
         "repository": repository,
-        "repository_id": repository_id,
-        "repository_owner_id": repository_owner_id,
     }
+    repository_id: int | None = None
+    repository_owner_id: int | None = None
     previous_utc = started_utc
     for spec in _specs(repository, ruleset_id):
         observed_utc = _format_utc(clock())
@@ -1150,10 +1288,22 @@ def collect(
             observation = _collect_single(
                 spec,
                 runner=api_runner,
+                repository=repository,
                 ruleset_id=ruleset_id,
                 observed_utc=observed_utc,
             )
+            if spec.name == "repository-metadata":
+                metadata_body = observation["pages"][0]["body"]
+                assert isinstance(metadata_body, dict)
+                repository_id, repository_owner_id = _repository_metadata_identity(
+                    metadata_body,
+                    repository=repository,
+                )
+                document["repository_id"] = repository_id
+                document["repository_owner_id"] = repository_owner_id
         else:
+            if repository_id is None or repository_owner_id is None:
+                _fail("repository metadata was not observed before pagination")
             observation = _collect_paginated(
                 spec,
                 runner=api_runner,
@@ -1163,6 +1313,8 @@ def collect(
         observations.append(observation)
         canonical_json_bytes(document)
         previous_utc = observed_utc
+    if repository_id is None or repository_owner_id is None:
+        _fail("repository metadata observation is missing")
     completed_utc = _format_utc(clock())
     if completed_utc < previous_utc:
         _fail("collector clock moved backwards during the observation window")
@@ -1186,6 +1338,7 @@ def _is_link_like(metadata: os.stat_result) -> bool:
 
 
 def _prepare_output(path: Path) -> None:
+    _validate_windows_path_syntax(path, label="output path")
     if not path.name or path.name in {".", ".."}:
         _fail("output path must name a new file")
     if os.path.lexists(path):
@@ -1274,7 +1427,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Collect the unsigned, read-only EvoOM Guard repository-control "
-            "observation V2: 17 ordered endpoints, with additional bounded "
+            "observation V2: 18 ordered endpoints, with additional bounded "
             "page requests where Link pagination requires them."
         )
     )
@@ -1286,21 +1439,9 @@ def _parser() -> argparse.ArgumentParser:
         help="recorded tag-ruleset numeric ID",
     )
     parser.add_argument(
-        "--repository-id",
-        required=True,
-        type=_parse_positive_id,
-        help="reviewed GitHub repository numeric ID",
-    )
-    parser.add_argument(
-        "--owner-id",
-        required=True,
-        type=_parse_positive_id,
-        help="reviewed GitHub repository-owner numeric ID",
-    )
-    parser.add_argument(
         "--output",
         required=True,
-        type=Path,
+        type=_parse_output_path,
         help="new output JSON path (existing/link-like targets are refused)",
     )
     return parser
@@ -1312,8 +1453,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         document = collect(
             args.repo,
             args.ruleset,
-            repository_id=args.repository_id,
-            repository_owner_id=args.owner_id,
         )
         write_new_output(args.output, canonical_json_bytes(document))
     except CollectionError as exc:
