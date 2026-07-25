@@ -64,7 +64,7 @@ the retained evidence and contract rules.
 ## Command
 
 ```powershell
-python tools/ci/assemble_release_ledger_v2.py `
+python -I tools/ci/assemble_release_ledger_v2.py `
   .\collected\vX.Y.Z `
   .\reviewed\vX.Y.Z.claims.json `
   .\reviewed\RELEASE_LEDGER.unsigned.json `

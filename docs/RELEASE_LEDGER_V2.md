@@ -176,7 +176,7 @@ and must fail validation. Placeholders are never accepted as release evidence.
    bindings but does not collect or invent evidence:
 
    ```powershell
-   python tools/ci/validate_release_ledger_v2.py canonicalize `
+   python -I tools/ci/validate_release_ledger_v2.py canonicalize `
      .\RELEASE_LEDGER.draft.json `
      .\vX.Y.Z\RELEASE_LEDGER.json
    ```
@@ -189,7 +189,7 @@ and must fail validation. Placeholders are never accepted as release evidence.
    channel to a path outside the ledger directory, then validate offline:
 
    ```powershell
-   python tools/ci/validate_release_ledger_v2.py validate .\vX.Y.Z `
+   python -I tools/ci/validate_release_ledger_v2.py validate .\vX.Y.Z `
      --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem `
      --trusted-parent-repo .\trusted-parent-checkout
    ```
@@ -223,7 +223,7 @@ and must fail validation. Placeholders are never accepted as release evidence.
    key:
 
    ```powershell
-   python tools/ci/validate_release_ledger_v2.py validate-retirement `
+   python -I tools/ci/validate_release_ledger_v2.py validate-retirement `
      .\vX.Y.Z .\KEY_RETIREMENT.json .\KEY_RETIREMENT.json.sig `
      --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem `
      --trusted-parent-repo .\trusted-parent-checkout

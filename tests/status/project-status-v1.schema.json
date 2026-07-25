@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvoOM Guard project status v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "published_release",
+    "release_pipeline"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "evoguard-project-status-v1"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle",
+        "relation_to_latest_release",
+        "architecture"
+      ],
+      "properties": {
+        "lifecycle": {
+          "enum": [
+            "unreleased-development",
+            "release-candidate",
+            "release-line"
+          ]
+        },
+        "relation_to_latest_release": {
+          "const": "descendant"
+        },
+        "architecture": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "behavior_preserving_r2",
+            "cli_handler_extraction",
+            "overall_refactor_program"
+          ],
+          "properties": {
+            "behavior_preserving_r2": {
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
+            },
+            "cli_handler_extraction": {
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
+            },
+            "overall_refactor_program": {
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "published_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger"
+      ],
+      "properties": {
+        "ledger": {
+          "type": "string",
+          "pattern": "^(tests/baseline|evidence/release-ledgers)/v[0-9]+\\.[0-9]+\\.[0-9]+/RELEASE_LEDGER\\.json$"
+        }
+      }
+    },
+    "release_pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "implementation",
+        "legacy_workflow",
+        "activation_model",
+        "evidence_scope"
+      ],
+      "properties": {
+        "contract": {
+          "const": "protected-a-h-v1"
+        },
+        "implementation": {
+          "enum": [
+            "scaffolded",
+            "implemented"
+          ]
+        },
+        "legacy_workflow": {
+          "const": "hard-disabled"
+        },
+        "activation_model": {
+          "const": "disabled-by-default"
+        },
+        "evidence_scope": {
+          "const": "durable-repository-record"
+        }
+      }
+    }
+  }
+}

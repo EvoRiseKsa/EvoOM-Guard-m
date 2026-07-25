@@ -58,59 +58,32 @@ code.
 
 ## Install
 
-> **Release availability.** [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0)
-> is the current published immutable GitHub Release. For strict CI, pin the
-> exact commit SHA resolved from that release rather than a mutable tag.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_CURRENT_RELEASE -->
+> **Release availability.** [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest immutable
+> consumer release recorded by the protected source tree. For strict CI,
+> pin commit `b8c61315a22741415c75e4e8828feb60c0ad5149` rather than a tag.
 
-There are two ways to get Guard, depending on where you run it. EvoGuard is
-proprietary and is **not published to PyPI** (`pip install evoom-guard` will not find
-it) — both paths obtain and run it **from this repository**.
+EvoGuard is not published to PyPI. Obtain it from this repository.
 
-**In GitHub Actions — the core bootstrap needs no package install.** Reference
-the composite action, so a core-only workflow adds the `uses:` (plus a
-full-history checkout). A policy that requests optional changed-line coverage
-must preprovision `coverage.py` as described below:
+**GitHub Action:**
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }                 # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # published release; @<sha> is strictest, @main is latest
+  with: { fetch-depth: 0 }
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0
 ```
 
-> **Version boundary.** The immutable `v4.3.0` Action bootstraps its local
-> checkout through pip. The next, unreleased Action revision instead builds a
-> temporary stdlib-only zipapp from `github.action_path` and runs it with
-> `python -I`, without a package resolver, build backend, or PyPI access during
-> bootstrap. It does not claim the whole Action is zero-network:
-> `setup-python`, a missing-base fetch, the optional PR comment, and consumer
-> setup/tests retain their documented network boundaries. Optional
-> `coverage.py` must be preprovisioned in the selected Python 3.12 environment;
-> unavailable advisory measurement is explicit, while a configured minimum
-> fails closed.
-
-**As a CLI — install the `evo-guard` command from the repo** (the stdlib-only core has
-no third-party dependencies, so this is a fast, clean install — no clone needed):
+**CLI:**
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"   # published release
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@<sha>"    # the strictest, immutable pin
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@b8c61315a22741415c75e4e8828feb60c0ad5149"
 evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
 
-> **Pinning.** Guard is a verification *gate*, so pin the version you run rather
-> than tracking a moving branch — both for the `uses:` action ref and the `git+`
-> pip URL:
-> - **`@v4.3.0`** — the current published release tag. The recommended pin and the right choice for
->   trying Guard out: a real, named version rather than whatever is on `main`.
-> - **`@<sha>`** — a full commit SHA. The **strictest, immutable** pin (a tag can
->   in principle be moved); best for CI, where the gate you run should be the exact
->   code you reviewed.
-> - **`@main`** — always the latest, unreviewed code. Fine for a quick look, not
->   for a gate you depend on.
->
-> If the repository is private, the usual GitHub access applies — a
-> token-authenticated `git+https://…@<token>…` URL for `pip`, and repo read access
-> for the `uses:` reference.
+Pin the full commit for the strictest reviewed identity. The ledger-recorded
+tag is the named consumer release. Do not use `@main` for a gate you depend on.
+<!-- END EVOGUARD_PROJECT_STATUS:GUARD_CURRENT_RELEASE -->
 
 ## CLI
 
@@ -277,18 +250,21 @@ patch from supplying the judge that is meant to evaluate it.
 
 ## GitHub Action
 
-A composite action ships at the repo root ([`action.yml`](../action.yml)), used as
-the published `EvoRiseKsa/EvoOM-Guard-m@v4.3.0` release. Copy [`examples/evoguard.yml`](../examples/evoguard.yml) to
-`.github/workflows/evoguard.yml` in the repo you want to protect:
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_ACTION_EXAMPLE -->
+A composite action ships at the repository root
+([`action.yml`](../action.yml)). Copy
+[`examples/evoguard.yml`](../examples/evoguard.yml) to
+`.github/workflows/evoguard.yml` in the repository you want to protect:
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }            # Guard needs the base commit to diff
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # published release (@<sha> strictest, @main latest)
+  with: { fetch-depth: 0 }
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0
   with:
-    comment: "true"                   # post the verdict as a PR comment
-    fail-on: "any-non-pass"           # required on pull_request runs
+    comment: "true"
+    fail-on: "any-non-pass"
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:GUARD_ACTION_EXAMPLE -->
 
 > ⚠️ **`fail-on: rejected-only` is unavailable on `pull_request` runs.** The
 > Action requires `any-non-pass` there because `rejected-only` would leave a
@@ -379,10 +355,11 @@ add `if: github.event.pull_request.user.type == 'Bot'` to the job.
 
 If you prefer no composite action, the `--diff` mode is a two-line gate:
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_NO_ACTION_EXAMPLE -->
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }                       # Guard needs the base to diff
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"   # published release; @<sha> strictest for CI
+  with: { fetch-depth: 0 }
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
     git fetch --no-tags origin "$BASE"
@@ -392,6 +369,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
       --config "$RUNNER_TEMP/evoguard-base-policy.json" \
       --report "$GITHUB_STEP_SUMMARY"
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:GUARD_NO_ACTION_EXAMPLE -->
 
 `evo-guard guard` returns a non-zero exit on anything but `PASS`, so the step fails the
 check automatically. The test command belongs in the materialized base policy;

@@ -13,13 +13,15 @@ reference workflow, which binds the PR control plane before candidate execution.
 
 ## Create in a trusted finalizer
 
-Install the signing extra and generate an Ed25519 key once. `v4.3.0` is the
-published immutable GitHub Release:
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:EVIDENCE_BUNDLES_RELEASE_PIN -->
+Install the signing extra from ledger-recorded release `v4.3.0` and generate
+an Ed25519 key once:
 
 ```bash
 pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
+<!-- END EVOGUARD_PROJECT_STATUS:EVIDENCE_BUNDLES_RELEASE_PIN -->
 
 Create `context.json` from trusted workflow/event metadata, not from the verdict
 alone:

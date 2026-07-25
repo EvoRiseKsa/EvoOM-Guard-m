@@ -9,21 +9,16 @@
 
 ## Status and exact scope
 
-[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0)
-is the current published immutable GitHub Release. Its immutable tag identifies
-the exact protected-`main` source commit, and the release's `SHA256SUMS` asset
-identifies the exact `evo-guard.pyz` bytes.
-The release has a GitHub release attestation, and this exact asset has a
-separate GitHub Actions build-artifact attestation. Verification against the
-published asset succeeds when constrained to the repository, the `Release`
-workflow at `.github/workflows/release.yml@refs/heads/main`, the `main`
-source ref, and GitHub-hosted runners.
-
-`v4.3.0` has no `evo-guard.spdx.json` release asset and no SBOM attestation.
-The protected source tree now prepares an external SPDX 2.3 inventory and a
-second `actions/attest` invocation for the next release that uses the updated
-workflow. This is a source capability, not a retroactive claim about any
-published release. See [Release SBOM](SBOM.md).
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
+[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
+`b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
+records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
+`evo-guard.pyz`, `SHA256SUMS`, while its build-provenance attestation binds
+`evo-guard.pyz`. The ledger records no SBOM release asset. Canonical ledger:
+`tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+<!-- END EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
 
 `v3.7.0` has a GitHub **release** attestation. It does **not** have a GitHub
 Actions build-artifact attestation for `evo-guard.pyz`. Do not describe the
@@ -51,48 +46,50 @@ of deployment.
 
 ## Consumer verification
 
-Download the asset and checksum manifest, then verify the exact bytes before
-use:
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:ATTESTATIONS_CONSUMER_VERIFICATION -->
+Download the exact ledger-recorded asset set and verify its checksum
+manifest:
 
 ```bash
 gh release download v4.3.0 --repo EvoRiseKsa/EvoOM-Guard-m \
-  --pattern evo-guard.pyz --pattern SHA256SUMS
+  --pattern evo-guard.pyz \
+  --pattern SHA256SUMS
 sha256sum --check SHA256SUMS
-```
-
-Then use a current GitHub CLI in an online environment. First verify the
-release attestation and its assets:
-
-```bash
 gh release verify v4.3.0 --repo EvoRiseKsa/EvoOM-Guard-m
 ```
 
-Then verify the separate build-artifact attestation, supplying the exact
-repository/workflow/source identity rather than relying on a broad owner-only
-lookup:
+Verify the provider statement for each non-checksum subject against the
+exact workflow and source commit recorded by the validated ledger:
 
 ```bash
-SOURCE_DIGEST="$(gh api repos/EvoRiseKsa/EvoOM-Guard-m/commits/v4.3.0 --jq .sha)"
 gh attestation verify ./evo-guard.pyz \
   --repo EvoRiseKsa/EvoOM-Guard-m \
   --signer-workflow EvoRiseKsa/EvoOM-Guard-m/.github/workflows/release.yml \
   --source-ref refs/heads/main \
-  --source-digest "$SOURCE_DIGEST" \
+  --source-digest b8c61315a22741415c75e4e8828feb60c0ad5149 \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --deny-self-hosted-runners \
   --format json
 ```
 
-These checks are complementary: the release command verifies GitHub's signed
-release attestation and asset digests, while the artifact command verifies the
-GitHub Actions provenance identity for the local asset bytes. Neither command
-substitutes for verifying the downloaded checksum. For offline verification,
-use the GitHub CLI's downloaded attestation bundle and trusted-root procedure
-rather than treating a copied JSON document as a trust root.
+The release command and artifact commands are complementary. Neither
+substitutes for checksum verification. The ledger records no SBOM release asset.
+For offline verification, retain the provider bundles and use their
+trusted-root procedure; a copied JSON document is not a trust root.
+<!-- END EVOGUARD_PROJECT_STATUS:ATTESTATIONS_CONSUMER_VERIFICATION -->
 
-## Future SBOM attestation contract
+## SBOM attestation contract
 
-For a future release that actually publishes `evo-guard.spdx.json`, the
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:ATTESTATIONS_FUTURE_PIPELINE -->
+The protected A-H release pipeline is implemented in source and **disabled by default**.
+The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
+records a completed protected A-H operation. No externally anchored signed v2 ledger
+records publication by this pipeline. An admitted release is contracted to exactly
+`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
+evidence that those assets were published.
+<!-- END EVOGUARD_PROJECT_STATUS:ATTESTATIONS_FUTURE_PIPELINE -->
+
+For a release that actually publishes `evo-guard.spdx.json`, the
 separate clean attestation job in the default-branch release workflow requests
 a distinct SBOM attestation with:
 

@@ -9,14 +9,15 @@ release. A source tree may legitimately prepare a newer runtime before its
 immutable GitHub Release exists; ``docs/RELEASE_STATUS.md`` records the source
 and latest-published versions explicitly. ``evo-guard init`` must never guess a
 release ref: every documented invocation supplies an exact tag or full SHA.
-JSON-schema examples always use the current source runtime. The byte-pinned
-v3.7 Trusted Finalizer templates remain the sole historical pin exception
-because changing those URLs without matching reviewed SHA-256 values would be
-unsafe.
+JSON-schema examples use explicit runtime placeholders unless the example is
+intentionally bound to one immutable release. The byte-pinned v3.7 Trusted
+Finalizer templates remain the sole historical pin exception because changing
+those URLs without matching reviewed SHA-256 values would be unsafe.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -48,18 +49,10 @@ _PIN_PATTERNS = (
     re.compile(r"EvoOM-Guard-m(?:\.git)?@v(\d+\.\d+\.\d+)"),
     re.compile(r"releases/download/v(\d+\.\d+\.\d+)/"),
 )
-_TOOL_VERSION_RE = re.compile(r'"(?:tool_)?version":\s*"(\d+\.\d+\.\d+)"')
+_TOOL_VERSION_RE = re.compile(r'"(?:tool_)?version":\s*"([^"]+)"')
 _PREPUBLICATION_CONDITION_RE = re.compile(
     r"(?:only\s+after|after).{0,80}(?:release.{0,80}published|published.{0,80}release)",
     re.IGNORECASE,
-)
-_RELEASE_STATUS_RE = re.compile(
-    r"^---\s*\n"
-    r"source_version:\s*(?P<source>\d+\.\d+\.\d+)\s*\n"
-    r"latest_published_version:\s*(?P<published>\d+\.\d+\.\d+)\s*\n"
-    r"state:\s*(?P<state>pre-release|published)\s*\n"
-    r"---\s*$",
-    re.MULTILINE,
 )
 _CANONICAL_IDENTITY = (
     "Copyright © 2026 EvoRise Tech. All rights reserved.",
@@ -80,11 +73,16 @@ _LIVE_LICENSE_DOCUMENTS = (
 
 
 def _release_status() -> tuple[str, str, str]:
-    text = (ROOT / "docs" / "RELEASE_STATUS.md").read_text(encoding="utf-8")
-    match = _RELEASE_STATUS_RE.search(text)
-    if match is None:
-        raise AssertionError("docs/RELEASE_STATUS.md front matter is missing or invalid")
-    return match.group("source"), match.group("published"), match.group("state")
+    status = json.loads((ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8"))
+    ledger_path = status["published_release"]["ledger"]
+    ledger = json.loads((ROOT / ledger_path).read_text(encoding="utf-8"))
+    lifecycle = status["source"]["lifecycle"]
+    state = (
+        "pre-release"
+        if lifecycle in {"unreleased-development", "release-candidate"}
+        else "published"
+    )
+    return __version__, ledger["project"]["version"], state
 
 
 class DocsVersionDriftTests(unittest.TestCase):
@@ -151,17 +149,18 @@ class DocsVersionDriftTests(unittest.TestCase):
             self.assertRegex(
                 text,
                 re.compile(
-                    rf"v{re.escape(published_version)}.{{0,180}}"
-                    r"(?:published|immutable GitHub Release)",
-                    re.IGNORECASE | re.DOTALL,
+                    rf"latest immutable consumer release recorded by "
+                    rf"the protected source tree is\s*"
+                    rf"\[`v{re.escape(published_version)}`\]",
+                    re.IGNORECASE,
                 ),
-                f"{relative} must describe the latest published version as a released version",
+                f"{relative} must identify the protected-tree recorded release",
             )
 
         release_status = (ROOT / "docs" / "RELEASE_STATUS.md").read_text(encoding="utf-8")
         if state == "pre-release":
-            self.assertIn(f"v{__version__}", release_status)
-            self.assertRegex(release_status, re.compile(r"not yet a published", re.I))
+            self.assertIn(__version__, release_status)
+            self.assertRegex(release_status, re.compile(r"unreleased|not a consumer release", re.I))
         else:
             self.assertEqual(published_version, __version__)
 
@@ -181,17 +180,11 @@ class DocsVersionDriftTests(unittest.TestCase):
             + "\n".join(missing_ref),
         )
 
-    def test_json_schema_example_tool_version_is_current(self) -> None:
+    def test_json_schema_example_uses_a_runtime_version_placeholder(self) -> None:
         text = (ROOT / "docs" / "JSON_SCHEMA.md").read_text(encoding="utf-8")
         versions = _TOOL_VERSION_RE.findall(text)
         self.assertTrue(versions, "JSON_SCHEMA.md should show a tool_version example")
-        for version in versions:
-            self.assertEqual(
-                version,
-                __version__,
-                f"docs/JSON_SCHEMA.md example shows tool_version {version!r} but the "
-                f"package is {__version__!r}",
-            )
+        self.assertEqual(set(versions), {"<runtime-version>"})
 
     def test_action_example_in_readme_exists(self) -> None:
         text = (ROOT / "README.md").read_text(encoding="utf-8")

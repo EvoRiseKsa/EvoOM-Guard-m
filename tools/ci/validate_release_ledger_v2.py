@@ -21,6 +21,8 @@ import argparse
 import base64
 import binascii
 import hashlib
+import importlib
+import importlib.machinery
 import json
 import os
 import re
@@ -31,14 +33,14 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Mapping, Sequence
-from contextlib import suppress
+import unicodedata
+import urllib.parse
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn
-
-from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCHEMA = (
@@ -65,6 +67,60 @@ MAX_RETAINED_FILES = 64
 MAX_RETAINED_FILE_BYTES = 72 * 1024 * 1024
 MAX_RETAINED_TOTAL_BYTES = 256 * 1024 * 1024
 _READ_CHUNK_BYTES = 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_FILES = 512
+MAX_TRUSTED_FIRST_PARTY_FILE_BYTES = 4 * 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_TREE_BYTES = 2 * 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_PATH_BYTES = 1024
+MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH = 16
+MAX_TRUSTED_EXECUTABLE_BYTES = 256 * 1024 * 1024
+MAX_TRUSTED_DEPENDENCY_FILE_BYTES = 64 * 1024 * 1024
+MAX_TRUSTED_DEPENDENCY_TOTAL_BYTES = 256 * 1024 * 1024
+_TRUSTED_FIRST_PARTY_PREFIX = "evoom_guard"
+_TRUSTED_FIRST_PARTY_MODULES = (
+    "evoom_guard.github_attestation",
+    "evoom_guard.admission.release_artifact",
+    "evoom_guard.admission.release_source",
+    "evoom_guard.signing",
+)
+_TRUSTED_DEPENDENCY_PREFIXES = (
+    "cryptography",
+    "cffi",
+    "_cffi_backend",
+    "pycparser",
+)
+_TRUSTED_SCHEMA_PREFIXES = (
+    "jsonschema",
+    "jsonschema_specifications",
+    "referencing",
+    "rpds",
+    "attrs",
+    "attr",
+    "typing_extensions",
+)
+_TRUSTED_RUNTIME_PREFIXES = (
+    *_TRUSTED_DEPENDENCY_PREFIXES,
+    *_TRUSTED_SCHEMA_PREFIXES,
+)
+_TRUSTED_DEPENDENCY_MODULES = (
+    "cryptography",
+    "cryptography.exceptions",
+    "cryptography.hazmat.primitives.serialization",
+    "cryptography.hazmat.primitives.asymmetric.ed25519",
+    "jsonschema",
+    "pycparser",
+    "typing_extensions",
+)
+_FIRST_PARTY_IMPORT_LOCK = threading.RLock()
+_TRUSTED_IMPORT_DEPTH = 0
+_WINDOWS_RESERVED_PATH_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
 _CANONICAL_UTC = re.compile(
     r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
     r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z\Z"
@@ -89,10 +145,12 @@ REQUIRED_MAIN_CHECKS = {
     "smoke",
     "analyze",
     "CodeQL",
+    "project-status",
 }
 EXPECTED_TAG_JOBS = (
     "blackbox-docker-e2e",
     "e2e-runners",
+    "project-status",
     "publish-pyz",
     "release-tag-guard",
     "test (3.10)",
@@ -178,6 +236,38 @@ class _TrustedLedgerKey:
     key_id: str
     key: Any
     identity: tuple[int, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class _TrustedParentContracts:
+    repository: Path
+    commit_sha: str
+    tree_sha: str
+    repository_object: tuple[int, int]
+    git: _TrustedExecutable
+
+
+@dataclass(frozen=True)
+class _TrustedExecutable:
+    path: Path
+    data: bytes
+    identity: tuple[int, int, int, int, int]
+    search_path: str
+    parent_chain: Mapping[Path, tuple[int, int]]
+
+
+@dataclass(frozen=True)
+class _TrustedDependencyFile:
+    path: Path
+    data: bytes
+    identity: tuple[int, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class _TrustedFirstPartyFile:
+    blob_sha: str
+    sha256: str
+    size_bytes: int
 
 
 def _fail(message: str) -> NoReturn:
@@ -498,11 +588,10 @@ def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _trusted_process_environment() -> dict[str, str]:
+def _trusted_process_environment(*, search_path: str | None = None) -> dict[str, str]:
     environment = {
         key: os.environ[key]
         for key in (
-            "PATH",
             "PATHEXT",
             "SystemRoot",
             "SYSTEMROOT",
@@ -513,6 +602,8 @@ def _trusted_process_environment() -> dict[str, str]:
         )
         if key in os.environ
     }
+    if search_path is not None:
+        environment["PATH"] = search_path
     environment.update(
         {
             "GIT_CONFIG_NOSYSTEM": "1",
@@ -526,31 +617,174 @@ def _trusted_process_environment() -> dict[str, str]:
     return environment
 
 
-def _git_blob_sha(data: bytes) -> str:
-    """Return Git's protocol-mandated blob identity via the trusted Git binary."""
+def _trusted_path_roots(*blocked_roots: Path) -> list[Path]:
+    """Return the absolute, non-candidate-controlled PATH search directories."""
+
+    blocked = [
+        Path(os.path.abspath(path))
+        for path in (
+            Path.cwd(),
+            ROOT,
+            Path(tempfile.gettempdir()),
+            *blocked_roots,
+        )
+    ]
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for raw in os.environ.get("PATH", "").split(os.pathsep):
+        value = raw.strip()
+        if not value or value != raw or value.startswith('"') or value.endswith('"'):
+            continue
+        candidate = Path(value)
+        if not candidate.is_absolute():
+            continue
+        absolute = Path(os.path.abspath(candidate))
+        portable = os.path.normcase(str(absolute))
+        if portable in seen or any(
+            _path_is_within(absolute, root) or _path_is_within(root, absolute)
+            for root in blocked
+        ):
+            continue
+        try:
+            metadata = absolute.lstat()
+        except OSError:
+            continue
+        if _is_link_like(metadata) or not stat.S_ISDIR(metadata.st_mode):
+            continue
+        seen.add(portable)
+        roots.append(absolute)
+    return roots
+
+
+def _read_trusted_executable(path: Path) -> tuple[bytes, tuple[int, int, int, int, int]]:
+    """Read a host executable while allowing legitimate hard-linked installs."""
+
+    parent_snapshot = _directory_chain(
+        path.parent,
+        label="trusted Git executable parent",
+    )
+    try:
+        before = path.lstat()
+    except OSError as exc:
+        raise LedgerValidationError("cannot inspect trusted Git executable") from exc
+    if (
+        _is_link_like(before)
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_size < 1
+        or before.st_size > MAX_TRUSTED_EXECUTABLE_BYTES
+    ):
+        _fail("trusted Git executable is not one bounded regular file")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise LedgerValidationError("cannot open trusted Git executable") from exc
+    try:
+        opened = os.fstat(descriptor)
+        if _is_link_like(opened) or not stat.S_ISREG(opened.st_mode) or _identity(
+            opened
+        ) != _identity(before):
+            _fail("trusted Git executable changed while opening")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(
+                descriptor,
+                min(_READ_CHUNK_BYTES, MAX_TRUSTED_EXECUTABLE_BYTES + 1 - total),
+            )
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_TRUSTED_EXECUTABLE_BYTES:
+                _fail("trusted Git executable exceeded its read limit")
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        final = path.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot re-inspect trusted Git executable"
+        ) from exc
+    if (
+        _is_link_like(after)
+        or _is_link_like(final)
+        or _identity(opened) != _identity(after)
+        or _identity(opened) != _identity(final)
+    ):
+        _fail("trusted Git executable changed while reading")
+    _require_same_directory_chain(
+        parent_snapshot,
+        label="trusted Git executable parent",
+    )
+    data = b"".join(chunks)
+    if len(data) != before.st_size:
+        _fail("trusted Git executable returned a short or extended read")
+    return data, _inventory_identity(before)
+
+
+def _resolve_trusted_git(*blocked_roots: Path) -> _TrustedExecutable:
+    """Resolve Git without consulting cwd, relative PATH entries, or repo roots."""
+
+    roots = _trusted_path_roots(*blocked_roots)
+    executable_name = "git.exe" if os.name == "nt" else "git"
+    for root in roots:
+        path = root / executable_name
+        try:
+            data, identity = _read_trusted_executable(path)
+        except LedgerValidationError:
+            continue
+        if os.name != "nt" and not os.access(path, os.X_OK):
+            continue
+        return _TrustedExecutable(
+            path=path,
+            data=data,
+            identity=identity,
+            search_path=str(root),
+            parent_chain=_directory_chain(
+                path.parent,
+                label="trusted Git executable parent",
+            ),
+        )
+    _fail("no trusted Git executable exists in an absolute host PATH directory")
+
+
+def _require_trusted_executable_unchanged(
+    executable: _TrustedExecutable,
+) -> None:
+    data, identity = _read_trusted_executable(executable.path)
+    if data != executable.data or identity != executable.identity:
+        _fail("trusted Git executable changed during validation")
+    _require_same_directory_chain(
+        executable.parent_chain,
+        label="trusted Git executable parent",
+    )
+
+
+def _git_blob_sha(
+    data: bytes,
+    *,
+    repository: Path = ROOT,
+    executable: _TrustedExecutable | None = None,
+) -> str:
+    """Return Git's protocol-mandated blob identity through frozen host Git."""
 
     if len(data) > MAX_JSON_BYTES:
         _fail("trusted Git blob input exceeds its bounded size limit")
-    try:
-        returncode, stdout, stderr = _run_bounded_subprocess(
-            ["git", "hash-object", "--stdin"],
-            environment=_trusted_process_environment(),
-            output_limit=128,
-            timeout=15,
-            label="trusted Git blob identity",
-            input_data=data,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise LedgerValidationError("cannot compute trusted Git blob identity") from exc
-    if returncode != 0 or stderr:
-        _fail("trusted Git blob identity command failed")
-    try:
-        digest = stdout.decode("ascii", "strict").strip()
-    except UnicodeDecodeError as exc:
-        raise LedgerValidationError("trusted Git blob identity is not ASCII") from exc
-    if re.fullmatch(r"[0-9a-f]{40}", digest) is None:
-        _fail("trusted Git blob identity is not canonical SHA-1")
-    return digest
+    trusted = executable or _resolve_trusted_git(repository)
+    output = _trusted_git(
+        trusted.path.parent,
+        "hash-object",
+        "--stdin",
+        label="blob identity",
+        output_limit=65,
+        input_data=data,
+        executable=trusted,
+    )
+    if re.fullmatch(b"[0-9a-f]{40}\n", output) is None:
+        _fail("trusted Git returned a non-canonical SHA-1 blob identity")
+    return output[:-1].decode("ascii", "strict")
 
 
 def _trusted_git(
@@ -558,17 +792,29 @@ def _trusted_git(
     *arguments: str,
     label: str,
     output_limit: int,
+    input_data: bytes | None = None,
+    executable: _TrustedExecutable | None = None,
 ) -> bytes:
+    trusted = executable or _resolve_trusted_git(repository)
+    _require_trusted_executable_unchanged(trusted)
     try:
         returncode, stdout, _stderr = _run_bounded_subprocess(
-            ["git", "-C", str(repository), *arguments],
-            environment=_trusted_process_environment(),
+            [str(trusted.path), "-C", str(repository), *arguments],
+            environment=_trusted_process_environment(
+                search_path=trusted.search_path,
+            ),
             output_limit=output_limit,
             timeout=15,
             label=f"trusted parent {label}",
+            input_data=input_data,
         )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise LedgerValidationError(f"cannot inspect trusted parent {label}") from exc
+    except (OSError, subprocess.SubprocessError) as primary:
+        try:
+            _require_trusted_executable_unchanged(trusted)
+        except BaseException as integrity:
+            raise integrity from primary
+        raise LedgerValidationError(f"cannot inspect trusted parent {label}") from primary
+    _require_trusted_executable_unchanged(trusted)
     if returncode != 0:
         _fail(f"trusted parent {label} is unavailable or invalid")
     return stdout
@@ -719,17 +965,25 @@ def _validate_trusted_parent_contracts(
     ledger: Mapping[str, Any],
     trusted_parent_repo: Path | None,
     trusted_key: _TrustedLedgerKey,
-) -> None:
+) -> _TrustedParentContracts:
     if trusted_parent_repo is None:
         _fail("an external trusted parent repository is required")
     repository = _require_plain_directory(
         trusted_parent_repo,
         label="external trusted parent repository",
     )
+    try:
+        repository_metadata = repository.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot inspect external trusted parent repository"
+        ) from exc
+    repository_object = (repository_metadata.st_dev, repository_metadata.st_ino)
     if _path_is_within(repository, ledger_root) or _path_is_within(
         ledger_root, repository
     ):
         _fail("trusted parent repository and ledger root must be disjoint")
+    trusted_git = _resolve_trusted_git(repository, ledger_root)
     parent = ledger["source"]["parent_commit_sha"]
     parent_tree = ledger["source"]["parent_tree_sha"]
     resolved_commit = _trusted_git(
@@ -739,6 +993,7 @@ def _validate_trusted_parent_contracts(
         f"{parent}^{{commit}}",
         label="commit",
         output_limit=128,
+        executable=trusted_git,
     ).decode("ascii", "strict").strip()
     resolved_tree = _trusted_git(
         repository,
@@ -747,6 +1002,7 @@ def _validate_trusted_parent_contracts(
         f"{parent}^{{tree}}",
         label="tree",
         output_limit=128,
+        executable=trusted_git,
     ).decode("ascii", "strict").strip()
     if resolved_commit != parent or resolved_tree != parent_tree:
         _fail("trusted parent commit/tree identity is not exact")
@@ -778,6 +1034,7 @@ def _validate_trusted_parent_contracts(
             path,
             label=f"{label} tree entry",
             output_limit=4096,
+            executable=trusted_git,
         )
         expected_prefix = f"100644 blob {contract['git_blob_sha']}\t{path}\0".encode()
         if entry != expected_prefix:
@@ -789,6 +1046,7 @@ def _validate_trusted_parent_contracts(
             contract["git_blob_sha"],
             label=f"{label} blob size",
             output_limit=128,
+            executable=trusted_git,
         ).decode("ascii", "strict").strip()
         if not blob_size_text.isdigit() or int(blob_size_text) != len(current_bytes):
             _fail(f"trusted parent {label} blob size is not exact")
@@ -799,11 +1057,19 @@ def _validate_trusted_parent_contracts(
             contract["git_blob_sha"],
             label=f"{label} blob",
             output_limit=len(current_bytes) + 1,
+            executable=trusted_git,
         )
         if (
             parent_bytes != current_bytes
             or _sha256(parent_bytes) != contract["sha256"]
-            or _git_blob_sha(parent_bytes) != contract["git_blob_sha"]
+            or (
+                _git_blob_sha(
+                    parent_bytes,
+                    repository=repository,
+                    executable=trusted_git,
+                )
+                != contract["git_blob_sha"]
+            )
             or contract["trusted_parent_commit_sha"] != parent
             or contract["trusted_parent_tree_sha"] != parent_tree
         ):
@@ -826,6 +1092,7 @@ def _validate_trusted_parent_contracts(
             path,
             label=f"trusted build input {path} tree entry",
             output_limit=4096,
+            executable=trusted_git,
         )
         expected_entry = f"100644 blob {expected_blob}\t{path}\0".encode()
         if entry != expected_entry:
@@ -837,22 +1104,793 @@ def _validate_trusted_parent_contracts(
             expected_blob,
             label=f"trusted build input {path} blob",
             output_limit=len(current_bytes) + 1,
+            executable=trusted_git,
         )
         if (
             parent_bytes != current_bytes
-            or _git_blob_sha(parent_bytes) != expected_blob
+            or (
+                _git_blob_sha(
+                    parent_bytes,
+                    repository=repository,
+                    executable=trusted_git,
+                )
+                != expected_blob
+            )
         ):
             _fail(f"trusted parent build input {path} bytes are not exact")
+    return _TrustedParentContracts(
+        repository=repository,
+        commit_sha=parent,
+        tree_sha=parent_tree,
+        repository_object=repository_object,
+        git=trusted_git,
+    )
+
+
+def _require_trusted_parent_repository_unchanged(
+    contracts: _TrustedParentContracts,
+) -> None:
+    repository = _require_plain_directory(
+        contracts.repository,
+        label="external trusted parent repository",
+    )
+    try:
+        metadata = repository.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot re-inspect external trusted parent repository"
+        ) from exc
+    if (metadata.st_dev, metadata.st_ino) != contracts.repository_object:
+        _fail("external trusted parent repository changed during validation")
+    resolved_commit = _trusted_git(
+        repository,
+        "rev-parse",
+        "--verify",
+        f"{contracts.commit_sha}^{{commit}}",
+        label="first-party parent commit",
+        output_limit=128,
+        executable=contracts.git,
+    ).decode("ascii", "strict").strip()
+    resolved_tree = _trusted_git(
+        repository,
+        "rev-parse",
+        "--verify",
+        f"{contracts.commit_sha}^{{tree}}",
+        label="first-party parent tree",
+        output_limit=128,
+        executable=contracts.git,
+    ).decode("ascii", "strict").strip()
+    if (
+        resolved_commit != contracts.commit_sha
+        or resolved_tree != contracts.tree_sha
+    ):
+        _fail("trusted first-party parent commit/tree changed during validation")
+
+
+def _trusted_parent_contract_reference(
+    repository: Path,
+    commit_sha: str,
+    tree_sha: str,
+    *,
+    executable: _TrustedExecutable | None = None,
+) -> _TrustedParentContracts:
+    trusted_repository = _require_plain_directory(
+        repository,
+        label="external trusted parent repository",
+    )
+    try:
+        metadata = trusted_repository.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot inspect external trusted parent repository"
+        ) from exc
+    contracts = _TrustedParentContracts(
+        repository=trusted_repository,
+        commit_sha=commit_sha,
+        tree_sha=tree_sha,
+        repository_object=(metadata.st_dev, metadata.st_ino),
+        git=executable or _resolve_trusted_git(trusted_repository),
+    )
+    _require_trusted_parent_repository_unchanged(contracts)
+    return contracts
+
+
+def _trusted_first_party_relative_path(raw: bytes) -> str:
+    try:
+        relative = raw.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise LedgerValidationError(
+            "trusted first-party path is not UTF-8"
+        ) from exc
+    pure = PurePosixPath(relative)
+    if (
+        not relative
+        or "\\" in relative
+        or pure.is_absolute()
+        or pure.as_posix() != relative
+        or not pure.parts
+        or pure.parts[0] != _TRUSTED_FIRST_PARTY_PREFIX
+        or len(raw) > MAX_TRUSTED_FIRST_PARTY_PATH_BYTES
+        or len(pure.parts) > MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH
+        or any(part in {"", ".", ".."} for part in pure.parts)
+        or any(
+            len(part.encode("utf-8")) > 255
+            or part.endswith((" ", "."))
+            or any(character in '<>:"|?*' for character in part)
+            or part.casefold().split(".", 1)[0]
+            in _WINDOWS_RESERVED_PATH_NAMES
+            for part in pure.parts
+        )
+        or unicodedata.normalize("NFC", relative) != relative
+        or any(
+            ord(character) < 32
+            or ord(character) == 127
+            or 0xD800 <= ord(character) <= 0xDFFF
+            for character in relative
+        )
+    ):
+        _fail(f"trusted first-party path is unsafe: {relative!r}")
+    return relative
+
+
+def _matches_git_blob_object_id(
+    data: bytes,
+    object_id: str,
+    *,
+    repository: Path = ROOT,
+    executable: _TrustedExecutable | None = None,
+) -> bool:
+    framed = f"blob {len(data)}\0".encode("ascii") + data
+    if len(object_id) == 40:
+        observed = _git_blob_sha(
+            data,
+            repository=repository,
+            executable=executable,
+        )
+    elif len(object_id) == 64:
+        observed = hashlib.sha256(framed).hexdigest()
+    else:
+        return False
+    return observed == object_id
+
+
+def _read_trusted_first_party_tree(
+    contracts: _TrustedParentContracts,
+) -> tuple[dict[str, bytes], dict[str, _TrustedFirstPartyFile]]:
+    _require_trusted_parent_repository_unchanged(contracts)
+    listing = _trusted_git(
+        contracts.repository,
+        "ls-tree",
+        "-r",
+        "-l",
+        "-z",
+        "--full-tree",
+        contracts.commit_sha,
+        "--",
+        _TRUSTED_FIRST_PARTY_PREFIX,
+        label="first-party tree",
+        output_limit=MAX_TRUSTED_FIRST_PARTY_TREE_BYTES,
+        executable=contracts.git,
+    )
+    records = listing.split(b"\0")
+    if not records or records[-1] != b"":
+        _fail("trusted first-party tree listing is not NUL-terminated")
+    records.pop()
+    if not records or len(records) > MAX_TRUSTED_FIRST_PARTY_FILES:
+        _fail(
+            "trusted first-party file count is outside "
+            f"1..{MAX_TRUSTED_FIRST_PARTY_FILES}"
+        )
+
+    entries: list[tuple[str, str, int]] = []
+    portable_paths: dict[str, str] = {}
+    blob_sizes: dict[str, int] = {}
+    total = 0
+    for record in records:
+        try:
+            header, raw_path = record.split(b"\t", 1)
+            mode, object_type, object_id_bytes, size_bytes = header.split()
+        except ValueError as exc:
+            raise LedgerValidationError(
+                "trusted first-party tree entry is malformed"
+            ) from exc
+        if (
+            mode != b"100644"
+            or object_type != b"blob"
+            or re.fullmatch(b"(?:[0-9a-f]{40}|[0-9a-f]{64})", object_id_bytes)
+            is None
+            or not size_bytes.isdigit()
+        ):
+            _fail("trusted first-party tree contains a non-regular blob")
+        relative = _trusted_first_party_relative_path(raw_path)
+        portable = relative.casefold()
+        prior = portable_paths.get(portable)
+        if prior is not None:
+            _fail(
+                "trusted first-party tree contains duplicate or "
+                f"portable-case-colliding paths: {prior!r}, {relative!r}"
+            )
+        portable_paths[portable] = relative
+        object_id = object_id_bytes.decode("ascii", "strict")
+        size_text = size_bytes.decode("ascii", "strict")
+        if str(int(size_text)) != size_text:
+            _fail(f"trusted first-party blob size is not canonical: {relative}")
+        size = int(size_text)
+        if size > MAX_TRUSTED_FIRST_PARTY_FILE_BYTES:
+            _fail(f"trusted first-party blob is too large: {relative}")
+        total += size
+        if total > MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES:
+            _fail("trusted first-party tree exceeds the total byte budget")
+        prior_size = blob_sizes.setdefault(object_id, size)
+        if prior_size != size:
+            _fail("trusted first-party tree reports inconsistent blob sizes")
+        entries.append((relative, object_id, size))
+
+    query = b"".join(
+        f"{object_id}\n".encode("ascii") for object_id in blob_sizes
+    )
+    batch = _trusted_git(
+        contracts.repository,
+        "cat-file",
+        "--batch",
+        label="first-party blob batch",
+        output_limit=max(
+            1,
+            sum(blob_sizes.values()) + (len(blob_sizes) * 128) + 1,
+        ),
+        input_data=query,
+        executable=contracts.git,
+    )
+    blobs: dict[str, bytes] = {}
+    offset = 0
+    for object_id, size in blob_sizes.items():
+        header_end = batch.find(b"\n", offset, min(len(batch), offset + 128))
+        expected_header = f"{object_id} blob {size}".encode("ascii")
+        if header_end < 0 or batch[offset:header_end] != expected_header:
+            _fail("trusted first-party blob batch header is not exact")
+        data_start = header_end + 1
+        data_end = data_start + size
+        if data_end >= len(batch) or batch[data_end : data_end + 1] != b"\n":
+            _fail("trusted first-party blob batch framing is not exact")
+        data = batch[data_start:data_end]
+        if not _matches_git_blob_object_id(
+            data,
+            object_id,
+            repository=contracts.repository,
+            executable=contracts.git,
+        ):
+            _fail("trusted first-party blob batch bytes are not exact")
+        blobs[object_id] = data
+        offset = data_end + 1
+    if offset != len(batch):
+        _fail("trusted first-party blob batch has trailing output")
+
+    files: dict[str, bytes] = {}
+    manifest: dict[str, _TrustedFirstPartyFile] = {}
+    for relative, object_id, size in entries:
+        data = blobs[object_id]
+        files[relative] = data
+        manifest[relative] = _TrustedFirstPartyFile(
+            blob_sha=object_id,
+            sha256=_sha256(data),
+            size_bytes=size,
+        )
+    if f"{_TRUSTED_FIRST_PARTY_PREFIX}/__init__.py" not in files:
+        _fail("trusted first-party tree is not an importable package")
+    _require_trusted_parent_repository_unchanged(contracts)
+    return files, manifest
+
+
+def _verify_loaded_first_party_modules(
+    import_root: Path,
+    manifest: Mapping[str, _TrustedFirstPartyFile],
+    contracts: _TrustedParentContracts,
+) -> None:
+    loaded = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == _TRUSTED_FIRST_PARTY_PREFIX
+        or name.startswith(f"{_TRUSTED_FIRST_PARTY_PREFIX}.")
+    }
+    missing = set(_TRUSTED_FIRST_PARTY_MODULES) - set(loaded)
+    if missing:
+        _fail(f"trusted first-party modules were not loaded: {sorted(missing)}")
+    origins: dict[str, str] = {}
+    for name, module in sorted(loaded.items()):
+        file_value = getattr(module, "__file__", None)
+        spec = getattr(module, "__spec__", None)
+        origin_value = getattr(spec, "origin", None)
+        if not isinstance(file_value, str) or not isinstance(origin_value, str):
+            _fail(f"trusted first-party module has no file origin: {name}")
+        file_path = Path(os.path.abspath(file_value))
+        origin_path = Path(os.path.abspath(origin_value))
+        if file_path != origin_path or not _path_is_within(file_path, import_root):
+            _fail(f"trusted first-party module escaped the parent snapshot: {name}")
+        try:
+            relative = file_path.relative_to(import_root).as_posix()
+        except ValueError as exc:
+            raise LedgerValidationError(
+                f"trusted first-party module origin is outside the snapshot: {name}"
+            ) from exc
+        descriptor = manifest.get(relative)
+        if descriptor is None:
+            _fail(f"trusted first-party module is not in the parent manifest: {name}")
+        data = _read_regular(
+            file_path,
+            limit=max(descriptor.size_bytes, 1),
+            label=f"loaded trusted first-party module {name}",
+        )
+        if (
+            len(data) != descriptor.size_bytes
+            or _sha256(data) != descriptor.sha256
+            or not _matches_git_blob_object_id(
+                data,
+                descriptor.blob_sha,
+                repository=contracts.repository,
+                executable=contracts.git,
+            )
+        ):
+            _fail(f"loaded trusted first-party module bytes changed: {name}")
+        prior = origins.get(relative)
+        if prior is not None and prior != name:
+            _fail(
+                "multiple trusted first-party modules share one origin: "
+                f"{prior}, {name}"
+            )
+        origins[relative] = name
+
+
+def _require_trusted_first_party_unchanged(
+    import_root: Path,
+    manifest: Mapping[str, _TrustedFirstPartyFile],
+    contracts: _TrustedParentContracts,
+    snapshot_files: set[str],
+    snapshot_directories: set[str],
+    snapshot_identities: Mapping[str, tuple[int, int, int, int, int]],
+) -> None:
+    _verify_loaded_first_party_modules(import_root, manifest, contracts)
+    _require_inventory_unchanged(
+        import_root,
+        files=snapshot_files,
+        directories=snapshot_directories,
+        identities=snapshot_identities,
+        max_files=MAX_TRUSTED_FIRST_PARTY_FILES,
+        max_directories=(
+            MAX_TRUSTED_FIRST_PARTY_FILES * MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH
+        )
+        + 1,
+        max_total_bytes=MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES,
+    )
+    _require_trusted_parent_repository_unchanged(contracts)
+
+
+def _module_matches_prefix(name: str, prefixes: Sequence[str]) -> bool:
+    return any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes)
+
+
+def _safe_python_roots(*blocked_roots: Path) -> tuple[Path, ...]:
+    prefixes = {
+        Path(os.path.abspath(sys.prefix)),
+        Path(os.path.abspath(sys.base_prefix)),
+    }
+    blocked = tuple(Path(os.path.abspath(path)) for path in blocked_roots)
+    candidates = [
+        *prefixes,
+        *(Path(value) for value in sys.path if value and Path(value).is_absolute()),
+    ]
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        absolute = Path(os.path.abspath(candidate))
+        if (
+            not any(_path_is_within(absolute, prefix) for prefix in prefixes)
+            or any(
+                _path_is_within(absolute, root) or _path_is_within(root, absolute)
+                for root in blocked
+            )
+        ):
+            continue
+        portable = os.path.normcase(str(absolute))
+        if portable in seen:
+            continue
+        try:
+            metadata = absolute.lstat()
+        except OSError:
+            continue
+        if _is_link_like(metadata) or not stat.S_ISDIR(metadata.st_mode):
+            continue
+        seen.add(portable)
+        roots.append(absolute)
+    if not roots:
+        _fail("no safe Python runtime roots are available")
+    roots.sort(key=lambda path: (len(path.parts), os.path.normcase(str(path))))
+    return tuple(roots)
+
+
+def _module_origin_paths(module: Any) -> tuple[Path, ...]:
+    values: list[Path] = []
+    spec = getattr(module, "__spec__", None)
+    origin = getattr(spec, "origin", None)
+    file_value = getattr(module, "__file__", None)
+    for value in (file_value, origin):
+        if not isinstance(value, str) or value in {"built-in", "frozen"}:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            return (Path(""),)
+        values.append(Path(os.path.abspath(path)))
+    locations = getattr(spec, "submodule_search_locations", None)
+    if locations is not None:
+        for value in locations:
+            path = Path(value)
+            if not path.is_absolute():
+                return (Path(""),)
+            values.append(Path(os.path.abspath(path)))
+    return tuple(dict.fromkeys(values))
+
+
+def _module_is_outside_roots(module: Any, roots: Sequence[Path]) -> bool:
+    paths = _module_origin_paths(module)
+    if not paths:
+        spec = getattr(module, "__spec__", None)
+        origin = getattr(spec, "origin", None)
+        loader = getattr(spec, "loader", None)
+        return not (
+            origin == "built-in"
+            and loader is importlib.machinery.BuiltinImporter
+            or origin == "frozen"
+            and loader is importlib.machinery.FrozenImporter
+        )
+    return any(not any(_path_is_within(path, root) for root in roots) for path in paths)
+
+
+def _loaded_dependency_files(
+    safe_roots: Sequence[Path],
+) -> dict[Path, _TrustedDependencyFile]:
+    snapshots: dict[Path, _TrustedDependencyFile] = {}
+    total = 0
+    for name, module in sorted(sys.modules.items()):
+        if not _module_matches_prefix(name, _TRUSTED_RUNTIME_PREFIXES):
+            continue
+        file_value = getattr(module, "__file__", None)
+        spec = getattr(module, "__spec__", None)
+        origin_value = getattr(spec, "origin", None)
+        if not isinstance(file_value, str):
+            _fail(f"trusted dependency module has no file origin: {name}")
+        path = Path(os.path.abspath(file_value))
+        if (
+            (
+                isinstance(origin_value, str)
+                and origin_value not in {"built-in", "frozen"}
+                and path != Path(os.path.abspath(origin_value))
+            )
+            or not any(_path_is_within(path, root) for root in safe_roots)
+        ):
+            _fail(f"trusted dependency module escaped safe Python roots: {name}")
+        if path in snapshots:
+            continue
+        data = _read_regular(
+            path,
+            limit=MAX_TRUSTED_DEPENDENCY_FILE_BYTES,
+            label=f"trusted dependency module {name}",
+        )
+        total += len(data)
+        if total > MAX_TRUSTED_DEPENDENCY_TOTAL_BYTES:
+            _fail("trusted dependency modules exceed the total byte budget")
+        try:
+            metadata = path.lstat()
+        except OSError as exc:
+            raise LedgerValidationError(
+                f"cannot re-inspect trusted dependency module: {name}"
+            ) from exc
+        snapshots[path] = _TrustedDependencyFile(
+            path=path,
+            data=data,
+            identity=_inventory_identity(metadata),
+        )
+    return snapshots
+
+
+def _require_dependency_files_unchanged(
+    expected: Mapping[Path, _TrustedDependencyFile],
+    safe_roots: Sequence[Path],
+) -> None:
+    observed = _loaded_dependency_files(safe_roots)
+    if set(observed) != set(expected):
+        _fail("trusted dependency module set changed during validation")
+    for path, descriptor in expected.items():
+        current = observed[path]
+        if (
+            current.data != descriptor.data
+            or current.identity != descriptor.identity
+        ):
+            _fail(f"trusted dependency module changed during validation: {path}")
+
+
+def _bind_cryptography_extension_exceptions() -> None:
+    """Bind reloaded Python wrappers to the process-resident extension class."""
+
+    from cryptography import exceptions
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    key = ed25519.Ed25519PrivateKey.generate().public_key()
+    try:
+        key.verify(b"\0" * 64, b"evoguard-import-integrity-probe")
+    except Exception as exc:
+        observed = type(exc)
+    else:
+        _fail("cryptography accepted the invalid import-integrity probe")
+    if (
+        observed.__name__ != "InvalidSignature"
+        or observed.__module__ != "cryptography.exceptions"
+    ):
+        _fail("cryptography returned an unexpected signature exception")
+    exceptions.InvalidSignature = observed
+
+
+@contextmanager
+def _trusted_python_imports(
+    *,
+    import_root: Path | None,
+    blocked_roots: Sequence[Path],
+) -> Iterator[None]:
+    """Isolate imports for one single-threaded trusted-operator CLI operation.
+
+    This rejects candidate filesystem/module origins.  It does not attempt to
+    recover from an already-compromised Python interpreter or standard library.
+    """
+
+    global _TRUSTED_IMPORT_DEPTH
+    safe_roots = _safe_python_roots(
+        Path.cwd(),
+        ROOT,
+        Path(tempfile.gettempdir()),
+        *blocked_roots,
+    )
+    allowed_roots = (*safe_roots, *((import_root,) if import_root else ()))
+    saved_names = set(sys.modules)
+    removed_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if _module_matches_prefix(
+            name,
+            (*_TRUSTED_RUNTIME_PREFIXES, _TRUSTED_FIRST_PARTY_PREFIX),
+        )
+        or _module_is_outside_roots(module, safe_roots)
+    }
+    saved_path = list(sys.path)
+    saved_meta_path = list(sys.meta_path)
+    saved_path_hooks = list(sys.path_hooks)
+    saved_importer_cache = dict(sys.path_importer_cache)
+    saved_dont_write_bytecode = sys.dont_write_bytecode
+    entered = False
+    try:
+        for name in removed_modules:
+            sys.modules.pop(name, None)
+        sys.path[:] = [
+            *((str(import_root),) if import_root else ()),
+            *(str(path) for path in safe_roots),
+        ]
+        sys.meta_path[:] = [
+            importlib.machinery.BuiltinImporter,
+            importlib.machinery.FrozenImporter,
+            importlib.machinery.PathFinder,
+        ]
+        sys.path_hooks[:] = [
+            importlib.machinery.FileFinder.path_hook(
+                (
+                    importlib.machinery.SourceFileLoader,
+                    importlib.machinery.SOURCE_SUFFIXES,
+                ),
+                (
+                    importlib.machinery.SourcelessFileLoader,
+                    importlib.machinery.BYTECODE_SUFFIXES,
+                ),
+                (
+                    importlib.machinery.ExtensionFileLoader,
+                    importlib.machinery.EXTENSION_SUFFIXES,
+                ),
+            )
+        ]
+        sys.path_importer_cache.clear()
+        sys.dont_write_bytecode = True
+        importlib.invalidate_caches()
+        try:
+            for name in _TRUSTED_DEPENDENCY_MODULES:
+                importlib.import_module(name)
+            _bind_cryptography_extension_exceptions()
+        except Exception as exc:
+            raise LedgerValidationError(
+                "cannot import validation dependencies from safe Python roots"
+            ) from exc
+        dependency_files = _loaded_dependency_files(safe_roots)
+        trusted_originless = {
+            name: module
+            for name, module in sys.modules.items()
+            if not _module_origin_paths(module)
+            and _module_is_outside_roots(module, safe_roots)
+        }
+
+        def require_module_roots() -> None:
+            for name, module in sys.modules.items():
+                if not _module_is_outside_roots(module, allowed_roots):
+                    continue
+                if trusted_originless.get(name) is module:
+                    continue
+                _fail(f"module escaped trusted import roots: {name}")
+
+        _TRUSTED_IMPORT_DEPTH += 1
+        entered = True
+        try:
+            yield
+        except BaseException as primary:
+            try:
+                _require_dependency_files_unchanged(dependency_files, safe_roots)
+                require_module_roots()
+            except BaseException as integrity:
+                raise integrity from primary
+            raise
+        else:
+            _require_dependency_files_unchanged(dependency_files, safe_roots)
+            require_module_roots()
+    finally:
+        if entered:
+            _TRUSTED_IMPORT_DEPTH -= 1
+        for name in list(sys.modules):
+            if name not in saved_names or name in removed_modules:
+                sys.modules.pop(name, None)
+        sys.modules.update(removed_modules)
+        sys.path[:] = saved_path
+        sys.meta_path[:] = saved_meta_path
+        sys.path_hooks[:] = saved_path_hooks
+        sys.path_importer_cache.clear()
+        sys.path_importer_cache.update(saved_importer_cache)
+        sys.dont_write_bytecode = saved_dont_write_bytecode
+        importlib.invalidate_caches()
+
+
+@contextmanager
+def _trusted_parent_first_party(
+    contracts: _TrustedParentContracts,
+) -> Iterator[None]:
+    """Import every first-party verifier dependency from one literal parent tree."""
+
+    with _FIRST_PARTY_IMPORT_LOCK:
+        files, manifest = _read_trusted_first_party_tree(contracts)
+        with tempfile.TemporaryDirectory(
+            prefix="evoguard-ledger-v2-parent-"
+        ) as temporary:
+            import_root = _require_plain_directory(
+                Path(temporary),
+                label="trusted first-party import snapshot",
+            )
+            snapshot_files, snapshot_directories, snapshot_identities = (
+                _materialize_snapshot(
+                    import_root,
+                    files,
+                    max_files=MAX_TRUSTED_FIRST_PARTY_FILES,
+                    max_directories=(
+                        MAX_TRUSTED_FIRST_PARTY_FILES
+                        * MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH
+                    )
+                    + 1,
+                    max_total_bytes=MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES,
+                )
+            )
+            with _trusted_python_imports(
+                import_root=import_root,
+                blocked_roots=(contracts.repository,),
+            ):
+                try:
+                    for name in _TRUSTED_FIRST_PARTY_MODULES:
+                        importlib.import_module(name)
+                except Exception as exc:
+                    raise LedgerValidationError(
+                        "cannot import first-party verification code from "
+                        "the trusted parent snapshot"
+                    ) from exc
+                _verify_loaded_first_party_modules(
+                    import_root,
+                    manifest,
+                    contracts,
+                )
+                try:
+                    yield
+                except BaseException as primary:
+                    try:
+                        _require_trusted_first_party_unchanged(
+                            import_root,
+                            manifest,
+                            contracts,
+                            snapshot_files,
+                            snapshot_directories,
+                            snapshot_identities,
+                        )
+                    except BaseException as integrity:
+                        raise integrity from primary
+                    raise
+                else:
+                    _require_trusted_first_party_unchanged(
+                        import_root,
+                        manifest,
+                        contracts,
+                        snapshot_files,
+                        snapshot_directories,
+                        snapshot_identities,
+                    )
+
+
+def _is_valid_schema_date_time(value: object) -> bool:
+    if not isinstance(value, str):
+        return True
+    if _CANONICAL_UTC.fullmatch(value) is None:
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return True
+
+
+def _is_valid_absolute_uri(value: object) -> bool:
+    if not isinstance(value, str):
+        return True
+    if (
+        not value
+        or any(ord(character) <= 0x20 or ord(character) == 0x7F for character in value)
+        or re.search(r"%(?![0-9A-Fa-f]{2})", value) is not None
+    ):
+        return False
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        _ = parsed.port
+    except ValueError:
+        return False
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9+.-]*", parsed.scheme) is None:
+        return False
+    if parsed.scheme.lower() in {"http", "https"}:
+        return parsed.netloc != "" and parsed.hostname is not None
+    return True
 
 
 def _schema_errors(
     ledger: Mapping[str, Any], schema: Mapping[str, Any]
 ) -> list[str]:
-    Draft202012Validator.check_schema(schema)
-    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    def collect() -> tuple[Any, ...]:
+        try:
+            from jsonschema import Draft202012Validator, FormatChecker
+        except ImportError as exc:
+            raise LedgerValidationError(
+                "jsonschema is unavailable from safe Python runtime roots"
+            ) from exc
+        format_checker = FormatChecker()
+        format_checker.checkers["date-time"] = (
+            _is_valid_schema_date_time,
+            (),
+        )
+        format_checker.checkers["uri"] = (_is_valid_absolute_uri, ())
+        if not {"date-time", "uri"}.issubset(format_checker.checkers):
+            raise LedgerValidationError(
+                "required release-ledger schema format checkers are unavailable"
+            )
+        Draft202012Validator.check_schema(schema)
+        schema_validator = Draft202012Validator(
+            schema,
+            format_checker=format_checker,
+        )
+        return tuple(schema_validator.iter_errors(ledger))
+
+    if _TRUSTED_IMPORT_DEPTH:
+        errors = collect()
+    else:
+        with _FIRST_PARTY_IMPORT_LOCK, _trusted_python_imports(
+            import_root=None,
+            blocked_roots=(ROOT,),
+        ):
+            errors = collect()
     messages: list[str] = []
     for error in sorted(
-        validator.iter_errors(ledger),
+        errors,
         key=lambda item: tuple(str(part) for part in item.absolute_path),
     ):
         location = "/".join(str(part) for part in error.absolute_path) or "<root>"
@@ -864,11 +1902,11 @@ def _parse_time(value: object, *, label: str) -> datetime:
     if not isinstance(value, str) or _CANONICAL_UTC.fullmatch(value) is None:
         _fail(f"{label} must be canonical whole-second UTC")
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
     except ValueError as exc:
         raise LedgerValidationError(f"{label} is not an ISO date-time") from exc
-    if parsed.tzinfo is None:
-        _fail(f"{label} must include a timezone")
     return parsed
 
 
@@ -1381,6 +2419,12 @@ def _validate_attestations(ledger: Mapping[str, Any]) -> None:
         # predicate payload, not a second GitHub attestation subject.
         "sbom_provenance": ("E", "evo-guard.pyz"),
     }
+    expected_predicates = {
+        "source_producer": "https://slsa.dev/provenance/v1",
+        "build_provenance": "https://slsa.dev/provenance/v1",
+        "spdx_provenance": "https://slsa.dev/provenance/v1",
+        "sbom_provenance": "https://spdx.dev/Document/v2.3",
+    }
     descriptors = _collect_descriptors(ledger)
     for name, (phase, subject_name) in expected.items():
         attestation = attestations[name]
@@ -1392,6 +2436,7 @@ def _validate_attestations(ledger: Mapping[str, Any]) -> None:
             or attestation["run_attempt"] != run["run_attempt"]
             or attestation["source_digest"] != source["candidate_commit_sha"]
             or attestation["subject_name"] != subject_name
+            or attestation["predicate_type"] != expected_predicates[name]
         ):
             _fail(f"{name} is not bound to the exact phase {phase} identity")
 
@@ -1722,6 +2767,16 @@ def _validate_semantics(
         _fail("ledger signing key must be distinct from all six admission roots")
 
     toolchain = ledger["toolchain"]
+    bootstrap = toolchain["bootstrap_guard"]
+    expected_bootstrap_url = (
+        f"https://github.com/{release['repository']}/releases/download/"
+        f"v{bootstrap['version']}/evo-guard.pyz"
+    )
+    if bootstrap["url"] != expected_bootstrap_url:
+        _fail(
+            "bootstrap Guard URL does not bind its repository, version, "
+            "and runtime asset"
+        )
     image_digest = toolchain["runner_image"]["sha256"]
     if not toolchain["runner_image"]["reference"].endswith(f"@sha256:{image_digest}"):
         _fail("runner image reference does not bind its recorded digest")
@@ -1827,6 +2882,11 @@ def _actual_inventory(
     *,
     expected_files: set[str],
     expected_directories: set[str],
+    max_files: int = MAX_RETAINED_FILES + 2,
+    max_directories: int = (MAX_RETAINED_FILES * 8) + 1,
+    max_total_bytes: int = (
+        MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+    ),
 ) -> tuple[
     set[str],
     set[str],
@@ -1837,8 +2897,11 @@ def _actual_inventory(
     identities: dict[str, tuple[int, int, int, int, int]] = {}
     file_objects: dict[tuple[int, int], str] = {}
     if (
-        len(expected_files) > MAX_RETAINED_FILES + 2
-        or len(expected_directories) > (MAX_RETAINED_FILES * 8) + 1
+        max_files < 1
+        or max_directories < 1
+        or max_total_bytes < 1
+        or len(expected_files) > max_files
+        or len(expected_directories) > max_directories
     ):
         _fail("expected ledger inventory exceeds its bounded scan budget")
     pending: list[tuple[Path, str]] = [(root, ".")]
@@ -1900,9 +2963,7 @@ def _actual_inventory(
                 if len(files) >= len(expected_files):
                     _fail("ledger file count exceeds its expected budget")
                 total_bytes += metadata.st_size
-                if total_bytes > (
-                    MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
-                ):
+                if total_bytes > max_total_bytes:
                     _fail("ledger inventory exceeds its total byte scan budget")
                 object_id = (metadata.st_dev, metadata.st_ino)
                 prior = file_objects.get(object_id)
@@ -1981,6 +3042,12 @@ def _write_snapshot_file(path: Path, data: bytes) -> None:
 def _materialize_snapshot(
     root: Path,
     files: Mapping[str, bytes],
+    *,
+    max_files: int = MAX_RETAINED_FILES + 2,
+    max_directories: int = (MAX_RETAINED_FILES * 8) + 1,
+    max_total_bytes: int = (
+        MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+    ),
 ) -> tuple[
     set[str],
     set[str],
@@ -2007,6 +3074,9 @@ def _materialize_snapshot(
         root,
         expected_files=expected_files,
         expected_directories=expected_directories,
+        max_files=max_files,
+        max_directories=max_directories,
+        max_total_bytes=max_total_bytes,
     )
     if actual_files != expected_files or actual_directories != expected_directories:
         _fail("protected evidence snapshot inventory is not exact")
@@ -2065,11 +3135,19 @@ def _require_inventory_unchanged(
     files: set[str],
     directories: set[str],
     identities: Mapping[str, tuple[int, int, int, int, int]],
+    max_files: int = MAX_RETAINED_FILES + 2,
+    max_directories: int = (MAX_RETAINED_FILES * 8) + 1,
+    max_total_bytes: int = (
+        MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+    ),
 ) -> None:
     current_files, current_directories, current_identities = _actual_inventory(
         root,
         expected_files=files,
         expected_directories=directories,
+        max_files=max_files,
+        max_directories=max_directories,
+        max_total_bytes=max_total_bytes,
     )
     if (
         current_files != files
@@ -3670,7 +4748,7 @@ def _validate_keys_and_anchor(
         _fail("ledger signing key ID differs from external trusted key identity")
 
 
-def validate_directory(
+def _validate_directory_with_trusted_imports(
     root: Path,
     trusted_ledger_pub: Path,
     trusted_parent_repo: Path | None = None,
@@ -3702,7 +4780,7 @@ def validate_directory(
         schema,
         schema_sha256=schema_sha256,
     )
-    _validate_trusted_parent_contracts(
+    trusted_parent_contracts = _validate_trusted_parent_contracts(
         root,
         ledger,
         trusted_parent_repo,
@@ -3779,9 +4857,19 @@ def validate_directory(
 
         _validate_repository_control_observation_bytes(snapshot_root, ledger)
         _validate_control_bytes(snapshot_root, ledger)
-        _validate_attestation_bytes(snapshot_root, ledger)
-        _validate_envelopes(snapshot_root, ledger)
-        _validate_keys_and_anchor(snapshot_root, ledger, trusted_key)
+
+        def validate_first_party_material() -> None:
+            _validate_attestation_bytes(snapshot_root, ledger)
+            _validate_envelopes(snapshot_root, ledger)
+            _validate_keys_and_anchor(snapshot_root, ledger, trusted_key)
+
+        # Characterization fixtures replace both this owner and all dependent
+        # byte validators. The production path always receives the contract.
+        if trusted_parent_contracts is None:
+            validate_first_party_material()
+        else:
+            with _trusted_parent_first_party(trusted_parent_contracts):
+                validate_first_party_material()
         _require_inventory_unchanged(
             snapshot_root,
             files=snapshot_actual_files,
@@ -3803,6 +4891,33 @@ def validate_directory(
     )
     _require_trusted_key_unchanged(trusted_key)
     return ledger
+
+
+def validate_directory(
+    root: Path,
+    trusted_ledger_pub: Path,
+    trusted_parent_repo: Path | None = None,
+) -> Mapping[str, Any]:
+    """Validate one ledger with host dependencies isolated from candidate paths.
+
+    The validator is a single-threaded CLI.  This context temporarily owns the
+    interpreter import tables and is intentionally not an embeddable concurrent
+    API.
+    """
+
+    absolute_root = _require_plain_directory(root, label="ledger root")
+    blocked = [absolute_root]
+    if trusted_parent_repo is not None:
+        blocked.append(Path(os.path.abspath(trusted_parent_repo)))
+    with _FIRST_PARTY_IMPORT_LOCK, _trusted_python_imports(
+        import_root=None,
+        blocked_roots=tuple(blocked),
+    ):
+        return _validate_directory_with_trusted_imports(
+            absolute_root,
+            trusted_ledger_pub,
+            trusted_parent_repo,
+        )
 
 
 def _validate_retirement_observation(
@@ -3963,7 +5078,7 @@ def _validate_key_retirement_value(
         _fail("validated ledger did not leave publication authority pending")
 
 
-def validate_key_retirement(
+def _validate_key_retirement_with_trusted_imports(
     ledger_root: Path,
     receipt_path: Path,
     signature_path: Path,
@@ -4055,7 +5170,35 @@ def validate_key_retirement(
     return receipt
 
 
-def _canonicalize(input_path: Path, output_path: Path) -> None:
+def validate_key_retirement(
+    ledger_root: Path,
+    receipt_path: Path,
+    signature_path: Path,
+    trusted_ledger_pub: Path,
+    trusted_parent_repo: Path,
+) -> Mapping[str, Any]:
+    with _FIRST_PARTY_IMPORT_LOCK, _trusted_python_imports(
+        import_root=None,
+        blocked_roots=(
+            Path(os.path.abspath(ledger_root)),
+            Path(os.path.abspath(receipt_path.parent)),
+            Path(os.path.abspath(signature_path.parent)),
+            Path(os.path.abspath(trusted_parent_repo)),
+        ),
+    ):
+        return _validate_key_retirement_with_trusted_imports(
+            ledger_root,
+            receipt_path,
+            signature_path,
+            trusted_ledger_pub,
+            trusted_parent_repo,
+        )
+
+
+def _canonicalize_with_trusted_imports(
+    input_path: Path,
+    output_path: Path,
+) -> None:
     draft = _load_json_file(input_path, label="release ledger draft")
     schema, schema_sha256 = _load_official_schema()
     _validate_structure_with_official_schema(
@@ -4147,6 +5290,17 @@ def _canonicalize(input_path: Path, output_path: Path) -> None:
             except OSError:
                 pass
         raise
+
+
+def _canonicalize(input_path: Path, output_path: Path) -> None:
+    with _FIRST_PARTY_IMPORT_LOCK, _trusted_python_imports(
+        import_root=None,
+        blocked_roots=(
+            Path(os.path.abspath(input_path.parent)),
+            Path(os.path.abspath(output_path.parent)),
+        ),
+    ):
+        _canonicalize_with_trusted_imports(input_path, output_path)
 
 
 def _parser() -> argparse.ArgumentParser:

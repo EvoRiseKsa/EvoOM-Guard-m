@@ -96,6 +96,7 @@ def test_release_validation_build_and_write_privileges_are_separated() -> None:
     ci_windows = _job_block(WINDOWS, "smoke")
     assert "runs-on: windows-latest" in ci_windows
     assert "persist-credentials: false" in ci_windows
+    assert "fetch-depth: 0" in ci_windows
     assert "npm ci --ignore-scripts --prefix tools/ci-vitest" in ci_windows
     assert "npm install -g" not in ci_windows
     assert "python -m pytest tests/ -q" in ci_windows

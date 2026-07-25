@@ -109,10 +109,15 @@ gate.
 - `tests/baseline/schema/release-ledger-v2.schema.json` is the contract for a
   future post-publication protected A-H ledger. It does not apply retroactively
   to v1 ledgers and must not be used to rewrite a frozen baseline.
-- Before a v2 ledger is committed, run
-  `python tools/ci/validate_release_ledger_v2.py validate <ledger-directory>
-  --trusted-ledger-pub <independently-obtained-public-key>
-  --trusted-parent-repo <disjoint-trusted-parent-repository>`. The trusted key
+- Before a v2 ledger is committed, run:
+
+  ```text
+  python -I tools/ci/validate_release_ledger_v2.py validate <ledger-directory> `
+    --trusted-ledger-pub <independently-obtained-public-key> `
+    --trusted-parent-repo <disjoint-trusted-parent-repository>
+  ```
+
+  The trusted key
   path must be outside the ledger and must come from a pinned parent tree,
   immutable tag, or other previously authenticated channel; never copy it from
   the directory being validated.

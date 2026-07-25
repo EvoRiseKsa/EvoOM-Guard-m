@@ -16,16 +16,16 @@ evidence used to judge it. Guard still focuses on one narrow question:
 
 ## Shipped today
 
-- **Immutable `v4.3.0` consumer release** — the published zipapp is pinned by
-  its release `SHA256SUMS` and has a GitHub build-artifact attestation. This is
-  publication/provenance evidence, not a newly captured behavioral baseline or
-  an independent security review. Its independently re-queried
-  post-publication identity, exact asset bytes, provenance, Marketplace
-  propagation, and successful tag CI are frozen in
-  [`tests/baseline/v4.3.0/`](tests/baseline/v4.3.0/). This minimal ledger is not
-  Agent Change Admission or Release Artifact Admission pilot evidence. The
-  later bounded pilot records are preserved separately and do not turn this
-  release ledger into an admission or publication decision.
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
+[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
+`b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
+records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
+`evo-guard.pyz`, `SHA256SUMS`, while its build-provenance attestation binds
+`evo-guard.pyz`. The ledger records no SBOM release asset. Canonical ledger:
+`tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+<!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
 
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
@@ -205,6 +205,15 @@ evidence used to judge it. Guard still focuses on one narrow question:
   `--network none` container does not yet provide.
 
 ## Next work is gated by evidence
+
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_CURRENT_PIPELINE -->
+The protected A-H release pipeline is implemented in source and **disabled by default**.
+The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
+records a completed protected A-H operation. No externally anchored signed v2 ledger
+records publication by this pipeline. An admitted release is contracted to exactly
+`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
+evidence that those assets were published.
+<!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_CURRENT_PIPELINE -->
 
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:

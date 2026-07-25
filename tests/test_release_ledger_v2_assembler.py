@@ -7,9 +7,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.machinery
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
+import sys
+import types
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -38,6 +43,34 @@ def _git(repository: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def test_assembler_bootstrap_ignores_and_restores_ambient_jsonschema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_path = tmp_path / "jsonschema.py"
+    fake_path.write_text("raise AssertionError('must not execute')\n", encoding="utf-8")
+    fake = types.ModuleType("jsonschema")
+    fake.__file__ = str(fake_path)
+    fake.__spec__ = importlib.machinery.ModuleSpec(
+        "jsonschema",
+        loader=None,
+        origin=str(fake_path),
+    )
+    monkeypatch.setitem(sys.modules, "jsonschema", fake)
+
+    module_name = "_evoguard_assembler_bootstrap_test"
+    spec = importlib.util.spec_from_file_location(module_name, Path(assembler.__file__))
+    assert spec is not None and spec.loader is not None
+    loaded = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = loaded
+    try:
+        spec.loader.exec_module(loaded)
+        loaded.validator.validate_structure(_valid_ledger())
+        assert sys.modules["jsonschema"] is fake
+    finally:
+        sys.modules.pop(module_name, None)
+
+
 def _trusted_parent(
     tmp_path: Path,
     ledger: dict[str, Any],
@@ -48,6 +81,11 @@ def _trusted_parent(
     _git(repository, "init", "-q")
     _git(repository, "config", "user.name", "Ledger Assembler Test")
     _git(repository, "config", "user.email", "ledger@example.invalid")
+    shutil.copytree(
+        ROOT / "evoom_guard",
+        repository / "evoom_guard",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
     for source, relative in (
         (
             validator.DEFAULT_SCHEMA,
@@ -279,9 +317,21 @@ def test_assembler_emits_canonical_unsigned_draft_and_provenance_without_overwri
     # repository-observation checks remain active.  These three owners are
     # replaced because this compact fixture intentionally does not construct
     # real GitHub outputs or signed RSAE/RAAE bundles.
-    monkeypatch.setattr(validator, "_validate_control_bytes", lambda *_: None)
-    monkeypatch.setattr(validator, "_validate_attestation_bytes", lambda *_: None)
-    monkeypatch.setattr(validator, "_validate_envelopes", lambda *_: None)
+    monkeypatch.setattr(
+        assembler.validator,
+        "_validate_control_bytes",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        assembler.validator,
+        "_validate_attestation_bytes",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        assembler.validator,
+        "_validate_envelopes",
+        lambda *_: None,
+    )
     monkeypatch.setattr(
         assembler,
         "_derive_embedded_facts",

@@ -1,0 +1,22 @@
+{
+  "published_release": {
+    "ledger": "tests/baseline/v4.3.0/RELEASE_LEDGER.json"
+  },
+  "release_pipeline": {
+    "activation_model": "disabled-by-default",
+    "contract": "protected-a-h-v1",
+    "evidence_scope": "durable-repository-record",
+    "implementation": "implemented",
+    "legacy_workflow": "hard-disabled"
+  },
+  "schema_version": "evoguard-project-status-v1",
+  "source": {
+    "architecture": {
+      "behavior_preserving_r2": "complete",
+      "cli_handler_extraction": "complete",
+      "overall_refactor_program": "in-progress"
+    },
+    "lifecycle": "unreleased-development",
+    "relation_to_latest_release": "descendant"
+  }
+}

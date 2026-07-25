@@ -32,25 +32,23 @@ The paired workflows are available both as:
 - implementation-ready copies in `.github/workflows/evoguard-reverify.yml` and
   `.github/workflows/evoguard-seal.yml`.
 
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->
 They are not enforced as required merge gates by default in this repository.
-This project provides the split pattern; each consuming repository must apply its
-own branch protection, environment/reviewer controls, protected Guard-artifact
-digest, and the Round 1 audit below.
+Each consumer must apply its own branch protection, Environment/reviewer
+controls, protected Guard-artifact digest, and audit.
 
-The implementation-ready `.github/workflows/` copies currently download the
-immutable `v4.3.0` zipapp. Before enabling them, download the release's
-`evo-guard.pyz` and `SHA256SUMS`, verify the manifest and release attestation,
-and copy that exact digest into the protected
-`EVOGUARD_GUARD_ARTIFACT_SHA256` variable. The workflow must compare against
-this independently reviewed value; it must not derive its trust root from the
-downloaded executable or a mutable URL during the job.
+The implementation-ready workflows download ledger-recorded release `v4.3.0`.
+Before enabling them, download that release's `evo-guard.pyz` and
+`SHA256SUMS`, verify the manifest and release attestation, and copy the
+reviewed runtime digest into protected variable
+`EVOGUARD_GUARD_ARTIFACT_SHA256`. The workflow must not derive its trust root
+from the downloaded executable or a mutable URL.
 
-The `examples/trusted-finalizer/` pair remains a frozen byte-pinned v3.7.0
-reference for the published v3.7 pilot and must not be silently rewritten.
-New current-release exercises should copy the implementation-ready workflow
-pair, review it as a protected change, set the exact v4.3.0 digest from the
-published `SHA256SUMS`, and
-complete the audit before enforcement.
+The `examples/trusted-finalizer/` pair remains a frozen v3.7.0 reference and
+must not be silently rewritten. New exercises should use `v4.3.0` (version
+`4.3.0`) or its exact commit pin and complete the audit before
+enforcement.
+<!-- END EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->
 The raw-Git derivation contract is specified in
 [`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md). A consumer
 must deploy a release that contains this command set and update the protected

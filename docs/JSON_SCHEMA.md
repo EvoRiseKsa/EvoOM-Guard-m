@@ -40,7 +40,7 @@ not change the frozen PR `evidence-context-1` contract. See
 [RELEASE_SOURCE_FINALIZER.md](RELEASE_SOURCE_FINALIZER.md) for its trust and
 bootstrap boundaries.
 
-The current v4.3.0 source also defines the distinct, closed-world
+The current protected source tree also defines the distinct, closed-world
 [`release-source-admission-2.schema.json`](../evoom_guard/schemas/release-source-admission-2.schema.json)
 for `EVOGUARD_RELEASE_SOURCE_ADMISSION_V2`. Its signed manifest includes the
 full A/B/C identities and replay selectors, evidence descriptors, provider
@@ -68,7 +68,7 @@ semantic checks that JSON Schema cannot express; see
 {
   "schema_version": "1.11",
   "tool": "evoguard",
-  "tool_version": "4.3.0",
+  "tool_version": "<runtime-version>",
   "verdict": "PASS",
   "passed": true,
   "exit_code": 0,
@@ -528,7 +528,7 @@ It exits `0` when supported and `1` otherwise.
 ```json
 {
   "tool": "evoguard",
-  "version": "4.3.0",
+  "version": "<runtime-version>",
   "platform": "linux-x86_64",
   "python": "3.11.15",
   "git": true,
