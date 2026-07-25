@@ -1509,18 +1509,79 @@ def test_git_blob_identity_uses_bounded_git_protocol(
         validator._git_blob_sha(b"x")
 
 
-def test_git_blob_identity_is_process_free(
+def test_git_blob_identity_uses_the_frozen_bounded_git_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trusted = validator._resolve_trusted_git(ROOT)
+    calls: list[tuple[Path, tuple[str, ...], str, int, bytes | None, Any]] = []
+
+    def bounded_git(
+        repository: Path,
+        *arguments: str,
+        label: str,
+        output_limit: int,
+        input_data: bytes | None = None,
+        executable: Any = None,
+    ) -> bytes:
+        calls.append(
+            (
+                repository,
+                arguments,
+                label,
+                output_limit,
+                input_data,
+                executable,
+            )
+        )
+        return b"f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f\n"
+
+    monkeypatch.setattr(validator, "_trusted_git", bounded_git)
+    assert (
+        validator._git_blob_sha(
+            b"abc",
+            repository=ROOT,
+            executable=trusted,
+        )
+        == "f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f"
+    )
+    assert calls == [
+        (
+            trusted.path.parent,
+            ("hash-object", "--stdin"),
+            "blob identity",
+            65,
+            b"abc",
+            trusted,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "output",
+    (
+        b"f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f",
+        b"F2BA8F84AB5C1BCE84A7B441CB1959CFC7093B7F\n",
+        b"f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f\nextra",
+        b"0" * 64 + b"\n",
+    ),
+)
+def test_git_blob_identity_rejects_noncanonical_trusted_git_output(
+    output: bytes,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         validator,
-        "_run_bounded_subprocess",
-        lambda *_args, **_kwargs: pytest.fail("Git process must not run"),
+        "_trusted_git",
+        lambda *_args, **_kwargs: output,
     )
-    assert (
-        validator._git_blob_sha(b"abc")
-        == "f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f"
-    )
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="non-canonical SHA-1 blob identity",
+    ):
+        validator._git_blob_sha(
+            b"abc",
+            executable=validator._resolve_trusted_git(ROOT),
+        )
 
 
 def test_trusted_git_ignores_relative_path_and_freezes_executable(

@@ -762,18 +762,29 @@ def _require_trusted_executable_unchanged(
     )
 
 
-def _git_blob_sha(data: bytes) -> str:
-    """Return Git's protocol-mandated SHA-1 blob identity without a process."""
+def _git_blob_sha(
+    data: bytes,
+    *,
+    repository: Path = ROOT,
+    executable: _TrustedExecutable | None = None,
+) -> str:
+    """Return Git's protocol-mandated blob identity through frozen host Git."""
 
     if len(data) > MAX_JSON_BYTES:
         _fail("trusted Git blob input exceeds its bounded size limit")
-    framed = f"blob {len(data)}\0".encode("ascii") + data
-    # Git's SHA-1 object ID is a protocol identifier here, never a
-    # confidentiality or integrity proof.
-    return hashlib.sha1(  # noqa: S324 - Git protocol identity
-        framed,  # lgtm[py/weak-sensitive-data-hashing]
-        usedforsecurity=False,
-    ).hexdigest()
+    trusted = executable or _resolve_trusted_git(repository)
+    output = _trusted_git(
+        trusted.path.parent,
+        "hash-object",
+        "--stdin",
+        label="blob identity",
+        output_limit=65,
+        input_data=data,
+        executable=trusted,
+    )
+    if re.fullmatch(b"[0-9a-f]{40}\n", output) is None:
+        _fail("trusted Git returned a non-canonical SHA-1 blob identity")
+    return output[:-1].decode("ascii", "strict")
 
 
 def _trusted_git(
@@ -1051,7 +1062,14 @@ def _validate_trusted_parent_contracts(
         if (
             parent_bytes != current_bytes
             or _sha256(parent_bytes) != contract["sha256"]
-            or _git_blob_sha(parent_bytes) != contract["git_blob_sha"]
+            or (
+                _git_blob_sha(
+                    parent_bytes,
+                    repository=repository,
+                    executable=trusted_git,
+                )
+                != contract["git_blob_sha"]
+            )
             or contract["trusted_parent_commit_sha"] != parent
             or contract["trusted_parent_tree_sha"] != parent_tree
         ):
@@ -1090,7 +1108,14 @@ def _validate_trusted_parent_contracts(
         )
         if (
             parent_bytes != current_bytes
-            or _git_blob_sha(parent_bytes) != expected_blob
+            or (
+                _git_blob_sha(
+                    parent_bytes,
+                    repository=repository,
+                    executable=trusted_git,
+                )
+                != expected_blob
+            )
         ):
             _fail(f"trusted parent build input {path} bytes are not exact")
     return _TrustedParentContracts(
@@ -1208,15 +1233,20 @@ def _trusted_first_party_relative_path(raw: bytes) -> str:
     return relative
 
 
-def _matches_git_blob_object_id(data: bytes, object_id: str) -> bool:
+def _matches_git_blob_object_id(
+    data: bytes,
+    object_id: str,
+    *,
+    repository: Path = ROOT,
+    executable: _TrustedExecutable | None = None,
+) -> bool:
     framed = f"blob {len(data)}\0".encode("ascii") + data
     if len(object_id) == 40:
-        # This reproduces Git's protocol-mandated object ID; trusted SHA-256
-        # bindings provide the security property.
-        observed = hashlib.sha1(  # noqa: S324 - Git protocol identity
-            framed,  # lgtm[py/weak-sensitive-data-hashing]
-            usedforsecurity=False,
-        ).hexdigest()
+        observed = _git_blob_sha(
+            data,
+            repository=repository,
+            executable=executable,
+        )
     elif len(object_id) == 64:
         observed = hashlib.sha256(framed).hexdigest()
     else:
@@ -1323,7 +1353,12 @@ def _read_trusted_first_party_tree(
         if data_end >= len(batch) or batch[data_end : data_end + 1] != b"\n":
             _fail("trusted first-party blob batch framing is not exact")
         data = batch[data_start:data_end]
-        if not _matches_git_blob_object_id(data, object_id):
+        if not _matches_git_blob_object_id(
+            data,
+            object_id,
+            repository=contracts.repository,
+            executable=contracts.git,
+        ):
             _fail("trusted first-party blob batch bytes are not exact")
         blobs[object_id] = data
         offset = data_end + 1
@@ -1349,6 +1384,7 @@ def _read_trusted_first_party_tree(
 def _verify_loaded_first_party_modules(
     import_root: Path,
     manifest: Mapping[str, _TrustedFirstPartyFile],
+    contracts: _TrustedParentContracts,
 ) -> None:
     loaded = {
         name: module
@@ -1387,7 +1423,12 @@ def _verify_loaded_first_party_modules(
         if (
             len(data) != descriptor.size_bytes
             or _sha256(data) != descriptor.sha256
-            or not _matches_git_blob_object_id(data, descriptor.blob_sha)
+            or not _matches_git_blob_object_id(
+                data,
+                descriptor.blob_sha,
+                repository=contracts.repository,
+                executable=contracts.git,
+            )
         ):
             _fail(f"loaded trusted first-party module bytes changed: {name}")
         prior = origins.get(relative)
@@ -1407,7 +1448,7 @@ def _require_trusted_first_party_unchanged(
     snapshot_directories: set[str],
     snapshot_identities: Mapping[str, tuple[int, int, int, int, int]],
 ) -> None:
-    _verify_loaded_first_party_modules(import_root, manifest)
+    _verify_loaded_first_party_modules(import_root, manifest, contracts)
     _require_inventory_unchanged(
         import_root,
         files=snapshot_files,
@@ -1748,7 +1789,11 @@ def _trusted_parent_first_party(
                         "cannot import first-party verification code from "
                         "the trusted parent snapshot"
                     ) from exc
-                _verify_loaded_first_party_modules(import_root, manifest)
+                _verify_loaded_first_party_modules(
+                    import_root,
+                    manifest,
+                    contracts,
+                )
                 try:
                     yield
                 except BaseException as primary:
