@@ -2263,6 +2263,7 @@ def _validate_control_bytes(
             expected_settings = {
                 "runtime": {
                     "url": toolchain["bootstrap_guard"]["url"],
+                    "version": toolchain["bootstrap_guard"]["version"],
                     "sha256": toolchain["bootstrap_guard"]["sha256"],
                 },
                 "toolchain": {

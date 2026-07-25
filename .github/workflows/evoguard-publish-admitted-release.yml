@@ -386,9 +386,9 @@ jobs:
               'public_key_ids',
           }:
               raise SystemExit('F external settings set is not exact')
-          if set(settings['runtime']) != {'url', 'sha256'} or not re.fullmatch(
+          if set(settings['runtime']) != {'url', 'version', 'sha256'} or not re.fullmatch(
               r'https://\S+', str(settings['runtime'].get('url', ''))
-          ):
+          ) or settings['runtime'].get('version') != '4.3.0':
               raise SystemExit('F runtime settings are not exact')
           if not re.fullmatch(
               r'[0-9a-f]{64}', str(settings['runtime'].get('sha256', ''))
@@ -583,8 +583,10 @@ jobs:
           set -euo pipefail
           manifest="/run/evoguard-publication-approved/inputs/f-control-manifest.json"
           RUNTIME_URL="$(jq -er '.external_settings.runtime.url | select(type == "string")' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version | select(type == "string")' "$manifest")"
           RUNTIME_SHA256="$(jq -er '.external_settings.runtime.sha256 | select(type == "string")' "$manifest")"
           test -n "$RUNTIME_URL"
+          test "$RUNTIME_VERSION" = "4.3.0"
           [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
           curl --fail --location --proto '=https' --tlsv1.2 \
             --output "$RUNNER_TEMP/evo-guard-verifier.pyz" "$RUNTIME_URL"
@@ -666,7 +668,8 @@ jobs:
           OUTER_PROVIDER_GID="$(jq -er '.external_settings.toolchain.provider_gid' "$manifest")"
           BUILDER_RUN_ID="$(jq -er '.workflows.E.workflow_run_id' "$manifest")"
           BUILDER_RUN_ATTEMPT="$(jq -er '.workflows.E.workflow_run_attempt' "$manifest")"
-          RELEASE_VERSION="$(jq -er '.release_version | select(type == "string")' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version | select(type == "string")' "$manifest")"
+          test "$RUNTIME_VERSION" = "4.3.0"
           for value in "$OUTER_PROVIDER_UID" "$OUTER_PROVIDER_GID"; do
             [[ "$value" =~ ^[1-9][0-9]*$ ]]
             test "$value" -ne 65534
@@ -698,7 +701,7 @@ jobs:
           test "$(
             "${isolated[@]}" "$python_executable" -I \
               "$root/runtime/evo-guard.pyz" version
-          )" = "evo-guard $RELEASE_VERSION"
+          )" = "evo-guard $RUNTIME_VERSION"
           "${isolated[@]}" "$python_executable" -I \
             "$root/inputs/verify_spdx_attestation.py" \
             "$root/inputs/sbom-attestation-output.json" \

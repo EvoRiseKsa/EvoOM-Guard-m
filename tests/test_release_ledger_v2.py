@@ -2080,10 +2080,65 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
     phases = validator._phase_map(ledger)
     roots = {item["domain"]: item["key_id"] for item in ledger["trust_roots"]}
     toolchain = ledger["toolchain"]
+
+    def artifact_material(filename: str) -> dict[str, Any]:
+        return next(
+            item
+            for item in artifact_controls["materials"]
+            if PurePosixPath(item["path"]).name == filename
+        )
+
+    verifier_descriptor = artifact_material("verify_spdx_attestation.py")
+    verifier_bytes = b"# synthetic trusted SPDX verifier\n"
+    verifier_path = tmp_path / Path(
+        *PurePosixPath(verifier_descriptor["path"]).parts
+    )
+    verifier_path.parent.mkdir(parents=True, exist_ok=True)
+    verifier_path.write_bytes(verifier_bytes)
+    verifier_descriptor.update(
+        {
+            "size_bytes": len(verifier_bytes),
+            "sha256": hashlib.sha256(verifier_bytes).hexdigest(),
+        }
+    )
+    toolchain["trusted_build_inputs"]["spdx_attestation_verifier_blob_sha"] = (
+        validator._git_blob_sha(verifier_bytes)
+    )
+
+    def retained_descriptor(filename: str) -> dict[str, Any]:
+        descriptor = artifact_material(filename)
+        return {
+            "sha256": descriptor["sha256"],
+            "size": descriptor["size_bytes"],
+        }
+
     f_manifest = {
+        "format": artifact_controls["format"],
+        "artifacts": {
+            filename: retained_descriptor(filename)
+            for filename in ("evo-guard.pyz", "evo-guard.spdx.json")
+        },
+        "checksums": retained_descriptor("SHA256SUMS"),
+        "release_source_admission": retained_descriptor("source-allow.rsae"),
+        "release_version": ledger["project"]["version"],
+        "repository": ledger["release"]["repository"],
+        "repository_id": ledger["release"]["repository_id"],
+        "target_sha": ledger["source"]["candidate_commit_sha"],
+        "attestation_evidence": {
+            filename: retained_descriptor(filename)
+            for filename in (
+                "build-provenance-verification.json",
+                "build-provenance-verification-output.json",
+                "spdx-provenance-verification.json",
+                "spdx-provenance-verification-output.json",
+                "sbom-attestation-receipt.json",
+                "sbom-attestation-output.json",
+            )
+        },
         "external_settings": {
             "runtime": {
                 "url": toolchain["bootstrap_guard"]["url"],
+                "version": toolchain["bootstrap_guard"]["version"],
                 "sha256": toolchain["bootstrap_guard"]["sha256"],
             },
             "toolchain": {
@@ -2154,7 +2209,7 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
     f_manifest_path = tmp_path / Path(
         *PurePosixPath(artifact_controls["manifest"]["path"]).parts
     )
-    f_manifest_path.parent.mkdir(parents=True)
+    f_manifest_path.parent.mkdir(parents=True, exist_ok=True)
     f_manifest_bytes = validator.canonical_json_bytes(f_manifest)
     f_manifest_path.write_bytes(f_manifest_bytes)
     artifact_controls["manifest"]["size_bytes"] = len(f_manifest_bytes)
@@ -2162,14 +2217,44 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
         f_manifest_bytes
     ).hexdigest()
 
-    class PublicationOnlyControls(dict[str, Any]):
-        def items(self) -> Any:
-            return [("publication_controls", bundle)]
-
-    ledger["control_evidence"] = PublicationOnlyControls(
-        publication_controls=bundle,
-        artifact_external_controls=artifact_controls,
+    builder_descriptor = artifact_material("builder-controls.json")
+    builder_controls = {
+        "format": "EVOGUARD_RELEASE_ASSET_BUILDER_CONTROLS_V1",
+        "artifacts": f_manifest["artifacts"],
+        "checksums": f_manifest["checksums"],
+        "release_source_admission": f_manifest["release_source_admission"],
+        "release_version": ledger["project"]["version"],
+        "repository": ledger["release"]["repository"],
+        "source_created": "2030-01-01T00:13:00Z",
+        "source_admission_run_attempt": phases["C"]["run_attempt"],
+        "source_admission_run_id": str(phases["C"]["run_id"]),
+        "target_sha": ledger["source"]["candidate_commit_sha"],
+        "trusted_build_parent_sha": ledger["source"]["parent_commit_sha"],
+        "trusted_build_parent_tree_sha": ledger["source"]["parent_tree_sha"],
+        "trusted_build_tool_blobs": {
+            "ops/build_pyz.py": toolchain["trusted_build_inputs"][
+                "build_pyz_blob_sha"
+            ],
+            "ops/generate_spdx_sbom.py": toolchain["trusted_build_inputs"][
+                "spdx_generator_blob_sha"
+            ],
+        },
+        "build_container": {
+            "reference": toolchain["runner_image"]["reference"],
+            "sha256": toolchain["runner_image"]["sha256"],
+            "network": toolchain["runner_image"]["network"],
+        },
+    }
+    builder_bytes = validator.canonical_json_bytes(builder_controls)
+    builder_path = tmp_path / Path(*PurePosixPath(builder_descriptor["path"]).parts)
+    builder_path.write_bytes(builder_bytes)
+    builder_descriptor.update(
+        {
+            "size_bytes": len(builder_bytes),
+            "sha256": hashlib.sha256(builder_bytes).hexdigest(),
+        }
     )
+
     manifest = {
         "format": bundle["format"],
         "repository": ledger["release"]["repository"],
@@ -2231,7 +2316,131 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_bytes(validator.canonical_json_bytes(manifest))
 
+    publication_ready = ledger["control_evidence"]["publication_ready"]
+    ready_manifest = {
+        "format": publication_ready["format"],
+        "repository": ledger["release"]["repository"],
+        "target_sha": ledger["source"]["candidate_commit_sha"],
+        "tag": ledger["release"]["tag"],
+        "g_run_id": str(phases["G"]["run_id"]),
+        "g_run_attempt": phases["G"]["run_attempt"],
+        "tag_deploy_key_fingerprint": ledger["repository_controls"][
+            "release_deploy_key"
+        ]["fingerprint"],
+        "host_tools": {
+            "git": {
+                "path": "/usr/bin/git",
+                "sha256": toolchain["git"]["sha256"],
+                "size": 1024,
+            },
+            "gh": {
+                "path": "/usr/bin/gh",
+                "sha256": toolchain["github_cli"]["sha256"],
+                "size": 2048,
+            },
+            "ssh": {
+                "path": "/usr/bin/ssh",
+                "sha256": _sha("ssh"),
+                "size": 3072,
+            },
+            "ssh_keygen": {
+                "path": "/usr/bin/ssh-keygen",
+                "sha256": _sha("ssh-keygen"),
+                "size": 4096,
+            },
+        },
+        "assets": {
+            item["name"]: {
+                "sha256": item["sha256"],
+                "size": item["size_bytes"],
+            }
+            for item in ledger["artifacts"]
+        },
+    }
+    ready_path = tmp_path / Path(
+        *PurePosixPath(publication_ready["manifest"]["path"]).parts
+    )
+    ready_path.parent.mkdir(parents=True, exist_ok=True)
+    ready_bytes = validator.canonical_json_bytes(ready_manifest)
+    ready_path.write_bytes(ready_bytes)
+    publication_ready["manifest"].update(
+        {
+            "size_bytes": len(ready_bytes),
+            "sha256": hashlib.sha256(ready_bytes).hexdigest(),
+        }
+    )
+    ledger["control_evidence"] = {
+        "artifact_external_controls": artifact_controls,
+        "publication_controls": bundle,
+        "publication_ready": publication_ready,
+    }
+
     validator._validate_control_bytes(tmp_path, ledger)
+
+    artifact_mutations = (
+        (
+            lambda value: value["external_settings"]["runtime"].__setitem__(
+                "version", "0.0.0"
+            ),
+            "artifact controls differ",
+        ),
+        (
+            lambda value: value["trusted_tools"].__setitem__(
+                "tools/ci/verify_spdx_attestation.py", "0" * 40
+            ),
+            "artifact controls differ",
+        ),
+        (
+            lambda value: value["workflows"]["E"].__setitem__(
+                "workflow_blob_sha", "0" * 40
+            ),
+            "exact phase E",
+        ),
+    )
+    for mutate, message in artifact_mutations:
+        forged = copy.deepcopy(f_manifest)
+        mutate(forged)
+        f_manifest_path.write_bytes(validator.canonical_json_bytes(forged))
+        with pytest.raises(validator.LedgerValidationError, match=message):
+            validator._validate_control_bytes(tmp_path, ledger)
+    f_manifest_path.write_bytes(f_manifest_bytes)
+    forged_builder = copy.deepcopy(builder_controls)
+    forged_builder["trusted_build_tool_blobs"]["ops/build_pyz.py"] = "0" * 40
+    builder_path.write_bytes(validator.canonical_json_bytes(forged_builder))
+    with pytest.raises(validator.LedgerValidationError, match="E builder controls"):
+        validator._validate_control_bytes(tmp_path, ledger)
+    builder_path.write_bytes(builder_bytes)
+
+    for tool_name in ("git", "gh", "ssh", "ssh_keygen"):
+        for field, invalid in (
+            ("path", "relative/tool"),
+            ("sha256", "0" * 63),
+            ("size", 0),
+        ):
+            forged = copy.deepcopy(ready_manifest)
+            forged["host_tools"][tool_name][field] = invalid
+            ready_path.write_bytes(validator.canonical_json_bytes(forged))
+            with pytest.raises(
+                validator.LedgerValidationError,
+                match="publication-ready host tool",
+            ):
+                validator._validate_control_bytes(tmp_path, ledger)
+    ready_mutations = (
+        lambda value: value.__setitem__(
+            "tag_deploy_key_fingerprint", "SHA256:" + ("B" * 43)
+        ),
+        lambda value: value["assets"]["evo-guard.pyz"].__setitem__(
+            "sha256", _sha("wrong-ready-asset")
+        ),
+        lambda value: value["host_tools"].pop("ssh"),
+    )
+    for mutate in ready_mutations:
+        forged = copy.deepcopy(ready_manifest)
+        mutate(forged)
+        ready_path.write_bytes(validator.canonical_json_bytes(forged))
+        with pytest.raises(validator.LedgerValidationError, match="publication-ready"):
+            validator._validate_control_bytes(tmp_path, ledger)
+    ready_path.write_bytes(ready_bytes)
 
     mutations = (
         lambda value: value.__setitem__("release_version", "0.0.0"),
@@ -2240,6 +2449,9 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
         ),
         lambda value: value["f_external_settings"]["runtime"].__setitem__(
             "sha256", _sha("wrong-runtime")
+        ),
+        lambda value: value["f_external_settings"]["runtime"].__setitem__(
+            "version", "0.0.0"
         ),
         lambda value: value["f_trusted_tools"].__setitem__(
             "tools/ci/verify_spdx_attestation.py", "0" * 40

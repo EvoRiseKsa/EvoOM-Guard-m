@@ -367,6 +367,7 @@ jobs:
               'external_settings': {
                   'runtime': {
                       'url': os.environ['OUTER_RUNTIME_URL'],
+                      'version': '4.3.0',
                       'sha256': os.environ['OUTER_RUNTIME_SHA256'],
                   },
                   'toolchain': {
@@ -496,12 +497,14 @@ jobs:
           test "$(jq -er .workflows.E.workflow_run_attempt "$manifest")" = "$BUILDER_RUN_ATTEMPT"
           OUTER_GH_SHA256="$(jq -er '.external_settings.toolchain.gh_sha256' "$manifest")"
           RUNTIME_URL="$(jq -er '.external_settings.runtime.url' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version' "$manifest")"
           RUNTIME_SHA256="$(jq -er '.external_settings.runtime.sha256' "$manifest")"
           PROVIDER_UID="$(jq -er '.external_settings.toolchain.provider_uid' "$manifest")"
           PROVIDER_GID="$(jq -er '.external_settings.toolchain.provider_gid' "$manifest")"
           VERIFIER_BLOB="$(jq -er '.trusted_tools["tools/ci/verify_spdx_attestation.py"]' "$manifest")"
           [[ "$OUTER_GH_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$RUNTIME_URL" =~ ^https://[^[:space:]]+$ ]]
+          test "$RUNTIME_VERSION" = "4.3.0"
           [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$VERIFIER_BLOB" =~ ^[0-9a-f]{40}$ ]]
           for value in "$PROVIDER_UID" "$PROVIDER_GID"; do
@@ -519,7 +522,7 @@ jobs:
           printf '%s  %s\n' "$RUNTIME_SHA256" \
             "$RUNNER_TEMP/f-attestation-runtime.pyz" | sha256sum --check
           test "$(python -I "$RUNNER_TEMP/f-attestation-runtime.pyz" version)" = \
-            "evo-guard 4.3.0"
+            "evo-guard $RUNTIME_VERSION"
           python - "$RUNNER_TEMP/f-sbom-controls/verify_spdx_attestation.py" "$VERIFIER_BLOB" <<'PY'
           import hashlib, pathlib, sys
           data = pathlib.Path(sys.argv[1]).read_bytes()
@@ -847,6 +850,7 @@ jobs:
           expected = {
               'runtime': {
                   'url': os.environ['OUTER_RUNTIME_URL'],
+                  'version': '4.3.0',
                   'sha256': os.environ['OUTER_RUNTIME_SHA256'],
               },
               'toolchain': {
@@ -876,6 +880,7 @@ jobs:
           if len(set(ids)) != 6 or any(not re.fullmatch(r'sha256:[0-9a-f]{64}', value) for value in ids):
               raise SystemExit('reviewed F public-key domains are not six distinct canonical IDs')
           if (not re.fullmatch(r'https://\S+', expected['runtime']['url']) or
+              expected['runtime']['version'] != '4.3.0' or
               any(not re.fullmatch(r'[0-9a-f]{64}', expected['toolchain'][name])
                   for name in ('git_sha256', 'gh_sha256')) or
               any(not re.fullmatch(r'[0-9a-f]{64}', source_settings[name])
@@ -917,13 +922,15 @@ jobs:
           set -euo pipefail
           manifest="/run/evoguard-raae-approved/controls/f-control-manifest.json"
           RUNTIME_URL="$(jq -er '.external_settings.runtime.url | select(type == "string")' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version | select(type == "string")' "$manifest")"
           RUNTIME_SHA256="$(jq -er '.external_settings.runtime.sha256 | select(type == "string")' "$manifest")"
           test -n "$RUNTIME_URL"
+          test "$RUNTIME_VERSION" = "4.3.0"
           [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
           curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/evo-guard.pyz" "$RUNTIME_URL"
           printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNNER_TEMP/evo-guard.pyz" | sha256sum --check
           test "$(python -I "$RUNNER_TEMP/evo-guard.pyz" version)" = \
-            "evo-guard 4.3.0"
+            "evo-guard $RUNTIME_VERSION"
           TARGET_SHA="$(jq -er .target_sha "$manifest")"
           receipt_policy=(
             --repo "$GITHUB_REPOSITORY"

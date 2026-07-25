@@ -367,6 +367,7 @@ jobs:
               'external_settings': {
                   'runtime': {
                       'url': os.environ['OUTER_RUNTIME_URL'],
+                      'version': '4.3.0',
                       'sha256': os.environ['OUTER_RUNTIME_SHA256'],
                   },
                   'toolchain': {
@@ -437,13 +438,15 @@ jobs:
           set -euo pipefail
           manifest="/run/evoguard-raae-detached-approved/inputs/f-control-manifest.json"
           RUNTIME_URL="$(jq -er '.external_settings.runtime.url | select(type == "string")' "$manifest")"
+          RUNTIME_VERSION="$(jq -er '.external_settings.runtime.version | select(type == "string")' "$manifest")"
           RUNTIME_SHA256="$(jq -er '.external_settings.runtime.sha256 | select(type == "string")' "$manifest")"
           test -n "$RUNTIME_URL"
+          test "$RUNTIME_VERSION" = "4.3.0"
           [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
           curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/evo-guard.pyz" "$RUNTIME_URL"
           printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNNER_TEMP/evo-guard.pyz" | sha256sum --check
           test "$(python -I "$RUNNER_TEMP/evo-guard.pyz" version)" = \
-            "evo-guard 4.3.0"
+            "evo-guard $RUNTIME_VERSION"
           TARGET_SHA="$(jq -er .target_sha "$manifest")"
           receipt_policy=(
             --repo "$GITHUB_REPOSITORY"

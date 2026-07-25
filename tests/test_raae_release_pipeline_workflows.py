@@ -364,7 +364,9 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
         in attestations
     )
     assert "verify_spdx_attestation.py" in attestations
-    assert "evo-guard 4.3.0" in attestations
+    assert "'version': '4.3.0'" in preflight
+    assert ".external_settings.runtime.version" in attestations
+    assert "evo-guard $RUNTIME_VERSION" in attestations
     assert "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64" not in attestations
     assert "evoguard-release-artifact-v1-complete-controls-" in attestations
     assert "complete F control inventory" not in attestations
@@ -450,6 +452,10 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "the approval refuses an existing release" in draft
     assert "RAAE-bound builder version does not match SPDX" in whole
     assert "PYZ release version does not match SPDX" in whole
+    assert "'version': '4.3.0'" in _text(G)
+    assert ".external_settings.runtime.version" in preflight
+    assert "evo-guard $RUNTIME_VERSION" in preflight
+    assert "evo-guard $RELEASE_VERSION" not in preflight
     assert "environment: evoguard-release-publication" in publish
     assert "contents: write" in publish
     assert "immutable-releases" in draft
@@ -528,6 +534,8 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "--reuid=\"$OUTER_PROVIDER_UID\"" in preflight
     assert "publication host tool changed" in draft
     assert "publication host tool changed" in publish
+    assert "observed != expected_tools.get(name)" in draft
+    assert "observed != expected_tools.get(name)" in publish
     assert publish.count("$RUNNER_TEMP/publication-final/") >= 3
 
 
