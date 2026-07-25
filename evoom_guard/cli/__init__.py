@@ -84,6 +84,9 @@ from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.cli import record_commands as _record_command_owner
 from evoom_guard.cli import (
+    release_artifact_admission_commands as _release_artifact_admission_command_owner,
+)
+from evoom_guard.cli import (
     release_source_admission_commands as _release_source_admission_command_owner,
 )
 from evoom_guard.cli import (
@@ -1791,133 +1794,30 @@ def cmd_seal_github_release_artifact_admission(
     )
     from evoom_guard.signing import SigningUnavailableError, public_key_id
 
-    try:
-        event_path = os.environ.get("GITHUB_EVENT_PATH")
-        if not event_path:
-            raise ValueError(
-                "seal-github-release-artifact-admission requires GitHub Actions "
-                "GITHUB_EVENT_PATH"
-            )
-        _preflight_release_artifact_admission_paths(args, event_path=event_path)
-        source, context, producer, source_admitter, source_policy = (
-            _release_artifact_nested_expectations(args)
-        )
-        builder = _read_external_finalizer_object(
-            args.builder,
-            label="protected release-artifact builder identity",
-        )
-        admitter = _read_external_finalizer_object(
-            args.admitter,
-            label="protected release-artifact admitter identity",
-        )
-        event_payload = _read_external_finalizer_object(
-            event_path,
-            label="GitHub Actions release-artifact workflow_run event payload",
-        )
-        runtime_admitter = bind_release_artifact_admitter_runtime(
-            builder,
-            admitter,
-            source=source,
-            environment=os.environ,
-            event_payload=event_payload,
-        )
-        key_separation = _release_artifact_key_separation(args)
-        expected_signing_key_id = public_key_id(args.sign_pub)
-        if expected_signing_key_id in set(key_separation.values()):
-            raise ValueError(
-                "release-artifact admission public key belongs to an earlier "
-                "configured trust domain"
-            )
-        git_executable = git_executable_pin(
-            args.git_executable,
-            args.git_executable_sha256,
-        )
-        provider_isolation = github_attestation_provider_isolation(
-            args.gh_executable,
-            args.gh_executable_sha256,
-            uid=args.provider_isolation_uid,
-            gid=args.provider_isolation_gid,
-        )
-        sealed = seal_release_artifact_admission(
-            args.release_source_admission,
-            args.artifact,
-            args.out,
-            admitter=runtime_admitter,
-            trusted_release_source_public_key_path=(
-                args.release_source_admission_v2_pub
+    return _release_artifact_admission_command_owner.execute_seal_github_release_artifact_admission(
+        args,
+        services=_release_artifact_admission_command_owner.SealGitHubReleaseArtifactAdmissionServices(
+            admission_format=RELEASE_ARTIFACT_ADMISSION_FORMAT,
+            release_artifact_error=ReleaseArtifactAdmissionError,
+            github_error=GitHubAttestationError,
+            finalizer_error=FinalizerDerivationError,
+            signing_unavailable_error=SigningUnavailableError,
+            bind_runtime_admitter=bind_release_artifact_admitter_runtime,
+            seal_release_artifact_admission=seal_release_artifact_admission,
+            public_key_id=public_key_id,
+            git_executable_pin=git_executable_pin,
+            provider_isolation=github_attestation_provider_isolation,
+            environment_provider=lambda: os.environ,
+            preflight_provider=lambda: _preflight_release_artifact_admission_paths,
+            nested_expectations_provider=lambda: (
+                _release_artifact_nested_expectations
             ),
-            expected_release_source=source,
-            expected_release_source_context=context,
-            expected_release_source_producer=producer,
-            expected_release_source_admitter=source_admitter,
-            expected_release_source_bootstrap_guard_sha256=(
-                args.expected_release_source_bootstrap_guard_sha
-            ),
-            expected_release_source_github_policy=source_policy,
-            expected_release_source_git_executable_sha256=(
-                args.expected_release_source_git_executable_sha256
-            ),
-            expected_release_source_github_cli_executable_sha256=(
-                args.expected_release_source_gh_executable_sha256
-            ),
-            expected_release_source_provider_isolation_uid=(
-                args.expected_release_source_provider_isolation_uid
-            ),
-            expected_release_source_provider_isolation_gid=(
-                args.expected_release_source_provider_isolation_gid
-            ),
-            key_separation=key_separation,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            git_executable=git_executable,
-            provider_isolation=provider_isolation,
-            private_key_path=args.sign_key,
-            signing_public_key_path=args.sign_pub,
-            expected_signing_key_id=expected_signing_key_id,
-            gh_executable=args.gh_executable,
-            timeout_seconds=args.timeout_seconds,
-        )
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        ReleaseArtifactAdmissionError,
-        GitHubAttestationError,
-        FinalizerDerivationError,
-        SigningUnavailableError,
-    ) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
-            "ok": True,
-            "sealed": True,
-            "verified": True,
-            "status": "SEALED",
-            "bundle": sealed.bundle_path,
-            "artifact": sealed.artifact.as_dict(),
-            "release_source": sealed.manifest["release_source"],
-            "builder": sealed.manifest["builder"],
-            "admitter": sealed.manifest["admitter"],
-            "key_id": sealed.manifest["authentication"]["key_id"],
-            "decision": sealed.decision,
-            "admission": True,
-            "provider_verified": True,
-            "live_provider_reverification": True,
-        },
+            read_external_object_provider=lambda: _read_external_finalizer_object,
+            key_separation_provider=lambda: _release_artifact_key_separation,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_verify_github_release_artifact_admission(
@@ -1934,99 +1834,22 @@ def cmd_verify_github_release_artifact_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    try:
-        if args.bundle == "-" or args.artifact == "-":
-            raise ValueError(
-                "release-artifact admission bundle and artifact must be regular "
-                "files, not standard input"
-            )
-        source, context, producer, source_admitter, source_policy = (
-            _release_artifact_nested_expectations(args)
-        )
-        builder = _read_external_finalizer_object(
-            args.expected_builder,
-            label="expected protected release-artifact builder identity",
-        )
-        admitter = _read_external_finalizer_object(
-            args.expected_admitter,
-            label="expected protected release-artifact admitter identity",
-        )
-        key_separation = _release_artifact_key_separation(args)
-        verified = verify_release_artifact_admission(
-            args.bundle,
-            args.artifact,
-            trusted_public_key_path=args.trusted_pub,
-            trusted_release_source_public_key_path=(
-                args.release_source_admission_v2_pub
+    return _release_artifact_admission_command_owner.execute_verify_github_release_artifact_admission(
+        args,
+        services=_release_artifact_admission_command_owner.VerifyGitHubReleaseArtifactAdmissionServices(
+            admission_format=RELEASE_ARTIFACT_ADMISSION_FORMAT,
+            release_artifact_error=ReleaseArtifactAdmissionError,
+            signing_unavailable_error=SigningUnavailableError,
+            verify_release_artifact_admission=verify_release_artifact_admission,
+            nested_expectations_provider=lambda: (
+                _release_artifact_nested_expectations
             ),
-            expected_release_source=source,
-            expected_release_source_context=context,
-            expected_release_source_producer=producer,
-            expected_release_source_admitter=source_admitter,
-            expected_release_source_bootstrap_guard_sha256=(
-                args.expected_release_source_bootstrap_guard_sha
-            ),
-            expected_release_source_github_policy=source_policy,
-            expected_release_source_git_executable_sha256=(
-                args.expected_release_source_git_executable_sha256
-            ),
-            expected_release_source_github_cli_executable_sha256=(
-                args.expected_release_source_gh_executable_sha256
-            ),
-            expected_release_source_provider_isolation_uid=(
-                args.expected_release_source_provider_isolation_uid
-            ),
-            expected_release_source_provider_isolation_gid=(
-                args.expected_release_source_provider_isolation_gid
-            ),
-            expected_builder=builder,
-            expected_admitter=admitter,
-            expected_key_separation=key_separation,
-            expected_git_executable_sha256=args.expected_git_executable_sha256,
-            expected_github_cli_executable_sha256=(
-                args.expected_gh_executable_sha256
-            ),
-            expected_provider_isolation_uid=args.expected_provider_isolation_uid,
-            expected_provider_isolation_gid=args.expected_provider_isolation_gid,
-        )
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        ReleaseArtifactAdmissionError,
-        SigningUnavailableError,
-    ) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    manifest = verified.bundle.manifest
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_ARTIFACT_ADMISSION_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "VERIFIED",
-            "decision": verified.decision,
-            "admission": True,
-            "artifact": verified.artifact.as_dict(),
-            "release_source": manifest["release_source"],
-            "builder": manifest["builder"],
-            "admitter": manifest["admitter"],
-            "key_id": manifest["authentication"]["key_id"],
-            "verification_scope": "detached-offline-retained-provider-evidence",
-            "live_provider_reverification": False,
-        },
+            read_external_object_provider=lambda: _read_external_finalizer_object,
+            key_separation_provider=lambda: _release_artifact_key_separation,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_artifact_admission(

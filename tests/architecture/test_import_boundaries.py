@@ -1664,6 +1664,241 @@ def test_cli_github_attestation_admissions_have_two_bounded_state_machines() -> 
         } <= local_imports
 
 
+def test_cli_release_artifact_admission_has_bounded_online_and_offline_owners() -> None:
+    """RAAE sealing and detached verification share one capability-bounded owner."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.cli"
+    owner_module = "evoom_guard.cli.release_artifact_admission_commands"
+    facade_path = PACKAGE_ROOT / "cli" / "__init__.py"
+    owner_path = PACKAGE_ROOT / "cli" / "release_artifact_admission_commands.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_source = owner_path.read_text(encoding="utf-8")
+    owner_tree = ast.parse(owner_source)
+    owner_functions = {
+        node.name: node
+        for node in owner_tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    assert set(owner_functions) == {
+        "execute_seal_github_release_artifact_admission",
+        "execute_verify_github_release_artifact_admission",
+    }
+    owner_classes = {
+        node.name: node
+        for node in owner_tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    assert set(owner_classes) == {
+        "SealGitHubReleaseArtifactAdmissionServices",
+        "VerifyGitHubReleaseArtifactAdmissionServices",
+        "_AsDictValue",
+        "_BindRuntimeAdmitter",
+        "_Environment",
+        "_GitExecutablePin",
+        "_InspectedReleaseArtifactAdmission",
+        "_KeySeparation",
+        "_NestedExpectations",
+        "_PreflightPaths",
+        "_ProviderIsolation",
+        "_PublicKeyId",
+        "_ReadExternalObject",
+        "_SealReleaseArtifactAdmission",
+        "_SealedReleaseArtifactAdmission",
+        "_VerifiedReleaseArtifactAdmission",
+        "_VerifyReleaseArtifactAdmission",
+    }
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "argparse",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+
+    def service_fields(class_name: str) -> set[str]:
+        return {
+            node.target.id
+            for node in owner_classes[class_name].body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+        }
+
+    assert service_fields("SealGitHubReleaseArtifactAdmissionServices") == {
+        "admission_format",
+        "release_artifact_error",
+        "github_error",
+        "finalizer_error",
+        "signing_unavailable_error",
+        "bind_runtime_admitter",
+        "seal_release_artifact_admission",
+        "public_key_id",
+        "git_executable_pin",
+        "provider_isolation",
+        "environment_provider",
+        "preflight_provider",
+        "nested_expectations_provider",
+        "read_external_object_provider",
+        "key_separation_provider",
+        "machine_report_provider",
+    }
+    assert service_fields("VerifyGitHubReleaseArtifactAdmissionServices") == {
+        "admission_format",
+        "release_artifact_error",
+        "signing_unavailable_error",
+        "verify_release_artifact_admission",
+        "nested_expectations_provider",
+        "read_external_object_provider",
+        "key_separation_provider",
+        "machine_report_provider",
+    }
+
+    seal_tree = owner_functions[
+        "execute_seal_github_release_artifact_admission"
+    ]
+    verify_tree = owner_functions[
+        "execute_verify_github_release_artifact_admission"
+    ]
+
+    def argument_attributes(function: ast.FunctionDef) -> set[str]:
+        return {
+            node.attr
+            for node in ast.walk(function)
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "args"
+        }
+
+    assert argument_attributes(seal_tree) == {
+        "admitter",
+        "artifact",
+        "builder",
+        "expected_release_source_bootstrap_guard_sha",
+        "expected_release_source_gh_executable_sha256",
+        "expected_release_source_git_executable_sha256",
+        "expected_release_source_provider_isolation_gid",
+        "expected_release_source_provider_isolation_uid",
+        "gh_executable",
+        "gh_executable_sha256",
+        "git_executable",
+        "git_executable_sha256",
+        "git_repository",
+        "git_repository_bare",
+        "out",
+        "provider_isolation_gid",
+        "provider_isolation_uid",
+        "release_source_admission",
+        "release_source_admission_v2_pub",
+        "sign_key",
+        "sign_pub",
+        "timeout_seconds",
+    }
+    assert argument_attributes(verify_tree) == {
+        "artifact",
+        "bundle",
+        "expected_admitter",
+        "expected_builder",
+        "expected_gh_executable_sha256",
+        "expected_git_executable_sha256",
+        "expected_provider_isolation_gid",
+        "expected_provider_isolation_uid",
+        "expected_release_source_bootstrap_guard_sha",
+        "expected_release_source_gh_executable_sha256",
+        "expected_release_source_git_executable_sha256",
+        "expected_release_source_provider_isolation_gid",
+        "expected_release_source_provider_isolation_uid",
+        "release_source_admission_v2_pub",
+        "trusted_pub",
+    }
+    verify_attributes = {
+        node.attr for node in ast.walk(verify_tree) if isinstance(node, ast.Attribute)
+    }
+    assert verify_attributes.isdisjoint(
+        {
+            "environment_provider",
+            "finalizer_error",
+            "gh_executable",
+            "git_executable",
+            "git_executable_pin",
+            "git_repository",
+            "github_error",
+            "preflight_provider",
+            "private_key_path",
+            "provider_isolation",
+            "public_key_id",
+            "seal_release_artifact_admission",
+            "sign_key",
+            "timeout_seconds",
+        }
+    )
+    assert all(
+        not isinstance(node, (ast.Import, ast.ImportFrom))
+        for node in ast.walk(verify_tree)
+    )
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name: node
+        for node in facade_tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    for name in (
+        "cmd_seal_github_release_artifact_admission",
+        "cmd_verify_github_release_artifact_admission",
+    ):
+        facade = facade_functions[name]
+        assert not any(
+            isinstance(node, (ast.For, ast.If, ast.Match, ast.Try, ast.While))
+            for node in ast.walk(facade)
+        )
+    seal_imports = {
+        node.module
+        for node in ast.walk(
+            facade_functions["cmd_seal_github_release_artifact_admission"]
+        )
+        if isinstance(node, ast.ImportFrom)
+    }
+    verify_imports = {
+        node.module
+        for node in ast.walk(
+            facade_functions["cmd_verify_github_release_artifact_admission"]
+        )
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert seal_imports == {
+        "evoom_guard.admission.release_artifact",
+        "evoom_guard.finalizer_derivation",
+        "evoom_guard.github_attestation",
+        "evoom_guard.signing",
+    }
+    assert verify_imports == {
+        "evoom_guard.admission.release_artifact",
+        "evoom_guard.signing",
+    }
+
+
 def test_cli_release_source_finalizer_has_one_stdlib_owner_and_public_facades() -> None:
     """The four release-source adapters have one effect-injected owner."""
 

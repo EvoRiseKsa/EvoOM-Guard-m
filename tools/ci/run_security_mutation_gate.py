@@ -2143,6 +2143,250 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-release-artifact-seal-preflight-reresolution-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            preflight_provider=lambda: "
+            "_preflight_release_artifact_admission_paths,\n"
+        ),
+        after=(
+            "            preflight_provider=lambda _preflight="
+            "_preflight_release_artifact_admission_paths: _preflight,\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[seal_preflight_helper_is_live_after_environment_read]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-seal-key-reresolution-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            environment_provider=lambda: os.environ,\n"
+            "            preflight_provider=lambda: "
+            "_preflight_release_artifact_admission_paths,\n"
+            "            nested_expectations_provider=lambda: (\n"
+            "                _release_artifact_nested_expectations\n"
+            "            ),\n"
+            "            read_external_object_provider=lambda: "
+            "_read_external_finalizer_object,\n"
+            "            key_separation_provider=lambda: "
+            "_release_artifact_key_separation,\n"
+        ),
+        after=(
+            "            environment_provider=lambda: os.environ,\n"
+            "            preflight_provider=lambda: "
+            "_preflight_release_artifact_admission_paths,\n"
+            "            nested_expectations_provider=lambda: (\n"
+            "                _release_artifact_nested_expectations\n"
+            "            ),\n"
+            "            read_external_object_provider=lambda: "
+            "_read_external_finalizer_object,\n"
+            "            key_separation_provider=lambda _keys="
+            "_release_artifact_key_separation: _keys,\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[seal_key_helper_is_live_after_metadata_reads]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-verify-nested-reresolution-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            verify_release_artifact_admission="
+            "verify_release_artifact_admission,\n"
+            "            nested_expectations_provider=lambda: (\n"
+            "                _release_artifact_nested_expectations\n"
+            "            ),\n"
+        ),
+        after=(
+            "            verify_release_artifact_admission="
+            "verify_release_artifact_admission,\n"
+            "            nested_expectations_provider=lambda _nested=(\n"
+            "                _release_artifact_nested_expectations\n"
+            "            ): _nested,\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[verify_nested_helper_is_live_after_stdin_guard]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-verify-reader-reresolution-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            verify_release_artifact_admission="
+            "verify_release_artifact_admission,\n"
+            "            nested_expectations_provider=lambda: (\n"
+            "                _release_artifact_nested_expectations\n"
+            "            ),\n"
+            "            read_external_object_provider=lambda: "
+            "_read_external_finalizer_object,\n"
+        ),
+        after=(
+            "            verify_release_artifact_admission="
+            "verify_release_artifact_admission,\n"
+            "            nested_expectations_provider=lambda: (\n"
+            "                _release_artifact_nested_expectations\n"
+            "            ),\n"
+            "            read_external_object_provider=lambda _reader="
+            "_read_external_finalizer_object: _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[verify_reader_is_live_during_nested_reads]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-seal-event-required-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before="        if not event_path:\n",
+        after="        if False and not event_path:\n",
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[seal_missing_event_path]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-seal-key-separation-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before=(
+            "        if expected_signing_key_id in set(key_separation.values()):\n"
+        ),
+        after=(
+            "        if False and expected_signing_key_id "
+            "in set(key_separation.values()):\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[seal_signer_domain_collision_precedes_execution_pins]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-seal-isolation-identity-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before=(
+            "            provider_isolation=provider_isolation,\n"
+            "            private_key_path=args.sign_key,\n"
+        ),
+        after=(
+            "            provider_isolation=None,\n"
+            "            private_key_path=args.sign_key,\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[seal_success_online_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-seal-partial-oserror-catch-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before=(
+            "    except (\n"
+            "        OSError,\n"
+            "        UnicodeError,\n"
+            "        ValueError,\n"
+            "        services.release_artifact_error,\n"
+            "        services.github_error,\n"
+            "        services.finalizer_error,\n"
+            "        services.signing_unavailable_error,\n"
+            "    ) as exc:\n"
+        ),
+        after=(
+            "    except (\n"
+            "        UnicodeError,\n"
+            "        ValueError,\n"
+            "        services.release_artifact_error,\n"
+            "        services.github_error,\n"
+            "        services.finalizer_error,\n"
+            "        services.signing_unavailable_error,\n"
+            "    ) as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[seal_provider_oserror_preserves_partial_bundle]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-verify-stdin-short-circuit-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before='        if args.bundle == "-" or args.artifact == "-":\n',
+        after='        if args.bundle == "-" and args.artifact == "-":\n',
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[verify_artifact_stdin_after_bundle_read]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-verify-online-authority-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before=(
+            '    """Verify one RAAE, its artifact, nested RSAE, and all six roots offline."""\n'
+            "\n"
+            "    try:\n"
+        ),
+        after=(
+            '    """Verify one RAAE, its artifact, nested RSAE, and all six roots offline."""\n'
+            "\n"
+            "    _ = services.environment_provider()\n"
+            "    try:\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_verify_facade_does_not_import_online_provider_or_git_capabilities"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-verify-live-provider-claim-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before=(
+            '            "verification_scope": '
+            '"detached-offline-retained-provider-evidence",\n'
+            '            "live_provider_reverification": False,\n'
+        ),
+        after=(
+            '            "verification_scope": '
+            '"detached-offline-retained-provider-evidence",\n'
+            '            "live_provider_reverification": True,\n'
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[verify_success_offline_closed_world]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-artifact-verify-isolation-pin-binding-bypass",
+        path="evoom_guard/cli/release_artifact_admission_commands.py",
+        before=(
+            "            expected_provider_isolation_uid="
+            "args.expected_provider_isolation_uid,\n"
+            "            expected_provider_isolation_gid="
+            "args.expected_provider_isolation_gid,\n"
+        ),
+        after=(
+            "            expected_provider_isolation_uid="
+            "args.expected_provider_isolation_gid,\n"
+            "            expected_provider_isolation_gid="
+            "args.expected_provider_isolation_gid,\n"
+        ),
+        test=(
+            "tests/test_cli_release_artifact_admission_characterization.py::"
+            "test_frozen_cli_release_artifact_admission_behavior"
+            "[verify_success_offline_closed_world]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',
