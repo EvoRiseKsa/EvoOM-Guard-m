@@ -504,7 +504,7 @@ def _git_blob_sha(data: bytes) -> str:
     # as standalone content authentication: trusted-parent bytes are also
     # compared exactly and their retained descriptors are bound with SHA-256.
     return hashlib.sha1(  # codeql[py/weak-sensitive-data-hashing]
-        payload,
+        payload,  # codeql[py/weak-sensitive-data-hashing]
         usedforsecurity=False,
     ).hexdigest()
 
