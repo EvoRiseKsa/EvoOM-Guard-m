@@ -12,7 +12,9 @@ import json
 import tempfile
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+from evoom_guard import guard as guard_module
 from evoom_guard.guard import (
     ERROR,
     PASS,
@@ -26,6 +28,7 @@ from evoom_guard.guard import (
 )
 
 SCHEMA_VERSION = "guard-output-characterization-v1"
+FIXED_GUARD_VERSION = "4.3.0"
 CASE_NAMES = (
     "incomplete_error",
     "pass_full_evidence",
@@ -180,14 +183,18 @@ def capture_case(case_name: str, root: Path) -> dict[str, Any]:
     result, deleted, title = _case(case_name)
     json_path = root / f"{case_name}.json"
     sarif_path = root / f"{case_name}.sarif"
-    write_json(result, str(json_path), deleted=deleted)
-    write_sarif(result, str(sarif_path))
-    return {
-        "report": render_report(result, deleted=deleted, title=title),
-        "json_text": json_path.read_text(encoding="utf-8"),
-        "sarif": to_sarif(result),
-        "sarif_text": sarif_path.read_text(encoding="utf-8"),
-    }
+    # This vector characterizes the reviewed v4.3.0 wire contract. A later
+    # package version must not rewrite historical bytes when behavior is
+    # unchanged.
+    with patch.object(guard_module, "__version__", FIXED_GUARD_VERSION):
+        write_json(result, str(json_path), deleted=deleted)
+        write_sarif(result, str(sarif_path))
+        return {
+            "report": render_report(result, deleted=deleted, title=title),
+            "json_text": json_path.read_text(encoding="utf-8"),
+            "sarif": to_sarif(result),
+            "sarif_text": sarif_path.read_text(encoding="utf-8"),
+        }
 
 
 def capture_all() -> dict[str, Any]:
