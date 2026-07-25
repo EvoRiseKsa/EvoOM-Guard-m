@@ -152,6 +152,22 @@ dependency-injected `evoom_guard/cli/diagnostic_commands.py`. The public
 `doctor_report`, `validate_pack`, `cmd_doctor`, `cmd_pack_doctor`, and
 `cmd_version` facades retain live provider lookup and the existing import path.
 
+Initialization and workflow generation are owned by the stdlib-only,
+dependency-injected `evoom_guard/cli/init_command.py`. It owns the exact public
+and private workflow templates, credential-name validation, policy-path
+inference, and the established non-transactional write sequence. The public
+`_github_actions_credential_key`, `_workflow_yaml`,
+`_workflow_yaml_private`, `_default_policy_path`, and `cmd_init` facades remain
+at their historical import path. They inject providers that return the live
+callable for every path, filesystem, template, and JSON operation. The owner
+captures each callable before evaluating its arguments, preserving both
+providers rebound by an earlier operation and the historical
+callable-before-argument evaluation order. A frozen pre-extraction vector binds
+workflow and policy bytes, short-circuits, output order, propagated open,
+write, dump, and context-exit failures, nested path lookup order, property-read
+side effects, and all those lookup points. Parser ref validation and command
+dispatch remain outside this owner.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain

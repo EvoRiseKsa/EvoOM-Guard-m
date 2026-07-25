@@ -386,8 +386,16 @@ remain in their established facades.
   live-wired compatibility facades. A pre-extraction vector freezes supported
   and unsupported doctor modes, text/JSON projection, valid/missing/invalid
   pack reports, manifest-error containment, digest metadata, and version output.
-  Initialization and the source/artifact/GitHub-attestation command families
-  remain pending.
+- Initialization now lives in the stdlib-only `cli/init_command.py` owner.
+  Credential-name validation, exact public/private workflow generation,
+  policy-path inference, and write sequencing are typed behind the unchanged
+  helper and `cmd_init` facades. Every established operation is injected as a
+  provider returning the live callable, and the owner captures that callable
+  before evaluating its arguments. A pre-extraction vector freezes twenty-one
+  public, private, short-circuit, open/write/dump/exit-failure, nested path
+  lookup, property-side-effect, and mid-call rebinding cases. Parser ref
+  validation and dispatch do not move in this slice.
+- The source/artifact/GitHub-attestation command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.
