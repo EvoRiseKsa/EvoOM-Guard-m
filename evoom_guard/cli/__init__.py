@@ -69,6 +69,9 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 from evoom_guard import __version__
 from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 from evoom_guard.cli import artifact_admission_commands as _artifact_admission_command_owner
+from evoom_guard.cli import (
+    artifact_digest_admission_commands as _artifact_digest_admission_command_owner,
+)
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
@@ -2540,91 +2543,22 @@ def cmd_seal_artifact_digest_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    if any(value == "-" for value in (args.finalizer_bundle, args.provenance)):
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": "finalizer bundle and provenance must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        sealed = seal_artifact_digest_admission(
-            args.subject_kind,
-            args.subject_digest,
-            args.provenance,
-            args.provenance_identity,
-            args.finalizer_bundle,
-            args.out,
-            trusted_finalizer_public_key_path=args.finalizer_pub,
-            expected_finalizer_source=expected_source,
-            expected_finalizer_context=expected_context,
-            private_key_path=args.sign_key,
-            force=args.force,
-        )
-    except ArtifactDigestAdmissionError as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-            "ok": True,
-            "sealed": True,
-            "status": "SEALED",
-            "decision": "ALLOW",
-            "binding": sealed.binding_path,
-            "subject": sealed.subject.as_dict(),
-            "provenance_reference": sealed.provenance_reference.as_dict(),
-            "finalizer": sealed.payload["finalizer"],
-            "key_id": sealed.payload["authentication"]["key_id"],
-        },
+    return _artifact_digest_admission_command_owner.execute_seal_artifact_digest_admission(
+        args,
+        services=(
+            _artifact_digest_admission_command_owner.SealArtifactDigestAdmissionServices(
+                binding_format=ARTIFACT_DIGEST_BINDING_FORMAT,
+                artifact_error=ArtifactDigestAdmissionError,
+                signing_unavailable_error=SigningUnavailableError,
+                seal_artifact_digest_admission=seal_artifact_digest_admission,
+                read_external_object_provider=lambda: (
+                    _read_external_finalizer_object
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_verify_artifact_digest_admission(
@@ -2641,89 +2575,22 @@ def cmd_verify_artifact_digest_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    if any(value == "-" for value in (args.binding, args.finalizer_bundle, args.provenance)):
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": "binding, finalizer bundle, and provenance must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        verified = verify_artifact_digest_admission(
-            args.binding,
-            args.subject_kind,
-            args.subject_digest,
-            args.provenance,
-            args.provenance_identity,
-            args.finalizer_bundle,
-            trusted_public_key_path=args.trusted_pub,
-            trusted_finalizer_public_key_path=args.finalizer_pub,
-            expected_finalizer_source=expected_source,
-            expected_finalizer_context=expected_context,
-        )
-    except ArtifactDigestAdmissionError as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": ARTIFACT_DIGEST_BINDING_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "VERIFIED",
-            "decision": "ALLOW",
-            "subject": verified.subject.as_dict(),
-            "provenance_reference": verified.provenance_reference.as_dict(),
-            "finalizer": verified.inspection.finalizer,
-            "key_id": verified.inspection.payload["authentication"]["key_id"],
-        },
+    return _artifact_digest_admission_command_owner.execute_verify_artifact_digest_admission(
+        args,
+        services=(
+            _artifact_digest_admission_command_owner.VerifyArtifactDigestAdmissionServices(
+                binding_format=ARTIFACT_DIGEST_BINDING_FORMAT,
+                artifact_error=ArtifactDigestAdmissionError,
+                signing_unavailable_error=SigningUnavailableError,
+                verify_artifact_digest_admission=verify_artifact_digest_admission,
+                read_external_object_provider=lambda: (
+                    _read_external_finalizer_object
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def _github_attestation_policy_kwargs(
