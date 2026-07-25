@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -978,6 +979,75 @@ def test_signed_validator_descriptor_binds_trusted_parent_and_exact_bytes() -> N
     )
     with pytest.raises(validator.LedgerValidationError, match="trusted-parent validator"):
         validator.validate_structure(ledger)
+
+
+def test_external_trusted_parent_rejects_candidate_contract_mutation(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "trusted-parent"
+    repository.mkdir()
+
+    def git(*arguments: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repository), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Ledger Test")
+    git("config", "user.email", "ledger@example.invalid")
+    schema_target = repository / validator.OFFICIAL_SCHEMA_REPOSITORY_PATH
+    validator_target = repository / validator.VALIDATOR_REPOSITORY_PATH
+    schema_target.parent.mkdir(parents=True)
+    validator_target.parent.mkdir(parents=True)
+    schema_target.write_bytes(SCHEMA_PATH.read_bytes())
+    validator_target.write_bytes(Path(validator.__file__).read_bytes())
+    git("add", ".")
+    git("commit", "-q", "-m", "trusted parent")
+    parent = git("rev-parse", "HEAD")
+    parent_tree = git("rev-parse", "HEAD^{tree}")
+    ledger = _valid_ledger()
+    ledger["source"]["parent_commit_sha"] = parent
+    ledger["source"]["parent_tree_sha"] = parent_tree
+    for contract in (
+        ledger["schema_contracts"]["release_ledger"],
+        ledger["schema_contracts"]["validator"],
+    ):
+        contract["trusted_parent_commit_sha"] = parent
+        contract["trusted_parent_tree_sha"] = parent_tree
+    ledger_root = tmp_path / "ledger"
+    ledger_root.mkdir()
+    validator._validate_trusted_parent_contracts(
+        ledger_root,
+        ledger,
+        repository,
+    )
+
+    validator_target.write_bytes(Path(validator.__file__).read_bytes() + b"\n# mutation\n")
+    git("add", ".")
+    git("commit", "-q", "-m", "candidate mutation")
+    candidate = git("rev-parse", "HEAD")
+    candidate_tree = git("rev-parse", "HEAD^{tree}")
+    ledger["source"]["parent_commit_sha"] = candidate
+    ledger["source"]["parent_tree_sha"] = candidate_tree
+    for contract in (
+        ledger["schema_contracts"]["release_ledger"],
+        ledger["schema_contracts"]["validator"],
+    ):
+        contract["trusted_parent_commit_sha"] = candidate
+        contract["trusted_parent_tree_sha"] = candidate_tree
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="validator tree entry is not exact",
+    ):
+        validator._validate_trusted_parent_contracts(
+            ledger_root,
+            ledger,
+            repository,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1960,6 +2030,64 @@ def test_key_retirement_is_post_ledger_cross_bound_and_signed(
         )
 
 
+def test_key_retirement_rejects_between_stage_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ledger_root = tmp_path / "ledger"
+    ledger_root.mkdir()
+    private = tmp_path / "retirement.pem"
+    public = tmp_path / "retirement.pub.pem"
+    generate_keypair(str(private), str(public))
+    trusted = validator._load_trusted_ledger_key(ledger_root, public)
+    ledger = _valid_ledger()
+    ledger["ledger_signature"]["key_id"] = trusted.key_id
+    ledger_path = ledger_root / "RELEASE_LEDGER.json"
+    ledger_path.write_bytes(validator.canonical_json_bytes(ledger))
+    sign_file(str(ledger_path), str(private))
+    ledger_signature_path = Path(f"{ledger_path}.sig")
+    receipt = tmp_path / "KEY_RETIREMENT.json"
+    receipt.write_bytes(
+        validator.canonical_json_bytes(
+            _key_retirement_value(
+                ledger,
+                ledger_bytes=ledger_path.read_bytes(),
+                ledger_signature_bytes=ledger_signature_path.read_bytes(),
+                key_id=trusted.key_id,
+            )
+        )
+    )
+    sign_file(str(receipt), str(private))
+    signature = Path(f"{receipt}.sig")
+    monkeypatch.setattr(
+        validator,
+        "validate_directory",
+        lambda *_: ledger,
+    )
+    original = validator._validate_key_retirement_value
+
+    def mutate_after_semantics(*args: Any, **kwargs: Any) -> None:
+        original(*args, **kwargs)
+        receipt.write_bytes(receipt.read_bytes() + b" ")
+
+    monkeypatch.setattr(
+        validator,
+        "_validate_key_retirement_value",
+        mutate_after_semantics,
+    )
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="inputs changed",
+    ):
+        validator.validate_key_retirement(
+            ledger_root,
+            receipt,
+            signature,
+            public,
+            tmp_path / "unused-parent",
+        )
+
+
 def _replace_file_descriptors(value: object, contents: dict[str, bytes]) -> None:
     if isinstance(value, dict):
         path = value.get("path")
@@ -2066,6 +2194,11 @@ def _signed_directory(
     monkeypatch.setattr(validator, "_validate_control_bytes", lambda *_: None)
     monkeypatch.setattr(validator, "_validate_attestation_bytes", lambda *_: None)
     monkeypatch.setattr(validator, "_validate_envelopes", lambda *_: None)
+    monkeypatch.setattr(
+        validator,
+        "_validate_trusted_parent_contracts",
+        lambda *_: None,
+    )
 
     inventory = validator._collect_descriptors(ledger)
     for relative in inventory:

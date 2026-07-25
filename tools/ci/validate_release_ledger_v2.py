@@ -25,6 +25,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -484,6 +485,110 @@ def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
 def _git_blob_sha(data: bytes) -> str:
     payload = f"blob {len(data)}\0".encode("ascii") + data
     return hashlib.sha1(payload).hexdigest()  # noqa: S324 - Git object identity
+
+
+def _trusted_git(
+    repository: Path,
+    *arguments: str,
+    label: str,
+) -> bytes:
+    environment = {
+        **os.environ,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_OPTIONAL_LOCKS": "0",
+        "LC_ALL": "C",
+    }
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed Git operations, no shell
+            ["git", "-C", str(repository), *arguments],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            check=False,
+            timeout=15,
+            env=environment,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LedgerValidationError(f"cannot inspect trusted parent {label}") from exc
+    if result.returncode != 0:
+        _fail(f"trusted parent {label} is unavailable or invalid")
+    return result.stdout
+
+
+def _validate_trusted_parent_contracts(
+    ledger_root: Path,
+    ledger: Mapping[str, Any],
+    trusted_parent_repo: Path | None,
+) -> None:
+    if trusted_parent_repo is None:
+        _fail("an external trusted parent repository is required")
+    repository = _require_plain_directory(
+        trusted_parent_repo,
+        label="external trusted parent repository",
+    )
+    if _path_is_within(repository, ledger_root) or _path_is_within(
+        ledger_root, repository
+    ):
+        _fail("trusted parent repository and ledger root must be disjoint")
+    parent = ledger["source"]["parent_commit_sha"]
+    parent_tree = ledger["source"]["parent_tree_sha"]
+    resolved_commit = _trusted_git(
+        repository,
+        "rev-parse",
+        "--verify",
+        f"{parent}^{{commit}}",
+        label="commit",
+    ).decode("ascii", "strict").strip()
+    resolved_tree = _trusted_git(
+        repository,
+        "rev-parse",
+        "--verify",
+        f"{parent}^{{tree}}",
+        label="tree",
+    ).decode("ascii", "strict").strip()
+    if resolved_commit != parent or resolved_tree != parent_tree:
+        _fail("trusted parent commit/tree identity is not exact")
+    contracts = (
+        (
+            ledger["schema_contracts"]["release_ledger"],
+            DEFAULT_SCHEMA.read_bytes(),
+            "schema",
+        ),
+        (
+            ledger["schema_contracts"]["validator"],
+            Path(__file__).read_bytes(),
+            "validator",
+        ),
+    )
+    for contract, current_bytes, label in contracts:
+        path = contract["path"]
+        entry = _trusted_git(
+            repository,
+            "ls-tree",
+            "-z",
+            parent,
+            "--",
+            path,
+            label=f"{label} tree entry",
+        )
+        expected_prefix = f"100644 blob {contract['git_blob_sha']}\t{path}\0".encode()
+        if entry != expected_prefix:
+            _fail(f"trusted parent {label} tree entry is not exact")
+        parent_bytes = _trusted_git(
+            repository,
+            "cat-file",
+            "blob",
+            contract["git_blob_sha"],
+            label=f"{label} blob",
+        )
+        if (
+            parent_bytes != current_bytes
+            or _sha256(parent_bytes) != contract["sha256"]
+            or _git_blob_sha(parent_bytes) != contract["git_blob_sha"]
+            or contract["trusted_parent_commit_sha"] != parent
+            or contract["trusted_parent_tree_sha"] != parent_tree
+        ):
+            _fail(f"trusted parent {label} bytes do not equal the executing contract")
 
 
 def _schema_errors(
@@ -3006,6 +3111,7 @@ def _validate_keys_and_anchor(
 def validate_directory(
     root: Path,
     trusted_ledger_pub: Path,
+    trusted_parent_repo: Path | None = None,
 ) -> Mapping[str, Any]:
     """Validate one v2 ledger under an independently supplied trust anchor."""
 
@@ -3034,6 +3140,7 @@ def validate_directory(
         schema,
         schema_sha256=schema_sha256,
     )
+    _validate_trusted_parent_contracts(root, ledger, trusted_parent_repo)
 
     inventory = _collect_descriptors(ledger)
     _require_retained_budget(inventory)
@@ -3290,8 +3397,13 @@ def validate_key_retirement(
     receipt_path: Path,
     signature_path: Path,
     trusted_ledger_pub: Path,
+    trusted_parent_repo: Path,
 ) -> Mapping[str, Any]:
-    ledger = validate_directory(ledger_root, trusted_ledger_pub)
+    ledger = validate_directory(
+        ledger_root,
+        trusted_ledger_pub,
+        trusted_parent_repo,
+    )
     trusted_key = _load_trusted_ledger_key(ledger_root, trusted_ledger_pub)
     ledger_bytes = _read_regular(
         ledger_root / LEDGER_NAME,
@@ -3302,6 +3414,13 @@ def validate_key_retirement(
         ledger_root / SIGNATURE_NAME,
         limit=CANONICAL_SIGNATURE_BYTES,
         label="release ledger signature",
+    )
+    if canonical_json_bytes(ledger) != ledger_bytes:
+        _fail("release ledger changed after directory validation")
+    _verify_external_ledger_signature(
+        ledger_bytes,
+        ledger_signature_bytes,
+        trusted_key,
     )
     receipt_bytes = _read_regular(
         receipt_path,
@@ -3323,6 +3442,43 @@ def validate_key_retirement(
         ledger_bytes=ledger_bytes,
         ledger_signature_bytes=ledger_signature_bytes,
         trusted_key=trusted_key,
+    )
+    current_ledger = _read_regular(
+        ledger_root / LEDGER_NAME,
+        limit=MAX_JSON_BYTES,
+        label="release ledger",
+    )
+    current_ledger_signature = _read_regular(
+        ledger_root / SIGNATURE_NAME,
+        limit=CANONICAL_SIGNATURE_BYTES,
+        label="release ledger signature",
+    )
+    current_receipt = _read_regular(
+        receipt_path,
+        limit=1024 * 1024,
+        label="key-retirement receipt",
+    )
+    current_receipt_signature = _read_regular(
+        signature_path,
+        limit=CANONICAL_SIGNATURE_BYTES,
+        label="key-retirement signature",
+    )
+    if (
+        current_ledger != ledger_bytes
+        or current_ledger_signature != ledger_signature_bytes
+        or current_receipt != receipt_bytes
+        or current_receipt_signature != signature_bytes
+    ):
+        _fail("key-retirement inputs changed during validation")
+    _verify_external_ledger_signature(
+        current_ledger,
+        current_ledger_signature,
+        trusted_key,
+    )
+    _verify_external_ledger_signature(
+        current_receipt,
+        current_receipt_signature,
+        trusted_key,
     )
     _require_trusted_key_unchanged(trusted_key)
     return receipt
@@ -3443,6 +3599,15 @@ def _parser() -> argparse.ArgumentParser:
             "previously trusted channel"
         ),
     )
+    validate.add_argument(
+        "--trusted-parent-repo",
+        type=Path,
+        required=True,
+        help=(
+            "caller-supplied disjoint Git repository containing the admitted "
+            "trusted parent commit and exact schema/validator blobs"
+        ),
+    )
 
     canonicalize = subparsers.add_parser(
         "canonicalize",
@@ -3464,6 +3629,12 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="the same external per-release ledger public key",
     )
+    retirement.add_argument(
+        "--trusted-parent-repo",
+        type=Path,
+        required=True,
+        help="the same external trusted-parent Git repository used for the ledger",
+    )
     return parser
 
 
@@ -3471,7 +3642,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "validate":
-            validate_directory(args.root, args.trusted_ledger_pub)
+            validate_directory(
+                args.root,
+                args.trusted_ledger_pub,
+                args.trusted_parent_repo,
+            )
             print("release-ledger-v2: VALID")
         elif args.command == "canonicalize":
             _canonicalize(args.input, args.output)
@@ -3482,6 +3657,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.receipt,
                 args.signature,
                 args.trusted_ledger_pub,
+                args.trusted_parent_repo,
             )
             print("release-key-retirement-v1: VALID")
     except LedgerValidationError as exc:

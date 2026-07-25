@@ -184,12 +184,18 @@ and must fail validation. Placeholders are never accepted as release evidence.
 
    ```powershell
    python tools/ci/validate_release_ledger_v2.py validate .\vX.Y.Z `
-     --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem
+     --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem `
+     --trusted-parent-repo .\trusted-parent-checkout
    ```
 
    Never point `--trusted-ledger-pub` at the retained
    `vX.Y.Z\trust\release-ledger-v2.pub.pem` copy. The validator rejects an
    in-root, linked, hard-linked, changed, or byte-different anchor.
+   `--trusted-parent-repo` must be a disjoint trusted checkout/object store
+   containing the admitted parent commit. The validator resolves the exact
+   `100644` schema and validator blobs from that commit/tree and compares their
+   bytes, Git object IDs, and SHA-256 values; descriptor fields alone are not
+   accepted as proof.
 8. Commit the new directory only after the command reports
    `release-ledger-v2: VALID`. The ledger step must not create, move, delete, or
    rewrite a tag or GitHub Release. Re-run external-key validation from the
@@ -210,7 +216,8 @@ and must fail validation. Placeholders are never accepted as release evidence.
    ```powershell
    python tools/ci/validate_release_ledger_v2.py validate-retirement `
      .\vX.Y.Z .\KEY_RETIREMENT.json .\KEY_RETIREMENT.json.sig `
-     --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem
+     --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem `
+     --trusted-parent-repo .\trusted-parent-checkout
    ```
 
    A `404`, denied API call, incomplete page sequence, or unsigned JSON is not

@@ -111,10 +111,14 @@ gate.
   to v1 ledgers and must not be used to rewrite a frozen baseline.
 - Before a v2 ledger is committed, run
   `python tools/ci/validate_release_ledger_v2.py validate <ledger-directory>
-  --trusted-ledger-pub <independently-obtained-public-key>`. The trusted key
+  --trusted-ledger-pub <independently-obtained-public-key>
+  --trusted-parent-repo <disjoint-trusted-parent-repository>`. The trusted key
   path must be outside the ledger and must come from a pinned parent tree,
   immutable tag, or other previously authenticated channel; never copy it from
   the directory being validated.
+  The trusted-parent repository must contain the exact admitted parent
+  commit/tree; the validator resolves and byte-compares its schema and validator
+  Git blobs, so self-reported parent fields are insufficient.
   Schema-only validation is insufficient: the command verifies cross-phase run
   bindings, the exact three-asset set and checksum bytes, retained controls,
   RSAE/RAAE signatures and subjects, all public-key identities, closed file
