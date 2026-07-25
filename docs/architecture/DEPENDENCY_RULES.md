@@ -117,6 +117,14 @@ an atomic source-tree snapshot. Cleanup treats a recursive
 `FileNotFoundError` as idempotent success only after its live path provider
 observes the workspace root absent.
 
+The repository-workspace lifetime slice adds the dependency-free
+`workspace.repository_lifetime` owner. It records candidate/pack workspace
+paths, preserves pack-root reconciliation, and exposes the historical cleanup
+target order while importing no verifier, execution, evidence, or verdict
+module. `repo_verifier` supplies live allocation providers and retains the
+cleanup effect plus primary-exception precedence. This classified-to-classified
+extraction changes no baseline count and therefore adds no ratchet revision.
+
 The bounded verifier-pack intake slice gives
 `verifiers.repo_pack_intake` ownership of optional pack admission and its
 judge-owned snapshot identity. `repo_verifier` injects live `lexists`,

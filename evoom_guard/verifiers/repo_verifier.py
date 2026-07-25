@@ -351,6 +351,7 @@ from evoom_guard.workspace import (
     write_text_within_root,
 )
 from evoom_guard.workspace import repository as _repository_workspace
+from evoom_guard.workspace.repository_lifetime import RepositoryWorkspaceLifetime
 
 _BLOCK_RE = _candidate_edits._BLOCK_RE
 _LENIENT_FILE_RE = _candidate_edits._LENIENT_FILE_RE
@@ -1000,9 +1001,13 @@ class RepoVerifier:
         changed = list(candidate.files_changed)
         strict_harness = candidate.strict_harness
 
-        workdir = tempfile.mkdtemp(prefix="evo_repo_")
-        copy = os.path.join(workdir, "repo")
-        pack_workdir: str | None = None
+        workspace_lifetime = RepositoryWorkspaceLifetime.create(
+            prefix="evo_repo_",
+            create_workspace=lambda *, prefix: tempfile.mkdtemp(prefix=prefix),
+            join_path=lambda root, path: os.path.join(root, path),
+        )
+        workdir = workspace_lifetime.candidate_root
+        copy = workspace_lifetime.candidate_copy
         pack_snapshot: str | None = None
         pack_continuity: RepoPackContinuity | None = None
         try:
@@ -1036,9 +1041,12 @@ class RepoVerifier:
             )
 
             def create_pack_workspace(prefix: str) -> str:
-                nonlocal pack_workdir
-                pack_workdir = tempfile.mkdtemp(prefix=prefix)
-                return pack_workdir
+                return workspace_lifetime.create_pack(
+                    prefix,
+                    create_workspace=lambda *, prefix: tempfile.mkdtemp(
+                        prefix=prefix
+                    ),
+                )
 
             pack_intake = intake_repo_pack(
                 pack_request,
@@ -1050,7 +1058,7 @@ class RepoVerifier:
                     ),
                 ),
             )
-            pack_workdir = pack_intake.pack_workdir or pack_workdir
+            workspace_lifetime.retain_pack_root(pack_intake.pack_workdir)
             pack_snapshot = pack_intake.pack_snapshot
             pack_sha256 = pack_intake.pack_sha256
             pack_manifest = (
@@ -1559,9 +1567,6 @@ class RepoVerifier:
             )
         finally:
             _cleanup_repo_workspaces(
-                (
-                    ("candidate workspace", workdir),
-                    ("verifier-pack snapshot", pack_workdir),
-                ),
+                workspace_lifetime.cleanup_targets(),
                 primary=sys.exc_info()[1],
             )

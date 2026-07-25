@@ -121,8 +121,9 @@ aliases. Candidate materialization now has a focused
 `verifiers.repo_materialization` owner behind the dynamic RepoVerifier facade;
 `verifiers.repo_candidate` now coordinates parsing/admission, repository copy
 plus edit materialization, and post-pack safe deletion through immutable
-contracts and live providers. Workspace allocation, pack intake, execution,
-and final cleanup remain outside that owner.
+contracts and live providers. Workspace lifetime bookkeeping belongs to
+`workspace.repository_lifetime`; pack intake, execution, and final cleanup
+remain outside the candidate owner.
 Optional repository verifier-pack admission now has the focused
 `verifiers.repo_pack_intake` owner. It checks the required digest pin and
 reserved mount, creates and identifies the judge-owned snapshot through
@@ -150,16 +151,19 @@ focused, effect-free `verifiers.repo_result` owner. It freezes the observed
 pack identity and completed repository phase, projects completed pack fields,
 and owns exact key order, overwrite, and presence-versus-null behavior.
 `RepoVerifier` still records those facts at the same execution points and
-retains provider timing, phase-composer invocation, workspace lifetime, and
-cleanup.
+retains provider timing, phase-composer invocation, and live cleanup.
+`workspace.repository_lifetime` records the candidate/pack roots and cleanup
+target order without importing or executing cleanup.
 `verifiers/candidate_preflight.py` now owns the immutable, pre-execution
 classification of changed/deleted paths. It binds local Actions from the base
 tree, preserves the reserved verifier-pack and non-exemptible harness rules,
 and returns the exact safe-deletion set. Guard calls it at the characterized
 post-parse/pre-materialization seam and retains risk, execution, decision, and
 serialization responsibilities.
-`RepoVerifier` still owns workspace allocation, verifier-pack intake and
-snapshot continuity, runtime identity, phase composition, and cleanup.
+`RepoVerifier` still supplies the live workspace factories and owns
+verifier-pack intake and snapshot continuity, runtime identity, phase
+composition, and cleanup. Candidate/pack workspace path registration delegates
+to `workspace.repository_lifetime`.
 Sticky/final result projection is delegated to `repo_result`; candidate
 filesystem coordination is delegated to
 `repo_candidate`; repository-suite and verifier-pack subprocess/container
@@ -191,6 +195,13 @@ exception and suppresses `FileNotFoundError` only after a fresh root-absence
 observation, not as a stable-absence guarantee. `repo_verifier` retains
 call-time facades, so Guard, black-box, evidence, and monkeypatch-based adopters
 keep the same callable identities and dynamic effect seams.
+The dependency-free `workspace/repository_lifetime.py` owner records one
+repository judgment's candidate root/copy and optional verifier-pack root. It
+registers the pack root before snapshotting can begin, retains the historical
+`intake-result or callback-created` reconciliation, and returns the exact
+candidate-then-pack cleanup target order. `RepoVerifier` still supplies the
+live temporary-directory factories and invokes its existing cleanup facade in
+`finally`, preserving provider timing and primary-exception precedence.
 The flat CLI module has likewise been migrated byte-for-byte into the
 classified `cli/` package. Declarative parser construction now lives in the
 dependency-free `cli/parser.py` owner behind the public `cli.build_parser`

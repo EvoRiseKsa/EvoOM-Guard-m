@@ -535,15 +535,16 @@ def test_deletion_exception_class_is_resolved_after_delete_call(
     assert result.diagnostics.endswith("late unsafe path")
 
 
-def test_repo_verifier_keeps_allocation_pack_and_cleanup_outside_owner() -> None:
+def test_repo_verifier_keeps_workspace_pack_and_cleanup_outside_candidate_owner() -> None:
     owner_source = inspect.getsource(repo_candidate)
     verifier_source = inspect.getsource(repo_verifier.RepoVerifier._verify)
 
     assert "tempfile.mkdtemp" not in owner_source
+    assert "RepositoryWorkspaceLifetime" not in owner_source
     assert "intake_repo_pack" not in owner_source
     assert "_cleanup_repo_workspaces" not in owner_source
     assert verifier_source.index("admit_repo_candidate(") < verifier_source.index(
-        'tempfile.mkdtemp(prefix="evo_repo_")'
+        "RepositoryWorkspaceLifetime.create("
     )
     assert verifier_source.index("materialize_repo_candidate(") < verifier_source.index(
         "intake_repo_pack("

@@ -2717,12 +2717,16 @@ MUTATIONS = (
     ),
     Mutation(
         name="repo-pack-intake-workspace-cleanup-binding-bypass",
-        path="evoom_guard/verifiers/repo_verifier.py",
+        path="evoom_guard/workspace/repository_lifetime.py",
         before=(
-            "                pack_workdir = tempfile.mkdtemp(prefix=prefix)\n"
-            "                return pack_workdir\n"
+            "        pack_root = create_workspace(prefix=prefix)\n"
+            "        self.pack_root = pack_root\n"
+            "        return pack_root\n"
         ),
-        after="                return tempfile.mkdtemp(prefix=prefix)\n",
+        after=(
+            "        pack_root = create_workspace(prefix=prefix)\n"
+            "        return pack_root\n"
+        ),
         test=(
             "tests/test_repo_pack_intake_characterization.py::"
             "test_unexpected_snapshot_failure_preserves_workspace_for_final_cleanup"
