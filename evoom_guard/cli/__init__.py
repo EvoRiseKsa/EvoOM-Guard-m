@@ -68,6 +68,7 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from evoom_guard import __version__
 from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
+from evoom_guard.cli import artifact_admission_commands as _artifact_admission_command_owner
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
@@ -2483,87 +2484,18 @@ def cmd_seal_artifact_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    if args.artifact == "-" or args.finalizer_bundle == "-":
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": "artifact and finalizer bundle must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        sealed = seal_artifact_admission(
-            args.artifact,
-            args.finalizer_bundle,
-            args.out,
-            trusted_finalizer_public_key_path=args.finalizer_pub,
-            expected_finalizer_source=expected_source,
-            expected_finalizer_context=expected_context,
-            private_key_path=args.sign_key,
-            force=args.force,
-        )
-    except ArtifactAdmissionError as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": ARTIFACT_BINDING_FORMAT,
-            "ok": True,
-            "sealed": True,
-            "status": "SEALED",
-            "decision": "ALLOW",
-            "binding": sealed.binding_path,
-            "subject": sealed.subject.as_dict(),
-            "finalizer": sealed.payload["finalizer"],
-            "key_id": sealed.payload["authentication"]["key_id"],
-        },
+    return _artifact_admission_command_owner.execute_seal_artifact_admission(
+        args,
+        services=_artifact_admission_command_owner.SealArtifactAdmissionServices(
+            binding_format=ARTIFACT_BINDING_FORMAT,
+            artifact_error=ArtifactAdmissionError,
+            signing_unavailable_error=SigningUnavailableError,
+            seal_artifact_admission=seal_artifact_admission,
+            read_external_object_provider=lambda: _read_external_finalizer_object,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_verify_artifact_admission(
@@ -2580,85 +2512,18 @@ def cmd_verify_artifact_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    if any(value == "-" for value in (args.binding, args.artifact, args.finalizer_bundle)):
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": "binding, artifact, and finalizer bundle must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        expected_source = _read_external_finalizer_object(
-            args.expected_source, label="expected source"
-        )
-        expected_context = _read_external_finalizer_object(
-            args.expected_context, label="expected context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        verified = verify_artifact_admission(
-            args.binding,
-            args.artifact,
-            args.finalizer_bundle,
-            trusted_public_key_path=args.trusted_pub,
-            trusted_finalizer_public_key_path=args.finalizer_pub,
-            expected_finalizer_source=expected_source,
-            expected_finalizer_context=expected_context,
-        )
-    except ArtifactAdmissionError as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError, SigningUnavailableError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": ARTIFACT_BINDING_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": ARTIFACT_BINDING_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "VERIFIED",
-            "decision": "ALLOW",
-            "subject": verified.subject.as_dict(),
-            "finalizer": verified.inspection.finalizer,
-            "key_id": verified.inspection.payload["authentication"]["key_id"],
-        },
+    return _artifact_admission_command_owner.execute_verify_artifact_admission(
+        args,
+        services=_artifact_admission_command_owner.VerifyArtifactAdmissionServices(
+            binding_format=ARTIFACT_BINDING_FORMAT,
+            artifact_error=ArtifactAdmissionError,
+            signing_unavailable_error=SigningUnavailableError,
+            verify_artifact_admission=verify_artifact_admission,
+            read_external_object_provider=lambda: _read_external_finalizer_object,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_artifact_digest_admission(

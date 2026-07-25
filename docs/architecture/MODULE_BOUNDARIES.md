@@ -575,6 +575,19 @@ tests freeze operation order, stdout, exit status, public signatures, and those
 lookup points. This is an R2-compatible ownership move; it changes no verdict,
 bundle, signature, or frozen-release format.
 
+The fourth command-family slice adds the strictly typed, stdlib-only
+`cli.artifact_admission_commands` owner for only the Artifact Admission V1
+seal/verify pair. The public facades keep their function-local domain and
+signing imports as entry snapshots, while external source/context readers and
+the machine reporter are resolved live at every historical call site. The
+owner preserves the separate metadata and domain `try` regions, the
+`ArtifactAdmissionError`-before-`ValueError` catch order, eager stdin argument
+reads, success projection order, exact status/exit mapping, propagated
+exception identity, partial-output behavior, and the verifier's detached
+offline boundary. A cross-commit vector and focused reviewed mutations protect
+those contracts. No digest, GitHub, release-source, or release-artifact command
+moves in this slice.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

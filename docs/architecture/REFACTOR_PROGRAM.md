@@ -431,7 +431,14 @@ remain in their established facades.
   and supplies an entry-snapshotted keypair generator. A frozen
   pre-extraction vector binds provider-before-argument timing, path re-reads,
   no-clobber reporting, and propagated exception identity.
-- The source/artifact/GitHub-attestation command families remain pending.
+- The Artifact Admission V1 seal/verify pair now lives in the strictly typed,
+  stdlib-only `cli/artifact_admission_commands.py` owner. Its public facades
+  retain entry-snapshotted domain imports and live-per-use external readers and
+  reporting. A pre-extraction vector binds metadata/domain error boundaries,
+  catch precedence, eager argument reads, projections, exit codes, exception
+  identity, partial output, and detached offline verification.
+- The remaining source, digest, release-artifact, and GitHub-attestation
+  command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.
