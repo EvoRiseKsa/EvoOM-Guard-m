@@ -7164,6 +7164,187 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="blackbox-candidate-runtime-scanner-snapshot",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        services=CandidateExecutionEvidenceServices(\n"
+            "            container_ids_provider=lambda: _candidate_container_ids,\n"
+            "            sleeper_provider=lambda: time.sleep,\n"
+        ),
+        after=(
+            "        services=CandidateExecutionEvidenceServices(\n"
+            "            container_ids_provider=(\n"
+            "                lambda scanner=_candidate_container_ids: scanner\n"
+            "            ),\n"
+            "            sleeper_provider=lambda: time.sleep,\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_characterization.py::"
+            "test_retry_observes_live_providers_and_updates_cids_before_sorting"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-sleeper-snapshot",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        services=CandidateExecutionEvidenceServices(\n"
+            "            container_ids_provider=lambda: _candidate_container_ids,\n"
+            "            sleeper_provider=lambda: time.sleep,\n"
+        ),
+        after=(
+            "        services=CandidateExecutionEvidenceServices(\n"
+            "            container_ids_provider=lambda: _candidate_container_ids,\n"
+            "            sleeper_provider=(\n"
+            "                lambda sleeper=time.sleep: sleeper\n"
+            "            ),\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_characterization.py::"
+            "test_retry_observes_live_providers_and_updates_cids_before_sorting"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-scan-before-drain",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before=(
+            "        launcher_events = (\n"
+            "            request.recorder.drain()\n"
+            "            if request.recorder is not None\n"
+            "            else 0\n"
+            "        )\n"
+            "        container_ids = services.container_ids_provider()(\n"
+            "            request.cidfile_dir\n"
+            "        )\n"
+        ),
+        after=(
+            "        container_ids = services.container_ids_provider()(\n"
+            "            request.cidfile_dir\n"
+            "        )\n"
+            "        launcher_events = (\n"
+            "            request.recorder.drain()\n"
+            "            if request.recorder is not None\n"
+            "            else 0\n"
+            "        )\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_characterization.py::"
+            "test_retry_observes_live_providers_and_updates_cids_before_sorting"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-observed-cid-copy",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before=(
+            "            request.observed_container_ids.update(container_ids)\n"
+            "            container_ids = sorted(request.observed_container_ids)\n"
+        ),
+        after=(
+            "            container_ids = sorted(\n"
+            "                set(request.observed_container_ids) | set(container_ids)\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_characterization.py::"
+            "test_interrupted_observation_keeps_immediate_cid_mutation"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-container-conjunction-bypass",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before=(
+            "            candidate_invocations = min(\n"
+            "                launcher_events,\n"
+            "                len(container_ids),\n"
+            "            )\n"
+        ),
+        after="            candidate_invocations = launcher_events\n",
+        test=(
+            "tests/test_candidate_invocation_evidence.py::"
+            "test_docker_invocation_requires_both_launcher_receipt_and_valid_cid"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-kernel-late-binding",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before=(
+            "    cleanup_kernel = services.cleanup_kernel_provider()\n"
+            "    cleanup_request_factory = services.cleanup_request_factory_provider()\n"
+            "    known_container_ids = frozenset(request.known_container_ids or ())\n"
+        ),
+        after=(
+            "    cleanup_request_factory = services.cleanup_request_factory_provider()\n"
+            "    known_container_ids = frozenset(request.known_container_ids or ())\n"
+            "    cleanup_kernel = services.cleanup_kernel_provider()\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_characterization.py::"
+            "test_blackbox_candidate_runtime_matches_pre_extraction_vector"
+            "[cleanup_live_binding_schedule]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-known-ids-deferred",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before=(
+            "    known_container_ids = frozenset(request.known_container_ids or ())\n"
+        ),
+        after=(
+            "    known_container_ids = request.known_container_ids or frozenset()\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_owner.py::"
+            "test_cleanup_freezes_known_ids_once_and_preserves_provider_order"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-provider-order-inversion",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before=(
+            "        control_runner=services.control_runner_provider(),\n"
+            "        sleeper=services.sleeper_provider(),\n"
+            "        path_exists=services.path_exists_provider(),\n"
+        ),
+        after=(
+            "        sleeper=services.sleeper_provider(),\n"
+            "        control_runner=services.control_runner_provider(),\n"
+            "        path_exists=services.path_exists_provider(),\n"
+        ),
+        test=(
+            "tests/test_blackbox_candidate_runtime_owner.py::"
+            "test_cleanup_freezes_known_ids_once_and_preserves_provider_order"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-scan-error-overcatch",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before="        except services.scan_failure_type_provider() as exc:\n",
+        after="        except Exception as exc:\n",
+        test=(
+            "tests/test_blackbox_candidate_runtime_owner.py::"
+            "test_scan_adapter_propagates_unclassified_exceptions_by_identity"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-strict-gate-bypass",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before="    if request.strict and cleanup.failures:\n",
+        after="    if False and request.strict and cleanup.failures:\n",
+        test=(
+            "tests/test_blackbox_candidate_runtime_owner.py::"
+            "test_strict_cleanup_aggregates_failures_once_in_kernel_order"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-runtime-failure-order-inversion",
+        path="evoom_guard/verifiers/blackbox_candidate_runtime.py",
+        before='            + "; ".join(cleanup.failures)\n',
+        after='            + "; ".join(reversed(cleanup.failures))\n',
+        test=(
+            "tests/test_blackbox_candidate_runtime_owner.py::"
+            "test_strict_cleanup_aggregates_failures_once_in_kernel_order"
+        ),
+    ),
+    Mutation(
         name="blackbox-pack-outcome-exclusivity-bypass",
         path="evoom_guard/verifiers/blackbox_pack.py",
         before="        if (self.terminal is None) == (self.completed is None):\n",

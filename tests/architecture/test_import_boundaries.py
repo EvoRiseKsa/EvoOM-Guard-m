@@ -1814,6 +1814,72 @@ def test_blackbox_pack_has_only_public_execution_and_pack_dependencies() -> None
     )
 
 
+def test_blackbox_candidate_runtime_has_one_stdlib_owner_and_thin_facades() -> None:
+    """Candidate observation/cleanup sequencing must depend only on injection."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.blackbox"
+    owner_module = "evoom_guard.verifiers.blackbox_candidate_runtime"
+    facade_path = PACKAGE_ROOT / "blackbox.py"
+    owner_path = PACKAGE_ROOT / "verifiers" / "blackbox_candidate_runtime.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+    assert {
+        node.name
+        for node in owner_tree.body
+        if isinstance(node, ast.FunctionDef)
+    } == {
+        "attach_candidate_execution_evidence",
+        "cleanup_candidate_containers",
+    }
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name
+        for node in facade_tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    facade_classes = {
+        node.name
+        for node in facade_tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    assert {
+        "_attach_candidate_execution_evidence",
+        "_cleanup_candidate_containers",
+        "_candidate_container_ids",
+    } <= facade_functions
+    assert "CandidateContainerCleanupError" in facade_classes
+
+
 def test_release_source_admission_is_classified_and_uses_public_dependencies() -> None:
     """Prevent the first admission slice from inheriting flat-module debt."""
 

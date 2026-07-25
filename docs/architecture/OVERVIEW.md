@@ -177,9 +177,11 @@ injected effects. Lifecycle changes still flow through the typed builder.
 `verifiers/blackbox_pack.py` now owns the characterized verifier-pack process
 sequence and completed-process report interpretation through immutable
 boundaries plus an explicit mutable cleanup lifecycle. `blackbox.py` retains
-pack intake, command construction, candidate preparation, invocation/CID
-observation, evidence attachment, `BlackboxResult` projection, cleanup, and
-workspace lifetime.
+pack intake, command construction, candidate preparation, `BlackboxResult`
+projection, outer cleanup precedence, and workspace lifetime. The stdlib-only
+`verifiers/blackbox_candidate_runtime.py` owner now coordinates live
+launcher/CID evidence retries and candidate-container cleanup while the facade
+retains concrete Docker adapters and compatibility identities.
 The flat workspace module has been migrated atomically into the classified
 `workspace/` package. Its first bounded submodule,
 `workspace/candidate_tree.py`, now owns root validation, reparse-safe walking,
@@ -238,12 +240,19 @@ checks. Ownership, ACLs, xattrs, Windows security descriptors/alternate
 streams, and other non-portable metadata are not preserved. No parent-directory
 fsync is performed, so this does not promise power-loss/crash, NFS/distributed
 filesystem, or multi-file transactional durability.
-The remaining black-box candidate/runtime/cleanup orchestration and further
-runtime-effect decomposition remain pending; black-box pack sequencing,
+The bounded black-box candidate evidence/container-cleanup slice is complete.
+Remaining workspace/process coordination intentionally stays in the existing
+orchestrators under the current `R2` program. Black-box pack sequencing,
 candidate path admission, candidate-tree intake, repository workspace
-ownership, and both application decision/finalization paths are complete.
+ownership, and both application decision/finalization paths are also complete.
 
-The immediate structural priority after this bounded output slice is to reduce
-one remaining RepoVerifier/black-box effect responsibility without changing
-trust boundaries. Every slice must retain the existing contract, mutation,
-differential, and architectural-boundary gates.
+This closes the last currently justified behavior-preserving `R2` ownership
+gap in Guard/RepoVerifier/black-box runtime code. Their remaining
+orchestrators and compatibility facades stay in place. A cross-cutting
+`IsolationSession` abstraction or equivalent trust-model consolidation would
+be a semantic `R3` change, not a continuation of this extraction program.
+
+The immediate priority is to integrate and independently validate the completed
+boundaries, not to manufacture another ownership split. Any future semantic
+slice must retain the existing contract, mutation, differential, and
+architectural-boundary gates and satisfy the separate `R3` requirements above.
