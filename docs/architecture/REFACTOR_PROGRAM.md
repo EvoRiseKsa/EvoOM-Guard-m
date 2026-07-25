@@ -407,6 +407,11 @@ remain in their established facades.
   public, private, short-circuit, open/write/dump/exit-failure, nested path
   lookup, property-side-effect, and mid-call rebinding cases. Parser ref
   validation and dispatch do not move in this slice.
+- Signing-key generation now lives in the stdlib-only
+  `cli/signing_commands.py` owner. `cmd_keygen` retains the lazy signing import
+  and supplies an entry-snapshotted keypair generator. A frozen
+  pre-extraction vector binds provider-before-argument timing, path re-reads,
+  no-clobber reporting, and propagated exception identity.
 - The source/artifact/GitHub-attestation command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release

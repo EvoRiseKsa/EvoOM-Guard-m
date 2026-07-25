@@ -179,6 +179,14 @@ write, dump, and context-exit failures, nested path lookup order, property-read
 side effects, and all those lookup points. Parser ref validation and command
 dispatch remain outside this owner.
 
+Signing-key generation is owned by the stdlib-only, dependency-injected
+`evoom_guard/cli/signing_commands.py`. The public `cmd_keygen` facade keeps the
+lazy signing import at its historical path and snapshots `generate_keypair`
+before reading `args.key` or `args.pub`. The owner retains the exact
+`FileExistsError` exit-2 mapping, re-reads both paths for the success message,
+and propagates argument, non-`FileExistsError` provider, and output failures
+without wrapping them.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain

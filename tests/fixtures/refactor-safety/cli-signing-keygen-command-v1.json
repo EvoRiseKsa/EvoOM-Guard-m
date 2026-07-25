@@ -1,0 +1,378 @@
+{
+  "baseline_commit": "1262d987497a3be6fce5b71b9c4d90d299a1ba91",
+  "cases": {
+    "file_exists": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "message": "private key already exists",
+          "op": "output-entry"
+        },
+        {
+          "op": "output-return"
+        }
+      ],
+      "exception": null,
+      "exit_code": 2,
+      "messages": [
+        "private key already exists"
+      ]
+    },
+    "file_exists_output_failure_identity": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "message": "private key already exists",
+          "op": "output-entry"
+        }
+      ],
+      "exception": {
+        "message": "output failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null,
+      "messages": []
+    },
+    "key_property_failure_identity": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "op": "key-property-failure"
+        }
+      ],
+      "exception": {
+        "message": "key property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null,
+      "messages": []
+    },
+    "key_property_rebinds_provider": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "op": "rebind-provider"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "op": "provider-return"
+        },
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "message": "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)",
+          "op": "output-entry"
+        },
+        {
+          "op": "output-return"
+        }
+      ],
+      "exception": null,
+      "exit_code": 0,
+      "messages": [
+        "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)"
+      ]
+    },
+    "provider_keyboard_interrupt_identity": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        }
+      ],
+      "exception": {
+        "message": "provider interrupted",
+        "same_identity": true,
+        "type": "KeyboardInterrupt"
+      },
+      "exit_code": null,
+      "messages": []
+    },
+    "provider_oserror_identity": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        }
+      ],
+      "exception": {
+        "message": "provider failed",
+        "same_identity": true,
+        "type": "OSError"
+      },
+      "exit_code": null,
+      "messages": []
+    },
+    "pub_property_rebinds_provider": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "op": "rebind-provider"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "op": "provider-return"
+        },
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "message": "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)",
+          "op": "output-entry"
+        },
+        {
+          "op": "output-return"
+        }
+      ],
+      "exception": null,
+      "exit_code": 0,
+      "messages": [
+        "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)"
+      ]
+    },
+    "success": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "op": "provider-return"
+        },
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "message": "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)",
+          "op": "output-entry"
+        },
+        {
+          "op": "output-return"
+        }
+      ],
+      "exception": null,
+      "exit_code": 0,
+      "messages": [
+        "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)"
+      ]
+    },
+    "success_output_failure_identity": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "op": "provider-return"
+        },
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "message": "wrote /keys/private.pem (private — keep it a CI secret) and /keys/public.pem (public)",
+          "op": "output-entry"
+        }
+      ],
+      "exception": {
+        "message": "output failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null,
+      "messages": []
+    },
+    "success_provider_mutates_paths_before_report": {
+      "events": [
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/keys/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/keys/public.pem"
+        },
+        {
+          "key": "/keys/private.pem",
+          "op": "provider-entry",
+          "public_key": "/keys/public.pem"
+        },
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/rotated/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/rotated/public.pem"
+        },
+        {
+          "key": "/rotated/private.pem",
+          "op": "provider-mutated-paths",
+          "public_key": "/rotated/public.pem"
+        },
+        {
+          "op": "provider-return"
+        },
+        {
+          "name": "key",
+          "op": "read-arg",
+          "value": "/rotated/private.pem"
+        },
+        {
+          "name": "pub",
+          "op": "read-arg",
+          "value": "/rotated/public.pem"
+        },
+        {
+          "message": "wrote /rotated/private.pem (private — keep it a CI secret) and /rotated/public.pem (public)",
+          "op": "output-entry"
+        },
+        {
+          "op": "output-return"
+        }
+      ],
+      "exception": null,
+      "exit_code": 0,
+      "messages": [
+        "wrote /rotated/private.pem (private — keep it a CI secret) and /rotated/public.pem (public)"
+      ]
+    }
+  },
+  "schema_version": "cli-signing-keygen-command-characterization-v1"
+}
