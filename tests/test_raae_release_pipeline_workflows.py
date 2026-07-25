@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 
 from evoom_guard.pack_manifest import pack_digest
+from evoom_guard.signing import public_key_id
 
 ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -180,6 +181,22 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
 def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     policy = json.loads((ROOT / ".evoguard.json").read_text(encoding="utf-8"))
     pack = ROOT / "security" / "release-source-pack"
+    assert policy["policy_id"] == "evoom-guard-protected-release-source"
+    assert policy["policy_version"] == "2"
+    assert "*" in policy["protected"]
+    assert policy["allow"] == [
+        "CHANGELOG.md",
+        "PROJECT_STATUS.json",
+        "README.md",
+        "ROADMAP.md",
+        "benchmarks/results.jsonl",
+        "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
+        "docs/PROJECT_STATUS.md",
+        "docs/RELEASE_STATUS.md",
+        "docs/SBOM.md",
+        "docs/architecture/REFACTOR_PROGRAM.md",
+        "evoom_guard/__init__.py",
+    ]
     assert policy["verifier_pack"] == "security/release-source-pack"
     assert policy["expect_verifier_pack_sha256"] == pack_digest(str(pack))
     bootstrap = json.loads(
@@ -197,8 +214,16 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert policy["trust_setup_on_host"] is False
     assert policy["require_report_integrity"] == "external_process_isolated"
     assert policy["require_candidate_isolation"] == "docker"
+    assert "evidence/release-ledgers/*" in policy["protected"]
+    assert "security/release-ledger-roots/*" in policy["protected"]
     assert "security/release-source-pack/*" in policy["protected"]
     assert "security/release-pipeline-bootstrap.json" in policy["protected"]
+    ledger_root = ROOT / "security/release-ledger-roots/v4.4.0.pub.pem"
+    assert ledger_root.is_file()
+    assert (
+        public_key_id(str(ledger_root))
+        == "sha256:20cc7a937e94b716dd14642dc668ef365e0d74af11c84009237e7fe847df6e0f"
+    )
     pack_test = _text(pack / "test_release_protocol.py")
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
     assert "len(names) == len(set(names))" in pack_test
