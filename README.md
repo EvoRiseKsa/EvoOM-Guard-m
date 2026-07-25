@@ -262,9 +262,10 @@ Source version `4.4.0.dev0` is **unreleased development** and is not a consumer 
 The latest immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
-records the release assets `evo-guard.pyz`, `SHA256SUMS`, plus release and
-build-provenance attestation evidence. The ledger records no SBOM release asset.
-Canonical ledger: `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
+`evo-guard.pyz`, `SHA256SUMS`, while its build-provenance attestation binds
+`evo-guard.pyz`. The ledger records no SBOM release asset. Canonical ledger:
+`tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 
 The protected A-H release pipeline is implemented in source and **disabled by default**.
 The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
@@ -284,8 +285,9 @@ merely to exercise artifact attestation.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
 Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
-build-artifact attestation. The validated `v4.3.0` ledger records build provenance for
-its release artifacts under `.github/workflows/release.yml`; it records no SBOM release
+build-artifact attestation. The validated `v4.3.0` ledger records build provenance whose
+subject is `evo-guard.pyz` under `.github/workflows/release.yml`. Its release
+attestation separately binds `evo-guard.pyz`, `SHA256SUMS`; it records no SBOM release
 asset. Provider attestations are provenance evidence, not an EvoGuard verdict,
 artifact-admission decision, or proof of deployment. See
 [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the

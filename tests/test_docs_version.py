@@ -9,10 +9,10 @@ release. A source tree may legitimately prepare a newer runtime before its
 immutable GitHub Release exists; ``docs/RELEASE_STATUS.md`` records the source
 and latest-published versions explicitly. ``evo-guard init`` must never guess a
 release ref: every documented invocation supplies an exact tag or full SHA.
-JSON-schema examples always use the current source runtime. The byte-pinned
-v3.7 Trusted Finalizer templates remain the sole historical pin exception
-because changing those URLs without matching reviewed SHA-256 values would be
-unsafe.
+JSON-schema examples use explicit runtime placeholders unless the example is
+intentionally bound to one immutable release. The byte-pinned v3.7 Trusted
+Finalizer templates remain the sole historical pin exception because changing
+those URLs without matching reviewed SHA-256 values would be unsafe.
 """
 
 from __future__ import annotations

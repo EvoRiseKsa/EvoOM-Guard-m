@@ -127,6 +127,8 @@ class Ledger:
     release_url: str
     artifacts: tuple[str, ...]
     build_signer_workflow: str
+    build_provenance_subjects: tuple[str, ...]
+    release_attestation_subjects: tuple[str, ...]
     release_attestation_recorded: bool
     build_provenance_recorded: bool
     sbom_recorded: bool
@@ -175,8 +177,10 @@ class _PendingWrite:
     staged: Path
     backup: Path
     original: _FileIdentity
+    staged_identity: _FileIdentity
     original_bytes: bytes
     expected_bytes: bytes
+    committed_identity: _FileIdentity | None = None
 
 
 _SOURCE_GATE = "vars.EVOGUARD_RELEASE_SOURCE_V2_ENABLED == 'true'"
@@ -845,32 +849,153 @@ def _parse_common_ledger(
     return version, tag, commit_sha, release_url, tuple(artifacts)
 
 
-def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
-    configured = root / status.ledger_path
-    discovered = _discover_ledgers(root, root / "tests/baseline")
-    discovered.extend(
-        _discover_ledgers(
-            root,
-            root / "evidence/release-ledgers",
-            maximum_version=None,
-        )
-    )
-    if not discovered:
-        raise ProjectStatusError("no immutable release ledger was found")
-    versions = [version for version, _ in discovered]
-    if len(versions) != len(set(versions)):
-        raise ProjectStatusError("one release version exists in multiple ledger namespaces")
-    latest = max(discovered, key=lambda item: item[0])[1]
-    configured_safe = _safe_path(root, configured, leaf="file")
-    if configured_safe != latest:
+def _attestation_subject_names(value: object, where: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value:
+        raise ProjectStatusError(f"{where} must be a non-empty array")
+    subjects: list[str] = []
+    for index, raw_subject in enumerate(value):
+        subject = _mapping(raw_subject, f"{where}[{index}]")
+        name = _string(subject.get("name"), f"{where}[{index}].name")
+        if name in subjects:
+            raise ProjectStatusError(f"{where} contains duplicate subjects")
+        subjects.append(name)
+    return tuple(subjects)
+
+
+def _relative_ledger_path(root: Path, path: Path) -> str:
+    try:
+        return _absolute(path).relative_to(_absolute(root)).as_posix()
+    except ValueError as exc:
+        raise ProjectStatusError(f"release ledger escapes repository root: {path}") from exc
+
+
+def _git_nul_fields(raw: bytes, label: str) -> tuple[str, ...]:
+    if not raw:
+        return ()
+    if not raw.endswith(b"\0"):
+        raise ProjectStatusError(f"{label} is not NUL terminated")
+    try:
+        return tuple(field.decode("utf-8") for field in raw[:-1].split(b"\0"))
+    except UnicodeDecodeError as exc:
+        raise ProjectStatusError(f"{label} contains a non-UTF-8 path") from exc
+
+
+def _verify_append_only_v2_history(
+    root: Path,
+    discovered: Sequence[tuple[tuple[int, int, int], Path]],
+) -> None:
+    if _git(root, "rev-parse", "--is-shallow-repository") != "false":
         raise ProjectStatusError(
-            f"configured ledger is not newest: {status.ledger_path}; "
-            f"newest is {latest.relative_to(_absolute(root)).as_posix()}"
+            "release-ledger append-only proof requires complete non-shallow Git history"
+        )
+    current = {
+        relative
+        for _, path in discovered
+        if _V2_LEDGER_PATH_RE.fullmatch(
+            relative := _relative_ledger_path(root, path)
+        )
+        is not None
+    }
+    history_pathspec = ":(glob)evidence/release-ledgers/v*/RELEASE_LEDGER.json"
+    addition_fields = _git_nul_fields(
+        _git_bytes(
+            root,
+            "log",
+            "--format=",
+            "--name-status",
+            "-z",
+            "--diff-filter=A",
+            "HEAD",
+            "--",
+            history_pathspec,
+        ),
+        "release-ledger v2 Git history",
+    )
+    if len(addition_fields) % 2:
+        raise ProjectStatusError("release-ledger v2 Git history is malformed")
+    historical: set[str] = set()
+    for index in range(0, len(addition_fields), 2):
+        change, relative = addition_fields[index : index + 2]
+        if change != "A" or _V2_LEDGER_PATH_RE.fullmatch(relative) is None:
+            raise ProjectStatusError("release-ledger v2 Git history is ambiguous")
+        if relative in historical:
+            raise ProjectStatusError("release-ledger v2 was removed and re-added")
+        historical.add(relative)
+    non_additions = _git_bytes(
+        root,
+        "log",
+        "--format=",
+        "--name-status",
+        "-z",
+        "--diff-filter=CDMRTUXB",
+        "HEAD",
+        "--",
+        history_pathspec,
+    )
+    if non_additions:
+        raise ProjectStatusError(
+            "release-ledger v2 Git history contains a non-append change"
         )
 
-    ledger_bytes, _ = _read_stable_bytes(root, configured_safe)
+    tracked_namespace = _git_nul_fields(
+        _git_bytes(
+            root,
+            "ls-tree",
+            "-rz",
+            "--name-only",
+            "HEAD",
+            "--",
+            "evidence/release-ledgers",
+        ),
+        "tracked release-ledger v2 set",
+    )
+    tracked = {
+        relative
+        for relative in tracked_namespace
+        if relative.endswith("/RELEASE_LEDGER.json")
+    }
+    if any(_V2_LEDGER_PATH_RE.fullmatch(relative) is None for relative in tracked):
+        raise ProjectStatusError("tracked release-ledger v2 path is malformed")
+    missing = historical - current
+    if missing:
+        raise ProjectStatusError(
+            "release-ledger v2 history was rolled back; missing "
+            + ", ".join(sorted(missing))
+        )
+    if tracked != current:
+        raise ProjectStatusError(
+            "working release-ledger v2 set differs from the tracked HEAD set"
+        )
+
+
+def _verify_frozen_v1_set(
+    root: Path,
+    discovered: Sequence[tuple[tuple[int, int, int], Path]],
+) -> None:
+    expected = {
+        f"{directory}/RELEASE_LEDGER.json"
+        for directory in _FROZEN_V1_TREES
+    }
+    current = {
+        relative
+        for _, path in discovered
+        if _V1_LEDGER_PATH_RE.fullmatch(
+            relative := _relative_ledger_path(root, path)
+        )
+        is not None
+    }
+    if current != expected:
+        raise ProjectStatusError(
+            "frozen v1 ledger set differs; missing="
+            f"{sorted(expected - current)!r}, unexpected={sorted(current - expected)!r}"
+        )
+
+
+def _load_one_ledger(root: Path, path: Path, *, verify_git: bool) -> Ledger:
+    relative = _relative_ledger_path(root, path)
+    ledger_bytes, _ = _read_stable_bytes(root, path)
     if verify_git:
-        _verify_tracked_bytes(root, status.ledger_path, ledger_bytes)
+        _verify_tracked_bytes(root, relative, ledger_bytes)
     try:
         ledger_object = cast(
             object,
@@ -884,7 +1009,7 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
     top = _mapping(ledger_object, "release ledger")
     schema_version = _string(top.get("schema_version"), "release ledger.schema_version")
     if schema_version == "evoguard-release-ledger-v1":
-        path_match = _V1_LEDGER_PATH_RE.fullmatch(status.ledger_path)
+        path_match = _V1_LEDGER_PATH_RE.fullmatch(relative)
         if path_match is None:
             raise ProjectStatusError("release-ledger v1 is outside its frozen namespace")
         if _version_tuple(path_match.group(1)) > _LAST_V1_LEDGER_VERSION:
@@ -893,15 +1018,15 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
             )
         identity = _parse_common_ledger(
             top,
-            path=status.ledger_path,
+            path=relative,
             path_match=path_match,
             schema_version=schema_version,
         )
-        if identity[0] != "4.3.0" or identity[4] != (
+        if identity[4] != (
             "evo-guard.pyz",
             "SHA256SUMS",
         ):
-            raise ProjectStatusError("configured historical v1 ledger is not frozen v4.3.0")
+            raise ProjectStatusError("historical v1 ledger artifact set is invalid")
         release_attestation = _mapping(
             top.get("release_attestation"),
             "release ledger.release_attestation",
@@ -921,6 +1046,22 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
             build_provenance.get("signer_identity"),
             "release ledger.build_provenance.signer_identity",
         )
+        build_subject = _string(
+            build_provenance.get("subject_name"),
+            "release ledger.build_provenance.subject_name",
+        )
+        release_subjects = _attestation_subject_names(
+            release_attestation.get("asset_subjects"),
+            "release ledger.release_attestation.asset_subjects",
+        )
+        if build_subject != "evo-guard.pyz":
+            raise ProjectStatusError(
+                "historical v1 build provenance does not bind evo-guard.pyz"
+            )
+        if set(release_subjects) != set(identity[4]):
+            raise ProjectStatusError(
+                "historical v1 release attestation does not bind every release asset"
+            )
         signer_match = re.fullmatch(
             r"https://github\.com/EvoRiseKsa/EvoOM-Guard-m/"
             r"(\.github/workflows/[A-Za-z0-9._/-]+)@refs/heads/main",
@@ -929,18 +1070,24 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
         if signer_match is None:
             raise ProjectStatusError("historical v1 signer workflow identity is invalid")
         return Ledger(
-            schema_version,
-            *identity,
-            signer_match.group(1),
-            True,
-            True,
-            False,
-            False,
-            False,
+            schema_version=schema_version,
+            version=identity[0],
+            tag=identity[1],
+            commit_sha=identity[2],
+            release_url=identity[3],
+            artifacts=identity[4],
+            build_signer_workflow=signer_match.group(1),
+            build_provenance_subjects=(build_subject,),
+            release_attestation_subjects=release_subjects,
+            release_attestation_recorded=True,
+            build_provenance_recorded=True,
+            sbom_recorded=False,
+            pipeline_operational_evidence_recorded=False,
+            pipeline_publication_evidence_recorded=False,
         )
     if schema_version != "evoguard-release-ledger-v2":
         raise ProjectStatusError("release ledger schema_version is unsupported")
-    path_match = _V2_LEDGER_PATH_RE.fullmatch(status.ledger_path)
+    path_match = _V2_LEDGER_PATH_RE.fullmatch(relative)
     if path_match is None:
         raise ProjectStatusError("release-ledger v2 is outside its signed namespace")
     if verify_git:
@@ -954,22 +1101,27 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
         _verify_tracked_bytes(root, key_relative, key_bytes)
         _verify_clean_directory(
             root,
-            Path(status.ledger_path).parent.as_posix(),
+            Path(relative).parent.as_posix(),
         )
-    _validate_v2_ledger(root, configured_safe.parent, path_match.group(1))
-    validated_bytes, _ = _read_stable_bytes(root, configured_safe)
+    _validate_v2_ledger(root, path.parent, path_match.group(1))
+    validated_bytes, _ = _read_stable_bytes(root, path)
     if validated_bytes != ledger_bytes:
         raise ProjectStatusError("release-ledger v2 changed during external validation")
     identity = _parse_common_ledger(
         top,
-        path=status.ledger_path,
+        path=relative,
         path_match=path_match,
         schema_version=schema_version,
     )
     attestations = _mapping(top.get("attestations"), "release ledger.attestations")
     if not all(
         isinstance(attestations.get(name), Mapping)
-        for name in ("build_provenance", "sbom_provenance", "release")
+        for name in (
+            "build_provenance",
+            "spdx_provenance",
+            "sbom_provenance",
+            "release",
+        )
     ):
         raise ProjectStatusError("validated v2 ledger omits required attestations")
     if "evo-guard.spdx.json" not in identity[4]:
@@ -982,18 +1134,91 @@ def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
         build_attestation.get("signer_workflow"),
         "release ledger.attestations.build_provenance.signer_workflow",
     )
+    build_subject = _string(
+        build_attestation.get("subject_name"),
+        "release ledger.attestations.build_provenance.subject_name",
+    )
+    spdx_attestation = _mapping(
+        attestations["spdx_provenance"],
+        "release ledger.attestations.spdx_provenance",
+    )
+    sbom_attestation = _mapping(
+        attestations["sbom_provenance"],
+        "release ledger.attestations.sbom_provenance",
+    )
+    release_attestation = _mapping(
+        attestations["release"],
+        "release ledger.attestations.release",
+    )
+    release_subjects = _attestation_subject_names(
+        release_attestation.get("asset_subjects"),
+        "release ledger.attestations.release.asset_subjects",
+    )
+    if build_subject != "evo-guard.pyz":
+        raise ProjectStatusError("validated v2 build provenance subject is invalid")
+    if (
+        spdx_attestation.get("subject_name") != "evo-guard.spdx.json"
+        or sbom_attestation.get("subject_name") != "evo-guard.pyz"
+    ):
+        raise ProjectStatusError("validated v2 SPDX provenance subjects are invalid")
+    if set(release_subjects) != set(identity[4]):
+        raise ProjectStatusError(
+            "validated v2 release attestation does not bind every release asset"
+        )
     if re.fullmatch(r"\.github/workflows/[A-Za-z0-9._/-]+", signer_workflow) is None:
         raise ProjectStatusError("validated v2 signer workflow path is invalid")
     return Ledger(
-        schema_version,
-        *identity,
-        signer_workflow,
-        True,
-        True,
-        True,
-        True,
-        True,
+        schema_version=schema_version,
+        version=identity[0],
+        tag=identity[1],
+        commit_sha=identity[2],
+        release_url=identity[3],
+        artifacts=identity[4],
+        build_signer_workflow=signer_workflow,
+        build_provenance_subjects=(build_subject,),
+        release_attestation_subjects=release_subjects,
+        release_attestation_recorded=True,
+        build_provenance_recorded=True,
+        sbom_recorded=True,
+        pipeline_operational_evidence_recorded=True,
+        pipeline_publication_evidence_recorded=True,
     )
+
+
+def _load_ledger(root: Path, status: Status, *, verify_git: bool) -> Ledger:
+    configured = root / status.ledger_path
+    discovered = _discover_ledgers(root, root / "tests/baseline")
+    discovered.extend(
+        _discover_ledgers(
+            root,
+            root / "evidence/release-ledgers",
+            maximum_version=None,
+        )
+    )
+    if not discovered:
+        raise ProjectStatusError("no immutable release ledger was found")
+    versions = [version for version, _ in discovered]
+    if len(versions) != len(set(versions)):
+        raise ProjectStatusError("one release version exists in multiple ledger namespaces")
+    configured_safe = _safe_path(root, configured, leaf="file")
+    if verify_git:
+        _verify_frozen_v1_set(root, discovered)
+        _verify_append_only_v2_history(root, discovered)
+
+    loaded: dict[Path, Ledger] = {}
+    for version, path in sorted(discovered):
+        ledger = _load_one_ledger(root, path, verify_git=verify_git)
+        if _version_tuple(ledger.version) != version:
+            raise ProjectStatusError("discovered ledger version changed during validation")
+        loaded[path] = ledger
+
+    latest = max(discovered, key=lambda item: item[0])[1]
+    if configured_safe != latest:
+        raise ProjectStatusError(
+            f"configured ledger is not newest: {status.ledger_path}; "
+            f"newest is {latest.relative_to(_absolute(root)).as_posix()}"
+        )
+    return loaded[configured_safe]
 
 
 def _verify_source_relation(status: Status, ledger: Ledger, source_version: str) -> None:
@@ -1316,7 +1541,7 @@ def _verify_clean_directory(root: Path, relative: str) -> None:
 
 def _verify_tracked_bytes(root: Path, relative: str, working_bytes: bytes) -> None:
     parent = Path(relative).parent.as_posix()
-    _verify_clean_directory(root, parent)
+    _verify_clean_directory(root, relative if parent == "." else parent)
     tree_entry = _git(root, "ls-tree", "HEAD", "--", relative)
     if re.fullmatch(rf"100644 blob [0-9a-f]{{40}}\t{re.escape(relative)}", tree_entry) is None:
         raise ProjectStatusError(f"ledger is not one tracked regular Git blob: {relative}")
@@ -1344,7 +1569,15 @@ def _verify_git(root: Path, status: Status, ledger: Ledger) -> None:
 
 def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
     _safe_path(root, root, leaf="directory")
+    status_bytes: bytes | None = None
+    if verify_git:
+        status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
+        _verify_tracked_bytes(root, _STATUS_PATH.as_posix(), status_bytes)
     status = load_status(root)
+    if verify_git:
+        current_status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
+        if current_status_bytes != status_bytes:
+            raise ProjectStatusError("PROJECT_STATUS.json changed during validation")
     ledger = _load_ledger(root, status, verify_git=verify_git)
     source_version = _extract_source_version(root)
     _verify_source_relation(status, ledger, source_version)
@@ -1373,6 +1606,8 @@ def _release_summary(context: Context) -> str:
             f"unsupported rendered source lifecycle: {context.status.lifecycle}"
         )
     artifacts = "`, `".join(ledger.artifacts)
+    release_subjects = "`, `".join(ledger.release_attestation_subjects)
+    build_subjects = "`, `".join(ledger.build_provenance_subjects)
     sbom = (
         "The ledger records the SPDX SBOM release asset and its provenance."
         if ledger.sbom_recorded
@@ -1383,8 +1618,9 @@ def _release_summary(context: Context) -> str:
         f"The latest immutable consumer release recorded by the protected source "
         f"tree is [`{ledger.tag}`]({ledger.release_url}) at commit "
         f"`{ledger.commit_sha}`. Its `{ledger.schema_version}` ledger records "
-        f"the release assets `{artifacts}`, plus release and build-provenance "
-        f"attestation evidence. {sbom} "
+        f"the release assets `{artifacts}`. Its release attestation binds "
+        f"`{release_subjects}`, while its build-provenance attestation binds "
+        f"`{build_subjects}`. {sbom} "
         f"Canonical ledger: `{context.status.ledger_path}`."
     )
 
@@ -1444,6 +1680,8 @@ def _blocks(context: Context) -> dict[str, str]:
     version = ledger.version
     release_link = f"[`{tag}`]({ledger.release_url})"
     asset_names = "`, `".join(ledger.artifacts)
+    release_subject_names = "`, `".join(ledger.release_attestation_subjects)
+    build_subject_names = "`, `".join(ledger.build_provenance_subjects)
     download_patterns = " \\\n".join(
         f"  --pattern {name}" for name in ledger.artifacts
     )
@@ -1506,8 +1744,9 @@ def _blocks(context: Context) -> dict[str, str]:
         "README_ATTESTATION_SCOPE": _wrap(
             f"Historical `v3.7.0` has a GitHub release attestation but no GitHub "
             f"Actions build-artifact attestation. The validated `{tag}` ledger "
-            f"records build provenance for its release artifacts under "
-            f"`{ledger.build_signer_workflow}`"
+            f"records build provenance whose subject is `{build_subject_names}` "
+            f"under `{ledger.build_signer_workflow}`. Its release attestation "
+            f"separately binds `{release_subject_names}`"
             + (
                 " and records SPDX SBOM provenance."
                 if ledger.sbom_recorded
@@ -1544,8 +1783,9 @@ def _blocks(context: Context) -> dict[str, str]:
         "PROJECT_STATUS_RELEASE_PIPELINE": pipeline,
         "PROJECT_STATUS_RELEASE_EVIDENCE_ROWS": _wrap(
             f"Release evidence: validated ledger `{context.status.ledger_path}` "
-            f"records `{tag}` assets `{asset_names}` and build provenance under "
-            f"`{ledger.build_signer_workflow}`. "
+            f"records `{tag}` assets `{asset_names}`. Its release attestation binds "
+            f"`{release_subject_names}`; its build-provenance attestation binds "
+            f"`{build_subject_names}` under `{ledger.build_signer_workflow}`. "
             + (
                 "It also records the SPDX SBOM asset and SBOM provenance. "
                 if ledger.sbom_recorded
@@ -1734,6 +1974,31 @@ def _is_fence_closer(line: str, character: str, minimum: int) -> bool:
     )
 
 
+def _strip_complete_inline_code_spans(line: str) -> str:
+    visible: list[str] = []
+    cursor = 0
+    while True:
+        opener = re.search(r"`+", line[cursor:])
+        if opener is None:
+            visible.append(line[cursor:])
+            break
+        opener_start = cursor + opener.start()
+        opener_end = cursor + opener.end()
+        delimiter = opener.group(0)
+        closer = re.search(
+            rf"(?<!`){re.escape(delimiter)}(?!`)",
+            line[opener_end:],
+        )
+        if closer is None:
+            visible.append(line[cursor:])
+            break
+        closer_end = opener_end + closer.end()
+        visible.append(line[cursor:opener_start])
+        visible.append(" " * (closer_end - opener_start))
+        cursor = closer_end
+    return "".join(visible)
+
+
 def _marker_locations(text: str) -> dict[str, tuple[int, int]]:
     if "\r" in text:
         raise ProjectStatusError("CR line endings are forbidden in marker documents")
@@ -1815,11 +2080,7 @@ def _marker_locations(text: str) -> dict[str, tuple[int, int]]:
             offset += len(line)
             continue
 
-        if (
-            len(content) - len(content.lstrip(" ")) < 4
-            and content.lstrip().startswith("<")
-            and _RAW_HTML_RE.search(content) is not None
-        ):
+        if _RAW_HTML_RE.search(_strip_complete_inline_code_spans(content)) is not None:
             raise ProjectStatusError(
                 "raw HTML containers and comments are forbidden in marker documents"
             )
@@ -2047,12 +2308,14 @@ def _write_transaction(
                 "backup",
                 register=loose_temporaries,
             )
+            _, staged_identity = _read_stable_bytes(root, staged)
             pending.append(
                 _PendingWrite(
                     _absolute(target),
                     staged,
                     backup,
                     original,
+                    staged_identity,
                     original_bytes,
                     expected,
                 )
@@ -2084,15 +2347,46 @@ def _write_transaction(
                 )
             committed.append(item)
             replacer(item.staged, item.target)
-            actual, _ = _read_stable_bytes(root, item.target)
+            actual, committed_identity = _read_stable_bytes(root, item.target)
             if actual != item.expected_bytes:
                 raise ProjectStatusError(
                     f"committed bytes differ for {item.target}"
                 )
+            item.committed_identity = committed_identity
     except BaseException as commit_error:
         rollback_errors: list[str] = []
         for item in reversed(committed):
             try:
+                actual, current_identity = _read_stable_bytes(root, item.target)
+                if actual == item.original_bytes and current_identity == item.original:
+                    continue
+                expected_identity = item.committed_identity
+                if expected_identity is None:
+                    expected_staged_identity = item.staged_identity
+                    replacement_identity_matches = (
+                        current_identity.device,
+                        current_identity.inode,
+                        current_identity.mode,
+                        current_identity.size,
+                        current_identity.modified_ns,
+                    ) == (
+                        expected_staged_identity.device,
+                        expected_staged_identity.inode,
+                        expected_staged_identity.mode,
+                        expected_staged_identity.size,
+                        expected_staged_identity.modified_ns,
+                    )
+                else:
+                    replacement_identity_matches = current_identity == expected_identity
+                if (
+                    actual != item.expected_bytes
+                    or not replacement_identity_matches
+                ):
+                    rollback_errors.append(
+                        f"{item.target}: target changed after transaction write; "
+                        "concurrent bytes were left untouched"
+                    )
+                    continue
                 replacer(item.backup, item.target)
             except BaseException as exc:
                 rollback_errors.append(

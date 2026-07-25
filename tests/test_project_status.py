@@ -49,10 +49,18 @@ def _minimal_v2_ledger(version: str = "4.4.0") -> dict[str, object]:
             "build_provenance": {
                 "signer_workflow": (
                     ".github/workflows/evoguard-build-release-artifact.yml"
-                )
+                ),
+                "subject_name": "evo-guard.pyz",
             },
-            "sbom_provenance": {},
-            "release": {},
+            "spdx_provenance": {"subject_name": "evo-guard.spdx.json"},
+            "sbom_provenance": {"subject_name": "evo-guard.pyz"},
+            "release": {
+                "asset_subjects": [
+                    {"name": "evo-guard.pyz"},
+                    {"name": "evo-guard.spdx.json"},
+                    {"name": "SHA256SUMS"},
+                ]
+            },
         },
     }
 
@@ -89,35 +97,53 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_project_status_runs_in_matrix_and_has_one_aggregate_check(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        jobs = render_project_status._parse_workflow_jobs(  # noqa: SLF001
-            workflow,
-            ".github/workflows/ci.yml",
-        )
-        test_block = re.search(
-            r"(?ms)^  test:\s*\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*\n|\Z)",
-            workflow,
-        )
-        aggregate_block = re.search(
-            r"(?ms)^  project-status:\s*\n"
-            r"(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*\n|\Z)",
-            workflow,
-        )
-        self.assertIsNotNone(test_block)
-        self.assertIsNotNone(aggregate_block)
-        assert test_block is not None
-        assert aggregate_block is not None
-        self.assertRegex(
-            test_block.group("body"),
-            r'(?m)^\s{8}python-version:\s*\["3\.10", "3\.11", "3\.12"\]\s*$',
-        )
-        self.assertIn(
-            "run: python -I ops/render_project_status.py --check",
-            test_block.group("body"),
-        )
-        aggregate = jobs["project-status"]
-        self.assertEqual(aggregate.needs, frozenset({"test"}))
-        self.assertEqual(aggregate.gate, "always()")
-        self.assertNotRegex(aggregate_block.group("body"), r"(?m)^\s+strategy:\s*$")
+
+        def assert_contract(candidate: str) -> None:
+            jobs = render_project_status._parse_workflow_jobs(  # noqa: SLF001
+                candidate,
+                ".github/workflows/ci.yml",
+            )
+            test_block = re.search(
+                r"(?ms)^  test:\s*\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*\n|\Z)",
+                candidate,
+            )
+            aggregate_block = re.search(
+                r"(?ms)^  project-status:\s*\n"
+                r"(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*\n|\Z)",
+                candidate,
+            )
+            self.assertIsNotNone(test_block)
+            self.assertIsNotNone(aggregate_block)
+            assert test_block is not None
+            assert aggregate_block is not None
+            self.assertRegex(
+                test_block.group("body"),
+                r'(?m)^\s{8}python-version:\s*\["3\.10", "3\.11", "3\.12"\]\s*$',
+            )
+            self.assertIn(
+                "run: python -I ops/render_project_status.py --check",
+                jobs["test"].active_text,
+            )
+            aggregate = jobs["project-status"]
+            self.assertEqual(aggregate.needs, frozenset({"test"}))
+            self.assertEqual(aggregate.gate, "always()")
+            self.assertNotRegex(
+                aggregate_block.group("body"),
+                r"(?m)^\s+strategy:\s*$",
+            )
+
+        assert_contract(workflow)
+        command = "        run: python -I ops/render_project_status.py --check"
+        for replacement in (
+            "        # run: python -I ops/render_project_status.py --check",
+            "",
+        ):
+            mutated = workflow.replace(command, replacement, 1)
+            self.assertNotEqual(mutated, workflow)
+            with self.subTest(replacement=replacement), self.assertRaises(
+                AssertionError
+            ):
+                assert_contract(mutated)
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
@@ -133,6 +159,14 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertTrue(context.ledger.release_attestation_recorded)
         self.assertTrue(context.ledger.build_provenance_recorded)
         self.assertEqual(
+            context.ledger.build_provenance_subjects,
+            ("evo-guard.pyz",),
+        )
+        self.assertEqual(
+            context.ledger.release_attestation_subjects,
+            context.ledger.artifacts,
+        )
+        self.assertEqual(
             context.ledger.schema_version,
             "evoguard-release-ledger-v1",
         )
@@ -140,6 +174,33 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertFalse(context.ledger.pipeline_operational_evidence_recorded)
         self.assertFalse(context.ledger.pipeline_publication_evidence_recorded)
         self.assertEqual(context.status.cli_extraction, "complete")
+        generated = render_project_status._blocks(context)
+        attestation_scope = " ".join(
+            generated["README_ATTESTATION_SCOPE"].split()
+        )
+        evidence_row = " ".join(
+            generated["PROJECT_STATUS_RELEASE_EVIDENCE_ROWS"].split()
+        )
+        self.assertIn(
+            "build provenance whose subject is `evo-guard.pyz`",
+            attestation_scope,
+        )
+        self.assertIn(
+            "release attestation separately binds `evo-guard.pyz`, `SHA256SUMS`",
+            attestation_scope,
+        )
+        self.assertNotIn(
+            "build provenance for its release artifacts",
+            attestation_scope,
+        )
+        self.assertIn(
+            "release attestation binds `evo-guard.pyz`, `SHA256SUMS`",
+            evidence_row,
+        )
+        self.assertIn(
+            "build-provenance attestation binds `evo-guard.pyz`",
+            evidence_row,
+        )
 
     def test_every_supported_status_enum_changes_rendered_truth(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
@@ -195,6 +256,11 @@ class ProjectStatusTests(unittest.TestCase):
                 ),
                 build_signer_workflow=(
                     ".github/workflows/evoguard-build-release-artifact.yml"
+                ),
+                release_attestation_subjects=(
+                    "evo-guard.pyz",
+                    "evo-guard.spdx.json",
+                    "SHA256SUMS",
                 ),
                 sbom_recorded=True,
                 pipeline_operational_evidence_recorded=True,
@@ -413,6 +479,10 @@ class ProjectStatusTests(unittest.TestCase):
             f"<div hidden>\n{begin}\n{end}\n</div>\n",
             f"<details open>\n{begin}\n{end}\n</details>\n",
             f"<!-- hidden block\n{begin}\n{end}\n-->\n",
+            f"visible prefix <!-- hidden span\n{begin}\n{end}\n-->\n",
+            f"visible prefix <div hidden>\n{begin}\n{end}\n</div>\n",
+            f"<section style=\"display:none\">\n{begin}\n{end}\n</section>\n",
+            f"<table>\n{begin}\n{end}\n</table>\n",
         )
         for text in invalid:
             with self.subTest(text=text), self.assertRaises(
@@ -440,6 +510,7 @@ class ProjectStatusTests(unittest.TestCase):
             f"~~~~ shell\ncode\n~~~~~\n{begin}\nbody\n{end}\n",
             f"    ````\n{begin}\nbody\n{end}\n",
             f"``` bad`info\n{begin}\nbody\n{end}\n",
+            f"`<repo>` and ``<table>`` placeholders\n{begin}\nbody\n{end}\n",
         )
         for text in visible:
             with self.subTest(text=text):
@@ -493,6 +564,184 @@ class ProjectStatusTests(unittest.TestCase):
                         status,
                         verify_git=False,
                     )
+
+    def test_every_discovered_historical_v1_ledger_is_validated(self) -> None:
+        base_context = render_project_status.load_context(ROOT, verify_git=False)
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            baseline = root / "tests" / "baseline"
+            for version in ("4.2.0", "4.3.0"):
+                target = baseline / f"v{version}" / "RELEASE_LEDGER.json"
+                target.parent.mkdir(parents=True)
+                target.write_bytes(
+                    (
+                        ROOT
+                        / f"tests/baseline/v{version}/RELEASE_LEDGER.json"
+                    ).read_bytes()
+                )
+            historical = baseline / "v4.2.0" / "RELEASE_LEDGER.json"
+            malformed = json.loads(historical.read_text(encoding="utf-8"))
+            malformed["project"]["name"] = "not EvoOM Guard"
+            historical.write_text(json.dumps(malformed) + "\n", encoding="utf-8")
+            status = replace(
+                base_context.status,
+                ledger_path="tests/baseline/v4.3.0/RELEASE_LEDGER.json",
+            )
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "project identity",
+            ):
+                render_project_status._load_ledger(
+                    root,
+                    status,
+                    verify_git=False,
+                )
+
+    def test_every_discovered_historical_v2_ledger_is_validated(self) -> None:
+        base_context = render_project_status.load_context(ROOT, verify_git=False)
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ledger_root = root / "evidence" / "release-ledgers"
+            for version in ("4.4.0", "4.5.0"):
+                target = ledger_root / f"v{version}" / "RELEASE_LEDGER.json"
+                target.parent.mkdir(parents=True)
+                target.write_text(
+                    json.dumps(_minimal_v2_ledger(version)) + "\n",
+                    encoding="utf-8",
+                )
+            historical = ledger_root / "v4.4.0" / "RELEASE_LEDGER.json"
+            malformed = json.loads(historical.read_text(encoding="utf-8"))
+            malformed["project"]["name"] = "not EvoOM Guard"
+            historical.write_text(json.dumps(malformed) + "\n", encoding="utf-8")
+            status = replace(
+                base_context.status,
+                ledger_path=(
+                    "evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json"
+                ),
+            )
+            with (
+                mock.patch.object(render_project_status, "_validate_v2_ledger"),
+                self.assertRaisesRegex(
+                    render_project_status.ProjectStatusError,
+                    "project identity",
+                ),
+            ):
+                render_project_status._load_ledger(
+                    root,
+                    status,
+                    verify_git=False,
+                )
+
+    def test_v2_ledger_set_cannot_roll_back_across_head_ancestry(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for version in ("4.0.2", "4.1.0", "4.2.0", "4.3.0"):
+                v1 = root / f"tests/baseline/v{version}/RELEASE_LEDGER.json"
+                v1.parent.mkdir(parents=True)
+                v1.write_bytes(
+                    (
+                        ROOT
+                        / f"tests/baseline/v{version}/RELEASE_LEDGER.json"
+                    ).read_bytes()
+                )
+            v2 = root / "evidence/release-ledgers/v4.4.0/RELEASE_LEDGER.json"
+            v2.parent.mkdir(parents=True)
+            v2.write_text(
+                json.dumps(_minimal_v2_ledger()) + "\n",
+                encoding="utf-8",
+            )
+            status_document = json.loads(
+                (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
+            )
+            status_document["published_release"]["ledger"] = (
+                "evidence/release-ledgers/v4.4.0/RELEASE_LEDGER.json"
+            )
+            status_path = root / "PROJECT_STATUS.json"
+            status_path.write_text(
+                json.dumps(status_document) + "\n",
+                encoding="utf-8",
+            )
+            commands = (
+                ("init", "-q"),
+                ("config", "user.name", "Status Test"),
+                ("config", "user.email", "status@example.invalid"),
+                ("config", "core.autocrlf", "false"),
+                ("add", "."),
+                ("commit", "-qm", "record v4.4.0"),
+            )
+            for command in commands:
+                subprocess.run(
+                    ["git", *command],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+            v2.unlink()
+            v2.parent.rmdir()
+            status_document["published_release"]["ledger"] = (
+                "tests/baseline/v4.3.0/RELEASE_LEDGER.json"
+            )
+            status_path.write_text(
+                json.dumps(status_document) + "\n",
+                encoding="utf-8",
+            )
+            for command in (
+                ("add", "-A"),
+                ("commit", "-qm", "attempt release rollback"),
+            ):
+                subprocess.run(
+                    ["git", *command],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "non-append change",
+            ):
+                render_project_status._load_ledger(
+                    root,
+                    render_project_status.load_status(root),
+                    verify_git=True,
+                )
+
+    def test_frozen_v1_ledger_set_rejects_historical_deletion(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for version in ("4.0.2", "4.1.0", "4.2.0", "4.3.0"):
+                ledger = root / f"tests/baseline/v{version}/RELEASE_LEDGER.json"
+                ledger.parent.mkdir(parents=True)
+                ledger.write_bytes(
+                    (
+                        ROOT
+                        / f"tests/baseline/v{version}/RELEASE_LEDGER.json"
+                    ).read_bytes()
+                )
+            (root / "tests/baseline/v4.1.0/RELEASE_LEDGER.json").unlink()
+            discovered = render_project_status._discover_ledgers(
+                root,
+                root / "tests/baseline",
+            )
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "frozen v1 ledger set differs",
+            ):
+                render_project_status._verify_frozen_v1_set(root, discovered)
+
+    def test_append_only_proof_rejects_shallow_git_history(self) -> None:
+        with (
+            mock.patch.object(
+                render_project_status,
+                "_git",
+                return_value="true",
+            ),
+            self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "non-shallow Git history",
+            ),
+        ):
+            render_project_status._verify_append_only_v2_history(ROOT, ())
 
     def test_new_v1_ledger_after_v430_is_rejected(self) -> None:
         base_context = render_project_status.load_context(ROOT, verify_git=False)
@@ -985,6 +1234,41 @@ class ProjectStatusTests(unittest.TestCase):
                 for path, expected in originals.items():
                     self.assertEqual(path.read_bytes(), expected)
                 self.assertEqual(list(root.rglob("*.tmp")), [])
+
+    def test_rollback_never_overwrites_a_concurrent_external_update(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.md"
+            second = root / "second.md"
+            first.write_bytes(b"old-first\n")
+            second.write_bytes(b"old-second\n")
+            rendered = {
+                first: b"new-first\n",
+                second: b"new-second\n",
+            }
+            calls = 0
+
+            def fail_after_external_update(source: Path, target: Path) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    first.write_bytes(b"external-concurrent-update\n")
+                    raise OSError("injected failure after concurrent update")
+                render_project_status._replace_path(root, source, target)
+
+            with self.assertRaises(
+                render_project_status.ProjectStatusError
+            ) as caught:
+                render_project_status._write_transaction(
+                    root,
+                    rendered,
+                    replace=fail_after_external_update,
+                )
+            self.assertIn("rollback was incomplete", str(caught.exception))
+            self.assertIn("concurrent bytes were left untouched", str(caught.exception))
+            self.assertEqual(first.read_bytes(), b"external-concurrent-update\n")
+            self.assertEqual(second.read_bytes(), b"old-second\n")
+            self.assertEqual(list(root.rglob("*.tmp")), [])
 
     def test_control_baseexception_at_every_replace_rolls_back_with_identity(self) -> None:
         for error_type in (KeyboardInterrupt, SystemExit):

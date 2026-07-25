@@ -40,7 +40,7 @@ not change the frozen PR `evidence-context-1` contract. See
 [RELEASE_SOURCE_FINALIZER.md](RELEASE_SOURCE_FINALIZER.md) for its trust and
 bootstrap boundaries.
 
-The current v4.3.0 source also defines the distinct, closed-world
+The current protected source tree also defines the distinct, closed-world
 [`release-source-admission-2.schema.json`](../evoom_guard/schemas/release-source-admission-2.schema.json)
 for `EVOGUARD_RELEASE_SOURCE_ADMISSION_V2`. Its signed manifest includes the
 full A/B/C identities and replay selectors, evidence descriptors, provider

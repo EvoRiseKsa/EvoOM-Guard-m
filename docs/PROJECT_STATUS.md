@@ -31,9 +31,10 @@ Source version `4.4.0.dev0` is **unreleased development** and is not a consumer 
 The latest immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
-records the release assets `evo-guard.pyz`, `SHA256SUMS`, plus release and
-build-provenance attestation evidence. The ledger records no SBOM release asset.
-Canonical ledger: `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
+`evo-guard.pyz`, `SHA256SUMS`, while its build-provenance attestation binds
+`evo-guard.pyz`. The ledger records no SBOM release asset. Canonical ledger:
+`tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
 
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
@@ -66,10 +67,11 @@ evidence that those assets were published.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_EVIDENCE_ROWS -->
 Release evidence: validated ledger `tests/baseline/v4.3.0/RELEASE_LEDGER.json` records
-`v4.3.0` assets `evo-guard.pyz`, `SHA256SUMS` and build provenance under
-`.github/workflows/release.yml`. It records no SBOM release asset. These attestations
-establish bounded provenance, not correctness, security, deployment, or independent
-review.
+`v4.3.0` assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
+`evo-guard.pyz`, `SHA256SUMS`; its build-provenance attestation binds `evo-guard.pyz`
+under `.github/workflows/release.yml`. It records no SBOM release asset. These
+attestations establish bounded provenance, not correctness, security, deployment, or
+independent review.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_EVIDENCE_ROWS -->
 
 | Mechanism | Publicly supported statement | Boundary that remains |
