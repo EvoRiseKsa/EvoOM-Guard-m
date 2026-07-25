@@ -84,6 +84,9 @@ from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.cli import record_commands as _record_command_owner
 from evoom_guard.cli import (
+    release_source_admission_commands as _release_source_admission_command_owner,
+)
+from evoom_guard.cli import (
     release_source_finalizer_commands as _release_source_finalizer_command_owner,
 )
 from evoom_guard.cli import (
@@ -1573,139 +1576,49 @@ def cmd_seal_release_source_admission(
     )
     from evoom_guard.signing import SigningUnavailableError, public_key_id
 
-    if any(value == "-" for value in (args.receipt, args.handoff, args.verdict)):
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": "producer receipt, handoff, and verdict must be regular files, not standard input",
-            },
+    return (
+        _release_source_admission_command_owner.execute_seal_release_source_admission(
+            args,
+            services=(
+                _release_source_admission_command_owner.SealReleaseSourceAdmissionServices(
+                    admission_format=RELEASE_SOURCE_ADMISSION_FORMAT,
+                    release_source_error=ReleaseSourceAdmissionError,
+                    producer_receipt_error=ReleaseSourceProducerReceiptError,
+                    github_error=GitHubAttestationError,
+                    finalizer_error=FinalizerDerivationError,
+                    signing_unavailable_error=SigningUnavailableError,
+                    git_executable_pin=git_executable_pin,
+                    provider_isolation=github_attestation_provider_isolation,
+                    verify_admitter_workflow=(
+                        verify_release_source_admitter_workflow_blob
+                    ),
+                    validate_admitter_runtime=(
+                        validate_release_source_admitter_runtime_environment
+                    ),
+                    reverify_producer_receipt=(
+                        reverify_attested_release_source_producer_receipt
+                    ),
+                    seal_release_source_admission=seal_release_source_admission,
+                    public_key_id=public_key_id,
+                    producer_inputs_provider=lambda: (
+                        _producer_receipt_external_inputs
+                    ),
+                    read_external_object_provider=lambda: (
+                        _read_external_finalizer_object
+                    ),
+                    key_separation_provider=lambda: (
+                        _release_source_key_separation
+                    ),
+                    preflight_provider=lambda: (
+                        _preflight_release_source_admission_paths
+                    ),
+                    environment_provider=lambda: os.environ,
+                    machine_report_provider=lambda: _machine_report,
+                )
+            ),
+            out=out,
         )
-        return 2
-    try:
-        source, context, producer = _producer_receipt_external_inputs(args)
-        admitter = _read_external_finalizer_object(
-            args.admitter,
-            label="expected release-source admitter",
-        )
-        github_policy = _read_external_finalizer_object(
-            args.github_policy, label="GitHub producer-attestation policy"
-        )
-        key_separation = _release_source_key_separation(args)
-        expected_signing_key_id = public_key_id(args.sign_pub)
-        if expected_signing_key_id in set(key_separation.values()):
-            raise ValueError(
-                "release-source admission public key belongs to another configured trust domain"
-            )
-        _preflight_release_source_admission_paths(args)
-        git_executable = git_executable_pin(
-            args.git_executable,
-            args.git_executable_sha256,
-        )
-        provider_isolation = github_attestation_provider_isolation(
-            args.gh_executable,
-            args.gh_executable_sha256,
-            uid=args.provider_isolation_uid,
-            gid=args.provider_isolation_gid,
-        )
-        admitter = verify_release_source_admitter_workflow_blob(
-            source=source,
-            producer=producer,
-            admitter=admitter,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            git_executable=git_executable,
-        )
-        event_path = os.environ.get("GITHUB_EVENT_PATH")
-        if not event_path:
-            raise ValueError(
-                "seal-release-source-admission requires GitHub Actions GITHUB_EVENT_PATH"
-            )
-        event_payload = _read_external_finalizer_object(
-            event_path,
-            label="GitHub Actions workflow_run event payload",
-        )
-        runtime_admitter = validate_release_source_admitter_runtime_environment(
-            admitter,
-            producer,
-            environment=os.environ,
-            event_payload=event_payload,
-        )
-        attested = reverify_attested_release_source_producer_receipt(
-            args.receipt,
-            args.handoff,
-            args.verdict,
-            expected_source=source,
-            expected_context=context,
-            expected_producer=producer,
-            expected_bootstrap_guard_sha256=args.bootstrap_guard_sha,
-            expected_github_policy=github_policy,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            github_receipt_path=args.github_receipt_out,
-            github_raw_output_path=args.github_raw_output_out,
-            gh_executable=args.gh_executable,
-            timeout_seconds=args.timeout_seconds,
-            provider_isolation=provider_isolation,
-            protected_signing_key_path=args.sign_key,
-            git_executable=git_executable,
-        )
-        sealed = seal_release_source_admission(
-            attested,
-            args.out,
-            admitter=runtime_admitter,
-            key_separation=key_separation,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            git_executable=git_executable,
-            provider_isolation=provider_isolation,
-            private_key_path=args.sign_key,
-            signing_public_key_path=args.sign_pub,
-            expected_signing_key_id=expected_signing_key_id,
-            force=args.force,
-        )
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        ReleaseSourceAdmissionError,
-        ReleaseSourceProducerReceiptError,
-        GitHubAttestationError,
-        FinalizerDerivationError,
-        SigningUnavailableError,
-    ) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_ADMISSION_FORMAT,
-            "ok": True,
-            "sealed": True,
-            "verified": True,
-            "status": "SEALED",
-            "bundle": sealed.bundle_path,
-            "key_id": sealed.manifest["authentication"]["key_id"],
-            "record_sha256": sealed.manifest["record"]["sha256"],
-            "producer_receipt_sha256": sealed.manifest["producer_receipt"]["sha256"],
-            "decision": sealed.decision,
-            "admission": True,
-            "provider_verified": True,
-        },
     )
-    return 0
 
 
 def cmd_verify_release_source_admission(
@@ -1722,81 +1635,27 @@ def cmd_verify_release_source_admission(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    if args.bundle == "-":
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": "release-source admission bundle must be a regular file, not standard input",
-            },
+    return (
+        _release_source_admission_command_owner.execute_verify_release_source_admission(
+            args,
+            services=(
+                _release_source_admission_command_owner.VerifyReleaseSourceAdmissionServices(
+                    admission_format=RELEASE_SOURCE_ADMISSION_FORMAT,
+                    release_source_error=ReleaseSourceAdmissionError,
+                    signing_unavailable_error=SigningUnavailableError,
+                    verify_release_source_admission=verify_release_source_admission,
+                    read_external_object_provider=lambda: (
+                        _read_external_finalizer_object
+                    ),
+                    key_separation_provider=lambda: (
+                        _release_source_key_separation
+                    ),
+                    machine_report_provider=lambda: _machine_report,
+                )
+            ),
+            out=out,
         )
-        return 2
-    try:
-        source = _read_external_finalizer_object(args.expected_source, label="expected release source")
-        context = _read_external_finalizer_object(
-            args.expected_context, label="expected release-source context"
-        )
-        producer = _read_external_finalizer_object(
-            args.expected_producer, label="expected producer identity"
-        )
-        admitter = _read_external_finalizer_object(
-            args.expected_admitter, label="expected protected C workflow identity"
-        )
-        github_policy = _read_external_finalizer_object(
-            args.expected_github_policy, label="expected GitHub producer-attestation policy"
-        )
-        key_separation = _release_source_key_separation(args)
-        verified = verify_release_source_admission(
-            args.bundle,
-            trusted_public_key_path=args.trusted_pub,
-            expected_source=source,
-            expected_context=context,
-            expected_producer=producer,
-            expected_admitter=admitter,
-            expected_bootstrap_guard_sha256=args.expected_bootstrap_guard_sha,
-            expected_github_policy=github_policy,
-            expected_key_separation=key_separation,
-            expected_git_executable_sha256=args.expected_git_executable_sha256,
-            expected_github_cli_executable_sha256=args.expected_gh_executable_sha256,
-            expected_provider_isolation_uid=args.expected_provider_isolation_uid,
-            expected_provider_isolation_gid=args.expected_provider_isolation_gid,
-        )
-    except (
-        OSError,
-        UnicodeError,
-        ValueError,
-        ReleaseSourceAdmissionError,
-        SigningUnavailableError,
-    ) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_ADMISSION_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_ADMISSION_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "VERIFIED",
-            "key_id": verified.bundle.manifest["authentication"]["key_id"],
-            "record_sha256": verified.bundle.manifest["record"]["sha256"],
-            "producer_receipt_sha256": verified.bundle.manifest["producer_receipt"]["sha256"],
-            "decision": verified.decision,
-            "admission": True,
-        },
     )
-    return 0
 
 
 def _release_artifact_key_separation(args: argparse.Namespace) -> dict[str, str]:

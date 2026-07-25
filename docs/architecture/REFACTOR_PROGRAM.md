@@ -477,8 +477,17 @@ remain in their established facades.
   archive-only opt-in exits. Both verification commands remain explicitly
   non-admitting; their services gain no signing, admission, isolation-builder,
   or executable-pin authority.
-- The remaining release-source admission and release-artifact admission
-  command families remain pending.
+- Release Source Admission V2 sealing and detached verification now live in
+  the strictly typed, stdlib-only
+  `cli/release_source_admission_commands.py` owner. Independent seal/verify
+  services preserve entry snapshots and live trusted-reader/helper/
+  environment/reporting seams. Only sealing can access raw Git, protected
+  workflow/runtime validation, fresh GitHub provider verification, provider
+  evidence outputs, preflight, or a private signing key. The reviewed 56-case
+  vector freezes eager inputs, key separation, no-clobber/alias preflight,
+  provider ordering, exception identity, partial evidence, exact projections,
+  and the verifier's closed-world offline surface.
+- The remaining release-artifact admission command family remains pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

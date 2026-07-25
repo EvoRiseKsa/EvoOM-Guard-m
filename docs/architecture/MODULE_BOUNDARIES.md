@@ -634,7 +634,27 @@ guards, separate metadata/domain catches, GitHub-error precedence, repeated
 result projections, partial-output residue, and success projection outside the
 domain `try`. A 70-case cross-parent vector and at least sixteen focused
 reviewed mutations protect the slice. Release-source and release-artifact
-command families remain in the facade.
+command families remain outside that slice.
+
+The eighth command-family slice adds the separate strictly typed, stdlib-only
+`cli.release_source_admission_commands` owner for only the Release Source
+Admission V2 seal/detached-verify pair. The facade keeps the admission format,
+domain callables, domain exceptions, executable-pin callable, provider
+isolation callable, and signing callable/exception as function-local entry
+snapshots. External trust readers, producer-input/key-separation/preflight
+helpers, environment resolution, and reporting remain live at their exact
+historical use sites. Seal and verify have independent service contracts: only
+the seal contract can access the protected runtime, raw-Git executable,
+GitHub provider, fresh provider-evidence outputs, private signing key,
+preflight, or ambient `GITHUB_EVENT_PATH`. The detached verifier contract has
+none of those authority seams. The owner preserves eager receipt/handoff/
+verdict reads, no-clobber and destructive-alias preflight before executable
+I/O, key-domain separation, protected workflow/runtime validation order,
+partial provider-evidence residue, catch identity and precedence, exact
+success projections, and the verifier's closed-world offline boundary. A
+56-case cross-parent vector plus focused reviewed mutations protect the slice.
+Other release-source and release-artifact command families remain outside this
+slice.
 
 The eighth command-family slice adds the strictly typed, stdlib-only
 `cli.release_source_finalizer_commands` owner for release-source handoff

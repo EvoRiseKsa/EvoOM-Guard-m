@@ -1804,6 +1804,345 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-release-source-admission-seal-stdin-tuple-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            '    if any(value == "-" for value in '
+            "(args.receipt, args.handoff, args.verdict)):\n"
+        ),
+        after='    if args.receipt == "-":\n',
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_handoff_stdin_short_circuit]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-producer-helper-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    public_key_id=public_key_id,\n"
+            "                    producer_inputs_provider=lambda: (\n"
+            "                        _producer_receipt_external_inputs\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda: (\n"
+        ),
+        after=(
+            "                    public_key_id=public_key_id,\n"
+            "                    producer_inputs_provider=lambda _inputs=(\n"
+            "                        _producer_receipt_external_inputs\n"
+            "                    ): _inputs,\n"
+            "                    read_external_object_provider=lambda: (\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_producer_helper_is_live]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-key-helper-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    key_separation_provider=lambda: (\n"
+            "                        _release_source_key_separation\n"
+            "                    ),\n"
+            "                    preflight_provider=lambda: (\n"
+        ),
+        after=(
+            "                    key_separation_provider=lambda _keys=(\n"
+            "                        _release_source_key_separation\n"
+            "                    ): _keys,\n"
+            "                    preflight_provider=lambda: (\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_key_helper_is_live]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-seal-reader-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    producer_inputs_provider=lambda: (\n"
+            "                        _producer_receipt_external_inputs\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    producer_inputs_provider=lambda: (\n"
+            "                        _producer_receipt_external_inputs\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda _reader=(\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ): _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_reader_is_live_between_inputs]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-preflight-helper-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    preflight_provider=lambda: (\n"
+            "                        _preflight_release_source_admission_paths\n"
+            "                    ),\n"
+            "                    environment_provider=lambda: os.environ,\n"
+        ),
+        after=(
+            "                    preflight_provider=lambda _preflight=(\n"
+            "                        _preflight_release_source_admission_paths\n"
+            "                    ): _preflight,\n"
+            "                    environment_provider=lambda: os.environ,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_preflight_is_live]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-preflight-execution-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before="        services.preflight_provider()(args)\n",
+        after="        _ = services.preflight_provider\n",
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_output_alias_rejected]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-git-pin-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            "        git_executable = services.git_executable_pin(\n"
+            "            args.git_executable,\n"
+            "            args.git_executable_sha256,\n"
+            "        )\n"
+        ),
+        after=(
+            "        _ = (args.git_executable, args.git_executable_sha256)\n"
+            "        git_executable = None\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-provider-isolation-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            "        provider_isolation = services.provider_isolation(\n"
+            "            args.gh_executable,\n"
+            "            args.gh_executable_sha256,\n"
+            "            uid=args.provider_isolation_uid,\n"
+            "            gid=args.provider_isolation_gid,\n"
+            "        )\n"
+        ),
+        after=(
+            "        _ = (\n"
+            "            args.gh_executable,\n"
+            "            args.gh_executable_sha256,\n"
+            "            args.provider_isolation_uid,\n"
+            "            args.provider_isolation_gid,\n"
+            "        )\n"
+            "        provider_isolation = None\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-event-context-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before="        if not event_path:\n",
+        after="        if False and not event_path:\n",
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_event_path_missing]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-protected-key-binding-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before="            protected_signing_key_path=args.sign_key,\n",
+        after="            protected_signing_key_path=None,\n",
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-partial-evidence-error-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            "    except (\n"
+            "        OSError,\n"
+            "        UnicodeError,\n"
+            "        ValueError,\n"
+            "        services.release_source_error,\n"
+            "        services.producer_receipt_error,\n"
+        ),
+        after=(
+            "    except (\n"
+            "        UnicodeError,\n"
+            "        ValueError,\n"
+            "        services.release_source_error,\n"
+            "        services.producer_receipt_error,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_partial_provider_output_preserved]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-seal-projection-order-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            '            "bundle": sealed.bundle_path,\n'
+            '            "key_id": sealed.manifest["authentication"]["key_id"],\n'
+            '            "record_sha256": sealed.manifest["record"]["sha256"],\n'
+        ),
+        after=(
+            '            "record_sha256": sealed.manifest["record"]["sha256"],\n'
+            '            "bundle": sealed.bundle_path,\n'
+            '            "key_id": sealed.manifest["authentication"]["key_id"],\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[seal_success_projection_order]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-verify-online-argument-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            '    """Verify a V2 source authorization using only external trust roots."""\n'
+            "\n"
+            '    if args.bundle == "-":\n'
+        ),
+        after=(
+            '    """Verify a V2 source authorization using only external trust roots."""\n'
+            "\n"
+            "    _ = args.gh_executable\n"
+            '    if args.bundle == "-":\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-verify-key-helper-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    verify_release_source_admission="
+            "verify_release_source_admission,\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+            "                    key_separation_provider=lambda: (\n"
+            "                        _release_source_key_separation\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    verify_release_source_admission="
+            "verify_release_source_admission,\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+            "                    key_separation_provider=lambda _keys=(\n"
+            "                        _release_source_key_separation\n"
+            "                    ): _keys,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[verify_key_helper_is_live]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-verify-reader-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    verify_release_source_admission="
+            "verify_release_source_admission,\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+            "                    key_separation_provider=lambda: (\n"
+        ),
+        after=(
+            "                    verify_release_source_admission="
+            "verify_release_source_admission,\n"
+            "                    read_external_object_provider=lambda _reader=(\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ): _reader,\n"
+            "                    key_separation_provider=lambda: (\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[verify_reader_is_live_between_inputs]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-verify-authority-service-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            "    machine_report_provider: Callable[[], _MachineReport]\n"
+            "\n"
+            "\n"
+            "def execute_seal_release_source_admission(\n"
+        ),
+        after=(
+            "    machine_report_provider: Callable[[], _MachineReport]\n"
+            "    environment_provider: Callable[[], Mapping[str, str]] | None = None\n"
+            "\n"
+            "\n"
+            "def execute_seal_release_source_admission(\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_verify_service_contract_has_no_connected_authority_seam"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-admission-verify-projection-order-bypass",
+        path="evoom_guard/cli/release_source_admission_commands.py",
+        before=(
+            '            "key_id": verified.bundle.manifest'
+            '["authentication"]["key_id"],\n'
+            '            "record_sha256": verified.bundle.manifest["record"]["sha256"],\n'
+        ),
+        after=(
+            '            "record_sha256": verified.bundle.manifest["record"]["sha256"],\n'
+            '            "key_id": verified.bundle.manifest'
+            '["authentication"]["key_id"],\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_admission_characterization.py::"
+            "test_frozen_cli_release_source_admission_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',
