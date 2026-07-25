@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -48,6 +49,11 @@ def _trusted_parent(
     _git(repository, "init", "-q")
     _git(repository, "config", "user.name", "Ledger Assembler Test")
     _git(repository, "config", "user.email", "ledger@example.invalid")
+    shutil.copytree(
+        ROOT / "evoom_guard",
+        repository / "evoom_guard",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
     for source, relative in (
         (
             validator.DEFAULT_SCHEMA,

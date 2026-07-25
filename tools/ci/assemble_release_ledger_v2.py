@@ -1452,19 +1452,28 @@ def assemble(
 
     ledger: MutableMapping[str, Any] = copy.deepcopy(claims)
     retained = _complete_file_descriptors(ledger, root)
-    extracted_facts = _derive_embedded_facts(ledger, root)
-    _derive_file_bindings(ledger, root)
     trusted_parent = _trusted_contracts(
         ledger,
         root,
         trusted_parent_repo,
     )
-    inventory = _validate_completed_evidence(
-        ledger,
-        root,
-        trusted_parent_repo,
-        retained,
-    )
+    try:
+        first_party_contracts = validator._trusted_parent_contract_reference(
+            trusted_parent_repo,
+            trusted_parent["commit_sha"],
+            trusted_parent["tree_sha"],
+        )
+        with validator._trusted_parent_first_party(first_party_contracts):
+            extracted_facts = _derive_embedded_facts(ledger, root)
+            _derive_file_bindings(ledger, root)
+            inventory = _validate_completed_evidence(
+                ledger,
+                root,
+                trusted_parent_repo,
+                retained,
+            )
+    except validator.LedgerValidationError as exc:
+        raise LedgerAssemblyError(str(exc)) from exc
     draft_bytes = validator.canonical_json_bytes(ledger)
 
     tool_path = Path(__file__).resolve()

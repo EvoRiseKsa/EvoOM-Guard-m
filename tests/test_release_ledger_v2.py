@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -965,6 +966,26 @@ def test_v2_schema_is_valid_and_synthetic_contract_passes() -> None:
     validator.validate_structure(_valid_ledger())
 
 
+def test_project_status_is_a_schema_required_main_check_and_tag_job() -> None:
+    ledger = _valid_ledger()
+    ledger["repository_controls"]["main_branch"]["required_checks"].remove(
+        "project-status"
+    )
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="schema validation failed",
+    ):
+        validator.validate_structure(ledger)
+
+    ledger = _valid_ledger()
+    ledger["tag_ci"]["successful_jobs"].remove("project-status")
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="schema validation failed",
+    ):
+        validator.validate_structure(ledger)
+
+
 def test_official_schema_is_not_caller_replaceable() -> None:
     ledger = _valid_ledger()
     ledger["unexpected"] = True
@@ -1129,6 +1150,184 @@ def test_external_trusted_parent_rejects_candidate_contract_mutation(
             repository,
             trusted,
         )
+
+
+def _first_party_parent_repository(
+    tmp_path: Path,
+) -> tuple[Path, str, str]:
+    repository = tmp_path / "first-party-parent"
+    repository.mkdir()
+
+    def git(*arguments: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repository), *arguments],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "First Party Parent Test")
+    git("config", "user.email", "first-party@example.invalid")
+    shutil.copytree(
+        ROOT / "evoom_guard",
+        repository / "evoom_guard",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
+    )
+    git("add", ".")
+    git("commit", "-q", "-m", "literal trusted parent")
+    return (
+        repository,
+        git("rev-parse", "HEAD"),
+        git("rev-parse", "HEAD^{tree}"),
+    )
+
+
+def test_first_party_verification_code_is_loaded_from_literal_parent_and_restored(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository, parent, parent_tree = _first_party_parent_repository(tmp_path)
+    signing_target = repository / "evoom_guard" / "signing.py"
+    signing_target.write_bytes(
+        signing_target.read_bytes()
+        + b"\n\ndef public_key_id(_path: str) -> str:\n"
+        + b"    return 'sha256:' + ('0' * 64)\n"
+    )
+    subprocess.run(
+        ["git", "-C", str(repository), "add", "evoom_guard/signing.py"],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "commit",
+            "-q",
+            "-m",
+            "untrusted candidate mutation",
+        ],
+        check=True,
+    )
+
+    private = tmp_path / "signing.private.pem"
+    public = tmp_path / "signing.public.pem"
+    generate_keypair(str(private), str(public))
+    ambient_signing = sys.modules["evoom_guard.signing"]
+    expected_key_id = public_key_id(str(public))
+    attacker_key_id = f"sha256:{'f' * 64}"
+    monkeypatch.setattr(
+        ambient_signing,
+        "public_key_id",
+        lambda _path: attacker_key_id,
+    )
+
+    contracts = validator._trusted_parent_contract_reference(
+        repository,
+        parent,
+        parent_tree,
+    )
+    parent_signing_bytes = subprocess.check_output(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "show",
+            f"{parent}:evoom_guard/signing.py",
+        ]
+    )
+    with validator._trusted_parent_first_party(contracts):
+        trusted_signing = sys.modules["evoom_guard.signing"]
+        trusted_file = trusted_signing.__file__
+        assert isinstance(trusted_file, str)
+        trusted_origin = Path(trusted_file)
+        assert trusted_signing is not ambient_signing
+        assert trusted_origin.read_bytes() == parent_signing_bytes
+        assert not validator._path_is_within(trusted_origin, repository)
+        assert trusted_signing.public_key_id(str(public)) == expected_key_id
+
+    assert sys.modules["evoom_guard.signing"] is ambient_signing
+    assert ambient_signing.public_key_id(str(public)) == attacker_key_id
+
+
+def test_first_party_snapshot_is_rechecked_when_validation_body_raises(
+    tmp_path: Path,
+) -> None:
+    repository, parent, parent_tree = _first_party_parent_repository(tmp_path)
+    contracts = validator._trusted_parent_contract_reference(
+        repository,
+        parent,
+        parent_tree,
+    )
+
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="loaded trusted first-party module",
+    ) as caught:
+        with validator._trusted_parent_first_party(contracts):
+            signing_file = sys.modules["evoom_guard.signing"].__file__
+            assert isinstance(signing_file, str)
+            signing_path = Path(signing_file)
+            signing_path.write_bytes(signing_path.read_bytes() + b"\n# tampered\n")
+            raise RuntimeError("primary validation failure")
+    assert isinstance(caught.value.__cause__, RuntimeError)
+
+
+def test_first_party_parent_tree_rejects_non_regular_git_entries(
+    tmp_path: Path,
+) -> None:
+    repository, _parent, _parent_tree = _first_party_parent_repository(tmp_path)
+    object_id = subprocess.run(
+        ["git", "-C", str(repository), "hash-object", "-w", "--stdin"],
+        input="signing.py",
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            f"120000,{object_id},evoom_guard/linked.py",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "commit",
+            "-q",
+            "-m",
+            "non-regular first-party entry",
+        ],
+        check=True,
+    )
+    parent = subprocess.check_output(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    tree = subprocess.check_output(
+        ["git", "-C", str(repository), "rev-parse", "HEAD^{tree}"],
+        text=True,
+    ).strip()
+    contracts = validator._trusted_parent_contract_reference(
+        repository,
+        parent,
+        tree,
+    )
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="non-regular blob",
+    ):
+        validator._read_trusted_first_party_tree(contracts)
 
 
 def test_trusted_git_output_is_bounded_before_aggregation() -> None:
@@ -1326,7 +1525,7 @@ def test_schema_mutations_fail_closed(
             lambda value: value["repository_controls"]["main_branch"].update(
                 {"required_checks": ["test (3.12)"]}
             ),
-            "missing required checks",
+            "schema validation failed",
         ),
         (
             lambda value: value["tag_ci"].update({"head_sha": _git("wrong")}),

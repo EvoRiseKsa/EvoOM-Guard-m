@@ -1274,8 +1274,8 @@
         },
         "successful_jobs": {
           "type": "array",
-          "minItems": 7,
-          "maxItems": 7,
+          "minItems": 8,
+          "maxItems": 8,
           "uniqueItems": true,
           "prefixItems": [
             {
@@ -1283,6 +1283,9 @@
             },
             {
               "const": "e2e-runners"
+            },
+            {
+              "const": "project-status"
             },
             {
               "const": "publish-pyz"
@@ -2535,6 +2538,9 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
+          "contains": {
+            "const": "project-status"
+          },
           "items": {
             "type": "string",
             "minLength": 1,

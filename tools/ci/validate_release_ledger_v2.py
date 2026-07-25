@@ -21,6 +21,8 @@ import argparse
 import base64
 import binascii
 import hashlib
+import importlib
+import importlib.machinery
 import json
 import os
 import re
@@ -31,8 +33,9 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Mapping, Sequence
-from contextlib import suppress
+import unicodedata
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -65,6 +68,28 @@ MAX_RETAINED_FILES = 64
 MAX_RETAINED_FILE_BYTES = 72 * 1024 * 1024
 MAX_RETAINED_TOTAL_BYTES = 256 * 1024 * 1024
 _READ_CHUNK_BYTES = 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_FILES = 512
+MAX_TRUSTED_FIRST_PARTY_FILE_BYTES = 4 * 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_TREE_BYTES = 2 * 1024 * 1024
+MAX_TRUSTED_FIRST_PARTY_PATH_BYTES = 1024
+MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH = 16
+_TRUSTED_FIRST_PARTY_PREFIX = "evoom_guard"
+_TRUSTED_FIRST_PARTY_MODULES = (
+    "evoom_guard.github_attestation",
+    "evoom_guard.admission.release_artifact",
+    "evoom_guard.admission.release_source",
+    "evoom_guard.signing",
+)
+_FIRST_PARTY_IMPORT_LOCK = threading.RLock()
+_WINDOWS_RESERVED_PATH_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
 _CANONICAL_UTC = re.compile(
     r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
     r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z\Z"
@@ -89,10 +114,12 @@ REQUIRED_MAIN_CHECKS = {
     "smoke",
     "analyze",
     "CodeQL",
+    "project-status",
 }
 EXPECTED_TAG_JOBS = (
     "blackbox-docker-e2e",
     "e2e-runners",
+    "project-status",
     "publish-pyz",
     "release-tag-guard",
     "test (3.10)",
@@ -178,6 +205,21 @@ class _TrustedLedgerKey:
     key_id: str
     key: Any
     identity: tuple[int, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class _TrustedParentContracts:
+    repository: Path
+    commit_sha: str
+    tree_sha: str
+    repository_object: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class _TrustedFirstPartyFile:
+    blob_sha: str
+    sha256: str
+    size_bytes: int
 
 
 def _fail(message: str) -> NoReturn:
@@ -558,6 +600,7 @@ def _trusted_git(
     *arguments: str,
     label: str,
     output_limit: int,
+    input_data: bytes | None = None,
 ) -> bytes:
     try:
         returncode, stdout, _stderr = _run_bounded_subprocess(
@@ -566,6 +609,7 @@ def _trusted_git(
             output_limit=output_limit,
             timeout=15,
             label=f"trusted parent {label}",
+            input_data=input_data,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise LedgerValidationError(f"cannot inspect trusted parent {label}") from exc
@@ -719,13 +763,20 @@ def _validate_trusted_parent_contracts(
     ledger: Mapping[str, Any],
     trusted_parent_repo: Path | None,
     trusted_key: _TrustedLedgerKey,
-) -> None:
+) -> _TrustedParentContracts:
     if trusted_parent_repo is None:
         _fail("an external trusted parent repository is required")
     repository = _require_plain_directory(
         trusted_parent_repo,
         label="external trusted parent repository",
     )
+    try:
+        repository_metadata = repository.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot inspect external trusted parent repository"
+        ) from exc
+    repository_object = (repository_metadata.st_dev, repository_metadata.st_ino)
     if _path_is_within(repository, ledger_root) or _path_is_within(
         ledger_root, repository
     ):
@@ -843,6 +894,440 @@ def _validate_trusted_parent_contracts(
             or _git_blob_sha(parent_bytes) != expected_blob
         ):
             _fail(f"trusted parent build input {path} bytes are not exact")
+    return _TrustedParentContracts(
+        repository=repository,
+        commit_sha=parent,
+        tree_sha=parent_tree,
+        repository_object=repository_object,
+    )
+
+
+def _require_trusted_parent_repository_unchanged(
+    contracts: _TrustedParentContracts,
+) -> None:
+    repository = _require_plain_directory(
+        contracts.repository,
+        label="external trusted parent repository",
+    )
+    try:
+        metadata = repository.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot re-inspect external trusted parent repository"
+        ) from exc
+    if (metadata.st_dev, metadata.st_ino) != contracts.repository_object:
+        _fail("external trusted parent repository changed during validation")
+    resolved_commit = _trusted_git(
+        repository,
+        "rev-parse",
+        "--verify",
+        f"{contracts.commit_sha}^{{commit}}",
+        label="first-party parent commit",
+        output_limit=128,
+    ).decode("ascii", "strict").strip()
+    resolved_tree = _trusted_git(
+        repository,
+        "rev-parse",
+        "--verify",
+        f"{contracts.commit_sha}^{{tree}}",
+        label="first-party parent tree",
+        output_limit=128,
+    ).decode("ascii", "strict").strip()
+    if (
+        resolved_commit != contracts.commit_sha
+        or resolved_tree != contracts.tree_sha
+    ):
+        _fail("trusted first-party parent commit/tree changed during validation")
+
+
+def _trusted_parent_contract_reference(
+    repository: Path,
+    commit_sha: str,
+    tree_sha: str,
+) -> _TrustedParentContracts:
+    trusted_repository = _require_plain_directory(
+        repository,
+        label="external trusted parent repository",
+    )
+    try:
+        metadata = trusted_repository.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot inspect external trusted parent repository"
+        ) from exc
+    contracts = _TrustedParentContracts(
+        repository=trusted_repository,
+        commit_sha=commit_sha,
+        tree_sha=tree_sha,
+        repository_object=(metadata.st_dev, metadata.st_ino),
+    )
+    _require_trusted_parent_repository_unchanged(contracts)
+    return contracts
+
+
+def _trusted_first_party_relative_path(raw: bytes) -> str:
+    try:
+        relative = raw.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise LedgerValidationError(
+            "trusted first-party path is not UTF-8"
+        ) from exc
+    pure = PurePosixPath(relative)
+    if (
+        not relative
+        or "\\" in relative
+        or pure.is_absolute()
+        or pure.as_posix() != relative
+        or not pure.parts
+        or pure.parts[0] != _TRUSTED_FIRST_PARTY_PREFIX
+        or len(raw) > MAX_TRUSTED_FIRST_PARTY_PATH_BYTES
+        or len(pure.parts) > MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH
+        or any(part in {"", ".", ".."} for part in pure.parts)
+        or any(
+            len(part.encode("utf-8")) > 255
+            or part.endswith((" ", "."))
+            or any(character in '<>:"|?*' for character in part)
+            or part.casefold().split(".", 1)[0]
+            in _WINDOWS_RESERVED_PATH_NAMES
+            for part in pure.parts
+        )
+        or unicodedata.normalize("NFC", relative) != relative
+        or any(
+            ord(character) < 32
+            or ord(character) == 127
+            or 0xD800 <= ord(character) <= 0xDFFF
+            for character in relative
+        )
+    ):
+        _fail(f"trusted first-party path is unsafe: {relative!r}")
+    return relative
+
+
+def _matches_git_blob_object_id(data: bytes, object_id: str) -> bool:
+    framed = f"blob {len(data)}\0".encode("ascii") + data
+    if len(object_id) == 40:
+        observed = hashlib.sha1(  # noqa: S324 - Git protocol identity
+            framed,
+            usedforsecurity=False,
+        ).hexdigest()
+    elif len(object_id) == 64:
+        observed = hashlib.sha256(framed).hexdigest()
+    else:
+        return False
+    return observed == object_id
+
+
+def _read_trusted_first_party_tree(
+    contracts: _TrustedParentContracts,
+) -> tuple[dict[str, bytes], dict[str, _TrustedFirstPartyFile]]:
+    _require_trusted_parent_repository_unchanged(contracts)
+    listing = _trusted_git(
+        contracts.repository,
+        "ls-tree",
+        "-r",
+        "-l",
+        "-z",
+        "--full-tree",
+        contracts.commit_sha,
+        "--",
+        _TRUSTED_FIRST_PARTY_PREFIX,
+        label="first-party tree",
+        output_limit=MAX_TRUSTED_FIRST_PARTY_TREE_BYTES,
+    )
+    records = listing.split(b"\0")
+    if not records or records[-1] != b"":
+        _fail("trusted first-party tree listing is not NUL-terminated")
+    records.pop()
+    if not records or len(records) > MAX_TRUSTED_FIRST_PARTY_FILES:
+        _fail(
+            "trusted first-party file count is outside "
+            f"1..{MAX_TRUSTED_FIRST_PARTY_FILES}"
+        )
+
+    entries: list[tuple[str, str, int]] = []
+    portable_paths: dict[str, str] = {}
+    blob_sizes: dict[str, int] = {}
+    total = 0
+    for record in records:
+        try:
+            header, raw_path = record.split(b"\t", 1)
+            mode, object_type, object_id_bytes, size_bytes = header.split()
+        except ValueError as exc:
+            raise LedgerValidationError(
+                "trusted first-party tree entry is malformed"
+            ) from exc
+        if (
+            mode != b"100644"
+            or object_type != b"blob"
+            or re.fullmatch(b"(?:[0-9a-f]{40}|[0-9a-f]{64})", object_id_bytes)
+            is None
+            or not size_bytes.isdigit()
+        ):
+            _fail("trusted first-party tree contains a non-regular blob")
+        relative = _trusted_first_party_relative_path(raw_path)
+        portable = relative.casefold()
+        prior = portable_paths.get(portable)
+        if prior is not None:
+            _fail(
+                "trusted first-party tree contains duplicate or "
+                f"portable-case-colliding paths: {prior!r}, {relative!r}"
+            )
+        portable_paths[portable] = relative
+        object_id = object_id_bytes.decode("ascii", "strict")
+        size_text = size_bytes.decode("ascii", "strict")
+        if str(int(size_text)) != size_text:
+            _fail(f"trusted first-party blob size is not canonical: {relative}")
+        size = int(size_text)
+        if size > MAX_TRUSTED_FIRST_PARTY_FILE_BYTES:
+            _fail(f"trusted first-party blob is too large: {relative}")
+        total += size
+        if total > MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES:
+            _fail("trusted first-party tree exceeds the total byte budget")
+        prior_size = blob_sizes.setdefault(object_id, size)
+        if prior_size != size:
+            _fail("trusted first-party tree reports inconsistent blob sizes")
+        entries.append((relative, object_id, size))
+
+    query = b"".join(
+        f"{object_id}\n".encode("ascii") for object_id in blob_sizes
+    )
+    batch = _trusted_git(
+        contracts.repository,
+        "cat-file",
+        "--batch",
+        label="first-party blob batch",
+        output_limit=max(
+            1,
+            sum(blob_sizes.values()) + (len(blob_sizes) * 128) + 1,
+        ),
+        input_data=query,
+    )
+    blobs: dict[str, bytes] = {}
+    offset = 0
+    for object_id, size in blob_sizes.items():
+        header_end = batch.find(b"\n", offset, min(len(batch), offset + 128))
+        expected_header = f"{object_id} blob {size}".encode("ascii")
+        if header_end < 0 or batch[offset:header_end] != expected_header:
+            _fail("trusted first-party blob batch header is not exact")
+        data_start = header_end + 1
+        data_end = data_start + size
+        if data_end >= len(batch) or batch[data_end : data_end + 1] != b"\n":
+            _fail("trusted first-party blob batch framing is not exact")
+        data = batch[data_start:data_end]
+        if not _matches_git_blob_object_id(data, object_id):
+            _fail("trusted first-party blob batch bytes are not exact")
+        blobs[object_id] = data
+        offset = data_end + 1
+    if offset != len(batch):
+        _fail("trusted first-party blob batch has trailing output")
+
+    files: dict[str, bytes] = {}
+    manifest: dict[str, _TrustedFirstPartyFile] = {}
+    for relative, object_id, size in entries:
+        data = blobs[object_id]
+        files[relative] = data
+        manifest[relative] = _TrustedFirstPartyFile(
+            blob_sha=object_id,
+            sha256=_sha256(data),
+            size_bytes=size,
+        )
+    if f"{_TRUSTED_FIRST_PARTY_PREFIX}/__init__.py" not in files:
+        _fail("trusted first-party tree is not an importable package")
+    _require_trusted_parent_repository_unchanged(contracts)
+    return files, manifest
+
+
+def _verify_loaded_first_party_modules(
+    import_root: Path,
+    manifest: Mapping[str, _TrustedFirstPartyFile],
+) -> None:
+    loaded = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == _TRUSTED_FIRST_PARTY_PREFIX
+        or name.startswith(f"{_TRUSTED_FIRST_PARTY_PREFIX}.")
+    }
+    missing = set(_TRUSTED_FIRST_PARTY_MODULES) - set(loaded)
+    if missing:
+        _fail(f"trusted first-party modules were not loaded: {sorted(missing)}")
+    origins: dict[str, str] = {}
+    for name, module in sorted(loaded.items()):
+        file_value = getattr(module, "__file__", None)
+        spec = getattr(module, "__spec__", None)
+        origin_value = getattr(spec, "origin", None)
+        if not isinstance(file_value, str) or not isinstance(origin_value, str):
+            _fail(f"trusted first-party module has no file origin: {name}")
+        file_path = Path(os.path.abspath(file_value))
+        origin_path = Path(os.path.abspath(origin_value))
+        if file_path != origin_path or not _path_is_within(file_path, import_root):
+            _fail(f"trusted first-party module escaped the parent snapshot: {name}")
+        try:
+            relative = file_path.relative_to(import_root).as_posix()
+        except ValueError as exc:
+            raise LedgerValidationError(
+                f"trusted first-party module origin is outside the snapshot: {name}"
+            ) from exc
+        descriptor = manifest.get(relative)
+        if descriptor is None:
+            _fail(f"trusted first-party module is not in the parent manifest: {name}")
+        data = _read_regular(
+            file_path,
+            limit=max(descriptor.size_bytes, 1),
+            label=f"loaded trusted first-party module {name}",
+        )
+        if (
+            len(data) != descriptor.size_bytes
+            or _sha256(data) != descriptor.sha256
+            or not _matches_git_blob_object_id(data, descriptor.blob_sha)
+        ):
+            _fail(f"loaded trusted first-party module bytes changed: {name}")
+        prior = origins.get(relative)
+        if prior is not None and prior != name:
+            _fail(
+                "multiple trusted first-party modules share one origin: "
+                f"{prior}, {name}"
+            )
+        origins[relative] = name
+
+
+def _require_trusted_first_party_unchanged(
+    import_root: Path,
+    manifest: Mapping[str, _TrustedFirstPartyFile],
+    contracts: _TrustedParentContracts,
+    snapshot_files: set[str],
+    snapshot_directories: set[str],
+    snapshot_identities: Mapping[str, tuple[int, int, int, int, int]],
+) -> None:
+    _verify_loaded_first_party_modules(import_root, manifest)
+    _require_inventory_unchanged(
+        import_root,
+        files=snapshot_files,
+        directories=snapshot_directories,
+        identities=snapshot_identities,
+        max_files=MAX_TRUSTED_FIRST_PARTY_FILES,
+        max_directories=(
+            MAX_TRUSTED_FIRST_PARTY_FILES * MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH
+        )
+        + 1,
+        max_total_bytes=MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES,
+    )
+    _require_trusted_parent_repository_unchanged(contracts)
+
+
+@contextmanager
+def _trusted_parent_first_party(
+    contracts: _TrustedParentContracts,
+) -> Iterator[None]:
+    """Import every first-party verifier dependency from one literal parent tree."""
+
+    with _FIRST_PARTY_IMPORT_LOCK:
+        files, manifest = _read_trusted_first_party_tree(contracts)
+        with tempfile.TemporaryDirectory(
+            prefix="evoguard-ledger-v2-parent-"
+        ) as temporary:
+            import_root = _require_plain_directory(
+                Path(temporary),
+                label="trusted first-party import snapshot",
+            )
+            snapshot_files, snapshot_directories, snapshot_identities = (
+                _materialize_snapshot(
+                    import_root,
+                    files,
+                    max_files=MAX_TRUSTED_FIRST_PARTY_FILES,
+                    max_directories=(
+                        MAX_TRUSTED_FIRST_PARTY_FILES
+                        * MAX_TRUSTED_FIRST_PARTY_PATH_DEPTH
+                    )
+                    + 1,
+                    max_total_bytes=MAX_TRUSTED_FIRST_PARTY_TOTAL_BYTES,
+                )
+            )
+            saved_modules = {
+                name: module
+                for name, module in sys.modules.items()
+                if name == _TRUSTED_FIRST_PARTY_PREFIX
+                or name.startswith(f"{_TRUSTED_FIRST_PARTY_PREFIX}.")
+            }
+            saved_path = list(sys.path)
+            saved_meta_path = list(sys.meta_path)
+            saved_path_hooks = list(sys.path_hooks)
+            saved_importer_cache = dict(sys.path_importer_cache)
+            saved_dont_write_bytecode = sys.dont_write_bytecode
+            try:
+                for name in saved_modules:
+                    sys.modules.pop(name, None)
+                sys.path.insert(0, str(import_root))
+                sys.meta_path[:] = [
+                    importlib.machinery.BuiltinImporter,
+                    importlib.machinery.FrozenImporter,
+                    importlib.machinery.PathFinder,
+                ]
+                sys.path_hooks[:] = [
+                    importlib.machinery.FileFinder.path_hook(
+                        (
+                            importlib.machinery.SourceFileLoader,
+                            importlib.machinery.SOURCE_SUFFIXES,
+                        ),
+                        (
+                            importlib.machinery.SourcelessFileLoader,
+                            importlib.machinery.BYTECODE_SUFFIXES,
+                        ),
+                        (
+                            importlib.machinery.ExtensionFileLoader,
+                            importlib.machinery.EXTENSION_SUFFIXES,
+                        ),
+                    )
+                ]
+                sys.path_importer_cache.clear()
+                sys.dont_write_bytecode = True
+                importlib.invalidate_caches()
+                try:
+                    for name in _TRUSTED_FIRST_PARTY_MODULES:
+                        importlib.import_module(name)
+                except Exception as exc:
+                    raise LedgerValidationError(
+                        "cannot import first-party verification code from "
+                        "the trusted parent snapshot"
+                    ) from exc
+                _verify_loaded_first_party_modules(import_root, manifest)
+                try:
+                    yield
+                except BaseException as primary:
+                    try:
+                        _require_trusted_first_party_unchanged(
+                            import_root,
+                            manifest,
+                            contracts,
+                            snapshot_files,
+                            snapshot_directories,
+                            snapshot_identities,
+                        )
+                    except BaseException as integrity:
+                        raise integrity from primary
+                    raise
+                else:
+                    _require_trusted_first_party_unchanged(
+                        import_root,
+                        manifest,
+                        contracts,
+                        snapshot_files,
+                        snapshot_directories,
+                        snapshot_identities,
+                    )
+            finally:
+                for name in list(sys.modules):
+                    if name == _TRUSTED_FIRST_PARTY_PREFIX or name.startswith(
+                        f"{_TRUSTED_FIRST_PARTY_PREFIX}."
+                    ):
+                        sys.modules.pop(name, None)
+                sys.modules.update(saved_modules)
+                sys.path[:] = saved_path
+                sys.meta_path[:] = saved_meta_path
+                sys.path_hooks[:] = saved_path_hooks
+                sys.path_importer_cache.clear()
+                sys.path_importer_cache.update(saved_importer_cache)
+                sys.dont_write_bytecode = saved_dont_write_bytecode
+                importlib.invalidate_caches()
 
 
 def _schema_errors(
@@ -1827,6 +2312,11 @@ def _actual_inventory(
     *,
     expected_files: set[str],
     expected_directories: set[str],
+    max_files: int = MAX_RETAINED_FILES + 2,
+    max_directories: int = (MAX_RETAINED_FILES * 8) + 1,
+    max_total_bytes: int = (
+        MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+    ),
 ) -> tuple[
     set[str],
     set[str],
@@ -1837,8 +2327,11 @@ def _actual_inventory(
     identities: dict[str, tuple[int, int, int, int, int]] = {}
     file_objects: dict[tuple[int, int], str] = {}
     if (
-        len(expected_files) > MAX_RETAINED_FILES + 2
-        or len(expected_directories) > (MAX_RETAINED_FILES * 8) + 1
+        max_files < 1
+        or max_directories < 1
+        or max_total_bytes < 1
+        or len(expected_files) > max_files
+        or len(expected_directories) > max_directories
     ):
         _fail("expected ledger inventory exceeds its bounded scan budget")
     pending: list[tuple[Path, str]] = [(root, ".")]
@@ -1900,9 +2393,7 @@ def _actual_inventory(
                 if len(files) >= len(expected_files):
                     _fail("ledger file count exceeds its expected budget")
                 total_bytes += metadata.st_size
-                if total_bytes > (
-                    MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
-                ):
+                if total_bytes > max_total_bytes:
                     _fail("ledger inventory exceeds its total byte scan budget")
                 object_id = (metadata.st_dev, metadata.st_ino)
                 prior = file_objects.get(object_id)
@@ -1981,6 +2472,12 @@ def _write_snapshot_file(path: Path, data: bytes) -> None:
 def _materialize_snapshot(
     root: Path,
     files: Mapping[str, bytes],
+    *,
+    max_files: int = MAX_RETAINED_FILES + 2,
+    max_directories: int = (MAX_RETAINED_FILES * 8) + 1,
+    max_total_bytes: int = (
+        MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+    ),
 ) -> tuple[
     set[str],
     set[str],
@@ -2007,6 +2504,9 @@ def _materialize_snapshot(
         root,
         expected_files=expected_files,
         expected_directories=expected_directories,
+        max_files=max_files,
+        max_directories=max_directories,
+        max_total_bytes=max_total_bytes,
     )
     if actual_files != expected_files or actual_directories != expected_directories:
         _fail("protected evidence snapshot inventory is not exact")
@@ -2065,11 +2565,19 @@ def _require_inventory_unchanged(
     files: set[str],
     directories: set[str],
     identities: Mapping[str, tuple[int, int, int, int, int]],
+    max_files: int = MAX_RETAINED_FILES + 2,
+    max_directories: int = (MAX_RETAINED_FILES * 8) + 1,
+    max_total_bytes: int = (
+        MAX_RETAINED_TOTAL_BYTES + MAX_JSON_BYTES + CANONICAL_SIGNATURE_BYTES
+    ),
 ) -> None:
     current_files, current_directories, current_identities = _actual_inventory(
         root,
         expected_files=files,
         expected_directories=directories,
+        max_files=max_files,
+        max_directories=max_directories,
+        max_total_bytes=max_total_bytes,
     )
     if (
         current_files != files
@@ -3702,7 +4210,7 @@ def validate_directory(
         schema,
         schema_sha256=schema_sha256,
     )
-    _validate_trusted_parent_contracts(
+    trusted_parent_contracts = _validate_trusted_parent_contracts(
         root,
         ledger,
         trusted_parent_repo,
@@ -3779,9 +4287,19 @@ def validate_directory(
 
         _validate_repository_control_observation_bytes(snapshot_root, ledger)
         _validate_control_bytes(snapshot_root, ledger)
-        _validate_attestation_bytes(snapshot_root, ledger)
-        _validate_envelopes(snapshot_root, ledger)
-        _validate_keys_and_anchor(snapshot_root, ledger, trusted_key)
+
+        def validate_first_party_material() -> None:
+            _validate_attestation_bytes(snapshot_root, ledger)
+            _validate_envelopes(snapshot_root, ledger)
+            _validate_keys_and_anchor(snapshot_root, ledger, trusted_key)
+
+        # Characterization fixtures replace both this owner and all dependent
+        # byte validators. The production path always receives the contract.
+        if trusted_parent_contracts is None:
+            validate_first_party_material()
+        else:
+            with _trusted_parent_first_party(trusted_parent_contracts):
+                validate_first_party_material()
         _require_inventory_unchanged(
             snapshot_root,
             files=snapshot_actual_files,
