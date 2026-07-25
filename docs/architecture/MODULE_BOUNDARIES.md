@@ -653,6 +653,24 @@ contracts. The extraction adds no checkout, network, provider, admission,
 transaction, or cleanup semantics; release-source producer/admission and
 release-artifact command families remain in the facade.
 
+The eighth command-family slice adds the strictly typed, stdlib-only
+`cli.release_source_producer_receipt_commands` owner for unsigned canonical
+claim creation, local/raw-Git verification, and fresh GitHub provider
+re-verification. The facade keeps each function-local format, domain exception,
+and domain callable as an entry snapshot. The shared external-input helper,
+external trust reader, absolute-path projection, and machine reporter remain
+call-through seams resolved at their historical use sites. Three independent
+service bundles make the authority difference explicit: local verification
+has no provider reader, while fresh re-verification has only the historically
+existing policy reader, `gh` path, and timeout surface. The owner preserves
+eager tuple reads, catch/report/exit behavior, exception identity, repeated
+projection order, provider-output residue, and archive-only opt-in exits.
+Successful verification remains `verified=true`, `ok=false`, `decision=NONE`,
+and `admission=false`; the slice adds no signing key, admission capability,
+provider-isolation builder, or executable pin. A 66-case cross-parent vector
+plus focused reviewed mutations protect these contracts. Release-source and
+release-artifact admission command families remain in the facade.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

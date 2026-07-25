@@ -469,8 +469,16 @@ remain in their established facades.
   `ALLOW`/`DENY` exits, exception identity, and the source-before-context
   partial-publication contract. The extraction adds no cleanup, transaction,
   checkout, network, or admission behavior.
-- The remaining release-source producer-receipt, release-source admission, and
-  release-artifact admission command families remain pending.
+- Producer-receipt creation, local/raw-Git verification, and fresh provider
+  re-verification now live in the strictly typed, stdlib-only
+  `cli/release_source_producer_receipt_commands.py` owner. Its reviewed 66-case
+  vector freezes eager tuple reads, entry snapshots, live helper/reader/path/
+  reporting seams, catch and projection order, provider-output residue, and
+  archive-only opt-in exits. Both verification commands remain explicitly
+  non-admitting; their services gain no signing, admission, isolation-builder,
+  or executable-pin authority.
+- The remaining release-source admission and release-artifact admission
+  command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

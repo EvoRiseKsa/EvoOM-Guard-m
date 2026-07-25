@@ -1474,6 +1474,336 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-producer-receipt-create-eager-stdin-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '    if any(value == "-" for value in (args.verdict, args.handoff)):\n'
+        ),
+        after='    if args.verdict == "-":\n',
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[create_handoff_stdin]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-verify-eager-stdin-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            "def execute_verify_producer_receipt(\n"
+            "    args: argparse.Namespace,\n"
+            "    *,\n"
+            "    services: VerifyProducerReceiptServices,\n"
+            "    out: _Output = print,\n"
+            ") -> int:\n"
+            '    """Verify local/raw-Git producer binding without treating it as '
+            'provider proof."""\n'
+            "\n"
+            '    if any(value == "-" for value in '
+            "(args.receipt, args.handoff, args.verdict)):\n"
+        ),
+        after=(
+            "def execute_verify_producer_receipt(\n"
+            "    args: argparse.Namespace,\n"
+            "    *,\n"
+            "    services: VerifyProducerReceiptServices,\n"
+            "    out: _Output = print,\n"
+            ") -> int:\n"
+            '    """Verify local/raw-Git producer binding without treating it as '
+            'provider proof."""\n'
+            "\n"
+            '    if args.receipt == "-":\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[verify_handoff_stdin]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-reverify-eager-stdin-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            "def execute_reverify_producer_receipt(\n"
+            "    args: argparse.Namespace,\n"
+            "    *,\n"
+            "    services: ReverifyProducerReceiptServices,\n"
+            "    out: _Output = print,\n"
+            ") -> int:\n"
+            '    """Make a fresh GitHub provider check after local/raw-Git '
+            'verification."""\n'
+            "\n"
+            '    if any(value == "-" for value in '
+            "(args.receipt, args.handoff, args.verdict)):\n"
+        ),
+        after=(
+            "def execute_reverify_producer_receipt(\n"
+            "    args: argparse.Namespace,\n"
+            "    *,\n"
+            "    services: ReverifyProducerReceiptServices,\n"
+            "    out: _Output = print,\n"
+            ") -> int:\n"
+            '    """Make a fresh GitHub provider check after local/raw-Git '
+            'verification."""\n'
+            "\n"
+            '    if args.receipt == "-":\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[reverify_handoff_stdin]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-create-reader-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            create_producer_receipt="
+            "create_release_source_producer_receipt,\n"
+            "            read_external_object_provider=lambda: "
+            "_read_external_finalizer_object,\n"
+        ),
+        after=(
+            "            create_producer_receipt="
+            "create_release_source_producer_receipt,\n"
+            "            read_external_object_provider=lambda _reader=(\n"
+            "                _read_external_finalizer_object\n"
+            "            ): _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[create_source_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-verify-helper-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            verify_producer_receipt="
+            "verify_release_source_producer_receipt,\n"
+            "            external_inputs_provider=lambda: "
+            "_producer_receipt_external_inputs,\n"
+        ),
+        after=(
+            "            verify_producer_receipt="
+            "verify_release_source_producer_receipt,\n"
+            "            external_inputs_provider=lambda _inputs=(\n"
+            "                _producer_receipt_external_inputs\n"
+            "            ): _inputs,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[verify_external_helper_is_live_after_stdin]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-create-rejection-classification-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '                "status": "REJECTED",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    services.machine_report_provider()(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.receipt_format,\n'
+            '            "ok": True,\n'
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    services.machine_report_provider()(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.receipt_format,\n'
+            '            "ok": True,\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[create_provider_valueerror]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-verify-rejection-classification-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '                "status": "REJECTED",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    services.machine_report_provider()(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.receipt_format,\n'
+            '            "ok": False,\n'
+            '            "verified": True,\n'
+            '            "status": "NONADMITTING_LOCAL_AND_RAW_GIT_VERIFIED",\n'
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    services.machine_report_provider()(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.receipt_format,\n'
+            '            "ok": False,\n'
+            '            "verified": True,\n'
+            '            "status": "NONADMITTING_LOCAL_AND_RAW_GIT_VERIFIED",\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[verify_provider_valueerror]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-reverify-rejection-classification-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '                "status": "REJECTED",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    services.machine_report_provider()(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.receipt_format,\n'
+            '            "ok": False,\n'
+            '            "verified": True,\n'
+            '            "status": "NONADMITTING_FRESH_PROVIDER_VERIFIED",\n'
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    services.machine_report_provider()(\n"
+            "        out,\n"
+            "        {\n"
+            '            "format": services.receipt_format,\n'
+            '            "ok": False,\n'
+            '            "verified": True,\n'
+            '            "status": "NONADMITTING_FRESH_PROVIDER_VERIFIED",\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[reverify_provider_valueerror]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-verify-admission-claim-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '            "status": "NONADMITTING_LOCAL_AND_RAW_GIT_VERIFIED",\n'
+            '            "record_sha256": verified.receipt.payload["record"]["sha256"],\n'
+            '            "decision": "NONE",\n'
+            '            "admission": False,\n'
+        ),
+        after=(
+            '            "status": "NONADMITTING_LOCAL_AND_RAW_GIT_VERIFIED",\n'
+            '            "record_sha256": verified.receipt.payload["record"]["sha256"],\n'
+            '            "decision": "ALLOW",\n'
+            '            "admission": True,\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[verify_success_default_nonadmitting]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-reverify-admission-claim-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '            "github_raw_output": verified.github_receipt.raw_output_path,\n'
+            '            "decision": "NONE",\n'
+            '            "admission": False,\n'
+        ),
+        after=(
+            '            "github_raw_output": verified.github_receipt.raw_output_path,\n'
+            '            "decision": "ALLOW",\n'
+            '            "admission": True,\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[reverify_success_default_nonadmitting]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-verify-opt-in-exit-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '            "provider_verified": False,\n'
+            '            "requires": (\n'
+            '                "explicit-allow-nonadmitting-evidence-for-archive-only-success"\n'
+            "            ),\n"
+            "        },\n"
+            "    )\n"
+            "    return 0 if args.allow_nonadmitting_evidence else 1\n"
+        ),
+        after=(
+            '            "provider_verified": False,\n'
+            '            "requires": (\n'
+            '                "explicit-allow-nonadmitting-evidence-for-archive-only-success"\n'
+            "            ),\n"
+            "        },\n"
+            "    )\n"
+            "    return 1\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[verify_success_opt_in_nonadmitting]"
+        ),
+    ),
+    Mutation(
+        name="cli-producer-receipt-reverify-opt-in-exit-bypass",
+        path="evoom_guard/cli/release_source_producer_receipt_commands.py",
+        before=(
+            '            "github_raw_output": verified.github_receipt.raw_output_path,\n'
+            '            "decision": "NONE",\n'
+            '            "admission": False,\n'
+            '            "requires": (\n'
+            '                "explicit-allow-nonadmitting-evidence-for-archive-only-success"\n'
+            "            ),\n"
+            "        },\n"
+            "    )\n"
+            "    return 0 if args.allow_nonadmitting_evidence else 1\n"
+        ),
+        after=(
+            '            "github_raw_output": verified.github_receipt.raw_output_path,\n'
+            '            "decision": "NONE",\n'
+            '            "admission": False,\n'
+            '            "requires": (\n'
+            '                "explicit-allow-nonadmitting-evidence-for-archive-only-success"\n'
+            "            ),\n"
+            "        },\n"
+            "    )\n"
+            "    return 1\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_producer_receipt_characterization.py::"
+            "test_frozen_cli_release_source_producer_receipt_behavior"
+            "[reverify_success_opt_in_nonadmitting]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',
