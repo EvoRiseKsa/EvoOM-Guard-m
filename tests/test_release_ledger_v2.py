@@ -423,6 +423,20 @@ def _valid_ledger() -> dict[str, Any]:
                 "id": "urn:evoguard:release-ledger:2",
                 "path": "tests/baseline/schema/release-ledger-v2.schema.json",
                 "sha256": hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest(),
+                "git_blob_sha": validator._git_blob_sha(SCHEMA_PATH.read_bytes()),
+                "trusted_parent_commit_sha": parent,
+                "trusted_parent_tree_sha": parent_tree,
+            },
+            "validator": {
+                "path": "tools/ci/validate_release_ledger_v2.py",
+                "sha256": hashlib.sha256(
+                    Path(validator.__file__).read_bytes()
+                ).hexdigest(),
+                "git_blob_sha": validator._git_blob_sha(
+                    Path(validator.__file__).read_bytes()
+                ),
+                "trusted_parent_commit_sha": parent,
+                "trusted_parent_tree_sha": parent_tree,
             },
             "verdict_record": "1.11",
             "sarif": "2.1.0",
@@ -871,6 +885,22 @@ def test_signed_schema_descriptor_binds_exact_repository_bytes() -> None:
         "permissive-schema"
     )
     with pytest.raises(validator.LedgerValidationError, match="exact official"):
+        validator.validate_structure(ledger)
+
+
+def test_signed_validator_descriptor_binds_trusted_parent_and_exact_bytes() -> None:
+    ledger = _valid_ledger()
+    ledger["schema_contracts"]["validator"]["sha256"] = _sha(
+        "candidate-mutated-validator"
+    )
+    with pytest.raises(validator.LedgerValidationError, match="trusted-parent validator"):
+        validator.validate_structure(ledger)
+
+    ledger = _valid_ledger()
+    ledger["schema_contracts"]["validator"]["trusted_parent_commit_sha"] = _git(
+        "wrong-parent"
+    )
+    with pytest.raises(validator.LedgerValidationError, match="trusted-parent validator"):
         validator.validate_structure(ledger)
 
 

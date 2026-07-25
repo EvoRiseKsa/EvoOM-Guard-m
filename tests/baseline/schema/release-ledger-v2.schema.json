@@ -189,6 +189,7 @@
       "additionalProperties": false,
       "required": [
         "release_ledger",
+        "validator",
         "verdict_record",
         "sarif",
         "verifier_pack",
@@ -204,7 +205,10 @@
           "required": [
             "id",
             "path",
-            "sha256"
+            "sha256",
+            "git_blob_sha",
+            "trusted_parent_commit_sha",
+            "trusted_parent_tree_sha"
           ],
           "properties": {
             "id": {
@@ -215,6 +219,43 @@
             },
             "sha256": {
               "$ref": "#/$defs/sha256"
+            },
+            "git_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_commit_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_tree_sha": {
+              "$ref": "#/$defs/gitSha"
+            }
+          }
+        },
+        "validator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "git_blob_sha",
+            "trusted_parent_commit_sha",
+            "trusted_parent_tree_sha"
+          ],
+          "properties": {
+            "path": {
+              "const": "tools/ci/validate_release_ledger_v2.py"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "git_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_commit_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "trusted_parent_tree_sha": {
+              "$ref": "#/$defs/gitSha"
             }
           }
         },

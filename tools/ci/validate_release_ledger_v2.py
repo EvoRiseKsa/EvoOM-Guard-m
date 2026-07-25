@@ -43,6 +43,7 @@ OFFICIAL_SCHEMA_ID = "urn:evoguard:release-ledger:2"
 OFFICIAL_SCHEMA_REPOSITORY_PATH = (
     "tests/baseline/schema/release-ledger-v2.schema.json"
 )
+VALIDATOR_REPOSITORY_PATH = "tools/ci/validate_release_ledger_v2.py"
 LEDGER_NAME = "RELEASE_LEDGER.json"
 SIGNATURE_NAME = "RELEASE_LEDGER.json.sig"
 README_NAME = "README.md"
@@ -478,6 +479,11 @@ def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
         )
         + "\n"
     ).encode("utf-8")
+
+
+def _git_blob_sha(data: bytes) -> str:
+    payload = f"blob {len(data)}\0".encode("ascii") + data
+    return hashlib.sha1(payload).hexdigest()  # noqa: S324 - Git object identity
 
 
 def _schema_errors(
@@ -1244,9 +1250,22 @@ def _validate_semantics(
         "id": OFFICIAL_SCHEMA_ID,
         "path": OFFICIAL_SCHEMA_REPOSITORY_PATH,
         "sha256": schema_sha256,
+        "git_blob_sha": _git_blob_sha(DEFAULT_SCHEMA.read_bytes()),
+        "trusted_parent_commit_sha": source["parent_commit_sha"],
+        "trusted_parent_tree_sha": source["parent_tree_sha"],
     }
     if ledger["schema_contracts"]["release_ledger"] != expected_schema:
         _fail("signed ledger does not bind the exact official v2 schema bytes")
+    validator_bytes = Path(__file__).read_bytes()
+    expected_validator = {
+        "path": VALIDATOR_REPOSITORY_PATH,
+        "sha256": _sha256(validator_bytes),
+        "git_blob_sha": _git_blob_sha(validator_bytes),
+        "trusted_parent_commit_sha": source["parent_commit_sha"],
+        "trusted_parent_tree_sha": source["parent_tree_sha"],
+    }
+    if ledger["schema_contracts"]["validator"] != expected_validator:
+        _fail("signed ledger does not bind the exact trusted-parent validator bytes")
     if release["repository"] != EXPECTED_REPOSITORY:
         _fail(f"ledger repository must be {EXPECTED_REPOSITORY}")
     if release["tag"] != f"v{project['version']}":

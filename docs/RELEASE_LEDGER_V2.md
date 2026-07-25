@@ -163,8 +163,11 @@ and must fail validation. Placeholders are never accepted as release evidence.
    `evo-guard.spdx.json`; F cannot freshly admit that file from a pyz-subject
    SBOM attestation.
 5. Assemble a complete draft whose schema descriptor hashes the exact
-   repository schema bytes. Canonicalization validates only that schema and
-   cross-field bindings but does not collect or invent evidence:
+   repository schema bytes. Both the schema and validator descriptors record
+   SHA-256, Git blob ID, and the same trusted-parent commit/tree admitted by A;
+   run the validator bytes extracted from that parent, never a candidate
+   replacement. Canonicalization validates only that schema and cross-field
+   bindings but does not collect or invent evidence:
 
    ```powershell
    python tools/ci/validate_release_ledger_v2.py canonicalize `

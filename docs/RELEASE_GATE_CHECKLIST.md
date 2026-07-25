@@ -121,7 +121,10 @@ gate.
   inventory, and the detached signature over canonical ledger bytes under that
   external EvoRise trust anchor.
 - The v2 schema is not caller-selectable. The signed ledger binds the exact
-  repository schema digest, and `README.md`, all directories, and all retained
+  repository schema digest and the exact validator digest/Git blob; both
+  descriptors bind the admitted trusted-parent commit/tree. Execute the
+  validator extracted from that parent, not candidate-controlled bytes.
+  `README.md`, all directories, and all retained
   regular files are part of the closed, bounded inventory. Validation uses a
   private immutable byte snapshot; hard links, extra empty directories, path
   swaps, same-size restored-mtime changes, and post-read mutations fail closed.
