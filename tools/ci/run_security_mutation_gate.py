@@ -453,6 +453,319 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-github-receipt-create-live-policy-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                create_github_attestation_receipt=(\n"
+            "                    create_github_attestation_receipt\n"
+            "                ),\n"
+            "                policy_kwargs_provider=lambda: (\n"
+            "                    _github_attestation_policy_kwargs\n"
+            "                ),\n"
+        ),
+        after=(
+            "                create_github_attestation_receipt=(\n"
+            "                    create_github_attestation_receipt\n"
+            "                ),\n"
+            "                policy_kwargs_provider=lambda _policy=(\n"
+            "                    _github_attestation_policy_kwargs\n"
+            "                ): _policy,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[create_policy_helper_is_live_after_paths]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-create-live-isolation-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                provider_isolation_provider=lambda: (\n"
+            "                    _github_attestation_provider_isolation\n"
+            "                ),\n"
+            "                machine_report_provider=lambda: _machine_report,\n"
+            "            )\n"
+            "        ),\n"
+            "        out=out,\n"
+            "    )\n"
+            "\n"
+            "\n"
+            "def cmd_verify_github_attestation_receipt("
+        ),
+        after=(
+            "                provider_isolation_provider=lambda _isolation=(\n"
+            "                    _github_attestation_provider_isolation\n"
+            "                ): _isolation,\n"
+            "                machine_report_provider=lambda: _machine_report,\n"
+            "            )\n"
+            "        ),\n"
+            "        out=out,\n"
+            "    )\n"
+            "\n"
+            "\n"
+            "def cmd_verify_github_attestation_receipt("
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[create_isolation_helper_is_live_after_timeout]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-reverify-live-policy-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                reverify_github_attestation_receipt=(\n"
+            "                    reverify_github_attestation_receipt\n"
+            "                ),\n"
+            "                policy_kwargs_provider=lambda: (\n"
+            "                    _github_attestation_policy_kwargs\n"
+            "                ),\n"
+        ),
+        after=(
+            "                reverify_github_attestation_receipt=(\n"
+            "                    reverify_github_attestation_receipt\n"
+            "                ),\n"
+            "                policy_kwargs_provider=lambda _policy=(\n"
+            "                    _github_attestation_policy_kwargs\n"
+            "                ): _policy,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[reverify_policy_helper_is_live_after_paths]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-reverify-live-isolation-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                reverify_github_attestation_receipt=(\n"
+            "                    reverify_github_attestation_receipt\n"
+            "                ),\n"
+            "                policy_kwargs_provider=lambda: (\n"
+            "                    _github_attestation_policy_kwargs\n"
+            "                ),\n"
+            "                provider_isolation_provider=lambda: (\n"
+            "                    _github_attestation_provider_isolation\n"
+            "                ),\n"
+        ),
+        after=(
+            "                reverify_github_attestation_receipt=(\n"
+            "                    reverify_github_attestation_receipt\n"
+            "                ),\n"
+            "                policy_kwargs_provider=lambda: (\n"
+            "                    _github_attestation_policy_kwargs\n"
+            "                ),\n"
+            "                provider_isolation_provider=lambda _isolation=(\n"
+            "                    _github_attestation_provider_isolation\n"
+            "                ): _isolation,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[reverify_isolation_helper_is_live_after_timeout]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-create-rejection-classification-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            "        created = services.create_github_attestation_receipt(\n"
+            "            args.artifact,\n"
+            "            args.receipt_out,\n"
+            "            args.raw_output_out,\n"
+            "            **services.policy_kwargs_provider()(args),\n"
+            "            gh_executable=args.gh_executable,\n"
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except services.github_error as exc:\n"
+        ),
+        after=(
+            "        created = services.create_github_attestation_receipt(\n"
+            "            args.artifact,\n"
+            "            args.receipt_out,\n"
+            "            args.raw_output_out,\n"
+            "            **services.policy_kwargs_provider()(args),\n"
+            "            gh_executable=args.gh_executable,\n"
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except () as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[create_domain_error_subclass_precedes_value_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-verify-invalid-classification-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            '                "status": "INVALID",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    except (OSError, ValueError) as exc:\n"
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    except (OSError, ValueError) as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[verify_domain_error_subclass_precedes_value_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-reverify-rejection-classification-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            "        fresh = services.reverify_github_attestation_receipt(\n"
+            "            args.receipt,\n"
+            "            args.artifact,\n"
+            "            **services.policy_kwargs_provider()(args),\n"
+            "            gh_executable=args.gh_executable,\n"
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except services.github_error as exc:\n"
+        ),
+        after=(
+            "        fresh = services.reverify_github_attestation_receipt(\n"
+            "            args.receipt,\n"
+            "            args.artifact,\n"
+            "            **services.policy_kwargs_provider()(args),\n"
+            "            gh_executable=args.gh_executable,\n"
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except () as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[reverify_domain_error_subclass_precedes_value_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-verify-offline-argument-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            '    """Check retained evidence continuity without making a live provider call."""\n'
+            "\n"
+            "    try:\n"
+        ),
+        after=(
+            '    """Check retained evidence continuity without making a live provider call."""\n'
+            "\n"
+            "    _ = args.gh_executable\n"
+            "    try:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-create-isolation-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            "        created = services.create_github_attestation_receipt(\n"
+            "            args.artifact,\n"
+            "            args.receipt_out,\n"
+            "            args.raw_output_out,\n"
+            "            **services.policy_kwargs_provider()(args),\n"
+            "            gh_executable=args.gh_executable,\n"
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except services.github_error as exc:\n"
+        ),
+        after=(
+            "        created = services.create_github_attestation_receipt(\n"
+            "            args.artifact,\n"
+            "            args.receipt_out,\n"
+            "            args.raw_output_out,\n"
+            "            **services.policy_kwargs_provider()(args),\n"
+            "            gh_executable=args.gh_executable,\n"
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=None,\n"
+            "        )\n"
+            "    except services.github_error as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[create_success_isolated_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-create-projection-order-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            '            "receipt": created.receipt_path,\n'
+            '            "raw_output": created.raw_output_path,\n'
+            '            "artifact": created.artifact.as_dict(),\n'
+        ),
+        after=(
+            '            "artifact": created.artifact.as_dict(),\n'
+            '            "receipt": created.receipt_path,\n'
+            '            "raw_output": created.raw_output_path,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[create_success_unisolated_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-verify-projection-order-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            '            "artifact": verified.artifact.as_dict(),\n'
+            '            "verification_policy": verified.policy.as_dict(),\n'
+        ),
+        after=(
+            '            "verification_policy": verified.policy.as_dict(),\n'
+            '            "artifact": verified.artifact.as_dict(),\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-receipt-reverify-projection-order-bypass",
+        path="evoom_guard/cli/github_attestation_receipt_commands.py",
+        before=(
+            '            "artifact": fresh.artifact.as_dict(),\n'
+            '            "verification_policy": fresh.policy.as_dict(),\n'
+            '            "verified_attestation_count": fresh.verified_attestation_count,\n'
+        ),
+        after=(
+            '            "verified_attestation_count": fresh.verified_attestation_count,\n'
+            '            "artifact": fresh.artifact.as_dict(),\n'
+            '            "verification_policy": fresh.policy.as_dict(),\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_receipt_characterization.py::"
+            "test_frozen_cli_github_attestation_receipt_behavior"
+            "[reverify_success_unisolated_boundary]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',
