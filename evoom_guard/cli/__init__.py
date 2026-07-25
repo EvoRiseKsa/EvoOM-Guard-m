@@ -68,6 +68,7 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 from evoom_guard import __version__
 from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
+from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.cli import record_commands as _record_command_owner
@@ -529,30 +530,25 @@ def doctor_report() -> dict[str, object]:
     ``git``/``patch`` are the only host tools the gate shells out to (for
     ``--diff`` reverse-apply); ``supported`` is true when at least one is present.
     """
-    has_git = shutil.which("git") is not None
-    has_patch = shutil.which("patch") is not None
-    return {
-        "tool": "evoguard",
-        "version": __version__,
-        "platform": f"{sys.platform}-{platform.machine()}",
-        "python": platform.python_version(),
-        "git": has_git,
-        "patch": has_patch,
-        "supported": has_git or has_patch,
-    }
+    return _diagnostic_command_owner.build_doctor_report(
+        _diagnostic_command_owner.DoctorServices(
+            version=lambda: __version__,
+            platform_name=lambda: sys.platform,
+            machine=lambda: platform.machine(),
+            python_version=lambda: platform.python_version(),
+            which=lambda name: shutil.which(name),
+        )
+    )
 
 
 def cmd_doctor(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard doctor`` — report the environment; exit 0 only if supported."""
-    info = doctor_report()
-    if getattr(args, "doctor_json", False):
-        out(json.dumps(info, indent=2))
-    else:
-        out(f"evoguard {info['version']}  ({info['platform']}, python {info['python']})")
-        out(f"  git:   {'found' if info['git'] else 'MISSING'}")
-        out(f"  patch: {'found' if info['patch'] else 'MISSING'}")
-        out(f"  supported: {'yes' if info['supported'] else 'no — need git or patch'}")
-    return 0 if info["supported"] else 1
+    return _diagnostic_command_owner.execute_doctor(
+        args,
+        report_provider=lambda: doctor_report(),
+        json_dumps=lambda value, **kwargs: json.dumps(value, **kwargs),
+        out=out,
+    )
 
 
 def _workflow_yaml(ref: str) -> str:
@@ -3491,57 +3487,35 @@ def cmd_verify_bundle(
 
 def validate_pack(pack_dir: str) -> dict[str, object]:
     """Validate a verifier-pack directory; returns a report dict (see pack-doctor)."""
-    report: dict[str, object] = {"pack": pack_dir, "ok": False, "problems": []}
-    problems: list[str] = report["problems"]  # type: ignore[assignment]
-    if not os.path.isdir(pack_dir):
-        problems.append("not a directory")
-        return report
-    try:
-        test_files = pack_test_files(pack_dir)
-        report["test_files"] = sorted(test_files)
-        if not test_files:
-            problems.append(
-                "no pytest test files (test_*.py) — the judge would have nothing to run"
-            )
-        report["manifest"] = load_pack_manifest(pack_dir)
-        report["pack_sha256"] = pack_digest(pack_dir)
-        report["pack_digest_format"] = PACK_DIGEST_FORMAT
-    except PackManifestError as exc:
-        problems.append(str(exc))
-        report["test_files"] = []
-        report["manifest"] = None
-        report["pack_sha256"] = ""
-        report["pack_digest_format"] = PACK_DIGEST_FORMAT
-    report["ok"] = not problems
-    return report
+    return _diagnostic_command_owner.validate_pack(
+        pack_dir,
+        services=_diagnostic_command_owner.PackValidationServices(
+            is_directory=lambda path: os.path.isdir(path),
+            test_files=lambda path: pack_test_files(path),
+            load_manifest=lambda path: load_pack_manifest(path),
+            digest=lambda path: pack_digest(path),
+            digest_format=lambda: PACK_DIGEST_FORMAT,
+            manifest_error=lambda: PackManifestError,
+        ),
+    )
 
 
 def cmd_pack_doctor(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard pack-doctor`` — validate a verifier pack (exit 0/1)."""
-    report = validate_pack(args.pack)
-    problems = report.get("problems")
-    problems_list = problems if isinstance(problems, list) else []
-    if getattr(args, "pack_json", False):
-        out(json.dumps(report, indent=2))
-    else:
-        out(f"pack: {report['pack']}")
-        mf = report.get("manifest")
-        if isinstance(mf, dict):
-            out(f"  manifest: id={mf.get('id')!r} version={mf.get('version')!r}")
-        elif "manifest" in report:
-            out("  manifest: none (optional — plain folder of judge tests)")
-        tf = report.get("test_files")
-        out(f"  test files: {len(tf) if isinstance(tf, list) else 0}")
-        out(f"  pack sha256: {report.get('pack_sha256', '')}")
-        for prob in problems_list:
-            out(f"  PROBLEM: {prob}")
-        out("  ok" if report["ok"] else "  INVALID")
-    return 0 if report["ok"] else 1
+    return _diagnostic_command_owner.execute_pack_doctor(
+        args,
+        report_provider=lambda path: validate_pack(path),
+        json_dumps=lambda value, **kwargs: json.dumps(value, **kwargs),
+        out=out,
+    )
 
 
 def cmd_version(_args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
-    out(f"evo-guard {__version__}")
-    return 0
+    return _diagnostic_command_owner.execute_version(
+        _args,
+        version=lambda: __version__,
+        out=out,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -373,6 +373,14 @@ remain in their established facades.
   freezes config/CLI precedence, patch/diff/base-head routing, fail-closed
   errors, publication order, and exit codes. Every other handler remains
   pending; no package-wide debt ceiling is lowered by this slice.
+- Environment diagnostics, verifier-pack inspection/reporting, and version
+  output now live in the stdlib-only `cli/diagnostic_commands.py` owner.
+  `doctor_report`, `validate_pack`, and the three public command handlers remain
+  live-wired compatibility facades. A pre-extraction vector freezes supported
+  and unsupported doctor modes, text/JSON projection, valid/missing/invalid
+  pack reports, manifest-error containment, digest metadata, and version output.
+  Initialization and the source/artifact/GitHub-attestation command families
+  remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.

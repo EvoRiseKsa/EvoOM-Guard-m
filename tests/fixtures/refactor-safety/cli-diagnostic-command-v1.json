@@ -1,0 +1,249 @@
+{
+  "cases": {
+    "doctor_json_unsupported": {
+      "events": [
+        "which-missing:git",
+        "which-missing:patch",
+        "json-dumps-late",
+        "which-missing:git",
+        "which-missing:patch"
+      ],
+      "exit_code": 1,
+      "messages": [
+        "{\n  \"tool\": \"evoguard\",\n  \"version\": \"7.8.9\",\n  \"platform\": \"test-os-test-machine\",\n  \"python\": \"3.99.1\",\n  \"git\": false,\n  \"patch\": false,\n  \"supported\": false\n}"
+      ],
+      "report": {
+        "git": false,
+        "patch": false,
+        "platform": "test-os-test-machine",
+        "python": "3.99.1",
+        "supported": false,
+        "tool": "evoguard",
+        "version": "7.8.9"
+      }
+    },
+    "doctor_midcall_rebinding": {
+      "events": [
+        "which-initial:git",
+        "which-late:patch",
+        "machine-late",
+        "which-late:git",
+        "which-late:patch",
+        "machine-late"
+      ],
+      "exit_code": 0,
+      "messages": [
+        "evoguard 7.8.9  (test-os-late-machine, python 3.99.1)",
+        "  git:   found",
+        "  patch: found",
+        "  supported: yes"
+      ],
+      "report": {
+        "git": true,
+        "patch": true,
+        "platform": "test-os-late-machine",
+        "python": "3.99.1",
+        "supported": true,
+        "tool": "evoguard",
+        "version": "7.8.9"
+      }
+    },
+    "doctor_patch_only": {
+      "events": [
+        "which-initial:git",
+        "which-initial:patch",
+        "which-initial:git",
+        "which-initial:patch"
+      ],
+      "exit_code": 0,
+      "messages": [
+        "evoguard 7.8.9  (test-os-test-machine, python 3.99.1)",
+        "  git:   MISSING",
+        "  patch: found",
+        "  supported: yes"
+      ],
+      "report": {
+        "git": false,
+        "patch": true,
+        "platform": "test-os-test-machine",
+        "python": "3.99.1",
+        "supported": true,
+        "tool": "evoguard",
+        "version": "7.8.9"
+      }
+    },
+    "doctor_text_supported": {
+      "events": [
+        "which-initial:git",
+        "which-initial:patch",
+        "which-initial:git",
+        "which-initial:patch"
+      ],
+      "exit_code": 0,
+      "messages": [
+        "evoguard 7.8.9  (test-os-test-machine, python 3.99.1)",
+        "  git:   found",
+        "  patch: MISSING",
+        "  supported: yes"
+      ],
+      "report": {
+        "git": true,
+        "patch": false,
+        "platform": "test-os-test-machine",
+        "python": "3.99.1",
+        "supported": true,
+        "tool": "evoguard",
+        "version": "7.8.9"
+      }
+    },
+    "pack_manifest_error_report": {
+      "events": [
+        "is-directory",
+        "test-files-initial",
+        "manifest-initial",
+        "is-directory",
+        "test-files-initial",
+        "manifest-initial"
+      ],
+      "exit_code": 1,
+      "messages": [
+        "pack: controlled-pack",
+        "  manifest: none (optional — plain folder of judge tests)",
+        "  test files: 0",
+        "  pack sha256: ",
+        "  PROBLEM: controlled manifest failure",
+        "  INVALID"
+      ],
+      "report": {
+        "manifest": null,
+        "ok": false,
+        "pack": "controlled-pack",
+        "pack_digest_format": "EVOGUARD_PACK_V2",
+        "pack_sha256": "",
+        "problems": [
+          "controlled manifest failure"
+        ],
+        "test_files": []
+      }
+    },
+    "pack_midcall_rebinding": {
+      "events": [
+        "is-directory",
+        "test-files-late",
+        "manifest-late",
+        "digest-late",
+        "is-directory",
+        "test-files-late",
+        "manifest-late",
+        "digest-late"
+      ],
+      "exit_code": 0,
+      "messages": [
+        "pack: controlled-pack",
+        "  manifest: id='late-pack' version='2'",
+        "  test files: 1",
+        "  pack sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "  ok"
+      ],
+      "report": {
+        "manifest": {
+          "id": "late-pack",
+          "version": "2"
+        },
+        "ok": true,
+        "pack": "controlled-pack",
+        "pack_digest_format": "LATE_PACK_FORMAT",
+        "pack_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "problems": [],
+        "test_files": [
+          "test_late.py"
+        ]
+      }
+    },
+    "pack_missing_text": {
+      "events": [],
+      "exit_code": 1,
+      "messages": [
+        "pack: controlled-pack",
+        "  test files: 0",
+        "  pack sha256: ",
+        "  PROBLEM: not a directory",
+        "  INVALID"
+      ],
+      "report": null
+    },
+    "pack_optional_manifest_text": {
+      "events": [
+        "is-directory",
+        "test-files-initial",
+        "manifest-initial",
+        "digest-initial",
+        "is-directory",
+        "test-files-initial",
+        "manifest-initial",
+        "digest-initial"
+      ],
+      "exit_code": 0,
+      "messages": [
+        "pack: controlled-pack",
+        "  manifest: none (optional — plain folder of judge tests)",
+        "  test files: 2",
+        "  pack sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "  ok"
+      ],
+      "report": {
+        "manifest": null,
+        "ok": true,
+        "pack": "controlled-pack",
+        "pack_digest_format": "EVOGUARD_PACK_V2",
+        "pack_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "problems": [],
+        "test_files": [
+          "test_alpha.py",
+          "test_beta.py"
+        ]
+      }
+    },
+    "pack_valid_json": {
+      "events": [
+        "is-directory",
+        "test-files-initial",
+        "manifest-initial",
+        "digest-initial",
+        "is-directory",
+        "test-files-initial",
+        "manifest-initial",
+        "digest-initial",
+        "json-dumps-late"
+      ],
+      "exit_code": 0,
+      "messages": [
+        "{\n  \"pack\": \"controlled-pack\",\n  \"ok\": true,\n  \"problems\": [],\n  \"test_files\": [\n    \"test_alpha.py\",\n    \"test_beta.py\"\n  ],\n  \"manifest\": {\n    \"id\": \"controlled-pack\",\n    \"version\": \"1\"\n  },\n  \"pack_sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"pack_digest_format\": \"EVOGUARD_PACK_V2\"\n}"
+      ],
+      "report": {
+        "manifest": {
+          "id": "controlled-pack",
+          "version": "1"
+        },
+        "ok": true,
+        "pack": "controlled-pack",
+        "pack_digest_format": "EVOGUARD_PACK_V2",
+        "pack_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "problems": [],
+        "test_files": [
+          "test_alpha.py",
+          "test_beta.py"
+        ]
+      }
+    },
+    "version": {
+      "events": [],
+      "exit_code": 0,
+      "messages": [
+        "evo-guard 7.8.9"
+      ],
+      "report": null
+    }
+  },
+  "schema_version": "cli-diagnostic-command-characterization-v1"
+}
