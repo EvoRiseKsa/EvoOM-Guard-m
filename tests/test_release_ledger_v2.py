@@ -1173,6 +1173,21 @@ def test_bounded_subprocess_rejects_descendant_inherited_output_pipes() -> None:
     assert time.monotonic() - started < 3
 
 
+def test_git_blob_identity_uses_bounded_git_protocol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        validator._git_blob_sha(b"")
+        == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    )
+    monkeypatch.setattr(validator, "MAX_JSON_BYTES", 0)
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="bounded size limit",
+    ):
+        validator._git_blob_sha(b"x")
+
+
 def test_inventory_rejects_unexpected_entry_during_bounded_scan(
     tmp_path: Path,
 ) -> None:

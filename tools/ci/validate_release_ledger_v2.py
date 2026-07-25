@@ -498,21 +498,7 @@ def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _git_blob_sha(data: bytes) -> str:
-    payload = f"blob {len(data)}\0".encode("ascii") + data
-    # Git's object format mandates SHA-1 here. This identifier is never accepted
-    # as standalone content authentication: trusted-parent bytes are also
-    # compared exactly and their retained descriptors are bound with SHA-256.
-    # codeql[py/weak-sensitive-data-hashing]
-    return hashlib.sha1(payload, usedforsecurity=False).hexdigest()
-
-
-def _trusted_git(
-    repository: Path,
-    *arguments: str,
-    label: str,
-    output_limit: int,
-) -> bytes:
+def _trusted_process_environment() -> dict[str, str]:
     environment = {
         key: os.environ[key]
         for key in (
@@ -529,18 +515,54 @@ def _trusted_git(
     }
     environment.update(
         {
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_OPTIONAL_LOCKS": "0",
-        "GIT_NO_REPLACE_OBJECTS": "1",
-        "GIT_NO_LAZY_FETCH": "1",
-        "LC_ALL": "C",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_NO_LAZY_FETCH": "1",
+            "LC_ALL": "C",
         }
     )
+    return environment
+
+
+def _git_blob_sha(data: bytes) -> str:
+    """Return Git's protocol-mandated blob identity via the trusted Git binary."""
+
+    if len(data) > MAX_JSON_BYTES:
+        _fail("trusted Git blob input exceeds its bounded size limit")
+    try:
+        returncode, stdout, stderr = _run_bounded_subprocess(
+            ["git", "hash-object", "--stdin"],
+            environment=_trusted_process_environment(),
+            output_limit=128,
+            timeout=15,
+            label="trusted Git blob identity",
+            input_data=data,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LedgerValidationError("cannot compute trusted Git blob identity") from exc
+    if returncode != 0 or stderr:
+        _fail("trusted Git blob identity command failed")
+    try:
+        digest = stdout.decode("ascii", "strict").strip()
+    except UnicodeDecodeError as exc:
+        raise LedgerValidationError("trusted Git blob identity is not ASCII") from exc
+    if re.fullmatch(r"[0-9a-f]{40}", digest) is None:
+        _fail("trusted Git blob identity is not canonical SHA-1")
+    return digest
+
+
+def _trusted_git(
+    repository: Path,
+    *arguments: str,
+    label: str,
+    output_limit: int,
+) -> bytes:
     try:
         returncode, stdout, _stderr = _run_bounded_subprocess(
             ["git", "-C", str(repository), *arguments],
-            environment=environment,
+            environment=_trusted_process_environment(),
             output_limit=output_limit,
             timeout=15,
             label=f"trusted parent {label}",
@@ -559,6 +581,7 @@ def _run_bounded_subprocess(
     output_limit: int,
     timeout: int,
     label: str,
+    input_data: bytes | None = None,
 ) -> tuple[int, bytes, bytes]:
     """Run one fixed command while bounding combined stdout and stderr bytes."""
 
@@ -570,14 +593,25 @@ def _run_bounded_subprocess(
         popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         popen_options["start_new_session"] = True
-    process = subprocess.Popen(  # noqa: S603 - caller supplies a fixed argv
-        list(command),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=dict(environment),
-        **popen_options,
-    )
+    input_stream: Any = subprocess.DEVNULL
+    temporary_input = None
+    if input_data is not None:
+        temporary_input = tempfile.TemporaryFile()
+        temporary_input.write(input_data)
+        temporary_input.seek(0)
+        input_stream = temporary_input
+    try:
+        process = subprocess.Popen(  # noqa: S603 - caller supplies a fixed argv
+            list(command),
+            stdin=input_stream,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=dict(environment),
+            **popen_options,
+        )
+    finally:
+        if temporary_input is not None:
+            temporary_input.close()
     if process.stdout is None or process.stderr is None:
         with suppress(OSError):
             process.kill()
