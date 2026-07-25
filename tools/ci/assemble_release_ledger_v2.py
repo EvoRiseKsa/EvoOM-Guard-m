@@ -17,20 +17,202 @@ import argparse
 import copy
 import hashlib
 import importlib
+import importlib.machinery
+import importlib.util
 import os
 import re
 import stat
-import subprocess
 import sys
 import tempfile
 from collections.abc import Iterator, Mapping, MutableMapping, Sequence
+from contextlib import suppress
 from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn, cast
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-validator = importlib.import_module("tools.ci.validate_release_ledger_v2")
+
+
+def _bootstrap_is_link_like(metadata: os.stat_result) -> bool:
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return stat.S_ISLNK(metadata.st_mode) or bool(
+        reparse_flag and attributes & reparse_flag
+    )
+
+
+def _bootstrap_path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path_text = os.path.normcase(os.path.abspath(path))
+        root_text = os.path.normcase(os.path.abspath(root))
+        return os.path.commonpath((path_text, root_text)) == root_text
+    except ValueError:
+        return False
+
+
+def _bootstrap_plain_directory(path: Path) -> bool:
+    absolute = Path(os.path.abspath(path))
+    for current in (absolute, *absolute.parents):
+        try:
+            metadata = current.lstat()
+        except OSError:
+            return False
+        if _bootstrap_is_link_like(metadata) or not stat.S_ISDIR(metadata.st_mode):
+            return False
+    return True
+
+
+def _bootstrap_module_paths(module: Any) -> tuple[Path, ...]:
+    values: list[Path] = []
+    spec = getattr(module, "__spec__", None)
+    for value in (getattr(module, "__file__", None), getattr(spec, "origin", None)):
+        if not isinstance(value, str) or value in {"built-in", "frozen"}:
+            continue
+        path = Path(value)
+        if not path.is_absolute():
+            return (Path(""),)
+        values.append(Path(os.path.abspath(path)))
+    locations = getattr(spec, "submodule_search_locations", None)
+    if locations is not None:
+        for value in locations:
+            path = Path(value)
+            if not path.is_absolute():
+                return (Path(""),)
+            values.append(Path(os.path.abspath(path)))
+    return tuple(dict.fromkeys(values))
+
+
+def _bootstrap_module_is_unsafe(module: Any, roots: Sequence[Path]) -> bool:
+    paths = _bootstrap_module_paths(module)
+    if not paths:
+        spec = getattr(module, "__spec__", None)
+        origin = getattr(spec, "origin", None)
+        loader = getattr(spec, "loader", None)
+        return not (
+            origin == "built-in"
+            and loader is importlib.machinery.BuiltinImporter
+            or origin == "frozen"
+            and loader is importlib.machinery.FrozenImporter
+        )
+    return any(
+        not any(_bootstrap_path_is_within(path, root) for root in roots)
+        for path in paths
+    )
+
+
+def _load_validator_from_isolated_runtime() -> Any:
+    """Load the candidate validator with dependencies from host runtime roots.
+
+    This is a trusted-operator bootstrap and does not claim recovery from an
+    already-compromised interpreter or standard library.
+    """
+
+    prefixes = {
+        Path(os.path.abspath(sys.prefix)),
+        Path(os.path.abspath(sys.base_prefix)),
+    }
+    candidates = [
+        *prefixes,
+        *(Path(value) for value in sys.path if value and Path(value).is_absolute()),
+    ]
+    safe_roots: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        absolute = Path(os.path.abspath(candidate))
+        if (
+            not any(
+                _bootstrap_path_is_within(absolute, prefix)
+                for prefix in prefixes
+            )
+            or _bootstrap_path_is_within(absolute, ROOT)
+            or _bootstrap_path_is_within(ROOT, absolute)
+            or not _bootstrap_plain_directory(absolute)
+        ):
+            continue
+        portable = os.path.normcase(str(absolute))
+        if portable not in seen:
+            safe_roots.append(absolute)
+            seen.add(portable)
+    if not safe_roots:
+        raise RuntimeError("no isolated Python runtime path is available")
+    safe_roots.sort(key=lambda path: (len(path.parts), os.path.normcase(str(path))))
+
+    module_name = "tools.ci.validate_release_ledger_v2"
+    validator_path = ROOT / "tools" / "ci" / "validate_release_ledger_v2.py"
+    saved_path = list(sys.path)
+    saved_meta_path = list(sys.meta_path)
+    saved_hooks = list(sys.path_hooks)
+    saved_cache = dict(sys.path_importer_cache)
+    saved_names = set(sys.modules)
+    removed_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == module_name
+        or name == "jsonschema"
+        or name.startswith("jsonschema.")
+        or _bootstrap_module_is_unsafe(module, safe_roots)
+    }
+    parent_package = sys.modules.get("tools.ci")
+    missing = object()
+    parent_attribute = (
+        getattr(parent_package, "validate_release_ledger_v2", missing)
+        if parent_package is not None
+        else missing
+    )
+    try:
+        for name in removed_modules:
+            sys.modules.pop(name, None)
+        sys.path[:] = [str(path) for path in safe_roots]
+        sys.meta_path[:] = [
+            importlib.machinery.BuiltinImporter,
+            importlib.machinery.FrozenImporter,
+            importlib.machinery.PathFinder,
+        ]
+        sys.path_hooks[:] = [
+            importlib.machinery.FileFinder.path_hook(
+                (
+                    importlib.machinery.SourceFileLoader,
+                    importlib.machinery.SOURCE_SUFFIXES,
+                ),
+                (
+                    importlib.machinery.SourcelessFileLoader,
+                    importlib.machinery.BYTECODE_SUFFIXES,
+                ),
+                (
+                    importlib.machinery.ExtensionFileLoader,
+                    importlib.machinery.EXTENSION_SUFFIXES,
+                ),
+            )
+        ]
+        sys.path_importer_cache.clear()
+        spec = importlib.util.spec_from_file_location(module_name, validator_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("cannot create the isolated validator import")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for name in list(sys.modules):
+            if name not in saved_names or name in removed_modules:
+                sys.modules.pop(name, None)
+        sys.modules.update(removed_modules)
+        if parent_package is not None:
+            if parent_attribute is missing:
+                with suppress(AttributeError):
+                    delattr(parent_package, "validate_release_ledger_v2")
+            else:
+                vars(parent_package)[
+                    "validate_release_ledger_v2"
+                ] = parent_attribute
+        sys.path[:] = saved_path
+        sys.meta_path[:] = saved_meta_path
+        sys.path_hooks[:] = saved_hooks
+        sys.path_importer_cache.clear()
+        sys.path_importer_cache.update(saved_cache)
+        importlib.invalidate_caches()
+
+
+validator = _load_validator_from_isolated_runtime()
 
 ASSEMBLY_FORMAT = "EVOGUARD_RELEASE_LEDGER_V2_ASSEMBLY_PROVENANCE_V1"
 MAX_CLAIMS_BYTES = validator.MAX_JSON_BYTES
@@ -889,44 +1071,18 @@ def _trusted_git(
     *arguments: str,
     label: str,
     output_limit: int,
+    executable: Any | None = None,
 ) -> bytes:
-    environment = {
-        key: os.environ[key]
-        for key in (
-            "PATH",
-            "PATHEXT",
-            "SystemRoot",
-            "SYSTEMROOT",
-            "WINDIR",
-            "COMSPEC",
-            "TEMP",
-            "TMP",
-        )
-        if key in os.environ
-    }
-    environment.update(
-        {
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_OPTIONAL_LOCKS": "0",
-            "GIT_NO_LAZY_FETCH": "1",
-            "GIT_NO_REPLACE_OBJECTS": "1",
-            "LC_ALL": "C",
-        }
-    )
     try:
-        returncode, stdout, _stderr = validator._run_bounded_subprocess(
-            ["git", "-C", str(repository), *arguments],
-            environment=environment,
+        return validator._trusted_git(
+            repository,
+            *arguments,
+            label=label,
             output_limit=output_limit,
-            timeout=15,
-            label=f"trusted parent {label}",
+            executable=executable,
         )
-    except (OSError, subprocess.SubprocessError, validator.LedgerValidationError) as exc:
+    except validator.LedgerValidationError as exc:
         raise LedgerAssemblyError(f"cannot inspect trusted parent {label}") from exc
-    if returncode != 0:
-        _fail(f"trusted parent {label} is unavailable or invalid")
-    return bytes(stdout)
 
 
 def _trusted_blob(
@@ -935,6 +1091,7 @@ def _trusted_blob(
     *,
     label: str,
     limit: int,
+    executable: Any | None = None,
 ) -> bytes:
     size_bytes = _trusted_git(
         repository,
@@ -943,6 +1100,7 @@ def _trusted_blob(
         object_id,
         label=f"{label} size",
         output_limit=64,
+        executable=executable,
     )
     try:
         size_text = size_bytes.decode("ascii", "strict").strip()
@@ -960,6 +1118,7 @@ def _trusted_blob(
         object_id,
         label=label,
         output_limit=limit,
+        executable=executable,
     )
     if len(data) != size:
         _fail(f"trusted parent {label} returned a short or extended read")
@@ -970,6 +1129,8 @@ def _trusted_contracts(
     ledger: MutableMapping[str, Any],
     evidence_root: Path,
     trusted_parent_repo: Path,
+    *,
+    executable: Any | None = None,
 ) -> dict[str, Any]:
     try:
         repository = validator._require_plain_directory(
@@ -982,6 +1143,10 @@ def _trusted_contracts(
         evidence_root, repository
     ):
         _fail("trusted parent repository and evidence root must be disjoint")
+    trusted_git = executable or validator._resolve_trusted_git(
+        repository,
+        evidence_root,
+    )
 
     source = _as_mapping(ledger.get("source"), label="source")
     parent = source.get("parent_commit_sha")
@@ -996,6 +1161,7 @@ def _trusted_contracts(
             f"{parent}^{{commit}}",
             label="commit",
             output_limit=64,
+            executable=trusted_git,
         ).decode("ascii", "strict").strip()
         resolved_tree = _trusted_git(
             repository,
@@ -1004,6 +1170,7 @@ def _trusted_contracts(
             f"{parent}^{{tree}}",
             label="tree",
             output_limit=64,
+            executable=trusted_git,
         ).decode("ascii", "strict").strip()
     except UnicodeDecodeError as exc:
         raise LedgerAssemblyError(str(exc)) from exc
@@ -1059,6 +1226,7 @@ def _trusted_contracts(
                 path,
                 label=f"{name} tree entry",
                 output_limit=4096,
+                executable=trusted_git,
             )
         except LedgerAssemblyError:
             raise
@@ -1077,6 +1245,7 @@ def _trusted_contracts(
             blob_id,
             label=f"{name} blob",
             limit=blob_limit,
+            executable=trusted_git,
         )
         if blob != executing_bytes:
             _fail(
@@ -1138,6 +1307,7 @@ def _trusted_contracts(
             path,
             label=f"trusted build input {path} tree entry",
             output_limit=4096,
+            executable=trusted_git,
         )
         prefix = b"100644 blob "
         suffix = f"\t{path}\0".encode()
@@ -1158,6 +1328,7 @@ def _trusted_contracts(
             object_id,
             label=f"trusted build input {path}",
             limit=validator.MAX_JSON_BYTES,
+            executable=trusted_git,
         )
         if (
             blob != executing_bytes
@@ -1189,10 +1360,17 @@ def _validate_completed_evidence(
     evidence_root: Path,
     trusted_parent_repo: Path,
     retained: Mapping[str, bytes],
+    *,
+    executable: Any | None = None,
 ) -> dict[str, tuple[int, str]]:
     try:
         validator.validate_structure(ledger)
-        _trusted_contracts(ledger, evidence_root, trusted_parent_repo)
+        _trusted_contracts(
+            ledger,
+            evidence_root,
+            trusted_parent_repo,
+            executable=executable,
+        )
         inventory = validator._collect_descriptors(ledger)
         validator._require_retained_budget(inventory)
         expected_files = set(inventory)
@@ -1282,7 +1460,12 @@ def _validate_completed_evidence(
             directories=actual_directories,
             identities=identities,
         )
-        _trusted_contracts(ledger, evidence_root, trusted_parent_repo)
+        _trusted_contracts(
+            ledger,
+            evidence_root,
+            trusted_parent_repo,
+            executable=executable,
+        )
     except validator.LedgerValidationError as exc:
         raise LedgerAssemblyError(str(exc)) from exc
     return cast(dict[str, tuple[int, str]], inventory)
@@ -1452,16 +1635,19 @@ def assemble(
 
     ledger: MutableMapping[str, Any] = copy.deepcopy(claims)
     retained = _complete_file_descriptors(ledger, root)
+    trusted_git = validator._resolve_trusted_git(root, trusted_parent_repo)
     trusted_parent = _trusted_contracts(
         ledger,
         root,
         trusted_parent_repo,
+        executable=trusted_git,
     )
     try:
         first_party_contracts = validator._trusted_parent_contract_reference(
             trusted_parent_repo,
             trusted_parent["commit_sha"],
             trusted_parent["tree_sha"],
+            executable=trusted_git,
         )
         with validator._trusted_parent_first_party(first_party_contracts):
             extracted_facts = _derive_embedded_facts(ledger, root)
@@ -1471,6 +1657,7 @@ def assemble(
                 root,
                 trusted_parent_repo,
                 retained,
+                executable=trusted_git,
             )
     except validator.LedgerValidationError as exc:
         raise LedgerAssemblyError(str(exc)) from exc

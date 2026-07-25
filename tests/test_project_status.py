@@ -710,7 +710,7 @@ class ProjectStatusTests(unittest.TestCase):
                 encoding="utf-8",
             )
             commands = (
-                ("init", "-q"),
+                ("init", "-q", "--initial-branch=main"),
                 ("config", "user.name", "Status Test"),
                 ("config", "user.email", "status@example.invalid"),
                 ("config", "core.autocrlf", "false"),
@@ -752,6 +752,91 @@ class ProjectStatusTests(unittest.TestCase):
                     root,
                     render_project_status.load_status(root),
                     verify_git=True,
+                )
+
+    def test_v2_append_only_proof_covers_side_branch_merge_history(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ledger = root / "evidence/release-ledgers/v4.4.0/RELEASE_LEDGER.json"
+            (root / ".gitkeep").write_text("", encoding="utf-8")
+            for command in (
+                ("init", "-q", "--initial-branch=main"),
+                ("config", "user.name", "Status Test"),
+                ("config", "user.email", "status@example.invalid"),
+                ("config", "core.autocrlf", "false"),
+                ("add", "."),
+                ("commit", "-qm", "initial"),
+                ("branch", "side"),
+                ("checkout", "-q", "side"),
+            ):
+                subprocess.run(
+                    ["git", *command],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+            ledger.parent.mkdir(parents=True)
+            ledger.write_text('{"branch":"side"}\n', encoding="utf-8")
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-qm", "side ledger"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "checkout", "-q", "main"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            ledger.parent.mkdir(parents=True, exist_ok=True)
+            ledger.write_text('{"branch":"main"}\n', encoding="utf-8")
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-qm", "main ledger"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            merge = subprocess.run(
+                ["git", "merge", "--no-ff", "--no-commit", "side"],
+                cwd=root,
+                check=False,
+                capture_output=True,
+            )
+            self.assertNotEqual(merge.returncode, 0)
+            ledger.write_text('{"branch":"main"}\n', encoding="utf-8")
+            subprocess.run(
+                ["git", "add", "."],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-qm", "resolve merge"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "non-append change",
+            ):
+                render_project_status._verify_append_only_v2_history(
+                    root,
+                    [((4, 4, 0), ledger)],
                 )
 
     def test_frozen_v1_ledger_set_rejects_historical_deletion(self) -> None:
@@ -825,7 +910,7 @@ class ProjectStatusTests(unittest.TestCase):
                     verify_git=False,
                 )
 
-    def test_v2_requires_real_validator_boundary_and_derives_evidence(self) -> None:
+    def test_v2_no_git_mode_skips_external_boundary_and_derives_evidence(self) -> None:
         base_context = render_project_status.load_context(ROOT, verify_git=False)
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -854,11 +939,7 @@ class ProjectStatusTests(unittest.TestCase):
                     status,
                     verify_git=False,
                 )
-            validator.assert_called_once_with(
-                root,
-                ledger_path.parent,
-                "4.4.0",
-            )
+            validator.assert_not_called()
             self.assertEqual(
                 ledger.schema_version,
                 "evoguard-release-ledger-v2",
@@ -869,7 +950,6 @@ class ProjectStatusTests(unittest.TestCase):
             self.assertTrue(ledger.pipeline_publication_evidence_recorded)
 
     def test_v2_validation_failure_and_validation_race_fail_closed(self) -> None:
-        base_context = render_project_status.load_context(ROOT, verify_git=False)
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
             ledger_path = (
@@ -882,11 +962,15 @@ class ProjectStatusTests(unittest.TestCase):
             ledger_path.parent.mkdir(parents=True)
             original = json.dumps(_minimal_v2_ledger(), sort_keys=True) + "\n"
             ledger_path.write_text(original, encoding="utf-8")
-            status = replace(
-                base_context.status,
-                ledger_path=ledger_path.relative_to(root).as_posix(),
-            )
             with (
+                mock.patch.object(
+                    render_project_status,
+                    "_verify_tracked_bytes",
+                ),
+                mock.patch.object(
+                    render_project_status,
+                    "_verify_clean_directory",
+                ),
                 mock.patch.object(
                     render_project_status,
                     "_validate_v2_ledger",
@@ -896,10 +980,10 @@ class ProjectStatusTests(unittest.TestCase):
                 ),
                 self.assertRaises(render_project_status.ProjectStatusError),
             ):
-                render_project_status._load_ledger(
+                render_project_status._load_one_ledger(
                     root,
-                    status,
-                    verify_git=False,
+                    ledger_path,
+                    verify_git=True,
                 )
 
             def mutate(*_arguments: object) -> None:
@@ -911,6 +995,14 @@ class ProjectStatusTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     render_project_status,
+                    "_verify_tracked_bytes",
+                ),
+                mock.patch.object(
+                    render_project_status,
+                    "_verify_clean_directory",
+                ),
+                mock.patch.object(
+                    render_project_status,
                     "_validate_v2_ledger",
                     side_effect=mutate,
                 ),
@@ -919,60 +1011,127 @@ class ProjectStatusTests(unittest.TestCase):
                     "changed during external validation",
                 ),
             ):
-                render_project_status._load_ledger(
+                render_project_status._load_one_ledger(
                     root,
-                    status,
-                    verify_git=False,
+                    ledger_path,
+                    verify_git=True,
                 )
 
-    def test_v2_validator_receives_external_key_and_disjoint_parent(self) -> None:
+    def test_v2_validator_is_extracted_from_tag_parent_not_candidate(self) -> None:
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
             validator = root / "tools/ci/validate_release_ledger_v2.py"
             trusted_key = (
                 root / "security/release-ledger-roots/v4.4.0.pub.pem"
             )
-            ledger_directory = (
-                root / "evidence/release-ledgers/v4.4.0"
-            )
+            ledger_directory = root / "evidence/release-ledgers/v4.4.0"
             validator.parent.mkdir(parents=True)
             trusted_key.parent.mkdir(parents=True)
             ledger_directory.mkdir(parents=True)
-            validator.write_text("# validator\n", encoding="utf-8")
+            parent_marker = root / "parent-validator-ran"
+            evil_marker = root / "candidate-validator-ran"
+            validator.write_text(
+                "import os\nfrom pathlib import Path\n"
+                "Path(os.environ['EVOGUARD_PARENT_MARKER']).write_text("
+                "'parent', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
             trusted_key.write_text("PUBLIC KEY\n", encoding="utf-8")
-            calls: list[tuple[tuple[str, ...], Path, str]] = []
+            for relative in (
+                "tests/baseline/schema/release-ledger-v2.schema.json",
+                "ops/build_pyz.py",
+                "ops/generate_spdx_sbom.py",
+                "tools/ci/verify_spdx_attestation.py",
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(f"# {relative}\n", encoding="utf-8")
+            for command in (
+                ("init", "-q"),
+                ("config", "user.name", "Status Test"),
+                ("config", "user.email", "status@example.invalid"),
+                ("config", "core.autocrlf", "false"),
+                ("add", "."),
+                ("commit", "-qm", "trusted parent"),
+            ):
+                subprocess.run(
+                    ["git", *command],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+            parent = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                text=True,
+            ).strip()
+            parent_tree = subprocess.check_output(
+                ["git", "rev-parse", "HEAD^{tree}"],
+                cwd=root,
+                text=True,
+            ).strip()
+            (root / "release.txt").write_text("release\n", encoding="utf-8")
+            for command in (
+                ("add", "release.txt"),
+                ("commit", "-qm", "release"),
+                ("tag", "v4.4.0"),
+            ):
+                subprocess.run(
+                    ["git", *command],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+            release_commit = subprocess.check_output(
+                ["git", "rev-parse", "v4.4.0^{commit}"],
+                cwd=root,
+                text=True,
+            ).strip()
+            ledger = {
+                "schema_version": "evoguard-release-ledger-v2",
+                "source": {
+                    "parent_commit_sha": parent,
+                    "parent_tree_sha": parent_tree,
+                },
+                "release": {"commit_sha": release_commit},
+            }
+            ledger_path = ledger_directory / "RELEASE_LEDGER.json"
+            ledger_path.write_text(json.dumps(ledger) + "\n", encoding="utf-8")
+            validator.write_text(
+                "import os\nfrom pathlib import Path\n"
+                "Path(os.environ['EVOGUARD_EVIL_MARKER']).write_text("
+                "'candidate', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
 
-            def record(
-                command: tuple[str, ...],
-                *,
-                cwd: Path,
-                label: str,
-                timeout: int = 120,
-            ) -> None:
-                del timeout
-                calls.append((command, cwd, label))
-
-            with mock.patch.object(
-                render_project_status,
-                "_run_checked",
-                side_effect=record,
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "EVOGUARD_PARENT_MARKER": str(parent_marker),
+                    "EVOGUARD_EVIL_MARKER": str(evil_marker),
+                },
             ):
                 render_project_status._validate_v2_ledger(
                     root,
                     ledger_directory,
                     "4.4.0",
                 )
-            self.assertEqual([call[2] for call in calls], [
-                "trusted-parent clone",
-                "release-ledger-v2 validator",
-            ])
-            validator_command = calls[1][0]
-            self.assertIn(str(trusted_key), validator_command)
-            self.assertIn(str(ledger_directory), validator_command)
-            parent_index = validator_command.index("--trusted-parent-repo") + 1
-            trusted_parent = Path(validator_command[parent_index])
-            self.assertFalse(trusted_parent.is_relative_to(root))
-            self.assertFalse(trusted_key.is_relative_to(ledger_directory))
+            self.assertTrue(parent_marker.exists())
+            self.assertFalse(evil_marker.exists())
+
+            parent_marker.unlink()
+            ledger["source"]["parent_commit_sha"] = "f" * 40
+            ledger_path.write_text(json.dumps(ledger) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "tag-derived ancestry",
+            ):
+                render_project_status._validate_v2_ledger(
+                    root,
+                    ledger_directory,
+                    "4.4.0",
+                )
+            self.assertFalse(parent_marker.exists())
 
     def test_ledger_rejects_a_symlinked_version_directory(self) -> None:
         base_context = render_project_status.load_context(ROOT, verify_git=False)
@@ -1128,6 +1287,60 @@ class ProjectStatusTests(unittest.TestCase):
             )
             with self.assertRaises(render_project_status.ProjectStatusError):
                 render_project_status._verify_tracked_bytes(root, relative, original)
+
+    def test_git_resolver_ignores_relative_candidate_and_detects_swap(self) -> None:
+        host = render_project_status._resolve_git(ROOT)
+        with TemporaryDirectory() as temporary:
+            candidate = Path(temporary)
+            fake = candidate / ("git.exe" if os.name == "nt" else "git")
+            fake.write_bytes(b"candidate-controlled Git")
+            if os.name != "nt":
+                fake.chmod(0o755)
+            with (
+                mock.patch.object(
+                    render_project_status.Path,
+                    "cwd",
+                    return_value=candidate,
+                ),
+                mock.patch.dict(
+                    os.environ,
+                    {"PATH": f".{os.pathsep}{host.path.parent}"},
+                ),
+            ):
+                resolved = render_project_status._resolve_git(candidate)
+            self.assertEqual(resolved.path, host.path)
+
+            copied = candidate / (
+                "trusted-git.exe" if os.name == "nt" else "trusted-git"
+            )
+            copied.write_bytes(host.data)
+            if os.name != "nt":
+                copied.chmod(0o755)
+            data, identity = render_project_status._read_host_executable(copied)
+            frozen = render_project_status._TrustedGit(
+                path=copied,
+                data=data,
+                identity=identity,
+                parent_chain=render_project_status._host_directory_chain(
+                    copied.parent
+                ),
+                search_path=str(copied.parent),
+            )
+            copied.write_bytes(bytes([data[0] ^ 1]) + data[1:])
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "changed",
+            ):
+                render_project_status._require_git_unchanged(frozen)
+
+    @unittest.skipUnless(os.name == "nt", "Git for Windows characterization")
+    def test_git_for_windows_hardlinked_executable_is_accepted(self) -> None:
+        trusted = render_project_status._resolve_git(ROOT)
+        if trusted.path.stat().st_nlink < 2:
+            self.skipTest("host Git executable is not hard-linked")
+        data, identity = render_project_status._read_host_executable(trusted.path)
+        self.assertEqual(data, trusted.data)
+        self.assertEqual(identity, trusted.identity)
 
     def test_paths_reject_escape_symlink_and_reparse_components(self) -> None:
         with TemporaryDirectory() as directory:

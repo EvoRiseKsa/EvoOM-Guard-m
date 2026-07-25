@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -178,6 +179,20 @@ class _PendingWrite:
     staged: Path
     original: _FileIdentity
     expected_bytes: bytes
+
+
+@dataclass(frozen=True)
+class _TrustedGit:
+    path: Path
+    data: bytes
+    identity: _FileIdentity
+    parent_chain: Mapping[Path, tuple[int, int]]
+    search_path: str
+
+
+_GIT_LOCK = threading.RLock()
+_ACTIVE_GIT: _TrustedGit | None = None
+_MAX_GIT_EXECUTABLE_BYTES = 256 * 1024 * 1024
 
 
 _SOURCE_GATE = "vars.EVOGUARD_RELEASE_SOURCE_V2_ENABLED == 'true'"
@@ -359,6 +374,246 @@ def _same_open_file(left: os.stat_result, right: os.stat_result) -> bool:
 
 def _absolute(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path)))
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        return os.path.commonpath(
+            (os.path.normcase(os.fspath(_absolute(path))),
+             os.path.normcase(os.fspath(_absolute(root))))
+        ) == os.path.normcase(os.fspath(_absolute(root)))
+    except ValueError:
+        return False
+
+
+def _host_directory_chain(path: Path) -> dict[Path, tuple[int, int]]:
+    chain: dict[Path, tuple[int, int]] = {}
+    for current in (path, *path.parents):
+        try:
+            metadata = os.lstat(current)
+        except OSError as exc:
+            raise ProjectStatusError(
+                f"cannot inspect trusted Git path component: {current}"
+            ) from exc
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or _is_reparse_point(metadata)
+            or not stat.S_ISDIR(metadata.st_mode)
+        ):
+            raise ProjectStatusError(
+                f"trusted Git path has a link-like component: {current}"
+            )
+        chain[current] = (metadata.st_dev, metadata.st_ino)
+    return chain
+
+
+def _read_host_executable(path: Path) -> tuple[bytes, _FileIdentity]:
+    parent_chain = _host_directory_chain(path.parent)
+    try:
+        before = os.lstat(path)
+    except OSError as exc:
+        raise ProjectStatusError(f"cannot inspect trusted Git executable: {path}") from exc
+    if (
+        stat.S_ISLNK(before.st_mode)
+        or _is_reparse_point(before)
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_size < 1
+        or before.st_size > _MAX_GIT_EXECUTABLE_BYTES
+    ):
+        raise ProjectStatusError("trusted Git executable is not one regular file")
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise ProjectStatusError("cannot open trusted Git executable") from exc
+    try:
+        opened = os.fstat(descriptor)
+        opened_identity = (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_size,
+            opened.st_mtime_ns,
+        )
+        path_identity = (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        )
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened_identity != path_identity
+        ):
+            raise ProjectStatusError("trusted Git executable changed while opening")
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_GIT_EXECUTABLE_BYTES:
+                raise ProjectStatusError("trusted Git executable exceeds its bound")
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        final = os.lstat(path)
+    except OSError as exc:
+        raise ProjectStatusError("cannot re-inspect trusted Git executable") from exc
+    if (
+        (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        )
+        != opened_identity
+        or _identity(final) != _identity(before)
+    ):
+        raise ProjectStatusError("trusted Git executable changed while reading")
+    for current, expected in parent_chain.items():
+        metadata = os.lstat(current)
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or _is_reparse_point(metadata)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or (metadata.st_dev, metadata.st_ino) != expected
+        ):
+            raise ProjectStatusError("trusted Git executable ancestry changed")
+    return b"".join(chunks), _identity(before)
+
+
+def _resolve_git(root: Path) -> _TrustedGit:
+    blocked = (
+        _absolute(root),
+        _absolute(Path.cwd()),
+        _absolute(Path(tempfile.gettempdir())),
+    )
+    executable_name = "git.exe" if os.name == "nt" else "git"
+    seen: set[str] = set()
+    for raw in os.environ.get("PATH", "").split(os.pathsep):
+        if not raw or raw != raw.strip() or raw.startswith('"') or raw.endswith('"'):
+            continue
+        directory = Path(raw)
+        if not directory.is_absolute():
+            continue
+        directory = _absolute(directory)
+        portable = os.path.normcase(os.fspath(directory))
+        if portable in seen or any(
+            _path_is_within(directory, item) or _path_is_within(item, directory)
+            for item in blocked
+        ):
+            continue
+        seen.add(portable)
+        candidate = directory / executable_name
+        try:
+            data, identity = _read_host_executable(candidate)
+        except ProjectStatusError:
+            continue
+        if os.name != "nt" and not os.access(candidate, os.X_OK):
+            continue
+        return _TrustedGit(
+            path=candidate,
+            data=data,
+            identity=identity,
+            parent_chain=_host_directory_chain(candidate.parent),
+            search_path=os.fspath(directory),
+        )
+    raise ProjectStatusError(
+        "no trusted Git executable exists in an absolute host PATH directory"
+    )
+
+
+def _require_git_unchanged(git: _TrustedGit) -> None:
+    data, identity = _read_host_executable(git.path)
+    if data != git.data or identity != git.identity:
+        raise ProjectStatusError("trusted Git executable changed during validation")
+    for current, expected in git.parent_chain.items():
+        try:
+            metadata = os.lstat(current)
+        except OSError as exc:
+            raise ProjectStatusError(
+                "cannot re-inspect trusted Git executable ancestry"
+            ) from exc
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or _is_reparse_point(metadata)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or (metadata.st_dev, metadata.st_ino) != expected
+        ):
+            raise ProjectStatusError("trusted Git executable ancestry changed")
+
+
+def _git_environment(git: _TrustedGit) -> dict[str, str]:
+    environment = {
+        key: os.environ[key]
+        for key in (
+            "PATHEXT",
+            "SystemRoot",
+            "SYSTEMROOT",
+            "WINDIR",
+            "COMSPEC",
+            "TEMP",
+            "TMP",
+        )
+        if key in os.environ
+    }
+    environment.update(
+        {
+            "PATH": git.search_path,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+            "GIT_NO_LAZY_FETCH": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+            "LC_ALL": "C",
+        }
+    )
+    return environment
+
+
+@contextmanager
+def _trusted_git_session(root: Path) -> Iterator[None]:
+    """Freeze Git for one single-threaded project-status CLI operation."""
+
+    global _ACTIVE_GIT
+    with _GIT_LOCK:
+        if _ACTIVE_GIT is not None:
+            directory = _ACTIVE_GIT.path.parent
+            blocked = (
+                _absolute(root),
+                _absolute(Path.cwd()),
+                _absolute(Path(tempfile.gettempdir())),
+            )
+            if any(
+                _path_is_within(directory, item)
+                or _path_is_within(item, directory)
+                for item in blocked
+            ):
+                raise ProjectStatusError(
+                    "active trusted Git executable overlaps the new repository root"
+                )
+            _require_git_unchanged(_ACTIVE_GIT)
+            yield
+            return
+        trusted = _resolve_git(root)
+        _ACTIVE_GIT = trusted
+        try:
+            yield
+        finally:
+            try:
+                _require_git_unchanged(trusted)
+            finally:
+                _ACTIVE_GIT = None
+
+
+def _selected_git(root: Path) -> _TrustedGit:
+    return _ACTIVE_GIT or _resolve_git(root)
 
 
 def _safe_path(
@@ -750,37 +1005,132 @@ def _run_checked(
         raise ProjectStatusError(f"{label} rejected the configured release ledger")
 
 
-def _validate_v2_ledger(
+def _validate_v2_ledger_with_git(
     root: Path,
     ledger_directory: Path,
     version: str,
 ) -> None:
-    validator = _safe_path(
-        root,
-        root / "tools/ci/validate_release_ledger_v2.py",
-        leaf="file",
+    ledger_object = _mapping(
+        _load_json(root, ledger_directory / "RELEASE_LEDGER.json"),
+        "release ledger",
     )
-    trusted_key = _safe_path(
-        root,
-        root / f"security/release-ledger-roots/v{version}.pub.pem",
-        leaf="file",
+    if ledger_object.get("schema_version") != "evoguard-release-ledger-v2":
+        raise ProjectStatusError("release-ledger v2 external validation got wrong schema")
+    source = _mapping(ledger_object.get("source"), "release ledger.source")
+    claimed_parent = _string(
+        source.get("parent_commit_sha"),
+        "release ledger.source.parent_commit_sha",
+    )
+    claimed_parent_tree = _string(
+        source.get("parent_tree_sha"),
+        "release ledger.source.parent_tree_sha",
+    )
+    release = _mapping(ledger_object.get("release"), "release ledger.release")
+    release_commit = _string(
+        release.get("commit_sha"),
+        "release ledger.release.commit_sha",
+    )
+    if (
+        re.fullmatch(r"[0-9a-f]{40}", claimed_parent) is None
+        or re.fullmatch(r"[0-9a-f]{40}", claimed_parent_tree) is None
+        or re.fullmatch(r"[0-9a-f]{40}", release_commit) is None
+    ):
+        raise ProjectStatusError("release-ledger v2 commit identities are not SHA-1")
+    parent_files = (
+        "tools/ci/validate_release_ledger_v2.py",
+        "tests/baseline/schema/release-ledger-v2.schema.json",
+        f"security/release-ledger-roots/v{version}.pub.pem",
+        "ops/build_pyz.py",
+        "ops/generate_spdx_sbom.py",
+        "tools/ci/verify_spdx_attestation.py",
     )
     with tempfile.TemporaryDirectory(prefix="evoguard-status-parent-") as temporary:
         trusted_parent = Path(temporary) / "trusted-parent.git"
-        _run_checked(
-            (
-                "git",
-                "-c",
-                "protocol.file.allow=always",
-                "clone",
-                "--local",
-                "--no-hardlinks",
-                "--no-checkout",
-                os.fspath(_absolute(root)),
-                os.fspath(trusted_parent),
-            ),
-            cwd=Path(temporary),
-            label="trusted-parent clone",
+        _git_bytes(
+            Path(temporary),
+            "-c",
+            "protocol.file.allow=always",
+            "clone",
+            "--local",
+            "--no-hardlinks",
+            "--no-checkout",
+            os.fspath(_absolute(root)),
+            os.fspath(trusted_parent),
+        )
+        tag = f"v{version}"
+        tag_commit = _git(
+            trusted_parent,
+            "rev-parse",
+            "--verify",
+            f"refs/tags/{tag}^{{commit}}",
+        )
+        if tag_commit != release_commit:
+            raise ProjectStatusError(
+                "release-ledger v2 release commit differs from the local release tag"
+            )
+        ancestry = _git(
+            trusted_parent,
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            tag_commit,
+        ).split()
+        if len(ancestry) != 2 or ancestry[0] != tag_commit:
+            raise ProjectStatusError(
+                "release-ledger v2 release commit must have exactly one parent"
+            )
+        parent = ancestry[1]
+        parent_tree = _git(
+            trusted_parent,
+            "rev-parse",
+            "--verify",
+            f"{parent}^{{tree}}",
+        )
+        if parent != claimed_parent or parent_tree != claimed_parent_tree:
+            raise ProjectStatusError(
+                "release-ledger v2 parent claim differs from tag-derived ancestry"
+            )
+        snapshot_root = Path(temporary) / "validator-snapshot"
+        snapshot_root.mkdir()
+        for relative in parent_files:
+            entry = _git_bytes(
+                trusted_parent,
+                "ls-tree",
+                "-z",
+                parent,
+                "--",
+                relative,
+            )
+            match = re.fullmatch(
+                rb"100644 blob ([0-9a-f]{40})\t" + re.escape(relative.encode()) + rb"\0",
+                entry,
+            )
+            if match is None:
+                raise ProjectStatusError(
+                    f"trusted parent validator input is not a regular blob: {relative}"
+                )
+            data = _git_bytes(
+                trusted_parent,
+                "cat-file",
+                "blob",
+                match.group(1).decode("ascii"),
+            )
+            target = snapshot_root.joinpath(*Path(relative).parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with target.open("xb") as stream:
+                    stream.write(data)
+            except OSError as exc:
+                raise ProjectStatusError(
+                    f"cannot materialize trusted parent validator input: {relative}"
+                ) from exc
+        validator = snapshot_root / "tools/ci/validate_release_ledger_v2.py"
+        trusted_key = (
+            snapshot_root
+            / "security"
+            / "release-ledger-roots"
+            / f"v{version}.pub.pem"
         )
         _run_checked(
             (
@@ -794,9 +1144,18 @@ def _validate_v2_ledger(
                 "--trusted-parent-repo",
                 os.fspath(trusted_parent),
             ),
-            cwd=root,
+            cwd=snapshot_root,
             label="release-ledger-v2 validator",
         )
+
+
+def _validate_v2_ledger(
+    root: Path,
+    ledger_directory: Path,
+    version: str,
+) -> None:
+    with _trusted_git_session(root):
+        _validate_v2_ledger_with_git(root, ledger_directory, version)
 
 
 def _parse_common_ledger(
@@ -898,6 +1257,9 @@ def _verify_append_only_v2_history(
         _git_bytes(
             root,
             "log",
+            "--full-history",
+            "-m",
+            "--root",
             "--format=",
             "--name-status",
             "-z",
@@ -915,12 +1277,13 @@ def _verify_append_only_v2_history(
         change, relative = addition_fields[index : index + 2]
         if change != "A" or _V2_LEDGER_PATH_RE.fullmatch(relative) is None:
             raise ProjectStatusError("release-ledger v2 Git history is ambiguous")
-        if relative in historical:
-            raise ProjectStatusError("release-ledger v2 was removed and re-added")
         historical.add(relative)
     non_additions = _git_bytes(
         root,
         "log",
+        "--full-history",
+        "-m",
+        "--root",
         "--format=",
         "--name-status",
         "-z",
@@ -1088,22 +1451,16 @@ def _load_one_ledger(root: Path, path: Path, *, verify_git: bool) -> Ledger:
     if path_match is None:
         raise ProjectStatusError("release-ledger v2 is outside its signed namespace")
     if verify_git:
-        validator_relative = "tools/ci/validate_release_ledger_v2.py"
-        validator_bytes, _ = _read_stable_bytes(root, root / validator_relative)
-        _verify_tracked_bytes(root, validator_relative, validator_bytes)
-        key_relative = (
-            f"security/release-ledger-roots/v{path_match.group(1)}.pub.pem"
-        )
-        key_bytes, _ = _read_stable_bytes(root, root / key_relative)
-        _verify_tracked_bytes(root, key_relative, key_bytes)
         _verify_clean_directory(
             root,
             Path(relative).parent.as_posix(),
         )
-    _validate_v2_ledger(root, path.parent, path_match.group(1))
-    validated_bytes, _ = _read_stable_bytes(root, path)
-    if validated_bytes != ledger_bytes:
-        raise ProjectStatusError("release-ledger v2 changed during external validation")
+        _validate_v2_ledger(root, path.parent, path_match.group(1))
+        validated_bytes, _ = _read_stable_bytes(root, path)
+        if validated_bytes != ledger_bytes:
+            raise ProjectStatusError(
+                "release-ledger v2 changed during external validation"
+            )
     identity = _parse_common_ledger(
         top,
         path=relative,
@@ -1482,43 +1839,42 @@ def _verify_pipeline(root: Path, status: Status) -> None:
 
 
 def _git(root: Path, *arguments: str) -> str:
+    raw = _git_bytes(root, *arguments)
     try:
-        result = subprocess.run(
-            ["git", *arguments],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=30,
-        )
-    except (
-        OSError,
-        subprocess.CalledProcessError,
-        subprocess.TimeoutExpired,
-        UnicodeDecodeError,
-    ) as exc:
-        raise ProjectStatusError(f"git verification failed: {' '.join(arguments)}") from exc
-    if len(result.stdout) + len(result.stderr) > 8 * 1024 * 1024:
-        raise ProjectStatusError("git verification output exceeds the bound")
-    return result.stdout.strip()
+        return raw.decode("utf-8", "strict").strip()
+    except UnicodeDecodeError as exc:
+        raise ProjectStatusError(
+            f"git verification output is not UTF-8: {' '.join(arguments)}"
+        ) from exc
 
 
 def _git_bytes(root: Path, *arguments: str) -> bytes:
+    trusted = _selected_git(root)
+    _require_git_unchanged(trusted)
     try:
         result = subprocess.run(
-            ["git", *arguments],
+            [os.fspath(trusted.path), *arguments],
             cwd=root,
-            check=True,
+            check=False,
             capture_output=True,
             timeout=30,
+            env=_git_environment(trusted),
         )
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+    except (OSError, subprocess.TimeoutExpired) as primary:
+        try:
+            _require_git_unchanged(trusted)
+        except BaseException as integrity:
+            raise integrity from primary
         raise ProjectStatusError(
             f"git byte verification failed: {' '.join(arguments)}"
-        ) from exc
+        ) from primary
+    _require_git_unchanged(trusted)
     if len(result.stdout) + len(result.stderr) > 8 * 1024 * 1024:
         raise ProjectStatusError("git byte verification output exceeds the bound")
+    if result.returncode != 0:
+        raise ProjectStatusError(
+            f"git byte verification failed: {' '.join(arguments)}"
+        )
     return result.stdout
 
 
@@ -1564,7 +1920,7 @@ def _verify_git(root: Path, status: Status, ledger: Ledger) -> None:
         raise ProjectStatusError(f"{ledger.tag} does not resolve to its ledger commit")
 
 
-def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
+def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
     _safe_path(root, root, leaf="directory")
     status_bytes: bytes | None = None
     if verify_git:
@@ -1582,6 +1938,13 @@ def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
     if verify_git:
         _verify_git(root, status, ledger)
     return Context(status, ledger, source_version)
+
+
+def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
+    if not verify_git:
+        return _load_context_with_trusted_git(root, verify_git=False)
+    with _trusted_git_session(root):
+        return _load_context_with_trusted_git(root, verify_git=True)
 
 
 def _release_summary(context: Context) -> str:

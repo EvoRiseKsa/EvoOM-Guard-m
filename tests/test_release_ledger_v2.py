@@ -9,12 +9,14 @@ from __future__ import annotations
 import base64
 import copy
 import hashlib
+import importlib.machinery
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -1275,6 +1277,126 @@ def test_first_party_snapshot_is_rechecked_when_validation_body_raises(
     assert isinstance(caught.value.__cause__, RuntimeError)
 
 
+def test_trusted_import_context_ignores_and_restores_fake_cryptography(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository, parent, parent_tree = _first_party_parent_repository(tmp_path)
+    contracts = validator._trusted_parent_contract_reference(
+        repository,
+        parent,
+        parent_tree,
+    )
+    attacker = tmp_path / "attacker"
+    package = attacker / "cryptography"
+    package.mkdir(parents=True)
+    marker = tmp_path / "fake-cryptography-executed"
+    fake_file = package / "__init__.py"
+    fake_file.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    fake = types.ModuleType("cryptography")
+    fake.__file__ = str(fake_file)
+    fake.__spec__ = importlib.machinery.ModuleSpec(
+        "cryptography",
+        loader=None,
+        origin=str(fake_file),
+        is_package=True,
+    )
+    monkeypatch.setitem(sys.modules, "cryptography", fake)
+    monkeypatch.syspath_prepend(str(attacker))
+
+    with validator._trusted_parent_first_party(contracts):
+        loaded = sys.modules["cryptography"]
+        assert loaded is not fake
+        loaded_file = Path(str(loaded.__file__))
+        assert any(
+            validator._path_is_within(loaded_file, Path(prefix))
+            for prefix in {sys.prefix, sys.base_prefix}
+        )
+        assert not marker.exists()
+
+    assert sys.modules["cryptography"] is fake
+    assert not marker.exists()
+
+
+def test_trusted_import_context_rejects_new_originless_modules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ambient = types.ModuleType("candidate.synthetic")
+    monkeypatch.setitem(sys.modules, "candidate.synthetic", ambient)
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="module escaped trusted import roots",
+    ):
+        with validator._trusted_python_imports(
+            import_root=None,
+            blocked_roots=(tmp_path,),
+        ):
+            assert "candidate.synthetic" not in sys.modules
+            sys.modules["late.synthetic"] = types.ModuleType("late.synthetic")
+    assert sys.modules["candidate.synthetic"] is ambient
+    assert "late.synthetic" not in sys.modules
+
+
+def test_retained_keys_are_bound_to_ids_and_external_anchor(
+    tmp_path: Path,
+) -> None:
+    repository, parent, parent_tree = _first_party_parent_repository(tmp_path)
+    contracts = validator._trusted_parent_contract_reference(
+        repository,
+        parent,
+        parent_tree,
+    )
+    root = tmp_path / "retained"
+    root.mkdir()
+    ledger = _valid_ledger()
+    public_bytes: list[bytes] = []
+    for index, item in enumerate(ledger["trust_roots"]):
+        private = tmp_path / f"root-{index}.pem"
+        public = tmp_path / f"root-{index}.pub.pem"
+        generate_keypair(str(private), str(public))
+        target = root.joinpath(*PurePosixPath(item["public_key"]["path"]).parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = public.read_bytes()
+        target.write_bytes(data)
+        item["key_id"] = public_key_id(str(public))
+        public_bytes.append(data)
+
+    ledger_private = tmp_path / "ledger.pem"
+    external_public = tmp_path / "ledger.pub.pem"
+    generate_keypair(str(ledger_private), str(external_public))
+    retained_public = root.joinpath(
+        *PurePosixPath(ledger["ledger_signature"]["public_key"]["path"]).parts
+    )
+    retained_public.parent.mkdir(parents=True, exist_ok=True)
+    retained_public.write_bytes(external_public.read_bytes())
+    trusted = validator._load_trusted_ledger_key(root, external_public)
+    ledger["ledger_signature"]["key_id"] = trusted.key_id
+
+    with validator._trusted_parent_first_party(contracts):
+        validator._validate_keys_and_anchor(root, ledger, trusted)
+        first = root.joinpath(
+            *PurePosixPath(ledger["trust_roots"][0]["public_key"]["path"]).parts
+        )
+        first.write_bytes(public_bytes[1])
+        with pytest.raises(
+            validator.LedgerValidationError,
+            match="root key ID",
+        ):
+            validator._validate_keys_and_anchor(root, ledger, trusted)
+        first.write_bytes(public_bytes[0])
+        retained_public.write_bytes(public_bytes[0])
+        with pytest.raises(
+            validator.LedgerValidationError,
+            match="differs from external trusted key",
+        ):
+            validator._validate_keys_and_anchor(root, ledger, trusted)
+
+
 def test_first_party_parent_tree_rejects_non_regular_git_entries(
     tmp_path: Path,
 ) -> None:
@@ -1385,6 +1507,279 @@ def test_git_blob_identity_uses_bounded_git_protocol(
         match="bounded size limit",
     ):
         validator._git_blob_sha(b"x")
+
+
+def test_git_blob_identity_is_process_free(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        validator,
+        "_run_bounded_subprocess",
+        lambda *_args, **_kwargs: pytest.fail("Git process must not run"),
+    )
+    assert (
+        validator._git_blob_sha(b"abc")
+        == "f2ba8f84ab5c1bce84a7b441cb1959cfc7093b7f"
+    )
+
+
+def test_trusted_git_ignores_relative_path_and_freezes_executable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = validator._resolve_trusted_git()
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    fake = candidate / ("git.exe" if os.name == "nt" else "git")
+    fake.write_bytes(b"candidate-controlled executable")
+    if os.name != "nt":
+        fake.chmod(0o755)
+    monkeypatch.chdir(candidate)
+    monkeypatch.setenv("PATH", f".{os.pathsep}{host.path.parent}")
+    resolved = validator._resolve_trusted_git(candidate)
+    assert resolved.path == host.path
+
+    copied = tmp_path / ("trusted-git.exe" if os.name == "nt" else "trusted-git")
+    shutil.copyfile(host.path, copied)
+    if os.name != "nt":
+        copied.chmod(0o755)
+    data, identity = validator._read_trusted_executable(copied)
+    frozen = validator._TrustedExecutable(
+        path=copied,
+        data=data,
+        identity=identity,
+        search_path=str(copied.parent),
+        parent_chain=validator._directory_chain(
+            copied.parent,
+            label="test Git parent",
+        ),
+    )
+    copied.write_bytes(bytes([data[0] ^ 1]) + data[1:])
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="trusted Git executable changed",
+    ):
+        validator._require_trusted_executable_unchanged(frozen)
+
+
+def test_trusted_git_rejects_path_directory_ancestor_of_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = validator._resolve_trusted_git()
+    ancestor = tmp_path / "path-ancestor"
+    ancestor.mkdir()
+    fake = ancestor / ("git.exe" if os.name == "nt" else "git")
+    shutil.copyfile(host.path, fake)
+    if os.name != "nt":
+        fake.chmod(0o755)
+    repository = ancestor / "repository"
+    repository.mkdir()
+    cwd = tmp_path / "disjoint-cwd"
+    cwd.mkdir()
+    synthetic_temp = tmp_path / "disjoint-temp"
+    synthetic_temp.mkdir()
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(
+        validator.tempfile,
+        "gettempdir",
+        lambda: str(synthetic_temp),
+    )
+    monkeypatch.setenv(
+        "PATH",
+        f"{ancestor}{os.pathsep}{host.path.parent}",
+    )
+    resolved = validator._resolve_trusted_git(repository)
+    assert resolved.path == host.path
+
+
+def test_trusted_executable_reader_accepts_hardlinked_system_git(
+    tmp_path: Path,
+) -> None:
+    host = validator._resolve_trusted_git()
+    copied = tmp_path / ("host-copy.exe" if os.name == "nt" else "host-copy")
+    shutil.copyfile(host.path, copied)
+    linked = tmp_path / ("git.exe" if os.name == "nt" else "git")
+    try:
+        os.link(copied, linked)
+    except OSError:
+        pytest.skip("hard links are unavailable for the host Git executable")
+    data, identity = validator._read_trusted_executable(linked)
+    assert data == host.data
+    assert identity[2] == len(data)
+
+
+def test_direct_validator_does_not_import_candidate_crypto_or_jsonschema(
+    tmp_path: Path,
+) -> None:
+    isolated = tmp_path / "isolated"
+    validator_path = isolated / "tools/ci/validate_release_ledger_v2.py"
+    schema_path = (
+        isolated
+        / "tests/baseline/schema/release-ledger-v2.schema.json"
+    )
+    validator_path.parent.mkdir(parents=True)
+    schema_path.parent.mkdir(parents=True)
+    shutil.copyfile(Path(validator.__file__), validator_path)
+    shutil.copyfile(SCHEMA_PATH, schema_path)
+    crypto_marker = tmp_path / "crypto-marker"
+    schema_marker = tmp_path / "jsonschema-marker"
+    fake_crypto = validator_path.parent / "cryptography"
+    fake_crypto.mkdir()
+    (fake_crypto / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(crypto_marker)!r}).write_text('bad', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    (validator_path.parent / "jsonschema.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(schema_marker)!r}).write_text('bad', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    draft = isolated / "draft.json"
+    output = isolated / "canonical.json"
+    draft.write_text("{}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(validator_path),
+            "canonicalize",
+            str(draft),
+            str(output),
+        ],
+        cwd=isolated,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 1
+    assert not crypto_marker.exists()
+    assert not schema_marker.exists()
+    assert not output.exists()
+
+
+def test_release_ledger_commands_require_isolated_python_bootstrap() -> None:
+    validator_doc = (ROOT / "docs/RELEASE_LEDGER_V2.md").read_text(
+        encoding="utf-8"
+    )
+    assembler_doc = (ROOT / "docs/RELEASE_LEDGER_V2_ASSEMBLY.md").read_text(
+        encoding="utf-8"
+    )
+    checklist = (ROOT / "docs/RELEASE_GATE_CHECKLIST.md").read_text(
+        encoding="utf-8"
+    )
+    assert "python tools/ci/validate_release_ledger_v2.py" not in (
+        validator_doc + checklist
+    )
+    assert "python -I tools/ci/validate_release_ledger_v2.py" in validator_doc
+    assert "python -I tools/ci/validate_release_ledger_v2.py" in checklist
+    assert "python tools/ci/assemble_release_ledger_v2.py" not in assembler_doc
+    assert "python -I tools/ci/assemble_release_ledger_v2.py" in assembler_doc
+
+
+def test_schema_format_checkers_are_fail_closed() -> None:
+    malformed_time = _valid_ledger()
+    malformed_time["ledger_scope"]["created_utc"] = "2030-02-31T00:30:00Z"
+    assert any(
+        "is not a 'date-time'" in error
+        for error in validator._schema_errors(malformed_time, _schema())
+    )
+
+    relative_uri = _valid_ledger()
+    relative_uri["release"]["release_url"] = "/releases/v9.9.9"
+    assert any(
+        "is not a 'uri'" in error
+        for error in validator._schema_errors(relative_uri, _schema())
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "https://",
+        "https:// bad",
+        "https://example.invalid/evo-guard.pyz",
+    ),
+)
+def test_bootstrap_guard_url_is_exact(url: str) -> None:
+    ledger = _valid_ledger()
+    ledger["toolchain"]["bootstrap_guard"]["url"] = url
+    with pytest.raises(validator.LedgerValidationError):
+        validator.validate_structure(ledger)
+
+
+def test_attestation_predicate_uri_is_exact() -> None:
+    ledger = _valid_ledger()
+    ledger["attestations"]["source_producer"][
+        "predicate_type"
+    ] = "https://example.invalid/provenance"
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="source_producer is not bound",
+    ):
+        validator._validate_attestations(ledger)
+
+
+_TIMESTAMP_PATHS: tuple[tuple[str | int, ...], ...] = (
+    ("ledger_scope", "created_utc"),
+    ("release", "created_utc"),
+    ("release", "published_utc"),
+    ("repository_controls", "observed_utc"),
+    ("tag_ci", "completed_utc"),
+    ("tag_ci", "observed_utc"),
+    ("marketplace", "observed_utc"),
+    *(
+        ("workflow_chain", index, field)
+        for index in range(len(validator.PHASES))
+        for field in ("started_utc", "completed_utc")
+    ),
+    *(
+        ("control_evidence", name, "observed_utc")
+        for name in (
+            "source_external_controls",
+            "artifact_external_controls",
+            "publication_controls",
+            "publication_ready",
+        )
+    ),
+    *(
+        ("attestations", name, "verified_utc")
+        for name in (
+            "source_producer",
+            "build_provenance",
+            "spdx_provenance",
+            "sbom_provenance",
+            "release",
+        )
+    ),
+    *(
+        (
+            "repository_controls",
+            "admission_secret_absence_after_publication",
+            index,
+            "observed_utc",
+        )
+        for index in range(2)
+    ),
+)
+
+
+@pytest.mark.parametrize("path", _TIMESTAMP_PATHS)
+def test_every_utc_timestamp_rejects_impossible_calendar_date(
+    path: tuple[str | int, ...],
+) -> None:
+    ledger = _valid_ledger()
+    target: Any = ledger
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = "2030-02-31T00:00:00Z"
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="not an ISO date-time",
+    ):
+        validator._validate_timeline(ledger)
 
 
 def test_inventory_rejects_unexpected_entry_during_bounded_scan(
@@ -3003,12 +3398,13 @@ def _signed_directory(
         for item in ledger["artifacts"]
     ]
 
-    # The full validator still executes every generic ledger check. These two
-    # owners are replaced only because constructing valid RSAE/RAAE and live
-    # GitHub control manifests belongs to their existing focused suites.
+    # The full validator still executes every generic ledger check. These four
+    # owners are replaced because their cryptographic/control bindings have
+    # focused suites and this fixture does not construct complete live inputs.
     monkeypatch.setattr(validator, "_validate_control_bytes", lambda *_: None)
     monkeypatch.setattr(validator, "_validate_attestation_bytes", lambda *_: None)
     monkeypatch.setattr(validator, "_validate_envelopes", lambda *_: None)
+    monkeypatch.setattr(validator, "_validate_keys_and_anchor", lambda *_: None)
     monkeypatch.setattr(
         validator,
         "_validate_trusted_parent_contracts",
