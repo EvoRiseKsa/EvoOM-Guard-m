@@ -766,6 +766,432 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-github-admission-seal-eager-path-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '    if any(value == "-" for value in regular_paths):\n'
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+        ),
+        after=(
+            '    if args.artifact == "-":\n'
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_finalizer_bundle_stdin_short_circuit]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-eager-path-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '    if any(value == "-" for value in regular_paths):\n'
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        after=(
+            '    if args.binding == "-":\n'
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_trusted_pub_stdin_short_circuit]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-reader-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    seal_github_attestation_admission=(\n"
+            "                        seal_github_attestation_admission\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    seal_github_attestation_admission=(\n"
+            "                        seal_github_attestation_admission\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda _reader=(\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ): _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_source_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-reader-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    verify_github_attestation_admission=(\n"
+            "                        verify_github_attestation_admission\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    verify_github_attestation_admission=(\n"
+            "                        verify_github_attestation_admission\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda _reader=(\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ): _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_source_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-policy-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    policy_kwargs_provider=lambda: (\n"
+            "                        _github_attestation_policy_kwargs\n"
+            "                    ),\n"
+            "                    provider_isolation_provider=lambda: (\n"
+            "                        _github_attestation_provider_isolation\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    policy_kwargs_provider=lambda _policy=(\n"
+            "                        _github_attestation_policy_kwargs\n"
+            "                    ): _policy,\n"
+            "                    provider_isolation_provider=lambda: (\n"
+            "                        _github_attestation_provider_isolation\n"
+            "                    ),\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_policy_helper_is_live_after_positionals]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-policy-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    verify_github_attestation_admission=(\n"
+            "                        verify_github_attestation_admission\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+            "                    policy_kwargs_provider=lambda: (\n"
+            "                        _github_attestation_policy_kwargs\n"
+            "                    ),\n"
+        ),
+        after=(
+            "                    verify_github_attestation_admission=(\n"
+            "                        verify_github_attestation_admission\n"
+            "                    ),\n"
+            "                    read_external_object_provider=lambda: (\n"
+            "                        _read_external_finalizer_object\n"
+            "                    ),\n"
+            "                    policy_kwargs_provider=lambda _policy=(\n"
+            "                        _github_attestation_policy_kwargs\n"
+            "                    ): _policy,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_policy_helper_is_live_after_positionals]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-isolation-snapshot",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                    provider_isolation_provider=lambda: (\n"
+            "                        _github_attestation_provider_isolation\n"
+            "                    ),\n"
+            "                    machine_report_provider=lambda: _machine_report,\n"
+        ),
+        after=(
+            "                    provider_isolation_provider=lambda _isolation=(\n"
+            "                        _github_attestation_provider_isolation\n"
+            "                    ): _isolation,\n"
+            "                    machine_report_provider=lambda: _machine_report,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_isolation_helper_is_live_after_timeout]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-isolation-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+        ),
+        after=(
+            "            timeout_seconds=args.timeout_seconds,\n"
+            "            provider_isolation=None,\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_success_isolated_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-force-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '    """Freshly verify provider evidence, then bind it to a finalizer ALLOW."""\n'
+            "\n"
+            "    regular_paths = (\n"
+        ),
+        after=(
+            '    """Freshly verify provider evidence, then bind it to a finalizer ALLOW."""\n'
+            "\n"
+            "    _ = args.force\n"
+            "    regular_paths = (\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_no_force_closed_world]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-online-argument-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '    """Verify retained provider bytes and their V2 finalizer-bound relation."""\n'
+            "\n"
+            "    regular_paths = (\n"
+        ),
+        after=(
+            '    """Verify retained provider bytes and their V2 finalizer-bound relation."""\n'
+            "\n"
+            "    _ = args.gh_executable\n"
+            "    regular_paths = (\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_no_live_provider_or_force_closed_world]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-domain-catch-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except services.github_error as exc:\n"
+        ),
+        after=(
+            "            provider_isolation=services.provider_isolation_provider()(args),\n"
+            "        )\n"
+            "    except () as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_domain_error_subclass_precedes_value_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-invalid-classification-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '                "status": "INVALID",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    except (OSError, ValueError, services.signing_unavailable_error) as exc:\n"
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    except (OSError, ValueError, services.signing_unavailable_error) as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_domain_error_subclass_precedes_value_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-valueerror-catch-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            "    except (OSError, ValueError, services.signing_unavailable_error) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+        ),
+        after=(
+            "    except (OSError, services.signing_unavailable_error) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_plain_value_error_is_operational]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-valueerror-catch-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            "    except (OSError, ValueError, services.signing_unavailable_error) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        after=(
+            "    except (OSError, services.signing_unavailable_error) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_plain_value_error_is_operational]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-metadata-oserror-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            "    except (OSError, UnicodeError, ValueError) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+        ),
+        after=(
+            "    except (UnicodeError, ValueError) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_source_read_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-metadata-oserror-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            "    except (OSError, UnicodeError, ValueError) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        after=(
+            "    except (UnicodeError, ValueError) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_source_read_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-seal-projection-order-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '            "receipt": sealed.receipt.receipt_path,\n'
+            '            "raw_output": sealed.receipt.raw_output_path,\n'
+            '            "binding": sealed.admission.binding_path,\n'
+        ),
+        after=(
+            '            "binding": sealed.admission.binding_path,\n'
+            '            "receipt": sealed.receipt.receipt_path,\n'
+            '            "raw_output": sealed.receipt.raw_output_path,\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[seal_repeated_projection_order]"
+        ),
+    ),
+    Mutation(
+        name="cli-github-admission-verify-projection-order-bypass",
+        path="evoom_guard/cli/github_attestation_admission_commands.py",
+        before=(
+            '            "artifact": verified.receipt.artifact.as_dict(),\n'
+            '            "verification_policy": verified.receipt.policy.as_dict(),\n'
+        ),
+        after=(
+            '            "verification_policy": verified.receipt.policy.as_dict(),\n'
+            '            "artifact": verified.receipt.artifact.as_dict(),\n'
+        ),
+        test=(
+            "tests/test_cli_github_attestation_admission_characterization.py::"
+            "test_frozen_cli_github_attestation_admission_behavior"
+            "[verify_repeated_projection_order]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',
