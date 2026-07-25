@@ -102,6 +102,11 @@ admission.
     and release checksums. Do not publish those trust envelopes as release
     assets and do not create, move, or rewrite any tag from the ledger step.
     Never rewrite a frozen release, historical baseline, or prior ledger.
+    The post-publication ledger must validate against
+    `tests/baseline/schema/release-ledger-v2.schema.json` and pass the offline
+    byte, binding, envelope, and signature checks in
+    `tools/ci/validate_release_ledger_v2.py`. The schema and validator existing
+    before publication do not themselves constitute a `v4.4.0` ledger.
     GitHub permits editing an immutable release's title and description, so
     neither field is authoritative trust metadata. The immutable tag, exact
     assets and digests, attestations, and separately frozen signed ledger are

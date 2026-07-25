@@ -1,0 +1,2538 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:release-ledger:2",
+  "title": "EvoOM Guard protected immutable release ledger v2",
+  "description": "Post-publication evidence for one immutable release traversing the protected A-H release pipeline. Structural validation is necessary but not sufficient; cross-field and byte-level validation is performed by tools/ci/validate_release_ledger_v2.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ledger_scope",
+    "project",
+    "release",
+    "source",
+    "schema_contracts",
+    "artifacts",
+    "checksum_manifest",
+    "workflow_chain",
+    "control_evidence",
+    "source_admission",
+    "artifact_admission",
+    "attestations",
+    "trust_roots",
+    "toolchain",
+    "repository_controls",
+    "tag_ci",
+    "marketplace",
+    "ledger_signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "evoguard-release-ledger-v2"
+    },
+    "ledger_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "created_utc",
+        "complete",
+        "evidence_boundary",
+        "readme"
+      ],
+      "properties": {
+        "kind": {
+          "const": "post-publication-immutable-release-evidence"
+        },
+        "created_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "complete": {
+          "const": true
+        },
+        "evidence_boundary": {
+          "const": "recorded-observations-and-retained-bytes"
+        },
+        "readme": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fileDescriptor"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "README.md"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "EvoOM Guard"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "repository_id",
+        "tag",
+        "commit_sha",
+        "tree_sha",
+        "release_id",
+        "state",
+        "prerelease",
+        "immutable",
+        "created_utc",
+        "published_utc",
+        "release_url"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/repository"
+        },
+        "repository_id": {
+          "$ref": "#/$defs/numericId"
+        },
+        "tag": {
+          "$ref": "#/$defs/tag"
+        },
+        "commit_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "tree_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "release_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "const": "published"
+        },
+        "prerelease": {
+          "const": false
+        },
+        "immutable": {
+          "const": true
+        },
+        "created_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "published_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "release_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protected_ref",
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "parent_commit_sha",
+        "parent_tree_sha",
+        "parent_count"
+      ],
+      "properties": {
+        "protected_ref": {
+          "const": "refs/heads/main"
+        },
+        "candidate_commit_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "candidate_tree_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "parent_commit_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "parent_tree_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "parent_count": {
+          "const": 1
+        }
+      }
+    },
+    "schema_contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_ledger",
+        "verdict_record",
+        "sarif",
+        "verifier_pack",
+        "release_source_admission",
+        "release_artifact_admission",
+        "publication_controls",
+        "junit_digest_formats"
+      ],
+      "properties": {
+        "release_ledger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "id": {
+              "const": "urn:evoguard:release-ledger:2"
+            },
+            "path": {
+              "const": "tests/baseline/schema/release-ledger-v2.schema.json"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "verdict_record": {
+          "const": "1.11"
+        },
+        "sarif": {
+          "const": "2.1.0"
+        },
+        "verifier_pack": {
+          "const": "EVOGUARD_PACK_V2"
+        },
+        "release_source_admission": {
+          "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2"
+        },
+        "release_artifact_admission": {
+          "const": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1"
+        },
+        "publication_controls": {
+          "const": "EVOGUARD_RELEASE_PUBLICATION_CONTROLS_V1"
+        },
+        "junit_digest_formats": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "prefixItems": [
+            {
+              "const": "JUNIT_XML_SHA256"
+            },
+            {
+              "const": "EVOGUARD_JUNIT_REPORT_SET_V1"
+            },
+            {
+              "const": "EVOGUARD_JUNIT_COMPOSITE_V1"
+            },
+            {
+              "const": "EVOGUARD_JUNIT_COMPOSITE_V2"
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/releaseArtifact"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "evo-guard.pyz"
+                },
+                "role": {
+                  "const": "runtime"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/releaseArtifact"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "evo-guard.spdx.json"
+                },
+                "role": {
+                  "const": "spdx-sbom"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/releaseArtifact"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "SHA256SUMS"
+                },
+                "role": {
+                  "const": "checksum-manifest"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "checksum_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "manifest_sha256",
+        "entries"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "format": {
+          "const": "sha256sum-two-space"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/checksumEntry"
+                },
+                {
+                  "properties": {
+                    "target": {
+                      "const": "evo-guard.pyz"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/checksumEntry"
+                },
+                {
+                  "properties": {
+                    "target": {
+                      "const": "evo-guard.spdx.json"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "workflow_chain": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/phaseA"
+        },
+        {
+          "$ref": "#/$defs/phaseB"
+        },
+        {
+          "$ref": "#/$defs/phaseC"
+        },
+        {
+          "$ref": "#/$defs/phaseD"
+        },
+        {
+          "$ref": "#/$defs/phaseE"
+        },
+        {
+          "$ref": "#/$defs/phaseF"
+        },
+        {
+          "$ref": "#/$defs/phaseG"
+        },
+        {
+          "$ref": "#/$defs/phaseH"
+        }
+      ],
+      "items": false
+    },
+    "control_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_external_controls",
+        "artifact_external_controls",
+        "publication_controls",
+        "publication_ready"
+      ],
+      "properties": {
+        "source_external_controls": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/controlBundle"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "source-external-controls"
+                },
+                "format": {
+                  "const": "EVOGUARD_RELEASE_SOURCE_V2_EXTERNAL_CONTROLS_V1"
+                },
+                "phase": {
+                  "const": "C"
+                }
+              }
+            }
+          ]
+        },
+        "artifact_external_controls": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/controlBundle"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "artifact-external-controls"
+                },
+                "format": {
+                  "const": "EVOGUARD_RELEASE_ASSET_F_CONTROLS_V1"
+                },
+                "phase": {
+                  "const": "F"
+                }
+              }
+            }
+          ]
+        },
+        "publication_controls": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/controlBundle"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "publication-controls"
+                },
+                "format": {
+                  "const": "EVOGUARD_RELEASE_PUBLICATION_CONTROLS_V1"
+                },
+                "phase": {
+                  "const": "G"
+                }
+              }
+            }
+          ]
+        },
+        "publication_ready": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/controlBundle"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "publication-ready"
+                },
+                "format": {
+                  "const": "EVOGUARD_RELEASE_PUBLICATION_READY_V1"
+                },
+                "phase": {
+                  "const": "H"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "source_admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "decision",
+        "target_commit_sha",
+        "target_tree_sha",
+        "rsae",
+        "protected_seal_result",
+        "detached_verification_result",
+        "negative_results",
+        "negative_case_count"
+      ],
+      "properties": {
+        "format": {
+          "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2"
+        },
+        "decision": {
+          "const": "ALLOW"
+        },
+        "target_commit_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "target_tree_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "rsae": {
+          "$ref": "#/$defs/signedEnvelope"
+        },
+        "protected_seal_result": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "detached_verification_result": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "negative_results": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "negative_case_count": {
+          "const": 11
+        }
+      }
+    },
+    "artifact_admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "decision",
+        "source_rsae_sha256",
+        "subjects",
+        "negative_results",
+        "negative_case_count"
+      ],
+      "properties": {
+        "format": {
+          "const": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1"
+        },
+        "decision": {
+          "const": "ALLOW"
+        },
+        "source_rsae_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "subjects": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/artifactAdmissionSubject"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evo-guard.pyz"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/artifactAdmissionSubject"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evo-guard.spdx.json"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "negative_results": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "negative_case_count": {
+          "const": 7
+        }
+      }
+    },
+    "attestations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_producer",
+        "build_provenance",
+        "spdx_provenance",
+        "sbom_provenance",
+        "release"
+      ],
+      "properties": {
+        "source_producer": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/workflowAttestation"
+            },
+            {
+              "properties": {
+                "role": {
+                  "const": "source-producer-receipt"
+                },
+                "phase": {
+                  "const": "B"
+                },
+                "predicate_type": {
+                  "const": "https://slsa.dev/provenance/v1"
+                }
+              }
+            }
+          ]
+        },
+        "build_provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/workflowAttestation"
+            },
+            {
+              "properties": {
+                "role": {
+                  "const": "build-provenance"
+                },
+                "phase": {
+                  "const": "E"
+                },
+                "predicate_type": {
+                  "const": "https://slsa.dev/provenance/v1"
+                }
+              }
+            }
+          ]
+        },
+        "spdx_provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/workflowAttestation"
+            },
+            {
+              "properties": {
+                "role": {
+                  "const": "spdx-file-provenance"
+                },
+                "phase": {
+                  "const": "E"
+                },
+                "predicate_type": {
+                  "const": "https://slsa.dev/provenance/v1"
+                }
+              }
+            }
+          ]
+        },
+        "sbom_provenance": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/workflowAttestation"
+            },
+            {
+              "properties": {
+                "role": {
+                  "const": "sbom-provenance"
+                },
+                "phase": {
+                  "const": "E"
+                },
+                "predicate_type": {
+                  "const": "https://spdx.dev/Document/v2.3"
+                }
+              }
+            }
+          ]
+        },
+        "release": {
+          "$ref": "#/$defs/releaseAttestation"
+        }
+      }
+    },
+    "trust_roots": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicRoot"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "release-source-admission-v2"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicRoot"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "trusted-finalizer"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicRoot"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "artifact-admission-v1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicRoot"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "artifact-digest-admission-v2"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicRoot"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "release-source-finalizer-v1"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/publicRoot"
+            },
+            {
+              "properties": {
+                "domain": {
+                  "const": "release-artifact-admission-v1"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bootstrap_guard",
+        "runner_image",
+        "git",
+        "github_cli",
+        "provider_identities",
+        "trusted_build_inputs"
+      ],
+      "properties": {
+        "bootstrap_guard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "version",
+            "sha256"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "version": {
+              "$ref": "#/$defs/version"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "runner_image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reference",
+            "sha256",
+            "network"
+          ],
+          "properties": {
+            "reference": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9./_-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}$",
+              "maxLength": 512
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "network": {
+              "const": "none"
+            }
+          }
+        },
+        "git": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/executablePin"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "git"
+                }
+              }
+            }
+          ]
+        },
+        "github_cli": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/executablePin"
+            },
+            {
+              "properties": {
+                "name": {
+                  "const": "gh"
+                }
+              }
+            }
+          ]
+        },
+        "provider_identities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_admission",
+            "artifact_admission"
+          ],
+          "properties": {
+            "source_admission": {
+              "$ref": "#/$defs/providerIdentity"
+            },
+            "artifact_admission": {
+              "$ref": "#/$defs/providerIdentity"
+            }
+          }
+        },
+        "trusted_build_inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_parent_sha",
+            "source_parent_tree_sha",
+            "build_pyz_blob_sha",
+            "spdx_generator_blob_sha"
+          ],
+          "properties": {
+            "source_parent_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "source_parent_tree_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "build_pyz_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "spdx_generator_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            }
+          }
+        }
+      }
+    },
+    "repository_controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_utc",
+        "main_branch",
+        "tag_ruleset",
+        "release_deploy_key",
+        "immutable_releases",
+        "actions",
+        "environments",
+        "activation_flags_after_publication",
+        "publication_window"
+      ],
+      "properties": {
+        "observed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "main_branch": {
+          "$ref": "#/$defs/mainBranchControls"
+        },
+        "tag_ruleset": {
+          "$ref": "#/$defs/tagRuleset"
+        },
+        "release_deploy_key": {
+          "$ref": "#/$defs/deployKey"
+        },
+        "immutable_releases": {
+          "const": true
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "sha_pinning_required",
+            "default_workflow_permissions",
+            "can_approve_pull_requests"
+          ],
+          "properties": {
+            "enabled": {
+              "const": true
+            },
+            "sha_pinning_required": {
+              "const": true
+            },
+            "default_workflow_permissions": {
+              "const": "read"
+            },
+            "can_approve_pull_requests": {
+              "const": false
+            }
+          }
+        },
+        "environments": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/environmentControl"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evoguard-release-source-v2"
+                    },
+                    "secret_required": {
+                      "const": true
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/environmentControl"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evoguard-release-artifact-v1"
+                    },
+                    "secret_required": {
+                      "const": true
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/environmentControl"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evoguard-release-draft"
+                    },
+                    "secret_required": {
+                      "const": false
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/environmentControl"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evoguard-release-publication"
+                    },
+                    "secret_required": {
+                      "const": true
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "activation_flags_after_publication": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_admission",
+            "artifact_admission",
+            "publication"
+          ],
+          "properties": {
+            "source_admission": {
+              "const": false
+            },
+            "artifact_admission": {
+              "const": false
+            },
+            "publication": {
+              "const": false
+            }
+          }
+        },
+        "publication_window": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "main_frozen",
+            "other_contents_write_actors_frozen",
+            "manual_release_operations_frozen",
+            "observation_scope"
+          ],
+          "properties": {
+            "main_frozen": {
+              "const": true
+            },
+            "other_contents_write_actors_frozen": {
+              "const": true
+            },
+            "manual_release_operations_frozen": {
+              "const": true
+            },
+            "observation_scope": {
+              "const": "operator-reviewed-control-plane"
+            }
+          }
+        }
+      }
+    },
+    "tag_ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "event",
+        "tag_ref",
+        "run_id",
+        "attempt",
+        "head_sha",
+        "conclusion",
+        "run_url",
+        "completed_utc",
+        "observed_utc",
+        "successful_jobs"
+      ],
+      "properties": {
+        "path": {
+          "const": ".github/workflows/ci.yml"
+        },
+        "event": {
+          "const": "push"
+        },
+        "tag_ref": {
+          "type": "string",
+          "pattern": "^refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempt": {
+          "$ref": "#/$defs/runAttempt"
+        },
+        "head_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "conclusion": {
+          "const": "success"
+        },
+        "run_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "completed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "observed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "successful_jobs": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "prefixItems": [
+            {
+              "const": "blackbox-docker-e2e"
+            },
+            {
+              "const": "e2e-runners"
+            },
+            {
+              "const": "publish-pyz"
+            },
+            {
+              "const": "release-tag-guard"
+            },
+            {
+              "const": "test (3.10)"
+            },
+            {
+              "const": "test (3.11)"
+            },
+            {
+              "const": "test (3.12)"
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "marketplace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "version",
+        "url",
+        "observed_utc"
+      ],
+      "properties": {
+        "action": {
+          "const": "EvoOM Guard"
+        },
+        "version": {
+          "$ref": "#/$defs/tag"
+        },
+        "url": {
+          "const": "https://github.com/marketplace/actions/evoom-guard"
+        },
+        "observed_utc": {
+          "$ref": "#/$defs/dateTime"
+        }
+      }
+    },
+    "ledger_signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "purpose",
+        "key_id",
+        "signed_path",
+        "signature_path",
+        "signature_encoding",
+        "public_key"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "purpose": {
+          "const": "evoguard-release-ledger-v2"
+        },
+        "key_id": {
+          "$ref": "#/$defs/keyId"
+        },
+        "signed_path": {
+          "const": "RELEASE_LEDGER.json"
+        },
+        "signature_path": {
+          "const": "RELEASE_LEDGER.json.sig"
+        },
+        "signature_encoding": {
+          "const": "base64"
+        },
+        "public_key": {
+          "$ref": "#/$defs/fileDescriptor"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "githubDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "numericId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,255}$"
+    },
+    "runAttempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$",
+      "maxLength": 512
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*\\u0000)[A-Za-z0-9._/-]+$"
+    },
+    "workflowPath": {
+      "type": "string",
+      "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$",
+      "maxLength": 256
+    },
+    "fileDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "size_bytes",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967296
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "releaseArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "role",
+        "path",
+        "release_asset_id",
+        "size_bytes",
+        "sha256",
+        "github_digest",
+        "download_url"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "maxLength": 256
+        },
+        "role": {
+          "enum": [
+            "runtime",
+            "spdx-sbom",
+            "checksum-manifest"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "release_asset_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967296
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "github_digest": {
+          "$ref": "#/$defs/githubDigest"
+        },
+        "download_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        }
+      }
+    },
+    "checksumEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "sha256"
+      ],
+      "properties": {
+        "target": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "phaseReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "run_id",
+        "run_attempt"
+      ],
+      "properties": {
+        "phase": {
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H"
+          ]
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "run_attempt": {
+          "$ref": "#/$defs/runAttempt"
+        }
+      }
+    },
+    "phaseEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "workflow_id",
+        "workflow_path",
+        "workflow_blob_sha",
+        "event",
+        "source_ref",
+        "run_id",
+        "run_attempt",
+        "head_sha",
+        "conclusion",
+        "run_url",
+        "started_utc",
+        "completed_utc",
+        "successful_jobs",
+        "upstream",
+        "dispatch_inputs"
+      ],
+      "properties": {
+        "phase": {
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H"
+          ]
+        },
+        "workflow_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "workflow_path": {
+          "$ref": "#/$defs/workflowPath"
+        },
+        "workflow_blob_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "event": {
+          "enum": [
+            "workflow_dispatch",
+            "workflow_run"
+          ]
+        },
+        "source_ref": {
+          "const": "refs/heads/main"
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "run_attempt": {
+          "$ref": "#/$defs/runAttempt"
+        },
+        "head_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "conclusion": {
+          "const": "success"
+        },
+        "run_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "started_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "completed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "successful_jobs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9 _().-]*$",
+            "maxLength": 128
+          }
+        },
+        "upstream": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/phaseReference"
+            }
+          ]
+        },
+        "dispatch_inputs": {
+          "type": "object"
+        }
+      }
+    },
+    "phaseA": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "A"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-release-source-reverify.yml"
+            },
+            "event": {
+              "const": "workflow_dispatch"
+            },
+            "successful_jobs": {
+              "const": [
+                "metadata",
+                "reverify"
+              ]
+            },
+            "upstream": {
+              "type": "null"
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "phaseB": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "B"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-produce-release-source-receipt.yml"
+            },
+            "event": {
+              "const": "workflow_run"
+            },
+            "successful_jobs": {
+              "const": [
+                "preflight",
+                "receipt"
+              ]
+            },
+            "upstream": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/phaseReference"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "A"
+                    }
+                  }
+                }
+              ]
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "phaseC": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "C"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-admit-release-source.yml"
+            },
+            "event": {
+              "const": "workflow_run"
+            },
+            "successful_jobs": {
+              "const": [
+                "preflight",
+                "seal"
+              ]
+            },
+            "upstream": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/phaseReference"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "B"
+                    }
+                  }
+                }
+              ]
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "phaseD": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "D"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-admit-release-source.yml"
+            },
+            "event": {
+              "const": "workflow_run"
+            },
+            "successful_jobs": {
+              "const": [
+                "detached-verify"
+              ]
+            },
+            "upstream": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/phaseReference"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "C"
+                    }
+                  }
+                }
+              ]
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "phaseE": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "E"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-build-release-artifact.yml"
+            },
+            "event": {
+              "const": "workflow_dispatch"
+            },
+            "successful_jobs": {
+              "const": [
+                "preflight",
+                "build",
+                "attest"
+              ]
+            },
+            "upstream": {
+              "type": "null"
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source_admission_run_id",
+                "source_admission_run_attempt",
+                "expected_version"
+              ],
+              "properties": {
+                "source_admission_run_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "source_admission_run_attempt": {
+                  "$ref": "#/$defs/runAttempt"
+                },
+                "expected_version": {
+                  "$ref": "#/$defs/version"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "phaseF": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "F"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-admit-release-artifact.yml"
+            },
+            "event": {
+              "const": "workflow_run"
+            },
+            "successful_jobs": {
+              "const": [
+                "preflight",
+                "seal"
+              ]
+            },
+            "upstream": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/phaseReference"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "E"
+                    }
+                  }
+                }
+              ]
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "phaseG": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "G"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-verify-release-artifact.yml"
+            },
+            "event": {
+              "const": "workflow_run"
+            },
+            "successful_jobs": {
+              "const": [
+                "detached-verify"
+              ]
+            },
+            "upstream": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/phaseReference"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "F"
+                    }
+                  }
+                }
+              ]
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "phaseH": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/phaseEvidence"
+        },
+        {
+          "properties": {
+            "phase": {
+              "const": "H"
+            },
+            "workflow_path": {
+              "const": ".github/workflows/evoguard-publish-admitted-release.yml"
+            },
+            "event": {
+              "const": "workflow_run"
+            },
+            "successful_jobs": {
+              "const": [
+                "preflight",
+                "draft",
+                "publish"
+              ]
+            },
+            "upstream": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/phaseReference"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "G"
+                    }
+                  }
+                }
+              ]
+            },
+            "dispatch_inputs": {
+              "type": "object",
+              "additionalProperties": false,
+              "maxProperties": 0
+            }
+          }
+        }
+      ]
+    },
+    "githubArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "digest",
+        "url",
+        "retention_days"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "maxLength": 256
+        },
+        "digest": {
+          "$ref": "#/$defs/githubDigest"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90
+        }
+      }
+    },
+    "controlBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "format",
+        "phase",
+        "workflow_run_id",
+        "workflow_run_attempt",
+        "observed_utc",
+        "github_artifact",
+        "manifest",
+        "materials"
+      ],
+      "properties": {
+        "domain": {
+          "enum": [
+            "source-external-controls",
+            "artifact-external-controls",
+            "publication-controls",
+            "publication-ready"
+          ]
+        },
+        "format": {
+          "type": "string",
+          "pattern": "^EVOGUARD_[A-Z0-9_]+$",
+          "maxLength": 128
+        },
+        "phase": {
+          "enum": [
+            "C",
+            "F",
+            "G",
+            "H"
+          ]
+        },
+        "workflow_run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "workflow_run_attempt": {
+          "$ref": "#/$defs/runAttempt"
+        },
+        "observed_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "github_artifact": {
+          "$ref": "#/$defs/githubArtifact"
+        },
+        "manifest": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "materials": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/fileDescriptor"
+          }
+        }
+      }
+    },
+    "signedEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "size_bytes",
+        "sha256",
+        "algorithm",
+        "key_id"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 69206016
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "key_id": {
+          "$ref": "#/$defs/keyId"
+        }
+      }
+    },
+    "artifactAdmissionSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "artifact_sha256",
+        "artifact_size_bytes",
+        "raae",
+        "protected_seal_result",
+        "detached_verification_result",
+        "live_provider_reverification"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "evo-guard.pyz",
+            "evo-guard.spdx.json"
+          ]
+        },
+        "artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "artifact_size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967296
+        },
+        "raae": {
+          "$ref": "#/$defs/signedEnvelope"
+        },
+        "protected_seal_result": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "detached_verification_result": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "live_provider_reverification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protected_seal",
+            "detached_verification"
+          ],
+          "properties": {
+            "protected_seal": {
+              "const": true
+            },
+            "detached_verification": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "workflowAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "phase",
+        "predicate_type",
+        "subject_name",
+        "subject_sha256",
+        "signer_workflow",
+        "signer_workflow_blob_sha",
+        "source_ref",
+        "source_digest",
+        "run_id",
+        "run_attempt",
+        "verified_utc",
+        "verification_receipt",
+        "verification_output"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "source-producer-receipt",
+            "build-provenance",
+            "spdx-file-provenance",
+            "sbom-provenance"
+          ]
+        },
+        "phase": {
+          "enum": [
+            "B",
+            "E"
+          ]
+        },
+        "predicate_type": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 512
+        },
+        "subject_name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "maxLength": 256
+        },
+        "subject_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "signer_workflow": {
+          "$ref": "#/$defs/workflowPath"
+        },
+        "signer_workflow_blob_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "source_ref": {
+          "const": "refs/heads/main"
+        },
+        "source_digest": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "run_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "run_attempt": {
+          "$ref": "#/$defs/runAttempt"
+        },
+        "verified_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "verification_receipt": {
+          "$ref": "#/$defs/fileDescriptor"
+        },
+        "verification_output": {
+          "$ref": "#/$defs/fileDescriptor"
+        }
+      }
+    },
+    "releaseAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate_type",
+        "verified_utc",
+        "identity",
+        "purl",
+        "tag",
+        "commit_sha",
+        "asset_subjects",
+        "verification_scope"
+      ],
+      "properties": {
+        "predicate_type": {
+          "const": "https://in-toto.io/attestation/release/v0.2"
+        },
+        "verified_utc": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "identity": {
+          "const": "https://dotcom.releases.github.com"
+        },
+        "purl": {
+          "type": "string",
+          "pattern": "^pkg:github/[^/]+/[^@]+@v[0-9]+\\.[0-9]+\\.[0-9]+$",
+          "maxLength": 1024
+        },
+        "tag": {
+          "$ref": "#/$defs/tag"
+        },
+        "commit_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "asset_subjects": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assetSubject"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evo-guard.pyz"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assetSubject"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "evo-guard.spdx.json"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/assetSubject"
+                },
+                {
+                  "properties": {
+                    "name": {
+                      "const": "SHA256SUMS"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "items": false
+        },
+        "verification_scope": {
+          "const": "recorded-external-attestation"
+        }
+      }
+    },
+    "assetSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "maxLength": 256
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "publicRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "key_id",
+        "public_key"
+      ],
+      "properties": {
+        "domain": {
+          "enum": [
+            "release-source-admission-v2",
+            "trusted-finalizer",
+            "artifact-admission-v1",
+            "artifact-digest-admission-v2",
+            "release-source-finalizer-v1",
+            "release-artifact-admission-v1"
+          ]
+        },
+        "key_id": {
+          "$ref": "#/$defs/keyId"
+        },
+        "public_key": {
+          "$ref": "#/$defs/fileDescriptor"
+        }
+      }
+    },
+    "executablePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "platform",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "git",
+            "gh"
+          ]
+        },
+        "platform": {
+          "const": "ubuntu-24.04"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "providerIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "uid",
+        "gid"
+      ],
+      "properties": {
+        "platform": {
+          "const": "posix"
+        },
+        "uid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "gid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "mainBranchControls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "head_sha",
+        "protected",
+        "strict_required_checks",
+        "enforce_admins",
+        "required_checks",
+        "required_approving_reviews",
+        "code_owner_reviews",
+        "dismiss_stale_reviews",
+        "last_push_approval",
+        "linear_history",
+        "allow_force_pushes",
+        "allow_deletions"
+      ],
+      "properties": {
+        "ref": {
+          "const": "refs/heads/main"
+        },
+        "head_sha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "protected": {
+          "const": true
+        },
+        "strict_required_checks": {
+          "const": true
+        },
+        "enforce_admins": {
+          "const": true
+        },
+        "required_checks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required_approving_reviews": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "code_owner_reviews": {
+          "const": true
+        },
+        "dismiss_stale_reviews": {
+          "const": true
+        },
+        "last_push_approval": {
+          "const": true
+        },
+        "linear_history": {
+          "const": true
+        },
+        "allow_force_pushes": {
+          "const": false
+        },
+        "allow_deletions": {
+          "const": false
+        }
+      }
+    },
+    "tagRuleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "target",
+        "enforcement",
+        "include",
+        "rules",
+        "bypass_actor_classes"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "target": {
+          "const": "tag"
+        },
+        "enforcement": {
+          "const": "active"
+        },
+        "include": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [
+            {
+              "const": "refs/tags/v*"
+            }
+          ],
+          "items": false
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "prefixItems": [
+            {
+              "const": "creation"
+            },
+            {
+              "const": "update"
+            },
+            {
+              "const": "deletion"
+            },
+            {
+              "const": "non_fast_forward"
+            }
+          ],
+          "items": false
+        },
+        "bypass_actor_classes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "actor_type",
+                "actor_id",
+                "bypass_mode"
+              ],
+              "properties": {
+                "actor_type": {
+                  "const": "DeployKey"
+                },
+                "actor_id": {
+                  "type": "null"
+                },
+                "bypass_mode": {
+                  "const": "always"
+                }
+              }
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "deployKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "fingerprint",
+        "read_only",
+        "sole_write_enabled"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+        },
+        "read_only": {
+          "const": false
+        },
+        "sole_write_enabled": {
+          "const": true
+        }
+      }
+    },
+    "environmentControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "reviewer",
+        "prevent_self_review",
+        "can_admins_bypass",
+        "deployment_branch",
+        "secret_required"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "maxLength": 256
+        },
+        "reviewer": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
+        },
+        "prevent_self_review": {
+          "const": true
+        },
+        "can_admins_bypass": {
+          "const": false
+        },
+        "deployment_branch": {
+          "const": "main"
+        },
+        "secret_required": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -104,5 +104,40 @@ gate.
   claim a required production gate, hostile-runner proof, single-use
   authorization, or independent validation.
 
+## Protected A-H release-ledger v2 readiness
+
+- `tests/baseline/schema/release-ledger-v2.schema.json` is the contract for a
+  future post-publication protected A-H ledger. It does not apply retroactively
+  to v1 ledgers and must not be used to rewrite a frozen baseline.
+- Before a v2 ledger is committed, run
+  `python tools/ci/validate_release_ledger_v2.py validate <ledger-directory>`.
+  Schema-only validation is insufficient: the command verifies cross-phase run
+  bindings, the exact three-asset set and checksum bytes, retained controls,
+  RSAE/RAAE signatures and subjects, all public-key identities, closed file
+  inventory, and the detached signature over canonical ledger bytes.
+- The v2 schema is not caller-selectable. The signed ledger binds the exact
+  repository schema digest, and `README.md`, all directories, and all retained
+  regular files are part of the closed inventory. Hard links, extra empty
+  directories, path swaps, and post-read mutations fail closed.
+- C/D and F/G result objects and both negative matrices must be retained in the
+  exact formats emitted by the protected workflows. GitHub verifier outputs
+  must bind one subject, one source dependency, the exact run/attempt, and the
+  exact SPDX predicate where applicable.
+- A complete ledger is assembled only after the immutable release, tag CI, and
+  Marketplace observation exist. A template, schema, candidate source version,
+  or successful pre-publication workflow is not a release ledger.
+- The ledger records the exact A-H run IDs and attempts, all seven workflow
+  ID/blob pins (C and D share one run), tool/runtime/container pins, six
+  admission roots, a distinct ledger-signing root, protected repository
+  controls, the tag ruleset, and the sole write deploy-key fingerprint.
+- E must have produced three independently verified receipts: pyz SLSA
+  provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
+  A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.
+- The ledger step is data-only. It must not have release or tag write authority,
+  and it must not publish RSAE/RAAE envelopes as GitHub Release assets.
+
+See [Protected release ledger v2](RELEASE_LEDGER_V2.md) for the retained
+directory, canonicalization, validation, and exact non-claims.
+
 Update this file with every major process change (workflow templates, policy schema,
 attestation format, or check ownership mapping).
