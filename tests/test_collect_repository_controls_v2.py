@@ -22,8 +22,8 @@ from tools.ci import collect_repository_controls_v2 as collector
 
 REPOSITORY = "EvoRiseKsa/EvoOM-Guard-m"
 RULESET_ID = 19713401
-REPOSITORY_ID = 123456789
-REPOSITORY_OWNER_ID = 987654321
+REPOSITORY_ID = collector.EXPECTED_REPOSITORY_ID
+REPOSITORY_OWNER_ID = collector.EXPECTED_REPOSITORY_OWNER_ID
 FIXED_TIME = datetime(2030, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 
 EXPECTED_NAMES = [
@@ -43,6 +43,7 @@ EXPECTED_NAMES = [
     "activation-variable-1",
     "activation-variable-2",
     "activation-variable-3",
+    "post-h-repository-secrets",
     "post-h-source-environment-secrets",
     "post-h-artifact-environment-secrets",
 ]
@@ -86,7 +87,13 @@ def _minimal_body(
         return {
             "full_name": REPOSITORY,
             "id": REPOSITORY_ID,
-            "owner": {"id": REPOSITORY_OWNER_ID, "login": "EvoRiseKsa"},
+            "private": False,
+            "visibility": "public",
+            "owner": {
+                "id": REPOSITORY_OWNER_ID,
+                "login": "EvoRiseKsa",
+                "type": "User",
+            },
         }
     if endpoint.endswith("/git/ref/heads/main"):
         return {
@@ -208,9 +215,9 @@ def test_collects_exact_ordered_read_only_observations_and_full_bodies() -> None
         == "owner-collected-bounded-window-github-api-observation"
     )
     assert [item["name"] for item in document["observations"]] == EXPECTED_NAMES
-    assert len(runner.calls) == 18
+    assert len(runner.calls) == 19
     assert all(method == "GET" for method, _, _ in runner.calls)
-    assert len({endpoint for _, endpoint, _ in runner.calls}) == 18
+    assert len({endpoint for _, endpoint, _ in runner.calls}) == 19
 
     for observation, (_, endpoint, query) in zip(
         document["observations"], runner.calls, strict=True
@@ -230,8 +237,8 @@ def test_collector_documents_its_non_atomic_trusted_operator_boundaries() -> Non
     documentation = " ".join((collector.__doc__ or "").split())
 
     for statement in (
-        "18 ordered observation definitions/endpoints",
-        "do not imply 18 HTTP calls",
+        "19 ordered observation definitions/endpoints",
+        "do not imply 19 HTTP calls",
         "observed window is non-atomic",
         "validated Link traversal",
         "trusted operator host",
@@ -277,8 +284,8 @@ def test_paginates_array_and_object_bodies_without_losing_pages() -> None:
     runner = FakeRunner(handler)
     document = _collect(runner)
 
-    assert len(document["observations"]) == 18
-    assert len(runner.calls) == 20
+    assert len(document["observations"]) == 19
+    assert len(runner.calls) == 21
     deploy_keys = document["observations"][7]
     assert deploy_keys["pagination"] == {
         "completion_basis": "validated-link-traversal",
@@ -295,7 +302,7 @@ def test_paginates_array_and_object_bodies_without_losing_pages() -> None:
     assert deploy_keys["pages"][0]["body"][99]["id"] == 99
     assert deploy_keys["pages"][1]["body"] == [{"id": 100, "title": "key-100"}]
 
-    source_secrets = document["observations"][16]
+    source_secrets = document["observations"][17]
     assert source_secrets["pagination"]["page_count"] == 2
     assert source_secrets["pagination"]["reported_total_count"] == 101
     assert (
@@ -326,8 +333,19 @@ def test_denied_response_fails_without_retaining_error_body() -> None:
         ("full_name", "EvoRiseKsa/another-repository"),
         ("id", 0),
         ("id", True),
+        ("id", "123456789"),
+        ("id", 123456789.0),
         ("owner.id", 0),
         ("owner.id", True),
+        ("owner.id", "987654321"),
+        ("owner.id", 987654321.0),
+        ("owner.login", "another"),
+        ("owner.type", "Organization"),
+        ("private", True),
+        ("private", 0),
+        ("visibility", "private"),
+        ("visibility", "internal"),
+        ("visibility", None),
     ],
 )
 def test_repository_identity_is_derived_from_exact_metadata(
@@ -341,14 +359,30 @@ def test_repository_identity_is_derived_from_exact_metadata(
     ) -> collector.ApiResponse:
         body = _minimal_body(endpoint, query)
         if endpoint == f"/repos/{REPOSITORY}":
-            if field == "owner.id":
-                body["owner"]["id"] = value
+            if field.startswith("owner."):
+                body["owner"][field.split(".", 1)[1]] = value
             else:
                 body[field] = value
         return collector.ApiResponse(_json(body))
 
     with pytest.raises(collector.CollectionError, match="repository|ID"):
         _collect(FakeRunner(mutated))
+
+
+@pytest.mark.parametrize("field", ["private", "visibility"])
+def test_repository_identity_requires_explicit_public_metadata(field: str) -> None:
+    def missing(
+        method: str,
+        endpoint: str,
+        query: Mapping[str, int | str],
+    ) -> collector.ApiResponse:
+        body = _minimal_body(endpoint, query)
+        if endpoint == f"/repos/{REPOSITORY}":
+            del body[field]
+        return collector.ApiResponse(_json(body))
+
+    with pytest.raises(collector.CollectionError, match="repository"):
+        _collect(FakeRunner(missing))
 
 
 @pytest.mark.parametrize(
@@ -832,7 +866,7 @@ def test_reviewed_repository_numeric_identities_are_canonical(
 
 def test_observation_timestamps_must_remain_inside_completed_window() -> None:
     earlier = datetime(2029, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
-    times = iter([FIXED_TIME] * 19 + [earlier])
+    times = iter([FIXED_TIME] * 20 + [earlier])
 
     with pytest.raises(collector.CollectionError, match="moved backwards"):
         collector.collect(

@@ -5,9 +5,9 @@
 """Collect a bounded, unsigned window of GitHub repository-control API bodies.
 
 The collector is intentionally a transport recorder, not a verifier.  Its plan
-contains exactly 18 ordered observation definitions/endpoints.  A paginated
-observation can issue multiple bounded GET page requests, so 18 observations do
-not imply 18 HTTP calls.  It retains parsed JSON page bodies and deterministic
+contains exactly 19 ordered observation definitions/endpoints.  A paginated
+observation can issue multiple bounded GET page requests, so 19 observations do
+not imply 19 HTTP calls.  It retains parsed JSON page bodies and deterministic
 canonical JSON, but does not derive protection claims, mutate GitHub state, or
 sign the result.  From ``gh api --include`` it retains only validated HTTP
 status and Link values; every other response header is discarded before the
@@ -62,6 +62,8 @@ GH_TREE_CLEANUP_TIMEOUT_SECONDS = 10.0
 MAX_PAGES = 1024
 PER_PAGE = 100
 ROOT = Path(__file__).resolve().parents[2]
+EXPECTED_REPOSITORY_ID = 1293651176
+EXPECTED_REPOSITORY_OWNER_ID = 231647061
 
 ENVIRONMENTS = (
     ("source", "evoguard-release-source-v2"),
@@ -341,6 +343,16 @@ def _specs(repository: str, ruleset_id: int) -> tuple[_ObservationSpec, ...]:
         )
         for index, name in enumerate(ACTIVATION_VARIABLES, start=1)
     )
+    specs.append(
+        _ObservationSpec(
+            "post-h-repository-secrets",
+            f"{base}/actions/secrets",
+            pagination="object",
+            items_field="secrets",
+            identity_field="name",
+            total_field="total_count",
+        )
+    )
     specs.extend(
         _ObservationSpec(
             f"post-h-{role}-environment-secrets",
@@ -352,9 +364,9 @@ def _specs(repository: str, ruleset_id: int) -> tuple[_ObservationSpec, ...]:
         )
         for role, environment in ENVIRONMENTS[:2]
     )
-    if len(specs) != 18 or len({spec.name for spec in specs}) != 18:
-        _fail("internal observation plan is not the frozen 18-entry contract")
-    if len({spec.endpoint for spec in specs}) != 18:
+    if len(specs) != 19 or len({spec.name for spec in specs}) != 19:
+        _fail("internal observation plan is not the frozen 19-entry contract")
+    if len({spec.endpoint for spec in specs}) != 19:
         _fail("internal observation plan contains duplicate endpoints")
     return tuple(specs)
 
@@ -996,12 +1008,25 @@ def _repository_metadata_identity(
     repository: str,
 ) -> tuple[int, int]:
     owner = body.get("owner")
-    if body.get("full_name") != repository or not isinstance(owner, dict):
+    expected_owner = repository.split("/", 1)[0]
+    if (
+        body.get("full_name") != repository
+        or body.get("private") is not False
+        or body.get("visibility") != "public"
+        or not isinstance(owner, dict)
+        or owner.get("login") != expected_owner
+        or owner.get("type") != "User"
+    ):
         _fail("repository-metadata response is not the exact requested repository")
     repository_id = _validate_github_id(body.get("id"), label="repository API ID")
     repository_owner_id = _validate_github_id(
         owner.get("id"), label="repository owner API ID"
     )
+    if (
+        repository_id != EXPECTED_REPOSITORY_ID
+        or repository_owner_id != EXPECTED_REPOSITORY_OWNER_ID
+    ):
+        _fail("repository-metadata response changed the trusted namespace identity")
     return repository_id, repository_owner_id
 
 
@@ -1427,7 +1452,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Collect the unsigned, read-only EvoOM Guard repository-control "
-            "observation V2: 18 ordered endpoints, with additional bounded "
+            "observation V2: 19 ordered endpoints, with additional bounded "
             "page requests where Link pagination requires them."
         )
     )

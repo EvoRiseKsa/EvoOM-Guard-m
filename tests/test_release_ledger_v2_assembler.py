@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -95,6 +96,10 @@ def _trusted_parent(
             Path(validator.__file__),
             validator.VALIDATOR_REPOSITORY_PATH,
         ),
+        (
+            ROOT / validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH,
+            validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH,
+        ),
         *(
             (
                 ROOT.joinpath(*PurePosixPath(relative).parts),
@@ -142,6 +147,7 @@ def _remove_derived_claims(ledger: dict[str, Any]) -> None:
     contracts = ledger["schema_contracts"]
     contracts.pop("release_ledger")
     contracts.pop("validator")
+    contracts.pop("repository_controls_collector")
     ledger["checksum_manifest"].pop("manifest_sha256")
     ledger["checksum_manifest"].pop("entries")
     ledger["artifact_admission"].pop("source_rsae_sha256")
@@ -226,6 +232,53 @@ def test_assembler_derives_descriptors_and_rejects_a_claimed_contradiction(
         match="contradicts retained evidence",
     ):
         assembler._complete_file_descriptors(ledger, root)
+
+
+def test_repository_control_claims_are_derived_from_collector_bytes(
+    tmp_path: Path,
+) -> None:
+    ledger = _valid_ledger()
+    expected = copy.deepcopy(ledger["repository_controls"])
+    root = tmp_path / "repository-controls"
+    observation_path = root / Path(
+        *PurePosixPath(expected["observation_evidence"]["path"]).parts
+    )
+    observation_path.parent.mkdir(parents=True)
+    observation_path.write_bytes(
+        validator.canonical_json_bytes(_repository_control_observation(ledger))
+    )
+    derived_keys = (
+        "observed_utc",
+        "main_branch",
+        "tag_ruleset",
+        "release_deploy_key",
+        "immutable_releases",
+        "actions",
+        "environments",
+        "repository_admission_secret_absence_after_publication",
+        "admission_secret_absence_after_publication",
+        "activation_flags_after_publication",
+    )
+    for key in derived_keys:
+        ledger["repository_controls"].pop(key)
+
+    facts = assembler._derive_repository_control_facts(ledger, root)
+
+    for key in derived_keys:
+        assert ledger["repository_controls"][key] == expected[key]
+        assert facts[key] == expected[key]
+    assert facts["observed_window"] == {
+        "started_utc": "2030-01-01T00:23:00Z",
+        "completed_utc": "2030-01-01T00:27:00Z",
+    }
+
+    ledger = _valid_ledger()
+    ledger["repository_controls"]["actions"]["allowed_actions"] = "selected"
+    with pytest.raises(
+        assembler.LedgerAssemblyError,
+        match="contradicts retained evidence",
+    ):
+        assembler._derive_repository_control_facts(ledger, root)
 
 
 def test_assembler_rejects_hard_linked_evidence(tmp_path: Path) -> None:

@@ -600,6 +600,52 @@ def _derive_attestation_facts(
     return facts
 
 
+def _derive_repository_control_facts(
+    ledger: MutableMapping[str, Any],
+    evidence_root: Path,
+) -> dict[str, Any]:
+    """Derive every API-provable repository-control claim from retained V2."""
+
+    repository_controls = _as_mapping(
+        ledger.get("repository_controls"), label="repository_controls"
+    )
+    observation_descriptor = _as_mapping(
+        repository_controls.get("observation_evidence"),
+        label="repository_controls.observation_evidence",
+    )
+    repository_control_observation = _canonical_descriptor_json(
+        evidence_root,
+        observation_descriptor,
+        label="repository-control observation evidence",
+    )
+    try:
+        facts = validator._repository_control_facts(
+            repository_control_observation,
+            ledger,
+        )
+    except validator.LedgerValidationError as exc:
+        raise LedgerAssemblyError(str(exc)) from exc
+    for key in (
+        "observed_utc",
+        "main_branch",
+        "tag_ruleset",
+        "release_deploy_key",
+        "immutable_releases",
+        "actions",
+        "environments",
+        "repository_admission_secret_absence_after_publication",
+        "admission_secret_absence_after_publication",
+        "activation_flags_after_publication",
+    ):
+        _set_derived(
+            repository_controls,
+            key,
+            facts[key],
+            label="repository_controls",
+        )
+    return cast(dict[str, Any], facts)
+
+
 def _derive_embedded_facts(
     ledger: MutableMapping[str, Any],
     evidence_root: Path,
@@ -818,6 +864,12 @@ def _derive_embedded_facts(
             **derived_run,
         }
 
+    repository_control_facts: dict[str, Any] = {}
+    if "repository_controls" in ledger:
+        repository_control_facts = _derive_repository_control_facts(
+            ledger, evidence_root
+        )
+
     return {
         "source_admission": {
             "format": source_manifest["format"],
@@ -831,6 +883,7 @@ def _derive_embedded_facts(
         },
         "artifact_admission": artifact_facts,
         "control_manifests": control_facts,
+        "repository_controls": repository_control_facts,
         "attestations": _derive_attestation_facts(ledger, evidence_root),
     }
 
@@ -1074,12 +1127,15 @@ def _trusted_git(
     executable: Any | None = None,
 ) -> bytes:
     try:
-        return validator._trusted_git(
-            repository,
-            *arguments,
-            label=label,
-            output_limit=output_limit,
-            executable=executable,
+        return cast(
+            bytes,
+            validator._trusted_git(
+                repository,
+                *arguments,
+                label=label,
+                output_limit=output_limit,
+                executable=executable,
+            ),
         )
     except validator.LedgerValidationError as exc:
         raise LedgerAssemblyError(f"cannot inspect trusted parent {label}") from exc
@@ -1208,6 +1264,14 @@ def _trusted_contracts(
             "validator",
             validator.VALIDATOR_REPOSITORY_PATH,
             Path(validator_file).read_bytes(),
+        ),
+        (
+            "repository_controls_collector",
+            validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH,
+            (
+                ROOT
+                / validator.REPOSITORY_CONTROLS_COLLECTOR_REPOSITORY_PATH
+            ).read_bytes(),
         ),
         (
             "ledger_signing_anchor",
