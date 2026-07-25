@@ -135,6 +135,11 @@ all help output, representative defaults, and immutable-ref rejection.
 Handlers, dispatch, file/process effects, and command-family ownership remain
 in `cli/__init__.py`.
 
+Environment/pack diagnostics and version output are owned by the stdlib-only,
+dependency-injected `evoom_guard/cli/diagnostic_commands.py`. The public
+`doctor_report`, `validate_pack`, `cmd_doctor`, `cmd_pack_doctor`, and
+`cmd_version` facades retain live provider lookup and the existing import path.
+
 The first execution-kernel slice lives in `evoom_guard/execution/process.py`.
 It owns the typed bounded-process request/result contracts, shared output cap,
 timeout handling, and native process-tree cleanup. Verifiers may retain
