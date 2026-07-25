@@ -188,6 +188,19 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
 def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     policy = json.loads((ROOT / ".evoguard.json").read_text(encoding="utf-8"))
     pack = ROOT / "security" / "release-source-pack"
+    candidate_image = (
+        "python:3.12-slim@sha256:"
+        "57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de"
+    )
+    assert json.loads((pack / "pack.json").read_text(encoding="utf-8")) == {
+        "description": (
+            "Judge-owned release CLI and deterministic asset protocol for "
+            "EvoOM Guard protected source admission"
+        ),
+        "id": "evoom-guard-release-source-protocol",
+        "target_type": "cli",
+        "version": "1.0.1",
+    }
     assert policy["policy_id"] == "evoom-guard-protected-release-source"
     assert policy["policy_version"] == "2"
     assert "*" in policy["protected"]
@@ -217,6 +230,7 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert policy["blackbox"] is True
     assert policy["blackbox_only"] is True
     assert policy["isolation"] == "docker"
+    assert policy["docker_image"] == candidate_image
     assert policy["docker_network"] == "none"
     assert policy["trust_setup_on_host"] is False
     assert policy["require_report_integrity"] == "external_process_isolated"
@@ -241,8 +255,19 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "package.get(\"versionInfo\") == expected_version" in pack_test
     assert "static release version does not match CLI/SPDX" in pack_test
     assert "mutation was accepted" in pack_test
+    assert 'doctor_status="$?"' in pack_test
+    assert 'test "$doctor_status" -eq 1' in pack_test
+    assert "object_pairs_hook=reject_duplicate_keys" in pack_test
+    assert 'type(report[key]) is bool for key in ("git", "patch", "supported")' in pack_test
+    assert '"platform": "linux-x86_64"' in pack_test
+    assert '"python": "3.12.13"' in pack_test
+    assert '"git": False' in pack_test
+    assert '"patch": False' in pack_test
+    assert '"supported": False' in pack_test
+    assert '"$1" -I "$work/evo-guard.pyz" doctor >/dev/null' not in pack_test
 
     source = _text(A)
+    assert source.count(f"CANDIDATE_IMAGE: {candidate_image}") == 3
     assert "ref: ${{ needs.metadata.outputs.parent_sha }}" in source
     assert 'path: base' in source
     assert (

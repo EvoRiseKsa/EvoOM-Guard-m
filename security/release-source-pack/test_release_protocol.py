@@ -41,8 +41,49 @@ def test_release_zipapp_public_protocol() -> None:
         trap 'rm -rf -- "$work"' EXIT
         "$1" -I ops/build_pyz.py -o "$work/evo-guard.pyz" >/dev/null
         test -s "$work/evo-guard.pyz"
-        "$1" -I "$work/evo-guard.pyz" version
-        "$1" -I "$work/evo-guard.pyz" doctor >/dev/null
+        version="$("$1" -I "$work/evo-guard.pyz" version)"
+        printf '%s\\n' "$version"
+        doctor_out="$work/doctor.json"
+        doctor_err="$work/doctor.err"
+        if "$1" -I "$work/evo-guard.pyz" doctor --json \
+            >"$doctor_out" 2>"$doctor_err"; then
+          exit 1
+        else
+          doctor_status="$?"
+        fi
+        test "$doctor_status" -eq 1
+        test ! -s "$doctor_err"
+        "$1" -I - "$doctor_out" "${version#evo-guard }" <<'PY'
+        import json
+        import pathlib
+        import sys
+
+        def reject_duplicate_keys(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise ValueError(f"duplicate JSON key: {key}")
+                value[key] = item
+            return value
+
+        report = json.loads(
+            pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+        )
+        release_version = sys.argv[2]
+        assert all(
+            type(report[key]) is bool for key in ("git", "patch", "supported")
+        )
+        assert report == {
+            "tool": "evoguard",
+            "version": release_version,
+            "platform": "linux-x86_64",
+            "python": "3.12.13",
+            "git": False,
+            "patch": False,
+            "supported": False,
+        }
+        PY
         """,
     )
     assert completed.returncode == 0, completed.stderr
