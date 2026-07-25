@@ -188,9 +188,13 @@ def test_a_b_c_separate_candidate_execution_provider_and_key_access() -> None:
 
 
 def test_e_build_and_attestation_are_capability_separated() -> None:
+    preflight = _job(E, "preflight")
     build = _job(E, "build")
     attest = _job(E, "attest")
 
+    assert "parent_tree_sha: ${{ steps.bind.outputs.parent_tree_sha }}" in preflight
+    assert "github.rest.git.getCommit" in preflight
+    assert "core.setOutput('parent_tree_sha', parentTreeSha)" in preflight
     assert "actions/checkout@" in build
     assert "ops/build_pyz.py" in build
     assert "ops/generate_spdx_sbom.py" in build
@@ -208,6 +212,12 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "secrets." not in build
     assert "python -I admitted-source/ops/build_pyz.py" not in build
     assert "--network none" in build
+    assert "test \"$parent_tree\" = \"$PARENT_TREE_SHA\"" in build
+    assert "'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA']" in build
+    assert "'build_container': {" in build
+    assert "'reference': os.environ['BUILD_IMAGE']" in build
+    assert "'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1]" in build
+    assert "'network': 'none'" in build
     assert "--read-only" in build
     assert "--cap-drop ALL" in build
     assert "--security-opt no-new-privileges" in build
@@ -253,6 +263,8 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "ZIP has trailing bytes" in attest
     assert "SPDX relationships are not exact" in attest
     assert "static PYZ version does not bind the trusted expected version" in attest
+    assert "builder controls do not bind the trusted parent tree" in attest
+    assert "builder controls do not bind the exact networkless container" in attest
 
 
 def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
@@ -266,6 +278,13 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     assert (
         "'evo-guard.spdx.json': descriptor('evo-guard.spdx.json')" in preflight
     )
+    assert "PARENT_TREE_SHA=\"$parent_tree\"" in preflight
+    assert "export PARENT_SHA PARENT_TREE_SHA" in preflight
+    assert "'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA']" in preflight
+    assert "'build_container': {" in preflight
+    assert "'reference': os.environ['BUILD_IMAGE']" in preflight
+    assert "'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1]" in preflight
+    assert "'network': 'none'" in preflight
 
     assert "environment: evoguard-release-artifact-v1" in seal
     assert (

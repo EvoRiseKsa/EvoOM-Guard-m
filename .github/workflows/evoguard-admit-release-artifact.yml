@@ -95,6 +95,7 @@ jobs:
           OUTER_RUNTIME_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_RUNTIME_SHA256 }}
           OUTER_GIT_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GIT_EXECUTABLE_SHA256 }}
           OUTER_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+          BUILD_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
           OUTER_PROVIDER_UID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_UID }}
           OUTER_PROVIDER_GID: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_PROVIDER_ISOLATION_GID }}
           RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
@@ -195,6 +196,7 @@ jobs:
           test -n "$PARENT_SHA"
           test -z "${unexpected_parent:-}"
           parent_tree="$(git -C "$objects" rev-parse "$PARENT_SHA^{tree}")"
+          PARENT_TREE_SHA="$parent_tree"
           test "$(jq -er .base_sha "$RUNNER_TEMP/f-controls/context.json")" = "$PARENT_SHA"
           test "$(jq -er .base_tree_sha "$RUNNER_TEMP/f-controls/context.json")" = "$parent_tree"
           build_entry="$(git -C "$objects" ls-tree "$PARENT_SHA" -- ops/build_pyz.py)"
@@ -217,7 +219,7 @@ jobs:
           print(parsed.astimezone(dt.timezone.utc).replace(microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ'))
           PY
           )"
-          export PARENT_SHA BUILD_TOOL_BLOB_SHA SBOM_TOOL_BLOB_SHA SOURCE_CREATED
+          export PARENT_SHA PARENT_TREE_SHA BUILD_TOOL_BLOB_SHA SBOM_TOOL_BLOB_SHA SOURCE_CREATED
 
           python - "$RUNNER_TEMP/f-controls" <<'PY'
           import hashlib, json, os, pathlib, re, sys
@@ -282,6 +284,11 @@ jobs:
               return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
           expected_builder_controls = {
               'format': 'EVOGUARD_RELEASE_ASSET_BUILDER_CONTROLS_V1',
+              'build_container': {
+                  'reference': os.environ['BUILD_IMAGE'],
+                  'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1],
+                  'network': 'none',
+              },
               'artifacts': {
                   'evo-guard.pyz': descriptor('evo-guard.pyz'),
                   'evo-guard.spdx.json': descriptor('evo-guard.spdx.json'),
@@ -295,6 +302,7 @@ jobs:
               'source_admission_run_id': source_admitter.get('workflow_run_id'),
               'target_sha': os.environ['TARGET_SHA'],
               'trusted_build_parent_sha': os.environ['PARENT_SHA'],
+              'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA'],
               'trusted_build_tool_blobs': {
                   'ops/build_pyz.py': os.environ['BUILD_TOOL_BLOB_SHA'],
                   'ops/generate_spdx_sbom.py': os.environ['SBOM_TOOL_BLOB_SHA'],
