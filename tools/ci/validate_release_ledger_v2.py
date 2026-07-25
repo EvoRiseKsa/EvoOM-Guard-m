@@ -768,6 +768,8 @@ def _git_blob_sha(data: bytes) -> str:
     if len(data) > MAX_JSON_BYTES:
         _fail("trusted Git blob input exceeds its bounded size limit")
     framed = f"blob {len(data)}\0".encode("ascii") + data
+    # codeql[py/weak-sensitive-data-hashing] Git's SHA-1 object ID is a
+    # protocol identifier here, never a confidentiality or integrity proof.
     return hashlib.sha1(  # noqa: S324 - Git protocol identity
         framed,
         usedforsecurity=False,
@@ -1209,6 +1211,9 @@ def _trusted_first_party_relative_path(raw: bytes) -> str:
 def _matches_git_blob_object_id(data: bytes, object_id: str) -> bool:
     framed = f"blob {len(data)}\0".encode("ascii") + data
     if len(object_id) == 40:
+        # codeql[py/weak-sensitive-data-hashing] This reproduces Git's
+        # protocol-mandated object ID; trusted SHA-256 bindings provide the
+        # security property.
         observed = hashlib.sha1(  # noqa: S324 - Git protocol identity
             framed,
             usedforsecurity=False,
