@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 from dataclasses import FrozenInstanceError, fields
@@ -11,6 +12,7 @@ import pytest
 
 import evoom_guard.domain as domain
 from evoom_guard import guard as guard_module
+from evoom_guard.application.repo_judgment import build_repo_judgment
 from evoom_guard.contracts import VerdictResult
 from evoom_guard.domain.evidence import (
     IsolationPayloadEvidence,
@@ -296,12 +298,21 @@ def test_partial_artifact_lifecycle_fallbacks_are_frozen(
 
 
 def test_repo_native_decision_segment_no_longer_reads_raw_artifact() -> None:
-    source = inspect.getsource(guard_module.guard)
-    segment = source.split("art = verdict.artifact or {}", 1)[1]
-    segment = segment.split("return GuardResult(", 1)[0]
+    tree = ast.parse(inspect.getsource(build_repo_judgment))
 
-    assert "art.get(" not in segment
-    assert "art[" not in segment
+    assert not any(
+        isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "raw_artifact"
+        for node in ast.walk(tree)
+    )
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "raw_artifact"
+        for node in ast.walk(tree)
+    )
 
 
 def _guard_with_artifact(

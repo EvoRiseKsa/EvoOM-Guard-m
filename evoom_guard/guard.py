@@ -93,6 +93,12 @@ from evoom_guard.application.repo_finalization import (
     RepoFinalizationServices,
     finalize_repo_verification,
 )
+from evoom_guard.application.repo_judgment import (
+    RepoJudgmentInput,
+    RepoJudgmentOutcome,
+    RepoJudgmentServices,
+    build_repo_judgment,
+)
 from evoom_guard.application.request_preparation import (
     GuardRequestPreparationInput,
     GuardRequestPreparationServices,
@@ -107,6 +113,7 @@ from evoom_guard.domain import (
     SourceIdentity,
 )
 from evoom_guard.domain.decision import GuardDecision
+from evoom_guard.domain.evidence import VerificationEvidence
 from evoom_guard.domain.verdict import (
     ERROR,
     EXECUTION_COMPLETED,
@@ -989,46 +996,54 @@ def guard(
     # before the mapping below flipped the verdict to REJECTED) — leaving
     # ``test_command_ran: true`` on a verdict documented as pre-execution. Skip
     # the run entirely whenever the outcome is already decided by the diff alone.
-    run_suite = preflight.may_execute
-    if run_suite:
-        verdict = RepoVerifier(
-            timeout=timeout, mem_limit_mb=mem_limit_mb,
-            isolation=isolation, docker_image=docker_image, docker_network=docker_network,
+    judgment_services: RepoJudgmentServices[
+        VerificationEvidence,
+        RiskScore,
+        VerificationPipeline,
+    ] = RepoJudgmentServices(
+        repo_verifier_provider=lambda: RepoVerifier,
+        evidence_projector_provider=(
+            lambda: repo_verification_evidence_from_artifact
+        ),
+        risk_map_provider=lambda: _risk_map,
+        repo_file_reader_provider=lambda: _read_repo_file,
+        risk_scorer_provider=lambda: risk_score,
+        protected_globs_provider=lambda: _PROTECTED_GLOBS,
+        verification_pipeline_provider=lambda: VerificationPipeline,
+    )
+    judgment: RepoJudgmentOutcome[
+        VerificationEvidence,
+        RiskScore,
+        VerificationPipeline,
+    ] = build_repo_judgment(
+        RepoJudgmentInput(
+            run_suite=preflight.may_execute,
+            repository_path=repo_path,
+            candidate_text=candidate,
+            problem=problem,
+            all_touched_paths=all_touched,
+            unsafe_paths=unsafe,
+            protected_violations=violations,
+            deleted_paths=deleted,
+            protected_patterns=protected,
+            file_blocks=file_blocks,
+            timeout=timeout,
+            mem_limit_mb=mem_limit_mb,
+            isolation=isolation,
+            docker_image=docker_image,
+            docker_network=docker_network,
             trust_setup_on_host=trust_setup_on_host,
             setup_output_globs=setup_output_globs,
             strict_harness=strict_harness,
-        ).verify(candidate, problem)
-        art = verdict.artifact or {}
-        verification_evidence = repo_verification_evidence_from_artifact(
-            art,
-            default_isolation=isolation,
-        )
-        diagnostics = verdict.diagnostics or ""
-    else:
-        verdict = None
-        art = {}
-        verification_evidence = None
-        diagnostics = ""
-    # Deletions count toward the blast radius too: a change that removes source
-    # files should not read as *lower* risk than one that edits them. Each deleted
-    # path contributes its base-file line count as removed lines (0 added).
-    rmap = _risk_map(repo_path, candidate, file_blocks)
-    for d in all_touched:
-        if d in deleted and d not in rmap:
-            base = _read_repo_file(repo_path, d)
-            rmap[d] = (0, len(base.splitlines()))
-    risk = risk_score(rmap, protected=_PROTECTED_GLOBS + tuple(protected))
-
-    decision_pipeline = VerificationPipeline.from_repo_facts(
-        has_changes=bool(all_touched),
-        unsafe_paths=unsafe,
-        protected_violations=violations,
-        verifier_present=verdict is not None,
-        verifier_passed=verdict.passed if verdict is not None else None,
-        verifier_score=verdict.score if verdict is not None else None,
-        diagnostics=diagnostics,
-        evidence=verification_evidence,
+        ),
+        services=judgment_services,
     )
+    run_suite = judgment.run_suite
+    art = cast(dict[str, Any], judgment.raw_artifact)
+    verification_evidence = judgment.verification_evidence
+    diagnostics = judgment.diagnostics
+    risk = judgment.risk
+    decision_pipeline = judgment.pipeline
     finalization = finalize_repo_verification(
         RepoFinalizationInput(
             pipeline=decision_pipeline,
