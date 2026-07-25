@@ -14,6 +14,10 @@ from pathlib import Path
 
 from evoom_guard.pack_manifest import pack_digest
 from evoom_guard.signing import public_key_id
+from evoom_guard.verifiers.candidate_preflight import (
+    CandidatePreflightRequest,
+    evaluate_candidate_preflight,
+)
 
 ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -249,6 +253,48 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "Validate the parent-owned release policy" in source
     assert "target.parents.length !== 1" in source
     assert "branch.protected !== true" in source
+
+
+def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
+    policy = json.loads((ROOT / ".evoguard.json").read_text(encoding="utf-8"))
+    protected = tuple(policy["protected"])
+    allowed = tuple(policy["allow"])
+
+    allowed_result = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=str(ROOT),
+            changed_paths=(
+                "CHANGELOG.md",
+                "README.md",
+                "evoom_guard/__init__.py",
+            ),
+            protected=protected,
+            allow=allowed,
+            strict_harness=True,
+        )
+    )
+    assert allowed_result.may_execute is True
+    assert allowed_result.protected_violations == ()
+
+    protected_result = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=str(ROOT),
+            changed_paths=(
+                ".evoguard.json",
+                "security/release-ledger-roots/v4.4.0.pub.pem",
+                "tests/test_raae_release_pipeline_workflows.py",
+            ),
+            protected=protected,
+            allow=allowed,
+            strict_harness=True,
+        )
+    )
+    assert protected_result.may_execute is False
+    assert protected_result.protected_violations == (
+        ".evoguard.json",
+        "security/release-ledger-roots/v4.4.0.pub.pem",
+        "tests/test_raae_release_pipeline_workflows.py",
+    )
 
 
 def test_a_b_c_separate_candidate_execution_provider_and_key_access() -> None:
