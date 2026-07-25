@@ -170,10 +170,10 @@ and must fail validation. Placeholders are never accepted as release evidence.
 7. Commit the new directory only after the command reports
    `release-ledger-v2: VALID`. The ledger step must not create, move, delete, or
    rewrite a tag or GitHub Release.
-8. After the public deploy-key fingerprint is frozen in the valid ledger,
-   remove the two admission private-key Environment secrets, the publication
-   deploy-key secret, and the exact write deploy key according to the release
-   runbook.
+8. The two admission private-key Environment secrets must already have been
+   removed immediately after H. After the public deploy-key ID/fingerprint is
+   frozen in the valid ledger, remove the publication deploy-key secret and the
+   exact write deploy key according to the release runbook.
 
 There is intentionally no evidence collector or “generate from GitHub”
 command. Collection combines mutable external state, expiring artifacts, and

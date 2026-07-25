@@ -29,7 +29,7 @@ been configured, or that any key currently exists.
 | C/D | `evoguard-admit-release-source.yml` | Preflight freezes external controls before Environment access; protected C freshly verifies B under a provider UID that cannot read the RSAE key; detached D verifies the envelope and negative mutations without a key or provider call. |
 | E-build | `evoguard-build-release-artifact.yml` | Verifies RSAE and checks out the admitted source. The executable builder and SPDX generator are literal `100644` Git blobs from its sole parent, whose commit and tree must equal A's admitted base. E extracts and hashes those blobs without filters, runs them in one exact digest-pinned container with `network: none` against the read-only candidate, records the container reference/digest/network plus parent commit/tree in `builder-controls.json`, and independently compares every packaged byte to source. F reconstructs and requires that exact controls object from trusted Git/API context and the downloaded bytes. E has no OIDC, attestation, secret, or write permission. |
 | E-attest | same workflow, separate job | Downloads an exact closed file set, performs no checkout and executes neither source nor artifact, then creates build-provenance attestations for the pyz and SPDX subjects plus an SBOM attestation binding the SPDX predicate to the pyz. |
-| F | `evoguard-admit-release-artifact.yml` | Freezes E/F identities and six distinct public roots before Environment access. It freshly verifies each E attestation and creates a separate RAAE for the pyz and SPDX bytes. |
+| F | `evoguard-admit-release-artifact.yml` | Freezes E/F identities and six distinct admission public roots before Environment access. It freshly verifies each E attestation and creates a separate RAAE for the pyz and SPDX bytes. |
 | G | `evoguard-verify-release-artifact.yml` | Re-verifies both detached RAAE envelopes, exact checksums, cross-artifact substitution, byte mutations, root substitution, and tool-pin mutations without a provider call or private key. |
 | H | `evoguard-publish-admitted-release.yml` | Preflight independently re-verifies both RAAE envelopes and stages exactly three assets. The first protected Environment is read-only and rejects any existing tag/release. Only the second protected Environment has `contents: write` and the tag deploy key; it rechecks main and Immutable Releases, creates an attributable draft, reads back exact GitHub SHA-256 asset digests, creates the exact tag through the deploy-key-only `v*` ruleset, and immediately submits `draft=false` in the same job. Pre-PATCH failures delete only the exact verified draft and any exact tag created by that run; after PATCH begins no automatic deletion is safe. Bounded polling then requires an immutable release and exact tag-to-target binding. Marketplace listing remains separate. |
 
@@ -59,9 +59,11 @@ admission.
 6. Review the canonical Git and `gh` executable hashes on `ubuntu-24.04`.
    Source admission uses UID/GID 60001; artifact admission uses 60002. The
    identities must not be root or `65534`.
-7. Establish six mutually distinct Ed25519 signing public-key IDs. Store only public
-   PEM values as repository variables. C and F private keys belong only in
-   their separately protected Environments. Separately create exactly one
+7. Establish six mutually distinct admission Ed25519 signing public-key IDs.
+   Store only their public PEM values as repository variables. Establish a
+   seventh, mutually distinct release-ledger signing public key/ID and keep its
+   private half outside the admission Environments. C and F private keys belong
+   only in their separately protected Environments. Separately create exactly one
    write-enabled deploy key for release tags; store its private half only in
    `evoguard-release-publication`. H has no signing secret.
 8. Merge a distinct one-parent **source candidate**. A must consume its policy,
@@ -88,9 +90,10 @@ admission.
     release ID recorded by H, and delete only a still-draft matching ID, tag,
     target, marker, author, and assets; never use the Publish UI to recover.
     Marketplace listing remains a separate, non-admission step.
-12. Return all flags to false and remove both signing private-key Environment
-    secrets. Delete the non-expiring write deploy key and its publication
-    Environment secret after the release ledger records its public fingerprint;
+12. Immediately after H, return all flags to false and remove both admission
+    signing private-key Environment secrets. Keep the publication deploy-key
+    secret and exact write deploy key only until the release ledger records
+    their public ID/fingerprint. Then delete both;
     create a fresh deploy key for the next release window. If an operational
     exception keeps it temporarily, it must remain only in the no-admin-bypass
     publication Environment and the repository must still have exactly one
@@ -98,8 +101,9 @@ admission.
     GitHub Actions artifacts are temporary evidence (even where repository
     retention is configured for 30 days), not a durable ledger.
 13. After the first publication, freeze a `v4.4.0` ledger containing both RAAE
-    envelopes, RSAE/controls, six public roots and IDs, run/workflow/tool pins,
-    and release checksums. Do not publish those trust envelopes as release
+    envelopes, RSAE/controls, six admission public roots and IDs, a seventh
+    distinct release-ledger signing public root/ID, run/workflow/tool pins, and
+    release checksums. Do not publish those trust envelopes as release
     assets and do not create, move, or rewrite any tag from the ledger step.
     Never rewrite a frozen release, historical baseline, or prior ledger.
     The post-publication ledger must validate against

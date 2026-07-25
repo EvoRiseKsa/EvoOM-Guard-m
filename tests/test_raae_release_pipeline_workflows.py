@@ -107,6 +107,10 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
         "release_tag_ruleset"
     ]
     assert bootstrap["post_publication_evidence"]["first_ledger"] == "v4.4.0"
+    frozen = bootstrap["post_publication_evidence"]["required_frozen_material"]
+    assert "six admission public roots and key IDs" in frozen
+    assert "one distinct release-ledger signing public root and key ID" in frozen
+    assert "six public roots and key IDs" not in frozen
 
 
 def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
