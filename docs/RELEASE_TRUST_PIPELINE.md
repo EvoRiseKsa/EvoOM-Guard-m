@@ -61,8 +61,11 @@ admission.
    identities must not be root or `65534`.
 7. Establish six mutually distinct admission Ed25519 signing public-key IDs.
    Store only their public PEM values as repository variables. Establish a
-   seventh, mutually distinct release-ledger signing public key/ID and keep its
-   private half outside the admission Environments. C and F private keys belong
+   fresh per-release seventh ledger-signing identity before the trusted
+   parent/candidate: pin its public PEM/ID in the reviewed parent tree or
+   another authenticated immutable channel, and keep its private half offline
+   and outside the admission Environments. The retained ledger copy is never
+   its own trust anchor. C and F private keys belong
    only in their separately protected Environments. Separately create exactly one
    write-enabled deploy key for release tags; store its private half only in
    `evoguard-release-publication`. H has no signing secret.
@@ -111,6 +114,9 @@ admission.
     byte, binding, envelope, and signature checks in
     `tools/ci/validate_release_ledger_v2.py`. The schema and validator existing
     before publication do not themselves constitute a `v4.4.0` ledger.
+    Validate with the independently retrieved key via
+    `--trusted-ledger-pub`, commit the ledger, validate the committed bytes
+    again, then destroy the per-release ledger private key.
     GitHub permits editing an immutable release's title and description, so
     neither field is authoritative trust metadata. The immutable tag, exact
     assets and digests, attestations, and separately frozen signed ledger are

@@ -775,6 +775,8 @@ def test_official_schema_is_not_caller_replaceable() -> None:
         validator._parser().parse_args(
             ["--schema", str(SCHEMA_PATH), "validate", "."]
         )
+    with pytest.raises(SystemExit):
+        validator._parser().parse_args(["validate", "."])
 
 
 def test_signed_schema_descriptor_binds_exact_repository_bytes() -> None:
@@ -1554,7 +1556,9 @@ def _replace_file_descriptors(value: object, contents: dict[str, bytes]) -> None
 def _signed_directory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> Path:
+) -> tuple[Path, Path]:
+    ledger_root = tmp_path / "ledger"
+    ledger_root.mkdir()
     ledger = _valid_ledger()
     inventory = validator._collect_descriptors(ledger)
     contents = {path: f"{path}\n".encode() for path in inventory}
@@ -1572,15 +1576,13 @@ def _signed_directory(
     key_directory.mkdir()
     for index, root in enumerate(ledger["trust_roots"]):
         private = key_directory / f"root-{index}.pem"
-        public = tmp_path / root["public_key"]["path"]
-        public.parent.mkdir(parents=True, exist_ok=True)
+        public = key_directory / f"root-{index}.pub.pem"
         generate_keypair(str(private), str(public))
         root["key_id"] = public_key_id(str(public))
         contents[root["public_key"]["path"]] = public.read_bytes()
 
     signing_private = key_directory / "ledger.pem"
-    signing_public = tmp_path / ledger["ledger_signature"]["public_key"]["path"]
-    signing_public.parent.mkdir(parents=True, exist_ok=True)
+    signing_public = tmp_path / "trusted-release-ledger-v2.pub.pem"
     generate_keypair(str(signing_private), str(signing_public))
     ledger["ledger_signature"]["key_id"] = public_key_id(str(signing_public))
     contents[ledger["ledger_signature"]["public_key"]["path"]] = (
@@ -1636,64 +1638,64 @@ def _signed_directory(
 
     inventory = validator._collect_descriptors(ledger)
     for relative in inventory:
-        target = tmp_path / Path(*PurePosixPath(relative).parts)
+        target = ledger_root / Path(*PurePosixPath(relative).parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(contents[relative])
-    ledger_path = tmp_path / "RELEASE_LEDGER.json"
+    ledger_path = ledger_root / "RELEASE_LEDGER.json"
     ledger_path.write_bytes(validator.canonical_json_bytes(ledger))
     sign_file(str(ledger_path), str(signing_private))
     for child in key_directory.iterdir():
         child.unlink()
     key_directory.rmdir()
-    return tmp_path
+    return ledger_root, signing_public
 def test_complete_directory_signature_and_closed_inventory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root = _signed_directory(tmp_path, monkeypatch)
-    validator.validate_directory(root)
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+    validator.validate_directory(root, trusted_key)
 
     (root / "unexpected.txt").write_text("not inventoried\n", encoding="utf-8")
     with pytest.raises(validator.LedgerValidationError, match="file set is not exact"):
-        validator.validate_directory(root)
+        validator.validate_directory(root, trusted_key)
 
 
 def test_complete_directory_rejects_unsigned_readme_and_extra_directory(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root = _signed_directory(tmp_path, monkeypatch)
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
     readme = root / "README.md"
     readme.write_bytes(readme.read_bytes() + b"unsigned mutation\n")
     with pytest.raises(validator.LedgerValidationError, match="retained evidence README"):
-        validator.validate_directory(root)
+        validator.validate_directory(root, trusted_key)
 
     second = tmp_path / "second"
     second.mkdir()
-    root = _signed_directory(second, monkeypatch)
+    root, trusted_key = _signed_directory(second, monkeypatch)
     (root / "empty-extra").mkdir()
     with pytest.raises(validator.LedgerValidationError, match="directory set is not exact"):
-        validator.validate_directory(root)
+        validator.validate_directory(root, trusted_key)
 
 
 def test_complete_directory_rejects_hardlinks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root = _signed_directory(tmp_path, monkeypatch)
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
     try:
         os.link(root / "README.md", root / "hardlink.txt")
     except OSError:
         pytest.skip("hard links are unavailable on this filesystem")
     with pytest.raises(validator.LedgerValidationError, match="hard-linked"):
-        validator.validate_directory(root)
+        validator.validate_directory(root, trusted_key)
 
 
 def test_complete_directory_detects_post_read_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root = _signed_directory(tmp_path, monkeypatch)
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
 
     def mutate_after_generic_reads(*_args: object) -> None:
         readme = root / "README.md"
@@ -1702,9 +1704,9 @@ def test_complete_directory_detects_post_read_mutation(
     monkeypatch.setattr(validator, "_validate_envelopes", mutate_after_generic_reads)
     with pytest.raises(
         validator.LedgerValidationError,
-        match="inventory changed while validation",
+        match="retained evidence changed during validation",
     ):
-        validator.validate_directory(root)
+        validator.validate_directory(root, trusted_key)
 
 
 def test_complete_directory_rejects_link_like_root(
@@ -1713,24 +1715,186 @@ def test_complete_directory_rejects_link_like_root(
 ) -> None:
     real = tmp_path / "real"
     real.mkdir()
-    root = _signed_directory(real, monkeypatch)
+    root, trusted_key = _signed_directory(real, monkeypatch)
     link = tmp_path / "linked"
     try:
         link.symlink_to(root, target_is_directory=True)
     except OSError:
         pytest.skip("directory symlinks are unavailable on this platform")
     with pytest.raises(validator.LedgerValidationError, match="link-like component"):
-        validator.validate_directory(link)
+        validator.validate_directory(link, trusted_key)
 
 
 def test_invalid_ledger_signature_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root = _signed_directory(tmp_path, monkeypatch)
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
     signature = root / "RELEASE_LEDGER.json.sig"
     encoded = bytearray(signature.read_bytes())
     encoded[0] = ord("A") if encoded[0] != ord("A") else ord("B")
     signature.write_bytes(bytes(encoded))
     with pytest.raises(validator.LedgerValidationError, match="signature"):
-        validator.validate_directory(root)
+        validator.validate_directory(root, trusted_key)
+
+
+def test_self_signed_seven_key_bundle_needs_external_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, _attacker_ledger_key = _signed_directory(tmp_path, monkeypatch)
+    authority_private = tmp_path / "authority.pem"
+    authority_public = tmp_path / "authority.pub.pem"
+    generate_keypair(str(authority_private), str(authority_public))
+
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="external trusted key",
+    ):
+        validator.validate_directory(root, authority_public)
+
+
+def test_trusted_ledger_key_must_be_independent_and_plain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+    retained = root / "trust" / "release-ledger-v2.pub.pem"
+    with pytest.raises(validator.LedgerValidationError, match="outside the ledger root"):
+        validator.validate_directory(root, retained)
+
+    hardlink = tmp_path / "trusted-hardlink.pub.pem"
+    try:
+        os.link(trusted_key, hardlink)
+    except OSError:
+        pytest.skip("hard links are unavailable on this filesystem")
+    with pytest.raises(validator.LedgerValidationError, match="hard-linked"):
+        validator.validate_directory(root, hardlink)
+
+
+def test_trusted_ledger_key_rejects_link_like_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+    link = tmp_path / "trusted-link.pub.pem"
+    try:
+        link.symlink_to(trusted_key)
+    except OSError:
+        pytest.skip("file symlinks are unavailable on this filesystem")
+    with pytest.raises(validator.LedgerValidationError, match="regular non-link"):
+        validator.validate_directory(root, link)
+
+
+def test_invalid_signature_fails_before_inventory_traversal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+    signature = root / "RELEASE_LEDGER.json.sig"
+    encoded = bytearray(signature.read_bytes())
+    encoded[0] = ord("A") if encoded[0] != ord("A") else ord("B")
+    signature.write_bytes(bytes(encoded))
+
+    def forbidden_inventory(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("inventory traversal ran before authentication")
+
+    monkeypatch.setattr(validator, "_actual_inventory", forbidden_inventory)
+    with pytest.raises(validator.LedgerValidationError, match="signature"):
+        validator.validate_directory(root, trusted_key)
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        b"A" * (validator.CANONICAL_SIGNATURE_BYTES + 1),
+        b"A" * (validator.CANONICAL_SIGNATURE_BYTES - 1) + b" ",
+    ],
+)
+def test_signature_sidecar_is_bounded_and_canonical(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    replacement: bytes,
+) -> None:
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+    (root / "RELEASE_LEDGER.json.sig").write_bytes(replacement)
+    with pytest.raises(validator.LedgerValidationError, match="signature"):
+        validator.validate_directory(root, trusted_key)
+
+
+def test_external_anchor_change_during_validation_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+
+    def mutate_anchor(*_args: object) -> None:
+        original = trusted_key.read_bytes()
+        trusted_key.write_bytes(b"X" * len(original))
+
+    monkeypatch.setattr(validator, "_validate_control_bytes", mutate_anchor)
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="external trusted ledger public key changed",
+    ):
+        validator.validate_directory(root, trusted_key)
+
+
+def test_same_size_mtime_restored_evidence_mutation_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, trusted_key = _signed_directory(tmp_path, monkeypatch)
+    readme = root / "README.md"
+    original = readme.read_bytes()
+    metadata = readme.stat()
+
+    def mutate_original_after_snapshot(*_args: object) -> None:
+        mutated = bytes([original[0] ^ 1]) + original[1:]
+        readme.write_bytes(mutated)
+        os.utime(readme, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+
+    monkeypatch.setattr(
+        validator,
+        "_validate_envelopes",
+        mutate_original_after_snapshot,
+    )
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="retained evidence changed during validation",
+    ):
+        validator.validate_directory(root, trusted_key)
+
+
+def test_retained_budget_rejects_file_count_file_size_and_total() -> None:
+    digest = "0" * 64
+    with pytest.raises(validator.LedgerValidationError, match="file count"):
+        validator._require_retained_budget(
+            {
+                f"evidence/{index}.json": (1, digest)
+                for index in range(validator.MAX_RETAINED_FILES + 1)
+            }
+        )
+    with pytest.raises(validator.LedgerValidationError, match="file exceeds"):
+        validator._require_retained_budget(
+            {
+                "evidence/oversized.bin": (
+                    validator.MAX_RETAINED_FILE_BYTES + 1,
+                    digest,
+                )
+            }
+        )
+    with pytest.raises(validator.LedgerValidationError, match="total exceeds"):
+        validator._require_retained_budget(
+            {
+                f"evidence/{index}.bin": (
+                    validator.MAX_RETAINED_FILE_BYTES,
+                    digest,
+                )
+                for index in range(
+                    validator.MAX_RETAINED_TOTAL_BYTES
+                    // validator.MAX_RETAINED_FILE_BYTES
+                    + 1
+                )
+            }
+        )

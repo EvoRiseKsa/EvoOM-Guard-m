@@ -10,6 +10,9 @@ The schema is
 [`tests/baseline/schema/release-ledger-v2.schema.json`](../tests/baseline/schema/release-ledger-v2.schema.json).
 The offline validator is
 [`tools/ci/validate_release_ledger_v2.py`](../tools/ci/validate_release_ledger_v2.py).
+Validation is not self-authenticating: the caller must supply the release's
+ledger public key from a previously trusted channel outside the evidence
+directory. The retained copy is evidence, not the trust anchor.
 
 ## Why schema validation is not enough
 
@@ -36,7 +39,8 @@ The validator therefore also requires:
 - one RSAE and two separate RAAEs, with their retained signatures verified
   against distinct recorded public roots;
 - all six admission public roots to be distinct, and the ledger signing key to
-  be a seventh distinct Ed25519 identity;
+  be a seventh distinct Ed25519 identity whose exact PEM and key ID equal the
+  caller-supplied external trust anchor;
 - source controls, artifact controls, publication controls, and
   publication-ready evidence to bind their exact workflow attempts and their
   closed material sets (9 source, 13 artifact, 3 publication, and 3
@@ -61,8 +65,10 @@ The validator therefore also requires:
   deploy-key, and post-publication flag observations;
 - every retained file (including `README.md`) to be signed by a descriptor,
   regular, single-link, uniquely backed, and byte-exact; every directory is
-  also closed-world, and component/file identities are rechecked to detect
-  path swaps or changes during validation;
+  also closed-world. The authenticated inventory is bounded, copied from one
+  verified read into a private snapshot for all semantic checks, then every
+  original byte and component/file identity is rechecked to detect path swaps,
+  restored-mtime mutations, or changes during validation;
 - `RELEASE_LEDGER.json` to use one canonical UTF-8 serialization and its
   detached signature to authenticate those exact bytes.
 
@@ -134,20 +140,24 @@ and must fail validation. Placeholders are never accepted as release evidence.
 
 ## Post-publication procedure
 
-1. Do not create the directory from source-tree expectations. Download the
+1. Before the trusted parent/candidate is merged, generate a fresh per-release
+   Ed25519 ledger key. Pin its public PEM and key ID in the reviewed parent tree
+   or another independently authenticated, immutable channel; keep its private
+   half offline. A key first discovered beside the ledger is not a trust anchor.
+2. Do not create the directory from source-tree expectations. Download the
    exact immutable release assets and all recorded A–H artifacts by their
    reviewed run IDs and attempts.
-2. Query the release, tag target, workflow runs, tag CI, Marketplace state,
+3. Query the release, tag target, workflow runs, tag CI, Marketplace state,
    branch protection, Environments, immutable-release setting, tag ruleset,
    and exact sole write deploy key. Record observations rather than inferred
    values.
-3. Copy the signed README, RSAE, both RAAEs, controls, detached results, negative matrices,
+4. Copy the signed README, RSAE, both RAAEs, controls, detached results, negative matrices,
    all three E attestation receipts and outputs, and seven public keys into a
    new directory. Never modify a prior ledger or baseline. Do not proceed if E
    did not create separate SLSA provenance whose exact subject is
    `evo-guard.spdx.json`; F cannot freshly admit that file from a pyz-subject
    SBOM attestation.
-4. Assemble a complete draft whose schema descriptor hashes the exact
+5. Assemble a complete draft whose schema descriptor hashes the exact
    repository schema bytes. Canonicalization validates only that schema and
    cross-field bindings but does not collect or invent evidence:
 
@@ -157,20 +167,26 @@ and must fail validation. Placeholders are never accepted as release evidence.
      .\vX.Y.Z\RELEASE_LEDGER.json
    ```
 
-5. Review the canonical bytes, then sign that exact file with the dedicated
+6. Review the canonical bytes, then sign that exact file with the dedicated
    release-ledger Ed25519 key. The signature sidecar is base64 and the public
    key ID must match `ledger_signature.key_id`. The ledger signing key must not
    be any of the six admission keys.
-6. Validate offline:
+7. Export or retrieve the previously pinned public PEM through that independent
+   channel to a path outside the ledger directory, then validate offline:
 
    ```powershell
-   python tools/ci/validate_release_ledger_v2.py validate .\vX.Y.Z
+   python tools/ci/validate_release_ledger_v2.py validate .\vX.Y.Z `
+     --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem
    ```
 
-7. Commit the new directory only after the command reports
+   Never point `--trusted-ledger-pub` at the retained
+   `vX.Y.Z\trust\release-ledger-v2.pub.pem` copy. The validator rejects an
+   in-root, linked, hard-linked, changed, or byte-different anchor.
+8. Commit the new directory only after the command reports
    `release-ledger-v2: VALID`. The ledger step must not create, move, delete, or
-   rewrite a tag or GitHub Release.
-8. The two admission private-key Environment secrets must already have been
+   rewrite a tag or GitHub Release. Re-run external-key validation from the
+   committed tree, then destroy the per-release ledger private key.
+9. The two admission private-key Environment secrets must already have been
    removed immediately after H. After the public deploy-key ID/fingerprint is
    frozen in the valid ledger, remove the publication deploy-key secret and the
    exact write deploy key according to the release runbook.
@@ -179,7 +195,8 @@ There is intentionally no evidence collector or “generate from GitHub”
 command. Collection combines mutable external state, expiring artifacts, and
 human approval boundaries; automating it as an authoritative generator would
 turn unchecked API responses into claimed truth. The canonicalizer only
-serializes a reviewed, already-complete draft.
+serializes a reviewed, already-complete draft; it does not authenticate the
+draft or establish an EvoRise signing identity.
 
 ## Evidence boundary
 

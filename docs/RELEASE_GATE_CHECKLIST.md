@@ -110,15 +110,21 @@ gate.
   future post-publication protected A-H ledger. It does not apply retroactively
   to v1 ledgers and must not be used to rewrite a frozen baseline.
 - Before a v2 ledger is committed, run
-  `python tools/ci/validate_release_ledger_v2.py validate <ledger-directory>`.
+  `python tools/ci/validate_release_ledger_v2.py validate <ledger-directory>
+  --trusted-ledger-pub <independently-obtained-public-key>`. The trusted key
+  path must be outside the ledger and must come from a pinned parent tree,
+  immutable tag, or other previously authenticated channel; never copy it from
+  the directory being validated.
   Schema-only validation is insufficient: the command verifies cross-phase run
   bindings, the exact three-asset set and checksum bytes, retained controls,
   RSAE/RAAE signatures and subjects, all public-key identities, closed file
-  inventory, and the detached signature over canonical ledger bytes.
+  inventory, and the detached signature over canonical ledger bytes under that
+  external EvoRise trust anchor.
 - The v2 schema is not caller-selectable. The signed ledger binds the exact
   repository schema digest, and `README.md`, all directories, and all retained
-  regular files are part of the closed inventory. Hard links, extra empty
-  directories, path swaps, and post-read mutations fail closed.
+  regular files are part of the closed, bounded inventory. Validation uses a
+  private immutable byte snapshot; hard links, extra empty directories, path
+  swaps, same-size restored-mtime changes, and post-read mutations fail closed.
 - C/D and F/G result objects and both negative matrices must be retained in the
   exact formats emitted by the protected workflows. GitHub verifier outputs
   must bind one subject, one source dependency, the exact run/attempt, and the

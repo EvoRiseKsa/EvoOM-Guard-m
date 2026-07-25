@@ -1304,7 +1304,7 @@
         "size_bytes": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 4294967296
+          "maximum": 75497472
         },
         "sha256": {
           "$ref": "#/$defs/sha256"
@@ -1347,7 +1347,7 @@
         "size_bytes": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 4294967296
+          "maximum": 67108864
         },
         "sha256": {
           "$ref": "#/$defs/sha256"
@@ -1955,7 +1955,7 @@
         "materials": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 128,
+          "maxItems": 16,
           "items": {
             "$ref": "#/$defs/fileDescriptor"
           }
@@ -2017,7 +2017,7 @@
         "artifact_size_bytes": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 4294967296
+          "maximum": 67108864
         },
         "raae": {
           "$ref": "#/$defs/signedEnvelope"

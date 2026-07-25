@@ -18,13 +18,17 @@ draft deterministically and refuses to overwrite its output.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import os
 import re
 import stat
 import sys
+import tempfile
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn
@@ -44,6 +48,11 @@ SIGNATURE_NAME = "RELEASE_LEDGER.json.sig"
 README_NAME = "README.md"
 MAX_JSON_BYTES = 8 * 1024 * 1024
 MAX_README_BYTES = 1024 * 1024
+MAX_PUBLIC_KEY_BYTES = 64 * 1024
+CANONICAL_SIGNATURE_BYTES = 89
+MAX_RETAINED_FILES = 64
+MAX_RETAINED_FILE_BYTES = 72 * 1024 * 1024
+MAX_RETAINED_TOTAL_BYTES = 256 * 1024 * 1024
 _READ_CHUNK_BYTES = 1024 * 1024
 _CANONICAL_UTC = re.compile(
     r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
@@ -144,6 +153,15 @@ class LedgerValidationError(ValueError):
     """A release ledger failed a structural, semantic, or byte-level check."""
 
 
+@dataclass(frozen=True)
+class _TrustedLedgerKey:
+    path: Path
+    pem: bytes
+    key_id: str
+    key: Any
+    identity: tuple[int, int, int, int, int]
+
+
 def _fail(message: str) -> NoReturn:
     raise LedgerValidationError(message)
 
@@ -195,6 +213,14 @@ def _identity(metadata: os.stat_result) -> tuple[int, int, int, int]:
         metadata.st_size,
         metadata.st_mtime_ns,
     )
+
+
+def _inventory_identity(
+    metadata: os.stat_result,
+) -> tuple[int, int, int, int, int]:
+    """Capture path metadata, including change time, for final inventory checks."""
+
+    return (*_identity(metadata), metadata.st_ctime_ns)
 
 
 def _directory_chain(path: Path, *, label: str) -> dict[Path, tuple[int, int]]:
@@ -294,6 +320,110 @@ def _read_regular(path: Path, *, limit: int, label: str) -> bytes:
     if len(data) != before.st_size:
         _fail(f"{label} returned a short or extended read: {path}")
     return data
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    path_text = os.path.normcase(os.path.abspath(path))
+    root_text = os.path.normcase(os.path.abspath(root))
+    try:
+        return os.path.commonpath((path_text, root_text)) == root_text
+    except ValueError:
+        return False
+
+
+def _load_trusted_ledger_key(root: Path, path: Path) -> _TrustedLedgerKey:
+    """Load one caller-supplied key that is independent of the evidence root."""
+
+    absolute = Path(os.path.abspath(path))
+    if _path_is_within(absolute, root):
+        _fail("trusted ledger public key must be outside the ledger root")
+    pem = _read_regular(
+        absolute,
+        limit=MAX_PUBLIC_KEY_BYTES,
+        label="external trusted ledger public key",
+    )
+    try:
+        metadata = absolute.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            f"cannot re-inspect external trusted ledger public key: {absolute}"
+        ) from exc
+
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        key = serialization.load_pem_public_key(pem)
+    except (ImportError, TypeError, ValueError) as exc:
+        raise LedgerValidationError(
+            "external trusted ledger public key is not a usable PEM key"
+        ) from exc
+    if not isinstance(key, ed25519.Ed25519PublicKey):
+        _fail("external trusted ledger public key is not Ed25519")
+    der = key.public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return _TrustedLedgerKey(
+        path=absolute,
+        pem=pem,
+        key_id=f"sha256:{_sha256(der)}",
+        key=key,
+        identity=_inventory_identity(metadata),
+    )
+
+
+def _decode_canonical_signature(data: bytes) -> bytes:
+    if len(data) != CANONICAL_SIGNATURE_BYTES or not data.endswith(b"\n"):
+        _fail(
+            "RELEASE_LEDGER.json.sig must be exact canonical base64 "
+            "for one 64-byte Ed25519 signature plus LF"
+        )
+    encoded = data[:-1]
+    try:
+        signature = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise LedgerValidationError(
+            "RELEASE_LEDGER.json.sig is not strict base64"
+        ) from exc
+    if len(signature) != 64 or base64.b64encode(signature) != encoded:
+        _fail("RELEASE_LEDGER.json.sig is not canonical Ed25519 base64")
+    return signature
+
+
+def _verify_external_ledger_signature(
+    ledger_bytes: bytes,
+    signature_bytes: bytes,
+    trusted_key: _TrustedLedgerKey,
+) -> None:
+    from cryptography.exceptions import InvalidSignature
+
+    signature = _decode_canonical_signature(signature_bytes)
+    try:
+        trusted_key.key.verify(signature, ledger_bytes)
+    except InvalidSignature as exc:
+        raise LedgerValidationError(
+            "detached ledger signature is invalid under the external trusted key"
+        ) from exc
+
+
+def _require_trusted_key_unchanged(trusted_key: _TrustedLedgerKey) -> None:
+    current = _read_regular(
+        trusted_key.path,
+        limit=MAX_PUBLIC_KEY_BYTES,
+        label="external trusted ledger public key",
+    )
+    try:
+        metadata = trusted_key.path.lstat()
+    except OSError as exc:
+        raise LedgerValidationError(
+            "cannot re-inspect external trusted ledger public key"
+        ) from exc
+    if (
+        current != trusted_key.pem
+        or _inventory_identity(metadata) != trusted_key.identity
+    ):
+        _fail("external trusted ledger public key changed during validation")
 
 
 def _load_json_value_bytes(data: bytes, *, label: str) -> Any:
@@ -1122,11 +1252,11 @@ def _actual_inventory(
 ) -> tuple[
     set[str],
     set[str],
-    dict[str, tuple[int, int, int, int]],
+    dict[str, tuple[int, int, int, int, int]],
 ]:
     files: set[str] = set()
     directories_found: set[str] = {"."}
-    identities: dict[str, tuple[int, int, int, int]] = {}
+    identities: dict[str, tuple[int, int, int, int, int]] = {}
     file_objects: dict[tuple[int, int], str] = {}
     for current, directories, names in os.walk(root, topdown=True, followlinks=False):
         current_path = Path(current)
@@ -1137,7 +1267,7 @@ def _actual_inventory(
         ):
             _fail(f"ledger directory contains an unsafe directory: {current_path}")
         directories_found.add(current_relative)
-        identities[f"d:{current_relative}"] = _identity(current_metadata)
+        identities[f"d:{current_relative}"] = _inventory_identity(current_metadata)
         for directory in list(directories):
             path = current_path / directory
             metadata = path.lstat()
@@ -1145,7 +1275,7 @@ def _actual_inventory(
                 _fail(f"ledger directory contains an unsafe directory: {path}")
             relative = path.relative_to(root).as_posix()
             directories_found.add(relative)
-            identities[f"d:{relative}"] = _identity(metadata)
+            identities[f"d:{relative}"] = _inventory_identity(metadata)
         for name in names:
             path = current_path / name
             metadata = path.lstat()
@@ -1160,7 +1290,7 @@ def _actual_inventory(
                 _fail(f"ledger files share one filesystem object: {prior}, {relative}")
             file_objects[object_id] = relative
             files.add(relative)
-            identities[f"f:{relative}"] = _identity(metadata)
+            identities[f"f:{relative}"] = _inventory_identity(metadata)
     return files, directories_found, identities
 
 
@@ -1174,12 +1304,141 @@ def _expected_directories(files: set[str]) -> set[str]:
     return expected
 
 
+def _require_retained_budget(
+    inventory: Mapping[str, tuple[int, str]],
+) -> None:
+    if len(inventory) > MAX_RETAINED_FILES:
+        _fail(
+            f"retained evidence file count exceeds {MAX_RETAINED_FILES}: "
+            f"{len(inventory)}"
+        )
+    total = 0
+    for relative, (size, _digest) in inventory.items():
+        if size > MAX_RETAINED_FILE_BYTES:
+            _fail(
+                f"retained evidence file exceeds {MAX_RETAINED_FILE_BYTES} bytes: "
+                f"{relative}"
+            )
+        total += size
+        if total > MAX_RETAINED_TOTAL_BYTES:
+            _fail(
+                f"retained evidence total exceeds {MAX_RETAINED_TOTAL_BYTES} bytes"
+            )
+
+
+def _write_snapshot_file(path: Path, data: bytes) -> None:
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise LedgerValidationError(
+            f"cannot create protected evidence snapshot file: {path}"
+        ) from exc
+    try:
+        remaining = memoryview(data)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                _fail(f"short write while creating protected evidence snapshot: {path}")
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+    except OSError as exc:
+        raise LedgerValidationError(
+            f"cannot write protected evidence snapshot file: {path}"
+        ) from exc
+    finally:
+        os.close(descriptor)
+
+
+def _materialize_snapshot(
+    root: Path,
+    files: Mapping[str, bytes],
+) -> tuple[
+    set[str],
+    set[str],
+    dict[str, tuple[int, int, int, int, int]],
+]:
+    expected_files = set(files)
+    expected_directories = _expected_directories(expected_files)
+    for relative in sorted(
+        expected_directories - {"."},
+        key=lambda value: (value.count("/"), value),
+    ):
+        target = root.joinpath(*PurePosixPath(relative).parts)
+        try:
+            target.mkdir(mode=0o700)
+        except OSError as exc:
+            raise LedgerValidationError(
+                f"cannot create protected evidence snapshot directory: {relative}"
+            ) from exc
+    for relative, data in sorted(files.items()):
+        target = _safe_retained_path(root, relative)
+        _write_snapshot_file(target, data)
+
+    actual_files, actual_directories, identities = _actual_inventory(root)
+    if actual_files != expected_files or actual_directories != expected_directories:
+        _fail("protected evidence snapshot inventory is not exact")
+    return actual_files, actual_directories, identities
+
+
+def _require_original_bytes_unchanged(
+    root: Path,
+    *,
+    ledger_bytes: bytes,
+    signature_bytes: bytes,
+    retained_bytes: Mapping[str, bytes],
+) -> None:
+    try:
+        current_ledger = _read_regular(
+            root / LEDGER_NAME,
+            limit=MAX_JSON_BYTES,
+            label="release ledger",
+        )
+    except LedgerValidationError as exc:
+        raise LedgerValidationError(
+            "RELEASE_LEDGER.json changed during validation"
+        ) from exc
+    if current_ledger != ledger_bytes:
+        _fail("RELEASE_LEDGER.json changed during validation")
+    try:
+        current_signature = _read_regular(
+            root / SIGNATURE_NAME,
+            limit=CANONICAL_SIGNATURE_BYTES,
+            label="release ledger signature",
+        )
+    except LedgerValidationError as exc:
+        raise LedgerValidationError(
+            "RELEASE_LEDGER.json.sig changed during validation"
+        ) from exc
+    if current_signature != signature_bytes:
+        _fail("RELEASE_LEDGER.json.sig changed during validation")
+    for relative, expected in retained_bytes.items():
+        try:
+            current = _read_regular(
+                _safe_retained_path(root, relative),
+                limit=max(len(expected), 1),
+                label=f"retained evidence {relative}",
+            )
+        except LedgerValidationError as exc:
+            raise LedgerValidationError(
+                f"retained evidence changed during validation: {relative}"
+            ) from exc
+        if current != expected:
+            _fail(f"retained evidence changed during validation: {relative}")
+
+
 def _require_inventory_unchanged(
     root: Path,
     *,
     files: set[str],
     directories: set[str],
-    identities: Mapping[str, tuple[int, int, int, int]],
+    identities: Mapping[str, tuple[int, int, int, int, int]],
 ) -> None:
     current_files, current_directories, current_identities = _actual_inventory(root)
     if (
@@ -2442,12 +2701,12 @@ def _validate_envelopes(root: Path, ledger: Mapping[str, Any]) -> None:
     )
 
 
-def _validate_keys_and_signature(
+def _validate_keys_and_anchor(
     root: Path,
-    ledger_path: Path,
     ledger: Mapping[str, Any],
+    trusted_key: _TrustedLedgerKey,
 ) -> None:
-    from evoom_guard.signing import public_key_id, verify_file
+    from evoom_guard.signing import public_key_id
 
     for entry in ledger["trust_roots"]:
         path = _safe_retained_path(root, entry["public_key"]["path"])
@@ -2456,21 +2715,31 @@ def _validate_keys_and_signature(
 
     seal = ledger["ledger_signature"]
     public_path = _safe_retained_path(root, seal["public_key"]["path"])
-    if public_key_id(str(public_path)) != seal["key_id"]:
-        _fail("ledger signing key ID does not match retained PEM")
-    signature_path = _safe_retained_path(root, seal["signature_path"])
+    retained = _read_regular(
+        public_path,
+        limit=MAX_PUBLIC_KEY_BYTES,
+        label="retained ledger signing public key",
+    )
     try:
-        valid = verify_file(str(ledger_path), str(signature_path), str(public_path))
+        retained_id = public_key_id(str(public_path))
     except (OSError, ValueError) as exc:
-        raise LedgerValidationError("ledger signature could not be verified") from exc
-    if not valid:
-        _fail("detached ledger signature is invalid")
+        raise LedgerValidationError(
+            "retained ledger signing public key is unusable"
+        ) from exc
+    if retained != trusted_key.pem:
+        _fail("retained ledger signing public key differs from external trusted key")
+    if retained_id != trusted_key.key_id or seal["key_id"] != trusted_key.key_id:
+        _fail("ledger signing key ID differs from external trusted key identity")
 
 
-def validate_directory(root: Path) -> Mapping[str, Any]:
-    """Validate one complete, signed, post-publication v2 ledger directory."""
+def validate_directory(
+    root: Path,
+    trusted_ledger_pub: Path,
+) -> Mapping[str, Any]:
+    """Validate one v2 ledger under an independently supplied trust anchor."""
 
     root = _require_plain_directory(root, label="ledger root")
+    trusted_key = _load_trusted_ledger_key(root, trusted_ledger_pub)
     ledger_path = root / LEDGER_NAME
     ledger_bytes = _read_regular(
         ledger_path,
@@ -2478,16 +2747,25 @@ def validate_directory(root: Path) -> Mapping[str, Any]:
         label="release ledger",
     )
     ledger = _load_json_bytes(ledger_bytes, label="release ledger")
+    if canonical_json_bytes(ledger) != ledger_bytes:
+        _fail("RELEASE_LEDGER.json is not canonical JSON")
+    signature_path = root / SIGNATURE_NAME
+    signature_bytes = _read_regular(
+        signature_path,
+        limit=CANONICAL_SIGNATURE_BYTES,
+        label="release ledger signature",
+    )
+    _verify_external_ledger_signature(ledger_bytes, signature_bytes, trusted_key)
+
     schema, schema_sha256 = _load_official_schema()
     _validate_structure_with_official_schema(
         ledger,
         schema,
         schema_sha256=schema_sha256,
     )
-    if canonical_json_bytes(ledger) != ledger_bytes:
-        _fail("RELEASE_LEDGER.json is not canonical JSON")
 
     inventory = _collect_descriptors(ledger)
+    _require_retained_budget(inventory)
     expected_files = set(inventory) | {LEDGER_NAME, SIGNATURE_NAME}
     expected_directories = _expected_directories(expected_files)
     actual_files, actual_directories, inventory_identities = _actual_inventory(root)
@@ -2503,6 +2781,15 @@ def validate_directory(root: Path) -> Mapping[str, Any]:
             f"missing={missing}, unexpected={unexpected}"
         )
 
+    trusted_object = trusted_key.identity[:2]
+    if any(
+        identity[:2] == trusted_object
+        for label, identity in inventory_identities.items()
+        if label.startswith("f:")
+    ):
+        _fail("external trusted ledger public key shares a filesystem object with ledger")
+
+    retained_bytes: dict[str, bytes] = {}
     for relative, (size, digest) in inventory.items():
         path = _safe_retained_path(root, relative)
         data = _read_regular(
@@ -2512,30 +2799,59 @@ def validate_directory(root: Path) -> Mapping[str, Any]:
         )
         if len(data) != size or _sha256(data) != digest:
             _fail(f"retained evidence bytes do not match descriptor: {relative}")
+        retained_bytes[relative] = data
 
-    assets = {item["name"]: item for item in ledger["artifacts"]}
-    checksum_bytes = _read_regular(
-        _safe_retained_path(root, ledger["checksum_manifest"]["path"]),
-        limit=1024 * 1024,
-        label="release checksum manifest",
+    snapshot_files = dict(retained_bytes)
+    snapshot_files[LEDGER_NAME] = ledger_bytes
+    snapshot_files[SIGNATURE_NAME] = signature_bytes
+    with tempfile.TemporaryDirectory(prefix="evoguard-ledger-v2-") as temporary:
+        snapshot_root = _require_plain_directory(
+            Path(temporary),
+            label="protected evidence snapshot",
+        )
+        (
+            snapshot_actual_files,
+            snapshot_actual_directories,
+            snapshot_identities,
+        ) = _materialize_snapshot(snapshot_root, snapshot_files)
+
+        assets = {item["name"]: item for item in ledger["artifacts"]}
+        checksum_bytes = _read_regular(
+            _safe_retained_path(snapshot_root, ledger["checksum_manifest"]["path"]),
+            limit=1024 * 1024,
+            label="release checksum manifest",
+        )
+        expected_checksum = "".join(
+            f"{assets[name]['sha256']}  {name}\n"
+            for name in ("evo-guard.pyz", "evo-guard.spdx.json")
+        ).encode("ascii")
+        if checksum_bytes != expected_checksum:
+            _fail("SHA256SUMS is not the exact two-line filename-ordered manifest")
+
+        _validate_control_bytes(snapshot_root, ledger)
+        _validate_attestation_bytes(snapshot_root, ledger)
+        _validate_envelopes(snapshot_root, ledger)
+        _validate_keys_and_anchor(snapshot_root, ledger, trusted_key)
+        _require_inventory_unchanged(
+            snapshot_root,
+            files=snapshot_actual_files,
+            directories=snapshot_actual_directories,
+            identities=snapshot_identities,
+        )
+
+    _require_original_bytes_unchanged(
+        root,
+        ledger_bytes=ledger_bytes,
+        signature_bytes=signature_bytes,
+        retained_bytes=retained_bytes,
     )
-    expected_checksum = "".join(
-        f"{assets[name]['sha256']}  {name}\n"
-        for name in ("evo-guard.pyz", "evo-guard.spdx.json")
-    ).encode("ascii")
-    if checksum_bytes != expected_checksum:
-        _fail("SHA256SUMS is not the exact two-line filename-ordered manifest")
-
-    _validate_control_bytes(root, ledger)
-    _validate_attestation_bytes(root, ledger)
-    _validate_envelopes(root, ledger)
-    _validate_keys_and_signature(root, ledger_path, ledger)
     _require_inventory_unchanged(
         root,
         files=actual_files,
         directories=actual_directories,
         identities=inventory_identities,
     )
+    _require_trusted_key_unchanged(trusted_key)
     return ledger
 
 
@@ -2639,9 +2955,21 @@ def _parser() -> argparse.ArgumentParser:
 
     validate = subparsers.add_parser(
         "validate",
-        help="validate a complete signed ledger directory and every retained byte",
+        help=(
+            "validate a complete signed ledger directory under an external "
+            "ledger-key trust anchor"
+        ),
     )
     validate.add_argument("root", type=Path)
+    validate.add_argument(
+        "--trusted-ledger-pub",
+        type=Path,
+        required=True,
+        help=(
+            "caller-supplied Ed25519 public key outside ROOT, obtained from a "
+            "previously trusted channel"
+        ),
+    )
 
     canonicalize = subparsers.add_parser(
         "canonicalize",
@@ -2656,7 +2984,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "validate":
-            validate_directory(args.root)
+            validate_directory(args.root, args.trusted_ledger_pub)
             print("release-ledger-v2: VALID")
         else:
             _canonicalize(args.input, args.output)
