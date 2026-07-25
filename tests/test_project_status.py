@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import unittest
 from dataclasses import replace
@@ -15,7 +16,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
 
-import yaml
 from jsonschema import Draft202012Validator
 
 from ops import render_project_status
@@ -88,22 +88,36 @@ class ProjectStatusTests(unittest.TestCase):
         )
 
     def test_project_status_runs_in_matrix_and_has_one_aggregate_check(self) -> None:
-        workflow = yaml.safe_load(
-            (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        jobs = render_project_status._parse_workflow_jobs(  # noqa: SLF001
+            workflow,
+            ".github/workflows/ci.yml",
         )
-        jobs = workflow["jobs"]
-        matrix = jobs["test"]["strategy"]["matrix"]["python-version"]
-        self.assertEqual(matrix, ["3.10", "3.11", "3.12"])
-        runs = [
-            step.get("run")
-            for step in jobs["test"]["steps"]
-            if isinstance(step, dict)
-        ]
-        self.assertIn("python -I ops/render_project_status.py --check", runs)
+        test_block = re.search(
+            r"(?ms)^  test:\s*\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*\n|\Z)",
+            workflow,
+        )
+        aggregate_block = re.search(
+            r"(?ms)^  project-status:\s*\n"
+            r"(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\s*\n|\Z)",
+            workflow,
+        )
+        self.assertIsNotNone(test_block)
+        self.assertIsNotNone(aggregate_block)
+        assert test_block is not None
+        assert aggregate_block is not None
+        self.assertRegex(
+            test_block.group("body"),
+            r'(?m)^\s{8}python-version:\s*\["3\.10", "3\.11", "3\.12"\]\s*$',
+        )
+        self.assertIn(
+            "run: python -I ops/render_project_status.py --check",
+            test_block.group("body"),
+        )
         aggregate = jobs["project-status"]
-        self.assertEqual(aggregate["needs"], ["test"])
-        self.assertEqual(aggregate["if"], "always()")
-        self.assertNotIn("strategy", aggregate)
+        self.assertEqual(aggregate.needs, frozenset({"test"}))
+        self.assertEqual(aggregate.gate, "always()")
+        self.assertNotRegex(aggregate_block.group("body"), r"(?m)^\s+strategy:\s*$")
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
