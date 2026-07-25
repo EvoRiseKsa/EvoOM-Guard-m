@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -96,6 +97,7 @@ def _repository_control_observation(ledger: dict[str, Any]) -> dict[str, Any]:
             "name": "evoguard-release-ledger",
             "version": "2",
         },
+        "github_api_version": "2022-11-28",
         "observations": [
             {
                 "environment_id": environments[item["environment"]],
@@ -118,6 +120,80 @@ def _repository_control_observation(ledger: dict[str, Any]) -> dict[str, Any]:
             for item in controls["admission_secret_absence_after_publication"]
         ],
         "evidence_boundary": "owner-collected-point-in-time-github-api-observation",
+    }
+
+
+def _key_retirement_value(
+    ledger: dict[str, Any],
+    *,
+    ledger_bytes: bytes,
+    ledger_signature_bytes: bytes,
+    key_id: str,
+) -> dict[str, Any]:
+    controls = ledger["repository_controls"]
+    deploy_key = controls["release_deploy_key"]
+    environment = next(
+        item
+        for item in controls["environments"]
+        if item["name"] == "evoguard-release-publication"
+    )
+    common = {
+        "http_status": 200,
+        "pagination_complete": True,
+        "per_page": 100,
+        "page_count": 1,
+        "total_count": 0,
+        "present": False,
+    }
+    return {
+        "format": "EVOGUARD_RELEASE_KEY_RETIREMENT_V1",
+        "created_utc": "2030-01-01T00:33:00Z",
+        "github_api_version": "2022-11-28",
+        "repository": {
+            "name": ledger["release"]["repository"],
+            "id": ledger["release"]["repository_id"],
+            "owner_id": ledger["release"]["repository_owner_id"],
+        },
+        "release": {
+            "tag": ledger["release"]["tag"],
+            "commit_sha": ledger["release"]["commit_sha"],
+        },
+        "ledger": {
+            "sha256": hashlib.sha256(ledger_bytes).hexdigest(),
+            "signature_sha256": hashlib.sha256(
+                ledger_signature_bytes
+            ).hexdigest(),
+            "key_id": key_id,
+            "created_utc": ledger["ledger_scope"]["created_utc"],
+        },
+        "publication_authority": {
+            "deploy_key": {
+                "kind": "repository-deploy-key",
+                "id": deploy_key["id"],
+                "title": deploy_key["title"],
+                "fingerprint": deploy_key["fingerprint"],
+                "api_action": "list-repository-deploy-keys",
+                "request_method": "GET",
+                "endpoint": f"/repos/{ledger['release']['repository']}/keys",
+                **common,
+                "observed_utc": "2030-01-01T00:31:00Z",
+            },
+            "environment_secret": {
+                "kind": "environment-secret-name",
+                "environment_id": environment["id"],
+                "environment": environment["name"],
+                "secret_name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+                "api_action": "list-environment-secrets",
+                "request_method": "GET",
+                "endpoint": (
+                    f"/repos/{ledger['release']['repository']}/environments/"
+                    "evoguard-release-publication/secrets"
+                ),
+                **common,
+                "observed_utc": "2030-01-01T00:32:00Z",
+            },
+        },
+        "proof_boundary": "owner-collected-point-in-time-github-api-observation",
     }
 
 
@@ -1813,6 +1889,75 @@ def test_repository_control_observation_is_closed_and_cross_bound(
         match="observation 0 is not exact",
     ):
         validator._validate_repository_control_observation_bytes(tmp_path, ledger)
+
+
+def test_key_retirement_is_post_ledger_cross_bound_and_signed(
+    tmp_path: Path,
+) -> None:
+    ledger_root = tmp_path / "ledger"
+    ledger_root.mkdir()
+    private = tmp_path / "retirement.pem"
+    public = tmp_path / "retirement.pub.pem"
+    generate_keypair(str(private), str(public))
+    trusted = validator._load_trusted_ledger_key(ledger_root, public)
+    ledger = _valid_ledger()
+    ledger["ledger_signature"]["key_id"] = trusted.key_id
+    ledger_bytes = validator.canonical_json_bytes(ledger)
+    ledger_signature_bytes = base64.b64encode(b"\0" * 64) + b"\n"
+    value = _key_retirement_value(
+        ledger,
+        ledger_bytes=ledger_bytes,
+        ledger_signature_bytes=ledger_signature_bytes,
+        key_id=trusted.key_id,
+    )
+    validator._validate_key_retirement_value(
+        value,
+        ledger=ledger,
+        ledger_bytes=ledger_bytes,
+        ledger_signature_bytes=ledger_signature_bytes,
+        trusted_key=trusted,
+    )
+    receipt = tmp_path / "KEY_RETIREMENT.json"
+    receipt.write_bytes(validator.canonical_json_bytes(value))
+    sign_file(str(receipt), str(private))
+    signature = Path(f"{receipt}.sig").read_bytes()
+    validator._verify_external_ledger_signature(
+        receipt.read_bytes(),
+        signature,
+        trusted,
+    )
+
+    value["publication_authority"]["deploy_key"]["http_status"] = 404
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="successful complete absence",
+    ):
+        validator._validate_key_retirement_value(
+            value,
+            ledger=ledger,
+            ledger_bytes=ledger_bytes,
+            ledger_signature_bytes=ledger_signature_bytes,
+            trusted_key=trusted,
+        )
+
+    value = _key_retirement_value(
+        ledger,
+        ledger_bytes=ledger_bytes,
+        ledger_signature_bytes=ledger_signature_bytes,
+        key_id=trusted.key_id,
+    )
+    value["created_utc"] = ledger["ledger_scope"]["created_utc"]
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="post-ledger window",
+    ):
+        validator._validate_key_retirement_value(
+            value,
+            ledger=ledger,
+            ledger_bytes=ledger_bytes,
+            ledger_signature_bytes=ledger_signature_bytes,
+            trusted_key=trusted,
+        )
 
 
 def _replace_file_descriptors(value: object, contents: dict[str, bytes]) -> None:

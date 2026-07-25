@@ -203,7 +203,20 @@ and must fail validation. Placeholders are never accepted as release evidence.
    already completed. Only after its committed bytes validate, remove the
    publication deploy-key secret and exact write deploy key, create and validate
    the separately signed `KEY_RETIREMENT.json`, then destroy the per-release
-   ledger private key.
+   ledger private key. The receipt and its detached signature live outside the
+   already closed ledger directory and are verified under the same independently
+   pinned ledger public key:
+
+   ```powershell
+   python tools/ci/validate_release_ledger_v2.py validate-retirement `
+     .\vX.Y.Z .\KEY_RETIREMENT.json .\KEY_RETIREMENT.json.sig `
+     --trusted-ledger-pub .\trusted-roots\vX.Y.Z-release-ledger.pub.pem
+   ```
+
+   A `404`, denied API call, incomplete page sequence, or unsigned JSON is not
+   retirement evidence. The receipt remains a same-owner point-in-time
+   observation; it does not prove destruction of copies outside GitHub and does
+   not prevent a new key or secret from being added later.
 
 There is intentionally no evidence collector or “generate from GitHub”
 command. Collection combines mutable external state, expiring artifacts, and

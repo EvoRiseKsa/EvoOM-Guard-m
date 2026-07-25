@@ -1156,6 +1156,7 @@ def _validate_repository_control_observation_bytes(
             "repository_id",
             "repository_owner_id",
             "collector",
+            "github_api_version",
             "observations",
             "evidence_boundary",
         },
@@ -1172,6 +1173,7 @@ def _validate_repository_control_observation_bytes(
             "name": "evoguard-release-ledger",
             "version": "2",
         }
+        or value["github_api_version"] != "2022-11-28"
         or value["evidence_boundary"]
         != "owner-collected-point-in-time-github-api-observation"
     ):
@@ -2239,6 +2241,9 @@ def _strict_attestation_parts(
         "sourceRepositoryDigest": source_digest,
         "sourceRepositoryRef": "refs/heads/main",
         "sourceRepositoryIdentifier": repository_id,
+        "sourceRepositoryOwnerURI": (
+            f"https://github.com/{repository.split('/', 1)[0]}"
+        ),
         "sourceRepositoryVisibilityAtSigning": "public",
         "buildConfigURI": signer_uri,
         "buildConfigDigest": source_digest,
@@ -3122,6 +3127,207 @@ def validate_directory(
     return ledger
 
 
+def _validate_retirement_observation(
+    value: Any,
+    *,
+    expected: Mapping[str, Any],
+    label: str,
+) -> datetime:
+    if not isinstance(value, dict):
+        _fail(f"{label} must be an object")
+    _require_exact_keys(
+        value,
+        set(expected)
+        | {
+            "http_status",
+            "pagination_complete",
+            "per_page",
+            "page_count",
+            "total_count",
+            "present",
+            "observed_utc",
+        },
+        label=label,
+    )
+    if any(value.get(key) != item for key, item in expected.items()):
+        _fail(f"{label} identity is not exact")
+    total = value.get("total_count")
+    pages = value.get("page_count")
+    if (
+        value.get("http_status") != 200
+        or value.get("pagination_complete") is not True
+        or value.get("per_page") != 100
+        or not isinstance(total, int)
+        or isinstance(total, bool)
+        or total < 0
+        or not isinstance(pages, int)
+        or isinstance(pages, bool)
+        or pages != max(1, (total + 99) // 100)
+        or value.get("present") is not False
+    ):
+        _fail(f"{label} does not prove a successful complete absence observation")
+    return _parse_time(value["observed_utc"], label=f"{label}.observed_utc")
+
+
+def _validate_key_retirement_value(
+    value: Mapping[str, Any],
+    *,
+    ledger: Mapping[str, Any],
+    ledger_bytes: bytes,
+    ledger_signature_bytes: bytes,
+    trusted_key: _TrustedLedgerKey,
+) -> None:
+    _require_exact_keys(
+        value,
+        {
+            "format",
+            "created_utc",
+            "repository",
+            "release",
+            "ledger",
+            "publication_authority",
+            "github_api_version",
+            "proof_boundary",
+        },
+        label="key-retirement receipt",
+    )
+    release = ledger["release"]
+    controls = ledger["repository_controls"]
+    if value.get("format") != "EVOGUARD_RELEASE_KEY_RETIREMENT_V1":
+        _fail("key-retirement receipt format is not exact")
+    if value.get("github_api_version") != "2022-11-28":
+        _fail("key-retirement GitHub API version is not exact")
+    if value.get("repository") != {
+        "name": release["repository"],
+        "id": release["repository_id"],
+        "owner_id": release["repository_owner_id"],
+    }:
+        _fail("key-retirement repository identity is not exact")
+    if value.get("release") != {
+        "tag": release["tag"],
+        "commit_sha": release["commit_sha"],
+    }:
+        _fail("key-retirement release identity is not exact")
+    if value.get("ledger") != {
+        "sha256": _sha256(ledger_bytes),
+        "signature_sha256": _sha256(ledger_signature_bytes),
+        "key_id": trusted_key.key_id,
+        "created_utc": ledger["ledger_scope"]["created_utc"],
+    }:
+        _fail("key-retirement receipt does not bind the validated ledger")
+    if value.get("proof_boundary") != (
+        "owner-collected-point-in-time-github-api-observation"
+    ):
+        _fail("key-retirement proof boundary is not exact")
+    authority = value.get("publication_authority")
+    if not isinstance(authority, dict):
+        _fail("key-retirement publication authority must be an object")
+    _require_exact_keys(
+        authority,
+        {"deploy_key", "environment_secret"},
+        label="key-retirement publication authority",
+    )
+    deploy_key = controls["release_deploy_key"]
+    deploy_observed = _validate_retirement_observation(
+        authority["deploy_key"],
+        expected={
+            "kind": "repository-deploy-key",
+            "id": deploy_key["id"],
+            "title": deploy_key["title"],
+            "fingerprint": deploy_key["fingerprint"],
+            "api_action": "list-repository-deploy-keys",
+            "request_method": "GET",
+            "endpoint": f"/repos/{release['repository']}/keys",
+        },
+        label="key-retirement deploy-key observation",
+    )
+    publication_environment = next(
+        item
+        for item in controls["environments"]
+        if item["name"] == "evoguard-release-publication"
+    )
+    secret_observed = _validate_retirement_observation(
+        authority["environment_secret"],
+        expected={
+            "kind": "environment-secret-name",
+            "environment_id": publication_environment["id"],
+            "environment": publication_environment["name"],
+            "secret_name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+            "api_action": "list-environment-secrets",
+            "request_method": "GET",
+            "endpoint": (
+                f"/repos/{release['repository']}/environments/"
+                "evoguard-release-publication/secrets"
+            ),
+        },
+        label="key-retirement publication-secret observation",
+    )
+    ledger_created = _parse_time(
+        ledger["ledger_scope"]["created_utc"],
+        label="ledger_scope.created_utc",
+    )
+    receipt_created = _parse_time(
+        value["created_utc"],
+        label="key-retirement created_utc",
+    )
+    if not (
+        ledger_created < deploy_observed <= receipt_created
+        and ledger_created < secret_observed <= receipt_created
+    ):
+        _fail("key-retirement observations are outside the post-ledger window")
+    if controls["publication_authority_retirement"] != {
+        "status": "pending-post-ledger",
+        "deploy_key_id": deploy_key["id"],
+        "environment": "evoguard-release-publication",
+        "secret_name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+        "proof_boundary": "not-claimed-by-release-ledger",
+    }:
+        _fail("validated ledger did not leave publication authority pending")
+
+
+def validate_key_retirement(
+    ledger_root: Path,
+    receipt_path: Path,
+    signature_path: Path,
+    trusted_ledger_pub: Path,
+) -> Mapping[str, Any]:
+    ledger = validate_directory(ledger_root, trusted_ledger_pub)
+    trusted_key = _load_trusted_ledger_key(ledger_root, trusted_ledger_pub)
+    ledger_bytes = _read_regular(
+        ledger_root / LEDGER_NAME,
+        limit=MAX_JSON_BYTES,
+        label="release ledger",
+    )
+    ledger_signature_bytes = _read_regular(
+        ledger_root / SIGNATURE_NAME,
+        limit=CANONICAL_SIGNATURE_BYTES,
+        label="release ledger signature",
+    )
+    receipt_bytes = _read_regular(
+        receipt_path,
+        limit=1024 * 1024,
+        label="key-retirement receipt",
+    )
+    receipt = _load_json_bytes(receipt_bytes, label="key-retirement receipt")
+    if canonical_json_bytes(receipt) != receipt_bytes:
+        _fail("KEY_RETIREMENT.json is not canonical JSON")
+    signature_bytes = _read_regular(
+        signature_path,
+        limit=CANONICAL_SIGNATURE_BYTES,
+        label="key-retirement signature",
+    )
+    _verify_external_ledger_signature(receipt_bytes, signature_bytes, trusted_key)
+    _validate_key_retirement_value(
+        receipt,
+        ledger=ledger,
+        ledger_bytes=ledger_bytes,
+        ledger_signature_bytes=ledger_signature_bytes,
+        trusted_key=trusted_key,
+    )
+    _require_trusted_key_unchanged(trusted_key)
+    return receipt
+
+
 def _canonicalize(input_path: Path, output_path: Path) -> None:
     draft = _load_json_file(input_path, label="release ledger draft")
     schema, schema_sha256 = _load_official_schema()
@@ -3244,6 +3450,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     canonicalize.add_argument("input", type=Path)
     canonicalize.add_argument("output", type=Path)
+
+    retirement = subparsers.add_parser(
+        "validate-retirement",
+        help="validate a post-ledger publication-authority retirement receipt",
+    )
+    retirement.add_argument("ledger_root", type=Path)
+    retirement.add_argument("receipt", type=Path)
+    retirement.add_argument("signature", type=Path)
+    retirement.add_argument(
+        "--trusted-ledger-pub",
+        type=Path,
+        required=True,
+        help="the same external per-release ledger public key",
+    )
     return parser
 
 
@@ -3253,9 +3473,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "validate":
             validate_directory(args.root, args.trusted_ledger_pub)
             print("release-ledger-v2: VALID")
-        else:
+        elif args.command == "canonicalize":
             _canonicalize(args.input, args.output)
             print(f"release-ledger-v2: canonical bytes written to {args.output}")
+        else:
+            validate_key_retirement(
+                args.ledger_root,
+                args.receipt,
+                args.signature,
+                args.trusted_ledger_pub,
+            )
+            print("release-key-retirement-v1: VALID")
     except LedgerValidationError as exc:
         print(f"release-ledger-v2: INVALID: {exc}", file=sys.stderr)
         return 1
