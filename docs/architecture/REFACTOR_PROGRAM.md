@@ -305,6 +305,17 @@ remain in their established facades.
 - The immutable `application.pipeline.VerificationPipeline` cursor is Guard's
   single facade for repo-native decision composition and the three pure
   demotions. It remains effect-free.
+- `application.repo_judgment.build_repo_judgment` now owns the bounded
+  repo-native initial-judgment sequence after candidate preflight and shared
+  problem construction: optional verifier execution, artifact/evidence
+  projection, deletion-aware risk completion, risk scoring, and initial
+  pipeline construction. The stdlib-only owner receives every runtime
+  dependency through a live provider and preserves the characterized provider
+  rebinding schedule, exception propagation, late verifier-field reads, and
+  verifier/artifact/problem/touched-container identities. A 12-case
+  pre-extraction public-Guard vector protects both executing and static paths.
+  Unsupported-policy handling, preflight, black-box runtime, shared problem
+  construction, repo finalization, and `GuardResult` remain in Guard.
 - `application.repo_finalization.finalize_repo_verification` owns the
   repo-native post-decision effect sequence behind frozen public
   characterization. Guard injects live coverage, baseline, attestation,

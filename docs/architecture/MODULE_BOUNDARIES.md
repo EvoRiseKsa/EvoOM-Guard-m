@@ -483,6 +483,22 @@ finalization, and CLI policy loading remain in their existing owners. The
 boundary deliberately preserves SHA short-circuiting, primary-versus-cleanup
 exception behavior, and the absence of any eager runtime result-class lookup.
 
+The eleventh application slice adds
+`application.repo_judgment.build_repo_judgment`. Its boundary starts only
+after candidate preflight and the shared repository problem mapping exist, and
+ends before `application.repo_finalization`. It coordinates the optional
+`RepoVerifier` call, raw-artifact fallback and evidence projection,
+deletion-aware risk-map completion, risk scoring, and initial
+`VerificationPipeline` construction. Runtime owners are supplied through live
+providers at their characterized lookup positions; in particular, pipeline
+method resolution remains before the verifier's late `passed` and `score`
+reads. The verifier result, non-empty artifact, problem, and touched-path
+containers retain their established identities. Unsupported-policy handling,
+candidate preflight, black-box runtime, shared problem construction, repo
+finalization, and public `GuardResult` construction remain in `guard.py`. A
+12-case public-Guard vector freezes fallbacks, provider rebinding, deletion
+reads, exception propagation, mutation timing, and identity behavior.
+
 The first command-family slice adds the typed `cli.guard_command` owner for
 the public `guard` command. It owns only effective-policy resolution, routing
 between patch/diff/base-head inputs, and report/JSON/SARIF/signature

@@ -1,0 +1,1860 @@
+{
+  "cases": {
+    "artifact_empty_fallback": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {},
+          "artifact_same": false,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": true
+        },
+        {
+          "op": "verdict-score",
+          "value": 1
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": true,
+            "verifier_present": true,
+            "verifier_score": 1
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {},
+          "artifact_same": false,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "artifact_identity_preserved": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": true
+        },
+        {
+          "op": "verdict-score",
+          "value": 1
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": true,
+            "verifier_present": true,
+            "verifier_score": 1
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "artifact_none_fallback": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {},
+          "artifact_same": false,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": true
+        },
+        {
+          "op": "verdict-score",
+          "value": 1
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": true,
+            "verifier_present": true,
+            "verifier_score": 1
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {},
+          "artifact_same": false,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "diagnostics_none_normalized": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": true
+        },
+        {
+          "op": "verdict-score",
+          "value": 1
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": true,
+            "verifier_present": true,
+            "verifier_score": 1
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "evidence_projection_failure": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        }
+      ],
+      "exception": {
+        "message": "controlled evidence failure",
+        "type": "ValueError"
+      },
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": null
+    },
+    "no_suite_static_facts": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": false,
+          "op": "preflight"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {}
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "evidence_same": false,
+          "kwargs": {
+            "diagnostics": "",
+            "evidence": null,
+            "has_changes": false,
+            "protected_violations": [
+              "tests/test_gate.py"
+            ],
+            "unsafe_paths": [
+              "../escape.py"
+            ],
+            "verifier_passed": null,
+            "verifier_present": false,
+            "verifier_score": null
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {},
+          "artifact_same": false,
+          "evidence_same": false,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": false
+        }
+      ],
+      "exception": null,
+      "problem_seen": null,
+      "result": {
+        "diagnostics": "",
+        "files_changed": [],
+        "passed": false,
+        "protected_violations": [
+          "tests/test_gate.py"
+        ],
+        "reason": "controlled static refusal",
+        "reason_code": "controlled_static",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": null,
+        "tests_total": null,
+        "verdict": "REJECTED",
+        "verdict_source": null
+      }
+    },
+    "provider_midcall_rebinding": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence-late"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map-late",
+          "repo": "/repo"
+        },
+        {
+          "op": "read-repo-file-late",
+          "path": "src/deleted.py",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score-late",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "late",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": false
+        },
+        {
+          "op": "verdict-score",
+          "value": 0.91
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": false,
+            "verifier_present": true,
+            "verifier_score": 0.91
+          },
+          "label": "late",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "high",
+        "risk_score": 0.91,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "risk_deletion_added": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "read-repo-file",
+          "path": "src/deleted.py",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              3
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": true
+        },
+        {
+          "op": "verdict-score",
+          "value": 1
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": true,
+            "verifier_present": true,
+            "verifier_score": 1
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "risk_existing_deletion_not_read": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": true
+        },
+        {
+          "op": "verdict-score",
+          "value": 1
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": true,
+            "verifier_present": true,
+            "verifier_score": 1
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": true,
+        "protected_violations": [],
+        "reason": "controlled pass",
+        "reason_code": "controlled_pass",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "PASS",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "risk_read_failure": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "read-repo-file",
+          "path": "src/deleted.py",
+          "repo": "/repo"
+        }
+      ],
+      "exception": {
+        "message": "controlled risk read failure",
+        "type": "OSError"
+      },
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": null
+    },
+    "verifier_failed_result": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        },
+        {
+          "op": "verdict-artifact"
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "default_isolation": "subprocess",
+          "op": "evidence"
+        },
+        {
+          "op": "verdict-diagnostics"
+        },
+        {
+          "blocks_same": true,
+          "candidate_same": true,
+          "op": "risk-map",
+          "repo": "/repo"
+        },
+        {
+          "op": "risk-score",
+          "protected": [
+            "tests/**",
+            ".evoguard.json",
+            "company/**"
+          ],
+          "risk_map": {
+            "src/app.py": [
+              2,
+              1
+            ],
+            "src/deleted.py": [
+              0,
+              2
+            ]
+          }
+        },
+        {
+          "label": "initial",
+          "op": "resolve-pipeline-method"
+        },
+        {
+          "op": "verdict-passed",
+          "value": false
+        },
+        {
+          "op": "verdict-score",
+          "value": 0.25
+        },
+        {
+          "evidence_same": true,
+          "kwargs": {
+            "diagnostics": "controlled diagnostics",
+            "evidence": "<SimpleNamespace>",
+            "has_changes": true,
+            "protected_violations": [],
+            "unsafe_paths": [],
+            "verifier_passed": false,
+            "verifier_present": true,
+            "verifier_score": 0.25
+          },
+          "label": "initial",
+          "op": "pipeline",
+          "unsafe_same": false,
+          "violations_same": false
+        },
+        {
+          "artifact": {
+            "execution_phase": "verifier_pack",
+            "execution_state": "completed",
+            "test_command_started": true,
+            "tests_passed": 3,
+            "tests_total": 4
+          },
+          "artifact_same": true,
+          "evidence_same": true,
+          "op": "finalize",
+          "pipeline_same": true,
+          "run_suite": true
+        }
+      ],
+      "exception": null,
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": {
+        "diagnostics": "controlled diagnostics",
+        "files_changed": [
+          "src/app.py"
+        ],
+        "passed": false,
+        "protected_violations": [],
+        "reason": "controlled verifier failure result",
+        "reason_code": "controlled_failure",
+        "risk_level": "medium",
+        "risk_score": 0.42,
+        "tests_passed": 3,
+        "tests_total": 4,
+        "verdict": "FAIL",
+        "verdict_source": "junit+exit"
+      }
+    },
+    "verifier_failure": {
+      "events": [
+        {
+          "op": "prepare"
+        },
+        {
+          "may_execute": true,
+          "op": "preflight"
+        },
+        {
+          "kwargs": {
+            "docker_image": null,
+            "docker_network": "none",
+            "isolation": "subprocess",
+            "mem_limit_mb": 256,
+            "setup_output_globs": [],
+            "strict_harness": true,
+            "timeout": 17,
+            "trust_setup_on_host": false
+          },
+          "op": "repo-verifier"
+        },
+        {
+          "candidate_same": true,
+          "op": "verify",
+          "problem": {
+            "deleted": [
+              "src/deleted.py"
+            ],
+            "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "file_blocks": {
+              "src/app.py": "VALUE = 2\n"
+            },
+            "name": "guard",
+            "protected": [
+              "company/**"
+            ],
+            "repo_path": "/repo",
+            "setup_command": [
+              "python",
+              "-m",
+              "pip",
+              "--version"
+            ],
+            "strict_harness": true,
+            "test_command": [
+              "python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "verifier_pack": "/absolute/trusted/pack"
+          }
+        }
+      ],
+      "exception": {
+        "message": "controlled verifier failure",
+        "type": "RuntimeError"
+      },
+      "problem_seen": {
+        "deleted": [
+          "src/deleted.py"
+        ],
+        "expect_verifier_pack_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "file_blocks": {
+          "src/app.py": "VALUE = 2\n"
+        },
+        "name": "guard",
+        "protected": [
+          "company/**"
+        ],
+        "repo_path": "/repo",
+        "setup_command": [
+          "python",
+          "-m",
+          "pip",
+          "--version"
+        ],
+        "strict_harness": true,
+        "test_command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "verifier_pack": "/absolute/trusted/pack"
+      },
+      "result": null
+    }
+  },
+  "schema_version": "repo-judgment-characterization-v1"
+}

@@ -32,6 +32,12 @@ from evoom_guard.application.repo_finalization import (
     RepoFinalizationServices,
     finalize_repo_verification,
 )
+from evoom_guard.application.repo_judgment import (
+    RepoJudgmentInput,
+    RepoJudgmentOutcome,
+    RepoJudgmentServices,
+    build_repo_judgment,
+)
 
 __all__ = [
     "assurance_profile",
@@ -51,9 +57,13 @@ __all__ = [
     "DiffVerificationServices",
     "finalize_blackbox_verification",
     "finalize_repo_verification",
+    "build_repo_judgment",
     "RepoFinalizationInput",
     "RepoFinalizationOutcome",
     "RepoFinalizationServices",
+    "RepoJudgmentInput",
+    "RepoJudgmentOutcome",
+    "RepoJudgmentServices",
     "VerificationPipeline",
     "verify_diff",
 ]
