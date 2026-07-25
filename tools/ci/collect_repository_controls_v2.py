@@ -2,14 +2,31 @@
 # Author / original creator: Mana Alharbi.
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
-"""Collect a bounded, unsigned snapshot of GitHub repository-control API bodies.
+"""Collect a bounded, unsigned window of GitHub repository-control API bodies.
 
-The collector is intentionally a transport recorder, not a verifier.  It issues
-only the 17 ordered GET observations frozen below, retains the parsed JSON page
-bodies, and writes deterministic canonical JSON.  It does not derive protection
-claims, mutate GitHub state, or sign the result.  From ``gh api --include`` it
-retains only the validated HTTP status and Link header; every other response
-header is discarded before the evidence layer.
+The collector is intentionally a transport recorder, not a verifier.  Its plan
+contains exactly 17 ordered observation definitions/endpoints.  A paginated
+observation can issue multiple bounded GET page requests, so 17 observations do
+not imply 17 HTTP calls.  It retains parsed JSON page bodies and deterministic
+canonical JSON, but does not derive protection claims, mutate GitHub state, or
+sign the result.  From ``gh api --include`` it retains only validated HTTP
+status and Link values; every other response header is discarded before the
+evidence layer.
+
+The observed window is non-atomic: repository controls can change between page
+requests and between endpoints.  ``pagination.complete`` means validated Link
+traversal reached its terminal page (with count checks where GitHub reports a
+total); it never means all controls were observed simultaneously.
+
+The execution boundary assumes a trusted operator host and trusted, absolute
+PATH directories outside the repository and current working directory.
+Pre/post identity and SHA-256 checks detect a persistent ``gh`` executable
+change; they are not an atomic execution pin and do not defend against a
+privileged hostile host that swaps and restores bytes during process creation.
+
+Output uses exclusive creation and rejects observed link-like paths, but assumes
+its parent directory is trusted and non-concurrently mutated.  It is not a
+race-safe writer against an attacker replacing parent path components.
 """
 
 from __future__ import annotations
@@ -17,11 +34,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
+import signal
 import stat
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -36,6 +57,8 @@ MAX_API_PAGE_BYTES = MAX_OUTPUT_BYTES
 MAX_HTTP_HEADER_BYTES = 64 * 1024
 MAX_INCLUDED_RESPONSE_BYTES = MAX_API_PAGE_BYTES + MAX_HTTP_HEADER_BYTES
 MAX_GH_EXECUTABLE_BYTES = 256 * 1024 * 1024
+GH_API_TIMEOUT_SECONDS = 60.0
+GH_TREE_CLEANUP_TIMEOUT_SECONDS = 10.0
 MAX_PAGES = 1024
 PER_PAGE = 100
 ROOT = Path(__file__).resolve().parents[2]
@@ -493,6 +516,113 @@ def _parse_included_response(data: bytes) -> ApiResponse:
     return ApiResponse(body=body, status=status, link_header=link_header)
 
 
+@dataclass
+class _BoundedReadState:
+    data: bytes | None = None
+    error: Exception | None = None
+
+
+def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
+    """Best-effort bounded cleanup for the isolated ``gh`` process tree."""
+
+    if os.name == "nt":
+        system_root = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT")
+        if system_root:
+            taskkill = Path(system_root) / "System32" / "taskkill.exe"
+            try:
+                metadata = taskkill.lstat()
+                _require_no_link_ancestry(
+                    taskkill.parent, label="Windows process-tree cleanup directory"
+                )
+                if (
+                    taskkill.is_absolute()
+                    and stat.S_ISREG(metadata.st_mode)
+                    and not _is_link_like(metadata)
+                ):
+                    subprocess.run(
+                        [
+                            str(taskkill),
+                            "/PID",
+                            str(process.pid),
+                            "/T",
+                            "/F",
+                        ],
+                        check=False,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        cwd=taskkill.parent,
+                        timeout=GH_TREE_CLEANUP_TIMEOUT_SECONDS,
+                    )
+            except (OSError, subprocess.SubprocessError, CollectionError):
+                pass
+    else:
+        try:
+            kill_group = getattr(os, "killpg", None)
+            if kill_group is not None:
+                kill_group(process.pid, getattr(signal, "SIGKILL", 9))
+        except OSError:
+            pass
+    try:
+        process.kill()
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=GH_TREE_CLEANUP_TIMEOUT_SECONDS)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def _bounded_process_output(
+    process: subprocess.Popen[bytes],
+    *,
+    deadline: float,
+) -> tuple[bytes, int]:
+    assert process.stdout is not None
+    stdout = process.stdout
+    state = _BoundedReadState()
+
+    def read_stdout() -> None:
+        try:
+            state.data = stdout.read(MAX_INCLUDED_RESPONSE_BYTES + 1)
+        except Exception as exc:
+            state.error = exc
+
+    reader = threading.Thread(
+        target=read_stdout,
+        name="evoguard-gh-bounded-stdout",
+        daemon=True,
+    )
+    reader.start()
+    reader.join(max(0.0, deadline - time.monotonic()))
+    if reader.is_alive():
+        _terminate_process_tree(process)
+        reader.join(GH_TREE_CLEANUP_TIMEOUT_SECONDS)
+        _fail("GitHub API request exceeded its bounded timeout")
+    if state.error is not None:
+        _terminate_process_tree(process)
+        raise CollectionError("cannot read the bounded GitHub included response") from (
+            state.error
+        )
+    if state.data is None:
+        _terminate_process_tree(process)
+        _fail("GitHub bounded stdout reader produced no result")
+    included = state.data
+    if len(included) > MAX_INCLUDED_RESPONSE_BYTES:
+        _terminate_process_tree(process)
+        _fail("GitHub included response exceeds its total byte bound")
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        _terminate_process_tree(process)
+        _fail("GitHub API request exceeded its bounded timeout")
+    try:
+        return_code = process.wait(timeout=remaining)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_process_tree(process)
+        raise CollectionError("GitHub API request exceeded its bounded timeout") from exc
+    return included, return_code
+
+
 def _run_gh_api(
     method: str, endpoint: str, query: Mapping[str, int | str]
 ) -> ApiResponse:
@@ -507,6 +637,8 @@ def _run_gh_api(
         "--hostname",
         "github.com",
         "--include",
+        "-H",
+        "Accept: application/vnd.github+json",
         "-H",
         f"X-GitHub-Api-Version: {GITHUB_API_VERSION}",
         endpoint,
@@ -527,31 +659,42 @@ def _run_gh_api(
         }
     )
     try:
+        if (
+            not isinstance(GH_API_TIMEOUT_SECONDS, (int, float))
+            or not math.isfinite(GH_API_TIMEOUT_SECONDS)
+            or GH_API_TIMEOUT_SECONDS <= 0
+        ):
+            _fail("GitHub API timeout configuration is not positive and finite")
+        deadline = time.monotonic() + GH_API_TIMEOUT_SECONDS
         try:
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                cwd=executable.path.parent,
-                env=environment,
-            )
+            if os.name == "nt":
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    cwd=executable.path.parent,
+                    env=environment,
+                    creationflags=getattr(
+                        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+                    ),
+                )
+            else:
+                process = subprocess.Popen(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    cwd=executable.path.parent,
+                    env=environment,
+                    start_new_session=True,
+                )
         except OSError as exc:
             raise CollectionError("cannot start the pinned GitHub CLI") from exc
-        assert process.stdout is not None
-        try:
-            included = process.stdout.read(MAX_INCLUDED_RESPONSE_BYTES + 1)
-        except Exception as exc:
-            process.kill()
-            process.wait()
-            raise CollectionError(
-                "cannot read the bounded GitHub included response"
-            ) from exc
-        if len(included) > MAX_INCLUDED_RESPONSE_BYTES:
-            process.kill()
-            process.wait()
-            _fail("GitHub included response exceeds its total byte bound")
-        return_code = process.wait()
+        included, return_code = _bounded_process_output(
+            process,
+            deadline=deadline,
+        )
         try:
             response = _parse_included_response(included)
         except CollectionError as exc:
@@ -627,10 +770,12 @@ def _link_relations(
     endpoint: str,
     page_number: int,
     repository_id: int,
-) -> set[str]:
+    expected_last_page: int | None = None,
+) -> tuple[set[str], int | None]:
     if link_header is None:
-        return set()
+        return set(), expected_last_page
     relations: set[str] = set()
+    linked_pages: dict[str, int] = {}
     position = 0
     allowed_paths = _link_paths(endpoint, repository_id)
     for match in _LINK_ENTRY.finditer(link_header):
@@ -681,6 +826,7 @@ def _link_relations(
         ):
             _fail("GitHub Link header pagination values are not canonical")
         linked_page = int(page_text)
+        linked_pages[relation] = linked_page
         if relation == "next" and linked_page != page_number + 1:
             _fail("GitHub Link next relation skips or repeats a page")
         if relation == "prev" and (
@@ -695,7 +841,25 @@ def _link_relations(
         _fail("GitHub Link header has trailing non-canonical syntax")
     if not relations:
         _fail("GitHub Link header contains no relations")
-    return relations
+    next_page = linked_pages.get("next")
+    last_page = linked_pages.get("last")
+    if next_page is not None:
+        if last_page is None:
+            _fail("GitHub Link next relation has no last-page bound")
+        if last_page < next_page:
+            _fail("GitHub Link last relation precedes its next relation")
+    elif last_page is not None and last_page != page_number:
+        _fail("terminal GitHub Link last relation is not the current page")
+    stable_last_page: int | None
+    if expected_last_page is not None:
+        if last_page is not None and last_page != expected_last_page:
+            _fail("GitHub Link last relation changed during pagination")
+        if page_number > expected_last_page:
+            _fail("GitHub pagination advanced beyond its stable last page")
+        stable_last_page = expected_last_page
+    else:
+        stable_last_page = last_page
+    return relations, stable_last_page
 
 
 def _require_object(value: Any, *, label: str) -> dict[str, Any]:
@@ -801,6 +965,7 @@ def _collect_single(
             }
         ],
         "pagination": {
+            "completion_basis": "single-successful-response",
             "complete": True,
             "kind": "single",
             "observed_item_count": None,
@@ -823,6 +988,7 @@ def _collect_paginated(
     pages: list[dict[str, Any]] = []
     identities: set[tuple[str, int | str]] = set()
     reported_total: int | None = None
+    linked_last_page: int | None = None
     termination: str | None = None
 
     for page_number in range(1, MAX_PAGES + 1):
@@ -833,13 +999,20 @@ def _collect_paginated(
             query,
             label=f"{spec.name} page {page_number}",
         )
-        relations = _link_relations(
+        relations, linked_last_page = _link_relations(
             response.link_header,
             endpoint=spec.endpoint,
             page_number=page_number,
             repository_id=repository_id,
+            expected_last_page=linked_last_page,
         )
         has_next = "next" in relations
+        if (
+            not has_next
+            and linked_last_page is not None
+            and page_number != linked_last_page
+        ):
+            _fail(f"{spec.name} Link terminated before its stable last page")
         if spec.pagination == "array":
             if not isinstance(value, list):
                 _fail(f"{spec.name} page {page_number} root must be an array")
@@ -915,9 +1088,11 @@ def _collect_paginated(
         "observed_utc": observed_utc,
         "pages": pages,
         "pagination": {
+            "completion_basis": "validated-link-traversal",
             "complete": True,
             "kind": "page-number",
             "link_complete": True,
+            "linked_last_page": linked_last_page,
             "observed_item_count": len(identities),
             "page_count": len(pages),
             "per_page": PER_PAGE,
@@ -952,7 +1127,9 @@ def collect(
             "name": "evoguard-release-ledger",
             "version": "2",
         },
-        "evidence_boundary": "owner-collected-point-in-time-github-api-observation",
+        "evidence_boundary": (
+            "owner-collected-bounded-window-github-api-observation"
+        ),
         "format": FORMAT,
         "github_api_version": GITHUB_API_VERSION,
         "observed_window": {
@@ -1031,7 +1208,11 @@ def _prepare_output(path: Path) -> None:
 
 
 def write_new_output(path: Path, data: bytes) -> None:
-    """Write canonical bytes to one new, non-link regular file."""
+    """Write one new regular file under a trusted, non-concurrent parent.
+
+    ``O_EXCL`` and link checks prevent ordinary overwrite mistakes.  They do not
+    make parent-path traversal atomic against a concurrent hostile operator.
+    """
 
     if len(data) > MAX_OUTPUT_BYTES:
         _fail("canonical observation exceeds one MiB")
@@ -1093,7 +1274,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Collect the unsigned, read-only EvoOM Guard repository-control "
-            "observation V2."
+            "observation V2: 17 ordered endpoints, with additional bounded "
+            "page requests where Link pagination requires them."
         )
     )
     parser.add_argument("--repo", required=True, help="canonical OWNER/REPO")

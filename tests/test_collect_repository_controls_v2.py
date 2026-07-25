@@ -10,6 +10,7 @@ import json
 import os
 import stat
 import subprocess
+import threading
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -199,7 +200,7 @@ def test_collects_exact_ordered_read_only_observations_and_full_bodies() -> None
     }
     assert (
         document["evidence_boundary"]
-        == "owner-collected-point-in-time-github-api-observation"
+        == "owner-collected-bounded-window-github-api-observation"
     )
     assert [item["name"] for item in document["observations"]] == EXPECTED_NAMES
     assert len(runner.calls) == 17
@@ -218,6 +219,22 @@ def test_collects_exact_ordered_read_only_observations_and_full_bodies() -> None
         assert observation["pagination"]["complete"] is True
     assert all("claims" not in observation for observation in document["observations"])
     assert "authorization" not in json.dumps(document).lower()
+
+
+def test_collector_documents_its_non_atomic_trusted_operator_boundaries() -> None:
+    documentation = " ".join((collector.__doc__ or "").split())
+
+    for statement in (
+        "17 ordered observation definitions/endpoints",
+        "do not imply 17 HTTP calls",
+        "observed window is non-atomic",
+        "validated Link traversal",
+        "trusted operator host",
+        "not an atomic execution pin",
+        "trusted and non-concurrently mutated",
+        "not a race-safe writer",
+    ):
+        assert statement in documentation
 
 
 def test_paginates_array_and_object_bodies_without_losing_pages() -> None:
@@ -255,11 +272,15 @@ def test_paginates_array_and_object_bodies_without_losing_pages() -> None:
     runner = FakeRunner(handler)
     document = _collect(runner)
 
+    assert len(document["observations"]) == 17
+    assert len(runner.calls) == 19
     deploy_keys = document["observations"][6]
     assert deploy_keys["pagination"] == {
+        "completion_basis": "validated-link-traversal",
         "complete": True,
         "kind": "page-number",
         "link_complete": True,
+        "linked_last_page": 2,
         "observed_item_count": 101,
         "page_count": 2,
         "per_page": 100,
@@ -367,17 +388,20 @@ def test_link_header_accepts_the_repository_id_canonicalization() -> None:
     endpoint = f"/repos/{REPOSITORY}/keys"
     link = (
         f"<https://api.github.com/repositories/{REPOSITORY_ID}/keys"
-        '?page=2&per_page=100>; rel="next"'
+        '?page=2&per_page=100>; rel="next", '
+        f"<https://api.github.com/repositories/{REPOSITORY_ID}/keys"
+        '?page=2&per_page=100>; rel="last"'
     )
 
-    relations = collector._link_relations(
+    relations, stable_last = collector._link_relations(
         link,
         endpoint=endpoint,
         page_number=1,
         repository_id=REPOSITORY_ID,
     )
 
-    assert relations == {"next"}
+    assert relations == {"next", "last"}
+    assert stable_last == 2
 
 
 def test_link_header_rejects_duplicate_relations() -> None:
@@ -392,6 +416,78 @@ def test_link_header_rejects_duplicate_relations() -> None:
             f"{next_link}, {next_link}",
             endpoint=endpoint,
             page_number=1,
+            repository_id=REPOSITORY_ID,
+        )
+
+
+def test_link_header_last_page_is_stable_across_requests() -> None:
+    endpoint = f"/repos/{REPOSITORY}/keys"
+    first = (
+        f"<https://api.github.com{endpoint}?page=2&per_page=100>; rel=\"next\", "
+        f"<https://api.github.com{endpoint}?page=3&per_page=100>; rel=\"last\""
+    )
+    _, stable_last = collector._link_relations(
+        first,
+        endpoint=endpoint,
+        page_number=1,
+        repository_id=REPOSITORY_ID,
+    )
+    changed = (
+        f"<https://api.github.com{endpoint}?page=3&per_page=100>; rel=\"next\", "
+        f"<https://api.github.com{endpoint}?page=4&per_page=100>; rel=\"last\""
+    )
+
+    with pytest.raises(collector.CollectionError, match="changed during pagination"):
+        collector._link_relations(
+            changed,
+            endpoint=endpoint,
+            page_number=2,
+            repository_id=REPOSITORY_ID,
+            expected_last_page=stable_last,
+        )
+
+
+@pytest.mark.parametrize(
+    ("page_number", "link", "message"),
+    [
+        (
+            1,
+            (
+                f"<https://api.github.com/repos/{REPOSITORY}/keys"
+                '?page=2&per_page=100>; rel="next"'
+            ),
+            "no last-page bound",
+        ),
+        (
+            2,
+            (
+                f"<https://api.github.com/repos/{REPOSITORY}/keys"
+                '?page=3&per_page=100>; rel="next", '
+                f"<https://api.github.com/repos/{REPOSITORY}/keys"
+                '?page=2&per_page=100>; rel="last"'
+            ),
+            "precedes its next",
+        ),
+        (
+            2,
+            (
+                f"<https://api.github.com/repos/{REPOSITORY}/keys"
+                '?page=3&per_page=100>; rel="last"'
+            ),
+            "not the current page",
+        ),
+    ],
+)
+def test_link_header_enforces_next_and_terminal_last_bounds(
+    page_number: int,
+    link: str,
+    message: str,
+) -> None:
+    with pytest.raises(collector.CollectionError, match=message):
+        collector._link_relations(
+            link,
+            endpoint=f"/repos/{REPOSITORY}/keys",
+            page_number=page_number,
             repository_id=REPOSITORY_ID,
         )
 
@@ -672,7 +768,7 @@ def test_gh_runner_uses_absolute_pinned_binary_and_keeps_token_out_of_argv(
     class Process:
         stdout = Stdout()
 
-        def wait(self) -> int:
+        def wait(self, timeout: float | None = None) -> int:
             return 0
 
         def kill(self) -> None:
@@ -697,11 +793,98 @@ def test_gh_runner_uses_absolute_pinned_binary_and_keeps_token_out_of_argv(
     assert Path(command[0]).is_absolute()
     assert "--include" in command
     assert "--hostname" in command
+    assert "Accept: application/vnd.github+json" in command
     assert "must-not-appear-in-argv" not in repr(command)
     assert kwargs["cwd"] == executable_path.parent
     assert kwargs["env"]["GH_TOKEN"] == "must-not-appear-in-argv"
     assert "GH_DEBUG" not in kwargs["env"]
     assert kwargs["stderr"] is subprocess.DEVNULL
+    if os.name == "nt":
+        assert kwargs["creationflags"] == subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        assert kwargs["start_new_session"] is True
+
+
+def test_gh_runner_timeout_cleans_the_process_tree_and_unblocks_reader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable_path = (tmp_path / ("gh.exe" if os.name == "nt" else "gh")).absolute()
+    executable_path.write_bytes(b"fixed timeout gh bytes")
+    executable_path.chmod(executable_path.stat().st_mode | stat.S_IXUSR)
+    executable = collector._snapshot_gh_executable(executable_path)
+    released = threading.Event()
+    cleaned: list[Any] = []
+
+    class Stdout:
+        def read(self, limit: int) -> bytes:
+            released.wait(5)
+            return b""
+
+    class Process:
+        stdout = Stdout()
+        pid = 12345
+
+        def wait(self, timeout: float | None = None) -> int:
+            return 0
+
+        def kill(self) -> None:
+            released.set()
+
+    process = Process()
+
+    def cleanup(value: Any) -> None:
+        cleaned.append(value)
+        released.set()
+
+    monkeypatch.setattr(collector, "_resolve_gh_executable", lambda: executable)
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(collector, "_terminate_process_tree", cleanup)
+    monkeypatch.setattr(collector, "GH_API_TIMEOUT_SECONDS", 0.02)
+
+    with pytest.raises(collector.CollectionError, match="bounded timeout"):
+        collector._run_gh_api("GET", "/repos/o/r/example", {})
+
+    assert cleaned == [process]
+
+
+def test_gh_runner_oversized_stdout_cleans_the_process_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable_path = (tmp_path / ("gh.exe" if os.name == "nt" else "gh")).absolute()
+    executable_path.write_bytes(b"fixed oversize gh bytes")
+    executable_path.chmod(executable_path.stat().st_mode | stat.S_IXUSR)
+    executable = collector._snapshot_gh_executable(executable_path)
+    cleaned: list[Any] = []
+
+    class Stdout:
+        def read(self, limit: int) -> bytes:
+            return b"x" * limit
+
+    class Process:
+        stdout = Stdout()
+        pid = 12346
+
+        def wait(self, timeout: float | None = None) -> int:
+            raise AssertionError("oversized stdout must be cleaned before wait")
+
+        def kill(self) -> None:
+            pass
+
+    process = Process()
+    monkeypatch.setattr(collector, "_resolve_gh_executable", lambda: executable)
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(
+        collector,
+        "_terminate_process_tree",
+        lambda value: cleaned.append(value),
+    )
+
+    with pytest.raises(collector.CollectionError, match="total byte bound"):
+        collector._run_gh_api("GET", "/repos/o/r/example", {})
+
+    assert cleaned == [process]
 
 
 def test_gh_resolution_accepts_only_safe_absolute_path_entries(
@@ -805,7 +988,7 @@ def test_gh_runner_detects_executable_byte_mutation_during_invocation(
     class Process:
         stdout = Stdout()
 
-        def wait(self) -> int:
+        def wait(self, timeout: float | None = None) -> int:
             executable_path.write_bytes(b"after")
             return 0
 
