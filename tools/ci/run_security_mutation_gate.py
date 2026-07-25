@@ -1192,6 +1192,288 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-release-source-handoff-stdin-exit-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            '                    "release-source-handoff verdict must be a regular file, "\n'
+            '                    "not standard input"\n'
+            "                ),\n"
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+        ),
+        after=(
+            '                    "release-source-handoff verdict must be a regular file, "\n'
+            '                    "not standard input"\n'
+            "                ),\n"
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[handoff_verdict_stdin]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-handoff-reader-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                create_release_source_handoff="
+            "create_release_source_handoff,\n"
+            "                read_external_object_provider=lambda: (\n"
+            "                    _read_external_finalizer_object\n"
+            "                ),\n"
+        ),
+        after=(
+            "                create_release_source_handoff="
+            "create_release_source_handoff,\n"
+            "                read_external_object_provider=lambda _reader=(\n"
+            "                    _read_external_finalizer_object\n"
+            "                ): _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[handoff_source_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-handoff-invalid-classification-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            "    except (OSError, ValueError, services.finalizer_error) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.handoff_format,\n'
+            '                "ok": False,\n'
+            '                "status": "INVALID_INPUT",\n'
+        ),
+        after=(
+            "    except (OSError, ValueError, services.finalizer_error) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.handoff_format,\n'
+            '                "ok": False,\n'
+            '                "status": "ERROR",\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[handoff_provider_valueerror]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-seal-signing-classification-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            "    except services.signing_unavailable_error as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.evidence_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+            '                "status": "INCOMPLETE",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    allowed = sealed.decision == \"ALLOW\"\n"
+        ),
+        after=(
+            "    except services.signing_unavailable_error as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.evidence_format,\n'
+            '                "ok": False,\n'
+            '                "sealed": False,\n'
+            '                "status": "INVALID_INPUT",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    allowed = sealed.decision == \"ALLOW\"\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[seal_signing_unavailable]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-seal-deny-opt-in-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            '            "record_sha256": sealed.manifest["record"]["sha256"],\n'
+            '            "key_id": sealed.manifest["authentication"]["key_id"],\n'
+            "        },\n"
+            "    )\n"
+            "    return 0 if allowed or args.allow_deny_evidence else 1\n"
+        ),
+        after=(
+            '            "record_sha256": sealed.manifest["record"]["sha256"],\n'
+            '            "key_id": sealed.manifest["authentication"]["key_id"],\n'
+            "        },\n"
+            "    )\n"
+            "    return 0 if allowed else 1\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[seal_success_deny_opt_in]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-verify-signing-classification-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            "    except services.signing_unavailable_error as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.evidence_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+            '                "status": "INCOMPLETE",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+            "    except (OSError, ValueError, services.finalizer_error) as exc:\n"
+        ),
+        after=(
+            "    except services.signing_unavailable_error as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.evidence_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+            '                "status": "INVALID",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+            "    except (OSError, ValueError, services.finalizer_error) as exc:\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[verify_signing_unavailable]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-verify-deny-opt-in-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            '            "record": verified.record_report,\n'
+            "        },\n"
+            "    )\n"
+            "    return 0 if allowed or args.allow_deny_evidence else 1\n"
+        ),
+        after=(
+            '            "record": verified.record_report,\n'
+            "        },\n"
+            "    )\n"
+            "    return 0 if allowed else 1\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[verify_success_deny_opt_in]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-derive-publication-order-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            "        services.publish_bytes(\n"
+            "            args.source_out,\n"
+            "            services.canonical_json(bindings.source),\n"
+            "            force=args.force,\n"
+            '            prefix=".evoguard-release-source-",\n'
+            '            label="verified release source",\n'
+            "        )\n"
+            "        services.publish_bytes(\n"
+            "            args.context_out,\n"
+            "            services.canonical_json(context),\n"
+            "            force=args.force,\n"
+            '            prefix=".evoguard-release-source-context-",\n'
+            '            label="verified release-source context",\n'
+            "        )\n"
+        ),
+        after=(
+            "        services.publish_bytes(\n"
+            "            args.context_out,\n"
+            "            services.canonical_json(context),\n"
+            "            force=args.force,\n"
+            '            prefix=".evoguard-release-source-context-",\n'
+            '            label="verified release-source context",\n'
+            "        )\n"
+            "        services.publish_bytes(\n"
+            "            args.source_out,\n"
+            "            services.canonical_json(bindings.source),\n"
+            "            force=args.force,\n"
+            '            prefix=".evoguard-release-source-",\n'
+            '            label="verified release source",\n'
+            "        )\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[derive_publish_context_oserror_preserves_source]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-derive-admission-claim-bypass",
+        path="evoom_guard/cli/release_source_finalizer_commands.py",
+        before=(
+            '            "decision": "NONE",\n'
+            '            "admission": False,\n'
+        ),
+        after=(
+            '            "decision": "ALLOW",\n'
+            '            "admission": True,\n'
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[derive_success_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-release-source-derive-path-snapshot-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                derive_release_source_bindings="
+            "derive_release_source_bindings,\n"
+            "                read_external_object_provider=lambda: (\n"
+            "                    _read_external_finalizer_object\n"
+            "                ),\n"
+            "                absolute_path_provider=lambda: os.path.abspath,\n"
+        ),
+        after=(
+            "                derive_release_source_bindings="
+            "derive_release_source_bindings,\n"
+            "                read_external_object_provider=lambda: (\n"
+            "                    _read_external_finalizer_object\n"
+            "                ),\n"
+            "                absolute_path_provider=lambda _abspath=(\n"
+            "                    os.path.abspath\n"
+            "                ): _abspath,\n"
+        ),
+        test=(
+            "tests/test_cli_release_source_finalizer_characterization.py::"
+            "test_frozen_cli_release_source_finalizer_behavior"
+            "[derive_source_out_property_rebinds_abspath]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',

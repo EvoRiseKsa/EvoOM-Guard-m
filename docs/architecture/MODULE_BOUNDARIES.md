@@ -636,6 +636,23 @@ domain `try`. A 70-case cross-parent vector and at least sixteen focused
 reviewed mutations protect the slice. Release-source and release-artifact
 command families remain in the facade.
 
+The eighth command-family slice adds the strictly typed, stdlib-only
+`cli.release_source_finalizer_commands` owner for release-source handoff
+creation, protected finalizer sealing, detached verification, and raw-Git
+control derivation. The facade keeps each function-local format, domain
+callable, domain exception, and signing exception as an entry snapshot.
+External trust readers, absolute-path projection, and machine reporting remain
+call-through providers resolved at their historical use sites. Four
+independent service bundles keep each command's authority surface explicit.
+The owner preserves stdin rejection, trusted-metadata versus domain/signing
+classification, catch order, exact projections and exit codes, `ALLOW`/`DENY`
+opt-in behavior, exception identity, and source-before-context publication
+with its historical partial-source residue if the second publication fails.
+An 82-case cross-parent vector plus focused reviewed mutations protect these
+contracts. The extraction adds no checkout, network, provider, admission,
+transaction, or cleanup semantics; release-source producer/admission and
+release-artifact command families remain in the facade.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay
