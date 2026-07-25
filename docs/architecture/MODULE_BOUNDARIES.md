@@ -602,6 +602,24 @@ offline verifier argument surface. A full 44-case cross-parent vector plus
 focused reviewed mutations protect those contracts. No V1, release, source,
 or GitHub-attestation command moves in this slice.
 
+The sixth command-family slice adds the strictly typed, stdlib-only
+`cli.github_attestation_receipt_commands` owner for only receipt creation,
+retained-byte verification, and fresh provider re-verification. The facade
+keeps the receipt format, domain exception, and three domain callables as
+function-local entry snapshots. It also keeps the shared policy and provider
+isolation helpers because their resolution and the isolation helper's own
+function-local imports are public compatibility boundaries; the owner receives
+call-through providers so each helper and the machine reporter remain live at
+their historical use site. Create and reverify services expose the online
+isolation seam, while the retained verifier service structurally cannot access
+it. The owner preserves the domain-error-before-`ValueError` catch order,
+including the historical late-error-class `ERROR/2` nuance, exact argument and
+success projection order, partial outputs, exception identity, and the
+retained verifier's environment-independent closed-world offline boundary. A
+51-case cross-parent vector and twelve focused reviewed mutations protect the
+slice. GitHub attestation admission, release-source, and release-artifact
+commands remain in the facade.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

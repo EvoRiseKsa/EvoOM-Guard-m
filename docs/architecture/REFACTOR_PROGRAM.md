@@ -443,7 +443,16 @@ remain in their established facades.
   and opaque-provenance arguments, eager stdin reads, subclass classification,
   full success projections, retained output, and a closed-world offline
   verification surface.
-- The remaining source, release-artifact, and GitHub-attestation
+- GitHub attestation receipt creation, retained verification, and fresh
+  provider re-verification now live in the strictly typed, stdlib-only
+  `cli/github_attestation_receipt_commands.py` owner. Its reviewed 51-case
+  vector freezes entry snapshots, live policy/isolation/reporting seams,
+  argument and projection order, exception precedence, partial receipt/output
+  residue, provider-isolation identity, fail-closed environment independence,
+  and the retained verifier's closed-world offline surface. The shared policy
+  and isolation helpers remain in the facade; the retained verifier service
+  has no connected provider seam.
+- The remaining source, release-artifact, and GitHub-attestation admission
   command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release

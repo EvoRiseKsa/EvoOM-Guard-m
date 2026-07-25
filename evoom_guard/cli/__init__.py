@@ -73,6 +73,9 @@ from evoom_guard.cli import (
     artifact_digest_admission_commands as _artifact_digest_admission_command_owner,
 )
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
+from evoom_guard.cli import (
+    github_attestation_receipt_commands as _github_attestation_receipt_command_owner,
+)
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
@@ -2650,56 +2653,26 @@ def cmd_github_attestation_receipt(
         create_github_attestation_receipt,
     )
 
-    try:
-        created = create_github_attestation_receipt(
-            args.artifact,
-            args.receipt_out,
-            args.raw_output_out,
-            **_github_attestation_policy_kwargs(args),
-            gh_executable=args.gh_executable,
-            timeout_seconds=args.timeout_seconds,
-            provider_isolation=_github_attestation_provider_isolation(args),
-        )
-    except GitHubAttestationError as exc:
-        _machine_report(
-            out,
-            {
-                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "PROVIDER_VERIFIED",
-            "verification_scope": "fresh-provider-gh-attestation-verify",
-            "receipt": created.receipt_path,
-            "raw_output": created.raw_output_path,
-            "artifact": created.artifact.as_dict(),
-            "verification_policy": created.policy.as_dict(),
-            "verified_attestation_count": created.verified_attestation_count,
-        },
+    return _github_attestation_receipt_command_owner.execute_github_attestation_receipt(
+        args,
+        services=(
+            _github_attestation_receipt_command_owner.CreateGitHubAttestationReceiptServices(
+                receipt_format=GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                github_error=GitHubAttestationError,
+                create_github_attestation_receipt=(
+                    create_github_attestation_receipt
+                ),
+                policy_kwargs_provider=lambda: (
+                    _github_attestation_policy_kwargs
+                ),
+                provider_isolation_provider=lambda: (
+                    _github_attestation_provider_isolation
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_verify_github_attestation_receipt(
@@ -2715,51 +2688,23 @@ def cmd_verify_github_attestation_receipt(
         verify_github_attestation_receipt,
     )
 
-    try:
-        verified = verify_github_attestation_receipt(
-            args.receipt,
-            args.artifact,
-            args.raw_output,
-            **_github_attestation_policy_kwargs(args),
-        )
-    except GitHubAttestationError as exc:
-        _machine_report(
-            out,
-            {
-                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "RETAINED_RECEIPT_VERIFIED",
-            "verification_scope": "retained-byte-continuity-only",
-            "live_provider_reverification": False,
-            "artifact": verified.artifact.as_dict(),
-            "verification_policy": verified.policy.as_dict(),
-        },
+    return _github_attestation_receipt_command_owner.execute_verify_github_attestation_receipt(
+        args,
+        services=(
+            _github_attestation_receipt_command_owner.VerifyGitHubAttestationReceiptServices(
+                receipt_format=GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                github_error=GitHubAttestationError,
+                verify_github_attestation_receipt=(
+                    verify_github_attestation_receipt
+                ),
+                policy_kwargs_provider=lambda: (
+                    _github_attestation_policy_kwargs
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_reverify_github_attestation_receipt(
@@ -2775,54 +2720,26 @@ def cmd_reverify_github_attestation_receipt(
         reverify_github_attestation_receipt,
     )
 
-    try:
-        fresh = reverify_github_attestation_receipt(
-            args.receipt,
-            args.artifact,
-            **_github_attestation_policy_kwargs(args),
-            gh_executable=args.gh_executable,
-            timeout_seconds=args.timeout_seconds,
-            provider_isolation=_github_attestation_provider_isolation(args),
-        )
-    except GitHubAttestationError as exc:
-        _machine_report(
-            out,
-            {
-                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except (OSError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "ERROR",
-                "error": str(exc),
-            },
-        )
-        return 2
-    _machine_report(
-        out,
-        {
-            "format": GITHUB_ATTESTATION_RECEIPT_FORMAT,
-            "ok": True,
-            "verified": True,
-            "status": "FRESH_PROVIDER_REVERIFIED",
-            "verification_scope": "fresh-provider-gh-attestation-verify",
-            "artifact": fresh.artifact.as_dict(),
-            "verification_policy": fresh.policy.as_dict(),
-            "verified_attestation_count": fresh.verified_attestation_count,
-            "reverification": "fresh-gh-attestation-verify",
-        },
+    return _github_attestation_receipt_command_owner.execute_reverify_github_attestation_receipt(
+        args,
+        services=(
+            _github_attestation_receipt_command_owner.ReverifyGitHubAttestationReceiptServices(
+                receipt_format=GITHUB_ATTESTATION_RECEIPT_FORMAT,
+                github_error=GitHubAttestationError,
+                reverify_github_attestation_receipt=(
+                    reverify_github_attestation_receipt
+                ),
+                policy_kwargs_provider=lambda: (
+                    _github_attestation_policy_kwargs
+                ),
+                provider_isolation_provider=lambda: (
+                    _github_attestation_provider_isolation
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_github_attestation_admission(
