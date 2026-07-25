@@ -122,8 +122,12 @@ The repository-workspace lifetime slice adds the dependency-free
 paths, preserves pack-root reconciliation, and exposes the historical cleanup
 target order while importing no verifier, execution, evidence, or verdict
 module. `repo_verifier` supplies live allocation providers and retains the
-cleanup effect plus primary-exception precedence. This classified-to-classified
-extraction changes no baseline count and therefore adds no ratchet revision.
+outer cleanup `finally` plus primary-exception call site. The dependency-free
+`verifiers.repo_cleanup` owner resolves the workspace cleanup algorithm,
+recursive remover, and note provider in their historical order. It imports no
+workspace or orchestrator module because all effects remain injected. This
+classified-to-classified extraction changes no baseline count and therefore
+adds no ratchet revision.
 
 The bounded verifier-pack intake slice gives
 `verifiers.repo_pack_intake` ownership of optional pack admission and its

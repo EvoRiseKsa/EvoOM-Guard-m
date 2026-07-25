@@ -130,6 +130,17 @@ precedence and compatibility monkeypatch timing do not move into this owner.
 Pack admission, execution, evidence, verdict composition, and cleanup effects
 remain outside the lifetime value.
 
+Repository-judgment cleanup effect coordination lives in
+`evoom_guard/verifiers/repo_cleanup.py`. Its immutable request carries the
+candidate-then-pack target schedule and exact active primary exception. Its
+services resolve the generic workspace cleanup algorithm, recursive remover,
+and diagnostic-note callable in the historical order before invoking cleanup.
+`repo_verifier` retains the two legacy facades and the outer `finally`;
+`workspace.repository` retains all-path removal sequencing, fresh root-absence
+proof, note wording, and first-failure/primary-exception precedence. The owner
+does not import either module and does not allocate paths, execute a phase,
+compose evidence, or project a verdict.
+
 The first CLI slice is the same kind of atomic compatibility migration:
 `evoom_guard/cli/__init__.py` contains the exact implementation bytes formerly
 stored in `cli.py`. The import path, `evoom_guard.cli:main` console entry point,
@@ -346,8 +357,10 @@ sets across no-pack, completed-pack, pack-launch-failure, invalid-present-pack,
 and missing-pack paths. This owner performs no provider lookup, trace
 mutation, process/container execution, filesystem access, clock read, or
 cleanup. `RepoVerifier` retains phase/effect ordering, live provider supply,
-phase-composer invocation, and primary-exception cleanup precedence; workspace
-path lifetime bookkeeping belongs to `workspace.repository_lifetime`.
+phase-composer invocation, and the primary-exception cleanup call site;
+workspace path lifetime bookkeeping belongs to
+`workspace.repository_lifetime`, and cleanup effect coordination belongs to
+`verifiers.repo_cleanup`.
 
 The third repository-verifier phase slice adds immutable
 `domain.evidence.VerificationEvidence`, `VerifierPackEvidence`,

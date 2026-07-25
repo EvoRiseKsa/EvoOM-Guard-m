@@ -1584,6 +1584,17 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repo-cleanup-effect-primary-forwarding-bypass",
+        path="evoom_guard/verifiers/repo_cleanup.py",
+        before="        primary=request.primary,\n",
+        after="        primary=None,\n",
+        test=(
+            "tests/test_repo_cleanup_characterization.py::"
+            "test_frozen_repo_cleanup_behavior"
+            "[primary_baseexception_multiple_failures]"
+        ),
+    ),
+    Mutation(
         name="finalizer-git-env-scrub-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before='        if not key.upper().startswith("GIT_")\n',

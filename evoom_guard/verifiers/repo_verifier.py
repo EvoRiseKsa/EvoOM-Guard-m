@@ -288,6 +288,11 @@ from evoom_guard.verifiers.repo_candidate import (
     apply_repo_candidate_deletions,
     materialize_repo_candidate,
 )
+from evoom_guard.verifiers.repo_cleanup import (
+    RepoCleanupRequest,
+    RepoCleanupServices,
+    cleanup_repo_verification,
+)
 from evoom_guard.verifiers.repo_execution import (
     RepoExecutionTrace,
     isolation_observation_payload,
@@ -682,12 +687,18 @@ def _cleanup_repo_workspaces(
     and receives one note per cleanup failure instead of being masked.
     """
 
-    _repository_workspace.cleanup_repo_workspaces(
-        workspaces,
-        primary=primary,
-        remove_tree=shutil.rmtree,
-        note_failure=_note_repo_cleanup_failure,
-        owner_name="RepoVerifier",
+    cleanup_repo_verification(
+        RepoCleanupRequest(
+            workspaces=workspaces,
+            primary=primary,
+        ),
+        services=RepoCleanupServices(
+            cleanup_workspaces_provider=(
+                lambda: _repository_workspace.cleanup_repo_workspaces
+            ),
+            remove_tree_provider=lambda: shutil.rmtree,
+            note_failure_provider=lambda: _note_repo_cleanup_failure,
+        ),
     )
 
 
