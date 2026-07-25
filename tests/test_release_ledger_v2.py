@@ -1107,6 +1107,10 @@ def _raw_attestation(
     repository = ledger["release"]["repository"]
     source = ledger["source"]["candidate_commit_sha"]
     workflow_path = attestation["signer_workflow"]
+    expected_event = (
+        "workflow_run" if name == "source_producer" else "workflow_dispatch"
+    )
+    repository_id = ledger["release"]["repository_id"]
     signer_uri = f"https://github.com/{repository}/{workflow_path}@{source}"
     run_uri = (
         f"https://github.com/{repository}/actions/runs/{attestation['run_id']}/"
@@ -1115,15 +1119,21 @@ def _raw_attestation(
     if predicate is None:
         predicate = {
             "buildDefinition": {
+                "buildType": "https://actions.github.io/buildtypes/workflow/v1",
                 "externalParameters": {
                     "workflow": {
                         "repository": f"https://github.com/{repository}",
                         "ref": "refs/heads/main",
-                        "path": f"/{workflow_path}",
+                        "path": workflow_path,
                     }
                 },
                 "internalParameters": {
-                    "github": {"runner_environment": "github-hosted"}
+                    "github": {
+                        "event_name": expected_event,
+                        "repository_id": repository_id,
+                        "repository_owner_id": "1002",
+                        "runner_environment": "github-hosted",
+                    }
                 },
                 "resolvedDependencies": [
                     {
@@ -1143,12 +1153,18 @@ def _raw_attestation(
         {
             "attestation": {"opaque": "provider-verified"},
             "verificationResult": {
+                "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
                 "signature": {
                     "certificate": {
+                        "certificateIssuer": (
+                            "CN=sigstore-intermediate,O=sigstore.dev"
+                        ),
                         "subjectAlternativeName": signer_uri,
                         "issuer": "https://token.actions.githubusercontent.com",
+                        "githubWorkflowTrigger": expected_event,
                         "githubWorkflowRepository": repository,
                         "githubWorkflowSHA": source,
+                        "githubWorkflowName": "EvoGuard release artifact builder",
                         "githubWorkflowRef": "refs/heads/main",
                         "buildSignerURI": signer_uri,
                         "buildSignerDigest": source,
@@ -1156,10 +1172,36 @@ def _raw_attestation(
                         "sourceRepositoryURI": f"https://github.com/{repository}",
                         "sourceRepositoryDigest": source,
                         "sourceRepositoryRef": "refs/heads/main",
+                        "sourceRepositoryIdentifier": repository_id,
+                        "sourceRepositoryOwnerURI": (
+                            "https://github.com/EvoRiseKsa"
+                        ),
+                        "sourceRepositoryOwnerIdentifier": "1002",
+                        "buildConfigURI": signer_uri,
+                        "buildConfigDigest": source,
+                        "buildTrigger": expected_event,
                         "runInvocationURI": run_uri,
+                        "sourceRepositoryVisibilityAtSigning": "public",
                     }
                 },
-                "verifiedIdentity": {"runnerEnvironment": "github-hosted"},
+                "verifiedTimestamps": [
+                    {
+                        "type": "Tlog",
+                        "uri": "https://rekor.sigstore.dev",
+                        "timestamp": "2030-01-01T00:12:00Z",
+                    }
+                ],
+                "verifiedIdentity": {
+                    "subjectAlternativeName": {
+                        "subjectAlternativeName": "",
+                        "regexp": f"^{signer_uri}$",
+                    },
+                    "issuer": {
+                        "issuer": "",
+                        "regexp": ".*",
+                    },
+                    "runnerEnvironment": "github-hosted",
+                },
                 "statement": {
                     "_type": "https://in-toto.io/Statement/v1",
                     "subject": [
@@ -1361,6 +1403,50 @@ def test_attestation_receipts_bind_subject_policy_and_output(
             ),
             "predicateType",
         ),
+        (
+            lambda value: value[0]["verificationResult"]["statement"][
+                "predicate"
+            ]["buildDefinition"]["externalParameters"]["workflow"].update(
+                {"path": "/.github/workflows/evoguard-build-release-artifact.yml"}
+            ),
+            "workflow parameters are not exact",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["statement"][
+                "predicate"
+            ]["buildDefinition"].update(
+                {"buildType": "https://example.invalid/build-type"}
+            ),
+            "build type",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["statement"][
+                "predicate"
+            ]["buildDefinition"]["internalParameters"]["github"].update(
+                {"event_name": "workflow_run"}
+            ),
+            "GitHub identity is not exact",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["statement"][
+                "predicate"
+            ]["buildDefinition"]["internalParameters"]["github"].update(
+                {"repository_id": "1001"}
+            ),
+            "GitHub identity is not exact",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["signature"][
+                "certificate"
+            ].update({"sourceRepositoryIdentifier": "1001"}),
+            "certificate does not bind",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["signature"][
+                "certificate"
+            ].update({"sourceRepositoryOwnerIdentifier": "1003"}),
+            "GitHub identity is not exact",
+        ),
     ],
 )
 def test_strict_slsa_raw_attestation_rejects_ambiguity(
@@ -1385,15 +1471,55 @@ def test_strict_slsa_raw_attestation_rejects_ambiguity(
         validator._validate_slsa_raw_output(
             data,
             repository=ledger["release"]["repository"],
+            repository_id=ledger["release"]["repository_id"],
             workflow_path=attestation["signer_workflow"],
             source_digest=ledger["source"]["candidate_commit_sha"],
             run_id=attestation["run_id"],
             run_attempt=attestation["run_attempt"],
+            expected_event="workflow_dispatch",
             subject_name=attestation["subject_name"],
             subject_sha256=artifact["sha256"],
             subject_size=artifact["size_bytes"],
             label="test SLSA output",
         )
+
+
+def test_gh_2_90_provider_metadata_shape_is_accepted() -> None:
+    ledger = _valid_ledger()
+    attestation = ledger["attestations"]["build_provenance"]
+    artifact = ledger["artifacts"][0]
+    data = _raw_attestation(
+        ledger,
+        "build_provenance",
+        subject_sha256=artifact["sha256"],
+    )
+    decoded = json.loads(data)
+    result = decoded[0]["verificationResult"]
+    assert set(result) == {
+        "mediaType",
+        "signature",
+        "verifiedTimestamps",
+        "verifiedIdentity",
+        "statement",
+    }
+    assert result["statement"]["predicate"]["buildDefinition"]["externalParameters"][
+        "workflow"
+    ]["path"] == attestation["signer_workflow"]
+
+    validator._validate_slsa_raw_output(
+        data,
+        repository=ledger["release"]["repository"],
+        repository_id=ledger["release"]["repository_id"],
+        workflow_path=attestation["signer_workflow"],
+        source_digest=ledger["source"]["candidate_commit_sha"],
+        run_id=attestation["run_id"],
+        run_attempt=attestation["run_attempt"],
+        expected_event="workflow_dispatch",
+        subject_name=attestation["subject_name"],
+        subject_sha256=artifact["sha256"],
+        subject_size=artifact["size_bytes"],
+        label="gh 2.90 representative output",
+    )
 
 
 def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
@@ -1410,10 +1536,12 @@ def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
     validator._validate_spdx_raw_output(
         data,
         repository=ledger["release"]["repository"],
+        repository_id=ledger["release"]["repository_id"],
         workflow_path=attestation["signer_workflow"],
         source_digest=ledger["source"]["candidate_commit_sha"],
         run_id=attestation["run_id"],
         run_attempt=attestation["run_attempt"],
+        expected_event="workflow_dispatch",
         subject_name=attestation["subject_name"],
         subject_sha256=artifact["sha256"],
         spdx_predicate=predicate,
@@ -1423,10 +1551,12 @@ def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
         validator._validate_spdx_raw_output(
             data,
             repository=ledger["release"]["repository"],
+            repository_id=ledger["release"]["repository_id"],
             workflow_path=attestation["signer_workflow"],
             source_digest=ledger["source"]["candidate_commit_sha"],
             run_id=attestation["run_id"],
             run_attempt=attestation["run_attempt"],
+            expected_event="workflow_dispatch",
             subject_name=attestation["subject_name"],
             subject_sha256=artifact["sha256"],
             spdx_predicate={"SPDXID": "SPDXRef-OTHER"},

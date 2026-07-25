@@ -521,6 +521,17 @@ def _require_exact_keys(
         )
 
 
+def _require_required_keys(
+    value: Mapping[str, Any],
+    required: set[str],
+    *,
+    label: str,
+) -> None:
+    missing = required - set(value)
+    if missing:
+        _fail(f"{label} is missing required keys: {sorted(missing)}")
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -1931,10 +1942,12 @@ def _strict_attestation_parts(
     data: bytes,
     *,
     repository: str,
+    repository_id: str,
     workflow_path: str,
     source_digest: str,
     run_id: int,
     run_attempt: int,
+    expected_event: str,
     subject_name: str,
     subject_sha256: str,
     predicate_type: str,
@@ -1958,7 +1971,7 @@ def _strict_attestation_parts(
     result = entry["verificationResult"]
     if not isinstance(result, dict):
         _fail(f"{label} verificationResult must be an object")
-    _require_exact_keys(
+    _require_required_keys(
         result,
         {"signature", "verifiedIdentity", "statement"},
         label=f"{label} verificationResult",
@@ -1968,7 +1981,7 @@ def _strict_attestation_parts(
     statement = result["statement"]
     if not all(isinstance(value, dict) for value in (signature, identity, statement)):
         _fail(f"{label} signature, identity, and statement must be objects")
-    _require_exact_keys(
+    _require_required_keys(
         signature,
         {"certificate"},
         label=f"{label} signature",
@@ -1976,30 +1989,36 @@ def _strict_attestation_parts(
     certificate = signature["certificate"]
     if not isinstance(certificate, dict):
         _fail(f"{label} certificate must be an object")
-    certificate_keys = {
-        "subjectAlternativeName",
-        "issuer",
-        "githubWorkflowRepository",
-        "githubWorkflowSHA",
-        "githubWorkflowRef",
-        "buildSignerURI",
-        "buildSignerDigest",
-        "runnerEnvironment",
-        "sourceRepositoryURI",
-        "sourceRepositoryDigest",
-        "sourceRepositoryRef",
-        "runInvocationURI",
-    }
-    _require_exact_keys(
-        certificate,
-        certificate_keys,
-        label=f"{label} certificate",
-    )
-    _require_exact_keys(
+    _require_required_keys(
         identity,
-        {"runnerEnvironment"},
+        {"subjectAlternativeName", "issuer", "runnerEnvironment"},
         label=f"{label} verifiedIdentity",
     )
+    identity_san = identity["subjectAlternativeName"]
+    identity_issuer = identity["issuer"]
+    if not isinstance(identity_san, dict) or not isinstance(identity_issuer, dict):
+        _fail(f"{label} verified identity constraints must be objects")
+    _require_exact_keys(
+        identity_san,
+        {"subjectAlternativeName", "regexp"},
+        label=f"{label} verified identity subject alternative name",
+    )
+    _require_exact_keys(
+        identity_issuer,
+        {"issuer", "regexp"},
+        label=f"{label} verified identity issuer",
+    )
+    if (
+        not all(isinstance(value, str) for value in identity_san.values())
+        or not all(isinstance(value, str) for value in identity_issuer.values())
+    ):
+        _fail(f"{label} verified identity constraints must be strings")
+    if expected_event not in {"workflow_run", "workflow_dispatch"}:
+        _fail(f"{label} expected GitHub event is not supported")
+    if not repository_id.isdigit() or (
+        repository_id != "0" and repository_id.startswith("0")
+    ):
+        _fail(f"{label} repository ID is not canonical decimal")
     workflow = f"{repository}/{workflow_path}"
     signer_base = f"https://github.com/{workflow}@"
     signer_uri = certificate.get("buildSignerURI")
@@ -2013,8 +2032,10 @@ def _strict_attestation_parts(
         f"attempts/{run_attempt}"
     )
     expected_certificate = {
+        "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
         "subjectAlternativeName": signer_uri,
         "issuer": "https://token.actions.githubusercontent.com",
+        "githubWorkflowTrigger": expected_event,
         "githubWorkflowRepository": repository,
         "githubWorkflowSHA": source_digest,
         "githubWorkflowRef": "refs/heads/main",
@@ -2024,11 +2045,27 @@ def _strict_attestation_parts(
         "sourceRepositoryURI": f"https://github.com/{repository}",
         "sourceRepositoryDigest": source_digest,
         "sourceRepositoryRef": "refs/heads/main",
+        "sourceRepositoryIdentifier": repository_id,
+        "buildConfigURI": signer_uri,
+        "buildConfigDigest": source_digest,
+        "buildTrigger": expected_event,
         "runInvocationURI": run_uri,
     }
-    if certificate != expected_certificate:
+    _require_required_keys(
+        certificate,
+        set(expected_certificate),
+        label=f"{label} certificate",
+    )
+    if any(certificate.get(key) != value for key, value in expected_certificate.items()):
         _fail(f"{label} certificate does not bind the exact workflow run")
-    if identity != {"runnerEnvironment": "github-hosted"}:
+    owner_id = certificate.get("sourceRepositoryOwnerIdentifier")
+    if (
+        not isinstance(owner_id, str)
+        or not owner_id.isdigit()
+        or (owner_id != "0" and owner_id.startswith("0"))
+    ):
+        _fail(f"{label} certificate repository owner ID is not canonical decimal")
+    if identity.get("runnerEnvironment") != "github-hosted":
         _fail(f"{label} verified identity is not GitHub-hosted")
     _require_exact_keys(
         statement,
@@ -2071,10 +2108,12 @@ def _validate_slsa_raw_output(
     data: bytes,
     *,
     repository: str,
+    repository_id: str,
     workflow_path: str,
     source_digest: str,
     run_id: int,
     run_attempt: int,
+    expected_event: str,
     subject_name: str,
     subject_sha256: str,
     subject_size: int,
@@ -2113,17 +2152,19 @@ def _validate_slsa_raw_output(
     statement, certificate = _strict_attestation_parts(
         data,
         repository=repository,
+        repository_id=repository_id,
         workflow_path=workflow_path,
         source_digest=source_digest,
         run_id=run_id,
         run_attempt=run_attempt,
+        expected_event=expected_event,
         subject_name=subject_name,
         subject_sha256=subject_sha256,
         predicate_type="https://slsa.dev/provenance/v1",
         label=label,
     )
     predicate = statement["predicate"]
-    _require_exact_keys(
+    _require_required_keys(
         predicate,
         {"buildDefinition", "runDetails"},
         label=f"{label} SLSA predicate",
@@ -2132,16 +2173,23 @@ def _validate_slsa_raw_output(
     details = predicate["runDetails"]
     if not isinstance(definition, dict) or not isinstance(details, dict):
         _fail(f"{label} SLSA build definition and run details must be objects")
-    _require_exact_keys(
+    _require_required_keys(
         definition,
-        {"externalParameters", "internalParameters", "resolvedDependencies"},
+        {
+            "buildType",
+            "externalParameters",
+            "internalParameters",
+            "resolvedDependencies",
+        },
         label=f"{label} SLSA buildDefinition",
     )
+    if definition["buildType"] != "https://actions.github.io/buildtypes/workflow/v1":
+        _fail(f"{label} SLSA build type is not the GitHub workflow build type")
     external = definition["externalParameters"]
     internal = definition["internalParameters"]
     if not isinstance(external, dict) or not isinstance(internal, dict):
         _fail(f"{label} SLSA parameters must be objects")
-    _require_exact_keys(
+    _require_required_keys(
         external,
         {"workflow"},
         label=f"{label} SLSA externalParameters",
@@ -2157,11 +2205,11 @@ def _validate_slsa_raw_output(
     expected_workflow = {
         "repository": f"https://github.com/{repository}",
         "ref": "refs/heads/main",
-        "path": f"/{workflow_path}",
+        "path": workflow_path,
     }
     if workflow != expected_workflow:
         _fail(f"{label} SLSA workflow parameters are not exact")
-    _require_exact_keys(
+    _require_required_keys(
         internal,
         {"github"},
         label=f"{label} SLSA internalParameters",
@@ -2169,20 +2217,31 @@ def _validate_slsa_raw_output(
     github = internal["github"]
     if not isinstance(github, dict):
         _fail(f"{label} SLSA GitHub parameters must be an object")
-    _require_exact_keys(
+    _require_required_keys(
         github,
-        {"runner_environment"},
+        {
+            "event_name",
+            "repository_id",
+            "repository_owner_id",
+            "runner_environment",
+        },
         label=f"{label} SLSA GitHub parameters",
     )
-    if github != {"runner_environment": "github-hosted"}:
-        _fail(f"{label} SLSA runner environment is not exact")
+    if (
+        github.get("runner_environment") != "github-hosted"
+        or github.get("event_name") != expected_event
+        or str(github.get("repository_id", "")) != repository_id
+        or str(github.get("repository_owner_id", ""))
+        != certificate["sourceRepositoryOwnerIdentifier"]
+    ):
+        _fail(f"{label} SLSA GitHub identity is not exact")
     expected_dependency = {
         "uri": f"git+https://github.com/{repository}@refs/heads/main",
         "digest": {"gitCommit": source_digest},
     }
     if definition["resolvedDependencies"] != [expected_dependency]:
         _fail(f"{label} SLSA resolved dependency set is not exact")
-    _require_exact_keys(
+    _require_required_keys(
         details,
         {"builder", "metadata"},
         label=f"{label} SLSA runDetails",
@@ -2191,15 +2250,15 @@ def _validate_slsa_raw_output(
     metadata = details["metadata"]
     if not isinstance(builder, dict) or not isinstance(metadata, dict):
         _fail(f"{label} SLSA builder and metadata must be objects")
-    _require_exact_keys(builder, {"id"}, label=f"{label} SLSA builder")
-    _require_exact_keys(
+    _require_required_keys(builder, {"id"}, label=f"{label} SLSA builder")
+    _require_required_keys(
         metadata,
         {"invocationId"},
         label=f"{label} SLSA metadata",
     )
     if (
-        builder != {"id": certificate["buildSignerURI"]}
-        or metadata != {"invocationId": certificate["runInvocationURI"]}
+        builder.get("id") != certificate["buildSignerURI"]
+        or metadata.get("invocationId") != certificate["runInvocationURI"]
     ):
         _fail(f"{label} SLSA builder/run identity is not exact")
 
@@ -2208,10 +2267,12 @@ def _validate_spdx_raw_output(
     data: bytes,
     *,
     repository: str,
+    repository_id: str,
     workflow_path: str,
     source_digest: str,
     run_id: int,
     run_attempt: int,
+    expected_event: str,
     subject_name: str,
     subject_sha256: str,
     spdx_predicate: Mapping[str, Any],
@@ -2220,10 +2281,12 @@ def _validate_spdx_raw_output(
     statement, _certificate = _strict_attestation_parts(
         data,
         repository=repository,
+        repository_id=repository_id,
         workflow_path=workflow_path,
         source_digest=source_digest,
         run_id=run_id,
         run_attempt=run_attempt,
+        expected_event=expected_event,
         subject_name=subject_name,
         subject_sha256=subject_sha256,
         predicate_type="https://spdx.dev/Document/v2.3",
@@ -2238,6 +2301,7 @@ def _validate_attestation_bytes(
     ledger: Mapping[str, Any],
 ) -> None:
     repository = ledger["release"]["repository"]
+    repository_id = ledger["release"]["repository_id"]
     candidate = ledger["source"]["candidate_commit_sha"]
     descriptors = _collect_descriptors(ledger)
     producer_matches = [
@@ -2377,10 +2441,14 @@ def _validate_attestation_bytes(
         validation_args: dict[str, Any] = {
             "data": output_bytes,
             "repository": repository,
+            "repository_id": repository_id,
             "workflow_path": attestation["signer_workflow"],
             "source_digest": candidate,
             "run_id": attestation["run_id"],
             "run_attempt": attestation["run_attempt"],
+            "expected_event": (
+                "workflow_run" if name == "source_producer" else "workflow_dispatch"
+            ),
             "subject_name": attestation["subject_name"],
             "subject_sha256": expected_subject["sha256"],
             "label": f"{name} raw attestation output",

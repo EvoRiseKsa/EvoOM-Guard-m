@@ -55,8 +55,10 @@ The validator therefore also requires:
   for the SBOM file and cannot substitute for the separate SPDX-file subject;
 - each retained raw verifier output to contain one exact subject, one exact
   source dependency, the expected workflow run/attempt and hosted-runner
-  identity, and no unknown semantic fields; the SPDX predicate must equal the
-  retained canonical `evo-guard.spdx.json` object;
+  identity. Version-specific `gh` provider metadata may add non-security
+  fields, but the certificate, workflow, source, subject, predicate, builder,
+  run, and hosted-runner bindings remain mandatory; the SPDX predicate must
+  equal the retained canonical `evo-guard.spdx.json` object;
 - pinned runtime, networkless OCI image, Git, `gh`, provider UID/GID, sole
   parent commit/tree, and exact parent-tree build tool blobs;
 - canonical whole-second UTC timestamps, non-overlapping Aâ€“H phase order, and
