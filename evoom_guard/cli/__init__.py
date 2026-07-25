@@ -83,6 +83,9 @@ from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
 from evoom_guard.cli import record_commands as _record_command_owner
+from evoom_guard.cli import (
+    release_source_finalizer_commands as _release_source_finalizer_command_owner,
+)
 from evoom_guard.cli import signing_commands as _signing_command_owner
 from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
 from evoom_guard.pack_manifest import (
@@ -1258,63 +1261,22 @@ def cmd_release_source_handoff(
         create_release_source_handoff,
     )
 
-    if args.verdict == "-":
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_HANDOFF_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": "release-source-handoff verdict must be a regular file, not standard input",
-            },
-        )
-        return 2
-    try:
-        source = _read_external_finalizer_object(args.source, label="release source")
-        context = _read_external_finalizer_object(args.context, label="release-source context")
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_HANDOFF_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": f"unusable trusted metadata: {exc}",
-            },
-        )
-        return 2
-    try:
-        handoff = create_release_source_handoff(
-            args.verdict,
-            args.out,
-            source=source,
-            context=context,
-            force=args.force,
-        )
-    except (OSError, ValueError, ReleaseSourceFinalizerError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_HANDOFF_FORMAT,
-                "ok": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_HANDOFF_FORMAT,
-            "ok": True,
-            "status": "CREATED",
-            "handoff": os.path.abspath(args.out),
-            "record_sha256": handoff["record"]["sha256"],
-            "source": handoff["source"],
-            "context": handoff["context"],
-        },
+    return _release_source_finalizer_command_owner.execute_release_source_handoff(
+        args,
+        services=(
+            _release_source_finalizer_command_owner.ReleaseSourceHandoffServices(
+                handoff_format=RELEASE_SOURCE_HANDOFF_FORMAT,
+                finalizer_error=ReleaseSourceFinalizerError,
+                create_release_source_handoff=create_release_source_handoff,
+                read_external_object_provider=lambda: (
+                    _read_external_finalizer_object
+                ),
+                absolute_path_provider=lambda: os.path.abspath,
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_seal_release_source_finalizer(
@@ -1331,87 +1293,22 @@ def cmd_seal_release_source_finalizer(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    if args.verdict == "-":
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": "seal-release-source-finalizer verdict must be a regular file, not standard input",
-            },
-        )
-        return 2
-    try:
-        source = _read_external_finalizer_object(args.expected_source, label="expected release source")
-        context = _read_external_finalizer_object(
-            args.expected_context, label="expected release-source context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "ERROR",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        sealed = seal_release_source_bundle(
-            args.handoff,
-            args.verdict,
-            args.out,
-            expected_source=source,
-            expected_context=context,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            private_key_path=args.sign_key,
-            prohibited_key_ids=args.must_differ_from_key_id,
-            force=args.force,
-        )
-    except (OSError, ValueError, ReleaseSourceFinalizerError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "INVALID_INPUT",
-                "error": str(exc),
-            },
-        )
-        return 1
-    except SigningUnavailableError as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "sealed": False,
-                "status": "INCOMPLETE",
-                "error": str(exc),
-            },
-        )
-        return 2
-    allowed = sealed.decision == "ALLOW"
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-            "ok": allowed,
-            "sealed": True,
-            "status": "FINALIZED" if allowed else "DENIED",
-            "decision": sealed.decision,
-            "bundle": sealed.bundle_path,
-            "record_sha256": sealed.manifest["record"]["sha256"],
-            "key_id": sealed.manifest["authentication"]["key_id"],
-        },
+    return _release_source_finalizer_command_owner.execute_seal_release_source_finalizer(
+        args,
+        services=(
+            _release_source_finalizer_command_owner.SealReleaseSourceFinalizerServices(
+                evidence_format=RELEASE_SOURCE_EVIDENCE_FORMAT,
+                finalizer_error=ReleaseSourceFinalizerError,
+                signing_unavailable_error=SigningUnavailableError,
+                seal_release_source_bundle=seal_release_source_bundle,
+                read_external_object_provider=lambda: (
+                    _read_external_finalizer_object
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0 if allowed or args.allow_deny_evidence else 1
 
 
 def cmd_verify_release_source_finalized(
@@ -1428,69 +1325,22 @@ def cmd_verify_release_source_finalized(
     )
     from evoom_guard.signing import SigningUnavailableError
 
-    try:
-        source = _read_external_finalizer_object(args.expected_source, label="expected release source")
-        context = _read_external_finalizer_object(
-            args.expected_context, label="expected release-source context"
-        )
-    except (OSError, UnicodeError, ValueError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "error": f"unusable external trust input: {exc}",
-            },
-        )
-        return 2
-    try:
-        verified = verify_release_source_bundle(
-            args.bundle,
-            trusted_public_key_path=args.trusted_pub,
-            expected_source=source,
-            expected_context=context,
-            prohibited_key_ids=args.must_differ_from_key_id,
-        )
-    except SigningUnavailableError as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INCOMPLETE",
-                "error": str(exc),
-            },
-        )
-        return 2
-    except (OSError, ValueError, ReleaseSourceFinalizerError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "INVALID",
-                "error": str(exc),
-            },
-        )
-        return 1
-    allowed = verified.decision == "ALLOW"
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_EVIDENCE_FORMAT,
-            "ok": allowed,
-            "verified": True,
-            "status": "VERIFIED" if allowed else "DENIED",
-            "decision": verified.decision,
-            "key_id": verified.bundle.manifest["authentication"]["key_id"],
-            "record": verified.record_report,
-        },
+    return _release_source_finalizer_command_owner.execute_verify_release_source_finalized(
+        args,
+        services=(
+            _release_source_finalizer_command_owner.VerifyReleaseSourceFinalizedServices(
+                evidence_format=RELEASE_SOURCE_EVIDENCE_FORMAT,
+                finalizer_error=ReleaseSourceFinalizerError,
+                signing_unavailable_error=SigningUnavailableError,
+                verify_release_source_bundle=verify_release_source_bundle,
+                read_external_object_provider=lambda: (
+                    _read_external_finalizer_object
+                ),
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0 if allowed or args.allow_deny_evidence else 1
 
 
 def cmd_derive_release_source_controls(
@@ -1510,64 +1360,28 @@ def cmd_derive_release_source_controls(
         derive_release_source_bindings,
     )
 
-    if args.verdict == "-":
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_CONTEXT_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": "derive-release-source-controls verdict must be a regular file, not standard input",
-            },
-        )
-        return 2
-    try:
-        source = _read_external_finalizer_object(args.source, label="release source")
-        _verdict_bytes, verdict, _record_report = _record_snapshot(args.verdict)
-        bindings = derive_release_source_bindings(
-            git_repository=args.git_repository,
-            source=source,
-            git_repository_is_bare=args.git_repository_bare,
-        )
-        context = context_from_release_source_bindings(bindings, verdict)
-        _publish_bytes(
-            args.source_out,
-            _canonical_json(bindings.source),
-            force=args.force,
-            prefix=".evoguard-release-source-",
-            label="verified release source",
-        )
-        _publish_bytes(
-            args.context_out,
-            _canonical_json(context),
-            force=args.force,
-            prefix=".evoguard-release-source-context-",
-            label="verified release-source context",
-        )
-    except (OSError, UnicodeError, ValueError, ReleaseSourceFinalizerError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_CONTEXT_FORMAT,
-                "ok": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_CONTEXT_FORMAT,
-            "ok": True,
-            "status": "RAW_GIT_CONTROLS_DERIVED",
-            "source": os.path.abspath(args.source_out),
-            "context": os.path.abspath(args.context_out),
-            "decision": "NONE",
-            "admission": False,
-        },
+    return _release_source_finalizer_command_owner.execute_derive_release_source_controls(
+        args,
+        services=(
+            _release_source_finalizer_command_owner.DeriveReleaseSourceControlsServices(
+                context_format=RELEASE_SOURCE_CONTEXT_FORMAT,
+                finalizer_error=ReleaseSourceFinalizerError,
+                canonical_json=_canonical_json,
+                publish_bytes=_publish_bytes,
+                record_snapshot=_record_snapshot,
+                context_from_release_source_bindings=(
+                    context_from_release_source_bindings
+                ),
+                derive_release_source_bindings=derive_release_source_bindings,
+                read_external_object_provider=lambda: (
+                    _read_external_finalizer_object
+                ),
+                absolute_path_provider=lambda: os.path.abspath,
+                machine_report_provider=lambda: _machine_report,
+            )
+        ),
+        out=out,
     )
-    return 0
 
 
 def cmd_create_release_source_producer_receipt(

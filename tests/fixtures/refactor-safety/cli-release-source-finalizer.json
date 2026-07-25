@@ -1,0 +1,1062 @@
+{
+  "baseline_commit": "28ddb67b52d259458796fd2ac4d47807491365c0",
+  "cases": {
+    "derive_bindings_projection_failure_identity": {
+      "activity_counts": [
+        3,
+        11,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "c55687014567921ecf22d064cc916b7a8822b5b210ea554ef0eab2bd6dfd8898",
+      "exception": {
+        "message": "projection failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "derive_context_valueerror": {
+      "activity_counts": [
+        3,
+        11,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "96643b516ff4246537063a917025e1e1db1c9805343e519b960a049bd2d1c91b",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_finalizer_error_class_and_reporter_snapshot": {
+      "activity_counts": [
+        2,
+        12,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "5c5c4e821899365969d358ccf7de2e359b830aea0aee814e6fce0e227e10e83b",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_output_failure_identity": {
+      "activity_counts": [
+        7,
+        26,
+        2,
+        1,
+        1
+      ],
+      "behavior_sha256": "53d01834dd1d3d80d19ef06cb3cc0eb09170e667cb96020ef1c62deb5d23597e",
+      "exception": {
+        "message": "output failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "derive_provider_baseexception_identity": {
+      "activity_counts": [
+        2,
+        8,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "81c7f3ab2946b85ae69dd09cd32a60a8c75180e8c6a0a6e9d8d44e0d0563d361",
+      "exception": {
+        "message": "provider interrupted",
+        "same_identity": true,
+        "type": "KeyboardInterrupt"
+      },
+      "exit_code": null
+    },
+    "derive_providers_frozen_before_arguments": {
+      "activity_counts": [
+        7,
+        27,
+        2,
+        1,
+        1
+      ],
+      "behavior_sha256": "ece9c68d7fb736cf5e1e7ff74e359c7f2fa896ef82be072195d1f1b27235969e",
+      "exception": null,
+      "exit_code": 0
+    },
+    "derive_publish_context_oserror_preserves_source": {
+      "activity_counts": [
+        7,
+        21,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "92553d5ed1314a0fea3957a067fb293afb9b5acfe45844f9a9a449c808762c5d",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_publish_source_oserror": {
+      "activity_counts": [
+        5,
+        16,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "54a792d40b2315c4f9901a18a65bfca9b465502ea3f0e1365d01ef539bf5e9ac",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_raw_git_valueerror": {
+      "activity_counts": [
+        2,
+        10,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "9cf8f9ccccb0e0b2f05714ef65240199326770900525a583c4a8bc9082fe4318",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_record_oserror": {
+      "activity_counts": [
+        1,
+        7,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "f6484679c33d424f5bf46093f49b844fca9c76cd4c202e9c887dca2b3b380db8",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_record_valueerror": {
+      "activity_counts": [
+        1,
+        7,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "31ca093ed12102ae0023e52018cd96f06b8488e16e5b7a07c4265f12c0f5fc23",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_source_out_property_rebinds_abspath": {
+      "activity_counts": [
+        7,
+        27,
+        2,
+        1,
+        1
+      ],
+      "behavior_sha256": "d145ac9e1d32532d6b9cc8577c62ee56a5da0af9c71379a19c7f21a4d3a20198",
+      "exception": null,
+      "exit_code": 0
+    },
+    "derive_source_property_rebinds_reader": {
+      "activity_counts": [
+        7,
+        27,
+        2,
+        1,
+        1
+      ],
+      "behavior_sha256": "b87ad522b27288b57165f76631c03cb9a92fe7515ec1215db5252ad13febab2c",
+      "exception": null,
+      "exit_code": 0
+    },
+    "derive_source_read_oserror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "ac81efce3648b345b80c04f58cdda98a232a2cff6bdf4377ed3ba83aba99b9d9",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_source_read_unicodeerror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "c8d46dd8eec272fa5c744c67b9357a894c5ca6aae8d13fa04fe0135907c3c8b2",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_source_read_valueerror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "0a6f92e6908c30e7de3ac294ccee84fc0289806d8e13780ba911d9c78599304e",
+      "exception": null,
+      "exit_code": 1
+    },
+    "derive_success_boundary": {
+      "activity_counts": [
+        7,
+        26,
+        2,
+        1,
+        1
+      ],
+      "behavior_sha256": "53d01834dd1d3d80d19ef06cb3cc0eb09170e667cb96020ef1c62deb5d23597e",
+      "exception": null,
+      "exit_code": 0
+    },
+    "derive_success_reporter_frozen_before_projection": {
+      "activity_counts": [
+        7,
+        27,
+        2,
+        1,
+        1
+      ],
+      "behavior_sha256": "d8e2ee938d61f955b1fce681a7d69b3b370d73035aa32bf0bed56d2a7d0a95d9",
+      "exception": null,
+      "exit_code": 0
+    },
+    "derive_verdict_property_failure_identity": {
+      "activity_counts": [
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "49aed2d1584f137dbfdc0ac230de0ec2c298a905074d0724834fa2951ed50b5e",
+      "exception": {
+        "message": "argument property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "derive_verdict_property_rebinds_reporter": {
+      "activity_counts": [
+        0,
+        4,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "152c6fc5c55b1fc72f941207f65932692084b31b37845c28d406ea40b7f9df61",
+      "exception": null,
+      "exit_code": 2
+    },
+    "derive_verdict_stdin": {
+      "activity_counts": [
+        0,
+        3,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "e9d3fbb76ec0de63a691187454e2c1190280bd3cfc86796588c148b6ee28d273",
+      "exception": null,
+      "exit_code": 2
+    },
+    "handoff_context_property_rebinds_reader": {
+      "activity_counts": [
+        1,
+        19,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "8c5ccc6ad46ba28701217c4391590210a80f55bad17e1dd4b46c2c0998948c45",
+      "exception": null,
+      "exit_code": 0
+    },
+    "handoff_context_read_unicodeerror": {
+      "activity_counts": [
+        0,
+        7,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "a04b58b89dc206cbb49f3cdef9de7299aa69db24d8c6dcdb40bc47217daabed1",
+      "exception": null,
+      "exit_code": 2
+    },
+    "handoff_out_property_rebinds_abspath": {
+      "activity_counts": [
+        1,
+        19,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "9755632f0c303808d74ecd342ca021f6ded966e395adf245669c37a1834cf1f5",
+      "exception": null,
+      "exit_code": 0
+    },
+    "handoff_output_failure_identity": {
+      "activity_counts": [
+        1,
+        18,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "5b249cc2f312b128009eeb1969ede5637422437f1f9921ec223cf906423d7f68",
+      "exception": {
+        "message": "output failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "handoff_projection_failure_identity": {
+      "activity_counts": [
+        1,
+        16,
+        1,
+        0,
+        0
+      ],
+      "behavior_sha256": "359773ace225a8851e6f3c356d85bbbe4b075fdbd2e41e0915f4eb3113a4b970",
+      "exception": {
+        "message": "projection failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "handoff_provider_baseexception_identity": {
+      "activity_counts": [
+        1,
+        9,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "c7fb719ed18bebf5ff6349e2ae44efa4f56a55fe3a7b5e7f43585ee0e469b0c7",
+      "exception": {
+        "message": "provider interrupted",
+        "same_identity": true,
+        "type": "KeyboardInterrupt"
+      },
+      "exit_code": null
+    },
+    "handoff_provider_finalizer_error_class_and_reporter_snapshot": {
+      "activity_counts": [
+        1,
+        13,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "7a3ec4047d96d87db0291c7cd65104379105a1b22e3b7c89968b93536d297706",
+      "exception": null,
+      "exit_code": 1
+    },
+    "handoff_provider_frozen_before_arguments": {
+      "activity_counts": [
+        1,
+        19,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "fdff9c23ce9a2748f654ce84ba7d4dc4e2a7b80f0ef70807e2874b357c873b18",
+      "exception": null,
+      "exit_code": 0
+    },
+    "handoff_provider_oserror_preserves_partial_output": {
+      "activity_counts": [
+        1,
+        12,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "219fd2ad86aa8d5348eb84157408c6245161db126343c590fead6f6bd65fcb23",
+      "exception": null,
+      "exit_code": 1
+    },
+    "handoff_provider_valueerror": {
+      "activity_counts": [
+        1,
+        11,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "442961c34602e7a4e3889aa17b10dfe9668d4b2baa102e72d8be68952c8c164a",
+      "exception": null,
+      "exit_code": 1
+    },
+    "handoff_source_property_rebinds_reader": {
+      "activity_counts": [
+        1,
+        19,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "456b54a7af5bcaaab90e4e3359501e2924954e4e2d2b5bf2c0c9821cd07f576c",
+      "exception": null,
+      "exit_code": 0
+    },
+    "handoff_source_read_oserror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "1b10dd3f2ad85295240c2a9b4793f1b3c3c6370f550e5b7d5a2572fe21b04141",
+      "exception": null,
+      "exit_code": 2
+    },
+    "handoff_source_read_valueerror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "dd13218f9a50e29190c7c7be0e099d5cfc8d1ba6f0ece4451dce9760f83b8844",
+      "exception": null,
+      "exit_code": 2
+    },
+    "handoff_success_boundary": {
+      "activity_counts": [
+        1,
+        18,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "5b249cc2f312b128009eeb1969ede5637422437f1f9921ec223cf906423d7f68",
+      "exception": null,
+      "exit_code": 0
+    },
+    "handoff_success_reporter_frozen_before_projection": {
+      "activity_counts": [
+        1,
+        19,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "3e86186fe1052ff489296bc66935b12faca9f5cd02e7811d2c45d8aa28ed1658",
+      "exception": null,
+      "exit_code": 0
+    },
+    "handoff_verdict_property_failure_identity": {
+      "activity_counts": [
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "49aed2d1584f137dbfdc0ac230de0ec2c298a905074d0724834fa2951ed50b5e",
+      "exception": {
+        "message": "argument property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "handoff_verdict_property_rebinds_reporter": {
+      "activity_counts": [
+        0,
+        4,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "f12d6d3cd02158032d30c3310511b62a2d4b208bed00b874bb307e99981fd066",
+      "exception": null,
+      "exit_code": 2
+    },
+    "handoff_verdict_stdin": {
+      "activity_counts": [
+        0,
+        3,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "7b7e59c20a36df52a2767f8c9863b62304f7883f2e4e79e62abe8cde53ab1578",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_allow_flag_failure_after_report": {
+      "activity_counts": [
+        1,
+        28,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "f0b32a377dd477e8fa59b2e4eda8417ae2abf512cad817c0d5b8fb6b0276744c",
+      "exception": {
+        "message": "argument property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "seal_context_property_rebinds_reader": {
+      "activity_counts": [
+        1,
+        27,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "ce51e8910f8253a08de4f9294fdbb2d63a5a526afbee15dd6b743663f93be4ad",
+      "exception": null,
+      "exit_code": 0
+    },
+    "seal_context_read_unicodeerror": {
+      "activity_counts": [
+        0,
+        7,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "5169020eca66aeaec08869705778361f650daf15d9398b8df0acfeadf1233f58",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_output_failure_identity": {
+      "activity_counts": [
+        1,
+        26,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "d85abbb98486ef16b70f936dae32e10223b32ea46d056fbbea231e504d2fd8a5",
+      "exception": {
+        "message": "output failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "seal_projection_failure_identity": {
+      "activity_counts": [
+        1,
+        18,
+        1,
+        0,
+        0
+      ],
+      "behavior_sha256": "ba358807985b7948e88e6d4a924a8a6394c430eb310be8f7eee6eadcbce938f0",
+      "exception": {
+        "message": "projection failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "seal_provider_baseexception_identity": {
+      "activity_counts": [
+        1,
+        14,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "753ac6a69b97286cdf68366da81e39833032db59b189d6d7d0699fe57455e69d",
+      "exception": {
+        "message": "provider interrupted",
+        "same_identity": true,
+        "type": "KeyboardInterrupt"
+      },
+      "exit_code": null
+    },
+    "seal_provider_finalizer_error_class_and_reporter_snapshot": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "f2546d8a19afbf48a07e6a31105adce4eaae52342040b300dd3b4b3ad7af05bf",
+      "exception": null,
+      "exit_code": 1
+    },
+    "seal_provider_frozen_before_arguments": {
+      "activity_counts": [
+        1,
+        27,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "eb0b384b30c926fb2c1c7dd8861b7c0e42857fd27b57a5b06d0bf17313088419",
+      "exception": null,
+      "exit_code": 0
+    },
+    "seal_provider_oserror_preserves_partial_output": {
+      "activity_counts": [
+        1,
+        17,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "13b107a741a2e0fd7219ca24805411a665690b100be0056bc03252816054e8f3",
+      "exception": null,
+      "exit_code": 1
+    },
+    "seal_provider_valueerror": {
+      "activity_counts": [
+        1,
+        16,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "389e8d973db8dcf7254b25bab70878f3ee123764cc78f0dcc2366c9f6c95d9e2",
+      "exception": null,
+      "exit_code": 1
+    },
+    "seal_signing_error_class_snapshot": {
+      "activity_counts": [
+        1,
+        16,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "f20ca33746aefba28f97ead75c06d9c6792fe6fc3e5e479abbc6199e7beb90b6",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_signing_unavailable": {
+      "activity_counts": [
+        1,
+        16,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "503cb1ddf78abe9c3d2386fffb11f72f4ba955ec75d45c7670d6786f792d0864",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_source_property_rebinds_reader": {
+      "activity_counts": [
+        1,
+        27,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "57056030ef0deb6f0df1a507afad8c83141e68b2cbc0edabf042a2aff0dd366a",
+      "exception": null,
+      "exit_code": 0
+    },
+    "seal_source_read_oserror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "d9ffc14513cd16fbccf864c3966b937ad3bd07fbe97eebba69488fc5bedd4551",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_source_read_valueerror": {
+      "activity_counts": [
+        0,
+        5,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "6860c6fb049ea016bd6db1afd108846fd6d80c7ba6e4e7248b6ee246113be3dd",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_success_allow_boundary": {
+      "activity_counts": [
+        1,
+        26,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "d85abbb98486ef16b70f936dae32e10223b32ea46d056fbbea231e504d2fd8a5",
+      "exception": null,
+      "exit_code": 0
+    },
+    "seal_success_deny_default": {
+      "activity_counts": [
+        1,
+        27,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "eed3d877afe29e45fa00a93bf4627256c393ddebe097339837e1c82f5c9c704a",
+      "exception": null,
+      "exit_code": 1
+    },
+    "seal_success_deny_opt_in": {
+      "activity_counts": [
+        1,
+        27,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "0cf7a546534963d67dafdcff64887ad37ff973393a5819ba1cb69468b0d1a507",
+      "exception": null,
+      "exit_code": 0
+    },
+    "seal_success_reporter_frozen_before_projection": {
+      "activity_counts": [
+        1,
+        27,
+        1,
+        1,
+        1
+      ],
+      "behavior_sha256": "8de4f76f1ef8db7ea8f1ac0aa53996bba435b9934c369c2e1e9efb14d4a7cd77",
+      "exception": null,
+      "exit_code": 0
+    },
+    "seal_verdict_property_failure_identity": {
+      "activity_counts": [
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "49aed2d1584f137dbfdc0ac230de0ec2c298a905074d0724834fa2951ed50b5e",
+      "exception": {
+        "message": "argument property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "seal_verdict_property_rebinds_reporter": {
+      "activity_counts": [
+        0,
+        4,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "9cdb727fa1b040ff1937a581c55a95b9a131c1a88c3c1b1ef65fd5861d521cef",
+      "exception": null,
+      "exit_code": 2
+    },
+    "seal_verdict_stdin": {
+      "activity_counts": [
+        0,
+        3,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "dca15d4d2b3aeb12f16d9861c5e4b97d83f8dbbdc3c002d63587ef83aa869e14",
+      "exception": null,
+      "exit_code": 2
+    },
+    "verify_allow_flag_failure_after_report": {
+      "activity_counts": [
+        1,
+        19,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "218683c758efe3a8e9305872d9d9fd65e2fcf11557e0f5ccc00d300fc871de66",
+      "exception": {
+        "message": "argument property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "verify_bundle_property_failure_identity": {
+      "activity_counts": [
+        0,
+        6,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "179a76523eeb724f3b5e3f490d09c824a5bb08985cdd4395cacd5605708b7fb3",
+      "exception": {
+        "message": "argument property failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "verify_bundle_stdin_is_forwarded": {
+      "activity_counts": [
+        1,
+        17,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "7336d7d9ee6851e450937a6515761ba9803ebdf5d8d24b05609823dbb891efdc",
+      "exception": null,
+      "exit_code": 0
+    },
+    "verify_context_property_rebinds_reader": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "1aa12328b5e9d2d8fa89225f801a29566b81985e023c8b28036597c059d1d92b",
+      "exception": null,
+      "exit_code": 0
+    },
+    "verify_context_read_unicodeerror": {
+      "activity_counts": [
+        0,
+        6,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "4476ea339cba5e22c7ed0fc88c953de72ee864c875298aa2a0193bbdfb979288",
+      "exception": null,
+      "exit_code": 2
+    },
+    "verify_output_failure_identity": {
+      "activity_counts": [
+        1,
+        17,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "053578624f5e8b3697dfd010312eecc98dca532af14729f68f8298b22c073f54",
+      "exception": {
+        "message": "output failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "verify_projection_failure_identity": {
+      "activity_counts": [
+        1,
+        11,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "4282a1648a19bfef010b86adeb0b6daa4319b94ac12180545da5aa9154794cea",
+      "exception": {
+        "message": "projection failed",
+        "same_identity": true,
+        "type": "RuntimeError"
+      },
+      "exit_code": null
+    },
+    "verify_provider_baseexception_identity": {
+      "activity_counts": [
+        1,
+        8,
+        0,
+        0,
+        0
+      ],
+      "behavior_sha256": "2541c4267549611b08271dbffe619daf7c3f1cb9993217afa8e62ef5d9c5a7a0",
+      "exception": {
+        "message": "provider interrupted",
+        "same_identity": true,
+        "type": "KeyboardInterrupt"
+      },
+      "exit_code": null
+    },
+    "verify_provider_finalizer_error_class_and_reporter_snapshot": {
+      "activity_counts": [
+        1,
+        12,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "da88914668b72fc75c1d10f4d4d9b04bd0a31caf6341813e8d43a020dd209b3d",
+      "exception": null,
+      "exit_code": 1
+    },
+    "verify_provider_frozen_before_arguments": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "87f18f961dc8cdc23e46b8feca6c75ea0feef12b8232ca0e840d27c81437cae4",
+      "exception": null,
+      "exit_code": 0
+    },
+    "verify_provider_oserror": {
+      "activity_counts": [
+        1,
+        10,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "ea24342a28dfd9c4b82beb6e89ff1ce191c2c13160cb52729973c360af574d29",
+      "exception": null,
+      "exit_code": 1
+    },
+    "verify_provider_valueerror": {
+      "activity_counts": [
+        1,
+        10,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "c14ae54984b93d5fbeb0fea92330f9e3c58cd9017dfb682f638f38c9cebd7588",
+      "exception": null,
+      "exit_code": 1
+    },
+    "verify_signing_error_class_snapshot": {
+      "activity_counts": [
+        1,
+        10,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "9207e8936f76055dc8d35e05dc8ba11fb8be41236aa2eac40f2dc61656b4f97d",
+      "exception": null,
+      "exit_code": 2
+    },
+    "verify_signing_unavailable": {
+      "activity_counts": [
+        1,
+        10,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "78cfc99af6a3fc0bd663d7a3c9f866a8dbb29dd3e5ecd483fa3ad071ef235211",
+      "exception": null,
+      "exit_code": 2
+    },
+    "verify_source_property_rebinds_reader": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "dce8a571d98dbb54c4a792021893aa2283da4474912e96375b07c12f53727620",
+      "exception": null,
+      "exit_code": 0
+    },
+    "verify_source_read_oserror": {
+      "activity_counts": [
+        0,
+        4,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "4f211fc83594dbcbef625ceecba90fb263c6a4e4cf90ff7e43622e13dc2e5ed3",
+      "exception": null,
+      "exit_code": 2
+    },
+    "verify_source_read_valueerror": {
+      "activity_counts": [
+        0,
+        4,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "15196af57584b104ac057d172a877f2ae95616467bc78a0ffe3fc69f9c2489dd",
+      "exception": null,
+      "exit_code": 2
+    },
+    "verify_success_allow_boundary": {
+      "activity_counts": [
+        1,
+        17,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "053578624f5e8b3697dfd010312eecc98dca532af14729f68f8298b22c073f54",
+      "exception": null,
+      "exit_code": 0
+    },
+    "verify_success_deny_default": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "d6706dadddaea0736c8b3fa62fb3274f5752eac1cd2c4869e782ed029dcea4bd",
+      "exception": null,
+      "exit_code": 1
+    },
+    "verify_success_deny_opt_in": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "8fb0274797cff55133c730ef7887844b49275d038a87f667d17f69e7fb46d11b",
+      "exception": null,
+      "exit_code": 0
+    },
+    "verify_success_reporter_frozen_before_projection": {
+      "activity_counts": [
+        1,
+        18,
+        0,
+        1,
+        1
+      ],
+      "behavior_sha256": "b512dd7e9c6a5ace7676bed2d4d816e412276483322f86af29c2b476a42dd0dc",
+      "exception": null,
+      "exit_code": 0
+    }
+  },
+  "schema_version": "cli-release-source-finalizer-characterization-v1"
+}

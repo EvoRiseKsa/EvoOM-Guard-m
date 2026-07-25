@@ -461,7 +461,16 @@ remain in their established facades.
   mutations freeze seven-path eager guards, metadata/domain boundaries,
   exception precedence and identity, partial output, repeated projections,
   isolation timing, and the verifier's closed-world offline surface.
-- The remaining source and release-artifact command families remain pending.
+- Release-source handoff creation, protected finalizer sealing, detached
+  verification, and raw-Git control derivation now live in the strictly typed,
+  stdlib-only `cli/release_source_finalizer_commands.py` owner. Its reviewed
+  82-case vector freezes entry snapshots, live reader/path/reporting seams,
+  trusted-metadata/domain/signing classification, exact projections and
+  `ALLOW`/`DENY` exits, exception identity, and the source-before-context
+  partial-publication contract. The extraction adds no cleanup, transaction,
+  checkout, network, or admission behavior.
+- The remaining release-source producer-receipt, release-source admission, and
+  release-artifact admission command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
   ledgers exist; a general offline mode and SBOM asset are not complete.
