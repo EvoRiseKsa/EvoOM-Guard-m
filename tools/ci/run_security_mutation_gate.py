@@ -40,6 +40,183 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="cli-artifact-v1-seal-stdin-short-circuit-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before='    if args.artifact == "-" or args.finalizer_bundle == "-":\n',
+        after='    if args.artifact == "-" and args.finalizer_bundle == "-":\n',
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[seal_artifact_stdin_short_circuit]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-verify-eager-stdin-read-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            '    if any(value == "-" for value in '
+            "(args.binding, args.artifact, args.finalizer_bundle)):\n"
+        ),
+        after='    if args.binding == "-":\n',
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[verify_binding_stdin_reads_all_paths]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-seal-reader-reresolution-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "            seal_artifact_admission=seal_artifact_admission,\n"
+            "            read_external_object_provider=lambda: "
+            "_read_external_finalizer_object,\n"
+        ),
+        after=(
+            "            seal_artifact_admission=seal_artifact_admission,\n"
+            "            read_external_object_provider=lambda "
+            "_reader=_read_external_finalizer_object: _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[seal_source_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-verify-reader-eager-read-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            "def execute_verify_artifact_admission(\n"
+            "    args: argparse.Namespace,\n"
+            "    *,\n"
+            "    services: VerifyArtifactAdmissionServices,\n"
+            "    out: _Output = print,\n"
+            ") -> int:\n"
+            '    """Verify a file binding with external artifact/finalizer trust inputs."""\n'
+            "\n"
+        ),
+        after=(
+            "def execute_verify_artifact_admission(\n"
+            "    args: argparse.Namespace,\n"
+            "    *,\n"
+            "    services: VerifyArtifactAdmissionServices,\n"
+            "    out: _Output = print,\n"
+            ") -> int:\n"
+            '    """Verify a file binding with external artifact/finalizer trust inputs."""\n'
+            "\n"
+            "    _ = services.read_external_object_provider()(\n"
+            "        args.expected_source,\n"
+            '        label="expected source",\n'
+            "    )\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[verify_binding_stdin_reads_all_paths]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-seal-invalid-error-classification-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            '                "status": "INVALID_INPUT",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[seal_domain_error_class_and_reporter_snapshot]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-verify-invalid-error-classification-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            '                "status": "INVALID",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[verify_domain_error_class_and_reporter_snapshot]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-verify-offline-argument-boundary-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            '    """Verify a file binding with external artifact/finalizer trust inputs."""\n'
+            "\n"
+            "    if any(value == "
+        ),
+        after=(
+            '    """Verify a file binding with external artifact/finalizer trust inputs."""\n'
+            "\n"
+            "    _ = args.sign_key\n"
+            "    if any(value == "
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-seal-success-projection-order-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            '            "binding": sealed.binding_path,\n'
+            '            "subject": sealed.subject.as_dict(),\n'
+        ),
+        after=(
+            '            "subject": sealed.subject.as_dict(),\n'
+            '            "binding": sealed.binding_path,\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[seal_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-v1-verify-success-projection-order-bypass",
+        path="evoom_guard/cli/artifact_admission_commands.py",
+        before=(
+            '            "subject": verified.subject.as_dict(),\n'
+            '            "finalizer": verified.inspection.finalizer,\n'
+        ),
+        after=(
+            '            "finalizer": verified.inspection.finalizer,\n'
+            '            "subject": verified.subject.as_dict(),\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_admission_v1_characterization.py::"
+            "test_frozen_cli_artifact_admission_v1_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',
