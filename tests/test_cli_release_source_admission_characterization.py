@@ -10,6 +10,9 @@ from pathlib import Path
 import pytest
 
 from evoom_guard import cli
+from evoom_guard.cli import (
+    release_source_admission_commands as release_source_admission_owner,
+)
 from tests.cli_release_source_admission_characterization_harness import (
     BASELINE_COMMIT,
     CASE_NAMES,
@@ -187,6 +190,20 @@ def test_verify_success_is_offline_and_has_one_projection_order() -> None:
         "projection:verified.bundle.manifest.producer_receipt[sha256]",
         "projection:verified.decision",
     ]
+
+
+def test_verify_service_contract_has_no_connected_authority_seam() -> None:
+    assert set(
+        release_source_admission_owner.VerifyReleaseSourceAdmissionServices.__dataclass_fields__
+    ) == {
+        "admission_format",
+        "key_separation_provider",
+        "machine_report_provider",
+        "read_external_object_provider",
+        "release_source_error",
+        "signing_unavailable_error",
+        "verify_release_source_admission",
+    }
 
 
 def test_provider_partial_evidence_is_not_hidden_or_rolled_back() -> None:
