@@ -41,6 +41,19 @@ def test_cli_release_artifact_admission_vector_metadata_is_exact() -> None:
     assert sum(name.startswith("verify_") for name in CASE_NAMES) >= 16
 
 
+def test_frozen_vector_has_no_checkout_specific_paths() -> None:
+    frozen_text = VECTOR.read_text(encoding="utf-8")
+    assert str(Path(__file__).resolve()) not in frozen_text
+    assert "\\Users\\" not in frozen_text
+    assert "/home/runner/work/" not in frozen_text
+    existing_output = frozen_text.count(
+        'arg:out=\\"/outputs/existing-release-artifact.raae\\"'
+    )
+    # The frozen preflight reads the output once while building its complete
+    # path set and once again for the existence check.
+    assert existing_output == 2
+
+
 @pytest.mark.parametrize("case_name", CASE_NAMES)
 def test_frozen_cli_release_artifact_admission_behavior(
     case_name: str,

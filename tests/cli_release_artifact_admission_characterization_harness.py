@@ -567,6 +567,7 @@ def capture_case(case_name: str) -> dict[str, object]:
     original_public_key_id = signing.public_key_id
     original_signing_error = signing.SigningUnavailableError
     original_environment = os.environ
+    original_lexists = os.path.lexists
 
     expected_exception: BaseException | None = None
     provider_exception: BaseException | None = None
@@ -851,7 +852,15 @@ def capture_case(case_name: str) -> dict[str, object]:
     elif case_name == "seal_alias_rejected_before_metadata":
         args.artifact = args.release_source_admission
     elif case_name == "seal_existing_output_rejected_before_metadata":
-        args.out = __file__
+        # Preserve the existing-output behavior without freezing a checkout-
+        # specific absolute path into the cross-platform characterization
+        # vector.  The virtual path is stable on Windows and POSIX; only this
+        # case's filesystem-existence seam is simulated.
+        existing_output = "/outputs/existing-release-artifact.raae"
+        args.out = existing_output
+        os.path.lexists = (
+            lambda path: path == existing_output or original_lexists(path)
+        )
     elif case_name == "seal_builder_property_rebinds_reader":
         # Read one happens in the complete preflight path set; read two precedes
         # the outer builder object read.
@@ -973,6 +982,7 @@ def capture_case(case_name: str) -> dict[str, object]:
         signing.public_key_id = original_public_key_id
         signing.SigningUnavailableError = original_signing_error  # type: ignore[misc]
         os.environ = original_environment  # noqa: B003
+        os.path.lexists = original_lexists
 
     return {
         "calls": calls,
