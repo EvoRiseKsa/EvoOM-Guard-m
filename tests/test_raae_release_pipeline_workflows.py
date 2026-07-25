@@ -232,11 +232,18 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert attest.count(
         "actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6"
     ) == 2
-    assert "subject-path: ${{ runner.temp }}/e-output/evo-guard.pyz" in attest
+    assert attest.count(
+        "subject-path: ${{ runner.temp }}/e-output/evo-guard.pyz"
+    ) == 2
     assert (
-        "subject-path: ${{ runner.temp }}/e-output/evo-guard.spdx.json"
+        "sbom-path: ${{ runner.temp }}/e-output/evo-guard.spdx.json"
         in attest
     )
+    assert (
+        "subject-path: ${{ runner.temp }}/e-output/evo-guard.spdx.json"
+        not in attest
+    )
+    assert "Attest the exact executable with its SPDX SBOM" in attest
     assert "unprivileged build output set is not closed" in attest
     assert "expected_version must be a reviewed stable X.Y.Z version" in _text(E)
     assert "compressed member:" in build
