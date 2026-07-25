@@ -217,6 +217,242 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="cli-artifact-digest-v2-seal-eager-stdin-read-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '    if any(value == "-" for value in '
+            "(args.finalizer_bundle, args.provenance)):\n"
+        ),
+        after=(
+            '    if args.finalizer_bundle == "-" or args.provenance == "-":\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[seal_finalizer_stdin_reads_provenance]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-eager-stdin-read-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            "    if any(\n"
+            '        value == "-"\n'
+            "        for value in "
+            "(args.binding, args.finalizer_bundle, args.provenance)\n"
+            "    ):\n"
+        ),
+        after=(
+            '    if args.binding == "-" or args.finalizer_bundle == "-" '
+            'or args.provenance == "-":\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_binding_stdin_reads_all_paths]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-provenance-stdin-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            "        for value in "
+            "(args.binding, args.finalizer_bundle, args.provenance)\n"
+        ),
+        after=(
+            "        for value in (args.binding, args.finalizer_bundle)\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_provenance_stdin_short_circuit]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-seal-reader-reresolution-bypass",
+        path="evoom_guard/cli/__init__.py",
+        before=(
+            "                seal_artifact_digest_admission="
+            "seal_artifact_digest_admission,\n"
+            "                read_external_object_provider=lambda: (\n"
+            "                    _read_external_finalizer_object\n"
+            "                ),\n"
+        ),
+        after=(
+            "                seal_artifact_digest_admission="
+            "seal_artifact_digest_admission,\n"
+            "                read_external_object_provider=lambda "
+            "_reader=_read_external_finalizer_object: _reader,\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[seal_source_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-context-eager-read-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '    """Verify V2 with external subject, provenance, and '
+            'finalizer inputs."""\n'
+            "\n"
+            "    if any(\n"
+        ),
+        after=(
+            '    """Verify V2 with external subject, provenance, and '
+            'finalizer inputs."""\n'
+            "\n"
+            "    _ = args.expected_context\n"
+            "    if any(\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_context_property_rebinds_reader]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-seal-invalid-classification-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '                "status": "INVALID_INPUT",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[seal_domain_error_class_and_reporter_snapshot]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-invalid-classification-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '                "status": "INVALID",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 1\n"
+        ),
+        after=(
+            '                "status": "ERROR",\n'
+            '                "error": str(exc),\n'
+            "            },\n"
+            "        )\n"
+            "        return 2\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_domain_error_class_and_reporter_snapshot]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-metadata-oserror-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            "        expected_context = services.read_external_object_provider()(\n"
+            "            args.expected_context,\n"
+            '            label="expected context",\n'
+            "        )\n"
+            "    except (OSError, UnicodeError, ValueError) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        after=(
+            "        expected_context = services.read_external_object_provider()(\n"
+            "            args.expected_context,\n"
+            '            label="expected context",\n'
+            "        )\n"
+            "    except (UnicodeError, ValueError) as exc:\n"
+            "        services.machine_report_provider()(\n"
+            "            out,\n"
+            "            {\n"
+            '                "format": services.binding_format,\n'
+            '                "ok": False,\n'
+            '                "verified": False,\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_source_read_error]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-offline-argument-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '    """Verify V2 with external subject, provenance, and '
+            'finalizer inputs."""\n'
+            "\n"
+            "    if any(\n"
+        ),
+        after=(
+            '    """Verify V2 with external subject, provenance, and '
+            'finalizer inputs."""\n'
+            "\n"
+            "    _ = args.telemetry_endpoint\n"
+            "    if any(\n"
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-seal-projection-order-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '            "subject": sealed.subject.as_dict(),\n'
+            '            "provenance_reference": '
+            "sealed.provenance_reference.as_dict(),\n"
+        ),
+        after=(
+            '            "provenance_reference": '
+            "sealed.provenance_reference.as_dict(),\n"
+            '            "subject": sealed.subject.as_dict(),\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior[seal_success]"
+        ),
+    ),
+    Mutation(
+        name="cli-artifact-digest-v2-verify-projection-order-bypass",
+        path="evoom_guard/cli/artifact_digest_admission_commands.py",
+        before=(
+            '            "subject": verified.subject.as_dict(),\n'
+            '            "provenance_reference": '
+            "verified.provenance_reference.as_dict(),\n"
+        ),
+        after=(
+            '            "provenance_reference": '
+            "verified.provenance_reference.as_dict(),\n"
+            '            "subject": verified.subject.as_dict(),\n'
+        ),
+        test=(
+            "tests/test_cli_artifact_digest_v2_characterization.py::"
+            "test_frozen_cli_artifact_digest_v2_behavior"
+            "[verify_success_offline_boundary]"
+        ),
+    ),
+    Mutation(
         name="repository-copy-windows-reparse-preflight-bypass",
         path="evoom_guard/workspace/repository.py",
         before='    if platform == "nt":\n',

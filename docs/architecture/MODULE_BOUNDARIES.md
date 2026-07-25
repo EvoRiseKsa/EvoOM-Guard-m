@@ -588,6 +588,20 @@ offline boundary. A cross-commit vector and focused reviewed mutations protect
 those contracts. No digest, GitHub, release-source, or release-artifact command
 moves in this slice.
 
+The fifth command-family slice adds the separate strictly typed, stdlib-only
+`cli.artifact_digest_admission_commands` owner for only the Artifact Digest
+Admission V2 seal/verify pair. The facade retains its function-local format,
+domain callable, domain exception, and signing-exception snapshots. External
+source/context readers and machine reporting remain live at each historical
+call site, with callable resolution before argument evaluation. The owner
+preserves eager stdin tuple reads, separate metadata/domain `try` regions,
+domain-subclass versus plain-`ValueError` classification, exact domain argument
+and success projection order, repeated payload/inspection reads, status/exit
+mapping, exception identity, retained partial/sealed output, and a closed-world
+offline verifier argument surface. A full 44-case cross-parent vector plus
+focused reviewed mutations protect those contracts. No V1, release, source,
+or GitHub-attestation command moves in this slice.
+
 The first admission-layer slice lives in
 `evoom_guard/admission/release_source.py`. It owns the separately keyed V2
 release-source `ALLOW` envelope: closed-world manifest validation, replay

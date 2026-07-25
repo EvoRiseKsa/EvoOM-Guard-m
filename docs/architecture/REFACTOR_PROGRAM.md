@@ -437,7 +437,13 @@ remain in their established facades.
   reporting. A pre-extraction vector binds metadata/domain error boundaries,
   catch precedence, eager argument reads, projections, exit codes, exception
   identity, partial output, and detached offline verification.
-- The remaining source, digest, release-artifact, and GitHub-attestation
+- The Artifact Digest Admission V2 seal/verify pair now lives in its own
+  strictly typed, stdlib-only `cli/artifact_digest_admission_commands.py`
+  owner. Its reviewed 44-case vector freezes the additional immutable-digest
+  and opaque-provenance arguments, eager stdin reads, subclass classification,
+  full success projections, retained output, and a closed-world offline
+  verification surface.
+- The remaining source, release-artifact, and GitHub-attestation
   command families remain pending.
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release
