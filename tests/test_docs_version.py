@@ -160,7 +160,10 @@ class DocsVersionDriftTests(unittest.TestCase):
         release_status = (ROOT / "docs" / "RELEASE_STATUS.md").read_text(encoding="utf-8")
         if state == "pre-release":
             self.assertIn(__version__, release_status)
-            self.assertRegex(release_status, re.compile(r"unreleased|not a consumer release", re.I))
+            self.assertRegex(
+                release_status,
+                re.compile(r"unreleased|not (?:yet )?a consumer release", re.I),
+            )
         else:
             self.assertEqual(published_version, __version__)
 

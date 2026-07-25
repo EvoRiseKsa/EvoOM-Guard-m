@@ -12,7 +12,15 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from evoom_guard.pack_manifest import pack_digest
+from evoom_guard.signing import public_key_id
+from evoom_guard.verifiers.candidate_preflight import (
+    CandidatePreflightRequest,
+    evaluate_candidate_preflight,
+)
+from tools.ci import validate_release_candidate_scope as candidate_scope
 
 ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -180,6 +188,22 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
 def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     policy = json.loads((ROOT / ".evoguard.json").read_text(encoding="utf-8"))
     pack = ROOT / "security" / "release-source-pack"
+    assert policy["policy_id"] == "evoom-guard-protected-release-source"
+    assert policy["policy_version"] == "2"
+    assert "*" in policy["protected"]
+    assert policy["allow"] == [
+        "CHANGELOG.md",
+        "PROJECT_STATUS.json",
+        "README.md",
+        "ROADMAP.md",
+        "benchmarks/results.jsonl",
+        "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
+        "docs/PROJECT_STATUS.md",
+        "docs/RELEASE_STATUS.md",
+        "docs/SBOM.md",
+        "docs/architecture/REFACTOR_PROGRAM.md",
+        "evoom_guard/__init__.py",
+    ]
     assert policy["verifier_pack"] == "security/release-source-pack"
     assert policy["expect_verifier_pack_sha256"] == pack_digest(str(pack))
     bootstrap = json.loads(
@@ -197,8 +221,16 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert policy["trust_setup_on_host"] is False
     assert policy["require_report_integrity"] == "external_process_isolated"
     assert policy["require_candidate_isolation"] == "docker"
+    assert "evidence/release-ledgers/*" in policy["protected"]
+    assert "security/release-ledger-roots/*" in policy["protected"]
     assert "security/release-source-pack/*" in policy["protected"]
     assert "security/release-pipeline-bootstrap.json" in policy["protected"]
+    ledger_root = ROOT / "security/release-ledger-roots/v4.4.0.pub.pem"
+    assert ledger_root.is_file()
+    assert (
+        public_key_id(str(ledger_root))
+        == "sha256:20cc7a937e94b716dd14642dc668ef365e0d74af11c84009237e7fe847df6e0f"
+    )
     pack_test = _text(pack / "test_release_protocol.py")
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
     assert "len(names) == len(set(names))" in pack_test
@@ -222,8 +254,255 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     )
     assert '--config "$GITHUB_WORKSPACE/base/.evoguard.json"' in source
     assert "Validate the parent-owned release policy" in source
+    assert (
+        'python -I "$GITHUB_WORKSPACE/base/tools/ci/'
+        'validate_release_candidate_scope.py"' in source
+    )
+    assert '--base "$GITHUB_WORKSPACE/base"' in source
+    assert '--candidate "$GITHUB_WORKSPACE/candidate"' in source
+    assert candidate_scope.ALLOWED_PATHS == tuple(policy["allow"])
     assert "target.parents.length !== 1" in source
     assert "branch.protected !== true" in source
+
+
+def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
+    policy = json.loads((ROOT / ".evoguard.json").read_text(encoding="utf-8"))
+    protected = tuple(policy["protected"])
+    allowed = tuple(policy["allow"])
+
+    allowed_result = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=str(ROOT),
+            changed_paths=(
+                "CHANGELOG.md",
+                "README.md",
+                "evoom_guard/__init__.py",
+            ),
+            protected=protected,
+            allow=allowed,
+            strict_harness=True,
+        )
+    )
+    assert allowed_result.may_execute is True
+    assert allowed_result.protected_violations == ()
+
+    protected_result = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=str(ROOT),
+            changed_paths=(
+                ".evoguard.json",
+                "security/release-ledger-roots/v4.4.0.pub.pem",
+                "tests/test_raae_release_pipeline_workflows.py",
+            ),
+            protected=protected,
+            allow=allowed,
+            strict_harness=True,
+        )
+    )
+    assert protected_result.may_execute is False
+    assert protected_result.protected_violations == (
+        ".evoguard.json",
+        "security/release-ledger-roots/v4.4.0.pub.pem",
+        "tests/test_raae_release_pipeline_workflows.py",
+    )
+
+    ordinary_source = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=str(ROOT),
+            changed_paths=("evoom_guard/guard.py",),
+            protected=protected,
+            allow=allowed,
+            strict_harness=True,
+        )
+    )
+    assert ordinary_source.may_execute is False
+    assert ordinary_source.protected_violations == ("evoom_guard/guard.py",)
+
+    ordinary_deletion = evaluate_candidate_preflight(
+        CandidatePreflightRequest(
+            repo_path=str(ROOT),
+            changed_paths=("evoom_guard/__init__.py",),
+            deleted_paths=("evoom_guard/guard.py",),
+            protected=protected,
+            allow=allowed,
+            strict_harness=True,
+        )
+    )
+    assert ordinary_deletion.may_execute is False
+    assert ordinary_deletion.protected_violations == ("evoom_guard/guard.py",)
+
+
+def _write_scope_tree(
+    root: Path,
+    *,
+    version_assignment: str,
+    readme: str = "base\n",
+    guard: str | None = None,
+) -> None:
+    package = root / "evoom_guard"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(
+        "# frozen prefix\n"
+        f'{version_assignment}\n'
+        "# frozen suffix\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (root / "README.md").write_text(readme, encoding="utf-8", newline="\n")
+    if guard is not None:
+        (package / "guard.py").write_text(
+            guard,
+            encoding="utf-8",
+            newline="\n",
+        )
+
+
+def test_release_scope_validator_accepts_only_the_exact_version_byte_change(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    _write_scope_tree(
+        base,
+        version_assignment='__version__ = "4.4.0.dev0"',
+    )
+    _write_scope_tree(
+        candidate,
+        version_assignment='__version__ = "4.4.0"',
+        readme="candidate\n",
+    )
+
+    assert candidate_scope.validate_candidate_scope(base, candidate) == (
+        "README.md",
+        "evoom_guard/__init__.py",
+    )
+
+
+@pytest.mark.parametrize(
+    "alias",
+    (
+        "README.MD",
+        "Docs/SBOM.md",
+        "evoom_guard/__INIT__.py",
+    ),
+)
+def test_release_scope_validator_rejects_case_aliases(alias: str) -> None:
+    with pytest.raises(
+        candidate_scope.CandidateScopeError,
+        match="outside the exact-case scope",
+    ):
+        candidate_scope.validate_changed_paths(
+            tuple(sorted((candidate_scope.VERSION_PATH, alias)))
+        )
+
+
+def test_release_scope_validator_rejects_an_unlisted_source_edit(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    _write_scope_tree(
+        base,
+        version_assignment='__version__ = "4.4.0.dev0"',
+        guard="VALUE = 1\n",
+    )
+    _write_scope_tree(
+        candidate,
+        version_assignment='__version__ = "4.4.0"',
+        guard="VALUE = 2\n",
+    )
+
+    with pytest.raises(
+        candidate_scope.CandidateScopeError,
+        match=r"evoom_guard/guard\.py",
+    ):
+        candidate_scope.validate_candidate_scope(base, candidate)
+
+
+def test_release_scope_validator_rejects_an_unlisted_source_deletion(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    _write_scope_tree(
+        base,
+        version_assignment='__version__ = "4.4.0.dev0"',
+        guard="VALUE = 1\n",
+    )
+    _write_scope_tree(
+        candidate,
+        version_assignment='__version__ = "4.4.0"',
+    )
+
+    with pytest.raises(
+        candidate_scope.CandidateScopeError,
+        match=r"evoom_guard/guard\.py",
+    ):
+        candidate_scope.validate_candidate_scope(base, candidate)
+
+
+def test_release_scope_validator_rejects_an_allowed_path_deletion(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    _write_scope_tree(
+        base,
+        version_assignment='__version__ = "4.4.0.dev0"',
+    )
+    _write_scope_tree(
+        candidate,
+        version_assignment='__version__ = "4.4.0"',
+    )
+    (candidate / "README.md").unlink()
+
+    with pytest.raises(
+        candidate_scope.CandidateScopeError,
+        match="may not add or delete an allowed path: README.md",
+    ):
+        candidate_scope.validate_candidate_scope(base, candidate)
+
+
+@pytest.mark.parametrize(
+    "candidate_init",
+    (
+        '# frozen prefix\n__version__ = "4.4.0"\n# changed suffix\n',
+        '# frozen prefix\n__version__ = "4.4.1"\n# frozen suffix\n',
+        (
+            '# frozen prefix\n__version__ = "4.4.0"\n'
+            'SECOND_VERSION = "4.4.0"\n# frozen suffix\n'
+        ),
+        (
+            "# frozen prefix\n"
+            'import os\n__version__ = "4.4.0"\n# frozen suffix\n'
+        ),
+    ),
+)
+def test_release_scope_validator_rejects_version_file_mutations(
+    tmp_path: Path,
+    candidate_init: str,
+) -> None:
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    _write_scope_tree(
+        base,
+        version_assignment='__version__ = "4.4.0.dev0"',
+    )
+    _write_scope_tree(
+        candidate,
+        version_assignment='__version__ = "4.4.0"',
+    )
+    (candidate / candidate_scope.VERSION_PATH).write_text(
+        candidate_init,
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    with pytest.raises(
+        candidate_scope.CandidateScopeError,
+        match="may change only the exact",
+    ):
+        candidate_scope.validate_candidate_scope(base, candidate)
 
 
 def test_a_b_c_separate_candidate_execution_provider_and_key_access() -> None:

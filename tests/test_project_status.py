@@ -193,8 +193,15 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(context.source_version, "4.4.0.dev0")
-        self.assertEqual(context.status.lifecycle, "unreleased-development")
+        expected_source_versions = {
+            "unreleased-development": "4.4.0.dev0",
+            "release-candidate": "4.4.0",
+        }
+        self.assertIn(context.status.lifecycle, expected_source_versions)
+        self.assertEqual(
+            context.source_version,
+            expected_source_versions[context.status.lifecycle],
+        )
         self.assertEqual(context.status.relation, "descendant")
         self.assertEqual(context.ledger.version, "4.3.0")
         self.assertEqual(context.ledger.tag, "v4.3.0")

@@ -162,6 +162,35 @@ jobs:
           path = pathlib.Path(sys.argv[1])
           policy = json.loads(path.read_text(encoding='utf-8'), object_pairs_hook=unique)
           required = {
+              'policy_id': 'evoom-guard-protected-release-source',
+              'policy_version': '2',
+              'protected': [
+                  '*',
+                  '.github/workflows/*',
+                  '.github/CODEOWNERS',
+                  '.evoguard.json',
+                  'LICENSE',
+                  'NOTICE',
+                  'evidence/release-ledgers/*',
+                  'security/release-ledger-roots/*',
+                  'security/release-pipeline-bootstrap.json',
+                  'security/release-source-pack/*',
+                  'security/*.lock',
+              ],
+              'allow': [
+                  'CHANGELOG.md',
+                  'PROJECT_STATUS.json',
+                  'README.md',
+                  'ROADMAP.md',
+                  'benchmarks/results.jsonl',
+                  'docs/GITHUB_ARTIFACT_ATTESTATIONS.md',
+                  'docs/PROJECT_STATUS.md',
+                  'docs/RELEASE_STATUS.md',
+                  'docs/SBOM.md',
+                  'docs/architecture/REFACTOR_PROGRAM.md',
+                  'evoom_guard/__init__.py',
+              ],
+              'allow_new_tests': False,
               'verifier_pack': 'security/release-source-pack',
               'expect_verifier_pack_sha256': os.environ['PACK_SHA256'],
               'blackbox': True,
@@ -177,6 +206,13 @@ jobs:
               if policy.get(key) != expected:
                   raise SystemExit(f'parent release policy mismatch: {key}')
           PY
+
+      - name: Enforce the exact parent-owned v4.4.0 candidate scope
+        run: |
+          set -euo pipefail
+          python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_candidate_scope.py" \
+            --base "$GITHUB_WORKSPACE/base" \
+            --candidate "$GITHUB_WORKSPACE/candidate"
 
       - name: Pull the byte-pinned candidate runtime image
         env:

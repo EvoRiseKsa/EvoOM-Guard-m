@@ -19,7 +19,7 @@ evidence that those assets were published.
 
 | Phase | Workflow | Authority and prohibited operations |
 | --- | --- | --- |
-| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, and executable runtime come from the parent or protected settings. It has no secret, OIDC, attestation, or write authority. |
+| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, executable runtime, and v4.4.0 scope validator come from the parent or protected settings. Before candidate execution, the parent validator compares both fresh trees, requires an exact-case subset of the frozen existing release paths with unchanged file modes, rejects additions, deletions, and ordinary unlisted changes, and permits `evoom_guard/__init__.py` to differ only by the exact `4.4.0.dev0` to `4.4.0` assignment bytes. It has no secret, OIDC, attestation, or write authority. |
 | B | `evoguard-produce-release-source-receipt.yml` | Produces an unsigned canonical receipt and GitHub attestation for A. It never checks out or executes candidate source. |
 | C/D | `evoguard-admit-release-source.yml` | Preflight freezes external controls before Environment access; protected C freshly verifies B under a provider UID that cannot read the RSAE key; detached D verifies the envelope and negative mutations without a key or provider call. |
 | E-build | `evoguard-build-release-artifact.yml` | Verifies RSAE and checks out the admitted source. The executable builder and SPDX generator are literal `100644` Git blobs from its sole parent, whose commit and tree must equal A's admitted base. E extracts and hashes those blobs without filters, runs them in one exact digest-pinned container with `network: none` against the read-only candidate, records the container reference/digest/network plus parent commit/tree in `builder-controls.json`, and independently compares every packaged byte to source. F reconstructs and requires that exact controls object from trusted Git/API context and the downloaded bytes. E has no OIDC, attestation, secret, or write permission. |
@@ -65,8 +65,11 @@ admission.
    write-enabled deploy key for release tags; store its private half only in
    `evoguard-release-publication`. H has no signing secret.
 8. Merge a distinct one-parent **source candidate**. A must consume its policy,
-   pack, and locks from that candidate's parent; the infrastructure commit
-   cannot authorize itself.
+   pack, locks, and release-scope validator from that candidate's parent; the
+   infrastructure commit cannot authorize itself. For v4.4.0, the parent
+   validator requires literal path case and an exact development-to-stable
+   version-assignment byte replacement, in addition to Guard's protected-path
+   and external verifier-pack checks.
 9. Temporarily freeze protected `main`; run A/B/C/D; inspect the no-secret C
    controls before approving C; require `ALLOW` and detached negatives.
 10. Dispatch E with the separately reviewed stable `X.Y.Z` version. Run E/F/G;
