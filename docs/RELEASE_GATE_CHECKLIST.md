@@ -152,6 +152,11 @@ gate.
 - E must have produced three independently verified receipts: pyz SLSA
   provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
   A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.
+  F must verify all three in its no-secret `verify-attestations` job and retain
+  the exact receipt/raw-output pairs in
+  `evoguard-release-artifact-v1-complete-controls-<attempt>`. The protected seal,
+  both RAAEs, G controls, H preflight, and the ledger must preserve those byte
+  identities.
 - The ledger step is data-only. It must not have release or tag write authority,
   and it must not publish RSAE/RAAE envelopes as GitHub Release assets.
 

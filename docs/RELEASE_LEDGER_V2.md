@@ -43,7 +43,7 @@ The validator therefore also requires:
   caller-supplied external trust anchor;
 - source controls, artifact controls, publication controls, and
   publication-ready evidence to bind their exact workflow attempts and their
-  closed material sets (9 source, 13 artifact, 3 publication, and 3
+  closed material sets (9 source, 20 artifact, 3 publication, and 3
   publication-ready files);
 - protected C/D and F/G success reports, the canonical eleven-case source
   negative JSON record, and the ordered seven-line artifact negative record to
@@ -53,6 +53,10 @@ The validator therefore also requires:
   whose subject is the SPDX file itself, and the SPDX predicate whose subject
   is the pyz. The SBOM predicate binds the SBOM to the pyz; it is not provenance
   for the SBOM file and cannot substitute for the separate SPDX-file subject;
+- F's no-secret `verify-attestations` job to retain the exact receipt and raw
+  provider bytes for all three E attestations before the signing Environment is
+  entered. The F control manifest, both RAAEs, G publication controls, and the
+  final ledger must cross-bind those same bytes;
 - each retained raw verifier output to contain one exact subject, one exact
   source dependency, the expected workflow run/attempt and hosted-runner
   identity. Version-specific `gh` provider metadata may add non-security
@@ -161,7 +165,9 @@ and must fail validation. Placeholders are never accepted as release evidence.
    new directory. Never modify a prior ledger or baseline. Do not proceed if E
    did not create separate SLSA provenance whose exact subject is
    `evo-guard.spdx.json`; F cannot freshly admit that file from a pyz-subject
-   SBOM attestation.
+   SBOM attestation. Retain the final F controls artifact named
+   `evoguard-release-artifact-v1-complete-controls-<attempt>`; the earlier
+   preflight artifact is incomplete and is not ledger evidence.
 5. Assemble a complete draft whose schema descriptor hashes the exact
    repository schema bytes. Both the schema and validator descriptors record
    SHA-256, Git blob ID, and the same trusted-parent commit/tree admitted by A;

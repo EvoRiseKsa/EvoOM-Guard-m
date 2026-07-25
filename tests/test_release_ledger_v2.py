@@ -331,7 +331,7 @@ def _valid_ledger() -> dict[str, Any]:
             "F",
             path=".github/workflows/evoguard-admit-release-artifact.yml",
             event="workflow_run",
-            jobs=["preflight", "seal"],
+            jobs=["preflight", "verify-attestations", "seal"],
             run_id=1005,
             workflow_id=105,
             candidate=candidate,
@@ -443,6 +443,13 @@ def _valid_ledger() -> dict[str, Any]:
         _file("controls/artifact/signing-requirements.lock"),
         _file("controls/artifact/builder.json"),
         _file("controls/artifact/admitter.json"),
+        _file("controls/artifact/verify_spdx_attestation.py"),
+        _file("controls/artifact/build-provenance-verification.json"),
+        _file("controls/artifact/build-provenance-verification-output.json"),
+        _file("controls/artifact/spdx-provenance-verification.json"),
+        _file("controls/artifact/spdx-provenance-verification-output.json"),
+        _file("controls/artifact/sbom-attestation-output.json"),
+        _file("controls/artifact/sbom-attestation-receipt.json"),
     ]
     publication_materials = [
         _file("controls/publication/evo-guard.pyz.detached-verification.json"),
@@ -562,7 +569,9 @@ def _valid_ledger() -> dict[str, Any]:
                 phase="F",
                 run_id=by_phase["F"]["run_id"],
                 artifact_id=4002,
-                artifact_name="evoguard-release-artifact-v1-controls-1",
+                artifact_name=(
+                    "evoguard-release-artifact-v1-complete-controls-1"
+                ),
                 retention_days=30,
                 manifest_path="controls/artifact/f-control-manifest.json",
                 materials=artifact_materials,
@@ -652,10 +661,10 @@ def _valid_ledger() -> dict[str, Any]:
                 "run_attempt": 1,
                 "verified_utc": "2030-01-01T00:11:15Z",
                 "verification_receipt": _file(
-                    "attestations/build-provenance-verification.json"
+                    "controls/artifact/build-provenance-verification.json"
                 ),
                 "verification_output": _file(
-                    "attestations/build-provenance-verification-output.json"
+                    "controls/artifact/build-provenance-verification-output.json"
                 ),
             },
             "spdx_provenance": {
@@ -672,10 +681,10 @@ def _valid_ledger() -> dict[str, Any]:
                 "run_attempt": 1,
                 "verified_utc": "2030-01-01T00:11:30Z",
                 "verification_receipt": _file(
-                    "attestations/spdx-provenance-verification.json"
+                    "controls/artifact/spdx-provenance-verification.json"
                 ),
                 "verification_output": _file(
-                    "attestations/spdx-provenance-verification-output.json"
+                    "controls/artifact/spdx-provenance-verification-output.json"
                 ),
             },
             "sbom_provenance": {
@@ -692,10 +701,10 @@ def _valid_ledger() -> dict[str, Any]:
                 "run_attempt": 1,
                 "verified_utc": "2030-01-01T00:11:45Z",
                 "verification_receipt": _file(
-                    "attestations/sbom-provenance-verification.json"
+                    "controls/artifact/sbom-attestation-receipt.json"
                 ),
                 "verification_output": _file(
-                    "attestations/sbom-provenance-verification-output.json"
+                    "controls/artifact/sbom-attestation-output.json"
                 ),
             },
             "release": {
@@ -767,6 +776,9 @@ def _valid_ledger() -> dict[str, Any]:
                 "source_parent_tree_sha": parent_tree,
                 "build_pyz_blob_sha": _git("build-pyz-blob"),
                 "spdx_generator_blob_sha": _git("spdx-generator-blob"),
+                "spdx_attestation_verifier_blob_sha": _git(
+                    "spdx-attestation-verifier-blob"
+                ),
             },
         },
         "repository_controls": {
@@ -1386,6 +1398,42 @@ def test_actual_negative_records_require_exact_bytes_and_order(
         )
 
 
+def test_envelope_attestation_evidence_requires_exact_embedded_bytes(
+    tmp_path: Path,
+) -> None:
+    ledger = _valid_ledger()
+    attestation = ledger["attestations"]["build_provenance"]
+    receipt = b'{"receipt":"exact"}\n'
+    output = b'[{"output":"exact"}]\n'
+    for descriptor, data in (
+        (attestation["verification_receipt"], receipt),
+        (attestation["verification_output"], output),
+    ):
+        path = tmp_path / Path(*PurePosixPath(descriptor["path"]).parts)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    validator._require_embedded_attestation_evidence(
+        tmp_path,
+        ledger,
+        attestation_name="build_provenance",
+        embedded_receipt=receipt,
+        embedded_output=output,
+        envelope_label="pyz RAAE",
+    )
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="exact provider evidence embedded in pyz RAAE",
+    ):
+        validator._require_embedded_attestation_evidence(
+            tmp_path,
+            ledger,
+            attestation_name="build_provenance",
+            embedded_receipt=receipt + b" ",
+            embedded_output=output,
+            envelope_label="pyz RAAE",
+        )
+
+
 def _raw_attestation(
     ledger: dict[str, Any],
     name: str,
@@ -1589,46 +1637,71 @@ def test_attestation_receipts_bind_subject_policy_and_output(
             predicate=spdx_document if name == "sbom_provenance" else None,
         )
         output_path.write_bytes(output_bytes)
-        attestation["verification_output"].update(
-            {
-                "size_bytes": len(output_bytes),
-                "sha256": hashlib.sha256(output_bytes).hexdigest(),
-            }
+        _update_matching_descriptor(
+            ledger,
+            path=attestation["verification_output"]["path"],
+            data=output_bytes,
         )
-        receipt = {
+        policy = {
+            "repository": "EvoRiseKsa/EvoOM-Guard-m",
+            "signer_workflow": (
+                "EvoRiseKsa/EvoOM-Guard-m/"
+                f"{attestation['signer_workflow']}"
+            ),
+            "signer_digest": ledger["source"]["candidate_commit_sha"],
+            "source_ref": "refs/heads/main",
+            "source_digest": ledger["source"]["candidate_commit_sha"],
+            "cert_oidc_issuer": "https://token.actions.githubusercontent.com",
+            "predicate_type": attestation["predicate_type"],
+            "deny_self_hosted_runners": True,
+            "attestation_limit": 1,
+        }
+        output_descriptor = {
+            "sha256": attestation["verification_output"]["sha256"],
+            "size": attestation["verification_output"]["size_bytes"],
+            "verified_attestation_count": 1,
+        }
+        receipt: dict[str, Any] = {
             "format": "EVOGUARD_GITHUB_ATTESTATION_RECEIPT_V1",
             "artifact": subject,
-            "verification_policy": {
-                "repository": "EvoRiseKsa/EvoOM-Guard-m",
-                "signer_workflow": (
-                    "EvoRiseKsa/EvoOM-Guard-m/"
-                    f"{attestation['signer_workflow']}"
-                ),
-                "signer_digest": ledger["source"]["candidate_commit_sha"],
-                "source_ref": "refs/heads/main",
-                "source_digest": ledger["source"]["candidate_commit_sha"],
-                "cert_oidc_issuer": "https://token.actions.githubusercontent.com",
-                "predicate_type": attestation["predicate_type"],
-                "deny_self_hosted_runners": True,
-                "attestation_limit": 1,
-            },
-            "verification_output": {
-                "sha256": attestation["verification_output"]["sha256"],
-                "size": attestation["verification_output"]["size_bytes"],
-                "verified_attestation_count": 1,
-            },
+            "verification_policy": policy,
+            "verification_output": output_descriptor,
         }
+        if name == "sbom_provenance":
+            receipt = {
+                "format": "EVOGUARD_GITHUB_SPDX_ATTESTATION_RECEIPT_V1",
+                "artifact": {
+                    "name": attestation["subject_name"],
+                    **subject,
+                },
+                "predicate": {
+                    "name": spdx["name"],
+                    "sha256": spdx["sha256"],
+                    "size": spdx["size_bytes"],
+                    "type": "https://spdx.dev/Document/v2.3",
+                },
+                "verification_policy": {
+                    **policy,
+                    "repository_id": ledger["release"]["repository_id"],
+                    "repository_owner_id": ledger["release"]["repository_owner_id"],
+                },
+                "workflow_run": {
+                    "id": attestation["run_id"],
+                    "attempt": attestation["run_attempt"],
+                    "event": "workflow_dispatch",
+                },
+                "verification_output": output_descriptor,
+            }
         receipt_bytes = validator.canonical_json_bytes(receipt)
         receipt_path = tmp_path / Path(
             *PurePosixPath(attestation["verification_receipt"]["path"]).parts
         )
         receipt_path.parent.mkdir(parents=True, exist_ok=True)
         receipt_path.write_bytes(receipt_bytes)
-        attestation["verification_receipt"].update(
-            {
-                "size_bytes": len(receipt_bytes),
-                "sha256": hashlib.sha256(receipt_bytes).hexdigest(),
-            }
+        _update_matching_descriptor(
+            ledger,
+            path=attestation["verification_receipt"]["path"],
+            data=receipt_bytes,
         )
 
     validator._validate_attestation_bytes(tmp_path, ledger)
@@ -1863,6 +1936,7 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
 ) -> None:
     ledger = _valid_ledger()
     bundle = ledger["control_evidence"]["publication_controls"]
+    artifact_controls = ledger["control_evidence"]["artifact_external_controls"]
     ledger["control_evidence"] = {"publication_controls": bundle}
     phases = validator._phase_map(ledger)
     manifest = {
@@ -1894,6 +1968,22 @@ def test_publication_control_bytes_bind_assets_admissions_and_target(
                 "size": subject["raae"]["size_bytes"],
             }
             for subject in ledger["artifact_admission"]["subjects"]
+        },
+        "attestation_evidence": {
+            PurePosixPath(item["path"]).name: {
+                "sha256": item["sha256"],
+                "size": item["size_bytes"],
+            }
+            for item in artifact_controls["materials"]
+            if PurePosixPath(item["path"]).name
+            in {
+                "build-provenance-verification.json",
+                "build-provenance-verification-output.json",
+                "spdx-provenance-verification.json",
+                "spdx-provenance-verification-output.json",
+                "sbom-attestation-receipt.json",
+                "sbom-attestation-output.json",
+            }
         },
     }
     manifest_path = tmp_path / Path(

@@ -273,6 +273,7 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
 
 def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     preflight = _job(F, "preflight")
+    attestations = _job(F, "verify-attestations")
     seal = _job(F, "seal")
 
     assert "environment:" not in preflight
@@ -289,8 +290,26 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     assert "'reference': os.environ['BUILD_IMAGE']" in preflight
     assert "'sha256': os.environ['BUILD_IMAGE'].rsplit('@sha256:', 1)[1]" in preflight
     assert "'network': 'none'" in preflight
+    assert "environment:" not in attestations
+    assert "secrets." not in attestations
+    assert "attestations: read" in attestations
+    assert "github-attestation-receipt" in attestations
+    assert "create_slsa_receipt evo-guard.pyz build-provenance" in attestations
+    assert (
+        "create_slsa_receipt evo-guard.spdx.json spdx-provenance"
+        in attestations
+    )
+    assert "verify_spdx_attestation.py" in attestations
+    assert "evo-guard 4.3.0" in attestations
+    assert "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64" not in attestations
+    assert "evoguard-release-artifact-v1-complete-controls-" in attestations
+    assert "complete F control inventory" not in attestations
+    assert "find \"$RUNNER_TEMP/f-controls-complete\"" in attestations
 
     assert "environment: evoguard-release-artifact-v1" in seal
+    assert "needs: [preflight, verify-attestations]" in _text(F)
+    assert "verify-github-attestation-receipt" in seal
+    assert "complete F manifest does not bind all attestation bytes" in seal
     assert (
         "secrets.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PRIVATE_KEY_B64"
         in seal
@@ -302,6 +321,9 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     assert "$RUNNER_TEMP/evo-guard.spdx.json.raae" in seal
     assert "outer provider can read the RAAE signing key" in seal
     assert "live_provider_reverification" in seal
+    assert "provider/github-attestation-receipt.json" in seal
+    assert "RAAE provider evidence size is unsafe" in seal
+    assert "cmp --silent" in seal
     assert "actions/checkout@" not in seal
 
 
@@ -326,6 +348,12 @@ def test_g_verifies_both_envelopes_and_required_negative_matrix() -> None:
     assert "live_provider_reverification" in g
     assert "= \"false\"" in g
     assert "publication-controls.json" in g
+    assert "evoguard-release-artifact-v1-complete-controls-" in g
+    assert "verify-github-attestation-receipt" in g
+    assert "verify_slsa_receipt evo-guard.pyz build-provenance" in g
+    assert "verify_slsa_receipt evo-guard.spdx.json spdx-provenance" in g
+    assert "verify_spdx_attestation.py" in g
+    assert "'attestation_evidence': {" in g
 
 
 def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
@@ -425,6 +453,8 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "gh release upload" not in whole
     assert "--latest" not in whole
     assert "evo-guard.pyz.raae" not in draft
+    assert "evoguard-release-artifact-v1-complete-controls-" in preflight
+    assert "G selector attestation digest mismatch" in preflight
     assert publish.count("$RUNNER_TEMP/publication-final/") >= 3
 
 

@@ -945,7 +945,8 @@
             "source_parent_sha",
             "source_parent_tree_sha",
             "build_pyz_blob_sha",
-            "spdx_generator_blob_sha"
+            "spdx_generator_blob_sha",
+            "spdx_attestation_verifier_blob_sha"
           ],
           "properties": {
             "source_parent_sha": {
@@ -958,6 +959,9 @@
               "$ref": "#/$defs/gitSha"
             },
             "spdx_generator_blob_sha": {
+              "$ref": "#/$defs/gitSha"
+            },
+            "spdx_attestation_verifier_blob_sha": {
               "$ref": "#/$defs/gitSha"
             }
           }
@@ -1905,6 +1909,7 @@
             "successful_jobs": {
               "const": [
                 "preflight",
+                "verify-attestations",
                 "seal"
               ]
             },
@@ -2111,7 +2116,7 @@
         "materials": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 16,
+          "maxItems": 20,
           "items": {
             "$ref": "#/$defs/fileDescriptor"
           }

@@ -115,6 +115,13 @@ ARTIFACT_CONTROL_MATERIALS = {
     "signing-requirements.lock",
     "builder.json",
     "admitter.json",
+    "verify_spdx_attestation.py",
+    "build-provenance-verification.json",
+    "build-provenance-verification-output.json",
+    "spdx-provenance-verification.json",
+    "spdx-provenance-verification-output.json",
+    "sbom-attestation-output.json",
+    "sbom-attestation-receipt.json",
 }
 PUBLICATION_CONTROL_MATERIALS = {
     "evo-guard.pyz.detached-verification.json",
@@ -512,6 +519,7 @@ def _trusted_git(
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_OPTIONAL_LOCKS": "0",
         "GIT_NO_REPLACE_OBJECTS": "1",
+        "GIT_NO_LAZY_FETCH": "1",
         "LC_ALL": "C",
         }
     )
@@ -596,6 +604,15 @@ def _validate_trusted_parent_contracts(
         expected_prefix = f"100644 blob {contract['git_blob_sha']}\t{path}\0".encode()
         if entry != expected_prefix:
             _fail(f"trusted parent {label} tree entry is not exact")
+        blob_size_text = _trusted_git(
+            repository,
+            "cat-file",
+            "-s",
+            contract["git_blob_sha"],
+            label=f"{label} blob size",
+        ).decode("ascii", "strict").strip()
+        if not blob_size_text.isdigit() or int(blob_size_text) != len(current_bytes):
+            _fail(f"trusted parent {label} blob size is not exact")
         parent_bytes = _trusted_git(
             repository,
             "cat-file",
@@ -982,7 +999,10 @@ def _validate_controls(ledger: Mapping[str, Any]) -> None:
         ),
         "artifact_external_controls": (
             "F",
-            f"evoguard-release-artifact-v1-controls-{phases['F']['run_attempt']}",
+            (
+                "evoguard-release-artifact-v1-complete-controls-"
+                f"{phases['F']['run_attempt']}"
+            ),
             30,
             "f-control-manifest.json",
         ),
@@ -1840,6 +1860,8 @@ def _validate_control_bytes(
             "repository_id",
             "target_sha",
             "external_settings",
+            "trusted_tools",
+            "attestation_evidence",
             "workflows",
         },
         "publication_controls": {
@@ -1850,6 +1872,7 @@ def _validate_control_bytes(
             "g",
             "release_assets",
             "admissions",
+            "attestation_evidence",
         },
         "publication_ready": {
             "format",
@@ -2012,6 +2035,23 @@ def _validate_control_bytes(
                 },
                 "public_key_ids": expected_roots,
             }
+            expected_trusted_tools = {
+                "tools/ci/verify_spdx_attestation.py": toolchain[
+                    "trusted_build_inputs"
+                ]["spdx_attestation_verifier_blob_sha"]
+            }
+            evidence_names = (
+                "build-provenance-verification.json",
+                "build-provenance-verification-output.json",
+                "spdx-provenance-verification.json",
+                "spdx-provenance-verification-output.json",
+                "sbom-attestation-receipt.json",
+                "sbom-attestation-output.json",
+            )
+            expected_attestation_evidence = {
+                filename: material_map[filename]
+                for filename in evidence_names
+            }
             if (
                 manifest.get("repository_id") != release["repository_id"]
                 or manifest.get("release_version") != ledger["project"]["version"]
@@ -2020,8 +2060,21 @@ def _validate_control_bytes(
                 or manifest.get("release_source_admission")
                 != material_map["source-allow.rsae"]
                 or manifest.get("external_settings") != expected_settings
+                or manifest.get("trusted_tools") != expected_trusted_tools
+                or manifest.get("attestation_evidence")
+                != expected_attestation_evidence
             ):
                 _fail("artifact controls differ from retained assets, tools, or roots")
+            verifier_descriptor = descriptor_map["verify_spdx_attestation.py"]
+            verifier_bytes = _read_regular(
+                _safe_retained_path(root, verifier_descriptor["path"]),
+                limit=1024 * 1024,
+                label="trusted SPDX attestation verifier",
+            )
+            if _git_blob_sha(verifier_bytes) != toolchain["trusted_build_inputs"][
+                "spdx_attestation_verifier_blob_sha"
+            ]:
+                _fail("trusted SPDX attestation verifier blob is not exact")
             builder_descriptor = descriptor_map["builder-controls.json"]
             builder_path = _safe_retained_path(root, builder_descriptor["path"])
             builder_bytes = _read_regular(
@@ -2117,9 +2170,29 @@ def _validate_control_bytes(
                 }
                 for subject in ledger["artifact_admission"]["subjects"]
             }
+            publication_attestation_evidence: dict[str, dict[str, Any]] = {}
+            for attestation_name in (
+                "build_provenance",
+                "spdx_provenance",
+                "sbom_provenance",
+            ):
+                attestation = ledger["attestations"][attestation_name]
+                for evidence_name in (
+                    "verification_receipt",
+                    "verification_output",
+                ):
+                    descriptor = attestation[evidence_name]
+                    publication_attestation_evidence[
+                        PurePosixPath(descriptor["path"]).name
+                    ] = {
+                        "sha256": descriptor["sha256"],
+                        "size": descriptor["size_bytes"],
+                    }
             if (
                 manifest.get("release_assets") != expected_assets
                 or manifest.get("admissions") != expected_admissions
+                or manifest.get("attestation_evidence")
+                != publication_attestation_evidence
             ):
                 _fail(
                     "publication controls do not bind the release assets "
@@ -2706,6 +2779,11 @@ def _validate_attestation_bytes(
             limit=MAX_JSON_BYTES,
             label=f"{name} raw attestation output",
         )
+        expected_output = {
+            "sha256": _sha256(output_bytes),
+            "size": len(output_bytes),
+            "verified_attestation_count": 1,
+        }
         expected_policy = {
             "repository": repository,
             "signer_workflow": f"{repository}/{attestation['signer_workflow']}",
@@ -2717,64 +2795,95 @@ def _validate_attestation_bytes(
             "deny_self_hosted_runners": True,
             "attestation_limit": 1,
         }
-        expected_output = {
-            "sha256": _sha256(output_bytes),
-            "size": len(output_bytes),
-            "verified_attestation_count": 1,
-        }
-        _require_exact_keys(
-            receipt,
-            {
-                "format",
-                "artifact",
-                "verification_policy",
-                "verification_output",
-            },
-            label=f"{name} attestation receipt",
-        )
-        artifact_value = receipt.get("artifact")
-        policy_value = receipt.get("verification_policy")
-        output_value = receipt.get("verification_output")
-        if not isinstance(artifact_value, dict):
-            _fail(f"{name} attestation receipt artifact must be an object")
-        if not isinstance(policy_value, dict):
-            _fail(f"{name} attestation receipt policy must be an object")
-        if not isinstance(output_value, dict):
-            _fail(f"{name} attestation receipt children must be objects")
-        _require_exact_keys(
-            artifact_value,
-            {"sha256", "size"},
-            label=f"{name} receipt artifact",
-        )
-        _require_exact_keys(
-            policy_value,
-            {
-                "repository",
-                "signer_workflow",
-                "signer_digest",
-                "source_ref",
-                "source_digest",
-                "cert_oidc_issuer",
-                "predicate_type",
-                "deny_self_hosted_runners",
-                "attestation_limit",
-            },
-            label=f"{name} receipt policy",
-        )
-        _require_exact_keys(
-            output_value,
-            {"sha256", "size", "verified_attestation_count"},
-            label=f"{name} receipt output",
-        )
+        if name == "sbom_provenance":
+            expected_receipt = {
+                "format": "EVOGUARD_GITHUB_SPDX_ATTESTATION_RECEIPT_V1",
+                "artifact": {
+                    "name": attestation["subject_name"],
+                    **expected_subject,
+                },
+                "predicate": {
+                    "name": spdx["name"],
+                    "sha256": spdx["sha256"],
+                    "size": spdx["size_bytes"],
+                    "type": "https://spdx.dev/Document/v2.3",
+                },
+                "verification_policy": {
+                    **expected_policy,
+                    "repository_id": repository_id,
+                    "repository_owner_id": repository_owner_id,
+                },
+                "workflow_run": {
+                    "id": attestation["run_id"],
+                    "attempt": attestation["run_attempt"],
+                    "event": "workflow_dispatch",
+                },
+                "verification_output": expected_output,
+            }
+            if receipt != expected_receipt:
+                _fail(
+                    "sbom_provenance receipt does not bind its predicate, "
+                    "subject, policy, and E run"
+                )
+        else:
+            _require_exact_keys(
+                receipt,
+                {
+                    "format",
+                    "artifact",
+                    "verification_policy",
+                    "verification_output",
+                },
+                label=f"{name} attestation receipt",
+            )
+            artifact_value = receipt.get("artifact")
+            policy_value = receipt.get("verification_policy")
+            output_value = receipt.get("verification_output")
+            if not isinstance(artifact_value, dict):
+                _fail(f"{name} attestation receipt artifact must be an object")
+            if not isinstance(policy_value, dict):
+                _fail(f"{name} attestation receipt policy must be an object")
+            if not isinstance(output_value, dict):
+                _fail(f"{name} attestation receipt children must be objects")
+            _require_exact_keys(
+                artifact_value,
+                {"sha256", "size"},
+                label=f"{name} receipt artifact",
+            )
+            _require_exact_keys(
+                policy_value,
+                {
+                    "repository",
+                    "signer_workflow",
+                    "signer_digest",
+                    "source_ref",
+                    "source_digest",
+                    "cert_oidc_issuer",
+                    "predicate_type",
+                    "deny_self_hosted_runners",
+                    "attestation_limit",
+                },
+                label=f"{name} receipt policy",
+            )
+            _require_exact_keys(
+                output_value,
+                {"sha256", "size", "verified_attestation_count"},
+                label=f"{name} receipt output",
+            )
+            if (
+                receipt["format"] != "EVOGUARD_GITHUB_ATTESTATION_RECEIPT_V1"
+                or artifact_value != expected_subject
+                or policy_value != expected_policy
+                or output_value != expected_output
+            ):
+                _fail(
+                    f"{name} attestation receipt does not bind its subject and policy"
+                )
         if (
-            receipt["format"] != "EVOGUARD_GITHUB_ATTESTATION_RECEIPT_V1"
-            or artifact_value != expected_subject
-            or policy_value != expected_policy
-            or output_value != expected_output
-            or output["sha256"] != expected_output["sha256"]
+            output["sha256"] != expected_output["sha256"]
             or output["size_bytes"] != expected_output["size"]
         ):
-            _fail(f"{name} attestation receipt does not bind its subject and policy")
+            _fail(f"{name} raw output descriptor does not bind retained bytes")
         validation_args: dict[str, Any] = {
             "data": output_bytes,
             "repository": repository,
@@ -2833,6 +2942,42 @@ def _validate_artifact_negative_file(
     expected = ("\n".join(ARTIFACT_NEGATIVE_LINES) + "\n").encode("ascii")
     if data != expected:
         _fail(f"{label} does not equal the ordered seven-case G negative record")
+
+
+def _require_embedded_attestation_evidence(
+    root: Path,
+    ledger: Mapping[str, Any],
+    *,
+    attestation_name: str,
+    embedded_receipt: bytes,
+    embedded_output: bytes,
+    envelope_label: str,
+) -> None:
+    attestation = ledger["attestations"][attestation_name]
+    retained_receipt = _read_regular(
+        _safe_retained_path(
+            root,
+            attestation["verification_receipt"]["path"],
+        ),
+        limit=MAX_JSON_BYTES,
+        label=f"{attestation_name} receipt cross-binding",
+    )
+    retained_output = _read_regular(
+        _safe_retained_path(
+            root,
+            attestation["verification_output"]["path"],
+        ),
+        limit=MAX_JSON_BYTES,
+        label=f"{attestation_name} raw-output cross-binding",
+    )
+    if (
+        retained_receipt != embedded_receipt
+        or retained_output != embedded_output
+    ):
+        _fail(
+            f"{attestation_name} evidence is not the exact provider evidence "
+            f"embedded in {envelope_label}"
+        )
 
 
 def _validate_envelopes(root: Path, ledger: Mapping[str, Any]) -> None:
@@ -2984,6 +3129,14 @@ def _validate_envelopes(root: Path, ledger: Mapping[str, Any]) -> None:
         or rsae.manifest["provider"]["policy"] != rsae_policy
     ):
         _fail("retained RSAE manifest does not bind the admitted source")
+    _require_embedded_attestation_evidence(
+        root,
+        ledger,
+        attestation_name="source_producer",
+        embedded_receipt=rsae.github_receipt_bytes,
+        embedded_output=rsae.github_raw_output_bytes,
+        envelope_label="RSAE",
+    )
 
     _validate_source_result(
         root,
@@ -3084,6 +3237,18 @@ def _validate_envelopes(root: Path, ledger: Mapping[str, Any]) -> None:
             or manifest["key_separation"] != expected_artifact_separation
         ):
             _fail(f"retained RAAE does not bind its asset and RSAE: {subject['name']}")
+        attestation_name = {
+            "evo-guard.pyz": "build_provenance",
+            "evo-guard.spdx.json": "spdx_provenance",
+        }[subject["name"]]
+        _require_embedded_attestation_evidence(
+            root,
+            ledger,
+            attestation_name=attestation_name,
+            embedded_receipt=raae.github_receipt_bytes,
+            embedded_output=raae.github_raw_output_bytes,
+            envelope_label=f"{subject['name']} RAAE",
+        )
         _validate_artifact_result(
             root,
             subject["protected_seal_result"],

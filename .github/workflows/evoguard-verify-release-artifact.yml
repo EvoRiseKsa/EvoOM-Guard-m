@@ -106,6 +106,7 @@ jobs:
             core.setOutput('f_run_id', String(run.id));
             core.setOutput('f_run_attempt', String(run.run_attempt));
             core.setOutput('repository_id', String(context.payload.repository.id));
+            core.setOutput('repository_owner_id', String(context.payload.repository.owner.id));
             core.setOutput('target_sha', run.head_sha);
 
       - name: Download the exact sealed F output
@@ -119,7 +120,7 @@ jobs:
       - name: Download the exact no-secret F controls
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: evoguard-release-artifact-v1-controls-${{ steps.bind.outputs.f_run_attempt }}
+          name: evoguard-release-artifact-v1-complete-controls-${{ steps.bind.outputs.f_run_attempt }}
           path: ${{ runner.temp }}/f-controls-download
           run-id: ${{ steps.bind.outputs.f_run_id }}
           github-token: ${{ github.token }}
@@ -188,6 +189,12 @@ jobs:
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
               'evo-guard.pyz.seal-result.json',
               'evo-guard.spdx.json.seal-result.json',
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
           }:
               raise SystemExit('sealed F inventory is not closed')
           expected_controls = {
@@ -196,6 +203,13 @@ jobs:
               'source.json', 'context.json', 'producer.json', 'source-admitter.json',
               'source-github-policy.json', 'signing-requirements.lock', 'builder.json',
               'admitter.json', 'f-control-manifest.json',
+              'verify_spdx_attestation.py',
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
           }
           if {path.name for path in controls.iterdir()} != expected_controls:
               raise SystemExit('F control inventory is not closed')
@@ -208,6 +222,15 @@ jobs:
               (admission / 'SHA256SUMS', 'sealed-SHA256SUMS', 512),
               (admission / 'evo-guard.pyz.seal-result.json', 'evo-guard.pyz.seal-result.json', 1024 * 1024),
               (admission / 'evo-guard.spdx.json.seal-result.json', 'evo-guard.spdx.json.seal-result.json', 1024 * 1024),
+              *[(admission / name, f'sealed-{name}', 16 * 1024 * 1024)
+                for name in {
+                    'build-provenance-verification.json',
+                    'build-provenance-verification-output.json',
+                    'spdx-provenance-verification.json',
+                    'spdx-provenance-verification-output.json',
+                    'sbom-attestation-receipt.json',
+                    'sbom-attestation-output.json',
+                }],
               *[(controls / name, name,
                   64 * 1024 * 1024 if name in {'source-allow.rsae', 'evo-guard.pyz'}
                   else 16 * 1024 * 1024 if name == 'evo-guard.spdx.json'
@@ -233,6 +256,19 @@ jobs:
               if sealed.read_bytes() != control.read_bytes():
                   raise SystemExit(f'sealed and control bytes differ: {name}')
               sealed.unlink()
+          for name in (
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
+          ):
+              sealed = destination / f'sealed-{name}'
+              control = destination / name
+              if sealed.read_bytes() != control.read_bytes():
+                  raise SystemExit(f'sealed and no-secret evidence differ: {name}')
+              sealed.unlink()
           PY
           python - "$RUNNER_TEMP/g-inputs" <<'PY'
           import hashlib, json, os, pathlib, sys
@@ -242,6 +278,9 @@ jobs:
           def descriptor(name):
               data = (root / name).read_bytes()
               return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+          def git_blob(name):
+              data = (root / name).read_bytes()
+              return hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
           builder = load('builder.json')
           admitter = load('admitter.json')
           manifest = load('f-control-manifest.json')
@@ -285,6 +324,17 @@ jobs:
               },
               'checksums': descriptor('SHA256SUMS'),
               'release_source_admission': descriptor('source-allow.rsae'),
+              'attestation_evidence': {
+                  name: descriptor(name)
+                  for name in (
+                      'build-provenance-verification.json',
+                      'build-provenance-verification-output.json',
+                      'spdx-provenance-verification.json',
+                      'spdx-provenance-verification-output.json',
+                      'sbom-attestation-receipt.json',
+                      'sbom-attestation-output.json',
+                  )
+              },
               'repository': os.environ['GITHUB_REPOSITORY'],
               'repository_id': os.environ['REPOSITORY_ID'],
               'target_sha': os.environ['TARGET_SHA'],
@@ -307,6 +357,11 @@ jobs:
                       'artifact_digest_admission_v2': os.environ['ARTIFACT_V2_PUBLIC_KEY_ID'],
                       'release_source_finalizer_v1': os.environ['SOURCE_V1_PUBLIC_KEY_ID'],
                   },
+              },
+              'trusted_tools': {
+                  'tools/ci/verify_spdx_attestation.py': git_blob(
+                      'verify_spdx_attestation.py'
+                  ),
               },
               'workflows': {'E': builder, 'F': admitter},
           }
@@ -349,7 +404,29 @@ jobs:
           [[ "$RUNTIME_SHA256" =~ ^[0-9a-f]{64}$ ]]
           curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/evo-guard.pyz" "$RUNTIME_URL"
           printf '%s  %s\n' "$RUNTIME_SHA256" "$RUNNER_TEMP/evo-guard.pyz" | sha256sum --check
-          python -I "$RUNNER_TEMP/evo-guard.pyz" version | grep -Eq '^evo-guard [0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'
+          test "$(python -I "$RUNNER_TEMP/evo-guard.pyz" version)" = \
+            "evo-guard 4.3.0"
+          TARGET_SHA="$(jq -er .target_sha "$manifest")"
+          receipt_policy=(
+            --repo "$GITHUB_REPOSITORY"
+            --signer-workflow \
+              "$GITHUB_REPOSITORY/.github/workflows/evoguard-build-release-artifact.yml"
+            --signer-digest "$TARGET_SHA"
+            --source-ref refs/heads/main
+            --source-digest "$TARGET_SHA"
+            --cert-oidc-issuer https://token.actions.githubusercontent.com
+          )
+          verify_slsa_receipt() {
+            local artifact="$1" stem="$2"
+            python -I "$RUNNER_TEMP/evo-guard.pyz" \
+              verify-github-attestation-receipt \
+              "/run/evoguard-raae-detached-approved/inputs/$stem-verification.json" \
+              "/run/evoguard-raae-detached-approved/inputs/$artifact" \
+              "/run/evoguard-raae-detached-approved/inputs/$stem-verification-output.json" \
+              "${receipt_policy[@]}" >/dev/null
+          }
+          verify_slsa_receipt evo-guard.pyz build-provenance
+          verify_slsa_receipt evo-guard.spdx.json spdx-provenance
 
       - name: Recheck six reviewer-approved public trust roots
         run: |
@@ -389,6 +466,9 @@ jobs:
 
       - name: Verify RAAE and retained provider evidence without a live provider call
         env:
+          TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+          REPOSITORY_ID: ${{ steps.bind.outputs.repository_id }}
+          REPOSITORY_OWNER_ID: ${{ steps.bind.outputs.repository_owner_id }}
           SOURCE_BOOTSTRAP_SHA256: ${{ vars.EVOGUARD_BOOTSTRAP_RUNTIME_SHA256 }}
           SOURCE_GIT_SHA256: ${{ vars.EVOGUARD_GIT_EXECUTABLE_SHA256 }}
           SOURCE_GH_SHA256: ${{ vars.EVOGUARD_GH_EXECUTABLE_SHA256 }}
@@ -402,6 +482,25 @@ jobs:
           OUTER_GH_SHA256="$(jq -er '.external_settings.toolchain.gh_sha256 | select(type == "string")' "$manifest")"
           OUTER_PROVIDER_UID="$(jq -er '.external_settings.toolchain.provider_uid | select(type == "number")' "$manifest")"
           OUTER_PROVIDER_GID="$(jq -er '.external_settings.toolchain.provider_gid | select(type == "number")' "$manifest")"
+          BUILDER_RUN_ID="$(jq -er '.workflows.E.workflow_run_id' "$manifest")"
+          BUILDER_RUN_ATTEMPT="$(jq -er '.workflows.E.workflow_run_attempt' "$manifest")"
+          python3 -I \
+            /run/evoguard-raae-detached-approved/inputs/verify_spdx_attestation.py \
+            /run/evoguard-raae-detached-approved/inputs/sbom-attestation-output.json \
+            /run/evoguard-raae-detached-approved/inputs/evo-guard.pyz \
+            /run/evoguard-raae-detached-approved/inputs/evo-guard.spdx.json \
+            --receipt "$RUNNER_TEMP/g-sbom-attestation-receipt.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$REPOSITORY_ID" \
+            --repository-owner-id "$REPOSITORY_OWNER_ID" \
+            --workflow-path .github/workflows/evoguard-build-release-artifact.yml \
+            --source-digest "$TARGET_SHA" \
+            --run-id "$BUILDER_RUN_ID" \
+            --run-attempt "$BUILDER_RUN_ATTEMPT" \
+            --event workflow_dispatch
+          cmp --silent \
+            /run/evoguard-raae-detached-approved/inputs/sbom-attestation-receipt.json \
+            "$RUNNER_TEMP/g-sbom-attestation-receipt.json"
           verify_raae() {
             local bundle="$1" artifact="$2" trusted="$3" outer_git="$4" source_gh="$5" output="$6"
             python -I "$RUNNER_TEMP/evo-guard.pyz" verify-github-release-artifact-admission \
@@ -536,6 +635,17 @@ jobs:
               'release_assets': {
                   name: descriptor(name)
                   for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
+              },
+              'attestation_evidence': {
+                  name: descriptor(name)
+                  for name in (
+                      'build-provenance-verification.json',
+                      'build-provenance-verification-output.json',
+                      'spdx-provenance-verification.json',
+                      'spdx-provenance-verification-output.json',
+                      'sbom-attestation-receipt.json',
+                      'sbom-attestation-output.json',
+                  )
               },
               'admissions': {
                   name: descriptor(name)

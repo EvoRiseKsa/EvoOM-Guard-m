@@ -193,7 +193,7 @@ jobs:
       - name: Download exact F external controls
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: evoguard-release-artifact-v1-controls-${{ steps.selector.outputs.f_run_attempt }}
+          name: evoguard-release-artifact-v1-complete-controls-${{ steps.selector.outputs.f_run_attempt }}
           path: ${{ runner.temp }}/f-controls
           run-id: ${{ steps.selector.outputs.f_run_id }}
           github-token: ${{ github.token }}
@@ -222,6 +222,12 @@ jobs:
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
               'evo-guard.pyz.seal-result.json',
               'evo-guard.spdx.json.seal-result.json',
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
           }
           controls_expected = {
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
@@ -229,6 +235,13 @@ jobs:
               'source.json', 'context.json', 'producer.json', 'source-admitter.json',
               'source-github-policy.json', 'signing-requirements.lock',
               'builder.json', 'admitter.json', 'f-control-manifest.json',
+              'verify_spdx_attestation.py',
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
           }
           if {item.name for item in admission.iterdir()} != admission_expected:
               raise SystemExit('F admitted set is not closed')
@@ -284,6 +297,20 @@ jobs:
           for name in ('evo-guard.pyz.raae', 'evo-guard.spdx.json.raae'):
               if selector['admissions'].get(name) != descriptor(destination / name):
                   raise SystemExit(f'G selector admission digest mismatch: {name}')
+          for name in (
+              'build-provenance-verification.json',
+              'build-provenance-verification-output.json',
+              'spdx-provenance-verification.json',
+              'spdx-provenance-verification-output.json',
+              'sbom-attestation-receipt.json',
+              'sbom-attestation-output.json',
+          ):
+              if (admission / name).read_bytes() != (controls / name).read_bytes():
+                  raise SystemExit(f'F attestation evidence mismatch: {name}')
+              if selector['attestation_evidence'].get(name) != descriptor(
+                  controls / name
+              ):
+                  raise SystemExit(f'G selector attestation digest mismatch: {name}')
           PY
           (
             cd "$RUNNER_TEMP/publication-inputs"
