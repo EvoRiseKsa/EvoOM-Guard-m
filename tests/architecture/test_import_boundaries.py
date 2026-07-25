@@ -1741,6 +1741,146 @@ def test_cli_release_source_finalizer_has_one_stdlib_owner_and_public_facades() 
         )
 
 
+def test_cli_producer_receipts_have_one_stdlib_nonadmitting_owner() -> None:
+    """Producer-receipt orchestration has one explicitly non-admitting owner."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.cli"
+    owner_module = "evoom_guard.cli.release_source_producer_receipt_commands"
+    facade_path = PACKAGE_ROOT / "cli" / "__init__.py"
+    owner_path = (
+        PACKAGE_ROOT / "cli" / "release_source_producer_receipt_commands.py"
+    )
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert owner_functions == {
+        "execute_create_producer_receipt",
+        "execute_reverify_producer_receipt",
+        "execute_verify_producer_receipt",
+    }
+    owner_classes = {
+        node.name: node
+        for node in owner_tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    assert set(owner_classes) == {
+        "CreateProducerReceiptServices",
+        "ReverifyProducerReceiptServices",
+        "VerifyProducerReceiptServices",
+        "_AttestedProducerReceipt",
+        "_CreateProducerReceipt",
+        "_CreatedGitHubReceipt",
+        "_InspectedProducerReceipt",
+        "_ProducerReceiptExternalInputs",
+        "_ReadExternalObject",
+        "_ReverifyProducerReceipt",
+        "_VerifiedProducerReceipt",
+        "_VerifyProducerReceipt",
+    }
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "argparse",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+
+    def service_fields(class_name: str) -> set[str]:
+        return {
+            node.target.id
+            for node in owner_classes[class_name].body
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+        }
+
+    assert service_fields("CreateProducerReceiptServices") == {
+        "receipt_format",
+        "producer_error",
+        "create_producer_receipt",
+        "read_external_object_provider",
+        "absolute_path_provider",
+        "machine_report_provider",
+    }
+    assert service_fields("VerifyProducerReceiptServices") == {
+        "receipt_format",
+        "producer_error",
+        "verify_producer_receipt",
+        "external_inputs_provider",
+        "machine_report_provider",
+    }
+    assert service_fields("ReverifyProducerReceiptServices") == {
+        "receipt_format",
+        "producer_error",
+        "reverify_producer_receipt",
+        "external_inputs_provider",
+        "read_external_object_provider",
+        "machine_report_provider",
+    }
+    all_service_fields = set().union(
+        service_fields("CreateProducerReceiptServices"),
+        service_fields("VerifyProducerReceiptServices"),
+        service_fields("ReverifyProducerReceiptServices"),
+    )
+    assert not (
+        {
+            "admission",
+            "signing_key",
+            "provider_isolation",
+            "git_executable_pin",
+            "gh_executable_pin",
+        }
+        & all_service_fields
+    )
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name: node
+        for node in facade_tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    facade_names = (
+        "cmd_create_release_source_producer_receipt",
+        "cmd_verify_release_source_producer_receipt",
+        "cmd_reverify_attested_release_source_producer_receipt",
+    )
+    for name in facade_names:
+        facade = facade_functions[name]
+        assert not any(
+            isinstance(node, (ast.For, ast.If, ast.Match, ast.Try, ast.While))
+            for node in ast.walk(facade)
+        )
+        assert {
+            node.module
+            for node in ast.walk(facade)
+            if isinstance(node, ast.ImportFrom)
+        } == {"evoom_guard.release_source_producer_receipt"}
+
+
 def test_guard_output_has_one_stdlib_owner_and_public_facades() -> None:
     """Output publication belongs to integrations while Guard keeps its API."""
 

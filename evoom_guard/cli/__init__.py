@@ -86,6 +86,9 @@ from evoom_guard.cli import record_commands as _record_command_owner
 from evoom_guard.cli import (
     release_source_finalizer_commands as _release_source_finalizer_command_owner,
 )
+from evoom_guard.cli import (
+    release_source_producer_receipt_commands as _producer_receipt_command_owner,
+)
 from evoom_guard.cli import signing_commands as _signing_command_owner
 from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
 from evoom_guard.pack_manifest import (
@@ -1397,58 +1400,18 @@ def cmd_create_release_source_producer_receipt(
         create_release_source_producer_receipt,
     )
 
-    if any(value == "-" for value in (args.verdict, args.handoff)):
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": "producer receipt verdict and handoff must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        source = _read_external_finalizer_object(args.source, label="release source")
-        context = _read_external_finalizer_object(args.context, label="release-source context")
-        producer = _read_external_finalizer_object(args.producer, label="producer identity")
-        receipt = create_release_source_producer_receipt(
-            args.verdict,
-            args.handoff,
-            args.out,
-            source=source,
-            context=context,
-            bootstrap_guard_sha256=args.bootstrap_guard_sha,
-            producer=producer,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            force=args.force,
-        )
-    except (OSError, UnicodeError, ValueError, ReleaseSourceProducerReceiptError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-                "ok": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-            "ok": True,
-            "status": "CANONICAL_CLAIM_CREATED",
-            "receipt": os.path.abspath(args.out),
-            "record_sha256": receipt["record"]["sha256"],
-            "decision": "NONE",
-            "admission": False,
-            "requires": "fresh-provider-gh-attestation-verify-before-any-future-admission",
-        },
+    return _producer_receipt_command_owner.execute_create_producer_receipt(
+        args,
+        services=_producer_receipt_command_owner.CreateProducerReceiptServices(
+            receipt_format=RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+            producer_error=ReleaseSourceProducerReceiptError,
+            create_producer_receipt=create_release_source_producer_receipt,
+            read_external_object_provider=lambda: _read_external_finalizer_object,
+            absolute_path_provider=lambda: os.path.abspath,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0
 
 
 def _producer_receipt_external_inputs(args: argparse.Namespace) -> tuple[
@@ -1474,57 +1437,17 @@ def cmd_verify_release_source_producer_receipt(
         verify_release_source_producer_receipt,
     )
 
-    if any(value == "-" for value in (args.receipt, args.handoff, args.verdict)):
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": "producer receipt, handoff, and verdict must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        source, context, producer = _producer_receipt_external_inputs(args)
-        verified = verify_release_source_producer_receipt(
-            args.receipt,
-            args.handoff,
-            args.verdict,
-            expected_source=source,
-            expected_context=context,
-            expected_producer=producer,
-            expected_bootstrap_guard_sha256=args.bootstrap_guard_sha,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-        )
-    except (OSError, UnicodeError, ValueError, ReleaseSourceProducerReceiptError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-            "ok": False,
-            "verified": True,
-            "status": "NONADMITTING_LOCAL_AND_RAW_GIT_VERIFIED",
-            "record_sha256": verified.receipt.payload["record"]["sha256"],
-            "decision": "NONE",
-            "admission": False,
-            "provider_verified": False,
-            "requires": "explicit-allow-nonadmitting-evidence-for-archive-only-success",
-        },
+    return _producer_receipt_command_owner.execute_verify_producer_receipt(
+        args,
+        services=_producer_receipt_command_owner.VerifyProducerReceiptServices(
+            receipt_format=RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+            producer_error=ReleaseSourceProducerReceiptError,
+            verify_producer_receipt=verify_release_source_producer_receipt,
+            external_inputs_provider=lambda: _producer_receipt_external_inputs,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0 if args.allow_nonadmitting_evidence else 1
 
 
 def cmd_reverify_attested_release_source_producer_receipt(
@@ -1540,66 +1463,20 @@ def cmd_reverify_attested_release_source_producer_receipt(
         reverify_attested_release_source_producer_receipt,
     )
 
-    if any(value == "-" for value in (args.receipt, args.handoff, args.verdict)):
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-                "ok": False,
-                "status": "ERROR",
-                "error": "producer receipt, handoff, and verdict must be regular files, not standard input",
-            },
-        )
-        return 2
-    try:
-        source, context, producer = _producer_receipt_external_inputs(args)
-        github_policy = _read_external_finalizer_object(
-            args.github_policy, label="GitHub producer-attestation policy"
-        )
-        verified = reverify_attested_release_source_producer_receipt(
-            args.receipt,
-            args.handoff,
-            args.verdict,
-            expected_source=source,
-            expected_context=context,
-            expected_producer=producer,
-            expected_bootstrap_guard_sha256=args.bootstrap_guard_sha,
-            expected_github_policy=github_policy,
-            git_repository=args.git_repository,
-            git_repository_is_bare=args.git_repository_bare,
-            github_receipt_path=args.github_receipt_out,
-            github_raw_output_path=args.github_raw_output_out,
-            gh_executable=args.gh_executable,
-            timeout_seconds=args.timeout_seconds,
-        )
-    except (OSError, UnicodeError, ValueError, ReleaseSourceProducerReceiptError) as exc:
-        _machine_report(
-            out,
-            {
-                "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-                "ok": False,
-                "verified": False,
-                "status": "REJECTED",
-                "error": str(exc),
-            },
-        )
-        return 1
-    _machine_report(
-        out,
-        {
-            "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
-            "ok": False,
-            "verified": True,
-            "status": "NONADMITTING_FRESH_PROVIDER_VERIFIED",
-            "record_sha256": verified.verified.receipt.payload["record"]["sha256"],
-            "github_receipt": verified.github_receipt.receipt_path,
-            "github_raw_output": verified.github_receipt.raw_output_path,
-            "decision": "NONE",
-            "admission": False,
-            "requires": "explicit-allow-nonadmitting-evidence-for-archive-only-success",
-        },
+    return _producer_receipt_command_owner.execute_reverify_producer_receipt(
+        args,
+        services=_producer_receipt_command_owner.ReverifyProducerReceiptServices(
+            receipt_format=RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT,
+            producer_error=ReleaseSourceProducerReceiptError,
+            reverify_producer_receipt=(
+                reverify_attested_release_source_producer_receipt
+            ),
+            external_inputs_provider=lambda: _producer_receipt_external_inputs,
+            read_external_object_provider=lambda: _read_external_finalizer_object,
+            machine_report_provider=lambda: _machine_report,
+        ),
+        out=out,
     )
-    return 0 if args.allow_nonadmitting_evidence else 1
 
 
 def _release_source_key_separation(args: argparse.Namespace) -> dict[str, str]:
