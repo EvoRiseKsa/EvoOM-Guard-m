@@ -537,6 +537,8 @@ jobs:
           sudo install -d -m 0555 -o root -g root /run/evoguard-spdx
           sudo install -d -m 0700 -o "$PROVIDER_UID" -g "$PROVIDER_GID" \
             /run/evoguard-spdx/output
+          sudo install -d -m 0700 -o "$PROVIDER_UID" -g "$PROVIDER_GID" \
+            /run/evoguard-spdx/gh-config
           for name in evo-guard.pyz evo-guard.spdx.json verify_spdx_attestation.py; do
             sudo install -m 0444 -o root -g root \
               "$RUNNER_TEMP/f-sbom-controls/$name" "/run/evoguard-spdx/$name"
@@ -576,6 +578,9 @@ jobs:
             --reuid="$PROVIDER_UID" --regid="$PROVIDER_GID" --clear-groups \
             timeout 120s sh -ceu '
               umask 077
+              export GH_CONFIG_DIR=/run/evoguard-spdx/gh-config
+              export HOME="$GH_CONFIG_DIR" TMPDIR="$GH_CONFIG_DIR"
+              export NO_COLOR=1 CLICOLOR=0 GIT_TERMINAL_PROMPT=0 GH_PROMPT_DISABLED=1
               "$1" attestation verify "$2" \
                 --repo "$3" \
                 --signer-workflow "$3/.github/workflows/evoguard-build-release-artifact.yml" \

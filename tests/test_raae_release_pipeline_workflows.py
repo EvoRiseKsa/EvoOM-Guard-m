@@ -752,6 +752,23 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
         in attestations
     )
     assert "verify_spdx_attestation.py" in attestations
+    assert (
+        'sudo install -d -m 0700 -o "$PROVIDER_UID" -g "$PROVIDER_GID" \\\n'
+        "            /run/evoguard-spdx/gh-config"
+        in attestations
+    )
+    direct_start = attestations.index("sudo --preserve-env=GH_TOKEN setpriv")
+    direct_end = attestations.index("sudo setpriv", direct_start)
+    direct_spdx_provider = attestations[direct_start:direct_end]
+    direct_verify = direct_spdx_provider.index('"$1" attestation verify "$2"')
+    for isolation_control in (
+        "export GH_CONFIG_DIR=/run/evoguard-spdx/gh-config",
+        'export HOME="$GH_CONFIG_DIR" TMPDIR="$GH_CONFIG_DIR"',
+        "export NO_COLOR=1 CLICOLOR=0 GIT_TERMINAL_PROMPT=0 "
+        "GH_PROMPT_DISABLED=1",
+    ):
+        assert isolation_control in direct_spdx_provider
+        assert direct_spdx_provider.index(isolation_control) < direct_verify
     assert "'version': '4.3.0'" in preflight
     assert ".external_settings.runtime.version" in attestations
     assert "evo-guard $RUNTIME_VERSION" in attestations
