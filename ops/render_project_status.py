@@ -242,7 +242,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _MAIN_ARTIFACT_GATE,
         ("build", "attest"),
-        "7367e2b316ebbc0692ff3271df010da1fca9556fc1aa8027234d1d411b56979a",
+        "1ab24066adaeef7f259a71387bc74f176b4c2c7b78aecb0399374cba541c7c60",
     ),
     _WorkflowSpec(
         "F",
@@ -277,7 +277,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "d7a498b1dfd33665a9128c98e75d8b6a7f02a56be11eb21ad22f7cbdc814921a",
+        "496739f4061a065be7c3998785cbe612eee2f6370b3a15baa36d21a58a1e3837",
     ),
 )
 _LEGACY_FALSE_GATE = (

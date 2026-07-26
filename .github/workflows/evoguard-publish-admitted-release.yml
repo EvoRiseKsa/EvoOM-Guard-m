@@ -721,6 +721,8 @@ jobs:
             "$output/h-sbom-attestation-receipt.json"
           verify_one() {
             local name="$1"
+            # Positional parameters expand only inside the isolated shell.
+            # shellcheck disable=SC2016
             "${isolated[@]}" /bin/sh -ceu '
               destination="$1"
               shift

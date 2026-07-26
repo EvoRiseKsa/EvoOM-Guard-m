@@ -388,6 +388,8 @@ jobs:
               finally:
                   os.close(descriptor)
           PY
+          # Inner variables expand only inside the container shell.
+          # shellcheck disable=SC2016
           observed_version="$(
             timeout --signal=KILL 5m docker run --rm \
               --network none \
