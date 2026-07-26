@@ -4,14 +4,7 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-"""Guard the EvoGuard Action's *sticky* PR-comment behaviour (issue #16).
-
-The Action must update one EvoGuard comment per PR (keyed on a stable hidden
-marker) instead of appending a fresh comment on every run. This is a cheap text
-assertion on ``action.yml`` so the upsert logic can't silently regress back to an
-unconditional ``createComment`` — it does not run the Action (that is covered by
-live validation). Stdlib-only.
-"""
+"""Guard the composite Action's candidate-job authority boundary."""
 
 from __future__ import annotations
 
@@ -22,39 +15,55 @@ ACTION_YML = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "action.yml",
 )
-MARKER = "<!-- evoguard-report -->"
-
-
-class ActionStickyCommentTests(unittest.TestCase):
+class ActionCommentAuthorityTests(unittest.TestCase):
     def setUp(self) -> None:
         with open(ACTION_YML, encoding="utf-8") as f:
             self.text = f.read()
 
-    def test_uses_stable_marker(self) -> None:
-        self.assertIn(MARKER, self.text)
+    def test_composite_action_has_no_pr_write_primitive(self) -> None:
+        self.assertNotIn("actions/github-script@", self.text)
+        self.assertNotIn("pull-requests: write", self.text)
+        self.assertNotIn("createComment", self.text)
+        self.assertNotIn("updateComment", self.text)
 
-    def test_upserts_instead_of_always_creating(self) -> None:
-        # Must look up existing comments, update on a hit, create only as fallback.
-        self.assertIn("listComments", self.text)
-        self.assertIn("updateComment", self.text)
-        self.assertIn("createComment", self.text)  # the no-prior-comment fallback
+    def test_legacy_comment_input_is_safe_by_default_and_refused(self) -> None:
+        block = self.text[
+            self.text.index("\n  comment:") : self.text.index("\n  fail-on:")
+        ]
+        self.assertIn('default: "false"', block)
+        refusal = self.text.index("- name: Refuse in-job PR commenting")
+        candidate = self.text.index("- name: Run EvoGuard")
+        self.assertLess(refusal, candidate)
+        self.assertIn("inputs.comment == 'true'", self.text[refusal:candidate])
+        self.assertIn("exit 2", self.text[refusal:candidate])
 
-    def test_finds_prior_comment_by_marker(self) -> None:
-        # The lookup must key off the marker, not a brittle title match.
-        self.assertIn("includes(MARKER)", self.text)
-
-    def test_comment_is_safe_for_fork_and_dependabot_prs(self) -> None:
-        """A read-only PR token must not turn a Guard result into a 403 failure."""
-        step = self.text[self.text.index("- name: Comment on the PR") :]
+    def test_persisted_checkout_auth_is_rejected_before_candidate_execution(self) -> None:
+        refusal = self.text.index("- name: Refuse persisted checkout credentials")
+        candidate = self.text.index("- name: Run EvoGuard")
+        self.assertLess(refusal, candidate)
+        guard = self.text[refusal:candidate]
+        self.assertIn("git config --includes --show-origin --get-regexp", guard)
+        self.assertIn(r"^http\..*\.extraheader$", guard)
+        self.assertNotIn("git config --local", guard)
         self.assertIn(
-            "github.event.pull_request.head.repo.full_name == github.repository",
-            step,
+            "GIT_ASKPASS SSH_ASKPASS SSH_AUTH_SOCK GH_TOKEN GITHUB_TOKEN",
+            guard,
         )
+        self.assertIn(r"^https?://[^/@]+@", guard)
+        self.assertIn("persist-credentials: false", guard)
+        self.assertIn(">/dev/null 2>&1", guard)
+        self.assertIn('case "$config_status" in', guard)
+        self.assertIn("could not safely inspect Git config", guard)
+        self.assertIn("git config exited $config_status", guard)
+        self.assertRegex(guard, r"(?ms)1\)\s+return 0\s+;;")
+        self.assertRegex(guard, r"(?ms)\*\)\s+echo .*?\s+exit 2\s+;;")
+
+    def test_report_remains_available_without_api_authority(self) -> None:
+        self.assertIn("\n  report-path:", self.text)
         self.assertIn(
-            "github.event.pull_request.user.login != 'dependabot[bot]'", step
+            'cat "$RUNNER_TEMP/guard-report.md" >> "$GITHUB_STEP_SUMMARY"',
+            self.text,
         )
-        self.assertIn("continue-on-error: true", step)
-        self.assertLess(step.index("if:"), step.index("uses:"))
 
 
 class ActionCliParityTests(unittest.TestCase):
@@ -67,7 +76,7 @@ class ActionCliParityTests(unittest.TestCase):
     # input-name == CLI flag name (the Action forwards inputs.<name> as --<name>).
     FORWARDED = (
         "test-command", "protected", "allow", "allow-new-tests",
-        "isolation", "docker-image", "docker-network",
+        "isolation", "docker-image", "docker-network", "operating-profile",
         "timeout", "mem-limit", "sarif",
         # v2.2 evidence flags — a Marketplace user must be able to reach them.
         "verifier-pack", "blackbox", "require-report-integrity", "require-candidate-isolation", "diff-coverage", "min-diff-coverage",

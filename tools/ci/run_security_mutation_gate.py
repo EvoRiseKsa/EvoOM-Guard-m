@@ -6683,9 +6683,9 @@ MUTATIONS = (
         before=(
             "            reader_cleanup_proven = True\n"
             "\n"
-            "        deadline = time.monotonic()"
+            "        # Re-read the clock after process and reader startup"
         ),
-        after="\n        deadline = time.monotonic()",
+        after="\n        # Re-read the clock after process and reader startup",
         test=(
             "tests/test_security_mutation_contract.py::"
             "test_post_poll_overflow_stops_before_normal_reader_join"
@@ -8578,8 +8578,8 @@ MUTATIONS = (
     Mutation(
         name="cli-guard-signing-without-json-bypass",
         path="evoom_guard/cli/guard_command.py",
-        before="        if not args.json_out:\n",
-        after="        if False and not args.json_out:\n",
+        before="    if sign_key and not args.json_out:\n",
+        after="    if False and sign_key and not args.json_out:\n",
         test=(
             "tests/test_cli_guard_command_characterization.py::"
             "test_frozen_cli_guard_command_behavior[sign_without_json]"

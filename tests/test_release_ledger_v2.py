@@ -1505,6 +1505,70 @@ def test_first_party_snapshot_is_rechecked_when_validation_body_raises(
     assert isinstance(caught.value.__cause__, RuntimeError)
 
 
+def test_safe_python_roots_exclude_nested_runtime_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = tmp_path / "candidate"
+    nested_runtime = candidate / ".venv"
+    nested_site = nested_runtime / "Lib" / "site-packages"
+    external_runtime = tmp_path / "trusted-runtime"
+    external_lib = external_runtime / "Lib"
+    nested_site.mkdir(parents=True)
+    external_lib.mkdir(parents=True)
+    monkeypatch.setattr(validator.sys, "prefix", str(nested_runtime))
+    monkeypatch.setattr(validator.sys, "base_prefix", str(external_runtime))
+    monkeypatch.setattr(
+        validator.sys,
+        "path",
+        [str(nested_site), str(external_lib)],
+    )
+
+    roots = validator._safe_python_roots(candidate)
+
+    assert external_runtime in roots
+    assert nested_runtime not in roots
+    assert nested_site not in roots
+    assert all(
+        not validator._path_is_within(root, candidate)
+        and not validator._path_is_within(candidate, root)
+        for root in roots
+    )
+
+
+def test_trusted_imports_fail_closed_when_active_runtime_overlaps_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = tmp_path / "candidate"
+    nested_runtime = candidate / ".venv"
+    nested_site = nested_runtime / "Lib" / "site-packages"
+    fake_package = nested_site / "cryptography"
+    fake_package.mkdir(parents=True)
+    marker = tmp_path / "fake-cryptography-executed"
+    (fake_package / "__init__.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(validator.sys, "prefix", str(nested_runtime))
+    monkeypatch.setattr(validator.sys, "path", [str(nested_site)])
+    expected_path = list(validator.sys.path)
+
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="trusted Python runtime overlaps a blocked root",
+    ):
+        with validator._trusted_python_imports(
+            import_root=None,
+            blocked_roots=(candidate,),
+        ):
+            pytest.fail("overlapping runtime entered the trusted import context")
+
+    assert validator.sys.path == expected_path
+    assert not marker.exists()
+
+
 def test_trusted_import_context_ignores_and_restores_fake_cryptography(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

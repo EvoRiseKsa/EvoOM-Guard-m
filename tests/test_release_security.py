@@ -16,6 +16,30 @@ WINDOWS = ROOT / ".github" / "workflows" / "windows.yml"
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
+def test_every_checkout_discards_persisted_credentials() -> None:
+    """No later step should inherit checkout's repository credential helper."""
+
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        lines = workflow.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            if "uses: actions/checkout@" not in line:
+                continue
+            checkout_indent = len(line) - len(line.lstrip())
+            step_lines: list[str] = []
+            for following in lines[index + 1 :]:
+                following_indent = len(following) - len(following.lstrip())
+                if (
+                    following.strip().startswith("- ")
+                    and following_indent <= checkout_indent
+                ):
+                    break
+                step_lines.append(following)
+            assert any(
+                item.strip() == "persist-credentials: false"
+                for item in step_lines
+            ), f"{workflow.name}:{index + 1} persists checkout credentials"
+
+
 def _job_block(workflow: Path, job_name: str) -> str:
     text = workflow.read_text(encoding="utf-8")
     match = re.search(

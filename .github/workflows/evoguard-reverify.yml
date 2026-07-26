@@ -21,7 +21,6 @@ on:
         type: string
 
 permissions:
-  checks: write
   contents: read
   pull-requests: read
 
@@ -29,6 +28,10 @@ jobs:
   metadata:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: read
     outputs:
       base_sha: ${{ steps.pr.outputs.base_sha }}
       head_sha: ${{ steps.pr.outputs.head_sha }}

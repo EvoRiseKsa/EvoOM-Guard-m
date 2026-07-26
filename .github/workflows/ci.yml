@@ -58,7 +58,8 @@ jobs:
       - name: Lint (ruff)
         run: >-
           python -m ruff check
-          evoom_guard/ tests/ tools/ci/
+          evoom_guard/ tests/ tools/ci/ tools/conformance/ tools/evaluation/ tools/fuzz/ tools/telemetry/
+          benchmarks/evaluate.py benchmarks/run_live.py benchmarks/run_manifest.py benchmarks/security_baseline.py
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
 
       - name: Type-check (mypy)
@@ -68,6 +69,16 @@ jobs:
         run: >-
           python -m mypy --strict
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
+
+      - name: Type-check evidence tooling (mypy strict)
+        run: >-
+          python -m mypy --strict --follow-imports=skip
+          tools/conformance/ tools/evaluation/ tools/fuzz/ tools/telemetry/
+
+      - name: Type-check benchmark tooling (mypy strict)
+        run: >-
+          python -m mypy --strict --follow-imports=skip --explicit-package-bases
+          benchmarks/evaluate.py benchmarks/run_live.py benchmarks/run_manifest.py benchmarks/security_baseline.py
 
       - name: Type-check domain contracts (mypy strict)
         run: python -m mypy --strict evoom_guard/domain/
@@ -121,9 +132,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "22"
+          # setup-node v5+ can infer npm caching from package metadata. Keep
+          # candidate CI cache-free so untrusted PR bytes cannot seed a later
+          # trusted run.
+          package-manager-cache: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
@@ -152,6 +169,8 @@ jobs:
       EVOGUARD_E2E_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
@@ -168,12 +187,21 @@ jobs:
           docker build --build-arg PYTHON_IMAGE="$EVOGUARD_E2E_IMAGE" \
             --tag evoguard-e2e-pytest:local \
             --file ops/ci/docker/evoguard-e2e-pytest.Dockerfile .
+      - name: Isolation conformance - pinned image, offline replay
+        run: >-
+          python -m tools.conformance.run_isolation_conformance
+          --image "$EVOGUARD_E2E_IMAGE"
+          --no-pull
+          --output "${RUNNER_TEMP}/isolation-conformance.json"
       - name: Docker E2E — the candidate must be confined
         env:
           EVOGUARD_E2E_PYTEST_IMAGE: evoguard-e2e-pytest:local
+          EVOGUARD_RUN_ISOLATION_CONFORMANCE: "1"
         run: >-
           python -m pytest tests/test_blackbox_docker_e2e.py
-          tests/test_docker_isolation.py::test_docker_setup_suite_and_pack_e2e -v
+          tests/test_docker_isolation.py::test_docker_setup_suite_and_pack_e2e
+          tests/conformance/test_isolation_conformance.py::test_live_docker_profiles_emit_schema_valid_truthful_evidence
+          -v
 
   release-tag-guard:
     # Fail the build if evoom_guard.__version__ has no matching git tag on a
@@ -183,6 +211,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
