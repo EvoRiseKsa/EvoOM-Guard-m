@@ -749,16 +749,29 @@ def test_published_manifest_binds_current_sources_corpus_and_results() -> None:
 
     manifest = load_run_manifest(MANIFEST)
     git = manifest["git"]
+    provenance = manifest["provenance"]
     claims = manifest["claims"]
+    assert manifest["schema_version"] == "evoguard-benchmark-run-v5"
     assert isinstance(git, dict)
+    assert isinstance(provenance, dict)
     assert isinstance(claims, dict)
+    source_commit = provenance["source_commit"]
+    evidence_commit = provenance["evidence_commit"]
+    assert isinstance(source_commit, dict)
+    assert isinstance(evidence_commit, dict)
+    assert source_commit["bound"] is True
+    assert evidence_commit["bound"] is True
+    assert provenance["final_manifest_in_evidence_commit"] is False
     assert claims["authenticated"] is False
     assert claims["evidence_status"] == "self_consistent_unattributed"
+    assert claims["source_commit_bound"] is True
+    assert claims["evidence_commit_bound"] is True
+    assert claims["source_and_results_commit_bound"] is True
+    assert claims["final_manifest_in_evidence_commit"] is False
     assert claims["execution_source_snapshot_bound"] is True
-    if git["dirty"] is not False:
-        assert git["source_and_results_commit_bound"] is False
-        assert claims["source_and_results_commit_bound"] is False
-        assert claims["content_identity"] == "content-digests-only"
+    assert claims["content_identity"] == (
+        "source-and-results-git-commits-plus-content-digests"
+    )
     assert "manifest_sha256" not in json.dumps(manifest, sort_keys=True)
 
 
