@@ -401,10 +401,58 @@ jobs:
               --tmpfs /tmp:rw,noexec,nosuid,nodev,size=67108864 \
               --mount "type=bind,src=$RUNNER_TEMP/release-assets,dst=/artifacts,readonly" \
               --workdir / \
+              --env "EXPECTED_VERSION=$EXPECTED_VERSION" \
               "$BUILD_IMAGE" \
               /bin/sh -ceu '
                 export HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONHASHSEED=0
-                python -I /artifacts/evo-guard.pyz doctor >/dev/null
+                doctor_status=0
+                python -I /artifacts/evo-guard.pyz doctor --json \
+                  > /tmp/doctor.json 2> /tmp/doctor.stderr \
+                  || doctor_status="$?"
+                test "$doctor_status" -eq 1
+                test ! -s /tmp/doctor.stderr
+                python -I -c '"'"'
+          import json, os, pathlib
+          def reject_duplicate_keys(pairs):
+              value = {}
+              for key, item in pairs:
+                  if key in value:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  value[key] = item
+              return value
+          def reject_constant(value):
+              raise ValueError(f"non-finite JSON constant: {value}")
+          report = json.loads(
+              pathlib.Path("/tmp/doctor.json").read_text(encoding="utf-8"),
+              object_pairs_hook=reject_duplicate_keys,
+              parse_constant=reject_constant,
+          )
+          expected = {
+              "tool": "evoguard",
+              "version": os.environ["EXPECTED_VERSION"],
+              "platform": "linux-x86_64",
+              "python": "3.12.13",
+              "git": False,
+              "patch": False,
+              "supported": False,
+          }
+          expected_types = {
+              "tool": str,
+              "version": str,
+              "platform": str,
+              "python": str,
+              "git": bool,
+              "patch": bool,
+              "supported": bool,
+          }
+          if (
+              not isinstance(report, dict)
+              or set(report) != set(expected)
+              or any(type(report[key]) is not expected_types[key] for key in expected)
+              or report != expected
+          ):
+              raise SystemExit("release asset doctor contract is not exact")
+          '"'"'
                 python -I /artifacts/evo-guard.pyz version
               '
           )"

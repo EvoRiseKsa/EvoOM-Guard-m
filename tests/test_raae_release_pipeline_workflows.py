@@ -612,6 +612,26 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "sudo chown" not in build
     assert "sudo chmod" not in build
     assert build.count("docker run --rm") == 2
+    assert "doctor --json \\" in build
+    assert "> /tmp/doctor.json 2> /tmp/doctor.stderr" in build
+    assert 'doctor_status="$?"' in build
+    assert 'test "$doctor_status" -eq 1' in build
+    assert "test ! -s /tmp/doctor.stderr" in build
+    assert '"platform": "linux-x86_64"' in build
+    assert '"python": "3.12.13"' in build
+    assert '"git": False' in build
+    assert '"patch": False' in build
+    assert '"supported": False' in build
+    assert "object_pairs_hook=reject_duplicate_keys" in build
+    assert "parse_constant=reject_constant" in build
+    assert "or set(report) != set(expected)" in build
+    assert (
+        "or any(type(report[key]) is not expected_types[key] for key in expected)"
+        in build
+    )
+    assert "release asset doctor contract is not exact" in build
+    assert "doctor >/dev/null" not in build
+    assert build.count('--env "EXPECTED_VERSION=$EXPECTED_VERSION"') == 2
     assert "container build output is not closed" in build
     assert "PYZ preamble is not canonical" in build
     assert "SPDX relationships are not exact" in build
@@ -650,6 +670,44 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "static PYZ version does not bind the trusted expected version" in attest
     assert "builder controls do not bind the trusted parent tree" in attest
     assert "builder controls do not bind the exact networkless container" in attest
+
+
+def test_e_doctor_validator_accepts_only_the_exact_typed_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = next(block for block in _literal_run_blocks(E) if "doctor --json" in block)
+    opener = "python -I -c '\"'\"'\n"
+    start = run.index(opener, run.index("doctor --json")) + len(opener)
+    source = run[start : run.index("\n'\"'\"'\n", start)]
+    report_path = tmp_path / "doctor.json"
+    source = source.replace('"/tmp/doctor.json"', repr(report_path.as_posix()))
+    compile(source, f"{E.name}:doctor-validator", "exec")
+    monkeypatch.setenv("EXPECTED_VERSION", "4.4.0")
+
+    exact = {
+        "tool": "evoguard",
+        "version": "4.4.0",
+        "platform": "linux-x86_64",
+        "python": "3.12.13",
+        "git": False,
+        "patch": False,
+        "supported": False,
+    }
+    report_path.write_text(json.dumps(exact), encoding="utf-8")
+    exec(compile(source, f"{E.name}:doctor-validator", "exec"), {})
+
+    rejected = (
+        '{"tool":"evoguard","tool":"other","version":"4.4.0",'
+        '"platform":"linux-x86_64","python":"3.12.13",'
+        '"git":false,"patch":false,"supported":false}',
+        json.dumps({**exact, "git": 0}),
+        json.dumps({**exact, "git": float("nan")}),
+    )
+    for payload in rejected:
+        report_path.write_text(payload, encoding="utf-8")
+        with pytest.raises((SystemExit, ValueError)):
+            exec(compile(source, f"{E.name}:doctor-validator", "exec"), {})
 
 
 def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
