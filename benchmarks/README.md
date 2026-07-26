@@ -1,9 +1,10 @@
 # EvoOM Guard labelled-corpus benchmark
 
-This benchmark measures **classification quality with real Guard runs** — every
-verdict below was produced by executing `evoom_guard.guard.guard()` on a real
-target repository built for that case, never hand-entered. It does **not** claim
-that a PASS proves correctness.
+This benchmark is a maintainer-reported measurement snapshot whose outcomes are
+reproducible by the live harness. A fresh harness invocation executes
+`evoom_guard.guard.guard()` on a real target repository built for each case;
+the committed evidence remains self-consistent and unattributed. It does **not**
+claim historical execution authenticity or that a PASS proves correctness.
 
 Two layers:
 
@@ -37,6 +38,11 @@ python -I benchmarks/evaluate.py benchmarks/results.jsonl   # metrics only
 
 Evidence output is create-only by default. Existing results are never replaced
 unless `--replace` is explicit.
+The one-time migration of a legacy checkout that has canonical tracked results
+but no manifest uses `--initialize-evidence --replace`. That mode accepts only
+the default pair, a clean checkout, exact 100644 result bytes at `HEAD`, and an
+absent manifest in both `HEAD` and the worktree. Normal complete-pair reruns use
+only `--replace`.
 
 ## Measured results (17 cases, isolated-Python workers)
 
@@ -130,8 +136,8 @@ establish population performance for either system.
 
 ## Self-consistent run evidence and environment comparison inputs
 
-`run-manifest.json` binds one observed run through three independent SHA-256
-identities:
+`run-manifest.json` binds one reported run snapshot through three independent
+SHA-256 identities:
 
 * **source** — a length-framed inventory of the exact files selected by
   `benchmarks/run_live.py`, `benchmarks/evaluate.py`,

@@ -152,6 +152,19 @@ class StableFileSnapshot:
 
 
 @dataclass(frozen=True)
+class EvidenceInitialization:
+    """Preflight capability for the one canonical results-only migration."""
+
+    root: Path
+    results_path: Path
+    manifest_path: Path
+    head: str
+    results_snapshot: StableFileSnapshot
+    results_parent_identity: tuple[int, int]
+    manifest_parent_identity: tuple[int, int]
+
+
+@dataclass(frozen=True)
 class SourceBundle:
     """Exact source evidence plus the captured bytes used to stage execution."""
 
@@ -1384,6 +1397,43 @@ def _head_blobs(
     return output
 
 
+def _head_tree_entries(
+    git_root: Path,
+    head: str,
+    paths: Sequence[Path],
+) -> dict[Path, tuple[str, str] | None] | None:
+    """Read exact Git modes and object kinds for selected paths at one commit."""
+    resolved_paths = tuple(dict.fromkeys(path.resolve() for path in paths))
+    output: dict[Path, tuple[str, str] | None] = {
+        path: None for path in resolved_paths
+    }
+    relative_to_path: dict[bytes, Path] = {}
+    for path in resolved_paths:
+        relative = _git_relative_path(git_root, path)
+        if relative is None or "\n" in relative or "\r" in relative:
+            return None
+        relative_to_path[relative.encode("utf-8")] = path
+    result = _git_bytes(
+        git_root,
+        ("ls-tree", "-z", head, "--", *(item.decode() for item in relative_to_path)),
+    )
+    if result is None or result.returncode != 0:
+        return None
+    for record in result.stdout.split(b"\0"):
+        if not record:
+            continue
+        try:
+            metadata, record_relative = record.split(b"\t", 1)
+            mode, kind, _object_id = metadata.decode("ascii").split(" ", 2)
+        except (UnicodeDecodeError, ValueError):
+            return None
+        matched_path = relative_to_path.get(record_relative)
+        if matched_path is None or output[matched_path] is not None:
+            return None
+        output[matched_path] = (mode, kind)
+    return output
+
+
 def _head_source_inventory(
     git_root: Path,
     root: Path,
@@ -2388,6 +2438,10 @@ def _assert_staged_identity(staged: _StagedFile, target: _PinnedTarget | None = 
         _attributes, observed_identity = _windows_handle_information(staged.windows_handle)
         if observed_identity != staged.identity:
             raise RuntimeError("benchmark evidence staging identity changed")
+        if target is not None:
+            observed = _target_lstat(target)
+            if observed is None or observed.st_ino != staged.identity[1]:
+                raise RuntimeError("benchmark evidence staging identity changed")
         return
     checked_target = (
         _PinnedTarget(
@@ -2414,6 +2468,26 @@ def _cleanup_staged_file(staged: _StagedFile) -> None:
             _close_windows_handle(handle)
         return
     _unlink_from_directory(staged.directory, staged.name)
+
+
+def _release_published_windows_handle(staged: _StagedFile) -> None:
+    if staged.windows_handle is None or not staged.published:
+        return
+    handle = staged.windows_handle
+    staged.windows_handle = None
+    _close_windows_handle(handle)
+
+
+def _target_matches_published(
+    target: _PinnedTarget,
+    published: _StagedFile,
+) -> bool:
+    observed = _target_lstat(target)
+    if observed is None:
+        return False
+    if os.name == "nt":
+        return observed.st_ino == published.identity[1]
+    return _file_identity(observed) == published.identity
 
 
 def _publish_staged_file(
@@ -2492,6 +2566,7 @@ def validate_evidence_destinations(
     results_path: Path,
     manifest_path: Path,
     replace: bool,
+    _allow_results_only_initialization: bool = False,
 ) -> tuple[Path, Path]:
     """Resolve output targets without mutation and reject aliases/protected paths."""
     root = root.resolve()
@@ -2545,9 +2620,118 @@ def validate_evidence_destinations(
     existence = (results.exists(), manifest.exists())
     if not replace and any(existence):
         raise FileExistsError("benchmark evidence exists; pass --replace explicitly")
-    if replace and existence[0] is not existence[1]:
+    if (
+        replace
+        and existence[0] is not existence[1]
+        and not (
+            _allow_results_only_initialization
+            and existence == (True, False)
+        )
+    ):
         raise ValueError("refusing to replace a pre-existing torn evidence pair")
     return results, manifest
+
+
+def validate_initial_evidence_destinations(
+    *,
+    root: Path,
+    results_path: Path,
+    manifest_path: Path,
+    replace: bool,
+) -> tuple[Path, Path, EvidenceInitialization]:
+    """Authorize the one canonical results-only to evidence-pair migration."""
+    root = root.resolve()
+    if not replace:
+        raise ValueError("initial evidence publication requires explicit replacement")
+    results, manifest = validate_evidence_destinations(
+        root=root,
+        results_path=results_path,
+        manifest_path=manifest_path,
+        replace=True,
+        _allow_results_only_initialization=True,
+    )
+    canonical_results = (root / "benchmarks" / "results.jsonl").resolve(
+        strict=False
+    )
+    canonical_manifest = (root / "benchmarks" / "run-manifest.json").resolve(
+        strict=False
+    )
+    if (results, manifest) != (canonical_results, canonical_manifest):
+        raise ValueError(
+            "initial evidence publication is limited to the canonical benchmark pair"
+        )
+    if not results.exists() or manifest.exists():
+        raise ValueError(
+            "initial evidence publication requires existing results and no manifest"
+        )
+    snapshot = read_stable_regular_file(
+        results,
+        max_bytes=MAX_RESULTS_BYTES,
+        label="existing canonical benchmark results",
+    )
+    results_stat = results.lstat()
+    if results_stat.st_nlink != 1:
+        raise ValueError(
+            "initial evidence publication refuses hard-linked canonical results"
+        )
+    git = collect_git_state(
+        root,
+        bound_paths=(results,),
+        bound_payloads={results: snapshot.payload},
+    )
+    if git.get("source_and_results_commit_bound") is not True:
+        raise ValueError(
+            "initial evidence publication requires clean results matching Git HEAD"
+        )
+    head = git.get("head")
+    top_result = _git(root, ("rev-parse", "--show-toplevel"))
+    if (
+        not isinstance(head, str)
+        or top_result is None
+        or top_result.returncode != 0
+    ):
+        raise ValueError("initial evidence publication Git identity is unavailable")
+    git_root = Path(top_result.stdout.strip()).resolve()
+    entries = _head_tree_entries(git_root, head, (results, manifest))
+    if (
+        entries is None
+        or entries.get(results) != ("100644", "blob")
+        or entries.get(manifest) is not None
+    ):
+        raise ValueError(
+            "initial evidence publication requires a 100644 results blob "
+            "and no manifest at Git HEAD"
+        )
+    with _pin_targets((results, manifest)) as (
+        results_target,
+        manifest_target,
+    ):
+        pinned_results_stat = _target_lstat(results_target)
+        if (
+            pinned_results_stat is None
+            or _path_descriptor_identity(pinned_results_stat)
+            != (
+                snapshot.device,
+                snapshot.inode,
+                snapshot.size,
+                snapshot.mtime_ns,
+            )
+            or pinned_results_stat.st_nlink != 1
+            or _target_lstat(manifest_target) is not None
+        ):
+            raise RuntimeError(
+                "canonical benchmark destinations changed during initialization preflight"
+            )
+        initialization = EvidenceInitialization(
+            root=root,
+            results_path=results,
+            manifest_path=manifest,
+            head=head,
+            results_snapshot=snapshot,
+            results_parent_identity=results_target.directory.identity,
+            manifest_parent_identity=manifest_target.directory.identity,
+        )
+    return results, manifest, initialization
 
 
 def validate_results_destination(
@@ -2661,6 +2845,12 @@ def _restore_target(
     published: _StagedFile | None = None,
     rollback: _StagedFile | None = None,
 ) -> None:
+    if published is not None:
+        if not _target_matches_published(target, published):
+            raise RuntimeError(
+                "benchmark evidence changed before rollback; "
+                "automatic recovery was refused"
+            )
     if published is not None and published.windows_handle is not None:
         published_handle = published.windows_handle
         published.windows_handle = None
@@ -2727,6 +2917,7 @@ def publish_evidence_pair(
     manifest_path: Path,
     manifest_payload: bytes,
     replace: bool,
+    initialization: EvidenceInitialization | None = None,
 ) -> None:
     """Publish a generation-linked pair and roll back ordinary second-write failure."""
     if results_path.suffix != ".jsonl" or manifest_path.suffix != ".json":
@@ -2766,7 +2957,19 @@ def publish_evidence_pair(
         existence = (results_stat is not None, manifest_stat is not None)
         if not replace and any(existence):
             raise FileExistsError("benchmark evidence exists; replacement was not requested")
-        if replace and existence[0] is not existence[1]:
+        if initialization is not None and not replace:
+            raise ValueError(
+                "initial evidence publication requires explicit replacement"
+            )
+        if initialization is not None and existence != (True, False):
+            raise ValueError(
+                "initial evidence publication state changed before publication"
+            )
+        if (
+            replace
+            and existence[0] is not existence[1]
+            and initialization is None
+        ):
             raise ValueError("refusing to replace a pre-existing torn evidence pair")
         if (
             results_stat is not None
@@ -2776,6 +2979,57 @@ def publish_evidence_pair(
             raise ValueError("results and manifest destinations alias one file")
         old_results: bytes | None = None
         old_manifest: bytes | None = None
+        if initialization is not None:
+            expected_paths = (
+                initialization.results_path.resolve(strict=False),
+                initialization.manifest_path.resolve(strict=False),
+            )
+            actual_paths = (
+                results_target.path.resolve(strict=False),
+                manifest_target.path.resolve(strict=False),
+            )
+            if actual_paths != expected_paths:
+                raise ValueError(
+                    "initial evidence publication capability targets another pair"
+                )
+            if (
+                results_target.directory.identity
+                != initialization.results_parent_identity
+                or manifest_target.directory.identity
+                != initialization.manifest_parent_identity
+            ):
+                raise RuntimeError(
+                    "canonical benchmark parent changed after initialization preflight"
+                )
+            snapshot = initialization.results_snapshot
+            if (
+                results_stat is None
+                or _path_descriptor_identity(results_stat)
+                != (
+                    snapshot.device,
+                    snapshot.inode,
+                    snapshot.size,
+                    snapshot.mtime_ns,
+                )
+                or results_stat.st_nlink != 1
+            ):
+                raise RuntimeError(
+                    "canonical benchmark results changed after initialization preflight"
+                )
+            current_git = collect_git_state(
+                initialization.root,
+                bound_paths=(results_target.path,),
+                bound_payloads={
+                    results_target.path: initialization.results_snapshot.payload
+                },
+            )
+            if (
+                current_git.get("head") != initialization.head
+                or current_git.get("source_and_results_commit_bound") is not True
+            ):
+                raise RuntimeError(
+                    "Git state changed after evidence initialization preflight"
+                )
         if replace and all(existence):
             old_results = _read_pinned_regular_file(
                 results_target,
@@ -2787,6 +3041,16 @@ def publish_evidence_pair(
                 max_bytes=MAX_MANIFEST_BYTES,
                 label="existing benchmark manifest",
             )
+        elif initialization is not None:
+            old_results = _read_pinned_regular_file(
+                results_target,
+                max_bytes=MAX_RESULTS_BYTES,
+                label="existing canonical benchmark results",
+            )
+            if old_results != initialization.results_snapshot.payload:
+                raise RuntimeError(
+                    "canonical benchmark results changed after initialization preflight"
+                )
 
         staged_results: _StagedFile | None = None
         staged_manifest: _StagedFile | None = None
@@ -2801,6 +3065,18 @@ def publish_evidence_pair(
                 rollback_manifest = _stage_bytes(manifest_target, old_manifest)
             _assert_pinned_directory_binding(results_target.directory)
             _assert_pinned_directory_binding(manifest_target.directory)
+            if initialization is not None:
+                current_results_stat = _target_lstat(results_target)
+                if (
+                    current_results_stat is None
+                    or results_stat is None
+                    or _stat_identity(current_results_stat)
+                    != _stat_identity(results_stat)
+                    or _target_lstat(manifest_target) is not None
+                ):
+                    raise RuntimeError(
+                        "canonical benchmark destinations changed before publication"
+                    )
             _publish_staged_file(
                 staged_results,
                 results_target,
@@ -2810,7 +3086,7 @@ def publish_evidence_pair(
             _publish_staged_file(
                 staged_manifest,
                 manifest_target,
-                replace=replace,
+                replace=False if initialization is not None else replace,
             )
             _assert_pinned_directory_binding(results_target.directory)
             _assert_pinned_directory_binding(manifest_target.directory)
@@ -2819,20 +3095,28 @@ def publish_evidence_pair(
                 _fsync_parent(manifest_target)
             _assert_pinned_directory_binding(results_target.directory)
             _assert_pinned_directory_binding(manifest_target.directory)
+            if os.name == "nt":
+                _release_published_windows_handle(staged_results)
+                _release_published_windows_handle(staged_manifest)
+            if (
+                _read_pinned_regular_file(
+                    results_target,
+                    max_bytes=MAX_RESULTS_BYTES,
+                    label="published benchmark results",
+                )
+                != results_payload
+                or _read_pinned_regular_file(
+                    manifest_target,
+                    max_bytes=MAX_MANIFEST_BYTES,
+                    label="published benchmark manifest",
+                )
+                != manifest_payload
+            ):
+                raise RuntimeError("benchmark evidence publication readback mismatch")
         except BaseException:
             rollback_errors: list[BaseException] = []
             result_published = staged_results is not None and staged_results.published
             manifest_published = staged_manifest is not None and staged_manifest.published
-            if result_published and staged_results is not None:
-                try:
-                    _restore_target(
-                        results_target,
-                        old_results,
-                        published=staged_results,
-                        rollback=rollback_results,
-                    )
-                except BaseException as exc:
-                    rollback_errors.append(exc)
             if manifest_published and staged_manifest is not None:
                 try:
                     _restore_target(
@@ -2840,6 +3124,16 @@ def publish_evidence_pair(
                         old_manifest,
                         published=staged_manifest,
                         rollback=rollback_manifest,
+                    )
+                except BaseException as exc:
+                    rollback_errors.append(exc)
+            if result_published and staged_results is not None:
+                try:
+                    _restore_target(
+                        results_target,
+                        old_results,
+                        published=staged_results,
+                        rollback=rollback_results,
                     )
                 except BaseException as exc:
                     rollback_errors.append(exc)

@@ -21,6 +21,7 @@ from benchmarks.evaluate import (
 )
 from benchmarks.run_manifest import (
     MAX_RESULTS_BYTES,
+    EvidenceInitialization,
     build_execution_environment,
     build_run_manifest,
     collect_dependency_lock,
@@ -35,6 +36,7 @@ from benchmarks.run_manifest import (
     read_stable_regular_file,
     source_inventory_paths,
     validate_evidence_destinations,
+    validate_initial_evidence_destinations,
     validate_results_destination,
     verify_reproduction_environment,
     verify_run_manifest,
@@ -683,11 +685,10 @@ def test_posix_worker_dispatch_requires_cleanup_proof(
 
 
 def test_published_live_results_match_their_labels() -> None:
-    # benchmarks/results.jsonl is the COMMITTED observed run (real guard()
-    # verdicts, produced by benchmarks/run_live.py). Its published metrics must
-    # stay honest: the known same-process false negative remains visible, ERROR
-    # is an abstention rather than a credited detection, and the two documented
-    # protected-policy trips remain false positives.
+    # benchmarks/results.jsonl is the committed, self-consistent, unattributed
+    # measurement snapshot. The live harness can reproduce these outcomes; this
+    # file alone does not prove historical execution authenticity. Its metrics
+    # must keep the known false negative, abstention, and false positives visible.
     result = evaluate(RESULTS)
     assert result["fn"] == 1, "the known default-profile gap changed — update evidence"
     assert result["fp"] == 2, "the FP count changed — update benchmarks/README.md"
@@ -1606,6 +1607,52 @@ def _minimal_pair_payloads(run_id: str) -> tuple[bytes, bytes]:
     return results, manifest_bytes(manifest)
 
 
+def _initialization_fixture(
+    tmp_path: Path,
+    old_results: bytes,
+) -> tuple[Path, Path, EvidenceInitialization]:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for relative in source_inventory_paths(ROOT):
+        destination = repo / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, destination)
+    results_path = repo / "benchmarks" / "results.jsonl"
+    manifest_path = repo / "benchmarks" / "run-manifest.json"
+    results_path.write_bytes(old_results)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "Benchmark Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "benchmark@invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "commit.gpgsign", "false"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.autocrlf", "false"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "--all"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "results-only fixture"],
+        check=True,
+    )
+    _results, _manifest, initialization = (
+        validate_initial_evidence_destinations(
+            root=repo,
+            results_path=results_path,
+            manifest_path=manifest_path,
+            replace=True,
+        )
+    )
+    return results_path, manifest_path, initialization
+
+
 def test_pair_publication_rolls_back_a_second_replace_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1650,6 +1697,205 @@ def test_pair_publication_rolls_back_a_second_replace_failure(
         )
     assert results_path.read_bytes() == old_results
     assert manifest_path.read_bytes() == old_manifest
+
+
+def test_pair_initialization_replaces_results_and_creates_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    old_results = b"old results\n"
+    results_path, manifest_path, initialization = _initialization_fixture(
+        tmp_path,
+        old_results,
+    )
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+    original_publish = run_manifest_module._publish_staged_file
+    replace_flags: list[bool] = []
+
+    def observe_publish(
+        temporary: Any,
+        target: Any,
+        *,
+        replace: bool,
+    ) -> None:
+        replace_flags.append(replace)
+        original_publish(temporary, target, replace=replace)
+
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_publish_staged_file",
+        observe_publish,
+    )
+
+    publish_evidence_pair(
+        results_path=results_path,
+        results_payload=results,
+        manifest_path=manifest_path,
+        manifest_payload=manifest,
+        replace=True,
+        initialization=initialization,
+    )
+
+    assert replace_flags == [True, False]
+    assert results_path.read_bytes() == results
+    assert manifest_path.read_bytes() == manifest
+
+
+def test_pair_initialization_rolls_back_a_second_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    old_results = b"old results\n"
+    results_path, manifest_path, initialization = _initialization_fixture(
+        tmp_path,
+        old_results,
+    )
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+    original_publish = run_manifest_module._publish_staged_file
+    calls = 0
+
+    def fail_second_publish(
+        temporary: Any,
+        target: Any,
+        *,
+        replace: bool,
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected initial manifest publication failure")
+        original_publish(temporary, target, replace=replace)
+
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_publish_staged_file",
+        fail_second_publish,
+    )
+    with pytest.raises(OSError, match="initial manifest"):
+        publish_evidence_pair(
+            results_path=results_path,
+            results_payload=results,
+            manifest_path=manifest_path,
+            manifest_payload=manifest,
+            replace=True,
+            initialization=initialization,
+        )
+
+    assert results_path.read_bytes() == old_results
+    assert not manifest_path.exists()
+
+
+def test_pair_initialization_rejects_changed_results(
+    tmp_path: Path,
+) -> None:
+    old_results = b"expected results\n"
+    results_path, manifest_path, initialization = _initialization_fixture(
+        tmp_path,
+        old_results,
+    )
+    results_path.write_bytes(b"changed results\n")
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+
+    with pytest.raises(RuntimeError, match="changed after initialization"):
+        publish_evidence_pair(
+            results_path=results_path,
+            results_payload=results,
+            manifest_path=manifest_path,
+            manifest_payload=manifest,
+            replace=True,
+            initialization=initialization,
+        )
+
+    assert results_path.read_bytes() == b"changed results\n"
+    assert not manifest_path.exists()
+
+
+def test_pair_initialization_rejects_a_changed_git_head(
+    tmp_path: Path,
+) -> None:
+    old_results = b"expected results\n"
+    results_path, manifest_path, initialization = _initialization_fixture(
+        tmp_path,
+        old_results,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(results_path.parents[1]),
+            "commit",
+            "--allow-empty",
+            "-q",
+            "-m",
+            "advance head",
+        ],
+        check=True,
+    )
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+
+    with pytest.raises(RuntimeError, match="Git state changed"):
+        publish_evidence_pair(
+            results_path=results_path,
+            results_payload=results,
+            manifest_path=manifest_path,
+            manifest_payload=manifest,
+            replace=True,
+            initialization=initialization,
+        )
+
+    assert results_path.read_bytes() == old_results
+    assert not manifest_path.exists()
+
+
+def test_pair_initialization_preserves_a_concurrently_created_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    old_results = b"old results\n"
+    foreign_manifest = b'{"foreign":true}\n'
+    results_path, manifest_path, initialization = _initialization_fixture(
+        tmp_path,
+        old_results,
+    )
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+    original_publish = run_manifest_module._publish_staged_file
+    calls = 0
+
+    def create_manifest_after_results(
+        temporary: Any,
+        target: Any,
+        *,
+        replace: bool,
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        original_publish(temporary, target, replace=replace)
+        if calls == 1:
+            manifest_path.write_bytes(foreign_manifest)
+
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_publish_staged_file",
+        create_manifest_after_results,
+    )
+    with pytest.raises(FileExistsError):
+        publish_evidence_pair(
+            results_path=results_path,
+            results_payload=results,
+            manifest_path=manifest_path,
+            manifest_payload=manifest,
+            replace=True,
+            initialization=initialization,
+        )
+
+    assert results_path.read_bytes() == old_results
+    assert manifest_path.read_bytes() == foreign_manifest
 
 
 def test_pair_create_failure_leaves_no_torn_output(
@@ -1999,6 +2245,77 @@ def test_destinations_are_create_only_distinct_and_not_source_aliases(
                 manifest_path=symlink,
                 replace=True,
             )
+
+
+def test_initial_evidence_destination_requires_canonical_clean_committed_results(
+    tmp_path: Path,
+) -> None:
+    results, manifest, _initialization = _initialization_fixture(
+        tmp_path,
+        b"committed results\n",
+    )
+    repo = results.parents[1]
+
+    with pytest.raises(ValueError, match="torn evidence pair"):
+        validate_evidence_destinations(
+            root=repo,
+            results_path=results,
+            manifest_path=manifest,
+            replace=True,
+        )
+
+    validated_results, validated_manifest, initialization = (
+        validate_initial_evidence_destinations(
+            root=repo,
+            results_path=results,
+            manifest_path=manifest,
+            replace=True,
+        )
+    )
+    assert validated_results == results.resolve()
+    assert validated_manifest == manifest.resolve()
+    assert initialization.results_snapshot.payload == results.read_bytes()
+
+    results.write_bytes(results.read_bytes() + b"\n")
+    with pytest.raises(ValueError, match="clean results matching Git HEAD"):
+        validate_initial_evidence_destinations(
+            root=repo,
+            results_path=results,
+            manifest_path=manifest,
+            replace=True,
+        )
+
+
+def test_initial_evidence_destination_rejects_custom_and_hardlinked_results(
+    tmp_path: Path,
+) -> None:
+    results, manifest, _initialization = _initialization_fixture(
+        tmp_path,
+        b"committed results\n",
+    )
+    repo = results.parents[1]
+    custom_results = repo / "work" / "results.jsonl"
+    custom_manifest = repo / "work" / "run-manifest.json"
+    custom_results.parent.mkdir()
+    custom_results.write_bytes(results.read_bytes())
+
+    with pytest.raises(ValueError, match="limited to the canonical"):
+        validate_initial_evidence_destinations(
+            root=repo,
+            results_path=custom_results,
+            manifest_path=custom_manifest,
+            replace=True,
+        )
+
+    outside_alias = tmp_path / "results-alias.jsonl"
+    os.link(results, outside_alias)
+    with pytest.raises(ValueError, match="hard-linked"):
+        validate_initial_evidence_destinations(
+            root=repo,
+            results_path=results,
+            manifest_path=manifest,
+            replace=True,
+        )
 
 
 def test_destination_validation_rejects_external_leaf_and_parent_symlinks(

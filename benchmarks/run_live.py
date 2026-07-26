@@ -28,6 +28,8 @@ Honest scope (printed with the results):
 
 Usage:
     python -I benchmarks/run_live.py --replace
+    # Only for the one-time migration from tracked results without a manifest:
+    python -I benchmarks/run_live.py --initialize-evidence --replace
     # Commit results.jsonl, then finalize the draft without rerunning:
     python -I benchmarks/run_live.py \
         --finalize-provenance benchmarks/run-manifest.json --replace
@@ -86,6 +88,7 @@ from benchmarks.run_manifest import (  # noqa: E402
     publish_results_file,
     read_stable_regular_file,
     validate_evidence_destinations,
+    validate_initial_evidence_destinations,
     validate_results_destination,
     verify_reproduction_environment,
     verify_run_manifest,
@@ -1434,6 +1437,7 @@ def run_corpus(
     *,
     manifest_path: str | None = None,
     replace: bool = False,
+    initialize_evidence: bool = False,
 ) -> int:
     output = Path(out_path)
     manifest_output = None if manifest_path is None else Path(manifest_path)
@@ -1446,9 +1450,25 @@ def run_corpus(
         return 2
     try:
         if manifest_output is None:
+            if initialize_evidence:
+                raise ValueError(
+                    "initial evidence publication requires a manifest destination"
+                )
             output = validate_results_destination(
                 root=ROOT,
                 results_path=output,
+                replace=replace,
+            )
+            evidence_initialization = None
+        elif initialize_evidence:
+            (
+                output,
+                manifest_output,
+                evidence_initialization,
+            ) = validate_initial_evidence_destinations(
+                root=ROOT,
+                results_path=output,
+                manifest_path=manifest_output,
                 replace=replace,
             )
         else:
@@ -1458,6 +1478,7 @@ def run_corpus(
                 manifest_path=manifest_output,
                 replace=replace,
             )
+            evidence_initialization = None
     except (OSError, ValueError) as exc:
         print(f"benchmark destination error: {exc}", file=sys.stderr)
         return 2
@@ -1622,12 +1643,27 @@ def run_corpus(
                 effective_environment=execution_environment,
                 tool_identities=tool_identities,
             )
+            if initialize_evidence:
+                provenance = manifest.get("provenance")
+                source_commit = (
+                    provenance.get("source_commit")
+                    if isinstance(provenance, dict)
+                    else None
+                )
+                if (
+                    not isinstance(source_commit, dict)
+                    or source_commit.get("bound") is not True
+                ):
+                    raise RuntimeError(
+                        "initial evidence source stopped matching the clean Git commit"
+                    )
             publish_evidence_pair(
                 results_path=output,
                 results_payload=results_payload,
                 manifest_path=manifest_output,
                 manifest_payload=manifest_bytes(manifest),
                 replace=replace,
+                initialization=evidence_initialization,
             )
         except (OSError, RuntimeError, ValueError) as exc:
             print(f"benchmark manifest error: {exc}", file=sys.stderr)
@@ -1699,6 +1735,14 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="explicitly replace an existing complete evidence pair",
     )
+    ap.add_argument(
+        "--initialize-evidence",
+        action="store_true",
+        help=(
+            "one-time migration of canonical tracked results into a complete "
+            "evidence pair; requires a clean Git checkout and --replace"
+        ),
+    )
     args = ap.parse_args(argv)
     worker_cases = [
         value
@@ -1707,6 +1751,20 @@ def main(argv: list[str]) -> int:
     ]
     if len(worker_cases) > 1:
         print("benchmark worker phase is ambiguous", file=sys.stderr)
+        return 2
+    if args.initialize_evidence and (
+        worker_cases or args.finalize_provenance or args.verify_manifest
+    ):
+        print(
+            "--initialize-evidence is only valid for a corpus run",
+            file=sys.stderr,
+        )
+        return 2
+    if args.initialize_evidence and not args.replace:
+        print(
+            "--initialize-evidence requires --replace",
+            file=sys.stderr,
+        )
         return 2
     if worker_cases:
         if not args._expected_env_sha256 or not args._expected_source_sha256:
@@ -1832,6 +1890,7 @@ def main(argv: list[str]) -> int:
         args.out,
         manifest_path=args.manifest,
         replace=args.replace,
+        initialize_evidence=args.initialize_evidence,
     )
 
 
