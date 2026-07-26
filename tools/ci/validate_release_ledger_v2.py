@@ -147,6 +147,8 @@ REQUIRED_MAIN_CHECKS = {
     ("test (3.12)", 15368),
     ("e2e-runners", 15368),
     ("blackbox-docker-e2e", 15368),
+    ("fuzz (address)", 15368),
+    ("fuzz (undefined)", 15368),
     ("smoke", 15368),
     ("analyze", 15368),
     ("CodeQL", 57789),
@@ -1785,6 +1787,8 @@ def _trusted_python_imports(
 @contextmanager
 def _trusted_parent_first_party(
     contracts: _TrustedParentContracts,
+    *,
+    blocked_roots: Sequence[Path] = (),
 ) -> Iterator[None]:
     """Import every first-party verifier dependency from one literal parent tree."""
 
@@ -1812,7 +1816,7 @@ def _trusted_parent_first_party(
             )
             with _trusted_python_imports(
                 import_root=import_root,
-                blocked_roots=(contracts.repository,),
+                blocked_roots=(contracts.repository, *blocked_roots),
             ):
                 try:
                     for name in _TRUSTED_FIRST_PARTY_MODULES:

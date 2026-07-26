@@ -728,6 +728,34 @@ def test_fuzz_candidate_processes_receive_no_github_credentials() -> None:
     assert "--network none" in text
 
 
+def test_fuzz_workflow_runs_on_main_and_pull_requests() -> None:
+    text = CFLITE_WORKFLOW.read_text(encoding="utf-8")
+    assert "push:\n    branches: [main]" in text
+    assert "pull_request:" in text
+    assert "workflow_dispatch:" in text
+
+
+def test_ci_verifies_and_retains_conformance_results() -> None:
+    text = ACTIVE_NODE_WORKFLOWS[0].read_text(encoding="utf-8")
+    upload = (
+        "actions/upload-artifact@"
+        "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    )
+    assert text.count(upload) == 2
+    for filename, module in (
+        ("runner-conformance.json", "run_runner_conformance"),
+        ("isolation-conformance.json", "run_isolation_conformance"),
+    ):
+        create = text.index(f'--output "${{RUNNER_TEMP}}/{filename}"')
+        verify = text.index(f'--verify "${{RUNNER_TEMP}}/{filename}"')
+        retained = text.index(f"path: ${{{{ runner.temp }}}}/{filename}")
+        assert create < verify < retained
+        assert text.count(f"tools.conformance.{module}") >= 2
+    assert '--image "$EVOGUARD_E2E_IMAGE"' in text
+    assert "--no-pull" in text
+    assert text.count("if-no-files-found: error") >= 2
+
+
 def test_fuzz_workflow_uses_an_immutable_builder_without_wrapper_actions() -> None:
     text = CFLITE_WORKFLOW.read_text(encoding="utf-8")
     assert re.search(

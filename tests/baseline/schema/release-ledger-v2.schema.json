@@ -2637,8 +2637,8 @@
         },
         "required_checks": {
           "type": "array",
-          "minItems": 9,
-          "maxItems": 9,
+          "minItems": 11,
+          "maxItems": 11,
           "uniqueItems": true,
           "items": {
             "type": "object",

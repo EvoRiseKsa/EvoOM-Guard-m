@@ -154,6 +154,19 @@ jobs:
           python -m pip install --no-deps --no-build-isolation -e .
       - name: e2e — vitest + node --test oracles
         run: python -m pytest tests/test_vitest_oracle.py tests/test_node_oracle.py -v
+      - name: Runner-adapter conformance
+        run: |
+          python -m tools.conformance.run_runner_conformance \
+            --output "${RUNNER_TEMP}/runner-conformance.json"
+          python -m tools.conformance.run_runner_conformance \
+            --verify "${RUNNER_TEMP}/runner-conformance.json"
+      - name: Retain runner-adapter conformance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-conformance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runner-conformance.json
+          if-no-files-found: error
+          retention-days: 30
 
   blackbox-docker-e2e:
     # The unit tests prove the FAIL-CLOSED half of the black-box candidate
@@ -188,11 +201,20 @@ jobs:
             --tag evoguard-e2e-pytest:local \
             --file ops/ci/docker/evoguard-e2e-pytest.Dockerfile .
       - name: Isolation conformance - pinned image, offline replay
-        run: >-
-          python -m tools.conformance.run_isolation_conformance
-          --image "$EVOGUARD_E2E_IMAGE"
-          --no-pull
-          --output "${RUNNER_TEMP}/isolation-conformance.json"
+        run: |
+          python -m tools.conformance.run_isolation_conformance \
+            --image "$EVOGUARD_E2E_IMAGE" \
+            --no-pull \
+            --output "${RUNNER_TEMP}/isolation-conformance.json"
+          python -m tools.conformance.run_isolation_conformance \
+            --verify "${RUNNER_TEMP}/isolation-conformance.json"
+      - name: Retain isolation conformance
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: isolation-conformance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/isolation-conformance.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Docker E2E — the candidate must be confined
         env:
           EVOGUARD_E2E_PYTEST_IMAGE: evoguard-e2e-pytest:local
