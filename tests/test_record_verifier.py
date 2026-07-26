@@ -1,4 +1,4 @@
-"""Semantic verification contract for schema-1.11 verdict records."""
+"""Semantic verification contract for schema-1.11 and schema-1.12 records."""
 
 from __future__ import annotations
 
@@ -20,6 +20,9 @@ from evoom_guard.record_verifier import (
     SUPPORTED_SCHEMA_VERSIONS,
     strict_json_loads,
     verify_record,
+)
+from evoom_guard.verdict_contract_v1_12 import (
+    SCHEMA_VERSION as OPERATING_PROFILE_SCHEMA_VERSION,
 )
 
 
@@ -310,6 +313,50 @@ def test_schema_1_11_accepts_optional_strict_harness_without_rejecting_old_recor
     policy["strict_harness"] = "true"
     _refresh_policy_digest(malformed)
     assert verify_record(malformed)["ok"] is False
+
+
+def test_schema_1_11_rejects_operating_profile_and_1_12_accepts_it() -> None:
+    wrong_version = _valid_composite_record()
+    policy = _refresh_policy_digest(wrong_version)
+    policy["operating_profile"] = "local"
+    _refresh_policy_digest(wrong_version)
+    wrong_report = verify_record(wrong_version)
+
+    assert wrong_report["ok"] is False
+    assert "unexpected schema-1.11 keys: operating_profile" in _check(
+        wrong_report, "policy.contract"
+    )["message"]
+    schema_1_11 = json.loads(
+        Path("evoom_guard/schemas/verdict-record-1.11.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert list(Draft202012Validator(schema_1_11).iter_errors(wrong_version))
+
+    local = _valid_composite_record()
+    local["schema_version"] = OPERATING_PROFILE_SCHEMA_VERSION
+    policy = _refresh_policy_digest(local)
+    policy["operating_profile"] = "local"
+    _refresh_policy_digest(local)
+    assert verify_record(local)["ok"] is True
+    schema_1_12 = json.loads(
+        Path("evoom_guard/schemas/verdict-record-1.12.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    Draft202012Validator(schema_1_12).validate(local)
+
+    overclaim = _valid_composite_record()
+    overclaim["schema_version"] = OPERATING_PROFILE_SCHEMA_VERSION
+    policy = _refresh_policy_digest(overclaim)
+    policy["operating_profile"] = "hostile"
+    _refresh_policy_digest(overclaim)
+    report = verify_record(overclaim)
+
+    assert report["ok"] is False
+    policy_check = _check(report, "policy.contract")
+    assert policy_check["status"] == "fail"
+    assert "requires isolation='gvisor'" in policy_check["message"]
 
 
 def test_real_static_guard_record_is_semantically_valid(tmp_path) -> None:
@@ -1325,32 +1372,35 @@ def test_pass_must_match_the_expected_verifier_pack_digest() -> None:
 
 
 def test_machine_readable_schema_is_valid_json() -> None:
-    with open(
-        "evoom_guard/schemas/verdict-record-1.11.schema.json", encoding="utf-8"
-    ) as stream:
-        schema = json.load(stream)
+    versions = (SCHEMA_VERSION, OPERATING_PROFILE_SCHEMA_VERSION)
+    for version in versions:
+        with open(
+            f"evoom_guard/schemas/verdict-record-{version}.schema.json",
+            encoding="utf-8",
+        ) as stream:
+            schema = json.load(stream)
 
-    Draft202012Validator.check_schema(schema)
-    assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-    assert schema["properties"]["schema_version"]["const"] == SCHEMA_VERSION
-    assert set(schema["required"]) >= {
-        "schema_version",
-        "assurance",
-        "attestation",
-        "execution_state",
-    }
-    effective_policy = schema["$defs"]["effectivePolicy"]
-    assert len(effective_policy["required"]) == 24
-    assert effective_policy["additionalProperties"] is False
-    assert schema["$defs"]["packAssurance"]["properties"]["integrity"]["enum"]
-    assert schema["properties"]["diff_coverage"]["oneOf"][0]["$ref"] == (
-        "#/$defs/diffCoverage"
-    )
-    assert schema["properties"]["baseline"]["oneOf"][0]["$ref"] == (
-        "#/$defs/baseline"
-    )
-    assert schema["properties"]["diagnostics"]["maxLength"] == 2000
-    assert SUPPORTED_SCHEMA_VERSIONS == frozenset({"1.11"})
+        Draft202012Validator.check_schema(schema)
+        assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+        assert schema["properties"]["schema_version"]["const"] == version
+        assert set(schema["required"]) >= {
+            "schema_version",
+            "assurance",
+            "attestation",
+            "execution_state",
+        }
+        effective_policy = schema["$defs"]["effectivePolicy"]
+        assert len(effective_policy["required"]) == 24
+        assert effective_policy["additionalProperties"] is False
+        assert schema["$defs"]["packAssurance"]["properties"]["integrity"]["enum"]
+        assert schema["properties"]["diff_coverage"]["oneOf"][0]["$ref"] == (
+            "#/$defs/diffCoverage"
+        )
+        assert schema["properties"]["baseline"]["oneOf"][0]["$ref"] == (
+            "#/$defs/baseline"
+        )
+        assert schema["properties"]["diagnostics"]["maxLength"] == 2000
+    assert SUPPORTED_SCHEMA_VERSIONS == frozenset({"1.11", "1.12"})
 
 
 def test_valid_record_matches_schema_and_required_field_mutation_does_not() -> None:

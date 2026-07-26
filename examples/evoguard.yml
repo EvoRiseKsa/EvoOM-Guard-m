@@ -17,19 +17,20 @@ name: EvoGuard
 on:
   pull_request:
 
-permissions:
-  contents: read
-  pull-requests: write   # required to post the verdict as a PR comment
+permissions: {}
 
 jobs:
   guard:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0            # Guard needs the base commit to diff against
+          persist-credentials: false
 
       - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # published release (@<sha> strictest, @main latest)
         with:
-          comment: "true"           # same-repo PR comment; forks keep the job summary
+          comment: "false"          # explicit for older releases; use the job summary
           fail-on: "any-non-pass"   # required for pull_request security gating

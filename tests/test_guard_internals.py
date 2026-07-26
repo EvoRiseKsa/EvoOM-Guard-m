@@ -147,3 +147,14 @@ def test_write_json_includes_deleted(tmp_path):
     from evoom_guard.guard import SCHEMA_VERSION
 
     assert payload["schema_version"] == SCHEMA_VERSION
+
+
+def test_to_dict_uses_schema_1_12_only_for_operating_profile_policy() -> None:
+    legacy = _result(PASS, attestation={"effective_policy": {}}).to_dict()
+    profiled = _result(
+        PASS,
+        attestation={"effective_policy": {"operating_profile": "local"}},
+    ).to_dict()
+
+    assert legacy["schema_version"] == "1.11"
+    assert profiled["schema_version"] == "1.12"

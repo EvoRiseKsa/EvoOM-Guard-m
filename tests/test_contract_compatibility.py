@@ -26,10 +26,17 @@ from jsonschema import Draft202012Validator
 import evoom_guard.guard as guard_module
 import evoom_guard.record_verifier as record_verifier
 import evoom_guard.verdict_contract_v1_11 as contract
+import evoom_guard.verdict_contract_v1_12 as contract_v1_12
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_PATH = ROOT / "tests" / "fixtures" / "contracts" / "schema-1.11-golden.json"
 SCHEMA_PATH = ROOT / "evoom_guard" / "schemas" / "verdict-record-1.11.schema.json"
+GOLDEN_1_12_PATH = (
+    ROOT / "tests" / "fixtures" / "contracts" / "schema-1.12-golden.json"
+)
+SCHEMA_1_12_PATH = (
+    ROOT / "evoom_guard" / "schemas" / "verdict-record-1.12.schema.json"
+)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -64,9 +71,7 @@ def test_schema_1_11_surfaces_match_frozen_contract() -> None:
     required = golden["required_keys"]
 
     assert contract.SCHEMA_VERSION == golden["schema_version"]
-    assert record_verifier.SUPPORTED_SCHEMA_VERSIONS == frozenset(
-        {golden["schema_version"]}
-    )
+    assert golden["schema_version"] in record_verifier.SUPPORTED_SCHEMA_VERSIONS
 
     assert sorted(contract.VERDICTS) == golden["verdicts"]
     assert sorted(contract.EXECUTION_STATES) == golden["execution_states"]
@@ -110,6 +115,36 @@ def test_schema_1_11_surfaces_match_frozen_contract() -> None:
     assert sorted(schema["$defs"]["attestation"]["required"]) == required[
         "attestation"
     ]
+
+
+def test_schema_1_12_surfaces_match_versioned_contract() -> None:
+    golden = _load_json(GOLDEN_1_12_PATH)
+    schema = _load_json(SCHEMA_1_12_PATH)
+    policy_schema = schema["$defs"]["effectivePolicy"]
+
+    assert contract_v1_12.SCHEMA_VERSION == golden["schema_version"]
+    assert record_verifier.SUPPORTED_SCHEMA_VERSIONS == frozenset({"1.11", "1.12"})
+    assert contract_v1_12.POLICY_KEYS == contract.POLICY_KEYS
+    assert sorted(contract_v1_12.POLICY_KEYS) == golden["policy_keys"]
+    assert sorted(contract_v1_12.OPTIONAL_POLICY_KEYS) == golden[
+        "optional_policy_keys"
+    ]
+    assert schema["properties"]["schema_version"]["const"] == golden[
+        "schema_version"
+    ]
+    assert sorted(policy_schema["required"]) == golden["policy_keys"]
+    assert sorted(
+        policy_schema["properties"]["operating_profile"]["enum"]
+    ) == golden["operating_profiles"]
+    assert policy_schema["additionalProperties"] is False
+
+
+def test_schema_1_11_remains_closed_to_the_1_12_operating_profile() -> None:
+    schema = _load_json(SCHEMA_PATH)
+    policy_schema = schema["$defs"]["effectivePolicy"]
+
+    assert "operating_profile" not in contract.ALLOWED_POLICY_KEYS
+    assert "operating_profile" not in policy_schema["properties"]
 
 
 def test_reason_verdict_lifecycle_truth_table_is_frozen() -> None:

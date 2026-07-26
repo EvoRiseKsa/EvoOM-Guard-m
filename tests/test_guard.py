@@ -12,6 +12,7 @@ skipped when pytest is absent.
 """
 
 import difflib
+import hashlib
 import importlib.util
 import json
 import os
@@ -19,6 +20,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -27,7 +29,11 @@ from evoom_guard.guard import (
     ERROR,
     FAIL,
     PASS,
+    REASON_BINARY_PATCH,
+    REASON_EMPTY_DIFF,
     REASON_NO_VERIFIABLE_CHANGES,
+    REASON_REVERSE_APPLY_FAILED,
+    REASON_UNSAFE_PATH,
     REASON_VERIFIER_PACK_INVALID,
     REJECTED,
     _UnverifiableChangedPathsError,
@@ -37,6 +43,7 @@ from evoom_guard.guard import (
     guard_from_diff,
     render_report,
 )
+from evoom_guard.record_verifier import verify_record
 
 
 def _udiff(rel: str, old: str, new: str) -> str:
@@ -66,6 +73,28 @@ def _make_repo(root: str) -> None:
         f.write("from pkg.m import dbl\n\n\ndef test_dbl():\n    assert dbl(3) == 6\n")
 
 
+def _complete_profile(
+    profile: str,
+    *,
+    verifier_pack: str,
+    verifier_pack_pin: object,
+) -> dict[str, object]:
+    isolation = "gvisor" if profile == "hostile" else "docker"
+    return {
+        "operating_profile": profile,
+        "blackbox": True,
+        "blackbox_only": True,
+        "isolation": isolation,
+        "docker_image": "judge:latest",
+        "docker_network": "none",
+        "verifier_pack": verifier_pack,
+        "expect_verifier_pack_sha256": verifier_pack_pin,
+        "require_report_integrity": "external_process_isolated",
+        "require_candidate_isolation": isolation,
+        "mem_limit_mb": 1024,
+    }
+
+
 FIX = _block("pkg/m.py", "def dbl(x):\n    return x * 2\n")
 WRONG = _block("pkg/m.py", "def dbl(x):\n    return x * 3\n")
 
@@ -85,6 +114,33 @@ class GuardGateTests(unittest.TestCase):
         self.assertFalse(r.passed)
         self.assertIn("tests/test_m.py", r.protected_violations)
         self.assertEqual(r.exit_code, 1)
+
+    def test_profile_rejects_empty_falsy_or_malformed_pack_pins(self) -> None:
+        cheat = _block("tests/test_m.py", "def test_dbl():\n    assert True\n")
+        invalid_pins: tuple[object, ...] = (
+            "",
+            False,
+            0,
+            " ",
+            "a" * 63,
+            "g" * 64,
+            "not-a-digest",
+        )
+        for profile in ("protected", "hostile"):
+            for pin in invalid_pins:
+                with self.subTest(profile=profile, pin=pin), self.assertRaisesRegex(
+                    ValueError,
+                    "expect_verifier_pack_sha256",
+                ):
+                    guard(
+                        self.root,
+                        cheat,
+                        **_complete_profile(
+                            profile,
+                            verifier_pack=self.root,
+                            verifier_pack_pin=pin,
+                        ),
+                    )
 
     def test_editing_the_config_is_rejected(self) -> None:
         cheat = _block("pyproject.toml", '[tool.pytest.ini_options]\naddopts = "-k nope"\n')
@@ -392,12 +448,56 @@ class GuardDiffModeTests(unittest.TestCase):
     def setUp(self) -> None:
         # the head working tree (the current checkout — the fix is already in place).
         self.head = tempfile.mkdtemp(prefix="evo_guard_diffmode_")
+        self.profile_pack = tempfile.mkdtemp(prefix="evo_guard_profile_pack_")
         _make_repo(self.head)
         with open(os.path.join(self.head, "pkg", "m.py"), "w", encoding="utf-8") as f:
             f.write(_FIXED_M)  # head = fixed
 
     def tearDown(self) -> None:
         shutil.rmtree(self.head, ignore_errors=True)
+        shutil.rmtree(self.profile_pack, ignore_errors=True)
+
+    def _protected_profile(self) -> dict[str, object]:
+        return {
+            "operating_profile": "protected",
+            "blackbox": True,
+            "blackbox_only": True,
+            "isolation": "docker",
+            "docker_image": "judge:latest",
+            "docker_network": "none",
+            "verifier_pack": self.profile_pack,
+            "expect_verifier_pack_sha256": "a" * 64,
+            "require_report_integrity": "external_process_isolated",
+            "require_candidate_isolation": "docker",
+        }
+
+    def _assert_profiled_early_result(
+        self,
+        result,
+        *,
+        reason_code: str,
+    ) -> None:
+        payload = result.to_dict()
+        self.assertEqual(payload["schema_version"], "1.12")
+        self.assertEqual(payload["reason_code"], reason_code)
+        self.assertEqual(payload["execution_state"], "not_started")
+        self.assertFalse(payload["test_command_ran"])
+        attestation = payload["attestation"]
+        self.assertIsInstance(attestation, dict)
+        assert isinstance(attestation, dict)
+        self.assertEqual(
+            attestation["candidate_sha256"],
+            hashlib.sha256(b"").hexdigest(),
+        )
+        self.assertEqual(attestation["execution_state"], "not_started")
+        self.assertFalse(attestation["test_command_started"])
+        policy = attestation["effective_policy"]
+        self.assertIsInstance(policy, dict)
+        assert isinstance(policy, dict)
+        self.assertEqual(policy["operating_profile"], "protected")
+        self.assertEqual(policy["isolation"], "docker")
+        verification = verify_record(payload)
+        self.assertTrue(verification["ok"], verification)
 
     @unittest.skipUnless(HAS_PYTEST, "needs pytest to run the suite")
     def test_valid_diff_passes(self) -> None:
@@ -505,6 +605,161 @@ class GuardDiffModeTests(unittest.TestCase):
     def test_empty_diff_is_an_error(self) -> None:
         result, _ = guard_from_diff(self.head, "")
         self.assertEqual(result.verdict, ERROR)
+
+    def test_profiled_early_diff_errors_keep_a_verifiable_1_12_policy(self) -> None:
+        cases = (
+            ("empty", "", REASON_EMPTY_DIFF),
+            (
+                "binary",
+                "diff --git a/img.png b/img.png\n"
+                "Binary files a/img.png and b/img.png differ\n",
+                REASON_BINARY_PATCH,
+            ),
+            (
+                "unsafe",
+                "--- a/pkg/m.py\n+++ b/../../etc/passwd\n"
+                "@@ -1 +1 @@\n-x\n+y\n",
+                REASON_UNSAFE_PATH,
+            ),
+            (
+                "reverse",
+                _udiff(
+                    "pkg/m.py",
+                    _BUGGY_M,
+                    "def dbl(x):\n    return 999\n",
+                ),
+                REASON_REVERSE_APPLY_FAILED,
+            ),
+        )
+        for name, diff, reason_code in cases:
+            with self.subTest(name=name):
+                result, _ = guard_from_diff(
+                    self.head,
+                    diff,
+                    **self._protected_profile(),
+                )
+                self._assert_profiled_early_result(
+                    result,
+                    reason_code=reason_code,
+                )
+
+        valid_diff = _udiff("pkg/m.py", _BUGGY_M, _FIXED_M)
+        unverifiable = _UnverifiableChangedPathsError(
+            [("pkg/m.py", "binary content")]
+        )
+        with mock.patch(
+            "evoom_guard.guard.blocks_from_dirs",
+            side_effect=unverifiable,
+        ):
+            result, _ = guard_from_diff(
+                self.head,
+                valid_diff,
+                **self._protected_profile(),
+            )
+        self._assert_profiled_early_result(
+            result,
+            reason_code=REASON_NO_VERIFIABLE_CHANGES,
+        )
+
+        with mock.patch(
+            "evoom_guard.guard.blocks_from_dirs",
+            return_value=({}, []),
+        ):
+            result, _ = guard_from_diff(
+                self.head,
+                valid_diff,
+                **self._protected_profile(),
+            )
+        self._assert_profiled_early_result(
+            result,
+            reason_code=REASON_NO_VERIFIABLE_CHANGES,
+        )
+
+        candidate_pack = os.path.join(self.head, "candidate-pack")
+        os.makedirs(candidate_pack)
+        candidate_pack_profile = self._protected_profile()
+        candidate_pack_profile["verifier_pack"] = candidate_pack
+        result, _ = guard_from_diff(
+            self.head,
+            valid_diff,
+            **candidate_pack_profile,
+        )
+        self._assert_profiled_early_result(
+            result,
+            reason_code=REASON_VERIFIER_PACK_INVALID,
+        )
+
+    def test_profile_validation_precedes_an_early_diff_error(self) -> None:
+        for name, kwargs in (
+            ("unknown", {"operating_profile": "invalid"}),
+            ("contradictory", {"operating_profile": "protected"}),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "operating profile .* is not satisfied",
+                ):
+                    guard_from_diff(self.head, "", **kwargs)
+
+    def test_profile_rejects_invalid_pack_pin_before_an_early_diff_error(
+        self,
+    ) -> None:
+        invalid_pins: tuple[object, ...] = (
+            "",
+            False,
+            0,
+            " ",
+            "a" * 63,
+            "g" * 64,
+            "not-a-digest",
+        )
+        for profile in ("protected", "hostile"):
+            for pin in invalid_pins:
+                with self.subTest(profile=profile, pin=pin), self.assertRaisesRegex(
+                    ValueError,
+                    "expect_verifier_pack_sha256",
+                ):
+                    guard_from_diff(
+                        self.head,
+                        "",
+                        **_complete_profile(
+                            profile,
+                            verifier_pack=self.profile_pack,
+                            verifier_pack_pin=pin,
+                        ),
+                    )
+
+    def test_profiled_early_diff_rejects_invalid_general_policy_first(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "timeout",
+                {"timeout": 0},
+                "timeout must be a positive integer",
+            ),
+            (
+                "isolation",
+                {"isolation": "gvisro"},
+                "unsupported isolation mode 'gvisro'",
+            ),
+            (
+                "coverage",
+                {"min_diff_coverage": float("nan")},
+                "min_diff_coverage must be a finite number between 0 and 100",
+            ),
+        )
+        for name, overrides, message in cases:
+            with self.subTest(name=name), self.assertRaisesRegex(
+                ValueError,
+                message,
+            ):
+                guard_from_diff(
+                    self.head,
+                    "",
+                    operating_profile="local",
+                    **overrides,
+                )
 
     # ---- hardening for untrusted diffs ---------------------------------- #
     @staticmethod

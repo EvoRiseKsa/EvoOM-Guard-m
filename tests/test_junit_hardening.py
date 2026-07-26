@@ -58,3 +58,130 @@ def test_normal_report_still_counts():
     j = parse_junit_xml(_NORMAL)
     assert j is not None
     assert (j.passed, j.total, j.failures, j.errors) == (1, 2, 1, 0)
+
+
+def test_namespaced_junit_elements_are_counted():
+    report = (
+        '<testsuites xmlns="urn:junit" tests="3" failures="1" errors="0" skipped="1">'
+        '<testsuite tests="3" failures="1" errors="0" skipped="1">'
+        '<testcase name="pass"/>'
+        '<testcase name="fail"><failure message="broken"/></testcase>'
+        '<testcase name="skip"><skipped/></testcase>'
+        "</testsuite>"
+        "</testsuites>"
+    )
+
+    counts = parse_junit_xml(report)
+
+    assert counts is not None
+    assert (counts.passed, counts.total, counts.failures, counts.errors) == (1, 2, 1, 0)
+
+
+def test_rejects_negative_or_impossible_aggregate_counters():
+    reports = (
+        '<testsuite tests="-1" failures="0" errors="0" skipped="0"/>',
+        '<testsuite tests="1" failures="-1" errors="0" skipped="0"/>',
+        '<testsuite tests="1" failures="1" errors="1" skipped="0"/>',
+        '<testsuite tests="1" failures="0" errors="0" skipped="2"/>',
+    )
+
+    for report in reports:
+        assert parse_junit_xml(report) is None
+
+
+def test_rejects_huge_or_non_ascii_counter_before_integer_conversion():
+    huge = "9" * 100_000
+
+    assert parse_junit_xml(f'<testsuite tests="{huge}"/>') is None
+    assert parse_junit_xml('<testsuite tests="١"/>') is None
+
+
+def test_rejects_excessively_deep_suite_nesting_without_recursion_error():
+    depth = 140
+    report = "<testsuites>" + ('<testsuite tests="1">' * depth)
+    report += '<testcase name="pass"/>'
+    report += "</testsuite>" * depth + "</testsuites>"
+
+    assert parse_junit_xml(report) is None
+
+
+def test_rejects_testcase_with_contradictory_terminal_states():
+    report = (
+        '<testsuite tests="2" failures="1" errors="0" skipped="1">'
+        '<testcase name="honest-pass"/>'
+        '<testcase name="ambiguous"><skipped/><failure message="hidden"/></testcase>'
+        "</testsuite>"
+    )
+
+    assert parse_junit_xml(report) is None
+
+
+def test_nested_suite_aggregates_are_validated_not_double_counted():
+    report = (
+        '<testsuites tests="2" failures="1" errors="0" skipped="0">'
+        '<testsuite name="parent" tests="2" failures="1" errors="0" skipped="0">'
+        '<testsuite name="passing" tests="1" failures="0" errors="0" skipped="0">'
+        '<testcase name="pass"/>'
+        "</testsuite>"
+        '<testsuite name="failing" tests="1" failures="1" errors="0" skipped="0">'
+        '<testcase name="fail"><failure/></testcase>'
+        "</testsuite>"
+        "</testsuite>"
+        "</testsuites>"
+    )
+
+    counts = parse_junit_xml(report)
+
+    assert counts is not None
+    assert (counts.passed, counts.total, counts.failures, counts.errors) == (1, 2, 1, 0)
+
+
+def test_pytest_passed_subtests_may_exceed_emitted_testcases_without_inflating_counts():
+    # Captures pytest 9's JUnit shape for successful unittest/builtin subtests:
+    # the suite counter includes them, but the XML writer reuses the parent
+    # node reporter and emits no separate testcase elements.
+    report = (
+        '<testsuites name="pytest tests">'
+        '<testsuite name="pytest" tests="3" failures="0" errors="0" skipped="0">'
+        '<testcase classname="tests.test_example" name="test_with_subtests"/>'
+        '<testcase classname="tests.test_example" name="test_plain"/>'
+        "</testsuite>"
+        "</testsuites>"
+    )
+
+    counts = parse_junit_xml(report)
+
+    assert counts is not None
+    # Trust only explicit testcase evidence, not the larger aggregate claim.
+    assert (counts.passed, counts.total, counts.failures, counts.errors) == (2, 2, 0, 0)
+
+
+def test_rejects_test_surplus_without_complete_matching_terminal_counters():
+    missing_terminal_claims = (
+        '<testsuite tests="2"><testcase name="only-explicit-case"/></testsuite>'
+    )
+    contradictory_terminal_claim = (
+        '<testsuite tests="3" failures="1" errors="0" skipped="0">'
+        '<testcase name="explicit-pass-one"/>'
+        '<testcase name="explicit-pass-two"/>'
+        "</testsuite>"
+    )
+
+    assert parse_junit_xml(missing_terminal_claims) is None
+    assert parse_junit_xml(contradictory_terminal_claim) is None
+
+
+def test_rejects_aggregate_claim_that_disagrees_with_testcases():
+    hidden_failure = (
+        '<testsuite tests="1" failures="0" errors="0" skipped="0">'
+        '<testcase name="failed"><failure/></testcase>'
+        "</testsuite>"
+    )
+    invented_failure = (
+        '<testsuite tests="1" failures="1" errors="0" skipped="0">'
+        '<testcase name="passed"/>'
+        "</testsuite>"
+    )
+
+    assert parse_junit_xml(hidden_failure) is None
+    assert parse_junit_xml(invented_failure) is None

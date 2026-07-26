@@ -131,6 +131,37 @@ def test_preparation_rejects_unknown_isolation_before_any_provider() -> None:
     assert calls == []
 
 
+def test_hostile_profile_rejects_before_any_provider() -> None:
+    calls: list[str] = []
+
+    def unexpected(name: str):
+        def provider():
+            calls.append(name)
+            raise AssertionError(f"{name} must not resolve")
+
+        return provider
+
+    services = GuardRequestPreparationServices(
+        repository_input_provider=unexpected("repository"),
+        candidate_input_provider=unexpected("candidate"),
+        source_identity_provider=unexpected("source"),
+        effective_policy_provider=unexpected("policy"),
+        guard_request_provider=unexpected("request"),
+        effective_policy_payload_provider=unexpected("payload"),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"operating profile 'hostile'.*requires blackbox=true",
+    ):
+        prepare_guard_request(
+            _raw(operating_profile="hostile"),
+            services=services,
+        )
+
+    assert calls == []
+
+
 def test_projection_uses_owned_request_containers_not_caller_containers() -> None:
     deleted = ["old.py"]
     command = ["python", "-m", "pytest"]

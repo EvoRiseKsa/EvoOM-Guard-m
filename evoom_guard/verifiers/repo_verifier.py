@@ -115,6 +115,7 @@ from evoom_guard.execution import (
     DEFAULT_READER_JOIN_SECONDS,
     DEFAULT_TERMINATION_GRACE_SECONDS,
     BoundedOutput,
+    PosixRLimitSpec,
     ProcessLimits,
     drain_process_pipe,
     join_pipe_readers,
@@ -764,24 +765,19 @@ class RepoVerifier:
         self.strict_harness = strict_harness
 
     # ------------------------------------------------------------------ #
-    def _limits(self):  # pragma: no cover - exercised in the child process
-        """preexec hook: cap CPU seconds and address space before exec."""
+    def _limits(self) -> PosixRLimitSpec | None:
+        """Return inert CPU/address-space policy for the POSIX launcher."""
         if resource is None:
             return None
 
-        def apply() -> None:
-            resource_api = cast(Any, resource)
-            cpu = max(1, int(self.timeout) + 1)
-            resource_api.setrlimit(resource_api.RLIMIT_CPU, (cpu, cpu))
-            if self.mem_limit_mb <= 0:
-                return
-            mem = self.mem_limit_mb * 1024 * 1024
-            try:
-                resource_api.setrlimit(resource_api.RLIMIT_AS, (mem, mem))
-            except (ValueError, OSError):
-                pass
-
-        return apply
+        return PosixRLimitSpec(
+            cpu_seconds=max(1, int(self.timeout) + 1),
+            address_space_bytes=(
+                self.mem_limit_mb * 1024 * 1024
+                if self.mem_limit_mb > 0
+                else None
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     def _command(self, problem: RepoProblem | dict) -> list[str]:

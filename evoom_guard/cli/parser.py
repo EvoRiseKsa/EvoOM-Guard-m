@@ -238,6 +238,15 @@ def build_parser(
         "when no trusted base policy is materialized.",
     )
     g_p.add_argument(
+        "--operating-profile",
+        choices=("local", "protected", "hostile"),
+        default=None,
+        help="explicit trust/runtime contract: local labels trusted local use; "
+        "protected requires pinned black-box-only verification in a network-less "
+        "docker/gVisor container; hostile additionally requires gVisor and an "
+        "active memory cap. Omitted preserves the legacy policy exactly.",
+    )
+    g_p.add_argument(
         "--isolation", choices=("subprocess", "docker", "gvisor"), default=None,
         help="how to run the suite: 'subprocess' (default; rlimits+timeout, not a "
         "sandbox), 'docker' (network-less, read-only container — defence in depth for "
@@ -276,8 +285,18 @@ def build_parser(
     g_p.add_argument("--report", default=None, help="write the Markdown report here (else stdout)")
     g_p.add_argument(
         "--sign-key", dest="sign_key", default=None,
-        help="Ed25519 private key (PEM) to sign the --json verdict with; writes a "
-        "detached base64 signature to <json>.sig (needs the 'sign' extra)",
+        help="trusted-local only: Ed25519 private key (PEM) to sign the --json "
+        "verdict with; requires --acknowledge-local-key-exposure and writes a "
+        "detached base64 signature to <json>.sig (needs the 'sign' extra). "
+        "Use Trusted Finalizer instead for untrusted candidate code",
+    )
+    g_p.add_argument(
+        "--acknowledge-local-key-exposure",
+        dest="acknowledge_local_key_exposure",
+        action="store_true",
+        help="explicitly acknowledge that guard executes candidate-controlled "
+        "code under the local OS identity before using --sign-key. This is not "
+        "a security boundary; use only for trusted local inputs",
     )
 
     # ----- keygen ---------------------------------------------------------- #
@@ -338,7 +357,10 @@ def build_parser(
         "bundle-evidence",
         help="sign a verdict and its declared materials into a canonical evidence envelope",
     )
-    be_p.add_argument("verdict", help="the schema-1.11 verdict JSON to bundle")
+    be_p.add_argument(
+        "verdict",
+        help="the supported schema-1.11/1.12 verdict JSON to bundle",
+    )
     be_p.add_argument("--out", required=True, help="output .evb path")
     be_p.add_argument(
         "--context",
@@ -1512,15 +1534,14 @@ def build_parser(
     )
     i_p.add_argument(
         "--private-evoguard", dest="private_evoguard", action="store_true",
-        help="generate a pip-install workflow for a private EvoGuard repo — uses a "
-        "PAT stored in an Actions secret instead of the default cross-repo action "
-        "(required when the EvoGuard repo is not accessible with the default GITHUB_TOKEN)",
+        help="disabled fail-closed: a candidate-controlled pull_request workflow "
+        "cannot safely receive the credential needed to install EvoGuard from a "
+        "private repository",
     )
     i_p.add_argument(
         "--evoguard-token-secret", dest="github_actions_credential_key",
         default="EVOGUARD_TOKEN",
-        help="name of the Actions secret that holds the PAT for the private EvoGuard "
-        "repo (default: EVOGUARD_TOKEN; only used with --private-evoguard)",
+        help="legacy private-workflow credential name (the private scaffold is disabled)",
     )
 
     # ----- version ------------------------------------------------------- #

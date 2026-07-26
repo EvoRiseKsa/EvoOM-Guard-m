@@ -392,9 +392,9 @@ def assurance_profile(
                     )
                     + "candidate_isolation is what was OBSERVED during a launcher "
                     f"invocation ('{effective_candidate_isolation}'); preparing "
-                    f"'{isolation}' alone is not evidence. A container boundary also "
-                    "removes the pack from "
-                    "the candidate's reach. "
+                    f"'{isolation}' alone is not evidence. Container modes omit the "
+                    "pack mount and use a read-only candidate mount; those scoped "
+                    "controls are not proof against container escape. "
                     + (
                         "Execution did not complete, so no clean verdict source is claimed. "
                         if execution_state != EXECUTION_COMPLETED

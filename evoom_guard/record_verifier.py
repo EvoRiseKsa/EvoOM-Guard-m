@@ -1,10 +1,10 @@
 """Offline semantic verification for EvoGuard verdict records.
 
 This module deliberately does not verify a detached signature or re-run a
-candidate.  It answers a narrower question: is a schema-1.11 record internally
-consistent with the public EvoGuard contract?  Signature verification remains
-the responsibility of ``verify-verdict``; admission systems should normally run
-both checks.
+candidate.  It answers a narrower question: is a supported verdict record
+internally consistent with its declared public EvoGuard contract? Signature
+verification remains the responsibility of ``verify-verdict``; admission
+systems should normally run both checks.
 """
 
 from __future__ import annotations
@@ -17,23 +17,25 @@ from datetime import datetime
 from typing import Any, TypeGuard, cast
 
 from evoom_guard import verdict_contract_v1_11 as _contract
+from evoom_guard import verdict_contract_v1_12 as _contract_v1_12
+from evoom_guard.domain import operating_profile_violations
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
-from evoom_guard.record_verification.isolation import (
-    check_isolation as _check_isolation,
-)
-from evoom_guard.record_verification.report import (
-    RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
-)
-from evoom_guard.record_verification.report import (
-    SUPPORTED_SCHEMA_VERSIONS as SUPPORTED_SCHEMA_VERSIONS,
-)
-from evoom_guard.record_verification.report import _Checks as _Checks
 from evoom_guard.strict_json import strict_json_loads as strict_json_loads
 from evoom_guard.verifiers.junit_oracle import (
     JUNIT_COMPOSITE_DIGEST_FORMAT,
     JUNIT_REPORT_SET_DIGEST_FORMAT,
     JUNIT_XML_DIGEST_FORMAT,
 )
+from evoom_guard.verifiers.record_isolation import (
+    check_isolation as _check_isolation,
+)
+from evoom_guard.verifiers.record_report import (
+    RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
+)
+from evoom_guard.verifiers.record_report import (
+    SUPPORTED_SCHEMA_VERSIONS as SUPPORTED_SCHEMA_VERSIONS,
+)
+from evoom_guard.verifiers.record_report import RecordChecks as _Checks
 
 _VERDICTS = _contract.VERDICTS
 _EXECUTION_STATES = _contract.EXECUTION_STATES
@@ -45,6 +47,10 @@ _ALLOWED_POLICY_KEYS = _contract.ALLOWED_POLICY_KEYS
 _REQUIRED_TOP_LEVEL = _contract.REQUIRED_TOP_LEVEL
 _REQUIRED_ASSURANCE = _contract.REQUIRED_ASSURANCE
 _REQUIRED_ATTESTATION = _contract.REQUIRED_ATTESTATION
+_POLICY_CONTRACTS = {
+    _contract.SCHEMA_VERSION: _contract,
+    _contract_v1_12.SCHEMA_VERSION: _contract_v1_12,
+}
 
 _VERDICT_SOURCES = frozenset(
     {
@@ -241,16 +247,30 @@ def _valid_utc_timestamp(value: object) -> bool:
     return True
 
 
-def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
+def _policy_type_errors(
+    policy: dict[str, Any],
+    schema_version: object,
+) -> list[str]:
     errors: list[str] = []
-    missing = sorted(_POLICY_KEYS - policy.keys())
+    policy_contract = (
+        _POLICY_CONTRACTS.get(schema_version, _contract)
+        if isinstance(schema_version, str)
+        else _contract
+    )
+    policy_keys = policy_contract.POLICY_KEYS
+    allowed_policy_keys = policy_contract.ALLOWED_POLICY_KEYS
+    missing = sorted(policy_keys - policy.keys())
     extra = sorted(
-        key for key in policy if isinstance(key, str) and key not in _ALLOWED_POLICY_KEYS
+        key
+        for key in policy
+        if isinstance(key, str) and key not in allowed_policy_keys
     )
     if missing:
         errors.append(f"missing keys: {', '.join(missing)}")
     if extra:
-        errors.append(f"unexpected schema-1.11 keys: {', '.join(extra)}")
+        errors.append(
+            f"unexpected schema-{schema_version} keys: {', '.join(extra)}"
+        )
     if any(not isinstance(key, str) for key in policy):
         errors.append("all policy keys must be strings")
 
@@ -292,6 +312,15 @@ def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
             errors.append(f"{field} must be a boolean")
     if "strict_harness" in policy and not isinstance(policy["strict_harness"], bool):
         errors.append("strict_harness must be a boolean when present")
+    operating_profile_supported = "operating_profile" in allowed_policy_keys
+    operating_profile = policy.get("operating_profile")
+    if operating_profile_supported and "operating_profile" in policy and (
+        not isinstance(operating_profile, str)
+        or operating_profile not in {"local", "protected", "hostile"}
+    ):
+        errors.append(
+            "operating_profile must be local, protected, or hostile when present"
+        )
     timeout = policy.get("timeout")
     if not _is_int(timeout) or timeout <= 0:
         errors.append("timeout must be a positive integer")
@@ -330,6 +359,49 @@ def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
         errors.append("blackbox_only requires blackbox")
     if expected_pack is not None and policy.get("verifier_pack_required") is not True:
         errors.append("an expected pack digest requires verifier_pack_required")
+    if operating_profile_supported and isinstance(
+        operating_profile, str
+    ) and operating_profile in {
+        "local",
+        "protected",
+        "hostile",
+    }:
+        profile_violations = operating_profile_violations(
+            operating_profile,
+            isolation=(
+                policy["isolation"]
+                if isinstance(policy.get("isolation"), str)
+                else ""
+            ),
+            docker_image_present=(
+                isinstance(policy.get("docker_image"), str)
+                and bool(policy["docker_image"])
+            ),
+            docker_network=(
+                policy["docker_network"]
+                if isinstance(policy.get("docker_network"), str)
+                else ""
+            ),
+            setup_command_present=bool(policy.get("setup_command")),
+            trust_setup_on_host=policy.get("trust_setup_on_host") is True,
+            mem_limit_mb=memory if _is_int(memory) else 0,
+            verifier_pack_required=policy.get("verifier_pack_required") is True,
+            expect_verifier_pack_sha256=(
+                expected_pack if isinstance(expected_pack, str) else None
+            ),
+            blackbox=blackbox is True,
+            blackbox_only=policy.get("blackbox_only") is True,
+            require_report_integrity=(
+                report_floor if isinstance(report_floor, str) else None
+            ),
+            require_candidate_isolation=(
+                isolation_floor if isinstance(isolation_floor, str) else None
+            ),
+        )
+        errors.extend(
+            f"operating_profile {operating_profile!r} {violation}"
+            for violation in profile_violations
+        )
     return errors
 
 
@@ -536,7 +608,7 @@ def _baseline_type_errors(baseline: dict[str, Any]) -> list[str]:
 
 
 def _policy_sha256(policy: dict[str, Any]) -> str:
-    """Reproduce the canonical schema-1.11 policy digest exactly."""
+    """Reproduce the canonical versioned policy digest exactly."""
     encoded = json.dumps(policy, sort_keys=True, allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -603,7 +675,7 @@ def _nested_type_checks(
         checks.expect(
             "assurance.required_fields",
             not missing,
-            "all schema-1.11 assurance fields are present",
+            "all contract assurance fields are present",
             f"missing assurance fields: {', '.join(missing)}",
         )
         errors: list[str] = []
@@ -680,7 +752,7 @@ def _nested_type_checks(
     checks.expect(
         "attestation.required_fields",
         not missing,
-        "all schema-1.11 semantic attestation fields are present",
+        "all contract semantic attestation fields are present",
         f"missing attestation fields: {', '.join(missing)}",
     )
     errors = []
@@ -927,7 +999,7 @@ def _check_verdict_and_counts(checks: _Checks, record: dict[str, Any]) -> None:
     checks.expect(
         "verdict.reason_code",
         reason_valid,
-        "reason_code agrees with its schema-1.11 verdict and lifecycle mapping",
+        "reason_code agrees with its contract verdict and lifecycle mapping",
         "reason_code is unknown or contradicts the verdict/execution_state",
     )
 
@@ -1025,6 +1097,7 @@ def _check_policy(
     checks: _Checks,
     record: dict[str, Any],
     attestation: dict[str, Any] | None,
+    schema_version: object,
 ) -> dict[str, Any] | None:
     if attestation is None:
         checks.skip("policy.digest", "attestation is unavailable")
@@ -1038,11 +1111,11 @@ def _check_policy(
         checks.fail("policy.contract", "effective_policy is not an object")
         checks.skip("policy.context_parity", "effective policy is invalid")
         return None
-    policy_errors = _policy_type_errors(policy)
+    policy_errors = _policy_type_errors(policy, schema_version)
     checks.expect(
         "policy.contract",
         not policy_errors,
-        "effective_policy has the complete typed schema-1.11 contract",
+        f"effective_policy has the complete typed schema-{schema_version} contract",
         "; ".join(policy_errors),
     )
     try:
@@ -2192,7 +2265,7 @@ def _verify_record(record: object) -> dict[str, Any]:
     checks.expect(
         "envelope.required_fields",
         not missing,
-        "all schema-1.11 top-level fields are present",
+        "all contract top-level fields are present",
         f"missing top-level fields: {', '.join(missing)}",
     )
     type_errors = _top_level_type_errors(record)
@@ -2250,7 +2323,7 @@ def _verify_record(record: object) -> dict[str, Any]:
         )
         and _known_string(record.get("isolation"), _ISOLATIONS),
         "verdict, risk, lifecycle, source, and isolation values are recognized",
-        "one or more schema-1.11 enum values are unknown",
+        "one or more contract enum values are unknown",
     )
     risk = record.get("risk_score")
     checks.expect(
@@ -2278,7 +2351,7 @@ def _verify_record(record: object) -> dict[str, Any]:
 
     _check_lifecycle(checks, record, assurance, attestation)
     _check_verdict_and_counts(checks, record)
-    policy = _check_policy(checks, record, attestation)
+    policy = _check_policy(checks, record, attestation, schema_version)
     _check_evidence_contracts(checks, record, policy, attestation)
     _check_policy_runtime_bindings(checks, record, assurance, attestation, policy)
     _check_receipts(checks, record, assurance, attestation)

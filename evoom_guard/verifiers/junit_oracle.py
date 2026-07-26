@@ -23,6 +23,170 @@ _PASSED_RE = re.compile(r"(\d+) passed")
 _FAILED_RE = re.compile(r"(\d+) failed")
 _ERROR_RE = re.compile(r"(\d+) errors?")
 
+_JUNIT_COUNTERS = ("tests", "failures", "errors", "skipped")
+_TERMINAL_CASE_STATES = frozenset(("failure", "error", "skipped"))
+_MAX_JUNIT_COUNTER = 10**12
+_MAX_JUNIT_COUNTER_DIGITS = len(str(_MAX_JUNIT_COUNTER))
+_MAX_JUNIT_NESTING = 128
+
+
+class _InvalidJUnit(ValueError):
+    """Internal fail-closed signal for contradictory JUnit semantics."""
+
+
+def _local_name(element: ET.Element) -> str:
+    """Return an XML element's local name, independent of its namespace."""
+
+    tag = element.tag
+    if not isinstance(tag, str):
+        return ""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _declared_counts(element: ET.Element) -> dict[str, int]:
+    """Read present aggregate counters, rejecting negative/impossible values."""
+
+    declared: dict[str, int] = {}
+    for name in _JUNIT_COUNTERS:
+        raw = element.get(name)
+        if raw is None:
+            continue
+        # Bound the lexical form before ``int``. Python 3.10 has no built-in
+        # integer-string digit limit, so converting an attacker-supplied
+        # multi-million-digit counter would otherwise consume unbounded CPU.
+        if (
+            not raw
+            or len(raw) > _MAX_JUNIT_COUNTER_DIGITS
+            or any(char < "0" or char > "9" for char in raw)
+        ):
+            raise _InvalidJUnit
+        value = int(raw)
+        if value > _MAX_JUNIT_COUNTER:
+            raise _InvalidJUnit
+        declared[name] = value
+
+    tests = declared.get("tests")
+    if tests is not None:
+        terminal = sum(declared.get(name, 0) for name in ("failures", "errors", "skipped"))
+        if terminal > tests:
+            raise _InvalidJUnit
+    return declared
+
+
+def _add_raw_counts(
+    left: tuple[int, int, int, int],
+    right: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    """Add raw ``(tests, failures, errors, skipped)`` counters."""
+
+    tests, failures, errors, skipped = (left[index] + right[index] for index in range(4))
+    return tests, failures, errors, skipped
+
+
+def _testcase_counts(testcase: ET.Element) -> tuple[int, int, int, int]:
+    """Return one testcase's state, rejecting mutually exclusive outcomes."""
+
+    states = {
+        _local_name(child) for child in testcase if _local_name(child) in _TERMINAL_CASE_STATES
+    }
+    if len(states) > 1:
+        # A testcase cannot simultaneously be skipped and failed (or errored).
+        # Picking the first child would let document order decide the verdict.
+        raise _InvalidJUnit
+    state = next(iter(states), "")
+    return (
+        1,
+        int(state == "failure"),
+        int(state == "error"),
+        int(state == "skipped"),
+    )
+
+
+def _validate_declared_counts(
+    declared: dict[str, int],
+    actual: tuple[int, int, int, int],
+) -> None:
+    """Require supplied aggregate fields to agree with explicit child evidence.
+
+    Pytest 9 counts successful ``unittest``/builtin subtests in a suite's
+    ``tests`` attribute without emitting a separate ``testcase`` element for
+    them.  Permit only that passed-only surplus when all three terminal counters
+    are present and exactly match the explicit testcase evidence.  The caller
+    deliberately retains ``actual`` rather than trusting the larger declaration,
+    so the compatibility case cannot inflate a candidate's score.
+    """
+
+    actual_by_name = dict(zip(_JUNIT_COUNTERS, actual, strict=True))
+    declared_tests = declared.get("tests")
+    if declared_tests is not None and declared_tests != actual_by_name["tests"]:
+        terminal_names = ("failures", "errors", "skipped")
+        passed_only_surplus = (
+            declared_tests > actual_by_name["tests"]
+            and all(name in declared for name in terminal_names)
+            and all(
+                declared[name] == actual_by_name[name]
+                for name in terminal_names
+            )
+        )
+        if not passed_only_surplus:
+            raise _InvalidJUnit
+
+    if any(
+        actual_by_name[name] != value
+        for name, value in declared.items()
+        if name != "tests"
+    ):
+        raise _InvalidJUnit
+
+
+def _element_counts(
+    element: ET.Element,
+    *,
+    depth: int = 0,
+) -> tuple[tuple[int, int, int, int], bool]:
+    """Derive counts recursively without double-counting nested suites.
+
+    Parent aggregate counters are validation claims over their descendants, not
+    extra tests to sum. A leaf ``testsuite`` without testcase elements is the one
+    compatibility case where its aggregate counters are the evidence.
+    """
+
+    if depth > _MAX_JUNIT_NESTING:
+        raise _InvalidJUnit
+
+    local_name = _local_name(element)
+    declared = _declared_counts(element) if local_name in {"testsuite", "testsuites"} else {}
+    counts = (0, 0, 0, 0)
+    seen = False
+
+    for child in element:
+        child_name = _local_name(child)
+        if child_name == "testcase":
+            counts = _add_raw_counts(counts, _testcase_counts(child))
+            seen = True
+        elif child_name in {"testsuite", "testsuites"}:
+            child_counts, child_seen = _element_counts(child, depth=depth + 1)
+            if child_seen:
+                counts = _add_raw_counts(counts, child_counts)
+                seen = True
+        elif list(child):
+            # Tolerate dialect-specific grouping wrappers while retaining the same
+            # testcase and testsuite validation rules.
+            child_counts, child_seen = _element_counts(child, depth=depth + 1)
+            if child_seen:
+                counts = _add_raw_counts(counts, child_counts)
+                seen = True
+
+    if seen:
+        _validate_declared_counts(declared, counts)
+        return counts, True
+
+    if local_name == "testsuite":
+        aggregate = tuple(declared.get(name, 0) for name in _JUNIT_COUNTERS)
+        return aggregate, True  # type: ignore[return-value]
+
+    return counts, False
+
 
 def parse_pytest_counts(output: str) -> tuple[int, int]:
     """Read ``(passed, total)`` from a pytest/vitest run's *human* output.
@@ -39,21 +203,21 @@ def parse_pytest_counts(output: str) -> tuple[int, int]:
 
 
 def _count_testcases(root: ET.Element) -> JUnitCounts | None:
-    """Count ``<testcase>`` elements directly — the unit every dialect emits."""
-    cases = list(root.iter("testcase"))
-    if not cases:
+    """Derive namespace-aware, semantically consistent JUnit counts."""
+
+    if _local_name(root) not in {"testsuite", "testsuites"}:
         return None
-    failures = errors = skipped = 0
-    for tc in cases:
-        if tc.find("skipped") is not None:
-            skipped += 1
-        elif tc.find("error") is not None:
-            errors += 1
-        elif tc.find("failure") is not None:
-            failures += 1
-    total = len(cases)
-    effective_total = max(0, total - skipped)
-    passed = max(0, effective_total - failures - errors)
+    try:
+        raw, seen = _element_counts(root)
+    except _InvalidJUnit:
+        return None
+    if not seen:
+        return None
+    total, failures, errors, skipped = raw
+    effective_total = total - skipped
+    passed = effective_total - failures - errors
+    if effective_total < 0 or passed < 0:
+        return None
     return JUnitCounts(
         passed=passed,
         total=effective_total,
@@ -98,30 +262,7 @@ def parse_junit_xml(xml_text: str) -> JUnitCounts | None:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
         return None
-    by_case = _count_testcases(root)
-    if by_case is not None:
-        return by_case
-    total = failures = errors = skipped = 0
-    seen = False
-    for suite in root.iter("testsuite"):
-        seen = True
-        try:
-            total += int(suite.get("tests", 0))
-            failures += int(suite.get("failures", 0))
-            errors += int(suite.get("errors", 0))
-            skipped += int(suite.get("skipped", 0))
-        except (TypeError, ValueError):  # pragma: no cover - defensive
-            return None
-    if not seen:
-        return None
-    effective_total = max(0, total - skipped)
-    passed = max(0, effective_total - failures - errors)
-    return JUnitCounts(
-        passed=passed,
-        total=effective_total,
-        failures=failures,
-        errors=errors,
-    )
+    return _count_testcases(root)
 
 
 def _read_text_or_none(path: str) -> str | None:

@@ -218,6 +218,9 @@ from evoom_guard.policy import (
     effective_policy_sha256 as _effective_policy_digest,
 )
 from evoom_guard.verdict_contract_v1_11 import SCHEMA_VERSION
+from evoom_guard.verdict_contract_v1_12 import (
+    SCHEMA_VERSION as OPERATING_PROFILE_SCHEMA_VERSION,
+)
 from evoom_guard.verifiers.candidate_preflight import (
     VERIFIER_PACK_DIR as VERIFIER_PACK_DIR,
 )
@@ -442,8 +445,16 @@ class GuardResult:
             )
 
     def to_dict(self) -> dict[str, Any]:
+        schema_version = SCHEMA_VERSION
+        if isinstance(self.attestation, Mapping):
+            effective_policy = self.attestation.get("effective_policy")
+            if (
+                isinstance(effective_policy, Mapping)
+                and "operating_profile" in effective_policy
+            ):
+                schema_version = OPERATING_PROFILE_SCHEMA_VERSION
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": schema_version,
             "tool": "evoguard",
             "tool_version": __version__,
             "verdict": self.verdict,
@@ -574,6 +585,7 @@ def guard(
     require_demonstrated_fix: bool = False,
     strict_harness: bool = False,
     file_blocks: dict[str, str] | None = None,
+    operating_profile: str | None = None,
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -670,6 +682,7 @@ def guard(
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
             file_blocks=file_blocks,
+            operating_profile=operating_profile,
         ),
         services=GuardRequestPreparationServices(
             repository_input_provider=lambda: RepositoryInput,
@@ -1243,7 +1256,7 @@ def _utc_now() -> str:
 # deleting tests, deselecting in config, forging stdout — all caught) but does
 # NOT stop a patch that writes deliberate process-level forgery code into
 # source. Read report_integrity before trusting a PASS on untrusted authors.
-def _effective_policy(
+def build_effective_policy_payload(
     *, mode: str, isolation: str, docker_image: str | None, docker_network: str,
     test_command: list[str] | None, setup_command: list[str] | None,
     trust_setup_on_host: bool,
@@ -1256,6 +1269,7 @@ def _effective_policy(
     min_diff_coverage: float | None, baseline_evidence: bool,
     require_demonstrated_fix: bool, strict_harness: bool,
     policy_id: str | None, policy_version: str | None,
+    operating_profile: str | None = None,
 ) -> dict[str, Any]:
     """The COMPLETE canonical policy that shaped this judgment (1.7).
 
@@ -1293,8 +1307,15 @@ def _effective_policy(
         strict_harness=strict_harness,
         policy_id=policy_id,
         policy_version=policy_version,
+        operating_profile=operating_profile,
     )
     return _effective_policy_payload(policy)
+
+
+# Historical compatibility seam.  New cross-package callers must use the
+# public name above; keeping the alias avoids breaking integrations that
+# imported or monkeypatched the pre-extraction helper.
+_effective_policy = build_effective_policy_payload
 
 
 def effective_policy_sha256(policy: Mapping[str, Any]) -> str:
@@ -1310,7 +1331,7 @@ def _build_attestation(
     """Context binding for the (optionally signed) verdict. Shared by the default
     and black-box paths so a black-box verdict is bound to what was judged too.
     ``policy_sha256`` covers the COMPLETE effective policy (see
-    :func:`_effective_policy`), and the policy itself ships in the attestation
+    :func:`build_effective_policy_payload`), and the policy itself ships in the
     so a consumer can audit exactly what the fingerprint commits to."""
     return _build_attestation_payload(
         candidate,
@@ -1732,9 +1753,17 @@ def input_error_result(
     source: str,
     base_reconstruction: str | None = None,
     verifier_pack: str | None = None,
+    effective_policy: dict[str, Any] | None = None,
+    test_command: list[str] | None = None,
+    base_sha: str | None = None,
+    head_sha: str | None = None,
+    base_tree_sha: str | None = None,
+    head_tree_sha: str | None = None,
+    policy_id: str | None = None,
+    policy_version: str | None = None,
 ) -> GuardResult:
     """Create a fail-closed result before a candidate tree is assembled."""
-    return GuardResult(
+    result = GuardResult(
         verdict=ERROR, passed=False, reason=reason,
         files_changed=[], protected_violations=[],
         risk_level="low", risk_score=0.0, diagnostics="",
@@ -1743,6 +1772,64 @@ def input_error_result(
         execution_state=EXECUTION_NOT_STARTED,
         execution_phase="preflight",
         assurance=_preflight_assurance_profile(verifier_pack),
+    )
+    if effective_policy is not None:
+        _bind_unmaterialized_input_policy(
+            result,
+            effective_policy=effective_policy,
+            test_command=test_command,
+            verifier_pack=verifier_pack,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+            policy_id=policy_id,
+            policy_version=policy_version,
+        )
+    return result
+
+
+def _bind_unmaterialized_input_policy(
+    result: GuardResult,
+    *,
+    effective_policy: dict[str, Any],
+    test_command: list[str] | None,
+    verifier_pack: str | None,
+    base_sha: str | None,
+    head_sha: str | None,
+    base_tree_sha: str | None,
+    head_tree_sha: str | None,
+    policy_id: str | None,
+    policy_version: str | None,
+) -> None:
+    """Bind a complete policy to an error raised before candidate assembly.
+
+    ``candidate_sha256`` intentionally commits to the canonical empty candidate:
+    these input paths never produced edit blocks or a candidate tree.  In
+    particular, a raw unified diff is not mislabeled as the materialized
+    candidate.  Source commit/tree identities remain available in their
+    dedicated attestation fields when the caller supplied them.
+    """
+    result.assurance = _preflight_assurance_profile(verifier_pack)
+    result.attestation = _build_attestation(
+        "",
+        safe_deleted=[],
+        test_command=test_command,
+        effective_policy=effective_policy,
+        art={
+            "base_sha": base_sha,
+            "head_sha": head_sha,
+            "base_tree_sha": base_tree_sha,
+            "head_tree_sha": head_tree_sha,
+            "policy_id": policy_id,
+            "policy_version": policy_version,
+            "execution_state": EXECUTION_NOT_STARTED,
+            "execution_phase": "preflight",
+            "test_command_started": False,
+            "delivered_isolation": "not_run",
+            "effective_candidate_isolation": None,
+        },
+        mode=cast(str, effective_policy["mode"]),
     )
 
 
@@ -1879,6 +1966,7 @@ def guard_from_diff(
     baseline_evidence: bool = False,
     require_demonstrated_fix: bool = False,
     strict_harness: bool = False,
+    operating_profile: str | None = None,
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -1893,6 +1981,95 @@ def guard_from_diff(
     apply against the real tree) when the diff is empty, binary, references an
     unsafe path (absolute / ``..`` / repo escape), or does not reverse-apply.
     """
+    profiled_effective_policy: dict[str, Any] | None = None
+    if operating_profile is not None:
+        # A profiled early result is a schema-1.12 artifact, so it must pass the
+        # same scalar validation and canonical policy construction as guard().
+        # Keep the historical no-profile early-return order untouched.
+        prepared_profile = prepare_guard_request(
+            GuardRequestPreparationInput(
+                repository_path=head_dir,
+                candidate_text="",
+                deleted_paths=(),
+                test_command=test_command,
+                setup_command=setup_command,
+                trust_setup_on_host=trust_setup_on_host,
+                setup_output_globs=setup_output_globs,
+                protected=protected,
+                allow=allow,
+                allow_new_tests=allow_new_tests,
+                timeout=timeout,
+                mem_limit_mb=mem_limit_mb,
+                isolation=isolation,
+                docker_image=docker_image,
+                docker_network=docker_network,
+                verifier_pack_path=verifier_pack,
+                expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+                collect_diff_coverage=diff_coverage,
+                min_diff_coverage=min_diff_coverage,
+                blackbox=blackbox,
+                blackbox_only=blackbox_only,
+                require_report_integrity=require_report_integrity,
+                require_candidate_isolation=require_candidate_isolation,
+                base_sha=base_sha,
+                head_sha=head_sha,
+                base_tree_sha=base_tree_sha,
+                head_tree_sha=head_tree_sha,
+                policy_id=policy_id,
+                policy_version=policy_version,
+                baseline_evidence=baseline_evidence,
+                require_demonstrated_fix=require_demonstrated_fix,
+                strict_harness=strict_harness,
+                file_blocks=None,
+                operating_profile=operating_profile,
+            ),
+            services=GuardRequestPreparationServices(
+                repository_input_provider=lambda: RepositoryInput,
+                candidate_input_provider=lambda: CandidateInput,
+                source_identity_provider=lambda: SourceIdentity,
+                effective_policy_provider=lambda: _build_effective_policy_contract,
+                guard_request_provider=lambda: GuardRequest,
+                effective_policy_payload_provider=lambda: _effective_policy_payload,
+            ),
+        )
+        profiled_effective_policy = cast(
+            dict[str, Any],
+            prepared_profile.effective_policy,
+        )
+        compatibility = prepared_profile.compatibility
+        test_command = compatibility.test_command
+        setup_command = compatibility.setup_command
+        trust_setup_on_host = compatibility.trust_setup_on_host
+        setup_output_globs = compatibility.setup_output_globs
+        protected = compatibility.protected
+        allow = compatibility.allow
+        allow_new_tests = compatibility.allow_new_tests
+        timeout = compatibility.timeout
+        mem_limit_mb = compatibility.mem_limit_mb
+        isolation = compatibility.isolation
+        docker_image = compatibility.docker_image
+        docker_network = compatibility.docker_network
+        verifier_pack = compatibility.verifier_pack_path
+        expect_verifier_pack_sha256 = (
+            compatibility.expect_verifier_pack_sha256
+        )
+        diff_coverage = compatibility.collect_diff_coverage
+        min_diff_coverage = compatibility.min_diff_coverage
+        blackbox = compatibility.blackbox
+        blackbox_only = compatibility.blackbox_only
+        require_report_integrity = compatibility.require_report_integrity
+        require_candidate_isolation = compatibility.require_candidate_isolation
+        base_sha = compatibility.base_sha
+        head_sha = compatibility.head_sha
+        base_tree_sha = compatibility.base_tree_sha
+        head_tree_sha = compatibility.head_tree_sha
+        policy_id = compatibility.policy_id
+        policy_version = compatibility.policy_version
+        baseline_evidence = compatibility.baseline_evidence
+        require_demonstrated_fix = compatibility.require_demonstrated_fix
+        strict_harness = compatibility.strict_harness
+        operating_profile = compatibility.operating_profile
+
     outcome = verify_diff(
         DiffVerificationRequest(
             head_dir=head_dir,
@@ -1927,6 +2104,7 @@ def guard_from_diff(
                 baseline_evidence=baseline_evidence,
                 require_demonstrated_fix=require_demonstrated_fix,
                 strict_harness=strict_harness,
+                operating_profile=operating_profile,
             ),
         ),
         DiffVerificationServices(
@@ -1965,6 +2143,22 @@ def guard_from_diff(
             cleanup_workspace_provider=lambda: shutil.rmtree,
         ),
     )
+    if (
+        profiled_effective_policy is not None
+        and outcome.result.attestation is None
+    ):
+        _bind_unmaterialized_input_policy(
+            outcome.result,
+            effective_policy=profiled_effective_policy,
+            test_command=test_command,
+            verifier_pack=verifier_pack,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            base_tree_sha=base_tree_sha,
+            head_tree_sha=head_tree_sha,
+            policy_id=policy_id,
+            policy_version=policy_version,
+        )
     return outcome.result, outcome.deleted
 
 

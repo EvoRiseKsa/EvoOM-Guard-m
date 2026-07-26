@@ -23,7 +23,13 @@ from evoom_guard.finalizer_derivation import (
     resolve_raw_git_regular_blob,
     write_finalizer_bindings,
 )
-from evoom_guard.guard import blocks_from_dirs, guard, serialize_candidate_blocks
+from evoom_guard.guard import (
+    _effective_policy,
+    blocks_from_dirs,
+    effective_policy_sha256,
+    guard,
+    serialize_candidate_blocks,
+)
 from evoom_guard.pack_manifest import pack_digest
 
 
@@ -143,6 +149,102 @@ def _record_for_pair(tmp_path: Path, repo: Path, base: str, head: str) -> dict[s
     record = result.to_dict()
     assert record["attestation"] is not None
     return record
+
+
+def test_finalizer_policy_derivation_preserves_operating_profile() -> None:
+    raw_policy = json.dumps(
+        {
+            "operating_profile": "protected",
+            "blackbox": True,
+            "blackbox_only": True,
+            "isolation": "docker",
+            "docker_image": "judge:latest",
+            "docker_network": "none",
+            "verifier_pack": "security/judge-pack",
+            "expect_verifier_pack_sha256": "a" * 64,
+            "require_report_integrity": "external_process_isolated",
+            "require_candidate_isolation": "docker",
+        }
+    ).encode()
+
+    policy, pack, pin = finalizer_derivation._effective_policy_from_raw_config(
+        raw_policy,
+        head_has_package_json=False,
+    )
+
+    assert policy["operating_profile"] == "protected"
+    assert pack == "security/judge-pack"
+    assert pin == "a" * 64
+
+
+def test_hostile_node_finalizer_preserves_explicit_memory_limit() -> None:
+    raw_policy = json.dumps(
+        {
+            "operating_profile": "hostile",
+            "blackbox": True,
+            "blackbox_only": True,
+            "isolation": "gvisor",
+            "docker_image": "judge@sha256:" + "b" * 64,
+            "docker_network": "none",
+            "verifier_pack": "security/judge-pack",
+            "expect_verifier_pack_sha256": "a" * 64,
+            "require_report_integrity": "external_process_isolated",
+            "require_candidate_isolation": "gvisor",
+            "mem_limit": 1024,
+        }
+    ).encode()
+
+    policy, _pack, _pin = finalizer_derivation._effective_policy_from_raw_config(
+        raw_policy,
+        head_has_package_json=True,
+    )
+
+    assert policy["operating_profile"] == "hostile"
+    assert policy["mem_limit_mb"] == 1024
+
+
+def test_integer_coverage_floor_is_canonical_between_api_and_finalizer() -> None:
+    finalizer_policy, pack, pin = (
+        finalizer_derivation._effective_policy_from_raw_config(
+            json.dumps({"min_diff_coverage": 80}).encode(),
+            head_has_package_json=False,
+        )
+    )
+    api_policy = _effective_policy(
+        mode="repo",
+        isolation="subprocess",
+        docker_image=None,
+        docker_network="none",
+        test_command=None,
+        setup_command=None,
+        trust_setup_on_host=False,
+        setup_output_globs=(),
+        protected=(),
+        allow=(),
+        allow_new_tests=False,
+        timeout=120,
+        mem_limit_mb=1024,
+        verifier_pack=None,
+        expect_verifier_pack_sha256=None,
+        blackbox=False,
+        blackbox_only=False,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        min_diff_coverage=80,
+        baseline_evidence=False,
+        require_demonstrated_fix=False,
+        strict_harness=False,
+        policy_id=None,
+        policy_version=None,
+    )
+
+    assert pack is None
+    assert pin is None
+    assert type(api_policy["min_diff_coverage"]) is float
+    assert api_policy == finalizer_policy
+    assert effective_policy_sha256(api_policy) == effective_policy_sha256(
+        finalizer_policy
+    )
 
 
 @pytest.mark.parametrize(

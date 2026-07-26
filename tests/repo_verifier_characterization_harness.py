@@ -57,9 +57,10 @@ def _write_source_repo(root: Path) -> None:
         "from app import VALUE\n\n\ndef test_value():\n    assert VALUE == 2\n",
         encoding="utf-8",
     )
-    # The token contains "pytest", so the production adapter binds the exact
-    # report path.  The tiny runner writes timestamp-free JUnit for stable hashes.
-    (root / "fake_pytest_runner.py").write_text(_RUNNER, encoding="utf-8")
+    # Run this tiny timestamp-free fixture through the explicit ``python -m
+    # pytest`` adapter contract. A filename that merely contains "pytest" must not
+    # select a runner adapter.
+    (root / "pytest.py").write_text(_RUNNER, encoding="utf-8")
 
 
 def _normalized_result(result: VerdictResult) -> dict[str, Any]:
@@ -108,7 +109,8 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         mode = "tamper" if case_name == "junit_tamper" else "pass"
         verifier_options["test_command"] = [
             sys.executable,
-            "fake_pytest_runner.py",
+            "-m",
+            "pytest",
             mode,
         ]
 

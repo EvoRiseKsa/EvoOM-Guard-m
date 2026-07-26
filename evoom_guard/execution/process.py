@@ -11,8 +11,9 @@ The public contract is fail-closed:
   exception is returned;
 * POSIX completion also proves that no member of the dedicated process group
   remains; and
-* a caller-supplied ``preexec_fn`` is applied only on POSIX, preserving the
-  existing resource-limit hook without claiming support on Windows.
+* POSIX resource limits are data, not a caller-supplied ``preexec_fn``. A clean
+  exec-based launcher applies them without running Python callbacks in the
+  unsafe child interval between ``fork`` and ``exec``.
 """
 
 from __future__ import annotations
@@ -21,9 +22,10 @@ import math
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,15 +34,90 @@ DEFAULT_READ_CHUNK_BYTES = 64 * 1024
 DEFAULT_TERMINATION_GRACE_SECONDS = 1.0
 DEFAULT_KILL_GRACE_SECONDS = 3.0
 DEFAULT_READER_JOIN_SECONDS = 2.0
+_POSIX_RLIMIT_LAUNCHER_FLAG = "--_evoguard-posix-rlimit-launcher"
+_POSIX_RLIMIT_LAUNCHER_SOURCE = r"""
+import os
+import sys
+
+try:
+    arguments = sys.argv[1:]
+    if (
+        os.name != "posix"
+        or len(arguments) < 5
+        or arguments[0] != "--_evoguard-posix-rlimit-launcher"
+        or arguments[3] != "--"
+    ):
+        raise ValueError("invalid EvoGuard POSIX rlimit launcher invocation")
+
+    def parse_limit(value):
+        parsed = int(value)
+        if parsed == -1:
+            return None
+        if parsed <= 0:
+            raise ValueError("launcher limits must be positive integers or -1")
+        return parsed
+
+    cpu_seconds = parse_limit(arguments[1])
+    address_space_bytes = parse_limit(arguments[2])
+    command = arguments[4:]
+    if not command or not command[0]:
+        raise ValueError("POSIX rlimit launcher command is empty")
+
+    import resource
+
+    if cpu_seconds is not None:
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+    if address_space_bytes is not None:
+        # A requested containment limit is part of the verdict boundary. If
+        # this platform cannot apply it, abort the launcher with status 125;
+        # silently running the candidate without the promised cap would be a
+        # fail-open isolation defect.
+        resource.setrlimit(
+            resource.RLIMIT_AS,
+            (address_space_bytes, address_space_bytes),
+        )
+    os.execvpe(command[0], command, os.environ)
+except BaseException as exc:
+    diagnostic = (
+        "EvoGuard POSIX rlimit launcher failed: "
+        + type(exc).__name__
+        + ": "
+        + str(exc)
+        + "\n"
+    ).encode("utf-8", errors="replace")[:4096]
+    try:
+        os.write(2, diagnostic)
+    except OSError:
+        pass
+    raise SystemExit(125)
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class PosixRLimitSpec:
+    """Serializable POSIX resource limits for the exec-based child launcher."""
+
+    cpu_seconds: int | None = None
+    address_space_bytes: int | None = None
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("cpu_seconds", self.cpu_seconds),
+            ("address_space_bytes", self.address_space_bytes),
+        ):
+            if value is not None and (
+                type(value) is not int or value <= 0
+            ):
+                raise ValueError(f"{name} must be a positive integer or None")
 
 
 @dataclass(frozen=True, slots=True)
 class ProcessLimits:
     """Bounded resources controlled directly by the process runner.
 
-    Address-space and CPU limits remain caller policy and are supplied through
-    ``BoundedProcessRequest.preexec_fn`` on POSIX.  These fields govern only
-    output retention and bounded cleanup waits.
+    Address-space and CPU limits remain caller policy and are supplied as a
+    :class:`PosixRLimitSpec`. These fields govern only output retention and
+    bounded cleanup waits.
     """
 
     max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES
@@ -76,11 +153,17 @@ class BoundedProcessRequest:
     cwd: str | None
     env: Mapping[str, str] | None
     timeout_seconds: float
-    preexec_fn: Callable[[], object] | None = None
+    # The compatibility spelling is retained for internal call sites while the
+    # value is now inert data. Arbitrary callback execution is rejected.
+    preexec_fn: PosixRLimitSpec | None = None
     limits: ProcessLimits = field(default_factory=ProcessLimits)
     require_process_group_cleanup_proof: bool = False
 
     def __post_init__(self) -> None:
+        if self.preexec_fn is not None and type(self.preexec_fn) is not PosixRLimitSpec:
+            raise ValueError(
+                "preexec_fn callbacks are unsafe; pass PosixRLimitSpec data instead"
+            )
         if type(self.require_process_group_cleanup_proof) is not bool:
             raise ValueError(
                 "require_process_group_cleanup_proof must be a bool"
@@ -94,7 +177,7 @@ class BoundedProcessRequest:
         cwd: str | None,
         env: Mapping[str, str] | None,
         timeout: float,
-        preexec_fn: Callable[[], object] | None = None,
+        preexec_fn: PosixRLimitSpec | None = None,
         limits: ProcessLimits | None = None,
         require_process_group_cleanup_proof: bool = False,
     ) -> BoundedProcessRequest:
@@ -227,6 +310,35 @@ def process_group_popen_kwargs() -> dict[str, Any]:
             )
         }
     return {}
+
+
+def _posix_rlimit_launcher_command(
+    command: list[str],
+    limits: PosixRLimitSpec,
+) -> list[str]:
+    """Wrap ``command`` in a clean interpreter that applies POSIX rlimits.
+
+    ``-I -S`` keeps candidate-controlled Python startup hooks out of the
+    launcher. The helper then ``exec``-replaces itself, preserving the managed
+    PID/session and inherited output pipes.
+    """
+
+    return [
+        sys.executable,
+        "-I",
+        "-S",
+        "-c",
+        _POSIX_RLIMIT_LAUNCHER_SOURCE,
+        _POSIX_RLIMIT_LAUNCHER_FLAG,
+        "-1" if limits.cpu_seconds is None else str(limits.cpu_seconds),
+        (
+            "-1"
+            if limits.address_space_bytes is None
+            else str(limits.address_space_bytes)
+        ),
+        "--",
+        *command,
+    ]
 
 
 def _wait_for_exit(process: subprocess.Popen[Any], timeout: float) -> bool:
@@ -393,6 +505,7 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
     """Execute one request while bounding capture, timeout, and tree cleanup."""
 
     command = list(request.command)
+    launch_command = command
     limits = request.limits
     if request.require_process_group_cleanup_proof and (
         os.name != "posix" or not callable(getattr(os, "killpg", None))
@@ -410,14 +523,21 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
         **process_group_popen_kwargs(),
     }
     if request.preexec_fn is not None and os.name == "posix":
-        kwargs["preexec_fn"] = request.preexec_fn
+        launch_command = _posix_rlimit_launcher_command(
+            command,
+            request.preexec_fn,
+        )
     process: subprocess.Popen[Any] | None = None
     streams: list[Any] = []
     reader_start_attempts: list[threading.Thread] = []
     tree_cleanup_proven = False
     reader_cleanup_proven = False
+    # Account for launcher startup in the same wall-clock budget. Unlike the
+    # old preexec callback path, Popen only starts an exec-safe helper and does
+    # not wait on arbitrary Python running in a forked child.
+    deadline = time.monotonic() + max(0.0, float(request.timeout_seconds))
     try:
-        process = subprocess.Popen(command, **kwargs)
+        process = subprocess.Popen(launch_command, **kwargs)
         stdout = process.stdout
         stderr = process.stderr
         streams = [stream for stream in (stdout, stderr) if stream is not None]
@@ -459,7 +579,19 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
                 )
             reader_cleanup_proven = True
 
-        deadline = time.monotonic() + max(0.0, float(request.timeout_seconds))
+        # Re-read the clock after process and reader startup so that launcher
+        # setup is charged to the timeout even when the child is already close
+        # to completion before the normal polling loop begins.
+        startup_deadline_reached = time.monotonic() >= deadline
+        if startup_deadline_reached and process.poll() is None:
+            stop_and_prove("subprocess timed out")
+            raise subprocess.TimeoutExpired(
+                command,
+                request.timeout_seconds,
+                output=capture.text("stdout"),
+                stderr=capture.text("stderr"),
+            )
+
         while process.poll() is None:
             if capture.exceeded:
                 stop_and_prove("subprocess output limit reached")
@@ -531,7 +663,7 @@ def run_bounded_subprocess(
     cwd: str | None,
     env: Mapping[str, str] | None,
     timeout: float,
-    preexec_fn: Callable[[], object] | None = None,
+    preexec_fn: PosixRLimitSpec | None = None,
     limits: ProcessLimits | None = None,
     require_process_group_cleanup_proof: bool = False,
 ) -> subprocess.CompletedProcess[str]:

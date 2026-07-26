@@ -14,9 +14,13 @@ lower-level trust component importing the command-line surface.
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Callable
 
+from evoom_guard.domain import (
+    OPERATING_PROFILES,
+    is_verifier_pack_sha256,
+    operating_profile_violations,
+)
 from evoom_guard.strict_json import strict_json_loads
 
 
@@ -36,6 +40,7 @@ _CONFIG_KEYS = frozenset(
         "trust_setup_on_host",
         "setup_output_globs",
         "strict_harness",
+        "operating_profile",
         "isolation",
         "docker_image",
         "docker_network",
@@ -156,6 +161,14 @@ def load_config(
         if value not in _ISOLATION_VALUES:
             raise invalid("isolation", f"expected one of {list(_ISOLATION_VALUES)}")
         cfg["isolation"] = value
+    if "operating_profile" in data:
+        value = data["operating_profile"]
+        if value not in OPERATING_PROFILES:
+            raise invalid(
+                "operating_profile",
+                f"expected one of {list(OPERATING_PROFILES)}",
+            )
+        cfg["operating_profile"] = value
     for key in ("docker_image", "docker_network"):
         if key in data:
             value = data[key]
@@ -169,7 +182,7 @@ def load_config(
         cfg["verifier_pack"] = value
     if "expect_verifier_pack_sha256" in data:
         value = data["expect_verifier_pack_sha256"]
-        if not isinstance(value, str) or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
+        if not is_verifier_pack_sha256(value):
             raise invalid(
                 "expect_verifier_pack_sha256",
                 "expected exactly 64 hexadecimal SHA-256 characters",
@@ -206,4 +219,53 @@ def load_config(
             if not isinstance(value, str) or not value.strip():
                 raise invalid(key, "expected a non-empty string")
             cfg[key] = value
+
+    operating_profile = cfg.get("operating_profile")
+    if isinstance(operating_profile, str):
+        isolation = cfg.get("isolation")
+        mem_limit = cfg.get("mem_limit")
+        docker_network_value = cfg.get("docker_network")
+        docker_network = (
+            docker_network_value
+            if isinstance(docker_network_value, str)
+            else "none"
+        )
+        expected_pack_value = cfg.get("expect_verifier_pack_sha256")
+        expected_pack = (
+            expected_pack_value
+            if isinstance(expected_pack_value, str)
+            else None
+        )
+        report_integrity_value = cfg.get("require_report_integrity")
+        report_integrity = (
+            report_integrity_value
+            if isinstance(report_integrity_value, str)
+            else None
+        )
+        candidate_isolation_value = cfg.get("require_candidate_isolation")
+        candidate_isolation = (
+            candidate_isolation_value
+            if isinstance(candidate_isolation_value, str)
+            else None
+        )
+        violations = operating_profile_violations(
+            operating_profile,
+            isolation=isolation if isinstance(isolation, str) else "subprocess",
+            docker_image_present=isinstance(cfg.get("docker_image"), str),
+            docker_network=docker_network,
+            setup_command_present=cfg.get("setup_command") is not None,
+            trust_setup_on_host=cfg.get("trust_setup_on_host") is True,
+            mem_limit_mb=mem_limit if type(mem_limit) is int else 1024,
+            verifier_pack_required=isinstance(cfg.get("verifier_pack"), str),
+            expect_verifier_pack_sha256=expected_pack,
+            blackbox=cfg.get("blackbox") is True,
+            blackbox_only=cfg.get("blackbox_only") is True,
+            require_report_integrity=report_integrity,
+            require_candidate_isolation=candidate_isolation,
+        )
+        if violations:
+            raise invalid(
+                "operating_profile",
+                f"{operating_profile!r} " + "; ".join(violations),
+            )
     return cfg

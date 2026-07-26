@@ -177,6 +177,7 @@ def test_signing_provider_is_resolved_after_json_publication(
             "verdict.json",
             "--sign-key",
             "private.key",
+            "--acknowledge-local-key-exposure",
         ]
     )
 

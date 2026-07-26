@@ -13,6 +13,7 @@ the convention in ``test_guard.py``.
 """
 
 import difflib
+import hashlib
 import importlib.util
 import io
 import json
@@ -25,7 +26,9 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard import __version__, cli
+from evoom_guard.guard import _UnverifiableChangedPathsError
 from evoom_guard.pack_manifest import pack_digest
+from evoom_guard.record_verifier import verify_record
 
 HAS_PYTEST = importlib.util.find_spec("pytest") is not None
 needs_pytest = pytest.mark.skipif(not HAS_PYTEST, reason="needs pytest to run the suite")
@@ -45,6 +48,50 @@ def _make_repo(root: str, *, m_body: str = _BUG) -> None:
         f.write(m_body)
     with open(os.path.join(root, "tests", "test_m.py"), "w", encoding="utf-8") as f:
         f.write(_TEST)
+
+
+def _protected_profile_args(verifier_pack: str) -> list[str]:
+    return [
+        "--no-config",
+        "--operating-profile",
+        "protected",
+        "--blackbox",
+        "--blackbox-only",
+        "--isolation",
+        "docker",
+        "--docker-image",
+        "judge:latest",
+        "--docker-network",
+        "none",
+        "--verifier-pack",
+        verifier_pack,
+        "--expect-verifier-pack-sha256",
+        "a" * 64,
+        "--require-report-integrity",
+        "external_process_isolated",
+        "--require-candidate-isolation",
+        "docker",
+    ]
+
+
+def _assert_profiled_input_error(
+    record: dict[str, object],
+    *,
+    reason_code: str,
+) -> None:
+    assert record["schema_version"] == "1.12"
+    assert record["reason_code"] == reason_code
+    assert record["execution_state"] == "not_started"
+    assert record["test_command_ran"] is False
+    attestation = record["attestation"]
+    assert isinstance(attestation, dict)
+    assert attestation["candidate_sha256"] == hashlib.sha256(b"").hexdigest()
+    assert attestation["execution_state"] == "not_started"
+    assert attestation["test_command_started"] is False
+    policy = attestation["effective_policy"]
+    assert isinstance(policy, dict)
+    assert policy["operating_profile"] == "protected"
+    assert verify_record(record)["ok"] is True
 
 
 # ───────────────────────────── helpers / dispatch ───────────────────────────
@@ -112,6 +159,7 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
                 "blackbox": True,
                 "blackbox_only": True,
                 "diff_coverage": True,
+                "min_diff_coverage": 80,
                 "baseline_evidence": True,
                 "require_demonstrated_fix": True,
             }
@@ -141,6 +189,7 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
             "blackbox",
             "blackbox_only",
             "diff_coverage",
+            "min_diff_coverage",
             "baseline_evidence",
             "require_demonstrated_fix",
         )
@@ -152,9 +201,11 @@ def test_trusted_config_forwards_full_runtime_policy_to_guard(tmp_path, monkeypa
         "blackbox": True,
         "blackbox_only": True,
         "diff_coverage": True,
+        "min_diff_coverage": 80.0,
         "baseline_evidence": True,
         "require_demonstrated_fix": True,
     }
+    assert type(captured["min_diff_coverage"]) is float
 
 
 def test_guard_docker_isolation_requires_image(capsys):
@@ -177,6 +228,212 @@ def test_blackbox_only_requires_blackbox(capsys):
 
 
 # ───────────────────────────── guard input modes ────────────────────────────
+def test_protected_profile_is_forwarded_only_when_contract_is_complete(
+    tmp_path,
+    monkeypatch,
+):
+    from evoom_guard.guard import PASS, GuardResult
+
+    patch = tmp_path / "candidate.txt"
+    patch.write_text(
+        "<<<FILE: app.py>>>\nvalue = 2\n<<<END FILE>>>",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_guard(_repo, _candidate, **kwargs):
+        captured.update(kwargs)
+        return GuardResult(
+            PASS,
+            True,
+            "stub",
+            ["app.py"],
+            [],
+            "low",
+            0.0,
+            verdict_source="exit",
+        )
+
+    monkeypatch.setattr("evoom_guard.guard.guard", fake_guard)
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(patch),
+            "--no-config",
+            "--operating-profile",
+            "protected",
+            "--blackbox",
+            "--blackbox-only",
+            "--isolation",
+            "docker",
+            "--docker-image",
+            "judge:latest",
+            "--verifier-pack",
+            str(tmp_path / "judge-pack"),
+            "--expect-verifier-pack-sha256",
+            "a" * 64,
+            "--require-report-integrity",
+            "external_process_isolated",
+            "--require-candidate-isolation",
+            "docker",
+        ]
+    )
+
+    assert code == 0
+    assert captured["operating_profile"] == "protected"
+
+
+def test_hostile_profile_rejects_docker_before_candidate_read(tmp_path, capsys):
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(tmp_path / "must-not-be-read.txt"),
+            "--no-config",
+            "--operating-profile",
+            "hostile",
+            "--blackbox",
+            "--blackbox-only",
+            "--isolation",
+            "docker",
+            "--docker-image",
+            "judge:latest",
+            "--verifier-pack",
+            str(tmp_path / "judge-pack"),
+            "--expect-verifier-pack-sha256",
+            "a" * 64,
+            "--require-report-integrity",
+            "external_process_isolated",
+            "--require-candidate-isolation",
+            "docker",
+        ]
+    )
+
+    assert code == 2
+    output = capsys.readouterr().out
+    assert "requires isolation='gvisor'" in output
+    assert "requires require_candidate_isolation='gvisor'" in output
+
+
+def test_hostile_node_profile_preserves_explicit_memory_limit(
+    tmp_path,
+    monkeypatch,
+):
+    from evoom_guard.guard import PASS, GuardResult
+
+    (tmp_path / "package.json").write_text("{}\n", encoding="utf-8")
+    patch = tmp_path / "candidate.txt"
+    patch.write_text(
+        "<<<FILE: app.py>>>\nvalue = 2\n<<<END FILE>>>",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_guard(_repo, _candidate, **kwargs):
+        captured.update(kwargs)
+        return GuardResult(
+            PASS,
+            True,
+            "stub",
+            ["app.py"],
+            [],
+            "low",
+            0.0,
+            verdict_source="exit",
+        )
+
+    monkeypatch.setattr("evoom_guard.guard.guard", fake_guard)
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(patch),
+            "--no-config",
+            "--operating-profile",
+            "hostile",
+            "--blackbox",
+            "--blackbox-only",
+            "--isolation",
+            "gvisor",
+            "--docker-image",
+            "judge@sha256:" + "b" * 64,
+            "--verifier-pack",
+            str(tmp_path / "judge-pack"),
+            "--expect-verifier-pack-sha256",
+            "a" * 64,
+            "--require-report-integrity",
+            "external_process_isolated",
+            "--require-candidate-isolation",
+            "gvisor",
+            "--mem-limit",
+            "1024",
+        ]
+    )
+
+    assert code == 0
+    assert captured["mem_limit_mb"] == 1024
+
+    policy = tmp_path / "hostile-policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "operating_profile": "hostile",
+                "blackbox": True,
+                "blackbox_only": True,
+                "isolation": "gvisor",
+                "docker_image": "judge@sha256:" + "b" * 64,
+                "docker_network": "none",
+                "verifier_pack": "judge-pack",
+                "expect_verifier_pack_sha256": "a" * 64,
+                "require_report_integrity": "external_process_isolated",
+                "require_candidate_isolation": "gvisor",
+                "mem_limit": 1024,
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured.clear()
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(patch),
+            "--config",
+            str(policy),
+        ]
+    )
+
+    assert code == 0
+    assert captured["mem_limit_mb"] == 1024
+
+
+def test_protected_profile_forbids_direct_signing_key(tmp_path, capsys):
+    code = cli.main(
+        [
+            "guard",
+            str(tmp_path),
+            "--patch",
+            str(tmp_path / "must-not-be-read.txt"),
+            "--no-config",
+            "--operating-profile",
+            "protected",
+            "--json",
+            str(tmp_path / "verdict.json"),
+            "--sign-key",
+            str(tmp_path / "private.pem"),
+            "--acknowledge-local-key-exposure",
+        ]
+    )
+
+    assert code == 2
+    assert "key custody must be separated" in capsys.readouterr().out
+
+
 @needs_pytest
 def test_guard_patch_via_stdin(tmp_path, monkeypatch, capsys):
     repo = tmp_path / "repo"
@@ -233,6 +490,102 @@ def test_base_head_rejects_a_candidate_controlled_verifier_pack(tmp_path):
     assert record["reason_code"] == "verifier_pack_invalid"
     assert record["source"] == "base/head"
     assert record["test_command_ran"] is False
+
+
+def test_profiled_base_head_pack_trust_error_is_verifiable(tmp_path):
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    _make_repo(str(base), m_body=_BUG)
+    shutil.copytree(base, head)
+    (head / "pkg" / "m.py").write_text(_FIXED, encoding="utf-8")
+    pack = head / "candidate-pack"
+    pack.mkdir()
+    verdict = tmp_path / "profiled-pack-error.json"
+    identities = {
+        "base_sha": "1" * 40,
+        "head_sha": "2" * 40,
+        "base_tree_sha": "3" * 40,
+        "head_tree_sha": "4" * 40,
+    }
+
+    assert (
+        cli.main(
+            [
+                "guard",
+                "--base",
+                str(base),
+                "--head",
+                str(head),
+                "--base-sha",
+                identities["base_sha"],
+                "--head-sha",
+                identities["head_sha"],
+                "--base-tree-sha",
+                identities["base_tree_sha"],
+                "--head-tree-sha",
+                identities["head_tree_sha"],
+                "--json",
+                str(verdict),
+                *_protected_profile_args(str(pack)),
+            ]
+        )
+        == 1
+    )
+    record = json.loads(verdict.read_text(encoding="utf-8"))
+    _assert_profiled_input_error(
+        record,
+        reason_code="verifier_pack_invalid",
+    )
+    attestation = record["attestation"]
+    assert isinstance(attestation, dict)
+    for field, value in identities.items():
+        assert attestation[field] == value
+
+
+def test_profiled_base_head_unverifiable_error_is_verifiable(
+    tmp_path,
+    monkeypatch,
+):
+    base = tmp_path / "base"
+    head = tmp_path / "head"
+    base.mkdir()
+    _make_repo(str(base), m_body=_BUG)
+    shutil.copytree(base, head)
+    (head / "pkg" / "m.py").write_text(_FIXED, encoding="utf-8")
+    pack = tmp_path / "trusted-pack"
+    pack.mkdir()
+    verdict = tmp_path / "profiled-unverifiable-error.json"
+
+    def reject_unverifiable_paths(_base, _head):
+        raise _UnverifiableChangedPathsError(
+            [("pkg/m.py", "binary content")]
+        )
+
+    monkeypatch.setattr(
+        "evoom_guard.guard.blocks_from_dirs",
+        reject_unverifiable_paths,
+    )
+    assert (
+        cli.main(
+            [
+                "guard",
+                "--base",
+                str(base),
+                "--head",
+                str(head),
+                "--json",
+                str(verdict),
+                *_protected_profile_args(str(pack)),
+            ]
+        )
+        == 1
+    )
+    record = json.loads(verdict.read_text(encoding="utf-8"))
+    _assert_profiled_input_error(
+        record,
+        reason_code="no_verifiable_changes",
+    )
 
 
 @needs_pytest
@@ -494,6 +847,8 @@ def test_init_writes_workflow(tmp_path, capsys):
     assert "on:\n  pull_request:" in body
     assert "EvoOM-Guard-m@v9.9.9" in body                 # ref pinned as requested
     assert "test-command:" not in body
+    assert "pull-requests: write" not in body
+    assert "persist-credentials: false" in body
     policy = tmp_path / ".evoguard.json"
     assert json.loads(policy.read_text(encoding="utf-8")) == {
         "test_command": "pytest -q app/"
@@ -548,7 +903,7 @@ def test_init_stdout_does_not_write(tmp_path, capsys):
     assert "name: EvoGuard" in capsys.readouterr().out
 
 
-def test_init_private_evoguard_generates_pip_workflow(tmp_path, capsys):
+def test_init_private_evoguard_fails_closed_without_writing(tmp_path, capsys):
     wf = tmp_path / "evoguard.yml"
     rc = cli.main([
         "init", "--path", str(wf),
@@ -556,30 +911,13 @@ def test_init_private_evoguard_generates_pip_workflow(tmp_path, capsys):
         "--test-command", "pytest -q",
         "--ref", "v1.3.0",
     ])
-    assert rc == 0
-    body = wf.read_text(encoding="utf-8")
-    assert "name: EvoGuard" in body
-    assert "pip install" in body
-    assert "EVOGUARD_TOKEN" in body
-    assert "v1.3.0" in body
-    assert "EvoOM-Guard-m@" not in body  # action-based ref NOT present in private mode
-    assert 'BASE="${{ github.event.pull_request.base.sha }}"' in body
-    assert 'git show "$BASE:.evoguard.json" > "$BASE_POLICY_CONFIG"' in body
-    assert 'evo-guard guard . --diff - --config "$BASE_POLICY_CONFIG"' in body
-    assert "--no-config" not in body
-    assert (
-        "github.event.pull_request.head.repo.full_name == github.repository" in body
-    )
-    assert "github.event.pull_request.user.login != 'dependabot[bot]'" in body
-    assert "continue-on-error: true" in body
-    assert (
-        "actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3"
-        in body
-    )
-    assert "actions/github-script@v" not in body
-    assert json.loads((tmp_path / ".evoguard.json").read_text(encoding="utf-8")) == {
-        "test_command": "pytest -q"
-    }
+    assert rc == 2
+    assert not wf.exists()
+    assert not (tmp_path / ".evoguard.json").exists()
+    output = capsys.readouterr().out
+    assert "--private-evoguard is disabled" in output
+    assert "candidate-controlled" in output
+    assert "separately protected workflow" in output
 
 
 def test_init_preserves_an_existing_policy(tmp_path, capsys):
@@ -597,14 +935,12 @@ def test_init_preserves_an_existing_policy(tmp_path, capsys):
 
 def test_init_private_custom_secret_name(tmp_path):
     wf = tmp_path / "evoguard.yml"
-    cli.main([
+    assert cli.main([
         "init", "--path", str(wf),
         "--private-evoguard",
         "--evoguard-token-secret", "MY_PAT", "--ref", "v9.9.9",
-    ])
-    body = wf.read_text(encoding="utf-8")
-    assert "MY_PAT" in body
-    assert "EVOGUARD_TOKEN" not in body
+    ]) == 2
+    assert not wf.exists()
 
 
 @pytest.mark.parametrize("credential_key", ("bad-name", "A B", "${{ x }}", "GITHUB_TOKEN"))
@@ -772,6 +1108,86 @@ def test_load_config_invalid_policy_values_are_fail_closed(tmp_path):
         p.write_text(json.dumps(payload), encoding="utf-8")
         with pytest.raises(cli.ConfigError):
             cli._load_config(str(p), out=_QUIET)
+
+
+def test_load_config_accepts_a_complete_protected_profile(tmp_path):
+    p = tmp_path / ".evoguard.json"
+    p.write_text(
+        json.dumps(
+            {
+                "operating_profile": "protected",
+                "blackbox": True,
+                "blackbox_only": True,
+                "isolation": "docker",
+                "docker_image": "judge:latest",
+                "docker_network": "none",
+                "verifier_pack": "security/judge-pack",
+                "expect_verifier_pack_sha256": "A" * 64,
+                "require_report_integrity": "external_process_isolated",
+                "require_candidate_isolation": "docker",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = cli._load_config(str(p), out=_QUIET)
+
+    assert cfg["operating_profile"] == "protected"
+    assert cfg["expect_verifier_pack_sha256"] == "a" * 64
+
+
+def test_load_config_protected_profile_rejects_string_setup_command(tmp_path):
+    p = tmp_path / ".evoguard.json"
+    p.write_text(
+        json.dumps(
+            {
+                "operating_profile": "protected",
+                "blackbox": True,
+                "blackbox_only": True,
+                "isolation": "docker",
+                "docker_image": "judge:latest",
+                "docker_network": "none",
+                "setup_command": "python prepare.py",
+                "verifier_pack": "security/judge-pack",
+                "expect_verifier_pack_sha256": "a" * 64,
+                "require_report_integrity": "external_process_isolated",
+                "require_candidate_isolation": "docker",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(cli.ConfigError, match="setup_command"):
+        cli._load_config(str(p), out=_QUIET)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"operating_profile": "production"},
+        {"operating_profile": "protected"},
+        {
+            "operating_profile": "hostile",
+            "blackbox": True,
+            "blackbox_only": True,
+            "isolation": "docker",
+            "docker_image": "judge:latest",
+            "verifier_pack": "security/judge-pack",
+            "expect_verifier_pack_sha256": "a" * 64,
+            "require_report_integrity": "external_process_isolated",
+            "require_candidate_isolation": "docker",
+        },
+    ],
+)
+def test_load_config_rejects_unknown_or_incomplete_operating_profile(
+    tmp_path,
+    payload,
+):
+    p = tmp_path / ".evoguard.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(cli.ConfigError, match="operating_profile"):
+        cli._load_config(str(p), out=_QUIET)
 
 
 def test_cmd_guard_exits_2_on_broken_config(tmp_path):

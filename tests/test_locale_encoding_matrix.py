@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -89,11 +90,15 @@ class LocaleEncodingMatrixTests(unittest.TestCase):
         for label, overrides in _LOCALES:
             with self.subTest(locale=label):
                 root = self._repo()
-                r = guard(
-                    root, fix,
-                    test_command=_wrapper(pytest_cmd, overrides),
-                    mem_limit_mb=0,
-                )
+                # Keep pytest as the actual executable structure so the adapter
+                # cannot mistake an arbitrary wrapper argument for a runner.
+                with patch.dict(os.environ, overrides):
+                    r = guard(
+                        root,
+                        fix,
+                        test_command=pytest_cmd,
+                        mem_limit_mb=0,
+                    )
                 self.assertEqual(r.verdict, PASS, f"{label}: {r.reason}")
                 self.assertEqual((r.tests_passed, r.tests_total), (1, 1))
                 self.assertEqual(r.verdict_source, "junit+exit")

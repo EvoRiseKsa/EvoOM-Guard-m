@@ -14,7 +14,12 @@ from evoom_guard.domain.isolation import (
     SUPPORTED_ISOLATION_MODES,
     validate_isolation_mode,
 )
-from evoom_guard.domain.policy import EffectivePolicy
+from evoom_guard.domain.policy import (
+    OPERATING_PROFILES,
+    EffectivePolicy,
+    is_verifier_pack_sha256,
+    operating_profile_violations,
+)
 from evoom_guard.domain.request import (
     CandidateInput,
     GuardRequest,
@@ -41,6 +46,9 @@ __all__ = [
     "IsolationObservation",
     "IsolationPayloadEvidence",
     "JUnitCounts",
+    "OPERATING_PROFILES",
+    "is_verifier_pack_sha256",
+    "operating_profile_violations",
     "PackPhaseResult",
     "RepositoryInput",
     "RepositorySuiteEvidence",

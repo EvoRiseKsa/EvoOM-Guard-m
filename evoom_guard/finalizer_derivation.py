@@ -1606,7 +1606,6 @@ def _effective_policy_from_raw_config(
             raise FinalizerDerivationError(
                 "trusted finalizer requires an explicit base-policy mem_limit for a Node project"
             )
-        mem_limit = 0
     isolation = policy_str("isolation") or "subprocess"
     docker_image = policy_str("docker_image")
     docker_network = policy_str("docker_network") or "none"
@@ -1641,6 +1640,7 @@ def _effective_policy_from_raw_config(
             strict_harness=policy_bool("strict_harness"),
             policy_id=policy_str("policy_id"),
             policy_version=policy_str("policy_version"),
+            operating_profile=policy_str("operating_profile"),
         )
     )
     return policy, pack, pack_pin

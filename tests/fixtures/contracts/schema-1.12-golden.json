@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.12",
+  "inherits_envelope_from": "1.11",
+  "policy_keys": [
+    "allow",
+    "allow_new_tests",
+    "baseline_evidence",
+    "blackbox",
+    "blackbox_only",
+    "docker_image",
+    "docker_network",
+    "expect_verifier_pack_sha256",
+    "isolation",
+    "mem_limit_mb",
+    "min_diff_coverage",
+    "mode",
+    "policy_id",
+    "policy_version",
+    "protected",
+    "require_candidate_isolation",
+    "require_demonstrated_fix",
+    "require_report_integrity",
+    "setup_command",
+    "setup_output_globs",
+    "test_command",
+    "timeout",
+    "trust_setup_on_host",
+    "verifier_pack_required"
+  ],
+  "optional_policy_keys": ["operating_profile", "strict_harness"],
+  "operating_profiles": ["hostile", "local", "protected"]
+}

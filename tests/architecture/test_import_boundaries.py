@@ -46,7 +46,7 @@ LAYER_GROUPS: tuple[tuple[str, ...], ...] = (
     ("domain",),
     ("policy", "candidate", "workspace"),
     ("execution", "isolation"),
-    ("verifiers",),
+    ("verifiers", "runners"),
     ("application",),
     ("evidence",),
     ("finalizer", "admission"),
@@ -56,6 +56,14 @@ LAYER_RANK = {
     package_name: rank
     for rank, package_names in enumerate(LAYER_GROUPS)
     for package_name in package_names
+}
+# Published versioned wire vocabularies intentionally retain their historical
+# flat import paths. Classify those exact compatibility modules by semantic
+# ownership so a new schema version does not become architectural debt merely
+# to preserve its stable public path.
+FLAT_MODULE_LAYERS = {
+    "evoom_guard.verdict_contract_v1_11": "domain",
+    "evoom_guard.verdict_contract_v1_12": "domain",
 }
 
 
@@ -473,6 +481,8 @@ def _strongly_connected_components(
 
 
 def _layer_name(module: str, package_modules: frozenset[str]) -> str | None:
+    if module in FLAT_MODULE_LAYERS:
+        return FLAT_MODULE_LAYERS[module]
     parts = module.split(".")
     if len(parts) < 2:
         return None
@@ -767,17 +777,20 @@ def test_domain_verification_contracts_are_classified_and_dependency_free() -> N
         } == set()
 
 
-def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contract() -> None:
-    """Keep generic semantics separate from schema-1.11 wire ownership."""
+def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contracts() -> None:
+    """Keep generic semantics separate from versioned wire ownership."""
 
     analysis = analyze_package(PACKAGE_ROOT)
-    legacy_facts = tuple(
-        fact
-        for fact in analysis.facts
-        if fact.source == "evoom_guard.guard"
-        and fact.target == "evoom_guard.verdict_contract_v1_11"
-    )
-    assert tuple(fact.symbol for fact in legacy_facts) == ("SCHEMA_VERSION",)
+    for contract in (
+        "evoom_guard.verdict_contract_v1_11",
+        "evoom_guard.verdict_contract_v1_12",
+    ):
+        contract_facts = tuple(
+            fact
+            for fact in analysis.facts
+            if fact.source == "evoom_guard.guard" and fact.target == contract
+        )
+        assert tuple(fact.symbol for fact in contract_facts) == ("SCHEMA_VERSION",)
     assert (
         "evoom_guard.guard",
         "evoom_guard.domain.verdict",
@@ -3224,6 +3237,98 @@ def test_agent_change_admission_dependencies_are_exactly_allowlisted() -> None:
     assert actual_dependencies == expected_dependencies
 
 
+def test_runner_instrumentation_has_classified_owners_and_a_thin_facade() -> None:
+    """Keep one class owner per runner behind two acyclic compatibility facades."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    command = "evoom_guard.runners._command"
+    class_owners = {
+        "evoom_guard.runners.gotestsum": "GotestsumAdapter",
+        "evoom_guard.runners.jest": "JestAdapter",
+        "evoom_guard.runners.maven": "MavenAdapter",
+        "evoom_guard.runners.mocha": "MochaAdapter",
+        "evoom_guard.runners.node_test": "NodeTestAdapter",
+        "evoom_guard.runners.pytest": "PytestAdapter",
+        "evoom_guard.runners.rspec": "RspecAdapter",
+        "evoom_guard.runners.shell": "ShellAdapter",
+        "evoom_guard.runners.vitest": "VitestAdapter",
+    }
+    simple_owners = set(class_owners) - {"evoom_guard.runners.shell"}
+    class_owner_modules = set(class_owners)
+    owner_dependencies = {
+        command: set(),
+        "evoom_guard.runners.protocol": set(),
+        **{module: {command} for module in simple_owners},
+        "evoom_guard.runners.shell": {
+            command,
+            "evoom_guard.runners.protocol",
+        },
+        "evoom_guard.runners.adapters": {
+            command,
+            *class_owner_modules,
+            "evoom_guard.runners.protocol",
+        },
+        "evoom_guard.runners.registry": {
+            *class_owner_modules,
+            "evoom_guard.runners.protocol",
+        },
+        "evoom_guard.runners": {
+            *class_owner_modules,
+            "evoom_guard.runners.protocol",
+            "evoom_guard.runners.registry",
+        },
+    }
+    for module, expected in owner_dependencies.items():
+        assert module in analysis.modules
+        assert module not in analysis.violations["unclassified_modules"]
+        actual = {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        }
+        assert actual == expected
+
+    facade = "evoom_guard.adapters"
+    facade_dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == facade and target != facade
+    }
+    assert facade_dependencies == {
+        "evoom_guard.runners.adapters",
+        "evoom_guard.runners.protocol",
+        "evoom_guard.runners.registry",
+    }
+    assert not any(
+        violation.startswith(f"{module} | ")
+        for module in owner_dependencies
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+    for module, class_name in class_owners.items():
+        owner_path = PACKAGE_ROOT.joinpath(*module.split(".")[1:]).with_suffix(".py")
+        owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+        assert [
+            node.name for node in owner_tree.body if isinstance(node, ast.ClassDef)
+        ] == [class_name]
+
+    combined_facade_tree = ast.parse(
+        (PACKAGE_ROOT / "runners" / "adapters.py").read_text(encoding="utf-8")
+    )
+    assert not any(
+        isinstance(node, (ast.ClassDef, ast.FunctionDef))
+        for node in combined_facade_tree.body
+    )
+
+    facade_tree = ast.parse((PACKAGE_ROOT / "adapters.py").read_text(encoding="utf-8"))
+    assert not any(isinstance(node, ast.ClassDef) for node in facade_tree.body)
+    assert {
+        node.name
+        for node in facade_tree.body
+        if isinstance(node, ast.FunctionDef)
+    } == {"instrument_command"}
+
+
 def _write_package(tmp_path: Path, files: Mapping[str, str]) -> Path:
     package = tmp_path / INTERNAL_PACKAGE
     for relative, content in files.items():
@@ -3386,13 +3491,33 @@ def test_new_unknown_package_exceeds_unclassified_module_ratchet(tmp_path: Path)
     )
 
 
-def test_transitional_record_verification_package_remains_explicit_debt() -> None:
+def test_record_verification_helpers_have_classified_verifier_owners() -> None:
     analysis = analyze_package(PACKAGE_ROOT)
-    assert {
+    removed_legacy_modules = {
         "evoom_guard.record_verification",
         "evoom_guard.record_verification.isolation",
         "evoom_guard.record_verification.report",
-    } <= set(analysis.violations["unclassified_modules"])
+    }
+    assert removed_legacy_modules.isdisjoint(analysis.modules)
+
+    expected_dependencies = {
+        "evoom_guard.verifiers.record_report": set(),
+        "evoom_guard.verifiers.record_isolation": {
+            "evoom_guard.verifiers.record_report"
+        },
+    }
+    for owner, expected in expected_dependencies.items():
+        assert owner in analysis.modules
+        assert owner not in analysis.violations["unclassified_modules"]
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == owner and target != owner
+        } == expected
+        assert not any(
+            violation.startswith(f"{owner} |")
+            for violation in analysis.violations["cross_package_private_imports"]
+        )
 
 
 def test_ratchet_rejects_added_and_removed_violations(tmp_path: Path) -> None:
