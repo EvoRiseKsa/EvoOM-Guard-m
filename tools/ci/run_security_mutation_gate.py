@@ -3194,11 +3194,11 @@ MUTATIONS = (
         name="guard-request-pack-contradiction-bypass",
         path="evoom_guard/application/request_preparation.py",
         before=(
-            "    if raw.expect_verifier_pack_sha256 and "
+            "    if raw.expect_verifier_pack_sha256 is not None and "
             "not raw.verifier_pack_path:\n"
         ),
         after=(
-            "    if False and raw.expect_verifier_pack_sha256 and "
+            "    if False and raw.expect_verifier_pack_sha256 is not None and "
             "not raw.verifier_pack_path:\n"
         ),
         test=(
@@ -3242,8 +3242,12 @@ MUTATIONS = (
     Mutation(
         name="guard-request-live-candidate-provider-snapshot",
         path="evoom_guard/guard.py",
-        before="            candidate_input_provider=lambda: CandidateInput,\n",
+        before=(
+            "            repository_input_provider=lambda: RepositoryInput,\n"
+            "            candidate_input_provider=lambda: CandidateInput,\n"
+        ),
         after=(
+            "            repository_input_provider=lambda: RepositoryInput,\n"
             "            candidate_input_provider=(\n"
             "                lambda factory=CandidateInput: lambda: factory\n"
             "            )(),\n"
@@ -3256,8 +3260,12 @@ MUTATIONS = (
     Mutation(
         name="guard-request-live-source-provider-snapshot",
         path="evoom_guard/guard.py",
-        before="            source_identity_provider=lambda: SourceIdentity,\n",
+        before=(
+            "            candidate_input_provider=lambda: CandidateInput,\n"
+            "            source_identity_provider=lambda: SourceIdentity,\n"
+        ),
         after=(
+            "            candidate_input_provider=lambda: CandidateInput,\n"
             "            source_identity_provider=(\n"
             "                lambda factory=SourceIdentity: lambda: factory\n"
             "            )(),\n"
@@ -3271,10 +3279,12 @@ MUTATIONS = (
         name="guard-request-live-policy-provider-snapshot",
         path="evoom_guard/guard.py",
         before=(
+            "            source_identity_provider=lambda: SourceIdentity,\n"
             "            effective_policy_provider="
             "lambda: _build_effective_policy_contract,\n"
         ),
         after=(
+            "            source_identity_provider=lambda: SourceIdentity,\n"
             "            effective_policy_provider=(\n"
             "                lambda factory=_build_effective_policy_contract: "
             "lambda: factory\n"
@@ -3289,10 +3299,12 @@ MUTATIONS = (
         name="guard-request-live-payload-provider-snapshot",
         path="evoom_guard/guard.py",
         before=(
+            "            guard_request_provider=lambda: GuardRequest,\n"
             "            effective_policy_payload_provider="
             "lambda: _effective_policy_payload,\n"
         ),
         after=(
+            "            guard_request_provider=lambda: GuardRequest,\n"
             "            effective_policy_payload_provider=(\n"
             "                lambda provider=_effective_policy_payload: "
             "lambda: provider\n"
@@ -3316,8 +3328,14 @@ MUTATIONS = (
     Mutation(
         name="guard-request-provider-pre-validation-snapshot",
         path="evoom_guard/guard.py",
-        before="            guard_request_provider=lambda: GuardRequest,\n",
+        before=(
+            "            effective_policy_provider="
+            "lambda: _build_effective_policy_contract,\n"
+            "            guard_request_provider=lambda: GuardRequest,\n"
+        ),
         after=(
+            "            effective_policy_provider="
+            "lambda: _build_effective_policy_contract,\n"
             "            guard_request_provider=(\n"
             "                lambda factory=GuardRequest: lambda: factory\n"
             "            )(),\n"

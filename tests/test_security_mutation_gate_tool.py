@@ -11,6 +11,21 @@ import pytest
 from tools.ci import run_security_mutation_gate as mutation_gate
 
 
+def test_every_reviewed_mutation_has_exactly_one_current_source_site() -> None:
+    """Refactors must retarget reviewed mutants before the long gate starts."""
+
+    mismatches: list[str] = []
+    for mutation in mutation_gate.MUTATIONS:
+        source = (mutation_gate.ROOT / mutation.path).read_text(encoding="utf-8")
+        count = source.count(mutation.before)
+        if count != 1:
+            mismatches.append(f"{mutation.name}: {count}")
+        if mutation.before == mutation.after:
+            mismatches.append(f"{mutation.name}: unchanged")
+
+    assert not mismatches, "\n".join(mismatches)
+
+
 class _FinishedProcess:
     pid = 4242
 
