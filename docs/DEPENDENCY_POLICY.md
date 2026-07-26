@@ -84,10 +84,11 @@ requirement, so missing coverage fails closed with `ERROR`.
 
 This is a resolver-free **bootstrap**, not a zero-network Action. The pinned
 `setup-python` action may obtain an interpreter, a shallow checkout may fetch a
-missing base object, the optional PR-comment step calls GitHub, and the
-consumer's own setup or test command may use the network. Consumers who need a
-fixed Action revision should pin the Action itself to a release tag or full
-commit SHA and manage the runner and optional coverage environment separately.
+missing base object, and the consumer's own setup or test command may use the
+network. The candidate-execution job does not post PR comments; a separately
+designed metadata-only reporter may call GitHub. Consumers who need a fixed
+Action revision should pin the Action itself to a release tag or full commit
+SHA and manage the runner and optional coverage environment separately.
 The temporary Action-built archive is also not a claim of same-user
 anti-tampering between composite steps.
 

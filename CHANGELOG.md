@@ -11,12 +11,52 @@ All notable changes to EvoOM Guard are recorded here. The format is loosely base
 on [Keep a Changelog](https://keepachangelog.com/), and the project follows
 semantic versioning (`vMAJOR.MINOR.PATCH`).
 
+Historical entries preserve the terminology used when those versions were
+developed. A phrase such as “live proof” or “validated live” in an old entry is
+not current release-bound evidence unless the current release status and linked
+retained evidence say so.
+
 ## [Unreleased]
 
-## [4.4.0] — 2026-07-26
+## [4.4.0] — release candidate (unpublished)
+
+The entries in this section describe the current source candidate. They are not
+evidence of a `v4.4.0` consumer release, a completed A-through-H publication
+round, or hostile-code production readiness.
 
 ### Added
 
+- Added explicit `local`, `protected`, and `hostile` operating profiles. The
+  protected and hostile profiles require external black-box verdicts and
+  container isolation; hostile mode additionally requires gVisor and a
+  non-zero memory limit. The selected profile is bound into policy, verdict,
+  attestation, and detached verification.
+- Added schema-versioned isolation and runner conformance tooling with versioned
+  manifests and JSON Schemas. Observations that cannot be exercised on the
+  current host are reported as `UNSUPPORTED` or `SKIP`, never promoted to
+  passing evidence. The release-bound, multi-OS conformance publication remains
+  open.
+- Added a signed blind-evaluation protocol that freezes exact case bundles,
+  candidate/base/head identities, policy, Guard artifact, separately signed
+  verdicts under an externally supplied trust root, and machine-derived
+  ordinary-CI baselines before labels are disclosed. Shipping the protocol is
+  not evidence that an independent party has run it.
+- Added an Atheris/ClusterFuzzLite-compatible fuzzing kit for strict JSON and
+  JUnit parsers, seed corpora, deterministic mutation tests, and
+  ASan/UBSan-capable container builds without candidate access to repository
+  tokens or network.
+- Added privacy-bounded operational telemetry for already-produced terminal
+  verdict records, with stable descriptor reads, link/reparse rejection, and
+  aggregate-only output.
+- Added an evidence-bound live benchmark manifest that re-derives Git state,
+  hashes all selected sources and outputs, detects assume-unchanged and
+  skip-worktree state, and records the sanitized execution environment. Its
+  two-phase finalizer binds the clean source commit first and, after results
+  are committed without rerunning the corpus, binds a distinct evidence
+  commit; the later manifest commit is reported separately rather than folded
+  into a recursive claim.
+- Added production-boundary, operations, independent-evaluation, fuzzing,
+  telemetry, operating-profile, and conformance documentation.
 - Added a stdlib-only deterministic SPDX 2.3 generator for the next release:
   one package, every regular zipapp member with SHA-1/SHA-256, an SPDX package
   verification code, the exact embedded license text, and exact
@@ -40,8 +80,42 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   source lifecycle, and reviewed workflow topology before updating public
   documentation.
 
+### Security
+
+- Candidate-facing workflow jobs no longer receive repository write
+  authority, persisted checkout credentials, OIDC, signing keys, or
+  best-effort comment mutation. Candidate fuzz execution is bounded,
+  networkless, read-only with respect to the source tree, and uses immutable
+  container image identities.
+- Process launch now uses typed resource-limit specifications, installs
+  timeouts before process creation, and rejects arbitrary pre-execution
+  callbacks. Key and detached-signature reservations use create-only
+  publication. Evidence-bundle, blind-evaluation, and conformance writers refuse
+  replacement by default unless their explicit force/replace option is selected;
+  their security-sensitive inputs use bounded, stable, non-link reads.
+- JUnit ingestion now rejects ambiguous suites, duplicate or contradictory
+  counters, unsafe XML constructs, malformed encodings, trailing content, and
+  exit-code/report disagreements.
+- The record verifier was split into separate report-envelope,
+  isolation-parity, and verifier-owned operating-profile modules. Profile
+  semantics are re-derived without importing the producer policy predicate;
+  architecture checks ratchet import direction, cycles, and private-module
+  dependencies.
+
 ### Changed
 
+- Split the eight ecosystem adapters plus the shell wrapper into owner modules
+  behind a compatibility facade, preserving public identities and registry
+  order while making tool-specific behavior independently testable.
+- Operating profiles, isolation evidence, effective policy, and finalizer
+  derivation now share one canonical contract instead of relying on
+  documentation-only expectations.
+- Benchmark and adversarial documentation now distinguish developer-owned
+  regression evidence from held-out, third-party validation.
+- Runtime assurance and isolation documentation now describe the delivered
+  read-only mount, omitted pack mount, network, identity, and cleanup controls
+  without claiming that Docker cannot be escaped or that arbitrary host writes
+  are impossible.
 - The composite Action builds and runs a temporary stdlib-only zipapp from its
   selected `github.action_path`; bootstrap no longer invokes pip, a package
   resolver, a build backend, or PyPI.
@@ -73,9 +147,19 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ### Known limitations
 
+- The source tree remains a `4.4.0` release candidate. It is not yet a
+  production claim for hostile code and has not completed a release-bound
+  A-through-H chain for the final commit.
+- Current local evidence does not substitute for a third-party held-out corpus,
+  an independent launcher/runtime attestation, multi-OS toolchain conformance,
+  or release-bound gVisor/VM evidence.
+- Aggregate telemetry cannot detect missing terminal records, publisher or
+  finalizer outages, retention lag, or end-to-end availability without an
+  external inventory/event source and independently operated storage.
 - Resolver-free bootstrap is not a whole-Action zero-network or same-user
-  anti-tampering claim. Interpreter setup, conditional base fetch, optional PR
-  comments, and consumer setup/tests retain their existing boundaries.
+  anti-tampering claim. Interpreter setup, conditional base fetch, a separate
+  metadata-only reporter if configured by the consumer, and consumer
+  setup/tests retain their existing boundaries.
 - The current immutable `v4.3.0` release has no SBOM asset; this source prepares
   the contract only for a later release and does not mutate historical tags,
   assets, baselines, or ledgers.

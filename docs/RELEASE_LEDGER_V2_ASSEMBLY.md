@@ -71,6 +71,12 @@ independent attestation.
 
 ## Command
 
+Use a dependency-locked Python runtime outside the checkout, current working
+directory, system temporary directory, evidence directory, and trusted-parent
+repository. The runtime and those roots must not contain one another. The
+assembler and validator fail closed on overlap; `python -I` does not make an
+in-checkout `.venv` a trusted operator environment.
+
 ```powershell
 python -I tools/ci/assemble_release_ledger_v2.py `
   .\collected\vX.Y.Z `

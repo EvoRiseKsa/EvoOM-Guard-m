@@ -63,11 +63,15 @@ repository's merge rule immutable. Configure those separately.
    `EvoRiseKsa/EvoOM-Guard-m` and all third-party Actions used by the workflow
    to reviewed full SHAs. Review changes to those pins as supply-chain changes.
 
-4. **Use minimal token permissions.** The normal gate needs
-   `contents: read`. Add `pull-requests: write` only when you want its optional
-   PR comment. Do not give the candidate job `contents: write`, deployment
-   credentials, `id-token: write`, package-publish permission, or long-lived
-   secrets merely to run the verifier.
+4. **Use minimal token permissions.** The candidate gate needs only
+   `contents: read`, and checkout must set `persist-credentials: false`.
+   Never give the candidate job `pull-requests: write`, `contents: write`,
+   deployment credentials, `id-token: write`, package-publish permission, or
+   long-lived secrets merely to run the verifier. If a PR comment is required,
+   post it from a separate metadata-only job that never checks out or executes
+   candidate code. Do not attach an authenticated Git remote, credential
+   helper, `GIT_ASKPASS`, SSH agent, `GH_TOKEN`, or `GITHUB_TOKEN` environment
+   value to the candidate job; the Action refuses these reachable transports.
 
 5. **Run candidate code on `pull_request`, not `pull_request_target`.** A
    `pull_request_target` workflow executes with the base repository's trust
@@ -99,14 +103,15 @@ policy belongs in the base-owned `.evoguard.json`:
 ```yaml
 permissions:
   contents: read
-  pull-requests: write # omit if PR comments are not wanted
 
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-    with: { fetch-depth: 0 }
+    with:
+      fetch-depth: 0
+      persist-credentials: false
   - uses: EvoRiseKsa/EvoOM-Guard-m@<reviewed-full-sha>
     with:
-      comment: "true"
+      comment: "false"
       fail-on: "any-non-pass"
 ```
 

@@ -17,16 +17,24 @@ report. Pin `schema_version`, then key decisions off `verdict` and
 - `schema_version` is bumped when a shape, enumerated value, or existing field's
   security meaning changes incompatibly. Schema 1.11 (EvoGuard v3.4.4) adds an
   explicit execution state machine and derives runtime assurance from observed
-  execution, pack, and isolation evidence rather than requested policy.
+  execution, pack, and isolation evidence rather than requested policy. Schema
+  1.12 adds the digest-bound `operating_profile` policy field without widening
+  the frozen 1.11 policy object.
 - Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are frozen.
 - A shipped `reason_code` is never renamed or repurposed. Consumers must still
   handle a future unknown code as the generic enclosing verdict.
 - Human `reason` and `diagnostics` text may change. Do **not** parse them.
-- Additive nullable fields may appear within a schema version; ignore fields an
-  older consumer does not understand.
-- A schema's `$id` remains on the immutable `v3.8.0` tag while its contract is
-  unchanged. It identifies the schema shape, not the newer runtime that carries
-  that same shape, so external resolvers retain a reachable stable reference.
+- Additive nullable fields may appear within a schema version only inside
+  objects that the schema explicitly leaves extensible; consumers may ignore
+  unknown fields there. Closed-world objects with `additionalProperties:
+  false` reject unknown fields and require a schema-version change to grow.
+- A released schema's `$id` remains on the immutable release tag where that
+  contract was introduced. Schema 1.11 keeps its published `v3.8.0` identity.
+  The checked-in schema 1.12 bytes carry the planned `v4.4.0` identity, but that
+  URL is not a reachable immutable reference until the release tag is
+  published; release-candidate consumers must use and pin the checked-in schema
+  bytes. A newer runtime carrying an unchanged released shape does not move its
+  reference.
 
 ## Release Source Finalizer contracts
 
@@ -52,13 +60,17 @@ bundle. See [RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md).
 
 ## Example (`PASS`)
 
-Schema 1.11 was introduced in EvoGuard v3.4.4 and remains the current verdict
-contract.
+Unprofiled records continue to use schema 1.11. When
+`attestation.effective_policy` contains `operating_profile`, the producer uses
+schema 1.12. A schema-1.11 record containing that field is invalid.
 
-A machine-readable structural schema is available at
-[`evoom_guard/schemas/verdict-record-1.11.schema.json`](../evoom_guard/schemas/verdict-record-1.11.schema.json).
-It defines the complete 24-field `effective_policy`, SHA/timestamp shapes,
-assurance and verifier-pack enums, and nested required fields. Use
+A machine-readable structural schema is available for
+[1.11](../evoom_guard/schemas/verdict-record-1.11.schema.json) and
+[1.12](../evoom_guard/schemas/verdict-record-1.12.schema.json). Both define the
+complete versioned `effective_policy`, SHA/timestamp shapes, assurance and
+verifier-pack enums, and nested required fields; 1.12 additionally permits and
+constrains `operating_profile` when present, while 1.11 forbids it. The current
+producer selects 1.12 only for an explicit profile. Use
 `evo-guard verify-record verdict.json` for reason-to-verdict/lifecycle mappings,
 source/channel binding, policy digest recomputation, and other cross-field
 semantic checks that JSON Schema cannot express; see
@@ -452,6 +464,15 @@ is the separately recorded repo phase, not the combined repo+pack verdict.
 | `ERROR` | `binary_patch` | Binary diff refused. |
 | `ERROR` | `reverse_apply_failed` | Diff did not reverse-apply to reconstruct the base. |
 | `ERROR` | `no_verifiable_changes` | Input reconstructed but contained no verifiable source change. |
+
+## Added in 1.11 → 1.12 (v4.4.0)
+
+- `attestation.effective_policy.operating_profile` is an optional,
+  digest-bound `local`, `protected`, or `hostile` contract.
+- A producer record containing that field declares schema 1.12. The dual
+  verifier accepts historical 1.11 records, but rejects the field under 1.11.
+- Protected and hostile profiles are structurally and semantically bound to
+  their required black-box, pack, network, and isolation settings.
 
 ## Added in 1.10 → 1.11 (v3.4.4)
 

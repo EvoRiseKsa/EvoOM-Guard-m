@@ -69,7 +69,9 @@ EvoGuard is not published to PyPI. Obtain it from this repository.
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }
+  with:
+    fetch-depth: 0
+    persist-credentials: false
 - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0
 ```
 
@@ -258,10 +260,12 @@ A composite action ships at the repository root
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }
+  with:
+    fetch-depth: 0
+    persist-credentials: false
 - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0
   with:
-    comment: "true"
+    comment: "false"
     fail-on: "any-non-pass"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:GUARD_ACTION_EXAMPLE -->
@@ -347,9 +351,11 @@ untrusted code on `pull_request`; do not checkout a candidate with secrets under
 [`REPOSITORY_PROTECTION.md`](REPOSITORY_PROTECTION.md) for the concrete GitHub
 controls and their remaining limits.
 
-It writes the report to the **job summary**, posts it as a **PR comment**, exposes a
-`verdict` output, and fails the step per `fail-on`. To gate only machine-made PRs,
-add `if: github.event.pull_request.user.type == 'Bot'` to the job.
+It writes the report to the **job summary**, exposes a `verdict` output, and
+fails the step per `fail-on`. It deliberately refuses in-job PR commenting so
+candidate execution never shares `pull-requests: write`; use a separate
+metadata-only reporting job if a comment is required. To gate only machine-made
+PRs, add `if: github.event.pull_request.user.type == 'Bot'` to the job.
 
 ### Minimal workflow with a natural `git diff` (no action needed)
 
@@ -358,7 +364,9 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_NO_ACTION_EXAMPLE -->
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }
+  with:
+    fetch-depth: 0
+    persist-credentials: false
 - run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
@@ -379,6 +387,15 @@ prerequisite as the composite Action: branch/ruleset protection must ensure the
 workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
+
+**Current unpublished 4.4.0 release-candidate source only:** for a named,
+fail-closed combination of these controls, use
+`--operating-profile local|protected|hostile`. The profile is included in the
+effective policy and its digest only when explicitly selected. `protected`
+requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
+network; `hostile` requires gVisor and an active memory limit. See
+[`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
+custody rules.
 
 The default judge runs the candidate in the **same process** as the report writer,
 so deliberate in-process source can forge the report (`report_integrity:
@@ -420,8 +437,9 @@ unevaluated. Requested Docker/gVisor/black-box settings remain in the effective
 policy only. Runtime assurance floors do not overwrite the original static
 `REJECTED`/`ERROR` reason because no runtime verdict exists to rank.
 
-Schema 1.11 extends that rule across the whole execution lifecycle. Every JSON,
-Markdown, SARIF, and attested result records `execution_state` as one of:
+Schema 1.11 introduced that rule across the whole execution lifecycle, and
+schema 1.12 preserves it. Every JSON, Markdown, SARIF, and attested result
+records `execution_state` as one of:
 
 - `static_gate` — the static diff gate decided the result;
 - `not_started` — runtime preflight stopped before a test/judge process started;

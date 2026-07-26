@@ -30,16 +30,20 @@ modules. It permits no unresolved dynamic imports, wildcard imports, extracted-l
 direction violations, or additional unclassified modules.
 
 The enforced layer order is explicit and matches `MODULE_BOUNDARIES.md`:
-`domain -> policy/candidate/workspace -> execution/isolation -> verifiers ->
-application -> evidence -> finalizer/admission -> api/cli/integrations`. A module
-is assigned to a layer only when its first-level name is a real Python package;
-same-named compatibility files such as `evidence.py` remain declared legacy
-debt until their atomic file-to-package migrations.
+`domain -> policy/candidate/workspace -> execution/isolation ->
+verifiers/runners -> application -> evidence -> finalizer/admission ->
+api/cli/integrations`. A module is assigned to a layer only when its first-level
+name is a real Python package; same-named compatibility files such as
+`evidence.py` remain declared legacy debt until their atomic file-to-package
+migrations.
 
-`record_verification` also remains unclassified debt. Its current `report` and
-`isolation` helpers do not form one justified target layer, so classifying the
-package merely to silence the gate would misstate the architecture. It must be
-split or moved deliberately before its three baseline entries can be removed.
+The former miscellaneous `record_verification` package has been removed.
+Its report-envelope and isolation-parity responsibilities now have explicit
+owners in `verifiers.record_report` and `verifiers.record_isolation`. The
+schema-1.12 profile slice adds `verifiers.record_policy`, which independently
+re-derives profile constraints without importing the producer's policy
+predicate. All three are classified in the verifier layer and the public
+`record_verifier` API is unchanged.
 
 The baseline is architectural debt, not permission to add equivalent debt:
 
@@ -182,7 +186,8 @@ Revision 6 extracts the immutable effective-policy value into
 `domain.policy` and its canonical builder/payload/digest into
 `policy.effective`. Guard retains its historical private facade, while
 `finalizer_derivation` now imports the public policy owner instead of
-`guard._effective_policy`. The frozen default digest and full payload remain
+`guard.build_effective_policy_payload` (with `_effective_policy` retained only
+as a same-module compatibility alias). The frozen default digest and full payload remain
 byte-for-byte equivalent, and the private-import ceiling falls from 56 to 55.
 
 The next Stage-3 slice adds `domain.request` as a dependency-closed aggregate
@@ -266,6 +271,23 @@ unclassified-module ceiling drops from 26 to 25. Cycles remain zero and the
 private-import ceiling remains 55. Parser and command extraction are separate
 later slices; this move does not claim that the CLI monolith has already been
 decomposed.
+
+Import-boundary ratchet revision 8 removes the transitional
+`record_verification` package after moving its two responsibilities to explicit
+verifier-layer owners. The unclassified-module ceiling drops from 25 to 22 and
+the cross-package private-import ceiling drops from 55 to 54 because
+`record_verifier` now consumes the public `RecordChecks` contract. Cycles,
+wildcard imports, unresolved dynamic imports, and layer violations remain zero.
+
+Import-boundary ratchet revision 9 classifies the stable flat
+`verdict_contract_v1_11` and `verdict_contract_v1_12` compatibility modules as
+domain-owned wire vocabularies. The unclassified-module ceiling drops from 22
+to 21 while both published import paths remain unchanged.
+
+The verifier-owned `record_policy` module is a new classified verifier-layer
+owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
+accept/reject mutation vectors are intentionally separate from producer policy
+tests, so no ratchet count is changed merely to record the new module.
 
 The next CLI slice moves only declarative `argparse` construction into the
 dependency-free `cli.parser` owner. `cli.__init__` retains the public

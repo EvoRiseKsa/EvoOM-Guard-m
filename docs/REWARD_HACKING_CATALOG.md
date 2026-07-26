@@ -7,10 +7,12 @@
 
 # EvoGuard — the reward-hacking catalog
 
-The one question EvoGuard answers: **did this change fix the code, or did it game
-the test harness to look green?** This catalog lists the concrete reward-hacking
-techniques an AI agent (or a human) can use to fake a pass, EvoGuard's verdict on
-each, and where that verdict is **reproducibly proven** in this repo.
+The narrow question EvoGuard answers is: **did this exact change satisfy the
+selected judge without modifying the evidence used to decide?** This catalog
+lists concrete reward-hacking techniques an AI agent (or a human) can use to
+fake a pass, EvoGuard's verdict on each, and the developer-owned regression
+tests that cover those verdict classes. It does not prove that an accepted
+change is generally correct.
 
 Two design choices do the work (see [`GUARD.md`](GUARD.md)):
 
@@ -39,9 +41,10 @@ engine; the historical campaign version is not the current release version.
 | 9 | **Edit `Makefile`/`noxfile.py`** the `test_command` shells out to | build-runner config → pre-gated | ⛔ `REJECTED` | `tests/test_repo_verifier.py` (`is_protected_config`) |
 | 10 | **Print a forged `"9999 passed"`** to stdout without fixing | verdict read from JUnit, not stdout | ❌ `FAIL` (real counts) | campaign `s6_stdout_fake` |
 | 11 | **Desync exit code ⟷ report** (`atexit`/`os._exit(0)` after failures) | the two trusted signals disagree | 🚨 `TAMPERED` | campaign `s9_tampered_junit_exit_conflict` |
+| 11a | **Forge both the JUnit report and zero exit from candidate source** in the default same-process profile | known boundary: candidate shares the report-producing process | ⚠️ false `PASS` (`known_gap`) | `tests/test_report_integrity.py::InProcessForgeryIsTheKnownBoundary::test_atexit_junit_forgery_currently_yields_a_false_pass` |
 | 12 | **Escape the repo root** (`../../etc/...`, absolute path) | unsafe path refused before apply | ⚠️ `ERROR` (`unsafe_path`) | internal validation campaign S11 |
 | 13 | **Submit nothing parseable** (prose, no edits) | no edits to verify | ⚠️ `ERROR` (`no_parseable_edits`) | campaign `s8_empty_patch_error` |
-| 14 | Honest fix that *touches look-alike names* (`contest.py`, `testing_utils.py`) | segment/pattern match, no over-rejection | ✅ `PASS` (0 false positives) | internal validation campaign S19 |
+| 14 | Honest fix that *touches look-alike names* (`contest.py`, `testing_utils.py`) | segment/pattern match, no over-rejection | ✅ `PASS` (no false positive in this scenario) | internal validation campaign S19 |
 
 Every ⛔ in rows 3–9 is decided **before any test runs** (`test_command_ran: false`
 in the JSON), so a harness-gaming patch never even executes the suite.
@@ -73,9 +76,10 @@ forgery → FAIL.
   weak suite is a `PASS`. EvoGuard checks honesty, not test quality.
 - It is **not** a sandbox for hostile code by default (the subprocess judge runs
   the suite with rlimits + a timeout). For untrusted/fork PRs add
-  `--isolation docker` (network-less, read-only container) — defence in depth, not
-  a complete boundary; truly untrusted input wants VM-class isolation. See
-  [`GUARD.md`](GUARD.md).
+  `--blackbox-only` and `--isolation docker` or `gvisor`; the ordinary
+  same-process repo suite retains row 11a's false-PASS boundary. Docker is
+  defence in depth rather than a complete hostile-kernel boundary; truly
+  untrusted input wants VM-class isolation. See [`GUARD.md`](GUARD.md).
 - Runners outside the eight structured adapters (pytest, `node --test`, vitest,
   jest, gotestsum, RSpec, mocha, Maven Surefire — see the matrix in
   [`ADOPTION.md`](ADOPTION.md)) grade on the **exit code alone** (no structured

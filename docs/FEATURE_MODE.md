@@ -63,9 +63,11 @@ residual risk:
 own coding agent adding features), paired with **human review of the added
 tests** — not for untrusted or public fork PRs. For untrusted code, keep strict
 mode (default) and add isolation (`--isolation docker`/`gvisor`, both shipping;
-a stronger microVM-class judge is on the roadmap). For untrusted *behaviour*, the
-external black-box judge (`--blackbox`) produces a judge-owned verdict the code
-under test cannot forge in-process, with delivered, fail-closed isolation. The
+a stronger microVM-class judge is on the roadmap). For untrusted *behaviour*,
+`--blackbox-only` removes the repo-native report channel. With delivered
+container/gVisor isolation the candidate is not given the judge pack/report
+mounts; this blocks the documented report-forgery path but is not proof that the
+runtime has no escape. The
 `*.test.ts` reward-hack in `REWARD_HACKING_CATALOG.md` — weakening an
 **existing** assertion — stays blocked in both modes.
 

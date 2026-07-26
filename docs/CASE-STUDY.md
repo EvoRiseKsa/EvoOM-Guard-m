@@ -6,7 +6,10 @@ whole study as a turnkey fixture:
 [`examples/case-study-charset-normalizer/`](../examples/case-study-charset-normalizer/)
 contains the exact candidate patches, the committed regression test, the raw
 verdict records behind the table below, and a one-command, self-checking
-reproduction script.
+reconstruction script. The PyPI source bytes are SHA-256-pinned, but the script
+uses the current checked-out Guard source and a compatible local
+Python/pytest/toolchain. It does not claim byte-identical or cross-builder
+reproducibility.
 
 ## The bug
 
@@ -112,12 +115,14 @@ What each row proves:
 All three verdicts share the identical policy fingerprint
 (`policy_sha256:
 349c2c0d8da098341f914c043722cf438116ae05f003b35b9edebe50519419a9`), so a
-downstream consumer can verify with `evo-guard verify-verdict
---expect-policy-sha …` that no scenario was judged under a softer policy than
-the others. Every record also passes `evo-guard verify-record` — the
-producer/verifier universality invariant the reason corpus enforces — and the
-honest-fix record seals into an Evidence Bundle that
-`verify-bundle --require-pass` authenticates end to end.
+downstream consumer can run `evo-guard verify-record` on each record and compare
+the three `attestation.policy_sha256` values before interpreting them. The
+shipped case-study records do not include detached signatures, so this
+comparison establishes self-consistency, not signer authentication. The
+honest-fix record also seals into an Evidence Bundle whose
+`verify-bundle --require-pass` check authenticates the exact record and supplied
+context as one snapshot; it does not independently attest that execution was
+honest.
 
 ## A strictness note worth knowing
 
@@ -134,7 +139,7 @@ reproduction workflow above). When the reproduction arrives with the patch
 itself, run `--baseline-evidence` without the hard gate and read
 `repair_effect` as evidence instead.
 
-## Reproduce it yourself
+## Reconstruct it yourself
 
 One command, self-checking:
 

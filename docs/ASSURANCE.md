@@ -333,9 +333,10 @@ input. The default composite cannot honestly satisfy an
   loudly.
 - **Untrusted or semi-trusted authors**: a same-process `PASS` means "the common
   cheats were blocked", not "correctness proven". Require human review of the
-  diff, and use the shipped external judge (`--blackbox`, with `--isolation
-  docker` for a delivered boundary) for a report-integrity guarantee the code
-  under test cannot forge.
+  diff, and use `--blackbox-only` with delivered Docker/gVisor isolation to
+  remove the repo-native channel and keep the pack/report outside the candidate
+  mount. This blocks the documented in-process forgery path; it is not an
+  absolute container/runtime escape guarantee.
 
 The shell-free `$EVOGUARD_EXEC` used by every black-box isolation mode is a
 POSIX executable launcher. Native Windows fails closed before subprocess,

@@ -26,7 +26,7 @@ correctness or security.
 > seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
 > table and a complete runnable example. Start there instead of reading this whole page.
 >
-> **See a frozen reproducible proof snapshot → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
+> **See a frozen reproducible demonstration snapshot → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
 > an honest fix passes, test tampering is rejected, a fake `9999 passed` on stdout
 > still fails, and black-box report forgery is caught. That repository records a
 > v3.5.2 scenario; it is not an independent assessment and does not validate the
@@ -36,7 +36,8 @@ correctness or security.
 > charset-normalizer's real `TypeError`-on-comparison bug (≤3.3.2, fixed upstream in
 > 3.4.0) — the genuine fix earns `PASS` with `repair_effect: demonstrated`, the
 > test-silencing variant is `REJECTED` before a single test runs, and the do-nothing
-> patch `FAIL`s. Reproducible from hash-pinned PyPI sdists.
+> patch `FAIL`s. Reconstructable on a compatible Python environment from
+> byte-pinned PyPI sdists; exact cross-environment reproducibility is not claimed.
 
 > **Trusted Finalizer status.** v3.6.0 introduced the split, v3.6.1 repaired
 > its unprivileged judge runtime, and v3.7.0 independently derives raw-Git
@@ -171,8 +172,10 @@ Guard closes that hole with two mechanisms:
 
 For targets with a process/protocol boundary (a CLI, an HTTP service, a
 DB-backed program), the black-box phase is produced by **its own pytest over
-judge-owned tests that never import your code** — so candidate code cannot
-forge that phase's report from inside the run:
+judge-owned tests that never import your code**. This defeats the demonstrated
+in-process `atexit`/`os._exit` report channel. Host-subprocess mode still shares
+an OS identity/filesystem and is not same-UID tamper-proof; require delivered
+container/gVisor isolation when that threat is in scope:
 
 ```bash
 evo-guard guard ./repo --patch candidate.txt \
@@ -185,7 +188,7 @@ For `--blackbox-only`, that completed judge yields
 `report_integrity: external_process_isolated`; in the default composite mode the
 overall profile honestly reports the weaker repo-native report channel. The
 *identical* `atexit`+`os._exit` forgery that
-fakes a `PASS` under the default judge yields the correct `FAIL` (proven in
+fakes a `PASS` under the default judge yields the correct `FAIL` (covered in
 `tests/test_blackbox.py`). A protected-harness refusal is decided earlier: it
 reports `static_gate`, `candidate_isolation: not_run`, and
 `report_integrity: not_applicable_static_gate` instead of claiming that the
@@ -193,7 +196,7 @@ requested judge or container ran. Runtime preflight failures are separately
 `not_started` with `report_integrity: not_applicable_not_run`; a suite/judge
 timeout is `started_incomplete`, has `test_command_ran: true`, and may still have
 `verdict_source: null`. Three properties make a completed execution verdict a
-real guarantee, not a label:
+scoped, evidence-backed contract rather than a requested label:
 
 - **Boundary evidence is observed, not requested.** `candidate_isolation`
   changes from `not_run` only after the judge observes a trusted-pack call to
@@ -204,11 +207,13 @@ real guarantee, not a label:
   `candidate_not_exercised` even without a floor — never a vacuous `PASS` or a
   result mislabelled `docker`. A pending verdict is also refused as
   `runtime_cleanup_failed` if the judge process group or a candidate container
-  cannot be proven absent after execution. In a container the repo copy is mounted
-  **read-only** and
-  the pack is **not mounted into the candidate at all** (proven against a real
-  daemon in CI, where a malicious candidate fails to write the host, open the
-  network, or reach the pack).
+  cannot be proven absent after execution. In a delivered container the
+  candidate tree is mounted **read-only** and the pack is not mounted into it.
+  The conformance kit can record and offline replay-check the listed
+  mount, network, identity, resource, and cleanup controls. A release claim
+  still requires retaining a result bound to the final commit and runtime.
+  These probes do not prove the absence of a container escape or make Docker a
+  hostile-code boundary; no release-bound gVisor result is currently claimed.
 - **The verdict is composite.** By default the repo's own suite **and** the
   external pack must both pass — a green pack can never mask an internal
   regression. Pure-CLI/service targets with no in-repo suite pass
@@ -227,10 +232,13 @@ A configured path alone is not reported as a verified pack.
 
 See [`docs/BLACKBOX.md`](docs/BLACKBOX.md) and [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 
-Structured, judge-owned verdicts (`junit+exit`) cover **eight runners**:
+Structured, judge-owned verdicts (`junit+exit`) cover **eight direct runners**:
 pytest, `node --test`, vitest, jest, gotestsum (Go), rspec (Ruby), mocha, and
-Maven/Surefire (Java). Any other test command is graded by exit code — still
-never by stdout.
+Maven/Surefire (Java), plus a Shell wrapper adapter for a supported final
+runner segment. The nine adapter owners now have a schema-versioned offline
+conformance kit; this is not yet a published multi-OS real-runner matrix. Any
+other test command is graded by exit code — still never by stdout. See
+[`docs/RUNNER_CONFORMANCE.md`](docs/RUNNER_CONFORMANCE.md).
 
 The **core runtime has zero Python dependencies** — 3.10+ standard library only
 (plus `git`/`patch` on the host). Ed25519 signing and diff-coverage are optional
@@ -323,9 +331,9 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 Every run can also emit a machine-readable JSON record (`--json`) with a stable
 `schema_version` and a fixed `reason_code` for the verdict's cause, plus an
 explicit `execution_state` (`static_gate`, `not_started`,
-`started_incomplete`, or `completed`) and `execution_phase`. In schema 1.11,
-`test_command_ran` means the test/judge process started, so it remains true on a
-test/judge timeout even when no clean `verdict_source` exists. Requested policy
+`started_incomplete`, or `completed`) and `execution_phase`. In schemas 1.11
+and 1.12, `test_command_ran` means the test/judge process started, so it remains
+true on a test/judge timeout even when no clean `verdict_source` exists. Requested policy
 remains in the attestation; no-run isolation is reported as `not_run`. It can
 also emit a
 SARIF 2.1.0 report (`--sarif`) for GitHub code scanning — see
@@ -346,30 +354,46 @@ base-owned judge policy `.evoguard.json`. Commit **both**. The policy, not the
 pull-request workflow, is where the test command and every setting that shapes
 the judge belong.
 
+`init --private-evoguard` is disabled fail-closed. A same-repository PR can
+modify its workflow definition, so putting a private-repository PAT in another
+job of that workflow does not create a trust boundary. For a private EvoGuard
+repository, use GitHub's private-action repository access with a reviewed pin,
+or publish a prebuilt internal artifact from a separately protected workflow
+that never evaluates candidate-controlled YAML.
+
 or drop the composite action in yourself:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ACTION_PIN -->
 ```yaml
 permissions:
   contents: read
-  pull-requests: write   # only if comment: "true"
 
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-    with: { fetch-depth: 0 }
+    with:
+      fetch-depth: 0
+      persist-credentials: false
   - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # ledger-recorded release; pin a SHA for strictest CI
     with:
-      comment: "true"
+      comment: "false"   # explicit for older releases; candidate jobs never comment
       fail-on: "any-non-pass"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_ACTION_PIN -->
+
+The candidate job intentionally has no PR-write permission. When execution
+reaches Guard report generation, that report is written to the job summary.
+Credential/comment preflight refusals can stop earlier and therefore produce no
+Guard report. If PR comments are required, transfer a bounded report artifact
+to a separate metadata-only job that never checks out or executes candidate
+code; do not add `pull-requests: write` to this job.
 
 > **Next/unreleased Action bootstrap:** current development builds the
 > stdlib-only `evo-guard.pyz` directly from the selected Action revision and
 > runs it with `python -I`; bootstrap does not invoke a package resolver, build
 > backend, or PyPI. This is not a `v4.3.0` claim and is not a whole-Action
-> zero-network claim: interpreter setup, a missing-base fetch, the optional PR
-> comment, and consumer setup/tests remain separate boundaries. Optional
+> zero-network claim: interpreter setup, a missing-base fetch, separately
+> authorized metadata reporting, and consumer setup/tests remain separate
+> boundaries. Optional
 > `coverage.py` must already exist in the selected Python 3.12 environment;
 > missing advisory measurement stays explicit and a configured minimum fails
 > closed.
@@ -402,9 +426,10 @@ The PR workflow is candidate-controlled, so its `with:` values are **not** a
 trusted policy source. In PR mode the Action ignores judge-shaping overrides
 such as `test-command`, `protected`, `allow-new-tests`, isolation, black-box,
 coverage, timeout, and assurance settings; conflicting verifier-pack inputs
-fail closed. `comment` only controls the optional report comment. The step
-always requires `fail-on: any-non-pass`, so `FAIL`, `TAMPERED`, and `ERROR`
-cannot turn green.
+fail closed. The legacy `comment` input defaults to false and `true` is refused
+before candidate execution because a composite action cannot separate the
+candidate from its job token. The step always requires
+`fail-on: any-non-pass`, so `FAIL`, `TAMPERED`, and `ERROR` cannot turn green.
 
 For a verifier pack on a PR, place both settings in the base policy:
 
@@ -500,22 +525,37 @@ to `subprocess`.
 
 ## Signed verdicts and portable evidence
 
+The acknowledgement flag and key-output failure contract in this section
+describe the current, **unpublished 4.4.0 release-candidate source**. They are
+not claims about the ledger-recorded `v4.3.0` consumer release; follow the
+documentation at the exact version you install.
+
 With the `sign` extra, the judge can sign every JSON verdict with an Ed25519
 key, making post-run record modification detectable — a `FAIL` cannot be quietly
 edited into a `PASS` without invalidating the signature:
 
 ```bash
 evo-guard keygen                                   # once: the judge's identity
-evo-guard guard ... --json v.json --sign-key evoguard-signing.pem
-evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1
+evo-guard guard ... --json v.json --sign-key evoguard-signing.pem \
+  --acknowledge-local-key-exposure
+evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1/2
 ```
 
-See [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
+Failed two-file key generation never unlinks final paths and can leave
+zero-length reservations by design; inspect and remove them before retrying.
+See the key-generation failure contract in
+[`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
+
+Direct signing is a trusted-local compatibility mode: the acknowledgement says
+candidate-controlled code may share the signing key's OS identity. It is not
+safe key separation for hostile PRs. Use the
+[`Trusted Finalizer`](docs/TRUSTED_FINALIZER.md) for untrusted candidates. See
+[`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
 
 For one machine-consumable result that combines canonical bytes, an external
-trust key, replay-resistant repository/run/revision context, and schema-1.11
-semantic verification, create an authenticated evidence bundle in a trusted
-post-run finalizer:
+trust key, replay-resistant repository/run/revision context, and supported
+schema-1.11/1.12 semantic verification, create an authenticated evidence bundle
+in a trusted post-run finalizer:
 
 ```bash
 evo-guard verify-record v.json
@@ -527,7 +567,9 @@ evo-guard verify-bundle evidence.evb \
 
 `VERIFIED` authenticates the enclosed record and its exact context; it does not
 mean the enclosed verdict is `PASS` or that all software behavior is correct.
-Add `--require-pass` when this command is the merge/deploy gate.
+A trusted consumer may add `--require-pass` when it must reject authenticated
+non-PASS records. That flag alone is not merge or deployment authorization: it
+does not separate authorities or prove an SCM admission/deployment event.
 This generic `bundle-evidence` path is a provenance primitive, not a safe
 pull-request finalizer: do not feed it an artifact from a candidate job and
 then sign it in `workflow_run`. For PR admission, use the split
@@ -599,11 +641,15 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
   to `CoverageData`; isolated startup and the empty rcfile do not prevent that.
   Therefore `diff_coverage` and `min_diff_coverage` are quality/scrutiny signals
   for non-hostile code, not evidence that can authorize an adversarial PR. Use
-  independent external verifier/finalizer evidence for hostile-code admission.
-- A patch overfitted to the visible tests fails the **Independent Verifier
-  Pack** — org-owned checks injected at judgment time that the **patch cannot
-  include or modify**. In 3.4, Guard snapshots the pack outside the candidate
-  tree, verifies its framed `EVOGUARD_PACK_V2` digest, then runs it as a
+  candidate-independent external verifier/finalizer evidence for hostile-code
+  admission.
+- A patch overfitted to the visible tests must also satisfy the **Independent
+  Verifier Pack** — org-owned, candidate-independent checks injected at
+  judgment time that the **patch cannot include or modify**. Independent here
+  means judge-owned rather than third-party review, and a pack does not
+  guarantee detection of every form of overfitting. Guard currently snapshots
+  the pack outside the candidate tree, verifies its framed `EVOGUARD_PACK_V2`
+  digest, then runs it as a
   **separate mandatory phase**: repo suite and pack must both pass, and a pack
   that collects zero tests cannot produce `PASS`. `--expect-verifier-pack-sha256`
   pins the exact accepted identity and the attestation records the digest,
@@ -667,15 +713,23 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
 | [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
 | [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v4.3.0 build-artifact attestation and historical/future release runs |
 | [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
-| [`docs/PROOFS.md`](docs/PROOFS.md) | Reproducible demonstration runs and an adversarial benchmark (documented cases → expected verdicts) |
+| [`docs/PROOFS.md`](docs/PROOFS.md) | Historical demonstration narratives and their evidence limits; older gVisor observations are not current release proof |
 | [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |
 | [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
-| [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Independent Verifier Packs: org-owned, patch-immutable invariants (and their honest runtime limits) |
+| [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Candidate-independent Verifier Packs: org-owned, patch-immutable invariants (not third-party review) |
 | [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
-| [`docs/BLACKBOX.md`](docs/BLACKBOX.md) | The `--blackbox` external judge: closing same-process report forgery |
+| [`docs/OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) | Explicit `local` / `protected` / `hostile` contracts, fail-closed requirements, and key custody |
+| [`docs/BLACKBOX.md`](docs/BLACKBOX.md) | The `--blackbox` external report channel; `--blackbox-only` removes the weaker repo-native channel |
+| [`docs/FUZZING.md`](docs/FUZZING.md) | Coverage-guided strict-JSON and hostile-JUnit fuzz targets, seed corpora, and reproducible local smoke |
+| [`docs/RUNNER_CONFORMANCE.md`](docs/RUNNER_CONFORMANCE.md) | Schema-versioned exact `argv`/environment checks for all nine adapter owners; real-runner multi-OS publication remains open |
+| [`docs/ISOLATION_CONFORMANCE.md`](docs/ISOLATION_CONFORMANCE.md) | Schema-versioned Docker/gVisor probes and replay metadata; release claims require retained, final-commit-bound results |
+| [`docs/INDEPENDENT_EVALUATION.md`](docs/INDEPENDENT_EVALUATION.md) | Runnable blind label-commitment, prediction-freeze, reveal, and baseline-scoring protocol; no external evaluation is claimed |
+| [`docs/OPERATIONAL_TELEMETRY.md`](docs/OPERATIONAL_TELEMETRY.md) | Privacy-allowlisted summaries of supplied verdict files; not attempted-run inventory or deployed SLO monitoring |
+| [`docs/PRODUCTION_OPERATIONS.md`](docs/PRODUCTION_OPERATIONS.md) | Fail-closed evidence retention, key rotation, incident, SLO, upgrade, and rollback operator contract |
 | [`ROADMAP.md`](ROADMAP.md) | Shipped capabilities, current limits, and general future direction |
 | [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |
+| [`docs/PRODUCTION_BLUEPRINT.md`](docs/PRODUCTION_BLUEPRINT.md) | Product boundary, authority model, target package structure, missing operational components, and mandatory production gates |
 | [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md) | The docker/gVisor isolation modes and their threat model |
 | [`docs/FEATURE_MODE.md`](docs/FEATURE_MODE.md) | `--allow-new-tests`: gating feature work that adds tests |
 | [`adversarial/README.md`](adversarial/README.md) | Executable adversarial corpus: enforced controls, known gaps, documented exceptions, and the environment-labelled security baseline |

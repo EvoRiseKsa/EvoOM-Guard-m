@@ -2090,14 +2090,15 @@ def _blocks(context: Context) -> dict[str, str]:
             ```yaml
             permissions:
               contents: read
-              pull-requests: write   # only if comment: "true"
 
             steps:
               - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-                with: {{ fetch-depth: 0 }}
+                with:
+                  fetch-depth: 0
+                  persist-credentials: false
               - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}   # ledger-recorded release; pin a SHA for strictest CI
                 with:
-                  comment: "true"
+                  comment: "false"   # explicit for older releases; candidate jobs never comment
                   fail-on: "any-non-pass"
             ```"""
         ),
@@ -2227,7 +2228,9 @@ def _blocks(context: Context) -> dict[str, str]:
 
             ```yaml
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-              with: {{ fetch-depth: 0 }}
+              with:
+                fetch-depth: 0
+                persist-credentials: false
             - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}
             ```
 
@@ -2251,10 +2254,12 @@ def _blocks(context: Context) -> dict[str, str]:
 
             ```yaml
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-              with: {{ fetch-depth: 0 }}
+              with:
+                fetch-depth: 0
+                persist-credentials: false
             - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}
               with:
-                comment: "true"
+                comment: "false"
                 fail-on: "any-non-pass"
             ```"""
         ),
@@ -2262,7 +2267,9 @@ def _blocks(context: Context) -> dict[str, str]:
             f"""\
             ```yaml
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-              with: {{ fetch-depth: 0 }}
+              with:
+                fetch-depth: 0
+                persist-credentials: false
             - run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
             - run: |
                 BASE="${{{{ github.event.pull_request.base.sha }}}}"

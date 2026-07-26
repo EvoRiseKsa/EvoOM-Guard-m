@@ -1,4 +1,4 @@
-﻿# Release gate checklist (v4 baseline hardening)
+# Release gate checklist (v4 baseline hardening)
 
 Use this checklist for the published `v4.0.1` behavioral baseline, the minimal
 `v4.0.2`, `v4.1.0`, `v4.2.0`, and `v4.3.0` release ledgers, and as the minimum
@@ -27,7 +27,10 @@ gate.
 
 4. **Workflow scope & permissions**
    - Use `pull_request` (not `pull_request_target`) for candidate checks.
-   - Minimal permission set; include `pull-requests: write` only if a comment is needed.
+   - Give the candidate job only `contents: read` and set checkout
+     `persist-credentials: false`.
+   - Put optional PR comments in a separate metadata-only job with no candidate
+     checkout or execution; never give the candidate job `pull-requests: write`.
    - Never give the candidate job `contents: write` when it only verifies code.
 
 5. **No edit-time bypasses**
@@ -116,6 +119,12 @@ gate.
     --trusted-ledger-pub <independently-obtained-public-key> `
     --trusted-parent-repo <disjoint-trusted-parent-repository>
   ```
+
+  Run this command from a dependency-locked Python environment whose runtime
+  and dependency roots are disjoint in both directions from the checkout,
+  current working directory, system temporary directory, ledger evidence,
+  candidate, and trusted-parent roots. An in-repository `.venv` is rejected;
+  `-I` alone does not turn it into a trusted runtime.
 
   The trusted key
   path must be outside the ledger and must come from a pinned parent tree,

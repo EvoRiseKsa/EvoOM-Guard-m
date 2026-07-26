@@ -13,3 +13,4 @@ dist/
 venv/
 .coverage
 node_modules/
+work/

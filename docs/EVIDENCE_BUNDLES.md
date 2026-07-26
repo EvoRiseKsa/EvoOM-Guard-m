@@ -23,6 +23,16 @@ evo-guard keygen --key judge.pem --pub judge.pub
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:EVIDENCE_BUNDLES_RELEASE_PIN -->
 
+The pinned `v4.3.0` release supports its frozen schema-1.11 bundle contract.
+Schema 1.12 support and the key-generation failure hardening described below
+belong to the current, **unpublished 4.4.0 release-candidate source**. Consumers
+must follow the documentation shipped at the exact version they run.
+
+Current release-candidate key generation uses the same fail-closed
+[two-file failure contract](SIGNED_VERDICTS.md#usage): a failed run can leave
+zero-length reservations that must be inspected and explicitly removed before
+retrying.
+
 Create `context.json` from trusted workflow/event metadata, not from the verdict
 alone:
 
@@ -67,8 +77,9 @@ evo-guard bundle-evidence verdict.json \
   --material log=judge.log
 ```
 
-The command strict-parses and semantically verifies schema 1.11 again inside the
-bundle writer before signing the exact bytes. It refuses an inconsistent record.
+In the current 4.4.0 release-candidate source, the command strict-parses and
+semantically verifies supported schema 1.11 or 1.12 again inside the bundle
+writer before signing the exact bytes. It refuses an inconsistent record.
 Output publication is atomic and no-clobber by default; `--force` is explicit.
 The Python `create_evidence_bundle()` API has the same fail-closed default;
 forensic tooling may set `require_valid_record=False` only when it intentionally
@@ -94,15 +105,17 @@ copied out of the bundle cannot substitute for either one. Exit `0` and status
 - canonical whole-container bytes;
 - an Ed25519 signature under the external key;
 - exact equality with the external expected context; and
-- schema-1.11 structural and cross-field record semantics.
+- declared schema-1.11 or schema-1.12 structural and cross-field record
+  semantics.
 
 `INVALID` exits non-zero. Unusable or missing trust inputs are never converted
 into `VERIFIED`. The JSON report also includes the authenticated key ID and
 context plus the enclosed `verdict`, `passed`, `reason_code`, and `exit_code`, so
 a consumer does not need to reopen the archive to see the authenticated decision.
 
-By default exit `0` means the envelope and record are valid; it deliberately does
-not mean the verdict was `PASS`. A merge/deploy gate should add `--require-pass`:
+By default exit `0` means the envelope and record are valid; it deliberately
+does not mean the verdict was `PASS`. A trusted consumer that must reject
+authenticated non-PASS records can add `--require-pass`:
 
 ```bash
 evo-guard verify-bundle evidence.evb --trusted-pub judge.pub \
@@ -111,6 +124,9 @@ evo-guard verify-bundle evidence.evb --trusted-pub judge.pub \
 
 An authenticated non-PASS then reports `DENIED`, retains `verified: true`, and
 exits `1`. `pass_gate` is always emitted as `ALLOW` or `DENY`.
+This checks the authenticated record only; it does not separate authorities or
+prove an SCM merge/deployment event and is not, by itself, admission authority.
+Use the [Trusted Finalizer](TRUSTED_FINALIZER.md) for PR admission.
 
 ## Wire format
 
@@ -169,3 +185,4 @@ Machine-readable contracts:
 - [`evidence-context-1.schema.json`](../evoom_guard/schemas/evidence-context-1.schema.json)
 - [`evidence-manifest-1.schema.json`](../evoom_guard/schemas/evidence-manifest-1.schema.json)
 - [`verdict-record-1.11.schema.json`](../evoom_guard/schemas/verdict-record-1.11.schema.json)
+- [`verdict-record-1.12.schema.json`](../evoom_guard/schemas/verdict-record-1.12.schema.json)

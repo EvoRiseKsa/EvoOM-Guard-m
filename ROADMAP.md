@@ -14,7 +14,12 @@ evidence used to judge it. Guard still focuses on one narrow question:
 > Did the change satisfy the selected judge without manipulating the evidence
 > used to judge it?
 
-## Shipped today
+[`docs/PRODUCTION_BLUEPRINT.md`](docs/PRODUCTION_BLUEPRINT.md) is the normative
+product boundary and production-gate plan. This roadmap records capability
+history; it must not be used to promote an implemented mechanism past the
+evidence level allowed by that blueprint.
+
+## Current source capabilities and consumer-release boundary
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
 Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
@@ -27,13 +32,16 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
 
+- Verdict schema `1.11` is the frozen consumer-release contract. Schema `1.12`
+  adds the explicit `operating_profile` field in the unpublished `4.4.0`
+  release-candidate source; its presence here is not evidence of publication.
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
 - **Structured, judge-owned verdicts** across eight test runners (verdict read
   from a JUnit report + exit code, never from stdout); a `TAMPERED` verdict when
   they disagree or when the judged candidate/pack snapshot drifts during a
   multi-phase run.
-- **Independent record verification** — a bounded, strict schema-1.11 consumer
+- **Independent record verification** — a bounded, strict schema-1.11/1.12 consumer
   checks lifecycle, policy, receipt, isolation, pack, and verdict-source
   invariants without executing candidate code.
 - **Authenticated evidence envelopes** — deterministic bundles bind the exact
@@ -55,11 +63,14 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
   provenance system.
 - **Assurance reporting** — every verdict states its `report_integrity` and
   `candidate_isolation` honestly.
-- **External black-box verification** (`--blackbox`) — the verdict comes from the
-  judge's own process over judge-owned tests that never import the candidate.
+- **External black-box verification** (`--blackbox`) — adds a judge-owned
+  external channel over tests that never import the candidate. The default
+  overall verdict remains composite; only `--blackbox-only` removes the weaker
+  repo-native channel.
 - **Delivered candidate isolation** — a real container boundary whose evidence is
   read from what actually ran; requesting isolation that cannot be delivered
-  fails closed. Exercised against a real Docker daemon in CI.
+  fails closed. Daemon-backed tests and conformance tooling exist; a release
+  claim still requires a retained result bound to the final commit and runtime.
 - **Canonical Independent Verifier Packs** — strict manifest parsing, framed
   `EVOGUARD_PACK_V2` identities, optional expected-digest pins, verified external
   snapshots and a separate mandatory pack phase with non-zero test evidence.
@@ -178,8 +189,16 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 
 ## Current limits (stated plainly)
 
-- The default same-process judge can be forged by deliberate in-process source;
-  use `--blackbox` to close that. See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
+- Source `4.4.0` adds operating-profile and conformance/evaluation tooling, but
+  those mechanisms are still release-candidate source. They do not certify a
+  hostile production deployment. The missing evidence remains a release-bound
+  gVisor/VM run, a real multi-OS runner matrix, a third-party held-out
+  evaluation with an independently controlled launcher when execution identity
+  matters, and provider-backed telemetry/retention exercises.
+- The default same-process judge can be forged by deliberate in-process source.
+  `--blackbox` adds a stronger external channel, but the default composite still
+  includes the weaker repo-native channel; use `--blackbox-only` to remove it
+  from the end-to-end verdict. See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
 - The subprocess boundary is not a sandbox; container isolation is opt-in.
 - POSIX rlimits are unavailable on native Windows, and the black-box subprocess
   launcher has a POSIX executable contract (use Linux/GitHub Actions or WSL).

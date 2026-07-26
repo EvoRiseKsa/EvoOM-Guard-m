@@ -1,7 +1,7 @@
 # Offline record verification
 
-`evo-guard verify-record` validates the schema-1.11 JSON record itself without
-running candidate code:
+`evo-guard verify-record` validates schema-1.11 and schema-1.12 JSON records
+without running candidate code:
 
 ```bash
 evo-guard verify-record verdict.json
@@ -18,9 +18,13 @@ over 128 digits, unpaired Unicode surrogates, and nesting over 256 levels are
 rejected as unusable input.
 
 The report contains a stable list of checks with `pass`, `fail`, or `skip`
-status. A skipped check is not presented as proof. For example, schema 1.11
-permits `attestation: null`; that record can still be structurally consistent,
+status. A skipped check is not presented as proof. For example, both schemas
+permit `attestation: null`; that record can still be structurally consistent,
 but policy binding and attestation parity are explicitly skipped.
+
+The policy vocabulary is selected from the record's declared version. Schema
+1.11 remains frozen and rejects `operating_profile`; schema 1.12 permits it and
+checks the named profile's runtime-policy constraints.
 
 The verifier checks:
 
@@ -29,7 +33,7 @@ The verifier checks:
 - verdict, `reason_code`, `passed`, exit status, protected-violation, and count
   invariants;
 - lifecycle parity across the top level, `assurance`, and `attestation`;
-- the complete typed 24-field effective policy and canonical recomputation of
+- the complete typed, versioned effective policy and canonical recomputation of
   `attestation.policy_sha256`;
 - black-box candidate-receipt zero/non-zero semantics;
 - delivered isolation and assurance-profile/report-channel semantics;
@@ -50,8 +54,9 @@ arrays where objects were expected, invalid nested fields, and non-canonical
 policy objects produce failed checks rather than an exception or a partial
 success report. Excessive parser nesting is reported as invalid JSON.
 
-The structural JSON Schema is
-[`evoom_guard/schemas/verdict-record-1.11.schema.json`](../evoom_guard/schemas/verdict-record-1.11.schema.json).
+The structural JSON Schemas are
+[1.11](../evoom_guard/schemas/verdict-record-1.11.schema.json) and
+[1.12](../evoom_guard/schemas/verdict-record-1.12.schema.json).
 JSON Schema cannot express all cross-field invariants, so consumers should run
 the command as well as structural validation.
 

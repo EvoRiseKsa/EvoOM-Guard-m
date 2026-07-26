@@ -12,27 +12,29 @@ gVisor backend ships as **`--isolation gvisor`** — the docker judge run throug
 `runsc` OCI runtime (a user-space guest kernel, no `/dev/kvm` needed). The stronger
 **Firecracker** microVM backend remains a design (it needs `/dev/kvm` / nested
 virtualization, which not every host exposes). The default **subprocess** and
-**`--isolation docker`** judges remain the lower isolation levels. In 3.4 their
+**`--isolation docker`** judges remain the lower isolation levels. Their current
 phase contract is explicit: container setup is writable and isolated; suite and
 verifier-pack candidate mounts are read-only. This document is the full VM-class
 design, threat model, and validation plan; §4a/§5/§8 mark what is built.
 
 ## 1. Why
 
-EvoGuard's two existing judges both **share the host kernel**:
+The current boundaries have different kernel exposure:
 
 | Judge | Confines | Gap |
 |---|---|---|
 | subprocess + timeout and POSIX `rlimits` (default) | CPU/mem/time where the OS exposes them | not a sandbox — full host FS/network; Windows has the timeout but not POSIX rlimits |
 | `--isolation docker` (Phase 2a) | setup in a writable container; suite/pack candidate mounts read-only; network/capability/PID/CPU/mem controls | shares the host kernel → a kernel exploit escapes |
+| `--isolation gvisor` | the same container controls plus the `runsc` user-space application kernel and a reduced host-syscall surface | the Sentry is still a host process; this is not a dedicated guest kernel or proof against runtime/kernel escape |
 
-For **untrusted / public fork-PR code**, neither is a complete boundary. VM-class
-isolation gives each judged run **its own guest kernel**, so a kernel-level escape
-lands in a throwaway VM, not on the host.
+For **untrusted / public fork-PR code**, none is an absolute boundary. The
+implemented gVisor backend interposes a user-space application kernel. Only the
+future, design-only Firecracker backend would give each run a dedicated guest
+kernel in a throwaway microVM.
 
 ## 2. Goals / non-goals
 
-**Goals**
+**Firecracker target goals (design-only)**
 - Run the candidate's suite under a **separate guest kernel**, no network, ephemeral
   (no persistence between runs), with strict CPU / memory / PID / wall-clock caps.
 - Read the verdict from a **judge-owned report on the host** — never guest stdout.
@@ -52,12 +54,15 @@ lands in a throwaway VM, not on the host.
 whose test/collection-time code executes inside the judge.
 
 **Defend against**
-- **Kernel escape → host compromise** (the core reason for a separate kernel).
+- **Kernel escape → host compromise** through a dedicated guest kernel (a
+  Firecracker target, not an implemented gVisor claim).
 - **Network exfiltration** of runner secrets/tokens.
 - **Resource exhaustion** — fork-bomb, memory/CPU/disk hog.
 - **Persistence** — leaving state that influences a later run.
-- **Verdict tampering** — forging the report or desyncing the exit code (already
-  covered by the judge-owned report + `detect_tamper`; preserved here).
+- **Verdict tampering** — `detect_tamper` catches exit/report disagreement, but
+  repo-native candidate and report writing still share a process. The
+  forge-both threat requires a meaningful `--blackbox-only` external channel;
+  same-identity/container threats additionally require delivered isolation.
 
 **Out of scope (documented residual):** hardware side-channels (Spectre-class),
 hypervisor/VMM 0-days (mitigated by a minimal device model + seccomp, not
@@ -160,10 +165,13 @@ self-check.
   Windows fails closed before subprocess, Docker, or gVisor delivery; use
   Linux/GitHub Actions or WSL. This is distinct from repo-native subprocess
   execution on Windows.
-- Repo-native Docker/gVisor end-to-end guarantees are exercised on POSIX hosts
-  with Linux containers. Native-Windows container delivery is runtime-dependent
-  and must fail closed when the requested image/mount boundary is unavailable;
-  the Windows CI suite does not label such an environment as delivered Docker.
+- The conformance kit records and replay-checks the listed Docker/gVisor
+  controls. When `runsc` is absent it reports gVisor as `UNSUPPORTED`, never as
+  delivered isolation. There is no current release-bound gVisor result, and a
+  release claim requires retaining a result bound to the final commit and
+  runtime. Native-Windows container delivery is runtime-dependent and must fail
+  closed when the requested image/mount boundary is unavailable; the Windows
+  CI suite does not label such an environment as delivered Docker.
 
 ## 8. Phasing
 

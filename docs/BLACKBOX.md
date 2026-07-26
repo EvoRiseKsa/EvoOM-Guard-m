@@ -27,8 +27,11 @@ evo-guard guard ./repo --patch candidate.txt \
 
 - The **verdict-producing process is the judge's own pytest over the pack** — it
   never imports the candidate's code, so the candidate cannot register an
-  `atexit` hook in it, cannot `os._exit` it, cannot rewrite its report. Its exit
-  code is authoritative.
+  `atexit` hook in it or call `os._exit` in the judge. In host-subprocess mode,
+  however, candidate and judge still share an OS identity and filesystem; the
+  external process alone does not prove the candidate cannot discover or modify
+  judge files. Require container/gVisor/VM isolation for that boundary. The
+  judge's exit code is authoritative only within the delivered isolation.
 - Before the runner is prepared, Guard validates the canonical `pack.json`,
   snapshots the pack outside the candidate tree and calculates its framed
   `EVOGUARD_PACK_V2` identity. Symlinks/special files and packs with no
@@ -83,7 +86,9 @@ evo-guard guard ./repo --patch p.txt --verifier-pack ./pack --blackbox \
     --require-candidate-isolation docker
 ```
 
-Schema 1.11 makes process progress explicit. `execution_state` is
+Schemas 1.11 and 1.12 make process progress explicit. Profile-free records
+remain on the frozen 1.11 contract; records with an explicit operating profile
+use 1.12. In either contract, `execution_state` is
 `not_started` for black-box preflight failures such as a missing/invalid pack,
 an expected-digest mismatch, patch preparation failure, or unavailable runner;
 `candidate_isolation` remains `not_run`. A judge timeout is
@@ -101,13 +106,17 @@ assurance floors are evaluated only when completed execution would otherwise be
 `PASS`; they do not replace a static, preflight, timeout/incomplete, pack, or
 isolation cause with a generic floor failure.
 
-In a container boundary the repo copy is mounted **read-only** and the
-judge-owned pack is **not mounted into the candidate at all** — so candidate code
-can neither write the host nor reach the pack to tamper with it. (In the
-`subprocess` boundary the candidate shares the host and user with the judge;
-`assurance.verifier_pack.secrecy` says so honestly — `reachable_same_host`.)
-The launcher executes the exact resolved image ID that was probed, rather than a
-mutable tag.
+In a delivered container boundary the candidate tree is mounted **read-only**
+and the judge-owned pack is **not mounted into the candidate**. The conformance
+kit can record and replay-check those mount properties and network denial; a
+release claim still requires retaining a result bound to the final commit and
+runtime. The probes do not prove the absence of a container escape, and
+Docker's shared kernel is not the hostile profile's final isolation boundary.
+(In the `subprocess` boundary
+the candidate shares the host and user with the judge;
+`assurance.verifier_pack.secrecy` says so honestly —
+`reachable_same_host`.) The launcher executes the exact resolved image ID that
+was probed, rather than a mutable tag.
 
 Pack evidence is equally phase-aware. `assurance.verifier_pack` independently
 records `configured`, observed `present`, `integrity`, `identity_verified`, pack
@@ -136,8 +145,8 @@ The completed composite's overall `report_integrity` is
 required external and repo-native channels. Use `--blackbox-only` when policy
 requires the end-to-end `external_process_isolated` level.
 
-`setup_command` is not silently applied to only part of this composite. In 3.4,
-combining setup with `--blackbox` returns
+`setup_command` is not silently applied to only part of this composite.
+Currently, combining setup with `--blackbox` returns
 `ERROR policy_requirement_unsupported`; place runtime dependencies in the
 environment/container image until a single explicit setup boundary exists for
 both sides.

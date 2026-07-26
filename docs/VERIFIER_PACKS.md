@@ -13,6 +13,10 @@ replace, delete, or deselect those files. In repo-native mode Guard runs the
 repo's own suite and then runs the accepted pack snapshot as a **separate
 mandatory phase**; both must pass.
 
+Independent in this feature name means candidate-independent and judge-owned.
+It does not mean independent review, an external evaluation, or a distinct
+organizational trust domain.
+
 The judge copies the pack to a temporary snapshot **outside** the candidate
 tree and its `HOME`, records its V2 content identity, and addresses that
 snapshot explicitly with `python -m pytest`. A narrowed command such as
@@ -72,12 +76,16 @@ The Action policy is therefore:
 # .github/workflows/evoguard.yml
 - uses: EvoRiseKsa/EvoOM-Guard-m@<reviewed-full-sha>
   with:
-    comment: "true"                  # reporting only
+    comment: "false"                 # candidate jobs never receive comment authority
     fail-on: "any-non-pass"          # required on pull_request
 ```
 
 The `with:` block above deliberately contains no judge policy. For a PR, an
-input cannot replace the base policy even when it has the same text.
+input cannot replace the base policy even when it has the same text. When
+execution reaches Guard report generation, the report is appended to the job
+summary; credential/comment preflight may stop earlier with no Guard report. If
+a PR comment is required, pass only the bounded report to a separate
+metadata-only job that does not check out or execute the candidate.
 
 The expected digest is checked before candidate code runs and is included in
 `attestation.effective_policy`, so it also changes `policy_sha256`. A mismatch
@@ -117,7 +125,9 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
   regression checks can gate many repositories and remain owned by a security
   or platform team.
 - **Overfitting pressure.** A patch that hard-codes answers to visible tests
-  still has to satisfy independent checks over different inputs.
+  still has to satisfy candidate-independent pack checks over different inputs.
+  This raises the cost of overfitting; it does not guarantee detection of every
+  overfit patch.
 
 **Does NOT guarantee (state this plainly):**
 

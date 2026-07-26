@@ -47,9 +47,9 @@ Use `evo-guard init --ref v4.3.0 --stdout` to review the workflow first.
 
 | Verdict | Exit | Meaning | Action |
 |---|---|---|---|
-| ✅ `PASS` | 0 | tests pass, harness untouched | merge |
+| ✅ `PASS` | 0 | selected judge passed under the recorded assurance profile | eligible for the next policy-controlled step; never merge authority by itself |
 | ❌ `FAIL` | 1 | the change's tests genuinely fail | send back to fix the **source** |
-| ⛔ `REJECTED` | 1 | the change edits tests/config/auto-exec — a reward-hack | **block**; the fix must touch the source, not the harness |
+| ⛔ `REJECTED` | 1 | the change trips protected tests/config/auto-exec policy | **block**; use a separately trusted policy-maintenance path when the edit is legitimate |
 | 🚨 `TAMPERED` | 1 | exit/JUnit disagreement, or candidate/pack snapshot drift during judgment | **block**; never read as a pass |
 | ⚠️ `ERROR` | 1 | no trustworthy run: invalid diff/pack, setup failure, unavailable command/isolation, timeout or unmet policy | fix the reported prerequisite/policy error and rerun |
 
@@ -358,9 +358,12 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 - Run on `pull_request` (not `pull_request_target`) so untrusted code never sees
   your secrets.
-- EvoGuard writes every report to the job summary. Its optional sticky PR comment
-  is skipped for fork and Dependabot PRs because their `GITHUB_TOKEN` is read-only;
-  a missing comment therefore cannot replace the Guard verdict with an HTTP 403.
+- When execution reaches Guard report generation, EvoGuard writes that report
+  to the job summary. Credential/comment preflight refusals can stop earlier and
+  produce no Guard report. The candidate-execution job never posts a PR comment
+  and `comment: "true"` is refused. If a comment is required, transfer the
+  bounded report to a separate metadata-only job that neither checks out nor
+  executes candidate code.
 - Configure container isolation through the protected base policy, never through candidate workflow `with:`. It creates a network-less, read-only
   container judge (defence in depth; not a complete boundary — see
   [`GUARD.md`](GUARD.md)). The image must carry your test runner (e.g.
