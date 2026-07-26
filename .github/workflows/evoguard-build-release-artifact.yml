@@ -506,9 +506,24 @@ jobs:
                   isinstance(part, ast.Name) and part.id == '__version__'
                   for target in targets for part in ast.walk(target)
               )
+          sbom_path = assets / 'evo-guard.spdx.json'
+          sbom_bytes = sbom_path.read_bytes()
           sbom = json.loads(
-              (assets / 'evo-guard.spdx.json').read_text(encoding='utf-8'),
+              sbom_bytes.decode('utf-8'),
               object_pairs_hook=reject_duplicate_keys,
+          )
+          canonical_sbom = (
+              json.dumps(
+                  sbom,
+                  ensure_ascii=False,
+                  sort_keys=True,
+                  separators=(',', ':'),
+                  allow_nan=False,
+              ) + '\n'
+          ).encode('utf-8')
+          require(
+              sbom_bytes == canonical_sbom,
+              'SPDX bytes are not canonical EvoGuard JSON',
           )
           packages = sbom.get('packages')
           require(isinstance(packages, list) and len(packages) == 1, 'SPDX must contain exactly one package')
@@ -1051,9 +1066,23 @@ jobs:
               },
               'builder controls do not bind exact trusted tool blobs',
           )
+          sbom_bytes = sbom_path.read_bytes()
           sbom = json.loads(
-              sbom_path.read_text(encoding='utf-8'),
+              sbom_bytes.decode('utf-8'),
               object_pairs_hook=reject_duplicate_keys,
+          )
+          canonical_sbom = (
+              json.dumps(
+                  sbom,
+                  ensure_ascii=False,
+                  sort_keys=True,
+                  separators=(',', ':'),
+                  allow_nan=False,
+              ) + '\n'
+          ).encode('utf-8')
+          require(
+              sbom_bytes == canonical_sbom,
+              'SPDX bytes are not canonical EvoGuard JSON',
           )
           package_id = 'SPDXRef-Package-evoom-guard'
           license_id = 'LicenseRef-EvoRise-Source-Available-1.0'

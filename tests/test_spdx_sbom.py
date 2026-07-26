@@ -136,6 +136,16 @@ def test_generated_sbom_is_schema_valid_deterministic_and_complete(
 
     document = json.loads(first.read_bytes())
     later_document = json.loads(later.read_bytes())
+    assert first.read_bytes() == (
+        json.dumps(
+            document,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
     assert later_document["documentNamespace"] != document["documentNamespace"]
     jsonschema.Draft7Validator(
         json.loads(SCHEMA.read_text(encoding="utf-8"))

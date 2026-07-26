@@ -242,7 +242,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _MAIN_ARTIFACT_GATE,
         ("build", "attest"),
-        "c88624c6fd152b0e5fab338725a84a6670d1853da9cc3b243fa6028837fba021",
+        "7367e2b316ebbc0692ff3271df010da1fca9556fc1aa8027234d1d411b56979a",
     ),
     _WorkflowSpec(
         "F",
