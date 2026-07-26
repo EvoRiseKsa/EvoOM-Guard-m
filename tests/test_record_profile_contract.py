@@ -79,6 +79,11 @@ def test_verifier_accepts_frozen_protected_and_hostile_vectors() -> None:
             "requires expect_verifier_pack_sha256",
         ),
         (
+            "expect_verifier_pack_sha256",
+            "A" * 64,
+            "requires expect_verifier_pack_sha256",
+        ),
+        (
             "require_report_integrity",
             None,
             "requires require_report_integrity='external_process_isolated'",

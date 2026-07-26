@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-_SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _PROFILES = frozenset({"local", "protected", "hostile"})
 
 
