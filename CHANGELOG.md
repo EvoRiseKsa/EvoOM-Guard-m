@@ -13,6 +13,8 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 
 ## [Unreleased]
 
+## [4.4.0] — 2026-07-25
+
 ### Added
 
 - Added a stdlib-only deterministic SPDX 2.3 generator for the next release:
@@ -29,6 +31,14 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   requests a GitHub SBOM attestation for the exact zipapp subject in addition
   to its build-provenance attestation, and a separate build-provenance
   attestation for the exact SPDX asset bytes required by artifact admission.
+- Added the disabled-by-default protected A–H release path and Release Ledger
+  v2: source re-verification, two independent admission boundaries, detached
+  verification, immutable publication, retained evidence validation, an
+  offline assembler, and an external per-release Ed25519 ledger trust root.
+- Added one machine-readable project-status source whose renderer verifies the
+  frozen or signed release ledger, Git/tag ancestry, exact release assets,
+  source lifecycle, and reviewed workflow topology before updating public
+  documentation.
 
 ### Changed
 
@@ -46,6 +56,15 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
 - Candidate code and the built zipapp execute only in the unprivileged release
   build job. A separate clean job receives the fixed assets, rebinds the SPDX
   package digest to the zipapp, and alone receives OIDC/attestation authority.
+- Completed the behavior-preserving R2 architecture program and CLI handler
+  extraction while retaining the wider refactor program as in progress.
+- The release-candidate parent now closes the source policy by default and
+  permits only the exact reviewed v4.4 release-metadata file set; tests, CI,
+  release tooling, policy, verifier packs, ledgers, and trust roots cannot be
+  changed by the candidate.
+- Corrected the parent-owned release-source verifier contract for the pinned
+  minimal image: `doctor --json` must report the expected unsupported tool
+  state exactly, rather than being misclassified as a protocol failure.
 
 ### Known limitations
 
@@ -60,6 +79,10 @@ semantic versioning (`vMAJOR.MINOR.PATCH`).
   a security verdict, artifact admission, or cross-platform reproducibility
   proof. The zipapp and SBOM share one build provenance and are not independent
   evidence merely because attestation occurs on a separate clean runner.
+- GitHub's release API does not provide one atomic compare-and-swap operation
+  spanning the draft/tag precondition and publication mutation. The H phase
+  therefore still requires the repository's frozen `contents: write` window,
+  strict `v*` tag ruleset, and immediate before/after identity checks.
 
 ## [4.3.0] — 2026-07-23
 
