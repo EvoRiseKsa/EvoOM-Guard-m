@@ -55,6 +55,7 @@ class EffectivePolicy:
     policy_id: str | None
     policy_version: str | None
     operating_profile: str | None = None
+    harness_inputs: tuple[str, ...] = ()
 
 
 def operating_profile_violations(

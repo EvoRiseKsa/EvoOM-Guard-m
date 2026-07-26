@@ -415,6 +415,16 @@ def finalize_blackbox_verification(
                     "REASON_VERIFIER_PACK_SNAPSHOT_CHANGED"
                 ),
             )
+        elif result.error == "candidate harness input changed":
+            verdict, reason_code = (
+                decision_symbol("TAMPERED"),
+                decision_symbol("REASON_CANDIDATE_TREE_CHANGED"),
+            )
+        elif result.error == "trusted harness input binding failed":
+            verdict, reason_code = (
+                decision_symbol("ERROR"),
+                decision_symbol("REASON_ASSURANCE_REQUIREMENT_NOT_MET"),
+            )
         elif result.error == "black-box JUnit/exit mismatch":
             verdict, reason_code = (
                 decision_symbol("TAMPERED"),

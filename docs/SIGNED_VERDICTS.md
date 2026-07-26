@@ -139,8 +139,9 @@ out or executes candidate code.
 | The verdict was not altered after signing | That the run itself was honest |
 | The signer held the private key | Who physically ran the job |
 
-For trusted local inputs, Guard's judge-owned report and harness protections
-shape the run; the signature extends record integrity after the run. The chain
+For trusted local inputs, Guard's judge-owned report and effective-policy
+protected-path admission shape the run; the signature extends record integrity
+after the run. The chain
 is only as strong as key custody. For untrusted inputs, direct signing cannot
 make that custody claim because the candidate and signer share an OS identity;
 use the Trusted Finalizer boundary instead. Rotate private keys like any

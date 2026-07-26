@@ -7,13 +7,13 @@
 
 # Feature mode — adding new tests safely (`allow_new_tests`)
 
-By default EvoGuard rejects **any** change to a test file before the suite runs:
-that's the harness-edit pre-gate, and it is what makes a *bug-fix* verdict
-trustworthy (fix the source under test, never the test that judges it). The
-side effect is that a PR which **legitimately adds a new feature with its own new
-tests** can't pass — and you can't add an untested function either (a coverage
-gate would fail). The "clean → PASS" demo had to be a doc-only change for exactly
-this reason.
+By default EvoGuard rejects a candidate change to a path recognized as a test
+before the suite runs. That protected-path pre-gate supports the bounded claim
+that the patch did not rewrite a recognized existing test; it does not prove
+complete harness discovery. The side effect is that a PR which **legitimately
+adds a new feature with its own new tests** can't pass — and you can't add an
+untested function either (a coverage gate would fail). The "clean → PASS" demo
+had to be a doc-only change for exactly this reason.
 
 **Feature mode** is a narrow, opt-in relaxation for that case.
 
@@ -54,10 +54,11 @@ residual risk:
   collection-time code runs alongside the real tests. A *hostile* new test could,
   in principle, monkeypatch or shadow a module so other tests pass falsely — i.e.
   mask a broken source change. EvoGuard does **not** sandbox this.
-- What feature mode still guarantees: **existing** tests are byte-for-byte the
-  originals (any edit/deletion is rejected), and the config / auto-exec / CI /
-  lock files are untouched. So an attacker can only act through *added* test code,
-  not by quietly rewriting the existing harness.
+- What feature mode still guarantees at path admission: the candidate patch
+  cannot edit/delete an **existing** recognized test or another built-in/
+  explicitly declared protected path. This is not a transitive dependency or
+  continuous runtime-byte guarantee; added test code remains an additional
+  executable influence that requires review.
 
 **Therefore:** feature mode is for **trusted / semi-trusted authors** (e.g. your
 own coding agent adding features), paired with **human review of the added
@@ -76,5 +77,7 @@ runtime has no escape. The
 - **Default / untrusted input:** leave it off (strict).
 - **Trusted feature work that should add tests:** turn it on per repo, and review
   the added tests like any other code. Combine with a CI rule that routes such PRs
-  to human review (the gate proves the *existing* harness is intact; a human
-  vouches the *new* tests are honest).
+  to human review (the gate proves that the candidate did not edit/delete an
+  existing path covered by the active harness policy; it does not prove complete
+  harness discovery or continuous runtime immutability. A human vouches that the
+  *new* tests are honest).

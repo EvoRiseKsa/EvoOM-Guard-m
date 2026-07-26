@@ -86,6 +86,7 @@ class _GuardCall(Protocol[_ResultCo]):
         strict_harness: bool = ...,
         file_blocks: dict[str, str] | None = ...,
         operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> _ResultCo: ...
 
 
@@ -125,6 +126,7 @@ class _GuardFromDiffCall(Protocol[_ResultCo]):
         require_demonstrated_fix: bool = ...,
         strict_harness: bool = ...,
         operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> tuple[_ResultCo, list[str]]: ...
 
 
@@ -178,6 +180,7 @@ class _EffectivePolicy(Protocol):
         policy_id: str | None,
         policy_version: str | None,
         operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> dict[str, Any]: ...
 
 
@@ -227,6 +230,10 @@ class _OperatingProfileViolations(Protocol):
 
 class _OperatingProfileOptions(TypedDict, total=False):
     operating_profile: str
+
+
+class _HarnessInputOptions(TypedDict, total=False):
+    harness_inputs: tuple[str, ...]
 
 
 class _InputErrorProfileOptions(TypedDict, total=False):
@@ -446,6 +453,13 @@ def execute_guard_command(
             else ()
         )
 
+    cfg_harness_inputs = cfg.get("harness_inputs")
+    harness_inputs = (
+        tuple(str(path) for path in cfg_harness_inputs)
+        if isinstance(cfg_harness_inputs, list)
+        else ()
+    )
+
     cfg_to = cfg.get("timeout")
     timeout = (
         args.timeout
@@ -577,10 +591,15 @@ def execute_guard_command(
         if operating_profile is not None
         else {}
     )
+    harness_input_options: _HarnessInputOptions = (
+        {"harness_inputs": harness_inputs}
+        if harness_inputs
+        else {}
+    )
 
     def _input_error_profile_options() -> _InputErrorProfileOptions:
         """Bind profiled early errors to the same complete policy as a run."""
-        if operating_profile is None:
+        if operating_profile is None and not harness_inputs:
             return {}
         return {
             "effective_policy": services.effective_policy(
@@ -610,6 +629,7 @@ def execute_guard_command(
                 policy_id=policy_id,
                 policy_version=policy_version,
                 operating_profile=operating_profile,
+                **harness_input_options,
             ),
             "test_command": test_command,
             "base_sha": args.base_sha,
@@ -657,6 +677,7 @@ def execute_guard_command(
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
             **profile_options,
+            **harness_input_options,
         )
     elif args.base and args.head:
         pack_trust_problem = services.verifier_pack_trust_error(
@@ -721,6 +742,7 @@ def execute_guard_command(
                     require_demonstrated_fix=require_demonstrated_fix,
                     strict_harness=strict_harness,
                     **profile_options,
+                    **harness_input_options,
                 )
                 result.source = "base/head"
     elif args.repo and args.patch:
@@ -757,6 +779,7 @@ def execute_guard_command(
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
             **profile_options,
+            **harness_input_options,
         )
         result.source = "edit blocks"
     else:

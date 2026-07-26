@@ -197,7 +197,8 @@ class GuardGateTests(unittest.TestCase):
         cheat = _block("tests/test_m.py", "def test_dbl():\n    assert True\n")
         report = render_report(guard(self.root, cheat))
         self.assertIn("REJECTED", report)
-        self.assertIn("Reward-hack", report)
+        self.assertIn("Protected path policy", report)
+        self.assertIn("separately trusted policy-maintenance lane", report)
         self.assertIn("tests/test_m.py", report)
 
     def test_static_report_footer_does_not_claim_a_judge_ran(self) -> None:

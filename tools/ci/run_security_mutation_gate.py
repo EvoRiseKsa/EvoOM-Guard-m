@@ -4492,6 +4492,433 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="harness-input-candidate-preflight-branch-bypass",
+        path="evoom_guard/verifiers/candidate_preflight.py",
+        before=(
+            "        if candidate_path_targets_harness_input(\n"
+            "            request.repo_path,\n"
+            "            path,\n"
+            "            harness_inputs,\n"
+            "        ):\n"
+            "            return True\n"
+        ),
+        after=(
+            "        if False and candidate_path_targets_harness_input(\n"
+            "            request.repo_path,\n"
+            "            path,\n"
+            "            harness_inputs,\n"
+            "        ):\n"
+            "            return True\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_candidate_preflight_makes_declared_harness_inputs_non_exemptible"
+        ),
+    ),
+    Mutation(
+        name="harness-input-repo-candidate-forwarding-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "    rejection = services.reject_paths()(\n"
+            "        changed,\n"
+            "        extra,\n"
+            "        harness_inputs=harness_inputs,\n"
+        ),
+        after=(
+            "    rejection = services.reject_paths()(\n"
+            "        changed,\n"
+            "        extra,\n"
+            "        harness_inputs=(),\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_repo_candidate_forwards_harness_inputs_to_changed_path_policy"
+        ),
+    ),
+    Mutation(
+        name="harness-input-repo-candidate-deletion-forwarding-bypass",
+        path="evoom_guard/verifiers/repo_candidate.py",
+        before=(
+            "        deletion_rejection = services.reject_paths()(\n"
+            "            deleted_paths,\n"
+            "            extra,\n"
+            "            harness_inputs=harness_inputs,\n"
+        ),
+        after=(
+            "        deletion_rejection = services.reject_paths()(\n"
+            "            deleted_paths,\n"
+            "            extra,\n"
+            "            harness_inputs=(),\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_repo_candidate_forwards_harness_inputs_to_deletion_policy"
+        ),
+    ),
+    Mutation(
+        name="harness-input-setup-output-ancestor-bypass",
+        path="evoom_guard/domain/harness.py",
+        before=(
+            "                for end in range(1, len(path.split(\"/\")) + 1)\n"
+        ),
+        after="                for end in (len(path.split(\"/\")),)\n",
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_setup_output_conflict_includes_declared_input_ancestors"
+        ),
+    ),
+    Mutation(
+        name="harness-input-post-suite-checkpoint-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            harness_failure = verify_harness_checkpoint(\n"
+            '                "after the repository suite",\n'
+            "                setup_isolation=setup_isolation,\n"
+            "            )\n"
+        ),
+        after="            harness_failure = None\n",
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_runtime_mutation_of_declared_helper_is_reported_as_tampering"
+        ),
+    ),
+    Mutation(
+        name="harness-input-windows-namespace-path-bypass",
+        path="evoom_guard/domain/harness.py",
+        before=(
+            "        part not in {\"\", \".\", \"..\"}\n"
+            "        and not is_windows_ambiguous_path_segment(part)\n"
+        ),
+        after=(
+            "        part not in {\"\", \".\", \"..\"}\n"
+            "        and True\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_portable_path_rejects_windows_namespace_alias_spellings"
+        ),
+    ),
+    Mutation(
+        name="harness-input-ancestor-conflict-bypass",
+        path="evoom_guard/domain/harness.py",
+        before=(
+            "        candidate == root.casefold()\n"
+            "        or root.casefold().startswith(candidate + \"/\")\n"
+        ),
+        after=(
+            "        candidate == root.casefold()\n"
+            "        or False\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_declared_harness_input_ancestor_is_a_path_conflict"
+        ),
+    ),
+    Mutation(
+        name="harness-input-filesystem-alias-identity-bypass",
+        path="evoom_guard/verifiers/harness_policy.py",
+        before=(
+            "                if os.path.samefile(candidate_path, trusted_path):\n"
+            "                    return True\n"
+        ),
+        after=(
+            "                if False and os.path.samefile("
+            "candidate_path, trusted_path):\n"
+            "                    return True\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_filesystem_alias_identity_is_a_path_conflict"
+        ),
+    ),
+    Mutation(
+        name="harness-input-trusted-pre-materialization-baseline-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before=(
+            "            candidate_harness_changes = harness_input_snapshot_changes(\n"
+            "                trusted_harness_baseline,\n"
+            "                candidate_harness_snapshot,\n"
+            "            )\n"
+        ),
+        after=(
+            "            candidate_harness_changes = harness_input_snapshot_changes(\n"
+            "                candidate_harness_snapshot,\n"
+            "                candidate_harness_snapshot,\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_trusted_harness_snapshot_precedes_candidate_materialization"
+        ),
+    ),
+    Mutation(
+        name="blackbox-harness-trusted-baseline-capture-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                trusted_harness_baseline = "
+            "capture_harness_input_snapshot(\n"
+            "                    repo_path,\n"
+            "                    harness_inputs,\n"
+            "                )\n"
+        ),
+        after="                trusted_harness_baseline = None\n",
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_compares_materialized_copy_with_trusted_source_snapshot"
+        ),
+    ),
+    Mutation(
+        name="blackbox-harness-materialization-comparison-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            materialization_changes = harness_input_snapshot_changes(\n"
+            "                trusted_harness_baseline,\n"
+            "                candidate_harness_snapshot,\n"
+            "            )\n"
+        ),
+        after=(
+            "            materialization_changes = harness_input_snapshot_changes(\n"
+            "                candidate_harness_snapshot,\n"
+            "                candidate_harness_snapshot,\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_compares_materialized_copy_with_trusted_source_snapshot"
+        ),
+    ),
+    Mutation(
+        name="blackbox-harness-terminal-postcondition-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            if not facts.attach_candidate_evidence:\n"
+            "                return enforce_harness_postcondition(result)\n"
+        ),
+        after=(
+            "            if not facts.attach_candidate_evidence:\n"
+            "                return result\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_postcondition_checks_terminal_without_candidate_evidence"
+        ),
+    ),
+    Mutation(
+        name="blackbox-harness-evidenced-postcondition-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            return enforce_harness_postcondition(\n"
+            "                with_candidate_evidence(\n"
+            "                    result,\n"
+            "                    wait_for_late_container_evidence=(\n"
+            "                        facts.wait_for_late_container_evidence\n"
+            "                    ),\n"
+            "                )\n"
+            "            )\n"
+        ),
+        after=(
+            "            return with_candidate_evidence(\n"
+            "                result,\n"
+            "                wait_for_late_container_evidence=(\n"
+            "                    facts.wait_for_late_container_evidence\n"
+            "                ),\n"
+            "            )\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_postcondition_invalidates_completed_pack_verdict"
+        ),
+    ),
+    Mutation(
+        name="blackbox-harness-public-facade-forwarding-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            expect_verifier_pack_sha256=expect_verifier_pack_sha256,\n"
+            "            harness_inputs=harness_inputs,\n"
+        ),
+        after=(
+            "            expect_verifier_pack_sha256=expect_verifier_pack_sha256,\n"
+            "            harness_inputs=(),\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_postcondition_invalidates_completed_pack_verdict"
+        ),
+    ),
+    Mutation(
+        name="guard-blackbox-harness-forwarding-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "        blackbox_harness_options: _BlackboxHarnessOptions = (\n"
+            '            {"harness_inputs": harness_inputs}\n'
+            "            if harness_inputs\n"
+            "            else {}\n"
+            "        )\n"
+        ),
+        after=(
+            "        blackbox_harness_options: _BlackboxHarnessOptions = {}\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_guard_forwards_nonempty_blackbox_harness_inputs_exactly"
+        ),
+    ),
+    Mutation(
+        name="guard-blackbox-empty-harness-compatibility-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            '            {"harness_inputs": harness_inputs}\n'
+            "            if harness_inputs\n"
+            "            else {}\n"
+        ),
+        after=(
+            '            {"harness_inputs": harness_inputs}\n'
+            "            if True\n"
+            "            else {}\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_guard_omits_empty_blackbox_harness_keyword_for_compatibility"
+        ),
+    ),
+    Mutation(
+        name="blackbox-harness-tamper-finalization-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before=(
+            '        elif result.error == "candidate harness input changed":\n'
+            "            verdict, reason_code = (\n"
+            '                decision_symbol("TAMPERED"),\n'
+            '                decision_symbol("REASON_CANDIDATE_TREE_CHANGED"),\n'
+            "            )\n"
+        ),
+        after=(
+            '        elif result.error == "candidate harness input changed":\n'
+            "            verdict, reason_code = (\n"
+            '                decision_symbol("ERROR"),\n'
+            '                decision_symbol("REASON_ASSURANCE_REQUIREMENT_NOT_MET"),\n'
+            "            )\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_guard_maps_blackbox_harness_drift_to_tampered"
+        ),
+    ),
+    Mutation(
+        name="blackbox-trusted-harness-binding-classification-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                    _TRUSTED_HARNESS_BINDING_FAILED,\n"
+            "                    pack_sha256,\n"
+        ),
+        after=(
+            "                    _HARNESS_INPUT_CHANGED,\n"
+            "                    pack_sha256,\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_trusted_binding_failure_is_an_assurance_error"
+        ),
+    ),
+    Mutation(
+        name="blackbox-trusted-harness-binding-finalization-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before=(
+            '        elif result.error == "trusted harness input binding failed":\n'
+            "            verdict, reason_code = (\n"
+            '                decision_symbol("ERROR"),\n'
+            '                decision_symbol("REASON_ASSURANCE_REQUIREMENT_NOT_MET"),\n'
+            "            )\n"
+        ),
+        after=(
+            '        elif result.error == "trusted harness input binding failed":\n'
+            "            verdict, reason_code = (\n"
+            '                decision_symbol("TAMPERED"),\n'
+            '                decision_symbol("REASON_CANDIDATE_TREE_CHANGED"),\n'
+            "            )\n"
+        ),
+        test=(
+            "tests/test_harness_input_mutation_contract.py::"
+            "test_blackbox_trusted_binding_failure_is_an_assurance_error"
+        ),
+    ),
+    Mutation(
+        name="record-harness-reason-version-contract-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "    versioned_contract = (\n"
+            "        _POLICY_CONTRACTS.get(schema_version, _contract)\n"
+            "        if isinstance(schema_version, str)\n"
+            "        else _contract\n"
+            "    )\n"
+        ),
+        after="    versioned_contract = _contract\n",
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_trusted_harness_snapshot_precedes_candidate_materialization"
+        ),
+    ),
+    Mutation(
+        name="schema-1-12-harness-not-started-reason-contract-bypass",
+        path="evoom_guard/verdict_contract_v1_12.py",
+        before=(
+            "    _candidate_tree_states | "
+            "frozenset({_v1_11.EXECUTION_NOT_STARTED}),\n"
+        ),
+        after="    _candidate_tree_states,\n",
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_trusted_harness_snapshot_precedes_candidate_materialization"
+        ),
+    ),
+    Mutation(
+        name="record-harness-input-ancestor-exclusion-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "        len(candidate_parts) <= len(declared_parts)\n"
+        ),
+        after=(
+            "        len(candidate_parts) == len(declared_parts)\n"
+        ),
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_record_verifier_rejects_pass_namespace_alias_or_ancestor[ci]"
+        ),
+    ),
+    Mutation(
+        name="record-harness-input-not-started-reason-scope-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            '        "policy.harness_reason_scope",\n'
+            "        _is_canonical_harness_input_list(harness_inputs),\n"
+        ),
+        after=(
+            '        "policy.harness_reason_scope",\n'
+            "        True,\n"
+        ),
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_blackbox_materialization_is_bound_to_trusted_harness_snapshot"
+        ),
+    ),
+    Mutation(
+        name="record-harness-input-trailing-alias-exclusion-bypass",
+        path="evoom_guard/record_verifier.py",
+        before=(
+            "    if candidate.rstrip(\" .\").casefold() == declared.casefold():\n"
+            "        return True\n"
+        ),
+        after=(
+            "    if False and candidate.rstrip(\" .\").casefold() == "
+            "declared.casefold():\n"
+            "        return True\n"
+        ),
+        test=(
+            "tests/test_harness_inputs.py::"
+            "test_record_verifier_rejects_pass_namespace_alias_or_ancestor"
+            "[ci/scripts/run-tests.py.]"
+        ),
+    ),
+    Mutation(
         name="protected-edit-preflight-bypass",
         path="evoom_guard/verifiers/repo_candidate.py",
         before=(

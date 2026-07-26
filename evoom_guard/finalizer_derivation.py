@@ -1155,6 +1155,20 @@ def _derive_raw_evaluation_from_readers(
         policy_bytes,
         head_has_package_json=head_package is not None and head_package.regular,
     )
+    harness_inputs = policy.get("harness_inputs")
+    if isinstance(harness_inputs, list):
+        for path in harness_inputs:
+            entry = base_entries.get(path)
+            if entry is None or not entry.regular:
+                raise FinalizerDerivationError(
+                    "harness_inputs must name exact regular files in the immutable "
+                    f"base tree: {path!r}"
+                )
+            if head_entries.get(path) != entry:
+                raise FinalizerDerivationError(
+                    "candidate tree changed a policy-bound harness input: "
+                    f"{path!r}"
+                )
     pack_digest: str | None = None
     pack_manifest: dict[str, Any] | None = None
     if pack_path is not None:
@@ -1594,6 +1608,12 @@ def _effective_policy_from_raw_config(
     )
     allow_raw = cfg.get("allow")
     allow = tuple(str(item) for item in allow_raw) if isinstance(allow_raw, list) else ()
+    harness_inputs_raw = cfg.get("harness_inputs")
+    harness_inputs = (
+        tuple(str(item) for item in harness_inputs_raw)
+        if isinstance(harness_inputs_raw, list)
+        else ()
+    )
     setup_globs_raw = cfg.get("setup_output_globs")
     setup_globs = (
         tuple(str(item) for item in setup_globs_raw) if isinstance(setup_globs_raw, list) else ()
@@ -1641,6 +1661,7 @@ def _effective_policy_from_raw_config(
             policy_id=policy_str("policy_id"),
             policy_version=policy_str("policy_version"),
             operating_profile=policy_str("operating_profile"),
+            harness_inputs=harness_inputs,
         )
     )
     return policy, pack, pack_pin

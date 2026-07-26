@@ -600,7 +600,7 @@ def test_green_baseline_demotes_with_exact_read_order_and_reason() -> None:
             "the suite passes on the candidate, but the fix is not "
             "demonstrated: the pristine base already passes the same suite"
             " — --require-demonstrated-fix demands baseline FAIL → "
-            "candidate PASS under an unchanged harness"
+            "candidate PASS under the same base-owned judge policy"
         ),
     )
     assert baseline.events == ["getitem:repair_effect", "get:verdict"]

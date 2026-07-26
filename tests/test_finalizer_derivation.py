@@ -111,6 +111,25 @@ def _create_repository(tmp_path: Path, *, with_pack: bool = False) -> tuple[Path
     return repo, base, head
 
 
+def _create_harness_repository(tmp_path: Path) -> tuple[Path, str, str]:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--quiet")
+    (repo / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    harness = repo / "ci" / "run-suite.py"
+    harness.parent.mkdir()
+    harness.write_text("print('trusted judge')\n", encoding="utf-8")
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"harness_inputs": ["ci/run-suite.py"]}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    base = _commit(repo, "base")
+    (repo / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+    head = _commit(repo, "candidate")
+    return repo, base, head
+
+
 def _derived(
     repo: Path,
     base: str,
@@ -130,7 +149,14 @@ def _derived(
     )
 
 
-def _record_for_pair(tmp_path: Path, repo: Path, base: str, head: str) -> dict[str, object]:
+def _record_for_pair(
+    tmp_path: Path,
+    repo: Path,
+    base: str,
+    head: str,
+    *,
+    harness_inputs: tuple[str, ...] = (),
+) -> dict[str, object]:
     base_dir = tmp_path / "base"
     head_dir = tmp_path / "head"
     _checkout(repo, base_dir, base)
@@ -145,6 +171,7 @@ def _record_for_pair(tmp_path: Path, repo: Path, base: str, head: str) -> dict[s
         head_sha=head,
         base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
         head_tree_sha=_git(repo, "rev-parse", f"{head}^{{tree}}"),
+        harness_inputs=harness_inputs,
     )
     record = result.to_dict()
     assert record["attestation"] is not None
@@ -506,6 +533,91 @@ def test_raw_git_derivation_matches_guard_candidate_and_policy(tmp_path: Path) -
     assert source == _source(base, head)
     assert context["candidate_sha256"] == bindings.candidate_sha256
     assert context["verifier_pack_sha256"] is None
+
+
+def test_raw_git_derivation_matches_guard_with_declared_harness_input(
+    tmp_path: Path,
+) -> None:
+    repo, base, head = _create_harness_repository(tmp_path)
+    bindings = _derived(repo, base, head)
+    record = _record_for_pair(
+        tmp_path,
+        repo,
+        base,
+        head,
+        harness_inputs=("ci/run-suite.py",),
+    )
+
+    _source_payload, context = context_from_verified_bindings(bindings, record)
+
+    assert bindings.effective_policy["harness_inputs"] == ["ci/run-suite.py"]
+    assert bindings.policy_sha256 == record["attestation"]["policy_sha256"]
+    assert context["candidate_sha256"] == bindings.candidate_sha256
+
+
+def test_raw_git_derivation_rejects_missing_base_harness_input(tmp_path: Path) -> None:
+    repo, base, _head = _create_repository(tmp_path)
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"harness_inputs": ["ci/missing.py"]}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    base = _commit(repo, "policy names missing harness input")
+    (repo / "app.py").write_text("VALUE = 3\n", encoding="utf-8")
+    head = _commit(repo, "candidate")
+
+    with pytest.raises(FinalizerDerivationError, match="exact regular files"):
+        _derived(repo, base, head)
+
+
+def test_raw_git_derivation_rejects_non_regular_base_harness_input(
+    tmp_path: Path,
+) -> None:
+    repo, _base, _head = _create_repository(tmp_path)
+    link_target = repo / "link-target.txt"
+    link_target.write_text("target\n", encoding="utf-8")
+    blob = _git(repo, "hash-object", "-w", "link-target.txt")
+    _git(
+        repo,
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        f"120000,{blob},ci-judge",
+    )
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"harness_inputs": ["ci-judge"]}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _git(repo, "add", ".evoguard.json", "link-target.txt")
+    _git(
+        repo,
+        "-c",
+        "user.name=EvoGuard Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "policy names symlink harness input",
+    )
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "app.py").write_text("VALUE = 3\n", encoding="utf-8")
+    head = _commit(repo, "candidate")
+
+    with pytest.raises(FinalizerDerivationError, match="exact regular files"):
+        _derived(repo, base, head)
+
+
+def test_raw_git_derivation_rejects_changed_harness_input(tmp_path: Path) -> None:
+    repo, base, _head = _create_harness_repository(tmp_path)
+    (repo / "ci" / "run-suite.py").write_text(
+        "print('candidate judge')\n",
+        encoding="utf-8",
+    )
+    head = _commit(repo, "candidate changes judge")
+
+    with pytest.raises(FinalizerDerivationError, match="changed a policy-bound"):
+        _derived(repo, base, head)
 
 
 def test_raw_git_pack_identity_matches_checkout_bytes_for_lf_fixture(tmp_path: Path) -> None:

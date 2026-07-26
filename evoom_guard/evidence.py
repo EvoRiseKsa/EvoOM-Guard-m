@@ -74,6 +74,12 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     run_bounded_subprocess as _run_bounded_subprocess,
 )
+from evoom_guard.policy.harness import HarnessInputPolicyError
+from evoom_guard.verifiers.harness_policy import (
+    HarnessInputIntegrityError,
+    capture_harness_input_snapshot,
+    harness_input_snapshot_changes,
+)
 from evoom_guard.verifiers.repo_verifier import (
     RepoVerifier,
     SetupFidelityError,
@@ -590,6 +596,7 @@ def collect_diff_coverage(
     mem_limit_mb: int = 1024,
     file_blocks: dict[str, str] | None = None,
     require_passing_suite: bool = False,
+    harness_inputs: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Measure changed-line coverage; always returns a dict with ``measured`` set.
 
@@ -640,6 +647,17 @@ def collect_diff_coverage(
         if wrapped is None:
             base["note"] = "changed-line coverage currently supports pytest commands only"
             return base
+        try:
+            trusted_harness_baseline = capture_harness_input_snapshot(
+                repo_path,
+                harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError) as exc:
+            base["note"] = (
+                "declared harness inputs could not be bound in the trusted "
+                f"coverage base: {exc}"
+            )
+            return base
 
         copy = os.path.join(workdir, "repo")
         copy_repo_tree(repo_path, copy)
@@ -660,6 +678,29 @@ def collect_diff_coverage(
             base["note"] = f"candidate deletion could not be applied safely: {exc}"
             return base
 
+        try:
+            candidate_harness_snapshot = capture_harness_input_snapshot(
+                copy,
+                harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError) as exc:
+            base["note"] = (
+                "declared harness inputs could not be bound for coverage: "
+                f"{exc}"
+            )
+            return base
+        candidate_harness_changes = harness_input_snapshot_changes(
+            trusted_harness_baseline,
+            candidate_harness_snapshot,
+        )
+        if candidate_harness_changes:
+            base["note"] = (
+                "coverage candidate materialization changed declared harness "
+                "inputs: " + ", ".join(candidate_harness_changes)
+            )
+            return base
+        harness_baseline = trusted_harness_baseline
+
         env = _judge_env(workdir)
         preexec_fn = _coverage_preexec(timeout, mem_limit_mb)
         if setup_command:
@@ -673,6 +714,30 @@ def collect_diff_coverage(
             )
             if setup_failure is not None:
                 base["note"] = setup_failure
+                return base
+            try:
+                harness_after_setup = capture_harness_input_snapshot(
+                    copy,
+                    harness_inputs,
+                )
+            except (
+                HarnessInputPolicyError,
+                HarnessInputIntegrityError,
+            ) as exc:
+                base["note"] = (
+                    "coverage setup left declared harness inputs unverifiable: "
+                    f"{exc}"
+                )
+                return base
+            setup_harness_changes = harness_input_snapshot_changes(
+                harness_baseline,
+                harness_after_setup,
+            )
+            if setup_harness_changes:
+                base["note"] = (
+                    "coverage setup changed declared harness inputs: "
+                    + ", ".join(setup_harness_changes)
+                )
                 return base
         try:
             coverage_run = _run_bounded_subprocess(
@@ -690,6 +755,27 @@ def collect_diff_coverage(
             return base
         except (OSError, subprocess.TimeoutExpired):
             base["note"] = "the coverage-wrapped suite run did not complete"
+            return base
+        try:
+            harness_after_suite = capture_harness_input_snapshot(
+                copy,
+                harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError) as exc:
+            base["note"] = (
+                "coverage run left declared harness inputs unverifiable: "
+                f"{exc}"
+            )
+            return base
+        suite_harness_changes = harness_input_snapshot_changes(
+            harness_baseline,
+            harness_after_suite,
+        )
+        if suite_harness_changes:
+            base["note"] = (
+                "coverage run changed declared harness inputs: "
+                + ", ".join(suite_harness_changes)
+            )
             return base
         if coverage_run.returncode != 0 and require_passing_suite:
             base["note"] = (

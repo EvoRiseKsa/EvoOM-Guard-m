@@ -71,7 +71,7 @@ repo's own `test` job is fooled — EvoGuard is not.
 |---|---|
 | Verdict | **⛔ REJECTED** |
 | Reason | protected harness file edited (`installments.test.ts`) |
-| When | **before the suite runs** (harness-edit pre-gate) |
+| When | **before the suite runs** (effective-policy protected-path pre-gate) |
 | Check status | **failure** (merge blocked) |
 
 This is exactly the case EvoGuard exists for: the change the ordinary test run

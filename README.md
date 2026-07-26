@@ -16,11 +16,12 @@
 **Policy- and evidence-bound verification for untrusted software changes — with
 AI-generated patches as the primary use case.**
 
-Guard asks one deliberately narrow question: did this change satisfy the selected
-judge without manipulating the evidence used to decide? It does not infer who
-wrote the change. A `PASS` means only that the change passed the recorded judge,
-policy, and delivered-assurance boundary; it is never a proof of complete software
-correctness or security.
+Guard asks one deliberately narrow question: did this change satisfy the
+selected judge without editing or deleting an evidence path covered by the
+active policy? It does not infer who wrote the change. A `PASS` means only that
+the change passed the recorded judge, policy, and delivered-assurance boundary;
+it is never a proof of complete harness discovery, continuous immutability,
+software correctness, or security.
 
 > **New here? → [`docs/START_HERE.md`](docs/START_HERE.md)** picks your path in 30
 > seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
@@ -137,23 +138,33 @@ passing"` deselect, print a fake `9999 passed` to stdout, or drop a
 
 Guard closes that hole with two mechanisms:
 
-1. **Protected harness paths are rejected before execution** (a robust
-   guarantee). Any edit — or **deletion** — of the tests, their configuration
-   (`pyproject.toml`, `pytest.ini`, `vitest.config.*`, `Makefile`, CI workflow
-   files, local Action manifests,
-   …), or an auto-executed file (`sitecustomize.py`, `*.pth`) is **REJECTED
-   before the suite even runs**. This is a *static* check on the patch's file
-   list, so runtime code cannot undo it. `package.json` is dual-purpose, so instead of
-   blocking it wholesale, its test-harness fields are restored from the pristine
-   original.
+1. **Effective-policy protected paths are rejected before execution** (a robust,
+   scoped guarantee). Guard rejects a candidate edit — or **deletion** — that
+   targets a conventionally recognized test/config/CI/auto-exec path, or an exact
+   regular repository file explicitly listed by trusted policy in
+   `harness_inputs`, **or an ancestor of that file**. Candidate path admission
+   also rejects platform-ambiguous spellings and, for already-existing paths,
+   checks filesystem object identity against the declared input and its
+   ancestors where the host can compare them. This is a scoped classification
+   and checkpoint boundary: it does not claim complete harness discovery or
+   continuous runtime immutability.
+   `package.json` is dual-purpose, so instead of blocking it wholesale, its
+   recognized test-harness fields are restored from the pristine original.
 2. **The result is judge-owned, not scraped from stdout.** Tests run against a
    throwaway copy, and the verdict is read from a **judge-owned JUnit report +
    the process exit code** — never from stdout. A patch that prints `9999
    passed` moves nothing, and an exit-code ⟷ report disagreement is its own
-   **`TAMPERED`** verdict. This blocks the reward-hacks agents do **in
-   practice** (harness edits/deletions, config deselects, stdout forgery — all
-   caught, with adversarial tests in `tests/` and the
+   **`TAMPERED`** verdict. This blocks the modelled reward-hack classes exercised
+   by the adversarial tests (edits/deletions to covered paths, recognized config
+   deselects, and stdout forgery), with evidence in `tests/` and the
    [catalogue](docs/REWARD_HACKING_CATALOG.md)).
+
+Guard does **not** parse `test_command`, `sh -c`, package scripts, imports,
+`source` statements, Make includes, globs, or dynamic loading to infer a complete
+dependency graph. A trusted base policy must explicitly list every
+repository-owned wrapper/helper it relies on. Apart from the documented narrow
+base-workflow local-Action directory rule, no transitive helper discovery is
+claimed.
 
 > **Honest boundary — read this.** By default, mechanism 2 is *not* unforgeable.
 > Your tests and the report writer run in the **same process** as the code under
@@ -187,6 +198,16 @@ which runs it under the delivered isolation) and asserts on its outputs.
 For `--blackbox-only`, that completed judge yields
 `report_integrity: external_process_isolated`; in the default composite mode the
 overall profile honestly reports the weaker repo-native report channel. The
+black-box runner receives the explicit base `harness_inputs`: it captures their
+trusted-source identity before candidate materialization, compares the
+materialized copy before candidate or pack code runs, and compares it again
+after candidate/pack execution. If the first trusted-source binding cannot be
+established, Guard stops before materialization with `ERROR` /
+`assurance_requirement_not_met`; that failure is not attributed to the
+candidate. Only a materialized-copy mismatch or persistent post-execution drift
+is `TAMPERED` / `candidate_tree_changed_during_run`, including under
+`--blackbox-only`. That option skips only the repo-native setup/suite
+checkpoints. The
 *identical* `atexit`+`os._exit` forgery that
 fakes a `PASS` under the default judge yields the correct `FAIL` (covered in
 `tests/test_blackbox.py`). A protected-harness refusal is decided earlier: it
@@ -318,11 +339,11 @@ You get a PR-ready Markdown report and a CI-friendly exit code:
 
 | Verdict | Meaning | Exit |
 |---|---|---|
-| ✅ `PASS` | the repo's tests pass **and** the patch left the protected harness untouched | 0 |
-| ⛔ `REJECTED` | the patch edits or deletes the tests, their config, CI, or an auto-executed file — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency change trips it too — review it through a trusted policy-maintenance path | 1 |
+| ✅ `PASS` | the selected repository judge passed, and the patch did not edit or delete a path covered by the active harness policy | 0 |
+| ⛔ `REJECTED` | the patch edits or deletes an effective-policy protected path — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency/wrapper change can trip it too — review it through a trusted policy-maintenance path | 1 |
 | ❌ `FAIL` | the patch applied and the suite ran, but tests fail | 1 |
-| 🚨 `TAMPERED` | the exit code and JUnit disagree, or the judged candidate/pack snapshot changed during execution | 1 |
-| ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff (refused, never applied), a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
+| 🚨 `TAMPERED` | the exit code and JUnit disagree, or an identity accepted from the trusted source later differs during materialization/execution | 1 |
+| ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff, an initial trusted-input binding failure, a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
 
 > **Security policy:** built-in tests, test/build configuration, CI, and judge
 > auto-exec files cannot be exempted with `--allow`. Review those changes in a
@@ -409,6 +430,33 @@ example:
   "strict_harness": true
 }
 ```
+
+For a repository-local command wrapper, list every judge-owned file explicitly:
+
+```json
+{
+  "test_command": ["sh", "ci/run-tests.sh"],
+  "harness_inputs": [
+    "ci/lib/assertions.sh",
+    "ci/run-tests.sh"
+  ]
+}
+```
+
+`harness_inputs` accepts exact, normalized, repository-relative regular files
+from the trusted base only—no directories, globs, absolute paths, `..`, symlinks,
+or reparse points. Its cross-platform canonical form also rejects Windows
+trailing-dot/space segments, reserved device names, and DOS 8.3-style `~N`
+spellings. Candidate edits/deletions to a declared file or any ancestor are
+non-exemptible by `allow`; already-existing candidate paths are additionally
+compared by filesystem object identity where supported. The path list, not the
+file bytes by itself, is included in `policy_sha256`. On a pull request the
+Marketplace Action takes this field only from the verified base
+`.evoguard.json`; it has no candidate-controlled Action input. Guard never
+infers the wrapper's helpers transitively, so list each repository-owned helper
+the judge relies on. For a dynamic or impractically large dependency closure,
+use a digest-pinned external verifier pack rather than claiming that the
+repository command graph was discovered.
 
 `strict_harness` is an opt-in CI profile for repositories that prefer a
 separate maintenance lane for toolchain changes. It makes dependency, lock, and
@@ -512,13 +560,28 @@ verifier-pack phase then run in separate containers with the candidate tree
 network is `none`, so bake dependencies into the image, use an available cache,
 or deliberately configure a network.
 
-Setup is checked before and after: changing judged source or harness files is an
+Setup is checked before and after: changing a non-exempt pre-existing path is an
 error. Conventional new dependency/build outputs are allowed, and repositories
 can declare additional exceptions with `setup_output_globs` in
 `.evoguard.json`. Those globs are **trusted policy**: a broad pattern excludes
-matching paths from the fidelity check, so keep them narrow and review the
-protected config. They affect setup validation only; a repo-native pack's
-post-setup runtime identity still includes those paths.
+matching paths from the general fidelity check, so keep them narrow and review
+the protected config. They never exempt a path declared in `harness_inputs` or
+any ancestor of that path. Guard captures the declared files' trusted-source
+byte/type/mode snapshot before candidate materialization and compares the
+materialized tree before execution. Repo-native runs repeat the comparison at
+their setup/suite checkpoints; black-box runs, including `--blackbox-only`,
+repeat it after candidate/pack execution. Failure to establish the initial
+trusted-source snapshot is `ERROR` / `assurance_requirement_not_met`, before
+materialization and without attributing the failure to the candidate. Only a
+later materialized or post-execution difference is `TAMPERED` /
+`candidate_tree_changed_during_run`. For a repo-native verifier pack, the
+post-setup runtime identity also includes paths otherwise allowed during setup.
+
+An identity snapshot proves equality only at its documented observation points.
+Host-subprocess mode is not filesystem isolation: it detects persistent drift
+at those checkpoints but cannot prove that a process did not mutate and restore
+bytes between them. Docker/gVisor can additionally deliver read-only candidate
+mounts when the recorded run satisfies that profile.
 `trust_setup_on_host: true` is a compatibility escape hatch
 for container modes; it is recorded and reduces effective candidate isolation
 to `subprocess`.
@@ -672,8 +735,8 @@ evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
   code, use `--isolation docker` or `gvisor` (network-less, read-only
   container) — see [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md).
 - Resistance is **tested against specific forgery classes** (stdout forgery,
-  planted/oversized/entity-bomb reports, harness edits *and deletions*,
-  auto-exec files, path escapes — see the adversarial tests and
+  planted/oversized/entity-bomb reports, edits and deletions to modelled
+  protected paths, auto-exec files, path escapes — see the adversarial tests and
   [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md)), not
   claimed as absolute immunity.
 - **The default judge's result is forgeable by deliberate in-process code** (the

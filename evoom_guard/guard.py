@@ -47,7 +47,7 @@ import subprocess
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 import evoom_guard.workspace.candidate_tree as _candidate_tree
 from evoom_guard import __version__
@@ -208,6 +208,7 @@ from evoom_guard.execution import (
 from evoom_guard.integrations import guard_output as _guard_output
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.patchmin import RiskScore, risk_score
+from evoom_guard.policy import HarnessInputPolicyError
 from evoom_guard.policy import (
     build_effective_policy as _build_effective_policy_contract,
 )
@@ -237,6 +238,9 @@ from evoom_guard.verifiers.harness_policy import (
 )
 from evoom_guard.verifiers.harness_policy import (
     matches_globs as _matches_globs,
+)
+from evoom_guard.verifiers.harness_policy import (
+    validate_harness_input_files,
 )
 from evoom_guard.verifiers.repo_baseline import (
     RepoBaselineRequest,
@@ -360,6 +364,9 @@ def _blackbox_decision_symbol_providers() -> dict[str, Callable[[], str]]:
         "REASON_CANDIDATE_NOT_EXERCISED": (
             lambda: REASON_CANDIDATE_NOT_EXERCISED
         ),
+        "REASON_CANDIDATE_TREE_CHANGED": (
+            lambda: REASON_CANDIDATE_TREE_CHANGED
+        ),
         "REASON_JUNIT_EXIT_MISMATCH": (
             lambda: REASON_JUNIT_EXIT_MISMATCH
         ),
@@ -385,6 +392,13 @@ def _blackbox_decision_symbol_providers() -> dict[str, Callable[[], str]]:
             lambda: REASON_VERIFIER_PACK_SNAPSHOT_CHANGED
         ),
     }
+
+
+class _BlackboxHarnessOptions(TypedDict, total=False):
+    """Additive schema-1.12 keyword passed only when explicitly configured."""
+
+    harness_inputs: tuple[str, ...]
+
 
 @dataclass
 class GuardResult:
@@ -450,7 +464,10 @@ class GuardResult:
             effective_policy = self.attestation.get("effective_policy")
             if (
                 isinstance(effective_policy, Mapping)
-                and "operating_profile" in effective_policy
+                and (
+                    "operating_profile" in effective_policy
+                    or "harness_inputs" in effective_policy
+                )
             ):
                 schema_version = OPERATING_PROFILE_SCHEMA_VERSION
         return {
@@ -586,6 +603,7 @@ def guard(
     strict_harness: bool = False,
     file_blocks: dict[str, str] | None = None,
     operating_profile: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> GuardResult:
     """Verify ``candidate`` against ``repo_path`` and return a :class:`GuardResult`.
 
@@ -603,7 +621,10 @@ def guard(
     config, the gate's CI, or an auto-exec file) is a reward-hack and yields
     ``REJECTED`` — removing a check is as much a hack as editing one.
     ``protected`` adds extra globs the patch may not touch (on top of the
-    built-in tests/config/auto-exec set). ``mem_limit_mb`` is the address-space cap
+    built-in tests/config/auto-exec set). A trusted policy must list custom
+    repository-local command wrappers and helper files in ``harness_inputs``;
+    those exact paths become non-exemptible judge inputs. ``mem_limit_mb`` is
+    the address-space cap
     for the test subprocess; pass ``0`` to disable it (required for Node/V8 suites,
     which reserve far more virtual memory than any sane ``RLIMIT_AS``).
     ``setup_command`` runs inside the repo copy before the test suite (e.g.
@@ -683,6 +704,7 @@ def guard(
             strict_harness=strict_harness,
             file_blocks=file_blocks,
             operating_profile=operating_profile,
+            harness_inputs=harness_inputs,
         ),
         services=GuardRequestPreparationServices(
             repository_input_provider=lambda: RepositoryInput,
@@ -728,6 +750,18 @@ def guard(
     baseline_evidence = compatibility.baseline_evidence
     require_demonstrated_fix = compatibility.require_demonstrated_fix
     strict_harness = compatibility.strict_harness
+    # Compatibility projections created before schema 1.12 may omit this
+    # optional field. Absence is the canonical 1.11/default policy.
+    harness_inputs = getattr(compatibility, "harness_inputs", ())
+    harness_input_problems = validate_harness_input_files(
+        repo_path,
+        harness_inputs,
+    )
+    if harness_input_problems:
+        raise HarnessInputPolicyError(
+            "invalid harness_inputs in trusted base: "
+            + "; ".join(harness_input_problems)
+        )
 
     # Fail-closed policy consistency (1.7): a GATE the selected judge cannot
     # enforce must stop the run — "require X" answered with a PASS that never
@@ -783,6 +817,7 @@ def guard(
             allow=tuple(allow),
             allow_new_tests=allow_new_tests,
             strict_harness=strict_harness,
+            harness_inputs=harness_inputs,
         ),
         services=CandidatePreflightServices(
             path_exists=lambda path: os.path.exists(path),
@@ -826,6 +861,8 @@ def guard(
         problem["allow_new_tests"] = True
     if strict_harness:
         problem["strict_harness"] = True
+    if harness_inputs:
+        problem["harness_inputs"] = list(harness_inputs)
     if safe_deleted:
         problem["deleted"] = safe_deleted
     if verifier_pack:
@@ -874,12 +911,18 @@ def guard(
                     mode="blackbox",
                 ),
             )
+        blackbox_harness_options: _BlackboxHarnessOptions = (
+            {"harness_inputs": harness_inputs}
+            if harness_inputs
+            else {}
+        )
         bx = run_blackbox(
             repo_path, candidate, os.path.abspath(verifier_pack), timeout=timeout,
             isolation=isolation, docker_image=docker_image, docker_network=docker_network,
             mem_limit_mb=mem_limit_mb, deleted_paths=tuple(safe_deleted),
             file_blocks=file_blocks,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+            **blackbox_harness_options,
         )
 
         def assess_blackbox_risk() -> RiskScore:
@@ -1089,6 +1132,7 @@ def guard(
             head_tree_sha=head_tree_sha,
             policy_id=policy_id,
             policy_version=policy_version,
+            harness_inputs=harness_inputs,
         ),
         services=RepoFinalizationServices(
             coverage_collector_provider=lambda: _repo_coverage_collector(),
@@ -1161,6 +1205,7 @@ def _run_baseline_suite(
     timeout: int,
     mem_limit_mb: int,
     strict_harness: bool,
+    harness_inputs: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Compatibility facade for the pristine repository baseline owner."""
     import tempfile as _tempfile
@@ -1191,6 +1236,7 @@ def _run_baseline_suite(
             timeout=timeout,
             mem_limit_mb=mem_limit_mb,
             strict_harness=strict_harness,
+            harness_inputs=harness_inputs,
         ),
         services=RepoBaselineServices(
             verifier_factory=RepoVerifier,
@@ -1238,9 +1284,12 @@ def _utc_now() -> str:
 # Assurance levels — see docs/ASSURANCE.md. The honest, load-bearing distinction
 # is between TWO integrity properties that people conflate:
 #
-#   * harness_integrity — can the patch change the CHECKS (tests/config/CI)?
-#     "pre_gate_enforced": no. This is a STATIC analysis of the diff done before
-#     anything runs, so runtime code cannot undo it. This guarantee is robust.
+#   * harness_integrity — was candidate protected-path admission enforced?
+#     "pre_gate_enforced": yes. This is a STATIC classification of the candidate
+#     paths before execution. Runtime code cannot retroactively change that fact,
+#     but the field alone does not claim complete dependency discovery or
+#     continuous runtime byte immutability. Explicit ``harness_inputs`` are also
+#     compared with their accepted identities at documented checkpoints.
 #
 #   * report_integrity — can the code under test forge the RESULT (the JUnit
 #     report + exit code) from inside the run? For every runner today the answer
@@ -1252,10 +1301,10 @@ def _utc_now() -> str:
 #     external black-box judge — see ROADMAP.md. There is an adversarial test
 #     that proves this so the claim can never silently drift to "unforgeable".
 #
-# So Guard reliably blocks the reward-hacks agents do in practice (editing or
-# deleting tests, deselecting in config, forging stdout — all caught) but does
-# NOT stop a patch that writes deliberate process-level forgery code into
-# source. Read report_integrity before trusting a PASS on untrusted authors.
+# Guard blocks edits/deletions to the modelled protected path set and stdout-only
+# forgery, but does NOT infer every transitive judge dependency or stop a patch
+# that writes deliberate process-level forgery code into source. Read the
+# effective policy and report_integrity before trusting a PASS.
 def build_effective_policy_payload(
     *, mode: str, isolation: str, docker_image: str | None, docker_network: str,
     test_command: list[str] | None, setup_command: list[str] | None,
@@ -1270,6 +1319,7 @@ def build_effective_policy_payload(
     require_demonstrated_fix: bool, strict_harness: bool,
     policy_id: str | None, policy_version: str | None,
     operating_profile: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """The COMPLETE canonical policy that shaped this judgment (1.7).
 
@@ -1308,6 +1358,7 @@ def build_effective_policy_payload(
         policy_id=policy_id,
         policy_version=policy_version,
         operating_profile=operating_profile,
+        harness_inputs=harness_inputs,
     )
     return _effective_policy_payload(policy)
 
@@ -1967,6 +2018,7 @@ def guard_from_diff(
     require_demonstrated_fix: bool = False,
     strict_harness: bool = False,
     operating_profile: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> tuple[GuardResult, list[str]]:
     """Verify a unified diff against the working tree it was produced from.
 
@@ -1982,7 +2034,7 @@ def guard_from_diff(
     unsafe path (absolute / ``..`` / repo escape), or does not reverse-apply.
     """
     profiled_effective_policy: dict[str, Any] | None = None
-    if operating_profile is not None:
+    if operating_profile is not None or harness_inputs:
         # A profiled early result is a schema-1.12 artifact, so it must pass the
         # same scalar validation and canonical policy construction as guard().
         # Keep the historical no-profile early-return order untouched.
@@ -2022,6 +2074,7 @@ def guard_from_diff(
                 strict_harness=strict_harness,
                 file_blocks=None,
                 operating_profile=operating_profile,
+                harness_inputs=harness_inputs,
             ),
             services=GuardRequestPreparationServices(
                 repository_input_provider=lambda: RepositoryInput,
@@ -2069,6 +2122,7 @@ def guard_from_diff(
         require_demonstrated_fix = compatibility.require_demonstrated_fix
         strict_harness = compatibility.strict_harness
         operating_profile = compatibility.operating_profile
+        harness_inputs = getattr(compatibility, "harness_inputs", ())
 
     outcome = verify_diff(
         DiffVerificationRequest(
@@ -2105,6 +2159,7 @@ def guard_from_diff(
                 require_demonstrated_fix=require_demonstrated_fix,
                 strict_harness=strict_harness,
                 operating_profile=operating_profile,
+                harness_inputs=harness_inputs,
             ),
         ),
         DiffVerificationServices(

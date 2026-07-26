@@ -16,8 +16,8 @@ reader does not infer a stronger assurance level than the evidence supports.
 EvoOM Guard is a source-available CLI and GitHub Action for one narrow
 admission question:
 
-> Did an untrusted software change satisfy the selected judge without changing
-> the harness or evidence that supplies the decision?
+> Did an untrusted software change satisfy the selected judge without editing or
+> deleting an evidence path covered by the active policy?
 
 It is not a general vulnerability scanner, an AI code reviewer, a hosted
 control plane, or a claim of complete software correctness. It is an early
@@ -76,9 +76,9 @@ independent review.
 
 | Mechanism | Publicly supported statement | Boundary that remains |
 | --- | --- | --- |
-| Basic Guard | Rejects edits/deletions to configured protected harness paths before the suite runs; uses a structured judge-owned JUnit/exit-code verdict. | The default in-process report channel is deliberately forgeable by malicious candidate code. |
+| Basic Guard | Rejects candidate edits/deletions to conventionally recognized judge paths, explicit base-owned `harness_inputs`, and their ancestors before the suite runs; rejects platform-ambiguous path spellings and checks existing filesystem aliases where comparable; uses a structured judge-owned JUnit/exit-code verdict. | It does not infer a transitive command dependency graph or prove continuous byte immutability; the default in-process report channel is deliberately forgeable by malicious candidate code. |
 | Changed-line coverage | Measures direct execution of changed Python lines, applies conservative denominator rules, and fails closed when a configured floor cannot be measured. | Candidate code shares and can mutate the live `coverage.py` state. It is a non-hostile-code quality signal, not adversarial admission evidence. |
-| `--blackbox-only` | Adds a judge-owned external process/protocol report and can fail closed on delivered isolation. | It is a narrowly supported target model, not a universal sandbox or proof of artifact provenance. |
+| `--blackbox-only` | Adds a judge-owned external process/protocol report, can fail closed on delivered isolation, and checkpoints explicit `harness_inputs` from trusted source through materialization and post candidate/pack execution. An initial trusted binding failure is `ERROR`, while only a later mismatch/drift is `TAMPERED`. | It is a narrowly supported target model, not a universal sandbox or proof of artifact provenance. Host-subprocess checkpoints detect observed persistent drift but are not filesystem isolation or continuous monitoring. |
 | Trusted Finalizer reference | Separates untrusted re-verification from a signing job that re-derives specified raw-Git bindings before key access. | It is a reference template and pilot, not enabled as this repository's merge requirement or proof of an unbreakable runner boundary. |
 | Artifact admission V1 | Can bind one observed regular-file digest and size to a verified finalizer `ALLOW`. The v4 pilot exercised this with a fresh, identity-constrained GitHub provider check and retained evidence. | It does not prove how that file was built, published, deployed, or secured, and the completed round is PR-head-bound rather than protected-main release authorization. |
 | GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. Published `v4.1.0` additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. Release Source Admission V2 Round 1 exercised that path for one authenticated producer receipt; Release Artifact Admission Round 2 later freshly verified one exact 290-byte JSON descriptor before sealing. | The adapter remains same-repository only. The observed objects are not evidence for an arbitrary package, image, release asset, general supply-chain guarantee, production gate, or independent provider implementation. |

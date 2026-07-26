@@ -78,6 +78,10 @@ class _OperatingProfileOptions(TypedDict, total=False):
     operating_profile: str
 
 
+class _HarnessInputOptions(TypedDict, total=False):
+    harness_inputs: tuple[str, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class DiffVerificationOptions:
     """Exact keyword inputs accepted by ``guard_from_diff()``.
@@ -117,6 +121,7 @@ class DiffVerificationOptions:
     require_demonstrated_fix: bool
     strict_harness: bool
     operating_profile: str | None = None
+    harness_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +304,11 @@ def verify_diff(
             if options.operating_profile is not None
             else {}
         )
+        harness_input_options: _HarnessInputOptions = (
+            {"harness_inputs": options.harness_inputs}
+            if options.harness_inputs
+            else {}
+        )
         result = run_guard(
             base,
             candidate,
@@ -335,6 +345,7 @@ def verify_diff(
             require_demonstrated_fix=options.require_demonstrated_fix,
             strict_harness=options.strict_harness,
             **profile_options,
+            **harness_input_options,
             file_blocks=file_blocks,
         )
         result.source = "diff"

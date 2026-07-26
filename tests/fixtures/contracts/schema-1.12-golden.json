@@ -27,6 +27,6 @@
     "trust_setup_on_host",
     "verifier_pack_required"
   ],
-  "optional_policy_keys": ["operating_profile", "strict_harness"],
+  "optional_policy_keys": ["harness_inputs", "operating_profile", "strict_harness"],
   "operating_profiles": ["hostile", "local", "protected"]
 }

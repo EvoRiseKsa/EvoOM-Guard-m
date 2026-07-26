@@ -38,7 +38,8 @@ kernel in a throwaway microVM.
 - Run the candidate's suite under a **separate guest kernel**, no network, ephemeral
   (no persistence between runs), with strict CPU / memory / PID / wall-clock caps.
 - Read the verdict from a **judge-owned report on the host** — never guest stdout.
-- Run the **harness-edit pre-gate on the host, before any guest boots**.
+- Run the **effective-policy protected-path pre-gate on the host, before any
+  guest boots**.
 - Emit **identical verdicts** (including `junit+exit` + the `TAMPERED` check) to the
   other judges — same `instrument_command` → `parse_junit_xml` → `grade_repo_run`.
 
@@ -110,9 +111,19 @@ a separate host-readable drive (or over `vsock`). Requires `/dev/kvm` on the run
   and verifier-pack phases receive the candidate read-only; a configured pack is a
   separate read-only mount and a separate mandatory phase. Its accepted
   `EVOGUARD_PACK_V2` SHA-256 can be pinned before candidate code runs.
-- **Setup fidelity.** The judged tree is compared before/after setup. Conventional
-  new dependency/build outputs are allowed. Extra `setup_output_globs` are trusted
-  policy exclusions — keep them narrow because matching paths are not compared.
+- **Setup fidelity.** The judged tree is compared before/after setup.
+  Conventional new dependency/build outputs are allowed. Extra
+  `setup_output_globs` are trusted policy exclusions from the general scan—keep
+  them narrow because matching paths are not compared there. They never exempt
+  base-owned `harness_inputs` or their ancestors. Their trusted identity is
+  captured before candidate materialization and checked against the materialized
+  tree before execution. Repo-native paths check at setup/suite boundaries;
+  black-box paths, including `--blackbox-only`, check after candidate/pack
+  execution. Failure to bind the initial trusted source is `ERROR` /
+  `assurance_requirement_not_met` before materialization; only a later
+  materialized/post-execution difference is `TAMPERED` /
+  `candidate_tree_changed_during_run`. Host-subprocess equality is checkpoint
+  evidence, not filesystem isolation or continuous monitoring.
 - **Judge-owned report.** `instrument_command` injects the JUnit reporter exactly as
   today; the report is written to a path the **host** reads back. The reporter env
   (jest's `JEST_JUNIT_OUTPUT_FILE`) is passed into the guest the same way docker does.
@@ -140,7 +151,7 @@ branch) — the report-and-exit-code oracle is backend-agnostic.
 |---|---|
 | honest fix | `PASS`, `junit+exit`, real counts — inside the guest |
 | broken fix | `FAIL`, `junit+exit` |
-| harness edit | `REJECTED` **before any guest boots** |
+| edit/delete of an effective-policy protected path | `REJECTED` **before any guest boots** |
 | test opens a socket | network blocked → fails/times out, verdict still read |
 | fork-bomb / mem hog | killed by caps; clear timeout/limit verdict; **host unaffected** |
 | forced `exit 0` vs failing report | `TAMPERED` |

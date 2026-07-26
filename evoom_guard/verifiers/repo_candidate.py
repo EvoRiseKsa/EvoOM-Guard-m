@@ -63,6 +63,8 @@ class RejectCandidatePaths(Protocol):
         paths: Sequence[str],
         extra: Sequence[str],
         *,
+        harness_inputs: Sequence[str] = (),
+        repo_path: str | None = None,
         allow_new_tests: bool = False,
         new_paths: frozenset[str] = frozenset(),
         allow: Sequence[str] = (),
@@ -80,6 +82,10 @@ class ApplyCandidateEdits(Protocol):
         file_blocks: dict[str, str],
         patch_blocks: list[PatchBlock],
     ) -> str | None: ...
+
+
+def _empty_harness_inputs() -> tuple[str, ...]:
+    return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +116,7 @@ class RepoCandidateAdmissionServices:
     join_path: Callable[[], Callable[..., str]]
     path_exists: Callable[[], Callable[[str], bool]]
     reject_paths: Callable[[], RejectCandidatePaths]
+    harness_inputs: Callable[[], Sequence[str]] = _empty_harness_inputs
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +289,7 @@ def admit_repo_candidate(
         )
 
     extra = tuple(services.extra_protected())
+    harness_inputs = tuple(services.harness_inputs())
     allow = tuple(services.allow())
     local_action_dirs = services.discover_local_action_dirs()(repo_path)
     changed = sorted(
@@ -300,6 +308,8 @@ def admit_repo_candidate(
     rejection = services.reject_paths()(
         changed,
         extra,
+        harness_inputs=harness_inputs,
+        repo_path=repo_path,
         allow_new_tests=allow_new_tests,
         new_paths=new_paths,
         allow=allow,
@@ -313,6 +323,8 @@ def admit_repo_candidate(
         deletion_rejection = services.reject_paths()(
             deleted_paths,
             extra,
+            harness_inputs=harness_inputs,
+            repo_path=repo_path,
             allow=allow,
             local_action_dirs=local_action_dirs,
             strict_harness=strict_harness,

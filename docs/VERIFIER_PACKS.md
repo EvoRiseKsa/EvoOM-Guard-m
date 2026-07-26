@@ -121,6 +121,14 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
   post-setup runtime tree before and after the repo and pack phases. Persistent
   drift anywhere in that prepared tree is `TAMPERED` /
   `candidate_tree_changed_during_run`.
+- **Black-box declared-input continuity.** The black-box runner, including
+  `--blackbox-only`, captures explicit `harness_inputs` from the trusted source
+  before materialization, compares the materialized copy before execution, and
+  checks again after candidate/pack execution. An initial trusted-source binding
+  failure is `ERROR` / `assurance_requirement_not_met` before materialization
+  and is not candidate-attributed. Only a materialized-copy mismatch or
+  persistent post-execution drift is `TAMPERED` /
+  `candidate_tree_changed_during_run`.
 - **Centralised, versioned invariants.** One pack of security/API/permission/
   regression checks can gate many repositories and remain owned by a security
   or platform team.
@@ -141,15 +149,22 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
   `same_process_candidate_writable`.
 - **A subprocess sandbox.** Under the default host subprocess, candidate and
   judge share the OS account. Pre/post checks are evidence of observed durable
-  state, not an OS confinement boundary, and transient changes restored between
-  observations are not claimed as impossible.
+  filesystem state, not an OS or filesystem-confinement boundary, and transient
+  changes restored between observations are not claimed as impossible.
 - **Scope of trusted setup exceptions.** `setup_output_globs` and newly
   generated conventional dependency/build outputs are excluded only from the
-  setup-fidelity comparison. After setup, `EVOGUARD_RUNTIME_TREE_V1` binds the
-  complete prepared tree, including those paths, before the repository suite
-  and checks it again before and after verifier-pack execution. Never allowlist
-  source, tests, policy, or harness paths: the exception still permits setup to
-  replace those bytes before the runtime identity is captured.
+  general setup-fidelity comparison. Exact base-owned files declared in
+  `harness_inputs` are never exempted and are compared with their accepted base
+  identity at the enforced checkpoints. After setup,
+  `EVOGUARD_RUNTIME_TREE_V1` binds the complete prepared tree, including other
+  excepted paths, before the repository suite and checks it again before and
+  after verifier-pack execution. Keep broad exceptions away from unlisted
+  source/judge paths: a path absent from `harness_inputs` does not gain
+  transitive protection merely because a command later consumes it.
+
+All of these hashes are observation-point evidence. In subprocess mode a
+process may theoretically mutate and restore bytes between snapshots; equality
+at the checkpoints is not a continuous immutability claim.
 
 For checks the running code genuinely cannot observe or modify, use the shipped
 external black-box judge (`--blackbox`): the pack runs in the judge's own

@@ -78,7 +78,22 @@ historical public scalar arguments first, then creates exactly one owned typed
 request and derives its operational values plus one canonical policy payload
 from that snapshot. The request
 contract performs no I/O, validation, serialization, or verdict composition;
-the existing 33-parameter `guard()` callable remains unchanged for adopters.
+the public `guard()` callable remains the compatibility boundary, with
+`harness_inputs` added as an optional keyword whose empty value preserves the
+1.11 policy payload.
+
+The explicit judge-input path contract lives in `domain/harness.py`. It owns
+only deterministic exact-path normalization/matching, setup-exclusion conflict
+detection, and the shared policy exception. Filesystem binding and checkpoint
+hashing remain in `verifiers/harness_policy.py`; config loading and public
+policy exports remain in `policy/`. Repo-native consumers and `blackbox.py`
+invoke those shared binding primitives at their own documented boundaries. In
+particular, black-box execution captures trusted inputs before materialization,
+checks the materialized copy before execution, and checks again after
+candidate/pack execution, including `--blackbox-only`. Initial trusted binding
+failure remains an assurance `ERROR`; later materialized/runtime mismatch is the
+candidate-drift `TAMPERED` path. Candidate coordination therefore does not
+import the downstream policy package.
 
 The first candidate slice lives in `evoom_guard/candidate/`. `edits.py` owns
 the dependency-free FILE/PATCH block grammar and `PatchBlock`; `patch.py` owns

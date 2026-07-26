@@ -26,6 +26,23 @@ round, or hostile-code production readiness.
 
 ### Added
 
+- Added explicit base-policy `harness_inputs` for repository-local judge
+  wrappers/helpers that built-in path rules cannot identify. Declarations are
+  exact cross-platform-canonical regular files, non-exemptible by candidate
+  allowlists, digest-bound in schema 1.12, checked against base/head raw Git by
+  the Trusted Finalizer, and independently constrained by record verification.
+- Added declared-input identity checkpoints around repository setup/suite,
+  black-box candidate/pack execution (including `--blackbox-only`),
+  pristine-baseline, and changed-line coverage runs. The trusted-source
+  byte/type/mode snapshot is captured before candidate copy/materialization,
+  compared with the resulting tree before execution, and checked again after
+  the applicable runtime phases. Setup-output exclusions cannot match a
+  declared file or any of its ancestors.
+- Distinguished black-box harness provenance failure from candidate drift. An
+  initial trusted-source binding failure stops before materialization as
+  `ERROR assurance_requirement_not_met` and is not attributed to the candidate;
+  only a materialized-copy mismatch or persistent post candidate/pack drift is
+  `TAMPERED candidate_tree_changed_during_run`.
 - Added explicit `local`, `protected`, and `hostile` operating profiles. The
   protected and hostile profiles require external black-box verdicts and
   container isolation; hostile mode additionally requires gVisor and a
@@ -82,6 +99,14 @@ round, or hostile-code production readiness.
 
 ### Security
 
+- Candidate edits/deletions of declared `harness_inputs` or their ancestors now
+  stop at the static pre-gate even when `allow`, `protected`, or
+  `allow_new_tests` would otherwise exempt the path. Candidate paths and
+  declarations reject Windows trailing-dot/space segments, reserved device
+  names, and DOS 8.3-style `~N` spellings; already-existing candidate paths are
+  checked by filesystem object identity against declared files and ancestors
+  where comparable. Missing, case-aliased, linked, reparse, hardlinked, or
+  non-regular declarations fail closed before candidate execution.
 - Candidate-facing workflow jobs no longer receive repository write
   authority, persisted checkout credentials, OIDC, signing keys, or
   best-effort comment mutation. Candidate fuzz execution is bounded,
@@ -147,6 +172,11 @@ round, or hostile-code production readiness.
 
 ### Known limitations
 
+- `harness_inputs` is explicit-only: commands, `sh -c`, package scripts,
+  imports, sourced helpers, and dynamic loads are not mined into a transitive
+  dependency graph. Host-subprocess execution is not filesystem isolation:
+  checkpoints prove identity only when observed and can miss a temporary
+  mutation restored before the next observation.
 - The source tree remains a `4.4.0` release candidate. It is not yet a
   production claim for hostile code and has not completed a release-bound
   A-through-H chain for the final commit.

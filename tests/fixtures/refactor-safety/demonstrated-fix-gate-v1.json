@@ -45,7 +45,7 @@
       ],
       "decision": {
         "passed": true,
-        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason": "the selected repo judge passed, and the patch did not edit or delete a path covered by the active harness policy",
         "reason_code": "tests_passed",
         "verdict": "PASS"
       },
@@ -310,7 +310,7 @@
       ],
       "decision": {
         "passed": false,
-        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base already passes the same suite — --require-demonstrated-fix demands baseline FAIL → candidate PASS under an unchanged harness",
+        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base already passes the same suite — --require-demonstrated-fix demands baseline FAIL → candidate PASS under the same base-owned judge policy",
         "reason_code": "fix_not_demonstrated",
         "verdict": "FAIL"
       },
@@ -389,7 +389,7 @@
       ],
       "decision": {
         "passed": false,
-        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base already passes the same suite — --require-demonstrated-fix demands baseline FAIL → candidate PASS under an unchanged harness",
+        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base already passes the same suite — --require-demonstrated-fix demands baseline FAIL → candidate PASS under the same base-owned judge policy",
         "reason_code": "fix_not_demonstrated",
         "verdict": "FAIL"
       },
@@ -467,7 +467,7 @@
       ],
       "decision": {
         "passed": true,
-        "reason": "all repo tests pass and the patch leaves the test harness untouched",
+        "reason": "the selected repo judge passed, and the patch did not edit or delete a path covered by the active harness policy",
         "reason_code": "tests_passed",
         "verdict": "PASS"
       },
@@ -696,7 +696,7 @@
       ],
       "decision": {
         "passed": false,
-        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base produced no clean baseline verdict — --require-demonstrated-fix demands baseline FAIL → candidate PASS under an unchanged harness",
+        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base produced no clean baseline verdict — --require-demonstrated-fix demands baseline FAIL → candidate PASS under the same base-owned judge policy",
         "reason_code": "fix_not_demonstrated",
         "verdict": "FAIL"
       },
@@ -773,7 +773,7 @@
       ],
       "decision": {
         "passed": false,
-        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base produced no clean baseline verdict — --require-demonstrated-fix demands baseline FAIL → candidate PASS under an unchanged harness",
+        "reason": "the suite passes on the candidate, but the fix is not demonstrated: the pristine base produced no clean baseline verdict — --require-demonstrated-fix demands baseline FAIL → candidate PASS under the same base-owned judge policy",
         "reason_code": "fix_not_demonstrated",
         "verdict": "FAIL"
       },

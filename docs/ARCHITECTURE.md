@@ -16,9 +16,11 @@ blast-radius scorer.
 Given a code change, EvoGuard applies it to a **throwaway copy** of the repo, runs
 the repo's **own test suite** in that copy, and reads the verdict from a **JUnit
 report the judge owns** (a path *outside* the copy) plus the **process exit code** —
-never from the candidate's stdout. Before running anything, it **rejects** any change
-that touches the tests, their config, the gate's CI, a lock file, or an auto-exec
-file. If an Independent Verifier Pack is configured, Guard snapshots and identifies
+never from the candidate's stdout. Before running anything, it **rejects** a
+candidate edit/deletion that targets a conventionally recognized judge path or
+an exact regular base file explicitly declared in `harness_inputs`. This is a
+finite path-policy decision, not transitive command-graph discovery. If an
+Independent Verifier Pack is configured, Guard snapshots and identifies
 it outside the candidate tree, then requires a **separate pack phase** as well as the
 repo suite; merely copying a pack or collecting zero pack tests is never enough. The
 result is one verdict (`PASS` / `REJECTED` / `FAIL` / `TAMPERED` / `ERROR`), an exit
@@ -35,8 +37,10 @@ canonical evidence envelope against external key and run-context inputs.
 | `domain/isolation.py` | Dependency-free vocabulary and fail-closed validation for the only supported execution modes: `subprocess`, `docker`, and `gvisor`. Unknown strings are rejected before provider lookup, workspace creation, or process launch. |
 | `domain/verdict.py` | Dependency-free frozen verdict names, execution lifecycle, reason codes, and read-only reason compatibility semantics. Versioned policy/wire fields stay in their schema contract. |
 | `domain/policy.py` | Immutable, dependency-free `EffectivePolicy` value plus producer-side operating-profile constraint validation and pack-digest shape checking. It contains no hashing, serialization, or schema logic; `verifiers/record_policy.py` independently re-derives profile semantics for offline records. |
+| `domain/harness.py` | Dependency-free exact-path normalization, matching, setup-exclusion conflict detection, and the shared `HarnessInputPolicyError` contract for explicit `harness_inputs`. It performs no filesystem inspection or command/dependency discovery. |
 | `domain/request.py` | Frozen composition of repository, candidate, source-identity, effective-policy, verifier-pack, and coverage inputs for one Guard judgment. The public `guard()` signature remains the compatibility boundary. |
-| `policy/effective.py` | Canonical construction, versioned schema-1.11/1.12 payload projection, and frozen JSON digest for effective policy. An absent operating profile preserves the exact 1.11 payload; an explicit profile is digest-bound in 1.12. Guard retains compatibility facades; the raw-Git finalizer consumes this public owner directly. |
+| `policy/effective.py` | Canonical construction, versioned schema-1.11/1.12 payload projection, and frozen JSON digest for effective policy. An absent operating profile and empty `harness_inputs` preserve the exact 1.11 payload; either 1.12-only field is digest-bound when present. Guard retains compatibility facades; the raw-Git finalizer consumes this public owner directly. |
+| `policy/harness.py` | Compatibility façade that re-exports the dependency-free `domain/harness.py` contracts through the public policy package. |
 | `application/request_preparation.py` | Typed validation and preparation of one public `guard()` invocation: immutable `GuardRequest` capture, supported-isolation validation, canonical policy construction/payload, and an owned projection back to the historical orchestrator values. Constructors and policy providers are injected by the `guard.py` facade at each use; path admission, delivered-isolation decisions, execution, and evidence remain outside this boundary. |
 | `application/repo_judgment.py` | Stdlib-only coordination of the repo-native initial judgment after preflight and shared problem construction: optional repository verification, raw-artifact evidence projection, deletion-aware blast-radius completion, risk scoring, and construction of the initial `VerificationPipeline`. Every runtime owner is injected through a live provider at its historical lookup position; unsupported-policy/preflight handling, black-box runtime, finalization, and public `GuardResult` construction remain in `guard.py`. |
 | `application/repo_finalization.py` | Ordered repo-native post-decision coordination: coverage and pristine-baseline effects, repair-effect annotation, lifecycle/pack evidence projection, attestation placement, assurance profile construction, and the final lazy assurance gate. Runtime operations are injected through live providers; post-cleanup black-box coordination has its own application owner, `GuardResult` remains in `guard.py`, and the baseline runtime effect is owned by `verifiers/repo_baseline.py`. |
@@ -72,7 +76,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `verifiers/grading.py` | The pure score gradient (`fraction_score`). |
 | `runners/` | Per-runner report wiring (`RunnerAdapter` + `instrument_command`). One adapter owner per runner plus a registry keeps the judgment engine runner-agnostic. |
 | `adapters.py` | Compatibility facade that preserves the historical runner-adapter surface and live monkeypatch timing while delegating ownership to `runners/`. |
-| `verdict_contract_v1_11.py` / `verdict_contract_v1_12.py` | Frozen schema-1.11 vocabulary plus the versioned 1.12 extension for digest-bound operating profiles. They contain no producer or verifier algorithm. |
+| `verdict_contract_v1_11.py` / `verdict_contract_v1_12.py` | Frozen schema-1.11 vocabulary plus the versioned 1.12 extension for digest-bound operating profiles and explicit harness-input path declarations. They contain no producer or verifier algorithm. |
 | `guard.py` | **Producer compatibility facade.** `guard()` / `guard_from_diff()` / `candidate_from_dirs()`, live effect wiring, black-box runtime invocation, public `GuardResult`, and unchanged Markdown / JSON / SARIF output facades. Unified-diff, repo-native, and post-cleanup black-box sequencing delegate to their separate application owners; pristine-baseline execution delegates through `_run_baseline_suite` to `verifiers/repo_baseline.py`, and output projection/publication delegates to `integrations/guard_output.py`. Unprofiled records retain schema 1.11; explicit operating profiles select schema 1.12. |
 | `integrations/guard_output.py` | Typed, stdlib-only owner of Markdown projection plus Markdown/JSON/SARIF publication. It consumes a structural result view and makes no verdict decision. Candidate-derived Markdown fields are context-escaped (including `&`, so character references cannot recreate hidden structure); top-level test counts, risk score, and dynamic evidence are type/range checked; and SARIF accepts only forward-slash repository-relative paths, rejecting controls, format characters, surrogates, ASCII drive prefixes, and backslashes while rendering message controls visibly. Publication stages an fsynced same-directory temporary file, rejects an observed symlink/directory/special/read-only destination both before staging and immediately before `os.replace`, and preserves an existing regular file's portable `rwx` mode bits. The text wrapper is opened with `closefd=False`; the writer retains exclusive ownership of the raw descriptor, releases the wrapper reference, disarms the cleanup slot, and attempts the raw close exactly once before unlink cleanup. This prevents both reused-descriptor closure and a Windows temporary-file handle leak when wrapper close fails. The parent directory must be trusted and quiescent between destination checks. Ownership, ACLs, xattrs, Windows security descriptors/alternate streams, and other non-portable metadata are not preserved. The parent directory is not fsynced, so this is single-file visibility/rollback hardening, not a power-loss, crash, NFS/distributed-filesystem, or multi-file transaction guarantee. `guard.py` retains the four historical public signatures and preserves benign wire bytes. |
 | `patch_applier.py` | Compatibility facade for the historical patch API; implementation ownership is in `candidate/patch.py`. |
@@ -146,7 +150,7 @@ candidate_from_dirs(base, head) ─► <<<FILE>>> blocks (add/modify) + deleted[
   ▼
 guard(base, candidate, deleted=…)
   │   validate runtime scalars; snapshot GuardRequest; construct canonical policy
-  │   pre-gate: unsafe path → ERROR ; protected edit OR protected deletion → REJECTED
+  │   pre-gate: unsafe path → ERROR ; effective-policy protected edit/deletion → REJECTED
   ▼
 RepoVerifier.verify(candidate, problem)
   │   copytree(base) → copy   (original never touched)
@@ -221,10 +225,17 @@ before subprocess, Docker, or gVisor delivery (use Linux/GitHub Actions or WSL).
 `--isolation docker` runs setup inside the
 resolved image by default, then runs suite and pack containers against read-only
 mounts; `gvisor` adds a separate user-space guest kernel. Explicit
-`setup_output_globs` are trusted policy exceptions to setup-fidelity checks, not
-to the post-setup runtime identity. Subprocess continuity is a boundary snapshot
-check, while Docker/gVisor can claim read-only enforcement only without host
-setup opt-in. POSIX workspace operations are descriptor-relative/no-follow;
+`setup_output_globs` are trusted policy exceptions to the general setup-fidelity
+scan, but never exempt declared `harness_inputs` or their ancestors. Other
+exceptions do not remove content from pack-backed post-setup runtime identity.
+Repo-native and black-box paths (including `--blackbox-only`) bind explicit
+`harness_inputs` before materialization and recheck them at their documented
+runtime boundaries. In the black-box path, inability to establish that initial
+trusted binding is an `ERROR`; only a subsequent materialized/runtime mismatch
+is `TAMPERED`. Subprocess continuity is a boundary snapshot check—not filesystem
+isolation or continuous immutability—while Docker/gVisor can
+claim read-only enforcement only without host setup opt-in. POSIX workspace
+operations are descriptor-relative/no-follow;
 Windows performs best-effort pre/post identity checks because stdlib lacks an
 atomic equivalent. `trust_setup_on_host` deliberately weakens effective
 isolation. A Firecracker

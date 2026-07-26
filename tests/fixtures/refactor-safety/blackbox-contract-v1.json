@@ -104,6 +104,11 @@
       "default": "None",
       "kind": "KEYWORD_ONLY",
       "name": "expect_verifier_pack_sha256"
+    },
+    {
+      "default": "()",
+      "kind": "KEYWORD_ONLY",
+      "name": "harness_inputs"
     }
   ],
   "schema_version": "blackbox-characterization-v1"

@@ -8,8 +8,8 @@
 
 Subcommands:
 
-  * ``evo-guard guard`` — verify a candidate change against a repo's tests, rejecting
-    any edit to the tests or their configuration.
+  * ``evo-guard guard`` — verify a candidate change against a repo's selected
+    judge, rejecting edits/deletions to the active protected path set.
   * ``evo-guard verify-record`` — verify a verdict's structural/semantic contract.
   * ``evo-guard verify-bundle`` — authenticate a portable verdict envelope.
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
@@ -110,6 +110,7 @@ from evoom_guard.pack_manifest import (
 )
 from evoom_guard.policy.config import ConfigError
 from evoom_guard.policy.config import load_config as _load_config
+from evoom_guard.policy.harness import HarnessInputPolicyError
 
 if TYPE_CHECKING:
     from evoom_guard.evidence_bundle import EvidenceMaterial
@@ -541,11 +542,15 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
 def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard guard`` through the extracted typed owner."""
 
-    return _guard_command_owner.execute_guard_command(
-        args,
-        services=_guard_command_services(),
-        out=out,
-    )
+    try:
+        return _guard_command_owner.execute_guard_command(
+            args,
+            services=_guard_command_services(),
+            out=out,
+        )
+    except HarnessInputPolicyError as exc:
+        out(f"usage: invalid trusted harness_inputs policy: {exc}")
+        return 2
 
 
 def doctor_report() -> dict[str, object]:

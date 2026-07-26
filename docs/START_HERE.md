@@ -30,7 +30,7 @@ to start.
 Quick tree:
 
 ```
-Just want to block test-harness tampering?           → Basic Guard
+Want to block edits to modelled/configured judge paths? → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a delivered container boundary?                  → add --isolation docker (fail-closed)
 Need the current hostile profile?                     → --operating-profile hostile (blackbox-only + gVisor)
@@ -66,9 +66,12 @@ context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
 
 **When:** your own repo, trusted authors, you want the common reward-hacks blocked.
 
-**Guarantees:** any edit/deletion of tests, their config, CI, or auto-exec files is
-`REJECTED` **before the suite runs** (static, runtime code can't undo it); the
-verdict is read from a judge-owned JUnit report + exit code, never stdout.
+**Guarantees:** a candidate edit/deletion targeting the built-in protected set
+or an exact regular base path explicitly declared in `harness_inputs` is
+`REJECTED` **before the suite runs**. Runtime code cannot alter that completed
+path-classification decision; this is not a claim of transitive discovery or
+continuous byte immutability. The verdict is read from a judge-owned JUnit
+report + exit code, never stdout.
 
 **Does NOT guarantee:** a patch that writes deliberate `atexit`+`os._exit` forgery
 into *source* can still fake a `PASS` (`report_integrity:
@@ -80,8 +83,11 @@ isolation when same-identity filesystem/process tampering is in scope.
 ```bash
 git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
 ```
-**Expected:** `✅ PASS` if the suite passes and the harness is untouched; `⛔ REJECTED`
-if the patch touches a test/config; `❌ FAIL` if tests fail.
+**Expected:** `✅ PASS` if the suite passes and the patch does not edit or delete
+a path covered by the active harness policy; `⛔ REJECTED` if it does; `❌ FAIL`
+if tests fail. This does not claim that Guard inferred every wrapper/helper from
+the command. Put custom repository-local judge files in base-policy
+`harness_inputs`; see [Guard](GUARD.md#explicit-repository-local-harness-inputs).
 
 **Optional candidate-independent checks:** adding a pinned
 `--verifier-pack /secure/pack --expect-verifier-pack-sha256 <digest>` snapshots
@@ -106,13 +112,20 @@ for an end-to-end `report_integrity: external_process_isolated` verdict. By
 default it is **composite** — your repo's own suite **and** the pack must both
 pass — so the overall profile honestly reports the weaker repo-native channel.
 The pack must call `$EVOGUARD_EXEC`; a constant pack/direct target shortcut is
-`ERROR candidate_not_exercised`.
+`ERROR candidate_not_exercised`. With explicit `harness_inputs`, the black-box
+runner snapshots their trusted-source identity before materialization, checks
+the materialized copy before execution, and checks again after candidate/pack
+execution. An initial binding failure stops before materialization as `ERROR` /
+`assurance_requirement_not_met` and is not attributed to the candidate. Only a
+materialized-copy mismatch or persistent post-execution drift is `TAMPERED` /
+`candidate_tree_changed_during_run`, including under `--blackbox-only`.
 
 **Does NOT guarantee (without `--isolation docker`):** OS isolation — the candidate
-runs as a host subprocess. The shell-free black-box launcher has a POSIX
-executable contract in every isolation mode; native Windows fails closed before
-subprocess, Docker, or gVisor delivery, so use Linux/GitHub Actions or WSL for
-this path.
+runs as a host subprocess and shares the filesystem. Snapshot equality is
+observation-point evidence, so a temporary mutation restored between checks may
+escape detection. The shell-free black-box launcher has a POSIX executable
+contract in every isolation mode; native Windows fails closed before subprocess,
+Docker, or gVisor delivery, so use Linux/GitHub Actions or WSL for this path.
 
 **Try it (a complete, runnable example ships in the repo):**
 ```bash
@@ -236,8 +249,12 @@ For repo-native docker/gVisor runs, `setup_command` runs inside a writable setup
 container by default, then suite and pack receive the candidate read-only. New
 conventional dependency/build outputs are permitted. Additional
 `setup_output_globs` in protected `.evoguard.json` are **trusted exceptions**;
-keep them narrow. `trust_setup_on_host` is an explicit recorded downgrade to
-effective `subprocess` isolation.
+keep them narrow. They do not exempt base-owned paths declared in
+`harness_inputs` or their ancestors. For a repo-native channel, its trusted
+snapshot precedes candidate materialization and is compared at the documented
+observation points; in subprocess mode this is not continuous immutability.
+`trust_setup_on_host` is an explicit recorded downgrade to effective
+`subprocess` isolation.
 
 ---
 

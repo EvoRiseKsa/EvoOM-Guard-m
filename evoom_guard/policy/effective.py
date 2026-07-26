@@ -13,6 +13,7 @@ import json
 from collections.abc import Mapping
 
 from evoom_guard.domain import EffectivePolicy
+from evoom_guard.policy.harness import normalize_harness_inputs
 
 DEFAULT_TEST_COMMAND_MARKER = "default:python -m pytest"
 
@@ -45,6 +46,7 @@ def build_effective_policy(
     policy_id: str | None,
     policy_version: str | None,
     operating_profile: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> EffectivePolicy:
     """Build the immutable value behind the versioned verdict-policy payload.
 
@@ -87,6 +89,7 @@ def build_effective_policy(
         policy_id=policy_id,
         policy_version=policy_version,
         operating_profile=operating_profile,
+        harness_inputs=normalize_harness_inputs(harness_inputs),
     )
 
 
@@ -129,6 +132,8 @@ def effective_policy_payload(policy: EffectivePolicy) -> dict[str, object]:
     # makes it part of the signed/hashed 1.12 policy contract.
     if policy.operating_profile is not None:
         payload["operating_profile"] = policy.operating_profile
+    if policy.harness_inputs:
+        payload["harness_inputs"] = list(policy.harness_inputs)
     return payload
 
 

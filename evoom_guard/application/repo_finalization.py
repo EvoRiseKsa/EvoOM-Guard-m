@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 from evoom_guard.application.pipeline import VerificationPipeline
 from evoom_guard.domain.decision import GuardDecision
@@ -30,6 +30,10 @@ from evoom_guard.domain.verdict import (
 
 EvidenceMapping = Mapping[str, object]
 MutableEvidenceMapping = MutableMapping[str, object]
+
+
+class _HarnessInputOptions(TypedDict, total=False):
+    harness_inputs: tuple[str, ...]
 
 
 class RepoCoverageCollector(Protocol):
@@ -48,6 +52,7 @@ class RepoCoverageCollector(Protocol):
         mem_limit_mb: int,
         file_blocks: dict[str, str] | None,
         require_passing_suite: bool,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> EvidenceMapping: ...
 
 
@@ -64,6 +69,7 @@ class RepoBaselineRunner(Protocol):
         timeout: int,
         mem_limit_mb: int,
         strict_harness: bool,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> MutableEvidenceMapping: ...
 
 
@@ -165,6 +171,7 @@ class RepoFinalizationInput:
     head_tree_sha: str | None
     policy_id: str | None
     policy_version: str | None
+    harness_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,6 +260,11 @@ def finalize_repo_verification(
         and core_verdict_completed
         and request.isolation == "subprocess"
     ):
+        harness_input_options: _HarnessInputOptions = (
+            {"harness_inputs": request.harness_inputs}
+            if request.harness_inputs
+            else {}
+        )
         coverage_evidence = services.coverage_collector_provider()(
             request.repository_path,
             request.candidate_text,
@@ -266,6 +278,7 @@ def finalize_repo_verification(
             require_passing_suite=(
                 core_verdict_passed and request.min_diff_coverage is not None
             ),
+            **harness_input_options,
         )
         decision_pipeline = decision_pipeline.apply_diff_coverage(
             coverage_evidence=coverage_evidence,
@@ -297,6 +310,11 @@ def finalize_repo_verification(
         and candidate_suite_completed
         and request.isolation == "subprocess"
     ):
+        harness_input_options = (
+            {"harness_inputs": request.harness_inputs}
+            if request.harness_inputs
+            else {}
+        )
         baseline_info = services.baseline_runner_provider()(
             request.repository_path,
             test_command=request.test_command,
@@ -305,6 +323,7 @@ def finalize_repo_verification(
             timeout=request.timeout,
             mem_limit_mb=request.mem_limit_mb,
             strict_harness=request.strict_harness,
+            **harness_input_options,
         )
         if baseline_info.get("verdict") == "NO_CLEAN_VERDICT":
             baseline_info["repair_effect"] = "unmeasured"

@@ -17,6 +17,9 @@ committing (``tests/test_reason_code_coverage.py`` holds it to the contract).
 Three scenarios cover black-box launcher facts the host cannot produce
 natively; they stub ``run_blackbox`` exactly the way this repository's own
 tests do and are marked ``producer-stubbed-blackbox`` in their provenance.
+The mode-only-diff scenario stubs only the platform-dependent reverse-apply
+step, then runs the real no-verifiable-changes producer path; its provenance
+is ``producer-stubbed-reconstruction``.
 
     python ops/generate_reason_corpus.py
 
@@ -62,6 +65,7 @@ STUBBED = frozenset(
         "runtime_cleanup_failed",
     }
 )
+RECONSTRUCTION_STUBBED = frozenset({"no_verifiable_changes"})
 
 
 def make_repo(root: str, *, buggy: bool = True) -> None:
@@ -185,7 +189,16 @@ def s_no_verifiable(tmp: str) -> object:
         "old mode 100644\n"
         "new mode 100755\n"
     )
-    return guard_from_diff(tmp, diff, test_command=list(PYTEST), mem_limit_mb=0)
+    # Mode-only reverse application is platform-dependent when the corpus is
+    # generated on Windows. Stub that one boundary so the real producer can
+    # deterministically exercise its post-reconstruction empty-change gate.
+    with mock.patch("evoom_guard.guard._reverse_apply", return_value=True):
+        return guard_from_diff(
+            tmp,
+            diff,
+            test_command=list(PYTEST),
+            mem_limit_mb=0,
+        )
 
 
 @scenario("patch_apply_failed")
@@ -447,7 +460,13 @@ def main() -> int:
             row = {
                 "reason_code": code,
                 "provenance": (
-                    "producer-stubbed-blackbox" if code in STUBBED else "producer"
+                    "producer-stubbed-blackbox"
+                    if code in STUBBED
+                    else (
+                        "producer-stubbed-reconstruction"
+                        if code in RECONSTRUCTION_STUBBED
+                        else "producer"
+                    )
                 ),
                 "record": out[code],
             }

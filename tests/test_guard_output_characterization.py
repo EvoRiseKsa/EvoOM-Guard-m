@@ -147,3 +147,19 @@ def test_output_owner_sarif_non_pass_is_not_suppressed() -> None:
 
     assert len(result["runs"][0]["results"]) == 1
     assert result["runs"][0]["results"][0]["level"] == "error"
+
+
+def test_current_pass_report_does_not_overclaim_complete_harness_immutability() -> None:
+    result = _result()
+    result.assurance = {
+        "harness_integrity": "pre_gate_enforced",
+        "report_integrity": "same_process_candidate_writable",
+        "candidate_isolation": "subprocess",
+    }
+
+    report = guard_module.render_report(result)
+
+    assert "test harness was left untouched" not in report
+    assert "unchanged harness" not in report
+    assert "active harness policy" in report
+    assert "transitive judge dependency" in report

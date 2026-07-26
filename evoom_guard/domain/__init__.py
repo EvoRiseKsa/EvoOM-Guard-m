@@ -10,6 +10,15 @@ from evoom_guard.domain.evidence import (
     VerifierPackEvidence,
 )
 from evoom_guard.domain.execution import ExecutionPhaseResult, IsolationObservation
+from evoom_guard.domain.harness import (
+    HarnessInputPolicyError,
+    harness_input_path_conflicts,
+    is_harness_input_path,
+    is_portable_repo_path,
+    is_windows_ambiguous_path_segment,
+    normalize_harness_inputs,
+    setup_output_harness_conflicts,
+)
 from evoom_guard.domain.isolation import (
     SUPPORTED_ISOLATION_MODES,
     validate_isolation_mode,
@@ -43,11 +52,17 @@ __all__ = [
     "ExecutionPhaseResult",
     "GuardRequest",
     "GuardDecision",
+    "HarnessInputPolicyError",
+    "harness_input_path_conflicts",
     "IsolationObservation",
     "IsolationPayloadEvidence",
     "JUnitCounts",
     "OPERATING_PROFILES",
+    "is_harness_input_path",
+    "is_portable_repo_path",
     "is_verifier_pack_sha256",
+    "is_windows_ambiguous_path_segment",
+    "normalize_harness_inputs",
     "operating_profile_violations",
     "PackPhaseResult",
     "RepositoryInput",
@@ -56,6 +71,7 @@ __all__ = [
     "RuntimeIdentityEvidence",
     "SourceIdentity",
     "SUPPORTED_ISOLATION_MODES",
+    "setup_output_harness_conflicts",
     "VerificationEvidence",
     "VerifierPackAssurance",
     "VerifierPackEvidence",

@@ -13,12 +13,25 @@ free.  The legacy names remain re-exported by
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import stat
 from fnmatch import fnmatch
 
 from evoom_guard.contracts import VerdictResult
+from evoom_guard.policy.harness import (
+    HarnessInputPolicyError,
+    harness_input_path_conflicts,
+    is_portable_repo_path,
+    normalize_harness_inputs,
+)
+from evoom_guard.verifiers.fidelity import (
+    SetupFidelityError,
+    _fidelity_entry_state,
+    _stat_fingerprint,
+)
 
 # Test-file basenames the candidate may not touch.
 _PROTECTED_BASENAMES = (
@@ -103,12 +116,322 @@ _AUTOEXEC_TESTLIKE = ("conftest.py",)
 _PKG_RUNNER_KEYS = ("jest", "vitest", "mocha", "ava", "c8", "nyc")
 
 
+class HarnessInputIntegrityError(SetupFidelityError):
+    """A declared harness file could not be bound at an execution checkpoint."""
+
+
+def validate_harness_input_files(
+    repo_path: str,
+    harness_inputs: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Validate exact, non-reparse regular files in the trusted base tree."""
+
+    problems: list[str] = []
+    reparse_flag = int(getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+    for relative_path in normalize_harness_inputs(harness_inputs):
+        parent = repo_path
+        parts = relative_path.split("/")
+        failed = False
+        for index, part in enumerate(parts):
+            try:
+                names = os.listdir(parent)
+            except OSError as exc:
+                problems.append(
+                    f"{relative_path}: cannot inspect trusted base parent ({exc})"
+                )
+                failed = True
+                break
+            if part not in names:
+                case_matches = [name for name in names if name.casefold() == part.casefold()]
+                reason = (
+                    f"path case differs from trusted base entry {case_matches[0]!r}"
+                    if case_matches
+                    else "path is absent from the trusted base"
+                )
+                problems.append(f"{relative_path}: {reason}")
+                failed = True
+                break
+            current = os.path.join(parent, part)
+            try:
+                info = os.lstat(current)
+            except OSError as exc:
+                problems.append(
+                    f"{relative_path}: cannot inspect trusted base entry ({exc})"
+                )
+                failed = True
+                break
+            if stat.S_ISLNK(info.st_mode) or (
+                int(getattr(info, "st_file_attributes", 0)) & reparse_flag
+            ):
+                problems.append(
+                    f"{relative_path}: symlink/reparse harness inputs are forbidden"
+                )
+                failed = True
+                break
+            if index < len(parts) - 1:
+                if not stat.S_ISDIR(info.st_mode):
+                    problems.append(
+                        f"{relative_path}: a parent component is not a directory"
+                    )
+                    failed = True
+                    break
+                parent = current
+            elif not stat.S_ISREG(info.st_mode):
+                problems.append(
+                    f"{relative_path}: harness input must be a regular base file"
+                )
+                failed = True
+                break
+            elif info.st_nlink != 1:
+                problems.append(
+                    f"{relative_path}: hardlinked harness inputs are forbidden"
+                )
+                failed = True
+                break
+        if failed:
+            continue
+    return tuple(problems)
+
+
+_HARNESS_DESCRIPTOR_SNAPSHOT_SUPPORTED = (
+    os.name == "posix"
+    and hasattr(os, "O_DIRECTORY")
+    and hasattr(os, "O_NOFOLLOW")
+    and os.open in os.supports_dir_fd
+    and os.stat in os.supports_dir_fd
+)
+
+
+def _descriptor_harness_input_state(
+    root: str,
+    relative_path: str,
+) -> tuple[str, int, str]:
+    """Hash one exact regular path while binding every traversed component."""
+
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    file_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_NOFOLLOW", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+    )
+    directory_chain: list[
+        tuple[int, str, os.stat_result, int]
+    ] = []
+    root_fd = -1
+    try:
+        root_before = os.lstat(root)
+        root_fd = os.open(root, directory_flags)
+        root_opened = os.fstat(root_fd)
+        if (
+            not stat.S_ISDIR(root_opened.st_mode)
+            or _stat_fingerprint(root_before) != _stat_fingerprint(root_opened)
+        ):
+            raise HarnessInputIntegrityError(
+                "harness snapshot root changed while it was opened"
+            )
+
+        current_fd = root_fd
+        parts = relative_path.split("/")
+        for part in parts[:-1]:
+            before = os.stat(part, dir_fd=current_fd, follow_symlinks=False)
+            if not stat.S_ISDIR(before.st_mode):
+                raise HarnessInputIntegrityError(
+                    f"harness parent is not a directory: {relative_path!r}"
+                )
+            child_fd = os.open(part, directory_flags, dir_fd=current_fd)
+            opened = os.fstat(child_fd)
+            if _stat_fingerprint(before) != _stat_fingerprint(opened):
+                os.close(child_fd)
+                raise HarnessInputIntegrityError(
+                    f"harness parent changed while opening: {relative_path!r}"
+                )
+            directory_chain.append((current_fd, part, before, child_fd))
+            current_fd = child_fd
+
+        filename = parts[-1]
+        before_file = os.stat(
+            filename,
+            dir_fd=current_fd,
+            follow_symlinks=False,
+        )
+        if not stat.S_ISREG(before_file.st_mode) or before_file.st_nlink != 1:
+            raise HarnessInputIntegrityError(
+                f"harness input is not an unambiguous regular file: "
+                f"{relative_path!r}"
+            )
+        file_fd = os.open(filename, file_flags, dir_fd=current_fd)
+        try:
+            opened_file = os.fstat(file_fd)
+            if (
+                not stat.S_ISREG(opened_file.st_mode)
+                or opened_file.st_nlink != 1
+                or _stat_fingerprint(before_file)
+                != _stat_fingerprint(opened_file)
+            ):
+                raise HarnessInputIntegrityError(
+                    f"harness input changed while opening: {relative_path!r}"
+                )
+            digest = hashlib.sha256()
+            while chunk := os.read(file_fd, 1024 * 1024):
+                digest.update(chunk)
+            after_open_file = os.fstat(file_fd)
+        finally:
+            os.close(file_fd)
+        after_file = os.stat(
+            filename,
+            dir_fd=current_fd,
+            follow_symlinks=False,
+        )
+        if not (
+            _stat_fingerprint(opened_file)
+            == _stat_fingerprint(after_open_file)
+            == _stat_fingerprint(after_file)
+        ):
+            raise HarnessInputIntegrityError(
+                f"harness input changed while hashing: {relative_path!r}"
+            )
+
+        for parent_fd, name, before, child_fd in reversed(directory_chain):
+            after_path = os.stat(
+                name,
+                dir_fd=parent_fd,
+                follow_symlinks=False,
+            )
+            after_fd = os.fstat(child_fd)
+            if not (
+                _stat_fingerprint(before)
+                == _stat_fingerprint(after_path)
+                == _stat_fingerprint(after_fd)
+            ):
+                raise HarnessInputIntegrityError(
+                    f"harness parent changed while hashing: {relative_path!r}"
+                )
+        root_after_fd = os.fstat(root_fd)
+        root_after_path = os.lstat(root)
+        if not (
+            _stat_fingerprint(root_opened)
+            == _stat_fingerprint(root_after_fd)
+            == _stat_fingerprint(root_after_path)
+        ):
+            raise HarnessInputIntegrityError(
+                "harness snapshot root changed while it was inspected"
+            )
+        return (
+            "file",
+            stat.S_IMODE(opened_file.st_mode),
+            digest.hexdigest(),
+        )
+    except HarnessInputIntegrityError:
+        raise
+    except OSError as exc:
+        raise HarnessInputIntegrityError(
+            f"cannot bind harness input {relative_path!r}: {exc}"
+        ) from exc
+    finally:
+        for _parent_fd, _name, _before, child_fd in reversed(
+            directory_chain
+        ):
+            os.close(child_fd)
+        if root_fd >= 0:
+            os.close(root_fd)
+
+
+def capture_harness_input_snapshot(
+    repo_path: str,
+    harness_inputs: tuple[str, ...],
+) -> dict[str, tuple[str, int, str]]:
+    """Capture exact type/mode/content identities at one judge checkpoint."""
+
+    normalized = normalize_harness_inputs(harness_inputs)
+    problems = validate_harness_input_files(repo_path, normalized)
+    if problems:
+        raise HarnessInputPolicyError(
+            "invalid harness_inputs in trusted tree: " + "; ".join(problems)
+        )
+    snapshot: dict[str, tuple[str, int, str]] = {}
+    for relative_path in normalized:
+        if _HARNESS_DESCRIPTOR_SNAPSHOT_SUPPORTED:
+            state = _descriptor_harness_input_state(repo_path, relative_path)
+        else:
+            try:
+                state = _fidelity_entry_state(
+                    os.path.join(repo_path, *relative_path.split("/"))
+                )
+            except SetupFidelityError as exc:
+                raise HarnessInputIntegrityError(
+                    f"cannot bind harness input {relative_path!r}: {exc}"
+                ) from exc
+        if state[0] != "file":
+            raise HarnessInputIntegrityError(
+                f"harness input is not a regular file: {relative_path!r}"
+            )
+        snapshot[relative_path] = state
+    problems = validate_harness_input_files(repo_path, normalized)
+    if problems:
+        raise HarnessInputIntegrityError(
+            "harness input changed during checkpoint: " + "; ".join(problems)
+        )
+    return snapshot
+
+
+def harness_input_snapshot_changes(
+    before: dict[str, tuple[str, int, str]],
+    after: dict[str, tuple[str, int, str]],
+) -> tuple[str, ...]:
+    """Return exact declared harness paths whose checkpoint identity changed."""
+
+    return tuple(
+        sorted(
+            path
+            for path in set(before) | set(after)
+            if before.get(path) != after.get(path)
+        )
+    )
+
+
+def candidate_path_targets_harness_input(
+    repo_path: str,
+    path: str,
+    harness_inputs: tuple[str, ...],
+) -> bool:
+    """Resolve lexical, ancestor, link, and filesystem-alias collisions."""
+
+    normalized = normalize_harness_inputs(harness_inputs)
+    if harness_input_path_conflicts(path, normalized):
+        return True
+    if (
+        not path
+        or os.path.isabs(path)
+        or "\\" in path
+        or ":" in path
+        or any(part in {"", ".", ".."} for part in path.split("/"))
+    ):
+        return False
+
+    candidate_path = os.path.join(repo_path, *path.split("/"))
+    if not os.path.lexists(candidate_path):
+        return False
+    for harness_path in normalized:
+        parts = harness_path.split("/")
+        for end in range(1, len(parts) + 1):
+            trusted_path = os.path.join(repo_path, *parts[:end])
+            try:
+                if os.path.samefile(candidate_path, trusted_path):
+                    return True
+            except OSError:
+                if os.path.lexists(trusted_path):
+                    return True
+    return False
+
+
 def is_safe_relpath(path: str) -> bool:
     """Is the path safe? Relative, normalized, and unable to escape the repo root."""
-    if not path or os.path.isabs(path) or "\\" in path:
-        return False
-    parts = path.split("/")
-    return all(part not in ("", ".", "..") for part in parts)
+    return is_portable_repo_path(path)
 
 
 def is_protected(path: str, extra_globs: tuple[str, ...] = ()) -> bool:
@@ -351,6 +674,8 @@ def reject_unsafe_or_protected(
     paths: list[str],
     extra: tuple[str, ...],
     *,
+    harness_inputs: tuple[str, ...] = (),
+    repo_path: str | None = None,
     allow_new_tests: bool = False,
     new_paths: frozenset[str] = frozenset(),
     allow: tuple[str, ...] = (),
@@ -364,6 +689,25 @@ def reject_unsafe_or_protected(
                 passed=False,
                 score=0.05,
                 diagnostics=f"unsafe path rejected: {path}",
+                artifact={"files_changed": []},
+            )
+        if (
+            candidate_path_targets_harness_input(
+                repo_path,
+                path,
+                harness_inputs,
+            )
+            if repo_path is not None
+            else harness_input_path_conflicts(path, harness_inputs)
+        ):
+            return VerdictResult(
+                passed=False,
+                score=0.05,
+                diagnostics=(
+                    f"modifying a policy-bound harness input is forbidden: {path} "
+                    "— fix the source under test, not the command wrapper or its "
+                    "declared dependencies"
+                ),
                 artifact={"files_changed": []},
             )
         # Check immutable configuration before adopter-defined extra globs:

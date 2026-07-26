@@ -79,14 +79,25 @@ delivered evidence.
 
 ## The two integrity properties
 
-### `harness_integrity` — can the patch change the *checks*?
+### `harness_integrity` — was protected-path admission enforced?
 
-**`pre_gate_enforced` — a robust guarantee.** Guard inspects the patch's file
-list *before running anything* and rejects any edit or deletion of the tests,
-their configuration, the gate's CI, or an auto-executed file. This is a static
-analysis of the diff, so runtime code cannot undo it. The reward-hacks agents do
-in practice — deleting a failing test, adding a `-k`/`--ignore` deselect,
-dropping a `sitecustomize.py` — are all caught here, before the suite runs.
+**`pre_gate_enforced` — a robust, scoped guarantee.** Guard inspects the
+candidate path list *before running anything* and rejects an edit or deletion
+that targets the built-in protected set, an exact base-owned file explicitly
+listed in `effective_policy.harness_inputs`, or an ancestor of that file.
+Cross-platform-ambiguous path spellings are unsafe. For an already-existing
+candidate path, Guard also compares filesystem object identity with the
+declared input and its ancestors where the host supports it, failing closed if
+an existing trusted target cannot be compared.
+
+This value does **not** mean Guard discovered the complete execution harness,
+that every dependency remained unchanged, or that repository bytes were
+continuously immutable. `test_command` is not analyzed to infer shell scripts,
+package scripts, sourced files, imports, Make includes, globs, or dynamic helper
+dependencies. Every repository-owned wrapper/helper relied on by the judge must
+be listed explicitly in the trusted base policy. Apart from the narrow
+base-workflow local-Action directory rule, no transitive dependency discovery
+is claimed.
 
 ### `report_integrity` — can the code under test forge the *result*?
 
@@ -193,9 +204,13 @@ phases receive read-only candidate mounts. The compatibility opt-in
 `trust_setup_on_host` is recorded as `subprocess_host_opt_in` and lowers
 `candidate_isolation` to `subprocess`, so a required docker floor fails closed.
 `setup_output_globs` are trusted repository policy: matching paths are excluded
-from setup-fidelity comparison, so broad patterns weaken what that check proves.
-They apply only to **setup validation**. Once setup finishes, they do not exempt
-matching content from repo-suite/verifier-pack runtime-continuity identity.
+from the general setup-fidelity comparison, so broad patterns weaken what that
+check proves. They never exempt a path declared in `harness_inputs` or any
+ancestor of that path. When the repo-native channel runs, declared files are
+compared with their accepted base identity before candidate execution and at the
+enforced checkpoints. Other setup exceptions apply only to **setup validation**
+and, when repo-native pack continuity is configured, enter the post-setup
+runtime tree identity.
 
 ### Filesystem and runtime-continuity boundary
 
@@ -232,7 +247,17 @@ continuity evidence states what was actually enforced:
 - `snapshot_boundary_checked` in subprocess mode means the runtime identity was
   compared at suite/pack phase boundaries. It detects persistent drift but does
   not stop a lingering process from mutating and restoring bytes between those
-  observations.
+  observations. An accepted harness-input byte/type/mode identity is captured
+  from the trusted source before candidate copy/materialization and compared
+  with the materialized tree before execution. Repo-native paths check it at
+  their setup/suite boundaries; black-box paths check it after candidate/pack
+  execution, including `--blackbox-only`. If the initial trusted-source binding
+  cannot be established before materialization, the result is `ERROR` /
+  `assurance_requirement_not_met`; there is no candidate attribution. Only a
+  materialized-copy mismatch or persistent post-execution difference becomes
+  `TAMPERED` / `candidate_tree_changed_during_run`. These checks have the same
+  observation-point limit: host subprocess is not filesystem isolation, and
+  matching the accepted identity is not a claim of continuous immutability.
 - `read_only_enforced` means Docker/gVisor suite and pack phases received the
   accepted runtime tree read-only. It is used only when setup stayed inside the
   requested container boundary (or no setup command ran). If a configured setup
@@ -249,12 +274,20 @@ malformed, oversized, or contains DTD/ENTITY declarations invalidates the set;
 Guard never computes a pass from only the remaining files.
 
 In black-box mode the verdict is **composite** by default: your repo's own suite
-*and* the external pack must both pass (harness-integrity always applies first).
-The pack adds an independent, judge-owned external evidence dimension; it never
-replaces the internal suite. Pure-CLI targets with no in-repo suite opt out with
-`--blackbox-only`. Because assurance is an end-to-end minimum, the completed
-composite reports `same_process_candidate_writable`; only `--blackbox-only`
-delivers an overall `external_process_isolated` report channel.
+*and* the external pack must both pass. Trusted-base `harness_inputs`
+declaration validation and static effective-policy candidate-path admission run
+before either mode. The black-box runner also takes that explicit declaration,
+binds the trusted-source identity before materialization, compares the prepared
+copy before execution, and compares it after candidate/pack execution.
+`--blackbox-only` skips the repo-native setup/suite checkpoints, not these
+black-box checkpoints. Failure to create the first trusted reference is an
+unmet assurance precondition (`ERROR assurance_requirement_not_met`) before
+candidate materialization, not evidence of candidate tampering. The pack adds
+an independent, judge-owned external evidence dimension; it never replaces the
+internal suite unless a pure-CLI target explicitly selects `--blackbox-only`.
+Because assurance is an end-to-end minimum, the completed composite reports
+`same_process_candidate_writable`; only `--blackbox-only` delivers an overall
+`external_process_isolated` report channel.
 
 ## Verifier-pack identity and execution
 
@@ -327,10 +360,11 @@ input. The default composite cannot honestly satisfy an
 ## How to use it
 
 - **Trusted authors / your own code** (the primary use case): a `PASS` at
-  `repo_native_same_process` is exactly what you want — it means the suite passed
-  and nobody touched the harness. Forging the report would require writing
-  blatant `os._exit(0)` forgery into a source file, which code review catches
-  loudly.
+  `repo_native_same_process` means the selected suite passed and the candidate
+  did not edit or delete a path covered by the active harness policy. It does not
+  prove complete harness discovery or continuous byte immutability. Forging the
+  report would require writing blatant `os._exit(0)` forgery into a source file,
+  which code review should treat as a critical signal.
 - **Untrusted or semi-trusted authors**: a same-process `PASS` means "the common
   cheats were blocked", not "correctness proven". Require human review of the
   diff, and use `--blackbox-only` with delivered Docker/gVisor isolation to

@@ -77,6 +77,41 @@ candidate-controlled. On `pull_request`, the Action materializes the policy from
 the verified base SHA and ignores judge-shaping `with:` inputs. `protected` adds
 globs the patch may not touch, on top of the built-in tests/config/auto-exec set.
 
+**Custom command wrappers (`harness_inputs`).**
+Guard recognizes conventional test/config/CI/auto-exec paths, but it does not
+guess whether a command token is the program under test or a judge-owned
+wrapper. Declare every repository-owned wrapper and helper explicitly:
+
+```json
+{
+  "test_command": ["sh", "ci/run-tests.sh"],
+  "harness_inputs": [
+    "ci/lib/assertions.sh",
+    "ci/run-tests.sh"
+  ]
+}
+```
+
+These are exact, normalized, repository-relative regular files in the trusted
+base—never directories, globs, absolute/escaping paths, symlinks, or reparse
+points. Cross-platform canonicalization also rejects Windows
+trailing-dot/space segments, reserved device names, and DOS 8.3-style `~N`
+spellings. An edit/deletion of a declared file or any ancestor cannot be waived
+by `allow`. Already-existing candidate paths are compared with the declared
+file and its ancestors by filesystem object identity where available. The
+canonical path list is bound into `policy_sha256`; binding the underlying bytes
+to immutable Git reality also requires the recorded base tree/raw-Git finalizer
+boundary.
+
+On a pull request this setting is **base-policy-only**. The Action reads it from
+the verified base `.evoguard.json` and exposes no candidate-controlled
+`harness_inputs` input. Guard does not parse `sh -c`, package scripts, `source`,
+imports, Make includes, globs, environment-selected paths, or dynamic loading to
+discover transitive dependencies. List each repository-owned helper the judge
+relies on; if that closure is dynamic or impractically large, use a
+digest-pinned external verifier pack or immutable execution image rather than
+claiming it was discovered.
+
 **Baseline allowlist (`allow`).**
 This applies only to adopter-defined extra `protected` globs. It cannot
 exempt built-in tests, test/build configuration, CI, or auto-executed judge files;
@@ -106,10 +141,10 @@ mode never loads it from the candidate checkout: provide a trusted external
 The Action does not treat the workflow file in a PR as judge policy. It resolves
 the event base SHA, materializes `$BASE:.evoguard.json`, and invokes Guard with
 that temporary base-owned file. Therefore put the test command, path rules,
-limits, assurance requirements, and verifier-pack policy in `.evoguard.json`,
-not in Action `with:` fields. Candidate `with:` values that would shape the
-judge are ignored; a conflicting base ref, fail mode, or verifier-pack input
-fails closed.
+explicit `harness_inputs`, limits, assurance requirements, and verifier-pack
+policy in `.evoguard.json`, not in Action `with:` fields. Candidate `with:`
+values that would shape the judge are ignored; a conflicting base ref, fail
+mode, or verifier-pack input fails closed.
 
 For a PR verifier pack, use both fields together:
 
@@ -130,7 +165,8 @@ For a high-assurance verification lane, add `"strict_harness": true` to that
 same base policy. It makes dependency/lock/compiler manifests immutable and
 requires a non-empty structured JUnit verdict, so keep routine dependency and
 toolchain upgrades in a separately reviewed maintenance lane. It is a harness
-integrity control, not a substitute for an isolated black-box judge.
+path-policy expansion over the documented manifest set, not complete dependency
+discovery or a substitute for an isolated black-box judge.
 
 This trust boundary begins only once the workflow has started. Configure a
 required workflow/status check (and appropriate review or CODEOWNERS controls
@@ -140,9 +176,9 @@ the workflow. Keep untrusted candidate checkouts on `pull_request`, not
 [`REPOSITORY_PROTECTION.md`](REPOSITORY_PROTECTION.md) for the required GitHub
 controls and what the composite Action cannot enforce on its own.
 
-`.evoguard.json` is itself protected harness (a candidate that edits it is
-REJECTED), so it can carry the *security policy* — not just runner settings —
-as a repository-contained contract no patch can weaken:
+`.evoguard.json` is itself a built-in protected policy path (a candidate that
+edits it is `REJECTED`), so it can carry the *security policy* — not just runner
+settings — as a repository-contained contract no patch can weaken:
 
 ```json
 {
@@ -160,6 +196,17 @@ protected base-policy settings supported by the installed Action release; do not
 try to establish this requirement through candidate workflow inputs. The default
 black-box composite intentionally cannot satisfy that floor because it also
 requires the weaker repo-native report channel.
+
+When `harness_inputs` are declared, black-box-only still binds their trusted
+source identity before candidate materialization, checks the materialized copy
+before execution, and checks again after candidate/pack execution. Persistent
+observed drift after that accepted reference is `TAMPERED` /
+`candidate_tree_changed_during_run`. If the initial trusted-source binding
+cannot be established, Guard stops before materialization with `ERROR` /
+`assurance_requirement_not_met`; do not attribute that provenance/assurance
+failure to the candidate. Under host `subprocess`, these are checkpoints rather
+than filesystem isolation: a temporary mutation restored before the next
+observation may not be seen.
 
 > **Mode-consistency (fail-closed in v3.4.0):** `min_diff_coverage` and
 > `require_demonstrated_fix` run under the **subprocess judge only** today.
@@ -228,8 +275,8 @@ must come from the image/cache or from a deliberately configured network.
 
 Guard snapshots the candidate tree before and after setup. New conventional
 outputs such as `node_modules`, `.venv`, `build`, `dist`, `target` and caches are
-allowed, while changes to judged source/harness fail closed. Additional outputs
-can be declared in protected `.evoguard.json`:
+allowed. Changes to non-exempt pre-existing paths fail closed. Additional
+outputs can be declared in protected `.evoguard.json`:
 
 ```json
 {
@@ -239,10 +286,16 @@ can be declared in protected `.evoguard.json`:
 ```
 
 `setup_output_globs` are **trusted exceptions**, not discoveries: matching paths
-are omitted from fidelity comparison. Keep patterns narrow. Setting
-`"trust_setup_on_host": true` under docker/gVisor is an explicit compatibility
-opt-in; the verdict records it and lowers effective candidate isolation to
-`subprocess`.
+are omitted from the general fidelity comparison. Keep patterns narrow. They
+never exempt a file declared in `harness_inputs` or any ancestor. In this
+repo-native setup path, Guard captures the trusted-source byte/type/mode
+identity before candidate copy/materialization, compares the materialized tree
+before candidate execution, and checks the identity again at the enforced
+checkpoints. A snapshot proves equality at those observation points only. In
+subprocess mode, it does not prove that a process could not mutate and restore
+bytes between checks. Setting `"trust_setup_on_host": true` under docker/gVisor
+is an explicit compatibility opt-in; the verdict records it and lowers
+effective candidate isolation to `subprocess`.
 
 Today `setup_command` and `--blackbox` are deliberately not composable: Guard
 returns `ERROR policy_requirement_unsupported` instead of silently preparing
@@ -251,8 +304,10 @@ environment/image until that boundary has an explicit implementation.
 
 ### Candidate lifecycle scripts are still executable code
 
-Setup fidelity detects persistent changes to judged source/harness paths; it
-does not make an installer inert. A candidate can add or edit an npm
+Setup fidelity detects persistent changes to non-exempt paths at its observation
+points, and declared `harness_inputs` plus their ancestors remain
+non-exemptible; it does not make an installer inert or prove continuous
+immutability. A candidate can add or edit an npm
 `postinstall`/`prepare` entry in `package.json`, and an unqualified install
 command will execute it during setup. In JavaScript ecosystems, remove that
 surface when dependencies do not require install hooks:
@@ -314,6 +369,10 @@ no exit⟷report mismatch check).
 
 The report's `Verdict source` row always states which path judged the run — a
 `junit+exit` verdict is strictly stronger evidence than an `exit` one.
+Recognizing a final runner token here is only report-adapter instrumentation; it
+does **not** discover shell scripts, sourced files, package-script bodies, or
+other harness dependencies. Declare those exact repository files with
+`harness_inputs`.
 
 ### In a workspace / monorepo (pnpm · yarn · npm)
 

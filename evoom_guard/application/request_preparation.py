@@ -28,10 +28,13 @@ from evoom_guard.domain import (
     CandidateInput,
     EffectivePolicy,
     GuardRequest,
+    HarnessInputPolicyError,
     RepositoryInput,
     SourceIdentity,
     is_verifier_pack_sha256,
+    normalize_harness_inputs,
     operating_profile_violations,
+    setup_output_harness_conflicts,
     validate_isolation_mode,
 )
 
@@ -81,6 +84,7 @@ class _EffectivePolicyFactory(Protocol):
         policy_id: str | None,
         policy_version: str | None,
         operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> EffectivePolicy: ...
 
 
@@ -135,6 +139,7 @@ class GuardRequestPreparationInput:
     strict_harness: bool
     file_blocks: Mapping[str, str] | None
     operating_profile: str | None = None
+    harness_inputs: Sequence[str] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +200,7 @@ class GuardCompatibilityProjection:
     require_demonstrated_fix: bool
     strict_harness: bool
     operating_profile: str | None = None
+    harness_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +231,16 @@ def prepare_guard_request(
         raise ValueError("mem_limit_mb must be a non-negative integer")
     if type(raw.strict_harness) is not bool:
         raise ValueError("strict_harness must be a boolean")
+    declared_harness_inputs = normalize_harness_inputs(raw.harness_inputs)
+    fidelity_conflicts = setup_output_harness_conflicts(
+        declared_harness_inputs,
+        raw.setup_output_globs,
+    )
+    if fidelity_conflicts:
+        raise HarnessInputPolicyError(
+            "setup_output_globs cannot exclude harness_inputs: "
+            + ", ".join(fidelity_conflicts)
+        )
     validate_isolation_mode(raw.isolation)
     if (
         raw.min_diff_coverage is not None
@@ -318,6 +334,7 @@ def prepare_guard_request(
         policy_id=raw.policy_id,
         policy_version=raw.policy_version,
         operating_profile=raw.operating_profile,
+        harness_inputs=declared_harness_inputs,
     )
     request = guard_request_factory(
         repository=repository,
@@ -376,6 +393,7 @@ def prepare_guard_request(
         require_demonstrated_fix=request.policy.require_demonstrated_fix,
         strict_harness=request.policy.strict_harness,
         operating_profile=request.policy.operating_profile,
+        harness_inputs=request.policy.harness_inputs,
     )
     return PreparedGuardRequest(
         request=request,

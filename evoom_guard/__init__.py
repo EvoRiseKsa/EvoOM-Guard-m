@@ -13,8 +13,9 @@ selected judge while blocking the explicitly modelled evidence-gaming paths:
 
   * the verdict is read from a *judge-owned* JUnit report plus the process exit
     code — never from stdout — so a forged ``"N passed"`` cannot fool it;
-  * any edit to the tests or their configuration is rejected *before* the suite
-    runs, so an agent cannot pass by rewriting the harness.
+  * candidate edits/deletions to conventionally protected paths and exact
+    trusted ``harness_inputs`` are rejected *before* the suite runs. The
+    command is not parsed to infer a complete transitive harness graph.
 
 The public surface is :func:`evoom_guard.guard.guard`, :func:`evoom_guard.guard.guard_from_diff`
 and the ``evo-guard guard`` CLI. The core is stdlib-only.

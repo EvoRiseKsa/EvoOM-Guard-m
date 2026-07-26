@@ -18,8 +18,8 @@ report. Pin `schema_version`, then key decisions off `verdict` and
   security meaning changes incompatibly. Schema 1.11 (EvoGuard v3.4.4) adds an
   explicit execution state machine and derives runtime assurance from observed
   execution, pack, and isolation evidence rather than requested policy. Schema
-  1.12 adds the digest-bound `operating_profile` policy field without widening
-  the frozen 1.11 policy object.
+  1.12 adds optional digest-bound `operating_profile` and `harness_inputs`
+  policy fields without widening the frozen 1.11 policy object.
 - Verdict names (`PASS`, `REJECTED`, `FAIL`, `ERROR`, `TAMPERED`) are frozen.
 - A shipped `reason_code` is never renamed or repurposed. Consumers must still
   handle a future unknown code as the generic enclosing verdict.
@@ -60,17 +60,19 @@ bundle. See [RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md).
 
 ## Example (`PASS`)
 
-Unprofiled records continue to use schema 1.11. When
-`attestation.effective_policy` contains `operating_profile`, the producer uses
-schema 1.12. A schema-1.11 record containing that field is invalid.
+Records without a 1.12-only policy field continue to use schema 1.11. When
+`attestation.effective_policy` contains `operating_profile` or
+`harness_inputs`, the producer uses schema 1.12. A schema-1.11 record containing
+either field is invalid.
 
 A machine-readable structural schema is available for
 [1.11](../evoom_guard/schemas/verdict-record-1.11.schema.json) and
 [1.12](../evoom_guard/schemas/verdict-record-1.12.schema.json). Both define the
 complete versioned `effective_policy`, SHA/timestamp shapes, assurance and
 verifier-pack enums, and nested required fields; 1.12 additionally permits and
-constrains `operating_profile` when present, while 1.11 forbids it. The current
-producer selects 1.12 only for an explicit profile. Use
+constrains `operating_profile` and `harness_inputs` when present, while 1.11
+forbids them. The current producer selects 1.12 for an explicit profile or a
+non-empty canonical `harness_inputs` declaration. Use
 `evo-guard verify-record verdict.json` for reason-to-verdict/lifecycle mappings,
 source/channel binding, policy digest recomputation, and other cross-field
 semantic checks that JSON Schema cannot express; see
@@ -85,7 +87,7 @@ semantic checks that JSON Schema cannot express; see
   "passed": true,
   "exit_code": 0,
   "reason_code": "tests_passed",
-  "reason": "all repo tests pass and the patch leaves the test harness untouched",
+  "reason": "selected repo judge passed; the patch did not edit or delete a path covered by the active harness policy",
   "files_changed": ["calc.py"],
   "protected_violations": [],
   "risk_level": "low",
@@ -121,7 +123,7 @@ deleting a protected test/config/CI/auto-exec path is `REJECTED`.
 | `reason` | string | Human explanation; do not parse. |
 | `files_changed` | string[] | Repo-relative paths added or modified by the candidate. |
 | `deleted` | string[] | Repo-relative deleted paths when supplied by a diff/base-head run. |
-| `protected_violations` | string[] | Protected harness paths the patch tried to change. |
+| `protected_violations` | string[] | Effective-policy protected paths the patch tried to edit or delete. |
 | `risk_level` | string | `low` \| `medium` \| `high`. |
 | `risk_score` | number | Blast-radius score in `0..1`. |
 | `tests_passed` / `tests_total` | int \| null | Judge-owned counts; completed composite repo+pack or black-box+repo verdicts contain summed phase totals. Incomplete composites use `null` rather than presenting a partial total as complete. |
@@ -172,7 +174,10 @@ are `not_run`.
 
 Important fields are:
 
-- `harness_integrity`: currently `pre_gate_enforced`.
+- `harness_integrity`: currently `pre_gate_enforced`; this means candidate
+  protected-path admission ran against the built-in set and any exact
+  `effective_policy.harness_inputs`. It is not a claim that every execution
+  dependency was discovered or remained continuously immutable.
 - `execution_state` and `execution_phase`: mirror the top-level state and phase.
 - `report_integrity`: `same_process_candidate_writable` for a started
   repo-native run (including the overall default black-box composite),
@@ -291,9 +296,30 @@ Core context binding includes:
   `effective_policy.mode/blackbox` unchanged. This records the requested policy;
   the `static_gate` assurance object still states that no black-box judge ran.
 - `effective_policy` and `policy_sha256`. The policy includes every material
-  knob, including `expect_verifier_pack_sha256`, `trust_setup_on_host`, and
-  `setup_output_globs`. Those globs exclude content from setup validation only;
-  they do not exclude it from post-setup runtime continuity.
+  knob, including `expect_verifier_pack_sha256`, `trust_setup_on_host`,
+  `setup_output_globs`, and optional `harness_inputs`. The latter is a sorted,
+  non-empty list of exact regular repository-relative base paths when present.
+  Canonical paths exclude platform-ambiguous segments, including Windows
+  trailing-dot/space names, reserved device names, and DOS 8.3-style `~N`
+  spellings. JSON Schema constrains the representable syntax; `verify-record`
+  independently enforces the full canonical rule and rejects a `PASS` whose
+  changed/deleted paths can name a declared input, one of its ancestors, or a
+  conservative namespace alias. The path declaration is policy-digest-bound,
+  while byte identity additionally depends on an immutable base-tree/raw-Git
+  binding. Guard does not derive this list from `test_command` or infer
+  transitive helpers.
+- `setup_output_globs` exclude matching content from the general setup
+  validation only. They never exempt declared `harness_inputs` or their
+  ancestors. Their trusted-source identity is captured before candidate
+  copy/materialization and compared with the materialized tree before execution.
+  Repo-native paths check again at setup/suite boundaries; black-box paths check
+  again after candidate/pack execution, including `--blackbox-only`. Failure to
+  establish the first trusted-source binding before materialization maps to
+  `ERROR` / `assurance_requirement_not_met` and is not candidate-attributed.
+  Only a materialized-copy mismatch or persistent post-execution drift maps to
+  `TAMPERED` / `candidate_tree_changed_during_run`. These are observation
+  points, not continuous host-filesystem isolation. Other matching paths enter
+  post-setup runtime continuity when that pack-backed identity is configured.
 - `base_sha`, `head_sha`, `base_tree_sha`, `head_tree_sha`, `policy_id`, and
   `policy_version` when supplied.
 - `isolation_evidence` records requested, prepared, and observed delivery facts.
@@ -436,13 +462,13 @@ is the separately recorded repo phase, not the combined repo+pack verdict.
 
 | Verdict | `reason_code` | Meaning |
 |---|---|---|
-| `PASS` | `tests_passed` | Required repo/pack phases passed and the harness gate passed. |
-| `REJECTED` | `protected_harness_edit` | Patch edits/deletes a protected test, config, CI, or auto-exec path. |
+| `PASS` | `tests_passed` | Required repo/pack phases passed and protected-path admission found no candidate edit/deletion to the effective set. |
+| `REJECTED` | `protected_harness_edit` | Patch edits/deletes a built-in or explicitly declared effective-policy protected path. |
 | `FAIL` | `tests_failed` | A required test phase genuinely failed. |
 | `FAIL` / `ERROR` | `no_test_verdict` | No clean test verdict was available (collection/usage/judge error). |
 | `TAMPERED` | `junit_exit_mismatch` | Process exit and judge-owned JUnit disagree. |
 | `TAMPERED` | `verifier_pack_snapshot_changed` | Accepted pack snapshot changed before or during execution. |
-| `TAMPERED` | `candidate_tree_changed_during_run` | The prepared candidate runtime tree changed across the repo-suite/pack transition. |
+| `TAMPERED` | `candidate_tree_changed_during_run` | The prepared repo runtime tree, or a declared harness-input identity during materialization or candidate/pack execution, differed at an enforced checkpoint. |
 | `ERROR` | `verifier_pack_identity_mismatch` | Expected V2 digest differs from the accepted snapshot; checked before candidate execution. |
 | `ERROR` | `verifier_pack_invalid` | Pack contract/tree is malformed, empty, unreadable, symlinked, special, or unstable. |
 | `ERROR` | `verifier_pack_required` | Black-box mode was requested without configuring a verifier pack. |
@@ -451,7 +477,7 @@ is the separately recorded repo phase, not the combined repo+pack verdict.
 | `ERROR` | `runtime_cleanup_failed` | The judge process group or a candidate container could not be proven absent after execution; a pending PASS/FAIL is invalidated fail-closed. |
 | `ERROR` | `test_command_unavailable` | Required test/pack interpreter or executable is unavailable. |
 | `ERROR` | `policy_requirement_unsupported` | Selected judge cannot enforce a requested gate; it is not silently dropped. |
-| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor, or required changed-line coverage is explicitly unavailable. |
+| `ERROR` | `assurance_requirement_not_met` | Delivered assurance/isolation is below the required floor, required changed-line coverage is explicitly unavailable, or the initial trusted harness-input identity could not be established before materialization. |
 | `ERROR` | `setup_timeout` | Setup timed out. |
 | `ERROR` | `setup_failed` | Setup failed or changed judged paths outside trusted output exceptions. |
 | `FAIL` / `ERROR` | `test_timeout` | A required test phase timed out; exact verdict reflects the judge path. |
@@ -469,8 +495,14 @@ is the separately recorded repo phase, not the combined repo+pack verdict.
 
 - `attestation.effective_policy.operating_profile` is an optional,
   digest-bound `local`, `protected`, or `hostile` contract.
-- A producer record containing that field declares schema 1.12. The dual
-  verifier accepts historical 1.11 records, but rejects the field under 1.11.
+- `attestation.effective_policy.harness_inputs` is an optional non-empty,
+  cross-platform-canonical list of exact repository-relative regular base
+  files. It binds the declared path list; candidate allowlists cannot exempt an
+  edit/deletion of a declared file or its ancestors. It does not claim
+  transitive dependency discovery or continuous byte immutability.
+- A producer record containing either 1.12-only field declares schema 1.12. The
+  dual verifier accepts historical 1.11 records, but rejects either field under
+  1.11.
 - Protected and hostile profiles are structurally and semantically bound to
   their required black-box, pack, network, and isolation settings.
 
