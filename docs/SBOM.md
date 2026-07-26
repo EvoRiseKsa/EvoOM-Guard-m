@@ -10,8 +10,8 @@
 ## Exact status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SBOM_EXACT_STATUS -->
-Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
 records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
@@ -43,6 +43,13 @@ flags/compression, metadata mismatches, overlapping local records, oversized
 input, invalid UTF-8 license text, and non-finite JSON. It writes through a
 same-directory temporary regular file and atomically replaces the destination
 only after serialization and `fsync`.
+
+The release byte contract uses EvoGuard's local canonical JSON encoding:
+UTF-8, keys sorted lexicographically, no insignificant whitespace, non-ASCII
+characters left unescaped, non-finite numbers forbidden, and one trailing LF.
+This is not a claim of RFC 8785 conformance. The exact encoding lets admission
+bind the SPDX predicate object returned by GitHub to the retained
+`evo-guard.spdx.json` bytes without normalizing or rewriting evidence.
 
 Tests validate the output against an unmodified official SPDX 2.3 JSON Schema
 pinned to upstream commit

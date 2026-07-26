@@ -635,6 +635,7 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "container build output is not closed" in build
     assert "PYZ preamble is not canonical" in build
     assert "SPDX relationships are not exact" in build
+    assert "SPDX bytes are not canonical EvoGuard JSON" in build
 
     assert "attestations: write" in attest
     assert "id-token: write" in attest
@@ -667,6 +668,7 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "trusted expected release version is not stable X.Y.Z" in attest
     assert "ZIP has trailing bytes" in attest
     assert "SPDX relationships are not exact" in attest
+    assert "SPDX bytes are not canonical EvoGuard JSON" in attest
     assert "static PYZ version does not bind the trusted expected version" in attest
     assert "builder controls do not bind the trusted parent tree" in attest
     assert "builder controls do not bind the exact networkless container" in attest

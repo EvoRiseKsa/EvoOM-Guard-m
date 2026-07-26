@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from ops import generate_spdx_sbom
 from tools.ci import verify_spdx_attestation as verifier
 
 REPOSITORY = "EvoRiseKsa/EvoOM-Guard-m"
@@ -120,6 +121,28 @@ def test_exact_spdx_relation_produces_closed_receipt() -> None:
         "attempt": RUN_ATTEMPT,
         "event": "workflow_dispatch",
     }
+
+
+def test_generator_and_spdx_adapter_share_one_canonical_byte_contract() -> None:
+    raw, artifact, expected_spdx = _fixture()
+    spdx_value = {
+        "SPDXID": "SPDXRef-DOCUMENT",
+        "spdxVersion": "SPDX-2.3",
+    }
+    generated_spdx = generate_spdx_sbom._serialize(spdx_value)
+    assert generated_spdx == expected_spdx
+    assert _verify(raw, artifact, generated_spdx)["predicate"]["sha256"] == (
+        hashlib.sha256(generated_spdx).hexdigest()
+    )
+
+    pretty_spdx = (
+        json.dumps(spdx_value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode()
+    with pytest.raises(
+        verifier.VerificationError,
+        match="retained SPDX predicate must be one canonical JSON object",
+    ):
+        _verify(raw, artifact, pretty_spdx)
 
 
 @pytest.mark.parametrize(

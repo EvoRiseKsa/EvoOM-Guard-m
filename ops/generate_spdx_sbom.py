@@ -504,7 +504,7 @@ def _serialize(document: dict[str, Any]) -> bytes:
             document,
             allow_nan=False,
             ensure_ascii=False,
-            indent=2,
+            separators=(",", ":"),
             sort_keys=True,
         )
     except (TypeError, ValueError) as exc:
