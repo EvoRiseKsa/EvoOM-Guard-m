@@ -539,6 +539,8 @@ jobs:
             /run/evoguard-spdx/output
           sudo install -d -m 0700 -o "$PROVIDER_UID" -g "$PROVIDER_GID" \
             /run/evoguard-spdx/gh-config
+          test "$(sudo stat -c '%u:%g:%a' /run/evoguard-spdx/gh-config)" = \
+            "$PROVIDER_UID:$PROVIDER_GID:700"
           for name in evo-guard.pyz evo-guard.spdx.json verify_spdx_attestation.py; do
             sudo install -m 0444 -o root -g root \
               "$RUNNER_TEMP/f-sbom-controls/$name" "/run/evoguard-spdx/$name"

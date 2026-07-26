@@ -757,6 +757,11 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
         "            /run/evoguard-spdx/gh-config"
         in attestations
     )
+    assert (
+        """test "$(sudo stat -c '%u:%g:%a' /run/evoguard-spdx/gh-config)" = \\
+            "$PROVIDER_UID:$PROVIDER_GID:700\""""
+        in attestations
+    )
     direct_start = attestations.index("sudo --preserve-env=GH_TOKEN setpriv")
     direct_end = attestations.index("sudo setpriv", direct_start)
     direct_spdx_provider = attestations[direct_start:direct_end]
