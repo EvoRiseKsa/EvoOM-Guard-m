@@ -1,0 +1,1 @@
+<!DOCTYPE testsuite [<!ENTITY x "boom">]><testsuite tests="1"><testcase name="&x;"/></testsuite>

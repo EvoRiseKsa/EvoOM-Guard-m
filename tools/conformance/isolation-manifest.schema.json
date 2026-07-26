@@ -1,0 +1,246 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evorise.example/schemas/isolation-conformance-manifest-1.json",
+  "title": "EvoOM Guard isolation conformance manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "suite_id",
+    "default_image",
+    "control_timeout_seconds",
+    "image_pull_timeout_seconds",
+    "run_timeout_seconds",
+    "timeout_probe_seconds",
+    "cleanup",
+    "container",
+    "network_probe",
+    "forbidden_paths",
+    "required_probes",
+    "profiles"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "evoom-isolation-conformance-manifest-1"
+    },
+    "suite_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "default_image": {
+      "type": "string",
+      "minLength": 1
+    },
+    "control_timeout_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "image_pull_timeout_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "run_timeout_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "timeout_probe_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_timeout_seconds",
+        "reconcile_attempts",
+        "reconcile_interval_seconds",
+        "required_final_absent_observations"
+      ],
+      "properties": {
+        "total_timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "reconcile_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reconcile_interval_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "required_final_absent_observations": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network",
+        "read_only_root",
+        "candidate_mount_path",
+        "candidate_mount_mode",
+        "workdir",
+        "tmpfs",
+        "pids_limit",
+        "cpus",
+        "cap_drop",
+        "security_opt",
+        "ulimit",
+        "user_policy",
+        "require_non_root_when_applied"
+      ],
+      "properties": {
+        "network": {
+          "const": "none"
+        },
+        "read_only_root": {
+          "const": true
+        },
+        "candidate_mount_path": {
+          "const": "/candidate"
+        },
+        "candidate_mount_mode": {
+          "const": "ro"
+        },
+        "workdir": {
+          "const": "/candidate"
+        },
+        "tmpfs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "pids_limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cpus": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cap_drop": {
+          "type": "array",
+          "contains": {
+            "const": "ALL"
+          },
+          "items": {
+            "type": "string"
+          }
+        },
+        "security_opt": {
+          "type": "array",
+          "contains": {
+            "const": "no-new-privileges"
+          },
+          "items": {
+            "type": "string"
+          }
+        },
+        "ulimit": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "user_policy": {
+          "const": "host_uid_gid_when_available"
+        },
+        "require_non_root_when_applied": {
+          "type": "boolean"
+        }
+      }
+    },
+    "network_probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "port",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "forbidden_paths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^/"
+      }
+    },
+    "required_probes": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "network_none",
+          "candidate_mount_read_only",
+          "root_filesystem_read_only",
+          "forbidden_path_read",
+          "security_profile",
+          "normal_cleanup",
+          "timeout_cleanup"
+        ]
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "runtime",
+          "required"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runtime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

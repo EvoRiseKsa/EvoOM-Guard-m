@@ -1,0 +1,752 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evorise.example/schemas/isolation-conformance-result-1.json",
+  "title": "EvoOM Guard isolation conformance result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "suite_id",
+    "run_id",
+    "started_at_utc",
+    "finished_at_utc",
+    "status",
+    "manifest",
+    "probe_source",
+    "source",
+    "reproduce",
+    "environment",
+    "profiles",
+    "summary"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "tools/conformance/isolation-result.schema.json"
+    },
+    "schema_version": {
+      "const": "evoom-isolation-conformance-result-1"
+    },
+    "suite_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "started_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": [
+        "pass",
+        "fail",
+        "error",
+        "unsupported"
+      ]
+    },
+    "manifest": {
+      "$ref": "#/$defs/bound_file"
+    },
+    "probe_source": {
+      "$ref": "#/$defs/bound_file"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "git_dirty",
+        "files",
+        "aggregate_sha256"
+      ],
+      "properties": {
+        "git_commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "git_dirty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/bound_file"
+          }
+        },
+        "aggregate_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "reproduce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "shell"
+      ],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "const": "python"
+            },
+            {
+              "const": "-m"
+            },
+            {
+              "const": "tools.conformance.run_isolation_conformance"
+            }
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "shell": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "docker",
+        "image"
+      ],
+      "properties": {
+        "host": {
+          "$ref": "#/$defs/host"
+        },
+        "docker": {
+          "$ref": "#/$defs/docker"
+        },
+        "image": {
+          "$ref": "#/$defs/image"
+        }
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/profile"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profiles",
+        "probes"
+      ],
+      "properties": {
+        "profiles": {
+          "$ref": "#/$defs/status_counts"
+        },
+        "probes": {
+          "$ref": "#/$defs/status_counts"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "bound_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?![A-Za-z]:[\\\\/])(?!/).+"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "image_id",
+        "repo_digests",
+        "pull_attempted",
+        "error"
+      ],
+      "properties": {
+        "requested": {
+          "type": "string",
+          "minLength": 1
+        },
+        "image_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repo_digests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pull_attempted": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "system",
+        "release",
+        "machine",
+        "python",
+        "os_name",
+        "uid",
+        "gid"
+      ],
+      "properties": {
+        "platform": {
+          "type": "string"
+        },
+        "system": {
+          "type": "string"
+        },
+        "release": {
+          "type": "string"
+        },
+        "machine": {
+          "type": "string"
+        },
+        "python": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uid": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gid": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "docker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "executable",
+        "error",
+        "client",
+        "server",
+        "info",
+        "available_runtimes"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "executable": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^/\\\\]+$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "server": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "info": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "available_runtimes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "required",
+        "status",
+        "expected",
+        "observed",
+        "detail"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "network_none",
+            "candidate_mount_read_only",
+            "root_filesystem_read_only",
+            "forbidden_path_read",
+            "security_profile",
+            "runtime_selection",
+            "user_identity",
+            "normal_cleanup",
+            "timeout_cleanup",
+            "docker_available",
+            "image_available",
+            "runtime_available",
+            "harness_execution",
+            "probe_execution",
+            "probe_output"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "skip",
+            "unsupported"
+          ]
+        },
+        "expected": {},
+        "observed": {},
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "required",
+        "requested_runtime",
+        "status",
+        "reason",
+        "runtime",
+        "container",
+        "probes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "requested_runtime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "unsupported"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "runtime": {
+          "$ref": "#/$defs/profile_runtime"
+        },
+        "container": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/container"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "probes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/probe"
+          }
+        }
+      }
+    },
+    "profile_runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested",
+        "available",
+        "available_runtimes",
+        "observed"
+      ],
+      "properties": {
+        "requested": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "available_runtimes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "observed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command_template",
+        "returncode",
+        "stderr",
+        "inspect",
+        "probe_payload"
+      ],
+      "properties": {
+        "command_template": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "returncode": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stderr": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "inspect": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/container_inspect"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "probe_payload": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "container_inspect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "image",
+        "user",
+        "network_mode",
+        "read_only_rootfs",
+        "runtime",
+        "cap_drop",
+        "security_opt",
+        "tmpfs",
+        "pids_limit",
+        "nano_cpus",
+        "ulimits",
+        "mounts"
+      ],
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "network_mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "read_only_rootfs": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "runtime": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cap_drop": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "security_opt": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tmpfs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pids_limit": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "nano_cpus": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ulimits": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/docker_ulimit"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/container_mount"
+          }
+        }
+      }
+    },
+    "docker_ulimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Name",
+        "Soft",
+        "Hard"
+      ],
+      "properties": {
+        "Name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "Soft": {
+          "type": "integer"
+        },
+        "Hard": {
+          "type": "integer"
+        }
+      }
+    },
+    "container_mount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "destination",
+        "rw"
+      ],
+      "properties": {
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rw": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "status_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pass",
+        "fail",
+        "error",
+        "skip",
+        "unsupported"
+      ],
+      "properties": {
+        "pass": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skip": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsupported": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
