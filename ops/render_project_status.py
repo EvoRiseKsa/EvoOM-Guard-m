@@ -255,7 +255,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _ARTIFACT_GATE,
         ("preflight", "verify-attestations", "seal"),
-        "7f6e6bce4141dd9730e0599307ae0cc534446c9c606eb767d5510bd3f216b8cf",
+        "87ada2d1e42ea10393741da6b9cccedb8f780cf2dc4ad54967aa0993d280944f",
     ),
     _WorkflowSpec(
         "G",
