@@ -242,7 +242,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _MAIN_ARTIFACT_GATE,
         ("build", "attest"),
-        "811a2eef3b748733758c5f359d9d9f5e025387c305b84d3cf82dabe9a4e14dae",
+        "e85f236f87298e417f69566ef2aefb9934bf77eff7b265d8bfb29e5668cc3285",
     ),
     _WorkflowSpec(
         "F",
@@ -255,7 +255,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _ARTIFACT_GATE,
         ("preflight", "verify-attestations", "seal"),
-        "428f93daebc6d1387d1f4e28a257c95fa155fcfa11854afcd61d66184e7e97f0",
+        "7f6e6bce4141dd9730e0599307ae0cc534446c9c606eb767d5510bd3f216b8cf",
     ),
     _WorkflowSpec(
         "G",

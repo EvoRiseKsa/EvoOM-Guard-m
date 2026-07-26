@@ -585,6 +585,19 @@ def test_e_build_and_attestation_are_capability_separated() -> None:
     assert "python -I admitted-source/ops/build_pyz.py" not in build
     assert "--network none" in build
     assert "test \"$parent_tree\" = \"$PARENT_TREE_SHA\"" in build
+    assert (
+        'jq -er .parent_commit_sha "$RUNNER_TEMP/e-inputs/context.json"'
+        in build
+    )
+    assert (
+        'jq -er .parent_tree_sha "$RUNNER_TEMP/e-inputs/context.json"'
+        in build
+    )
+    assert 'jq -er .base_sha "$RUNNER_TEMP/e-inputs/context.json"' not in build
+    assert (
+        'jq -er .base_tree_sha "$RUNNER_TEMP/e-inputs/context.json"'
+        not in build
+    )
     assert "'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA']" in build
     assert "'build_container': {" in build
     assert "'reference': os.environ['BUILD_IMAGE']" in build
@@ -653,6 +666,19 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     )
     assert "PARENT_TREE_SHA=\"$parent_tree\"" in preflight
     assert "export PARENT_SHA PARENT_TREE_SHA" in preflight
+    assert (
+        'jq -er .parent_commit_sha "$RUNNER_TEMP/f-controls/context.json"'
+        in preflight
+    )
+    assert (
+        'jq -er .parent_tree_sha "$RUNNER_TEMP/f-controls/context.json"'
+        in preflight
+    )
+    assert 'jq -er .base_sha "$RUNNER_TEMP/f-controls/context.json"' not in preflight
+    assert (
+        'jq -er .base_tree_sha "$RUNNER_TEMP/f-controls/context.json"'
+        not in preflight
+    )
     assert "'trusted_build_parent_tree_sha': os.environ['PARENT_TREE_SHA']" in preflight
     assert "'build_container': {" in preflight
     assert "'reference': os.environ['BUILD_IMAGE']" in preflight
