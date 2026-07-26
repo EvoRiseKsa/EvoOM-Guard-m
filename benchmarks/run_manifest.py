@@ -2090,6 +2090,7 @@ def _create_windows_staged_file(path: Path, payload: bytes) -> tuple[int, tuple[
     flush_file.argtypes = [wintypes.HANDLE]
     flush_file.restype = wintypes.BOOL
 
+    generic_read = 0x80000000
     generic_write = 0x40000000
     delete_access = 0x00010000
     file_read_attributes = 0x00000080
@@ -2100,7 +2101,11 @@ def _create_windows_staged_file(path: Path, payload: bytes) -> tuple[int, tuple[
     invalid_handle = ctypes.c_void_p(-1).value
     raw_handle = create_file(
         str(path),
-        generic_write | delete_access | file_read_attributes | synchronize,
+        generic_read
+        | generic_write
+        | delete_access
+        | file_read_attributes
+        | synchronize,
         0,
         None,
         create_new,
@@ -2470,14 +2475,6 @@ def _cleanup_staged_file(staged: _StagedFile) -> None:
     _unlink_from_directory(staged.directory, staged.name)
 
 
-def _release_published_windows_handle(staged: _StagedFile) -> None:
-    if staged.windows_handle is None or not staged.published:
-        return
-    handle = staged.windows_handle
-    staged.windows_handle = None
-    _close_windows_handle(handle)
-
-
 def _target_matches_published(
     target: _PinnedTarget,
     published: _StagedFile,
@@ -2486,8 +2483,90 @@ def _target_matches_published(
     if observed is None:
         return False
     if os.name == "nt":
-        return observed.st_ino == published.identity[1]
+        if published.windows_handle is None:
+            return False
+        _attributes, handle_identity = _windows_handle_information(
+            published.windows_handle
+        )
+        return (
+            handle_identity == published.identity
+            and target.directory.identity[0] == published.identity[0]
+            and observed.st_ino == published.identity[1]
+        )
     return _file_identity(observed) == published.identity
+
+
+def _read_windows_published_file(
+    staged: _StagedFile,
+    *,
+    max_bytes: int,
+    label: str,
+) -> bytes:
+    """Read back exact published bytes through the retained exclusive handle."""
+    if os.name != "nt" or staged.windows_handle is None or not staged.published:
+        raise RuntimeError(f"{label} has no retained Windows publication handle")
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_size = kernel32.GetFileSizeEx
+    get_size.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_longlong)]
+    get_size.restype = wintypes.BOOL
+    set_pointer = kernel32.SetFilePointerEx
+    set_pointer.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_longlong,
+        ctypes.POINTER(ctypes.c_longlong),
+        wintypes.DWORD,
+    ]
+    set_pointer.restype = wintypes.BOOL
+    read_file = kernel32.ReadFile
+    read_file.argtypes = [
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    ]
+    read_file.restype = wintypes.BOOL
+
+    size = ctypes.c_longlong()
+    if not get_size(wintypes.HANDLE(staged.windows_handle), ctypes.byref(size)):
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error), label)
+    if size.value < 0 or size.value > max_bytes:
+        raise ValueError(f"{label} exceeds the {max_bytes}-byte bound")
+    new_position = ctypes.c_longlong()
+    if not set_pointer(
+        wintypes.HANDLE(staged.windows_handle),
+        0,
+        ctypes.byref(new_position),
+        0,
+    ):
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error), label)
+
+    chunks: list[bytes] = []
+    remaining = size.value
+    while remaining:
+        requested = min(1024 * 1024, remaining)
+        buffer = ctypes.create_string_buffer(requested)
+        received = wintypes.DWORD()
+        if not read_file(
+            wintypes.HANDLE(staged.windows_handle),
+            buffer,
+            requested,
+            ctypes.byref(received),
+            None,
+        ):
+            error = ctypes.get_last_error()
+            raise OSError(error, ctypes.FormatError(error), label)
+        if received.value == 0 or received.value > requested:
+            raise RuntimeError(f"{label} returned an invalid read length")
+        chunks.append(buffer.raw[: received.value])
+        remaining -= received.value
+    _assert_staged_identity(staged)
+    return b"".join(chunks)
 
 
 def _publish_staged_file(
@@ -2851,16 +2930,18 @@ def _restore_target(
                 "benchmark evidence changed before rollback; "
                 "automatic recovery was refused"
             )
+    disposed_by_windows_handle = False
     if published is not None and published.windows_handle is not None:
         published_handle = published.windows_handle
         published.windows_handle = None
         try:
             if payload is None:
                 _dispose_windows_file(published_handle)
+                disposed_by_windows_handle = True
         finally:
             _close_windows_handle(published_handle)
     if payload is None:
-        if published is None or os.name != "nt":
+        if not disposed_by_windows_handle:
             _unlink_from_directory(target.directory, target.name)
         return
     temporary = rollback if rollback is not None else _stage_bytes(target, payload)
@@ -3096,22 +3177,28 @@ def publish_evidence_pair(
             _assert_pinned_directory_binding(results_target.directory)
             _assert_pinned_directory_binding(manifest_target.directory)
             if os.name == "nt":
-                _release_published_windows_handle(staged_results)
-                _release_published_windows_handle(staged_manifest)
-            if (
-                _read_pinned_regular_file(
+                observed_results = _read_windows_published_file(
+                    staged_results,
+                    max_bytes=MAX_RESULTS_BYTES,
+                    label="published benchmark results",
+                )
+                observed_manifest = _read_windows_published_file(
+                    staged_manifest,
+                    max_bytes=MAX_MANIFEST_BYTES,
+                    label="published benchmark manifest",
+                )
+            else:
+                observed_results = _read_pinned_regular_file(
                     results_target,
                     max_bytes=MAX_RESULTS_BYTES,
                     label="published benchmark results",
                 )
-                != results_payload
-                or _read_pinned_regular_file(
+                observed_manifest = _read_pinned_regular_file(
                     manifest_target,
                     max_bytes=MAX_MANIFEST_BYTES,
                     label="published benchmark manifest",
                 )
-                != manifest_payload
-            ):
+            if observed_results != results_payload or observed_manifest != manifest_payload:
                 raise RuntimeError("benchmark evidence publication readback mismatch")
         except BaseException:
             rollback_errors: list[BaseException] = []

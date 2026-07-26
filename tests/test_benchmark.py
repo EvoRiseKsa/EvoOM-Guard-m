@@ -218,6 +218,45 @@ def _commit_bound_benchmark_fixture(
     return repo, manifest_path, manifest
 
 
+def _source_only_benchmark_git_repo(tmp_path: Path) -> tuple[Path, str]:
+    repo = tmp_path / "source-only-repo"
+    repo.mkdir()
+    for relative in source_inventory_paths(ROOT):
+        destination = repo / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, destination)
+    shutil.copyfile(ROOT / ".gitignore", repo / ".gitignore")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "Benchmark Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "benchmark@invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "commit.gpgsign", "false"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "core.autocrlf", "false"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "add", "--all"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "source-only fixture"],
+        check=True,
+    )
+    source_commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    return repo, source_commit
+
+
 def test_sample_benchmark_has_no_classification_errors() -> None:
     result = evaluate(Path(__file__).parents[1] / "benchmarks" / "sample.jsonl")
     assert result["tp"] == 3
@@ -1200,10 +1239,11 @@ def test_verifier_detects_dependency_lock_and_interpreter_identity_drift(
     )
 
 
-def test_live_benchmark_reproduces_the_published_corpus(tmp_path) -> None:
-    # Run the REAL harness end-to-end (17 live guard() runs, a few seconds) and
-    # require every case to land on its expected verdict — so the published
-    # numbers can never drift from what the engine actually does.
+def test_live_benchmark_cli_draft_commit_finalize_and_verify_end_to_end(
+    tmp_path: Path,
+) -> None:
+    # Run the real 17-case harness once and exercise the documented two-phase
+    # Git lifecycle around that same immutable result payload.
     from benchmarks.run_live import (
         BASELINE_DEFINITION,
         ENGINE_VERSION,
@@ -1211,45 +1251,162 @@ def test_live_benchmark_reproduces_the_published_corpus(tmp_path) -> None:
         corpus_definition,
     )
 
-    out = tmp_path / "live.jsonl"
-    manifest = tmp_path / "run-manifest.json"
+    repo, source_commit = _source_only_benchmark_git_repo(tmp_path)
+    out = repo / "benchmarks" / "results.jsonl"
+    manifest = repo / "benchmarks" / "run-manifest.json"
     completed = subprocess.run(
         [
             sys.executable,
             "-I",
-            str(ROOT / "benchmarks" / "run_live.py"),
-            "--out",
-            str(out),
-            "--manifest",
-            str(manifest),
+            str(repo / "benchmarks" / "run_live.py"),
         ],
-        cwd=ROOT,
+        cwd=repo,
         capture_output=True,
         encoding="utf-8",
         errors="replace",
         timeout=180,
     )
     assert completed.returncode == 0, completed.stderr
+    result_bytes = out.read_bytes()
+    draft_bytes = manifest.read_bytes()
+    draft = load_run_manifest(manifest)
+    draft_run_id = draft["run_id"]
+    draft_provenance = draft["provenance"]
+    draft_claims = draft["claims"]
+    draft_git = draft["git"]
+    assert isinstance(draft_provenance, dict)
+    assert isinstance(draft_claims, dict)
+    assert isinstance(draft_git, dict)
+    draft_source = draft_provenance["source_commit"]
+    assert isinstance(draft_source, dict)
+    assert draft_source["commit"] == source_commit
+    assert draft_source["bound"] is True
+    assert draft_provenance["evidence_commit"] is None
+    assert draft_claims["source_commit_bound"] is True
+    assert draft_claims["evidence_commit_bound"] is False
+    assert draft_claims["source_and_results_commit_bound"] is False
+    assert draft_git["source_and_results_commit_bound"] is False
     assert (
         verify_run_manifest(
             manifest,
-            root=ROOT,
+            root=repo,
             corpus=corpus_definition(),
             settings=RUN_SETTINGS,
             baseline_definition=BASELINE_DEFINITION,
             engine_version=ENGINE_VERSION,
-            results_path=out,
         )
         == ()
     )
     fresh = evaluate(out)
     committed = evaluate(RESULTS)
     assert fresh == committed
-    # Per-case outcomes, reason codes and recorded engine identity are the
-    # reproducible evidence. Wall-clock timings are environment-dependent.
     assert _without_environmental_timing(_load_rows(out)) == (
         _without_environmental_timing(_load_rows(RESULTS))
     )
+
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "benchmarks/results.jsonl"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "record results"],
+        check=True,
+    )
+    evidence_commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    assert evidence_commit != source_commit
+    assert out.read_bytes() == result_bytes
+    assert manifest.read_bytes() == draft_bytes
+    assert (
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "show",
+                f"{evidence_commit}:benchmarks/results.jsonl",
+            ],
+            check=True,
+            capture_output=True,
+        ).stdout
+        == result_bytes
+    )
+    assert (
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo),
+                "cat-file",
+                "-e",
+                f"{evidence_commit}:benchmarks/run-manifest.json",
+            ],
+            check=False,
+            capture_output=True,
+        ).returncode
+        != 0
+    )
+
+    finalized = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(repo / "benchmarks" / "run_live.py"),
+            "--finalize-provenance",
+            str(manifest),
+            "--replace",
+        ],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+    )
+    assert finalized.returncode == 0, finalized.stderr
+    assert out.read_bytes() == result_bytes
+    final_manifest = load_run_manifest(manifest)
+    assert final_manifest["run_id"] == draft_run_id
+    final_provenance = final_manifest["provenance"]
+    final_claims = final_manifest["claims"]
+    assert isinstance(final_provenance, dict)
+    assert isinstance(final_claims, dict)
+    final_source = final_provenance["source_commit"]
+    final_evidence = final_provenance["evidence_commit"]
+    assert final_source == draft_source
+    assert isinstance(final_evidence, dict)
+    assert final_evidence["commit"] == evidence_commit
+    assert final_evidence["results_match_commit"] is True
+    assert final_evidence["final_manifest_in_commit"] is False
+    assert final_provenance["final_manifest_in_evidence_commit"] is False
+    assert final_claims["source_commit_bound"] is True
+    assert final_claims["evidence_commit_bound"] is True
+    assert final_claims["source_and_results_commit_bound"] is True
+    assert final_claims["final_manifest_in_evidence_commit"] is False
+    assert final_claims["authenticated"] is False
+    assert final_claims["evidence_status"] == "self_consistent_unattributed"
+
+    verified = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(repo / "benchmarks" / "run_live.py"),
+            "--verify-manifest",
+            str(manifest),
+        ],
+        cwd=repo,
+        check=False,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+    )
+    assert verified.returncode == 0, verified.stderr
+    assert "unsigned and unauthenticated" in verified.stdout
 
 
 @pytest.mark.parametrize(
@@ -1898,6 +2055,64 @@ def test_pair_initialization_preserves_a_concurrently_created_manifest(
     assert manifest_path.read_bytes() == foreign_manifest
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows retained-handle path only")
+def test_windows_initialization_readback_failure_restores_results_only_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    old_results = b"old results\n"
+    results_path, manifest_path, initialization = _initialization_fixture(
+        tmp_path,
+        old_results,
+    )
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+    original_read = run_manifest_module._read_windows_published_file
+    original_unlink = run_manifest_module._unlink_from_directory
+
+    def fail_published_results(
+        staged: Any,
+        *,
+        max_bytes: int,
+        label: str,
+    ) -> bytes:
+        if label == "published benchmark results":
+            raise OSError("injected published-results readback failure")
+        return original_read(staged, max_bytes=max_bytes, label=label)
+
+    def reject_target_path_unlink(
+        directory: Any,
+        name: str,
+    ) -> None:
+        if name in {results_path.name, manifest_path.name}:
+            raise AssertionError("Windows rollback used a target pathname")
+        original_unlink(directory, name)
+
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_read_windows_published_file",
+        fail_published_results,
+    )
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_unlink_from_directory",
+        reject_target_path_unlink,
+    )
+    with pytest.raises(OSError, match="published-results"):
+        publish_evidence_pair(
+            results_path=results_path,
+            results_payload=results,
+            manifest_path=manifest_path,
+            manifest_payload=manifest,
+            replace=True,
+            initialization=initialization,
+        )
+
+    assert results_path.read_bytes() == old_results
+    assert not manifest_path.exists()
+
+
 def test_pair_create_failure_leaves_no_torn_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1935,6 +2150,60 @@ def test_pair_create_failure_leaves_no_torn_output(
             manifest_payload=manifest,
             replace=False,
         )
+    assert not results_path.exists()
+    assert not manifest_path.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows retained-handle path only")
+def test_windows_create_readback_failure_removes_both_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    results_path = tmp_path / "results.jsonl"
+    manifest_path = tmp_path / "manifest.json"
+    results, manifest = _minimal_pair_payloads(str(uuid.uuid4()))
+    original_read = run_manifest_module._read_windows_published_file
+    original_unlink = run_manifest_module._unlink_from_directory
+
+    def fail_published_manifest(
+        staged: Any,
+        *,
+        max_bytes: int,
+        label: str,
+    ) -> bytes:
+        if label == "published benchmark manifest":
+            raise OSError("injected published-manifest readback failure")
+        return original_read(staged, max_bytes=max_bytes, label=label)
+
+    def reject_target_path_unlink(
+        directory: Any,
+        name: str,
+    ) -> None:
+        if name in {results_path.name, manifest_path.name}:
+            raise AssertionError("Windows rollback used a target pathname")
+        original_unlink(directory, name)
+
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_read_windows_published_file",
+        fail_published_manifest,
+    )
+    monkeypatch.setattr(
+        run_manifest_module,
+        "_unlink_from_directory",
+        reject_target_path_unlink,
+    )
+    with pytest.raises(OSError, match="published-manifest"):
+        publish_evidence_pair(
+            results_path=results_path,
+            results_payload=results,
+            manifest_path=manifest_path,
+            manifest_payload=manifest,
+            replace=False,
+        )
+
     assert not results_path.exists()
     assert not manifest_path.exists()
 
