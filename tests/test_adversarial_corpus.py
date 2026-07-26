@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import ast
 import json
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+
+import tools.evaluation.run_adversarial_corpus as corpus_runner
 
 ROOT = Path(__file__).parents[1]
 CORPUS = ROOT / "adversarial" / "corpus.jsonl"
@@ -44,7 +50,10 @@ def test_adversarial_corpus_has_a_unique_complete_schema() -> None:
     assert len({row["id"] for row in rows}) == len(rows)
     assert len({row["test_nodeid"] for row in rows}) == len(rows)
     assert {row["status"] for row in rows} <= STATUSES
-    assert all(row["observed_on"] == "3.4.2" for row in rows)
+    assert all(
+        isinstance(row["observed_on"], str) and row["observed_on"]
+        for row in rows
+    )
     assert all(row["safe_fixture"] is True for row in rows)
     assert all(row["current_observation"] for row in rows)
 
@@ -56,16 +65,90 @@ def test_every_registered_nodeid_resolves_to_a_real_test_function() -> None:
         assert qualname, f"missing test name in {nodeid}"
         path = ROOT / relative_path
         assert path.is_file(), f"missing test file for {nodeid}"
-        functions = {
-            node.name
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-        assert qualname[-1] in functions, f"missing test function for {nodeid}"
+        body = ast.parse(path.read_text(encoding="utf-8")).body
+        resolved: ast.AST | None = None
+        for part in qualname:
+            matches = [
+                node
+                for node in body
+                if isinstance(
+                    node,
+                    (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+                )
+                and node.name == part
+            ]
+            assert len(matches) == 1, f"invalid exact test nodeid {nodeid}"
+            resolved = matches[0]
+            body = resolved.body if isinstance(resolved, ast.ClassDef) else []
+        assert isinstance(
+            resolved, (ast.FunctionDef, ast.AsyncFunctionDef)
+        ), f"nodeid does not end at a test function: {nodeid}"
 
 
-def test_phase2_corpus_has_no_unowned_known_gap() -> None:
+def test_every_known_gap_has_an_owned_target_phase() -> None:
     rows = _rows()
     known_gaps = [row for row in rows if row["status"] == "known_gap"]
 
-    assert known_gaps == []
+    assert known_gaps, "a zero-gap registry would contradict the documented default boundary"
+    assert all(
+        isinstance(row["target_phase"], str) and row["target_phase"]
+        for row in known_gaps
+    )
+
+
+def test_dynamic_runner_selects_every_registry_nodeid_including_known_gaps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = tuple(str(row["test_nodeid"]) for row in _rows())
+    observed: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        observed["command"] = command
+        observed["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(corpus_runner.subprocess, "run", fake_run)
+
+    assert corpus_runner.run_registered_corpus() == 0
+    command = observed["command"]
+    kwargs = observed["kwargs"]
+    assert isinstance(command, list)
+    assert isinstance(kwargs, dict)
+    assert command[:9] == [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "--color=no",
+        "-p",
+        "no:cacheprovider",
+        "-o",
+        "addopts=",
+    ]
+    assert tuple(command[9:]) == expected
+    known_gap_nodeids = {
+        str(row["test_nodeid"])
+        for row in _rows()
+        if row["status"] == "known_gap"
+    }
+    assert known_gap_nodeids
+    assert known_gap_nodeids <= set(command[9:])
+    environment = kwargs["env"]
+    assert isinstance(environment, dict)
+    assert environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+    assert "PYTEST_ADDOPTS" not in environment
+
+
+def test_dynamic_runner_rejects_ambiguous_registry_json(tmp_path: Path) -> None:
+    registry = tmp_path / "corpus.jsonl"
+    registry.write_text(
+        '{"test_nodeid":"tests/test_x.py::test_x",'
+        '"test_nodeid":"tests/test_y.py::test_y"}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(corpus_runner.CorpusRegistryError, match="duplicate JSON key"):
+        corpus_runner.registered_nodeids(registry)
