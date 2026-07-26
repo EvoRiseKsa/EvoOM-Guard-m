@@ -75,9 +75,9 @@ def operating_profile_violations(
 ) -> tuple[str, ...]:
     """Return contradictions in an explicitly selected operating profile.
 
-    The contract belongs to the dependency-free domain layer so every producer
-    and independent record verifier can apply the same rules without importing
-    policy construction or CLI code.
+    This is the producer-side policy predicate in the dependency-free domain
+    layer. The offline record verifier deliberately re-derives the versioned
+    profile rules in its own verifier-layer implementation.
     """
 
     if operating_profile is None:

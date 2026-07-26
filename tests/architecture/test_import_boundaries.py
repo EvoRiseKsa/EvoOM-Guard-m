@@ -3502,6 +3502,7 @@ def test_record_verification_helpers_have_classified_verifier_owners() -> None:
 
     expected_dependencies = {
         "evoom_guard.verifiers.record_report": set(),
+        "evoom_guard.verifiers.record_policy": set(),
         "evoom_guard.verifiers.record_isolation": {
             "evoom_guard.verifiers.record_report"
         },

@@ -18,7 +18,6 @@ from typing import Any, TypeGuard, cast
 
 from evoom_guard import verdict_contract_v1_11 as _contract
 from evoom_guard import verdict_contract_v1_12 as _contract_v1_12
-from evoom_guard.domain import operating_profile_violations
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
 from evoom_guard.strict_json import strict_json_loads as strict_json_loads
 from evoom_guard.verifiers.junit_oracle import (
@@ -28,6 +27,9 @@ from evoom_guard.verifiers.junit_oracle import (
 )
 from evoom_guard.verifiers.record_isolation import (
     check_isolation as _check_isolation,
+)
+from evoom_guard.verifiers.record_policy import (
+    check_operating_profile as _check_operating_profile,
 )
 from evoom_guard.verifiers.record_report import (
     RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
@@ -366,38 +368,7 @@ def _policy_type_errors(
         "protected",
         "hostile",
     }:
-        profile_violations = operating_profile_violations(
-            operating_profile,
-            isolation=(
-                policy["isolation"]
-                if isinstance(policy.get("isolation"), str)
-                else ""
-            ),
-            docker_image_present=(
-                isinstance(policy.get("docker_image"), str)
-                and bool(policy["docker_image"])
-            ),
-            docker_network=(
-                policy["docker_network"]
-                if isinstance(policy.get("docker_network"), str)
-                else ""
-            ),
-            setup_command_present=bool(policy.get("setup_command")),
-            trust_setup_on_host=policy.get("trust_setup_on_host") is True,
-            mem_limit_mb=memory if _is_int(memory) else 0,
-            verifier_pack_required=policy.get("verifier_pack_required") is True,
-            expect_verifier_pack_sha256=(
-                expected_pack if isinstance(expected_pack, str) else None
-            ),
-            blackbox=blackbox is True,
-            blackbox_only=policy.get("blackbox_only") is True,
-            require_report_integrity=(
-                report_floor if isinstance(report_floor, str) else None
-            ),
-            require_candidate_isolation=(
-                isolation_floor if isinstance(isolation_floor, str) else None
-            ),
-        )
+        profile_violations = _check_operating_profile(policy)
         errors.extend(
             f"operating_profile {operating_profile!r} {violation}"
             for violation in profile_violations
