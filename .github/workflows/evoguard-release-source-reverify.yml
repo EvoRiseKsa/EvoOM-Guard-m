@@ -244,7 +244,8 @@ jobs:
               settings=RUN_SETTINGS,
               baseline_definition=BASELINE_DEFINITION,
               engine_version=ENGINE_VERSION,
-          )
+              required_history_tip='HEAD',
+            )
           if exact_errors:
               raise SystemExit(
                   'trusted parent benchmark rejected: ' + '; '.join(exact_errors)
@@ -257,7 +258,8 @@ jobs:
               baseline_definition=BASELINE_DEFINITION,
               engine_version='4.4.0',
               require_release_promotion=True,
-          )
+              required_history_tip='HEAD',
+            )
           if promotion_errors:
               raise SystemExit(
                   'release benchmark promotion rejected: '

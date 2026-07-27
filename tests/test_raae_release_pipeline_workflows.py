@@ -301,6 +301,7 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "trusted parent benchmark rejected" in source
     assert "engine_version='4.4.0'" in source
     assert "require_release_promotion=True" in source
+    assert source.count("required_history_tip='HEAD'") == 2
     assert "relation=exact-release-version-transition" in source
     assert "benchmarks/results.jsonl" not in source
 

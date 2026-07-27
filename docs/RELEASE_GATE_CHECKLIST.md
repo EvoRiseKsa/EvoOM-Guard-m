@@ -119,7 +119,10 @@ gate.
 
   The recorded source commit, results commit, and later final-manifest commit
   must remain reachable with their original IDs. Merge that evidence chain with
-  a merge commit; squash and GitHub rebase-and-merge are invalid.
+  a merge commit; squash and GitHub rebase-and-merge are invalid. Manifest
+  verification requires a distinct source-to-results ancestry chain, and Gate A
+  requires the results commit to be an ancestor of the trusted parent and
+  candidate.
 - The stable candidate must leave both `benchmarks/results.jsonl` and
   `benchmarks/run-manifest.json` byte-for-byte unchanged. Its parent-owned A
   workflow must require, not merely permit, the exact carry-forward relation:

@@ -3544,6 +3544,57 @@ def _validate_evidence_commit_record(value: object) -> tuple[tuple[str, ...], bo
     return tuple(errors), not errors
 
 
+def _verify_provenance_commit_chain(
+    root: Path,
+    *,
+    source_commit: object,
+    evidence_commit: object,
+    required_history_tip: str | None = None,
+) -> tuple[str, ...]:
+    """Require a distinct source-to-evidence chain and optionally a trusted tip."""
+    if not _is_git_oid(source_commit) or not _is_git_oid(evidence_commit):
+        return ("provenance commit chain identities are invalid",)
+    assert isinstance(source_commit, str)
+    assert isinstance(evidence_commit, str)
+    errors: list[str] = []
+    if source_commit == evidence_commit:
+        errors.append("source and evidence commits must be distinct")
+    else:
+        relation = _git(
+            root,
+            ("merge-base", "--is-ancestor", source_commit, evidence_commit),
+        )
+        if relation is None or relation.returncode not in {0, 1}:
+            errors.append("source-to-evidence commit ancestry is unverifiable")
+        elif relation.returncode == 1:
+            errors.append("evidence commit is not a descendant of source commit")
+
+    if required_history_tip is not None:
+        tip = _git(
+            root,
+            ("rev-parse", "--verify", f"{required_history_tip}^{{commit}}"),
+        )
+        if (
+            tip is None
+            or tip.returncode != 0
+            or not _is_git_oid(tip.stdout.strip())
+        ):
+            errors.append("required provenance history tip is invalid")
+        else:
+            tip_commit = tip.stdout.strip()
+            relation = _git(
+                root,
+                ("merge-base", "--is-ancestor", evidence_commit, tip_commit),
+            )
+            if relation is None or relation.returncode not in {0, 1}:
+                errors.append("evidence-to-tip commit ancestry is unverifiable")
+            elif relation.returncode == 1:
+                errors.append(
+                    "evidence commit is not an ancestor of required history tip"
+                )
+    return tuple(errors)
+
+
 def _verify_commit_bound_head_blobs(
     root: Path,
     *,
@@ -3752,6 +3803,7 @@ def verify_run_manifest(
     engine_version: str,
     results_path: Path | None = None,
     require_release_promotion: bool = False,
+    required_history_tip: str | None = None,
 ) -> tuple[str, ...]:
     """Verify historical self-consistency without claiming authentication.
 
@@ -3760,6 +3812,9 @@ def verify_run_manifest(
     the exact version-assignment bytes for comparison, requires that relation
     to be used, and keeps all recorded source, result, and commit bindings
     mandatory.
+
+    ``required_history_tip`` additionally proves that the distinct
+    source-to-evidence chain is retained below one trusted Git commit.
     """
     root = root.resolve()
     manifest = load_run_manifest(path)
@@ -4035,6 +4090,24 @@ def verify_run_manifest(
                     results=recorded_results,
                 )
             )
+        if (
+            source_bound
+            and evidence_bound
+            and isinstance(source_record, dict)
+            and isinstance(evidence_record, dict)
+        ):
+            errors.extend(
+                _verify_provenance_commit_chain(
+                    root,
+                    source_commit=source_record.get("commit"),
+                    evidence_commit=evidence_record.get("commit"),
+                    required_history_tip=required_history_tip,
+                )
+            )
+        elif required_history_tip is not None:
+            errors.append(
+                "required provenance history tip needs bound source and evidence commits"
+            )
 
     if not isinstance(claims, dict) or set(claims) != expected_claim_keys:
         errors.append("claims record schema invalid")
@@ -4154,6 +4227,17 @@ def finalize_run_manifest_provenance(
         source=manifest.get("source"),
         results=recorded_results,
     )
+    assert isinstance(source_record, dict)
+    chain_errors = _verify_provenance_commit_chain(
+        root,
+        source_commit=source_record.get("commit"),
+        evidence_commit=evidence_commit.get("commit"),
+    )
+    if chain_errors:
+        raise ValueError(
+            "benchmark provenance commit chain is invalid: "
+            + "; ".join(chain_errors)
+        )
     finalized = dict(manifest)
     finalized["provenance"] = {
         "workflow": PROVENANCE_WORKFLOW,

@@ -207,7 +207,9 @@ the same commit. After committing `results.jsonl`, `--finalize-provenance`
 verifies the exact source inventory and exact result bytes against the current
 Git commit and records that separate `evidence_commit` without rerunning a
 case or changing the `run_id`. Only then does
-`source_and_results_commit_bound` become true.
+`source_and_results_commit_bound` become true. Finalization and later
+verification require the two commits to be distinct and require the source
+commit to be an ancestor of the evidence commit.
 
 The finalized manifest cannot truthfully be a member of the evidence commit
 that it names: its final bytes do not exist until the second phase writes them.
@@ -232,6 +234,8 @@ benchmark evidence files from candidate scope. In that one case,
 source bundle: only the version assignment is normalized, while every other
 source byte, result digest, and recorded Git object remains mandatory. The
 manifest continues to identify the dev0 engine that was actually measured.
+Gate A additionally requires the evidence commit to be an ancestor of both the
+trusted parent and the one-parent release candidate.
 
 The harness also compares the complete source snapshot used for staged
 execution with the worktree at manifest assembly. Git probes use a reviewed

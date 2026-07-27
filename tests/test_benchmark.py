@@ -215,6 +215,19 @@ def _commit_bound_benchmark_fixture(
     assert git["source_and_results_commit_bound"] is True
     manifest_path = tmp_path / "run-manifest.json"
     write_run_manifest(manifest_path, manifest)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "retain result evidence",
+        ],
+        check=True,
+    )
     return repo, manifest_path, manifest
 
 
@@ -315,6 +328,7 @@ def test_two_phase_provenance_finalizes_committed_results_without_rerun(
         encoding="utf-8",
     ).stdout.strip()
     assert evidence_commit["commit"] == expected_head
+    assert evidence_commit["commit"] != source_commit["commit"]
     assert evidence_commit["results_match_commit"] is True
     assert evidence_commit["final_manifest_in_commit"] is False
     assert finalized_provenance["final_manifest_in_evidence_commit"] is False
@@ -335,6 +349,141 @@ def test_two_phase_provenance_finalizes_committed_results_without_rerun(
         )
         == ()
     )
+
+
+def test_provenance_finalization_rejects_same_source_and_evidence_commit(
+    tmp_path: Path,
+) -> None:
+    from benchmarks.run_live import (
+        BASELINE_DEFINITION,
+        ENGINE_VERSION,
+        RUN_SETTINGS,
+        corpus_definition,
+    )
+
+    repo, manifest_path, draft = _commit_bound_benchmark_fixture(tmp_path)
+    provenance = draft["provenance"]
+    assert isinstance(provenance, dict)
+    source_record = provenance["source_commit"]
+    assert isinstance(source_record, dict)
+    source_commit = source_record["commit"]
+    assert isinstance(source_commit, str)
+    subprocess.run(
+        ["git", "-C", str(repo), "reset", "--hard", "-q", source_commit],
+        check=True,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="source and evidence commits must be distinct",
+    ):
+        finalize_run_manifest_provenance(
+            manifest_path,
+            root=repo,
+            corpus=corpus_definition(),
+            settings=RUN_SETTINGS,
+            baseline_definition=BASELINE_DEFINITION,
+            engine_version=ENGINE_VERSION,
+        )
+
+
+def test_manifest_verification_rejects_reversed_provenance_chain(
+    tmp_path: Path,
+) -> None:
+    from benchmarks.run_live import (
+        BASELINE_DEFINITION,
+        ENGINE_VERSION,
+        RUN_SETTINGS,
+        corpus_definition,
+    )
+
+    repo, manifest_path, _draft = _commit_bound_benchmark_fixture(tmp_path)
+    finalized = finalize_run_manifest_provenance(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=ENGINE_VERSION,
+    )
+    provenance = finalized["provenance"]
+    assert isinstance(provenance, dict)
+    source_record = provenance["source_commit"]
+    evidence_record = provenance["evidence_commit"]
+    assert isinstance(source_record, dict)
+    assert isinstance(evidence_record, dict)
+    source_commit = source_record["commit"]
+    evidence_commit = evidence_record["commit"]
+    assert isinstance(source_commit, str)
+    assert isinstance(evidence_commit, str)
+    source_record["commit"] = evidence_commit
+    evidence_record["commit"] = source_commit
+    forged = tmp_path / "reversed-provenance.json"
+    write_run_manifest(forged, finalized)
+
+    errors = verify_run_manifest(
+        forged,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=ENGINE_VERSION,
+    )
+
+    assert "evidence commit is not a descendant of source commit" in errors
+
+
+def test_manifest_verification_requires_evidence_below_trusted_tip(
+    tmp_path: Path,
+) -> None:
+    from benchmarks.run_live import (
+        BASELINE_DEFINITION,
+        ENGINE_VERSION,
+        RUN_SETTINGS,
+        corpus_definition,
+    )
+
+    repo, manifest_path, _draft = _commit_bound_benchmark_fixture(tmp_path)
+    finalized = finalize_run_manifest_provenance(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=ENGINE_VERSION,
+    )
+    write_run_manifest(manifest_path, finalized, replace=True)
+    provenance = finalized["provenance"]
+    assert isinstance(provenance, dict)
+    source_record = provenance["source_commit"]
+    assert isinstance(source_record, dict)
+    source_commit = source_record["commit"]
+    assert isinstance(source_commit, str)
+    tree = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", f"{source_commit}^{{tree}}"],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+    sibling = subprocess.run(
+        ["git", "-C", str(repo), "commit-tree", tree, "-p", source_commit],
+        input="untrusted sibling tip\n",
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+    ).stdout.strip()
+
+    errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=ENGINE_VERSION,
+        required_history_tip=sibling,
+    )
+
+    assert "evidence commit is not an ancestor of required history tip" in errors
 
 
 def test_provenance_finalization_rejects_an_unbound_source_observation(

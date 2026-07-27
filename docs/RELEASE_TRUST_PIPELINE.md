@@ -38,6 +38,8 @@ admission.
 1. Merge this inert infrastructure through protected `main` with a merge
    commit. Squash and GitHub rebase-and-merge rewrite or discard the benchmark
    source/results commit IDs named by the final manifest and are invalid.
+   Verification requires those commits to be distinct, ordered
+   source-to-results, and retained below the protected parent.
 2. Keep all activation flags false and confirm a manual A/E dispatch skips.
 3. Before changing a flag, verify protected `main` has strict required status
    checks and `enforce_admins`, with admin bypass disabled. Configure all four
