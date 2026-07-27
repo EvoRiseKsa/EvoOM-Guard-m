@@ -95,6 +95,52 @@ class SigningRoundtripTests(unittest.TestCase):
         self.assertTrue(os.path.islink(public))
         self.assertFalse(os.path.exists(target))
 
+    def test_exclusive_output_rejects_existing_name_before_open(self) -> None:
+        from evoom_guard import signing
+
+        output = os.path.join(self.tmp.name, "preexisting-output.pem")
+        with open(output, "wb") as handle:
+            handle.write(b"attacker-owned")
+
+        with (
+            mock.patch.object(
+                signing.os,
+                "open",
+                side_effect=AssertionError("existing path must not be opened"),
+            ),
+            self.assertRaisesRegex(FileExistsError, "refusing to overwrite"),
+        ):
+            signing._open_exclusive_key_file(output, 0o600)
+
+        with open(output, "rb") as handle:
+            self.assertEqual(handle.read(), b"attacker-owned")
+
+    def test_exclusive_output_rejects_mocked_windows_reparse_before_open(
+        self,
+    ) -> None:
+        from evoom_guard import signing
+
+        output = os.path.join(self.tmp.name, "mocked-reparse.pem")
+        reparse = SimpleNamespace(
+            st_mode=signing.stat.S_IFLNK,
+            st_file_attributes=getattr(
+                signing.stat,
+                "FILE_ATTRIBUTE_REPARSE_POINT",
+                0x400,
+            ),
+        )
+
+        with (
+            mock.patch.object(signing.os, "lstat", return_value=reparse),
+            mock.patch.object(
+                signing.os,
+                "open",
+                side_effect=AssertionError("existing reparse path must not be opened"),
+            ),
+            self.assertRaisesRegex(FileExistsError, "refusing to overwrite"),
+        ):
+            signing._open_exclusive_key_file(output, 0o600)
+
     def test_exclusive_output_fstat_failure_releases_created_descriptor(self) -> None:
         from evoom_guard import signing
 
@@ -754,7 +800,7 @@ class SigningRoundtripTests(unittest.TestCase):
 
         self.assertEqual(len(fsynced), 2)
         self.assertEqual(len(set(fsynced)), 2)
-        self.assertEqual(inspected, [private, public])
+        self.assertEqual(inspected, [private, public, private, public])
         self.assertGreater(os.path.getsize(private), 0)
         self.assertGreater(os.path.getsize(public), 0)
 

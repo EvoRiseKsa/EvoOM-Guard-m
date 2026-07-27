@@ -351,6 +351,21 @@ def _open_exclusive_regular_output(
 ) -> _CreatedKeyFile:
     """Reserve one regular output without following or replacing a path."""
 
+    # Windows' CRT ``os.open(..., O_EXCL)`` can follow a dangling symlink and
+    # create its target. Reject every already-named object before opening so a
+    # static link/reparse point is never followed. ``O_EXCL`` below handles
+    # ordinary creation collisions, but Windows has no portable no-follow
+    # create primitive here. Callers therefore require a trusted, quiescent
+    # parent directory for the unavoidable gap between these pathname checks.
+    try:
+        os.lstat(path)
+    except FileNotFoundError:
+        pass
+    else:
+        raise FileExistsError(
+            f"refusing to overwrite an existing {output_label}: {path}"
+        )
+
     flags = (
         (os.O_RDWR if readable else os.O_WRONLY)
         | os.O_CREAT
@@ -1049,6 +1064,11 @@ def generate_keypair(private_path: str, public_path: str) -> None:
     The commit point is reached only after both contents are file-fsynced and
     both final paths are rebound to their retained descriptors.
 
+    The output parent directories must be trusted and quiescent. In particular,
+    Windows provides no portable atomic create-without-following primitive here;
+    the pre-open name check prevents following a static dangling reparse path,
+    but does not claim safety against a concurrent parent-directory writer.
+
     A descriptor close error after that point has an explicit state contract.
     A safe duplicate is made before close, so key bytes can be
     descriptor-truncated and fsynced without ever retrying an ambiguous
@@ -1075,9 +1095,10 @@ def generate_keypair(private_path: str, public_path: str) -> None:
     )
     created: list[_CreatedKeyFile] = []
     try:
-        # Reserve both final names before writing either payload. O_EXCL makes
-        # the no-clobber decision atomic for regular files, directories,
-        # symlinks (including dangling links), and Windows reparse paths.
+        # Reserve both final names before writing either payload. The helper
+        # rejects existing names, including static dangling/reparse paths, and
+        # uses O_EXCL for ordinary creation collisions. Its documented trusted,
+        # quiescent-parent boundary applies across both reservations.
         created.append(_open_exclusive_key_file(private_path, 0o600))
         created.append(_open_exclusive_key_file(public_path, 0o644))
         assert created[0].descriptor is not None
