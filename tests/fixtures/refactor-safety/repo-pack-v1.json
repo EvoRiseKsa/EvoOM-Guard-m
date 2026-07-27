@@ -4,19 +4,22 @@
       "sha256": "53067295edb42ba0ef2e56bbc9cbf45839b723e95d82950199f122d5d92993d0"
     },
     "docker_containment_unstarted": {
-      "sha256": "82a73fcd5551bc658f45e8ea70e7f7c84b4c50c4acf4585c251da5ea4b324c25"
+      "sha256": "414558e0082ce030afdfcca8b0c2fde466b3b5a455638a99ba7e46c44ecc1023"
+    },
+    "docker_exec_error_before_isolation_start": {
+      "sha256": "a2dc4cc81e5a1e95b85d4c4880a5e59711cafe11e4a7096b1c8c4761a3c3d10a"
     },
     "docker_exit_125": {
       "sha256": "df9c0bd9b352318f4b7126c394cc5b8b1d3288bc699921d5894af40af9598b47"
     },
     "docker_not_found": {
-      "sha256": "a0cab0e5414e745c96bc2b55099f04cdc5e2b4a408978fe825c400b1e3f10a2b"
+      "sha256": "58ef9ed32a68742ae33e075d98e78ed92f54976f928b5bcaed3b1794292f1665"
     },
     "docker_output_limit_started": {
       "sha256": "08781b89dbceef1e6b9db57e12a803b321c1d534fb68b6a57d864dee9eacc293"
     },
     "docker_output_limit_unstarted": {
-      "sha256": "74fbe899bd51d1be593345978b0fd0c4086c5d09dee8902c0b8041c5e3782b1e"
+      "sha256": "6e434d8aaf8e2b8decfb75a01adf4376c409114721d74c37c28e897626eed551"
     },
     "docker_pass": {
       "sha256": "1f553af966567efd4c526772f8c7896236609ef400ef859aceab5902479c6411"
@@ -25,13 +28,19 @@
       "sha256": "c990e0bbf96c572c9bdb03a7d3e9e4940493e01f038746330f276eacfad214f1"
     },
     "docker_timeout_unstarted": {
-      "sha256": "b180bb3f9ed9d6b6e17033fce77b3a4b120b08703526399374cc558b72f3cb70"
+      "sha256": "1673593daa3c02fe03f811bd553fc2cdc35154778d92379271ec752e4be4b4ef"
     },
     "gvisor_pass": {
       "sha256": "4faba96387c7529122842348e9ec50ce4555bdaf56c92b248571bd408cd04993"
     },
     "host_containment": {
       "sha256": "86452b23552ac3325a7df71b03b53e9db3a647fdad828fc0cfff7b1aee4f1413"
+    },
+    "host_exec_error_before_target_start": {
+      "sha256": "de33bbf6c2888384e23ea968dfc7ce2b64d809b098140f2d4ba2a9e3b2b825e4"
+    },
+    "host_launcher_failure_before_target_start": {
+      "sha256": "44f62f314574cd6b422f72e7c79ab42af5374ca13416131d312086146b472a9b"
     },
     "host_not_found": {
       "sha256": "7c58460ecbaf66e023991f96b6ff5c059165dc3c2347e178ab29a52b574a7d9e"

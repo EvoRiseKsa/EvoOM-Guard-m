@@ -5601,11 +5601,8 @@ MUTATIONS = (
         name="repo-setup-docker-timeout-start-proof-bypass",
         path="evoom_guard/verifiers/repo_setup.py",
         before=(
-            "        delivered = (\n"
-            "            services.requested_isolation()\n"
-            "            if exc.container_started\n"
-            '            else "not_run"\n'
-            "        )\n"
+            "        delivered = services.requested_isolation() "
+            'if exc.container_started else "not_run"\n'
         ),
         after='        delivered = "not_run"\n',
         test=(
@@ -6039,15 +6036,10 @@ MUTATIONS = (
         name="strict-suite-process-group-proof-bypass",
         path="evoom_guard/verifiers/repo_suite.py",
         before=(
-            "                require_process_group_cleanup_proof=(\n"
-            "                    request.strict_harness\n"
-            "                ),\n"
+            "                require_process_group_cleanup_proof="
+            "(request.strict_harness),\n"
         ),
-        after=(
-            "                require_process_group_cleanup_proof=(\n"
-            "                    False\n"
-            "                ),\n"
-        ),
+        after="                require_process_group_cleanup_proof=False,\n",
         test=(
             "tests/test_strict_harness.py::"
             "test_repo_verifier_strict_harness_requires_group_proof_for_every_host_phase"
@@ -6093,13 +6085,27 @@ MUTATIONS = (
         name="repo-suite-docker-not-found-classification-bypass",
         path="evoom_guard/verifiers/repo_suite.py",
         before=(
+            '                "but the docker CLI was not found"\n'
+            "                if request.container_mode\n"
+            "                else f\"test command not found: {base_command[0]!r}\"\n"
+            "            ),\n"
+            "            artifact={\n"
+            '                "files_changed": list(request.files_changed),\n'
             "                \"outcome\": (\n"
             "                    \"isolation_unavailable\"\n"
             "                    if request.container_mode\n"
             "                    else \"test_command_unavailable\"\n"
             "                ),\n"
         ),
-        after="                \"outcome\": \"test_command_unavailable\",\n",
+        after=(
+            '                "but the docker CLI was not found"\n'
+            "                if request.container_mode\n"
+            "                else f\"test command not found: {base_command[0]!r}\"\n"
+            "            ),\n"
+            "            artifact={\n"
+            '                "files_changed": list(request.files_changed),\n'
+            '                "outcome": "test_command_unavailable",\n'
+        ),
         test=(
             "tests/test_repo_suite_characterization.py::"
             "test_frozen_repo_suite_behavior[docker_not_found]"
@@ -7114,9 +7120,13 @@ MUTATIONS = (
         path="evoom_guard/execution/process.py",
         before=(
             "            tree_cleanup_proven = True\n"
-            "            if not join_pipe_readers(\n"
+            "            if not join_pipe_readers("
+            "readers, streams, limits.reader_join_seconds):\n"
         ),
-        after="            if not join_pipe_readers(\n",
+        after=(
+            "            if not join_pipe_readers("
+            "readers, streams, limits.reader_join_seconds):\n"
+        ),
         test=(
             "tests/test_security_mutation_contract.py::"
             "test_post_poll_overflow_stops_before_normal_reader_join"
@@ -7171,13 +7181,15 @@ MUTATIONS = (
             "        if capture.exceeded:\n"
             '            stop_and_prove("subprocess output limit reached")\n'
             "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
-            "        if not join_pipe_readers(\n"
+            "        if not join_pipe_readers("
+            "readers, streams, limits.reader_join_seconds):\n"
         ),
         after=(
             "        if False and capture.exceeded:\n"
             '            stop_and_prove("subprocess output limit reached")\n'
             "            raise ProcessOutputLimitExceeded(limits.max_output_bytes)\n"
-            "        if not join_pipe_readers(\n"
+            "        if not join_pipe_readers("
+            "readers, streams, limits.reader_join_seconds):\n"
         ),
         test=(
             "tests/test_security_mutation_contract.py::"
@@ -7219,15 +7231,13 @@ MUTATIONS = (
         path="evoom_guard/execution/process.py",
         before=(
             "            if not _terminate_process_tree(process, limits):\n"
-            "                raise ProcessContainmentError(\n"
-            '                    f"{reason}; could not prove subprocess-tree cleanup"\n'
-            "                )\n"
+            "                raise ProcessContainmentError("
+            'f"{reason}; could not prove subprocess-tree cleanup")\n'
         ),
         after=(
             "            if False and not _terminate_process_tree(process, limits):\n"
-            "                raise ProcessContainmentError(\n"
-            '                    f"{reason}; could not prove subprocess-tree cleanup"\n'
-            "                )\n"
+            "                raise ProcessContainmentError("
+            'f"{reason}; could not prove subprocess-tree cleanup")\n'
         ),
         test=(
             "tests/test_security_mutation_contract.py::"
@@ -7257,8 +7267,11 @@ MUTATIONS = (
     Mutation(
         name="subprocess-windows-group-contract-bypass",
         path="evoom_guard/execution/process.py",
-        before='                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)\n',
-        after="                0\n",
+        before=(
+            '        return {"creationflags": '
+            'int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))}\n'
+        ),
+        after='        return {"creationflags": 0}\n',
         test=(
             "tests/test_security_mutation_contract.py::"
             "test_windows_process_group_contract"
@@ -8309,9 +8322,8 @@ MUTATIONS = (
         name="junit-report-set-format-binding-bypass",
         path="evoom_guard/verifiers/repo_suite.py",
         before=(
-            "            junit_digest_format = (\n"
-            "                services.junit_report_set_digest_format()\n"
-            "            )\n"
+            "            junit_digest_format = "
+            "services.junit_report_set_digest_format()\n"
         ),
         after="            junit_digest_format = None\n",
         test=(

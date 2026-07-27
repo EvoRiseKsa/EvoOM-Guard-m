@@ -17,7 +17,7 @@ import pytest
 
 from evoom_guard.isolation.docker import DockerContainerCleanupResult
 from tools.conformance import isolation_kit
-from tools.conformance.secure_io import read_stable_regular_file
+from tools.conformance.secure_io import ConformanceIOError, read_stable_regular_file
 
 _IMAGE_ID = "sha256:" + ("a" * 64)
 
@@ -619,7 +619,9 @@ def test_live_docker_profiles_emit_schema_valid_truthful_evidence(
 def test_semantic_verifier_rejects_empty_profiles_status_and_source_forgery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(isolation_kit, "collect_docker_metadata", lambda _timeout: _unavailable_docker())
+    monkeypatch.setattr(
+        isolation_kit, "collect_docker_metadata", lambda _timeout: _unavailable_docker()
+    )
     result = isolation_kit.run_conformance(pull=False)
     isolation_kit.verify_result(result)
 
@@ -829,8 +831,12 @@ def test_isolation_writer_and_loader_reject_existing_symlink(tmp_path: Path) -> 
         link.symlink_to(target)
     except OSError:
         pytest.skip("symlink creation is unavailable")
-    with pytest.raises(OSError):
+    with pytest.raises(
+        isolation_kit.ResultVerificationError,
+        match="isolation result must not be a link or reparse point",
+    ) as caught:
         isolation_kit.load_result(link)
+    assert isinstance(caught.value.__cause__, ConformanceIOError)
     with pytest.raises(FileExistsError):
         isolation_kit.write_result(result, link)
     assert target.read_text(encoding="utf-8") == "{}"

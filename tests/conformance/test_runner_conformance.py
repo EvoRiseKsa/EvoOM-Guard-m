@@ -25,6 +25,7 @@ from tools.conformance.runner_kit import (
     verify_result,
     write_result_create_only,
 )
+from tools.conformance.secure_io import ConformanceIOError
 
 CONFORMANCE_DIR = DEFAULT_MANIFEST.parent
 MANIFEST_SCHEMA = CONFORMANCE_DIR / "runner-manifest.schema.json"
@@ -230,8 +231,12 @@ def test_result_loader_and_writer_reject_symlinks(tmp_path: Path) -> None:
     except OSError:
         pytest.skip("symlink creation is unavailable")
 
-    with pytest.raises(OSError):
+    with pytest.raises(
+        ResultVerificationError,
+        match="runner result must not be a link or reparse point",
+    ) as caught:
         load_result(link)
+    assert isinstance(caught.value.__cause__, ConformanceIOError)
     with pytest.raises(FileExistsError):
         write_result_create_only(run_conformance(), link)
     assert target.read_text(encoding="utf-8") == "{}"

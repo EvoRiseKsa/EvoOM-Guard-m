@@ -4,25 +4,31 @@
       "sha256": "a0a2f821ef0af57bc6185547439c23747c6a0c4984bfc3d9330515f11cb5d6ad"
     },
     "docker_containment_unstarted": {
-      "sha256": "5d8442c30ecc44f20329c41f6e800f325b761b158c31b1da5d5e737995a2eccd"
+      "sha256": "3d342a67ec304381b4b06ecddd8898b1a223cebbc8f61e08f397c9f6b73ad62c"
+    },
+    "docker_exec_error_before_isolation_start": {
+      "sha256": "181f043d1d66137a50e21937602a24f4629fce94acdc985c67b8e0d79c8d4a19"
     },
     "docker_exit_125": {
       "sha256": "a376b43c7b6640669e5b6359facec3eb2a68be14a53c439c4d06bb1c7e972da5"
     },
     "docker_not_found": {
-      "sha256": "83b02d48339a581baaddd4415077f4496e8d152f0ef7502226a82d23fee63650"
+      "sha256": "07c04b41766c436cf2a3cb2a34df8fef665c667d2b02ef2d0596fbc0a69d3d4d"
     },
     "docker_output_limit_started": {
       "sha256": "9546db71d6cd932fc91a718e7cebd8bc1f19dc6f945051567e0b51d1549d0486"
     },
     "docker_output_limit_unstarted": {
-      "sha256": "457a9629d490567f26c0a6df0cf8bf833cc3de8b8e27363b23097ce00fa63241"
+      "sha256": "74abb2d672c68f3f250b6630aef219103f9a3509e01ecc6f374d1d2ef11430b0"
+    },
+    "docker_pre_snapshot_error": {
+      "sha256": "4f43524bca1793e0099c1f8d6e9040783a51e62c4aed9e3a114479f235901f88"
     },
     "docker_timeout_started": {
       "sha256": "ecc2af7c1bc73e469cc12afbb97534a5d2fb8d7e60f698211b6da27f772eaf3c"
     },
     "docker_timeout_unstarted": {
-      "sha256": "1bd52a3e4e3de97faa4e37e831cbf8b57dd3940c87abd750a8f0b9f32622605b"
+      "sha256": "ad745e31439b55a7d39809f76df05c120a89cd830b5fa82efbf3fa50146a3a55"
     },
     "fidelity_change": {
       "sha256": "780fc275ca81dbca00aa871619bb71527ab68915e4d2bcfbacfa75477e66ddb5"
@@ -30,11 +36,17 @@
     "host_containment": {
       "sha256": "679e2dd7157037736e57a80d5d835955ea44ec29180871416bba78f8a76e92b1"
     },
+    "host_exec_error_before_target_start": {
+      "sha256": "e4dbd36bb4dedc0f6385b5d2205073cbd11d972157d98b9970d2b9e7e72191f5"
+    },
+    "host_launcher_failure_before_target_start": {
+      "sha256": "254b19562782db6552653722b57b1ce726868b3bc1cbb213278463814d9a62cc"
+    },
     "host_nonzero": {
       "sha256": "a8c32af558a4c11f3b6a87313433a72a400876c64ea4fd5a543acb2acfd4c3df"
     },
     "host_not_found": {
-      "sha256": "92db1ec7c577bef4ea4868b4622309f01acd7ab199a1de416bcbb1f1c77f47d5"
+      "sha256": "7a4ddb1c181f7dfa102f66337ce1cb36cdf716f60e24c767b7d7214e48faa996"
     },
     "host_output_limit": {
       "sha256": "90939584ff75970d578b6cecca1ba8e3fd4b6e08dfa92a90cb5bbae521b95502"

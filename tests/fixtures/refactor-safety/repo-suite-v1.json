@@ -4,7 +4,10 @@
       "sha256": "bee44b0f3641e8a80865d13950b91998b5d81ddff931e1681605863dda920051"
     },
     "docker_containment_unstarted": {
-      "sha256": "bf9d6b904d996b1a127ba9f32c66844aeb2223c1837ff8b9c0b8841d836c914f"
+      "sha256": "c491768403fec647f9dbffcfbb86724a845ebc3c4064ed16ce3171232e690e2b"
+    },
+    "docker_exec_error_before_isolation_start": {
+      "sha256": "9d2609b82d46830bea7ae48cb92af99d31777306b4fa3b875c83bba53e4629a2"
     },
     "docker_exit_125": {
       "sha256": "17def272da0363ecbd33b814ce41b76fc59a4f9b4f8b0e1987d5a419e8ef4390"
@@ -19,13 +22,13 @@
       "sha256": "a446ac5b4bfbf08fa75bb7b628667312f8370be6187c6066b7f5fd3132f05ccf"
     },
     "docker_output_limit_unstarted": {
-      "sha256": "681006cd49688d6f4b6c89ae01841c678a5f3308c9dd7c13e113dda1dab1bb08"
+      "sha256": "a96a754fe5cb6152aa1b166edd6bd14dd3b162549371f1211bdcc38b810f0c73"
     },
     "docker_timeout_started": {
       "sha256": "37a16a9fe744c7332d3e79df945361a633e7dd48b334cd9be6353a80cc9fe5a7"
     },
     "docker_timeout_unstarted": {
-      "sha256": "c5e424500b7546fd7b2bb8efe4c7a17f57dcc7246066e73c0ea797c34d9feec0"
+      "sha256": "653cbdf03a9f67a8b3db18540ff8d5d0d95b218f6dc2e69fc08772302da2c756"
     },
     "gvisor_junit_file_pass": {
       "sha256": "1dba411c7c3b82887feded3c0142ef24ac0bdbec07c3afa2a1236b17e037feff"
@@ -33,11 +36,17 @@
     "host_containment": {
       "sha256": "44fd7d54724b1bd439ad2298f2e1fb5d26eb6182858137d09d36957ed7ca8604"
     },
+    "host_exec_error_before_target_start": {
+      "sha256": "9410c2eed109433f8b0fa6402f3faed93de86c8a1bf98925f8c2274e1333db8c"
+    },
     "host_junit_directory_pass": {
       "sha256": "511c4e9c6d86ad5152e44a94023cc62230bbfea5ce9326c1127a56649c311aa4"
     },
     "host_junit_file_pass": {
       "sha256": "2d0920a63e599efb27a492aeed705a0102ab652e3f0441b466ae8af2cac37770"
+    },
+    "host_launcher_failure_before_target_start": {
+      "sha256": "1f81b01f017fb8b07e9820c22f68e4c70dee2220bd89eb3060d3dc6a7db23a47"
     },
     "host_not_found": {
       "sha256": "2f745f2c036b1d8795e2c49a9ad9f913025bac4429703591eb4f97ac6e8066ca"

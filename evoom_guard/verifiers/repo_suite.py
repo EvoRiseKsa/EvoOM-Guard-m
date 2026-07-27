@@ -263,23 +263,19 @@ def execute_repo_suite(
     started_at = services.perf_counter()
     try:
         if request.container_mode:
-            report_path, process, report_expected = (
-                services.run_docker_suite()(
-                    base_command,
-                    request.candidate_copy,
-                    request.workdir,
-                )
+            report_path, process, report_expected = services.run_docker_suite()(
+                base_command,
+                request.candidate_copy,
+                request.workdir,
             )
         else:
             report_path = os.path.join(
                 request.workdir,
                 "judge-result.xml",
             )
-            command, report_expected, report_env = (
-                services.instrument_command()(
-                    base_command,
-                    report_path,
-                )
+            command, report_expected, report_env = services.instrument_command()(
+                base_command,
+                report_path,
             )
             run_environment = {
                 **request.environment,
@@ -295,31 +291,18 @@ def execute_repo_suite(
                 cwd=request.candidate_copy,
                 env=run_environment,
                 timeout=services.timeout(),
-                preexec_fn=(
-                    services.limits()
-                    if os.name == "posix"
-                    else None
-                ),
-                require_process_group_cleanup_proof=(
-                    request.strict_harness
-                ),
+                preexec_fn=(services.limits() if os.name == "posix" else None),
+                require_process_group_cleanup_proof=(request.strict_harness),
             )
     except DockerRunTimeout as exc:
-        delivered = (
-            services.requested_isolation()
-            if exc.container_started
-            else "not_run"
-        )
+        delivered = services.requested_isolation() if exc.container_started else "not_run"
         isolation_evidence = services.phase_isolation_evidence()(
             delivered,
             request.resolved_image,
             note=(
                 None
                 if exc.container_started
-                else (
-                    "docker client timed out before container start "
-                    "was proven"
-                )
+                else ("docker client timed out before container start was proven")
             ),
         )
         trace.repo_suite_isolation_evidence = isolation_evidence
@@ -330,124 +313,134 @@ def execute_repo_suite(
         return _terminal(
             diagnostics=(
                 f"test suite timed out after {services.timeout()}s"
+                if exc.container_started
+                else (
+                    f"{services.requested_isolation()} isolation did not start: "
+                    f"docker client timed out after {services.timeout()}s"
+                )
             ),
             artifact={
                 "elapsed": services.timeout(),
                 "files_changed": list(request.files_changed),
-                "outcome": "test_timeout",
-                "isolation_evidence": services.isolation_payload()(
-                    isolation_evidence
-                ),
+                "outcome": ("test_timeout" if exc.container_started else "isolation_unavailable"),
+                "isolation_evidence": services.isolation_payload()(isolation_evidence),
                 **services.runtime_evidence(),
             },
         )
     except ProcessOutputLimitExceeded as exc:
         docker_failure = isinstance(exc, DockerRunOutputLimit)
-        container_started = bool(
-            getattr(exc, "container_started", True)
+        execution_started = bool(
+            getattr(
+                exc,
+                "container_started" if docker_failure else "target_started",
+                True,
+            )
         )
         delivered = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else (
-                "not_run"
-                if docker_failure
-                else "subprocess"
-            )
+            if docker_failure and execution_started
+            else ("not_run" if not execution_started else "subprocess")
         )
-        if container_started:
+        if execution_started:
             trace.execution_state = "started_incomplete"
             trace.test_command_started = True
             trace.delivered_isolation = delivered
-        trace.repo_suite_isolation_evidence = (
-            services.phase_isolation_evidence()(
-                delivered,
-                request.resolved_image,
-                note=(
-                    None
-                    if container_started
-                    else (
-                        "docker client output limit was reached before "
-                        "container start was proven"
-                    )
-                ),
-            )
+        trace.repo_suite_isolation_evidence = services.phase_isolation_evidence()(
+            delivered,
+            request.resolved_image,
+            note=(
+                None
+                if execution_started
+                else (
+                    "docker client output limit was reached before container start was proven"
+                    if docker_failure
+                    else "output limit was reached before target start was proven"
+                )
+            ),
         )
         return _terminal(
             diagnostics=f"test suite output was rejected: {exc}",
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "test_output_limit",
+                "outcome": ("test_output_limit" if execution_started else "isolation_unavailable"),
                 "setup_isolation": request.setup_isolation,
                 **services.runtime_evidence(),
             },
         )
     except ProcessContainmentError as exc:
         docker_failure = isinstance(exc, DockerRunContainmentError)
-        container_started = bool(
-            getattr(exc, "container_started", True)
+        execution_started = bool(
+            getattr(
+                exc,
+                "container_started" if docker_failure else "target_started",
+                True,
+            )
         )
         delivered = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else (
-                "not_run"
-                if docker_failure
-                else "subprocess"
-            )
+            if docker_failure and execution_started
+            else ("not_run" if not execution_started else "subprocess")
         )
-        if container_started:
+        if execution_started:
             trace.execution_state = "started_incomplete"
             trace.test_command_started = True
             trace.delivered_isolation = delivered
-        trace.repo_suite_isolation_evidence = (
-            services.phase_isolation_evidence()(
-                delivered,
-                request.resolved_image,
-                note=(
-                    "docker container cleanup was not proven"
-                    if docker_failure
-                    else "subprocess cleanup was not proven"
-                ),
-            )
+        trace.repo_suite_isolation_evidence = services.phase_isolation_evidence()(
+            delivered,
+            request.resolved_image,
+            note=(
+                "docker container cleanup was not proven"
+                if docker_failure
+                else (
+                    "subprocess cleanup was not proven"
+                    if execution_started
+                    else "target process did not start"
+                )
+            ),
         )
         return _terminal(
             diagnostics=f"test suite containment failed: {exc}",
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "runtime_containment_error",
+                "outcome": (
+                    "runtime_containment_error" if execution_started else "isolation_unavailable"
+                ),
                 "setup_isolation": request.setup_isolation,
                 **services.runtime_evidence(),
             },
         )
-    except subprocess.TimeoutExpired:
-        trace.execution_state = "started_incomplete"
-        trace.test_command_started = True
-        trace.delivered_isolation = "subprocess"
-        trace.repo_suite_isolation_evidence = (
-            services.phase_isolation_evidence()(
-                "subprocess",
-                request.resolved_image,
-            )
+    except subprocess.TimeoutExpired as exc:
+        target_started = getattr(exc, "target_started", True) is not False
+        if target_started:
+            trace.execution_state = "started_incomplete"
+            trace.test_command_started = True
+            trace.delivered_isolation = "subprocess"
+        trace.repo_suite_isolation_evidence = services.phase_isolation_evidence()(
+            "subprocess" if target_started else "not_run",
+            request.resolved_image,
+            note=(
+                None if target_started else "target exec was not reached before launcher timeout"
+            ),
         )
         return _terminal(
             diagnostics=(
-                f"test suite timed out after {services.timeout()}s"
+                (
+                    "test suite timed out"
+                    if target_started
+                    else "test suite target did not start before timeout"
+                )
+                + f" after {services.timeout()}s"
             ),
             artifact={
                 "elapsed": services.timeout(),
                 "files_changed": list(request.files_changed),
-                "outcome": "test_timeout",
+                "outcome": ("test_timeout" if target_started else "isolation_unavailable"),
                 **services.runtime_evidence(),
             },
         )
     except FileNotFoundError:
         unavailable_evidence = services.phase_isolation_evidence()(
-            (
-                "unavailable"
-                if request.container_mode
-                else "not_run"
-            ),
+            ("unavailable" if request.container_mode else "not_run"),
             request.resolved_image,
         )
         trace.repo_suite_isolation_evidence = unavailable_evidence
@@ -467,9 +460,45 @@ def execute_repo_suite(
                 ),
                 "setup_isolation": request.setup_isolation,
                 "isolation_evidence": (
-                    services.isolation_payload()(
-                        unavailable_evidence
-                    )
+                    services.isolation_payload()(unavailable_evidence)
+                    if request.container_mode
+                    else None
+                ),
+                **services.runtime_evidence(),
+            },
+        )
+    except OSError as exc:
+        if getattr(exc, "target_exec_failed", None) is not True:
+            raise
+        unavailable_evidence = services.phase_isolation_evidence()(
+            "unavailable" if request.container_mode else "not_run",
+            request.resolved_image,
+            note=(
+                "docker client exec failed before isolation start"
+                if request.container_mode
+                else "test command exec failed before target start"
+            ),
+        )
+        trace.repo_suite_isolation_evidence = unavailable_evidence
+        return _terminal(
+            diagnostics=(
+                (
+                    f"{services.requested_isolation()} isolation could not start"
+                    if request.container_mode
+                    else f"test command could not start: {base_command[0]!r}"
+                )
+                + f": {type(exc).__name__}: {exc}"
+            ),
+            artifact={
+                "files_changed": list(request.files_changed),
+                "outcome": (
+                    "isolation_unavailable"
+                    if request.container_mode
+                    else "test_command_unavailable"
+                ),
+                "setup_isolation": request.setup_isolation,
+                "isolation_evidence": (
+                    services.isolation_payload()(unavailable_evidence)
                     if request.container_mode
                     else None
                 ),
@@ -478,6 +507,26 @@ def execute_repo_suite(
         )
 
     elapsed = services.perf_counter() - started_at
+    if getattr(process, "target_started", True) is False:
+        not_started_evidence = services.phase_isolation_evidence()(
+            "not_run",
+            request.resolved_image,
+            note="trusted resource-limit launcher failed before target exec",
+        )
+        trace.repo_suite_isolation_evidence = not_started_evidence
+        return _terminal(
+            diagnostics=(
+                "test suite target did not start: "
+                + services.distill_diagnostics()(process.stdout + "\n" + process.stderr)
+            ),
+            artifact={
+                "elapsed": elapsed,
+                "files_changed": list(request.files_changed),
+                "outcome": "isolation_unavailable",
+                "setup_isolation": request.setup_isolation,
+                **services.runtime_evidence(),
+            },
+        )
     if request.container_mode and process.returncode == 125:
         unavailable_evidence = services.phase_isolation_evidence()(
             "unavailable",
@@ -488,43 +537,29 @@ def execute_repo_suite(
             diagnostics=(
                 f"the {services.requested_isolation()} suite container "
                 "could not be started (docker exit 125): "
-                + services.distill_diagnostics()(
-                    process.stdout + "\n" + process.stderr
-                )
+                + services.distill_diagnostics()(process.stdout + "\n" + process.stderr)
             ),
             artifact={
                 "files_changed": list(request.files_changed),
                 "outcome": "isolation_unavailable",
                 "setup_isolation": request.setup_isolation,
-                "isolation_evidence": services.isolation_payload()(
-                    unavailable_evidence
-                ),
+                "isolation_evidence": services.isolation_payload()(unavailable_evidence),
                 **services.runtime_evidence(),
             },
         )
 
     isolation_evidence = services.phase_isolation_evidence()(
-        (
-            services.requested_isolation()
-            if request.container_mode
-            else "subprocess"
-        ),
+        (services.requested_isolation() if request.container_mode else "subprocess"),
         request.resolved_image,
     )
     trace.repo_suite_isolation_evidence = isolation_evidence
     if request.container_mode:
         trace.primary_isolation_evidence = isolation_evidence
-    trace.execution_state = (
-        "started_incomplete"
-        if request.pack_configured
-        else "completed"
-    )
+    trace.execution_state = "started_incomplete" if request.pack_configured else "completed"
     trace.test_command_started = True
     trace.test_command_completed = True
     trace.delivered_isolation = (
-        services.requested_isolation()
-        if request.container_mode
-        else "subprocess"
+        services.requested_isolation() if request.container_mode else "subprocess"
     )
     return RepoSuiteExecutionOutcome(
         completed=RepoSuiteCompleted(
@@ -553,20 +588,12 @@ def interpret_repo_suite(
         if junit is not None and junit_text
         else None
     )
-    junit_digest_format = (
-        services.junit_xml_digest_format()
-        if junit_sha256 is not None
-        else None
-    )
+    junit_digest_format = services.junit_xml_digest_format() if junit_sha256 is not None else None
     if junit is None:
-        report_set = services.parse_directory()(
-            completed.report_path + ".d"
-        )
+        report_set = services.parse_directory()(completed.report_path + ".d")
         if report_set is not None:
             junit, junit_sha256 = report_set
-            junit_digest_format = (
-                services.junit_report_set_digest_format()
-            )
+            junit_digest_format = services.junit_report_set_digest_format()
     return services.evaluate_phase()(
         CompletedRunEvidence(
             returncode=completed.returncode,

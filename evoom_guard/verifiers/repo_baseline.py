@@ -339,6 +339,8 @@ def run_repo_baseline(
                 HarnessInputIntegrityError,
             ):
                 return _empty_evidence(setup_fidelity="unverified")
+            if getattr(setup_process, "target_started", True) is False:
+                return _empty_evidence(setup_fidelity="unverified")
             if setup_process.returncode != 0:
                 return _empty_evidence(setup_fidelity="setup_failed")
             setup_changes = services.setup_fidelity_changes(
@@ -404,6 +406,8 @@ def run_repo_baseline(
             services.output_limit_error_provider(),
             services.timeout_error_provider(),
         ):
+            return _empty_evidence()
+        if getattr(process, "target_started", True) is False:
             return _empty_evidence()
         try:
             harness_after_suite = capture_harness_input_snapshot(

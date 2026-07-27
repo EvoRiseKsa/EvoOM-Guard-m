@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import errno
 import math
 import os
 import subprocess
@@ -82,6 +83,7 @@ def test_posix_rlimit_launcher_does_not_depend_on_module_file_path(
     command = process_module._posix_rlimit_launcher_command(
         ["candidate", "--flag"],
         PosixRLimitSpec(cpu_seconds=8, address_space_bytes=1024),
+        17,
     )
 
     assert command[:4] == [sys.executable, "-I", "-S", "-c"]
@@ -91,10 +93,31 @@ def test_posix_rlimit_launcher_does_not_depend_on_module_file_path(
         "--_evoguard-posix-rlimit-launcher",
         "8",
         "1024",
+        "17",
         "--",
         "candidate",
         "--flag",
     ]
+
+
+def test_posix_exec_status_pipe_moves_descriptors_out_of_stdio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    duplicated = iter((2, 3, 4))
+    closed: list[int] = []
+    inheritability: list[tuple[int, bool]] = []
+    monkeypatch.setattr(process_module.os, "pipe", lambda: (0, 1))
+    monkeypatch.setattr(process_module.os, "dup", lambda descriptor: next(duplicated))
+    monkeypatch.setattr(process_module.os, "close", closed.append)
+    monkeypatch.setattr(
+        process_module.os,
+        "set_inheritable",
+        lambda descriptor, inheritable: inheritability.append((descriptor, inheritable)),
+    )
+
+    assert process_module._open_posix_exec_status_pipe() == (3, 4)
+    assert closed == [0, 2, 1]
+    assert inheritability == [(3, False), (4, False)]
 
 
 @pytest.mark.parametrize("invalid", [0, 1, None, "true", object()])
@@ -115,14 +138,10 @@ def test_typed_request_rejects_non_boolean_cleanup_requirement(
 
 
 def test_process_group_cleanup_proof_requirement_defaults_off() -> None:
-    request = BoundedProcessRequest.from_command(
-        ["trusted-tool"], cwd=None, env=None, timeout=1
-    )
+    request = BoundedProcessRequest.from_command(["trusted-tool"], cwd=None, env=None, timeout=1)
 
     assert request.require_process_group_cleanup_proof is False
-    assert issubclass(
-        ProcessGroupCleanupUnavailable, ProcessContainmentError
-    )
+    assert issubclass(ProcessGroupCleanupUnavailable, ProcessContainmentError)
 
 
 @pytest.mark.parametrize(
@@ -256,6 +275,7 @@ def test_required_process_group_cleanup_proof_runs_on_posix(tmp_path: Path) -> N
     )
 
     assert completed.returncode == 0
+    assert completed.target_started is True
     assert ready.exists()
     time.sleep(0.9)
     assert not survived.exists()
@@ -381,10 +401,7 @@ def test_public_runner_applies_posix_address_space_spec(tmp_path: Path) -> None:
     memory_limit = 1024 * 1024 * 1024
 
     completed = run_bounded_subprocess(
-        _command(
-            "import resource; "
-            "print(resource.getrlimit(resource.RLIMIT_AS)[0])"
-        ),
+        _command("import resource; print(resource.getrlimit(resource.RLIMIT_AS)[0])"),
         cwd=str(tmp_path),
         env=os.environ.copy(),
         timeout=5,
@@ -408,19 +425,319 @@ def test_posix_rlimit_launcher_timeout_remains_fail_closed(tmp_path: Path) -> No
 
 
 @pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
-def test_posix_rlimit_launcher_exec_error_is_a_bounded_failure(
+def test_posix_rlimit_exec_handshake_timeout_remains_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = tmp_path / "candidate-ran"
+    monkeypatch.setattr(
+        process_module,
+        "_POSIX_RLIMIT_LAUNCHER_SOURCE",
+        "import time; time.sleep(60)",
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        run_bounded_subprocess(
+            _command("from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ran')")
+            + [str(marker)],
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=0.1,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_posix_rlimit_status_reports_missing_command_before_target_start(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(FileNotFoundError) as caught:
+        run_bounded_subprocess(
+            ["evoguard-command-that-does-not-exist"],
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert caught.value.errno == errno.ENOENT
+    assert caught.value.filename == "evoguard-command-that-does-not-exist"
+    assert caught.value.target_exec_failed is True  # type: ignore[attr-defined]
+    assert caught.value.target_started is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_posix_rlimit_status_preserves_missing_shebang_interpreter(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "candidate-ran"
+    candidate = tmp_path / "candidate"
+    candidate.write_text(
+        f"#!/definitely/missing/evoguard-interpreter\ntouch {marker}\n",
+        encoding="utf-8",
+    )
+    candidate.chmod(0o700)
+
+    with pytest.raises(FileNotFoundError) as caught:
+        run_bounded_subprocess(
+            [str(candidate)],
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert caught.value.errno == errno.ENOENT
+    assert caught.value.filename == str(candidate)
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_posix_rlimit_status_preserves_exec_format_error(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate"
+    candidate.write_bytes(b"not an executable image\n")
+    candidate.chmod(0o700)
+
+    with pytest.raises(OSError) as caught:
+        run_bounded_subprocess(
+            [str(candidate)],
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert caught.value.errno == errno.ENOEXEC
+    assert caught.value.filename == str(candidate)
+    assert caught.value.target_exec_failed is True  # type: ignore[attr-defined]
+    assert caught.value.target_started is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_posix_rlimit_status_preserves_permission_error(tmp_path: Path) -> None:
+    candidate = tmp_path / "candidate"
+    candidate.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    candidate.chmod(0o600)
+
+    with pytest.raises(PermissionError) as caught:
+        run_bounded_subprocess(
+            [str(candidate)],
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert caught.value.errno == errno.EACCES
+    assert caught.value.filename == str(candidate)
+    assert caught.value.target_exec_failed is True  # type: ignore[attr-defined]
+    assert caught.value.target_started is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_posix_rlimit_status_uses_child_cwd_for_relative_path_entries(
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "bin" / "candidate"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+
+    completed = run_bounded_subprocess(
+        ["candidate"],
+        cwd=str(tmp_path),
+        env={"PATH": "bin"},
+        timeout=5,
+        preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+    )
+
+    assert completed.returncode == 0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_posix_rlimit_status_is_not_spoofed_by_candidate_stderr(
     tmp_path: Path,
 ) -> None:
     completed = run_bounded_subprocess(
-        ["evoguard-command-that-does-not-exist"],
+        _command("import sys; sys.stderr.write('exec:2\\n')"),
         cwd=str(tmp_path),
         env=os.environ.copy(),
         timeout=5,
         preexec_fn=PosixRLimitSpec(cpu_seconds=5),
     )
 
-    assert completed.returncode == 125
-    assert "POSIX rlimit launcher failed" in completed.stderr
+    assert completed.returncode == 0
+    assert completed.stderr == "exec:2\n"
+    assert completed.target_started is True
+
+
+@pytest.mark.skipif(os.name != "posix", reason="status pipes are POSIX-only")
+def test_posix_exec_status_rejects_a_malformed_trusted_record() -> None:
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, b"candidate-controlled:2\n")
+    finally:
+        os.close(write_fd)
+    try:
+        with pytest.raises(ProcessContainmentError, match="status was malformed"):
+            process_module._read_posix_exec_status(
+                read_fd,
+                deadline=time.monotonic() + 1,
+            )
+    finally:
+        os.close(read_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="status pipes are POSIX-only")
+def test_posix_exec_status_rejects_eof_without_a_launch_record() -> None:
+    read_fd, write_fd = os.pipe()
+    os.close(write_fd)
+    try:
+        with pytest.raises(
+            ProcessContainmentError,
+            match="closed without a launch record",
+        ):
+            process_module._read_posix_exec_status(
+                read_fd,
+                deadline=time.monotonic() + 1,
+            )
+    finally:
+        os.close(read_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_abrupt_launcher_exit_before_exec_attempt_is_not_target_start(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        process_module,
+        "_POSIX_RLIMIT_LAUNCHER_SOURCE",
+        "import os; os._exit(73)\n",
+    )
+
+    with pytest.raises(
+        ProcessContainmentError,
+        match="closed without a launch record",
+    ) as caught:
+        run_bounded_subprocess(
+            _command("raise AssertionError('target must not run')"),
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert caught.value.target_started is False  # type: ignore[attr-defined]
+    assert not hasattr(caught.value, "target_exec_failed")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_status_pipe_creation_error_is_launcher_infrastructure_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pipe_error = OSError(errno.EMFILE, "controlled descriptor exhaustion")
+    monkeypatch.setattr(
+        process_module,
+        "_open_posix_exec_status_pipe",
+        lambda: (_ for _ in ()).throw(pipe_error),
+    )
+
+    with pytest.raises(
+        ProcessContainmentError,
+        match="could not create the POSIX launcher status channel",
+    ) as caught:
+        run_bounded_subprocess(
+            _command("raise AssertionError('target must not run')"),
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert caught.value.__cause__ is pipe_error
+    assert caught.value.target_started is False  # type: ignore[attr-defined]
+    assert not hasattr(caught.value, "target_exec_failed")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="status pipes are POSIX-only")
+def test_posix_exec_status_wraps_selector_range_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RangeLimitedSelector:
+        def register(self, descriptor: int, events: int) -> None:
+            del descriptor, events
+
+        def select(self, timeout: float) -> list[object]:
+            del timeout
+            raise ValueError("filedescriptor out of range in select()")
+
+        def close(self) -> None:
+            return None
+
+    read_fd, write_fd = os.pipe()
+    monkeypatch.setattr(
+        process_module.selectors,
+        "DefaultSelector",
+        RangeLimitedSelector,
+    )
+    try:
+        with pytest.raises(
+            ProcessContainmentError,
+            match="could not read the POSIX launcher status channel",
+        ):
+            process_module._read_posix_exec_status(
+                read_fd,
+                deadline=time.monotonic() + 1,
+            )
+    finally:
+        os.close(write_fd)
+        os.close(read_fd)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="status pipes are POSIX-only")
+def test_posix_exec_status_pipe_closes_if_wrapper_construction_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened: tuple[int, int] | None = None
+    original_open = process_module._open_posix_exec_status_pipe
+
+    def tracked_open() -> tuple[int, int]:
+        nonlocal opened
+        opened = original_open()
+        return opened
+
+    def failed_wrapper(*args: object, **kwargs: object) -> list[str]:
+        del args, kwargs
+        raise RuntimeError("controlled wrapper construction failure")
+
+    monkeypatch.setattr(
+        process_module,
+        "_open_posix_exec_status_pipe",
+        tracked_open,
+    )
+    monkeypatch.setattr(
+        process_module,
+        "_posix_rlimit_launcher_command",
+        failed_wrapper,
+    )
+    with pytest.raises(RuntimeError, match="wrapper construction failure"):
+        run_bounded_subprocess(
+            _command("raise AssertionError('must not run')"),
+            cwd=str(tmp_path),
+            env=os.environ.copy(),
+            timeout=5,
+            preexec_fn=PosixRLimitSpec(cpu_seconds=5),
+        )
+
+    assert opened is not None
+    for descriptor in opened:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
@@ -429,10 +746,7 @@ def test_unrepresentable_address_space_limit_never_runs_candidate(
 ) -> None:
     marker = tmp_path / "candidate-ran"
     completed = run_bounded_subprocess(
-        _command(
-            "from pathlib import Path; import sys; "
-            "Path(sys.argv[1]).write_text('ran')"
-        )
+        _command("from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ran')")
         + [str(marker)],
         cwd=str(tmp_path),
         env=os.environ.copy(),
@@ -442,6 +756,7 @@ def test_unrepresentable_address_space_limit_never_runs_candidate(
 
     assert completed.returncode == 125
     assert "POSIX rlimit launcher failed" in completed.stderr
+    assert completed.target_started is False
     assert not marker.exists()
 
 
@@ -468,8 +783,7 @@ def test_execution_consumers_do_not_import_process_primitives_from_verifier() ->
         execution_imports = {
             alias.name
             for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and node.module == "evoom_guard.execution"
+            if isinstance(node, ast.ImportFrom) and node.module == "evoom_guard.execution"
             for alias in node.names
         }
         assert not (repo_imports & extracted)

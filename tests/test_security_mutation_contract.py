@@ -297,6 +297,8 @@ def test_posix_rlimit_data_uses_exec_launcher_without_preexec_callback(
 ) -> None:
     observed_kwargs: dict[str, Any] = {}
     observed_commands: list[list[str]] = []
+    observed_status_reads: list[int] = []
+    closed_descriptors: list[int] = []
     process = _FakeProcess(poll_result=0)
     _install_fake_launcher(
         monkeypatch,
@@ -308,7 +310,11 @@ def test_posix_rlimit_data_uses_exec_launcher_without_preexec_callback(
     monkeypatch.setattr(
         process_module,
         "os",
-        SimpleNamespace(name="posix", killpg=lambda *_args: None),
+        SimpleNamespace(
+            name="posix",
+            killpg=lambda *_args: None,
+            close=closed_descriptors.append,
+        ),
     )
     monkeypatch.setattr(
         process_module,
@@ -317,11 +323,27 @@ def test_posix_rlimit_data_uses_exec_launcher_without_preexec_callback(
     )
     monkeypatch.setattr(
         process_module,
+        "_open_posix_exec_status_pipe",
+        lambda: (17, 18),
+    )
+
+    def read_exec_status(descriptor: int, *, deadline: float) -> None:
+        del deadline
+        observed_status_reads.append(descriptor)
+
+    monkeypatch.setattr(
+        process_module,
+        "_read_posix_exec_status",
+        read_exec_status,
+    )
+    monkeypatch.setattr(
+        process_module,
         "_posix_rlimit_launcher_command",
-        lambda command, limits: [
+        lambda command, limits, exec_status_fd: [
             "safe-exec-launcher",
             str(limits.cpu_seconds),
             str(limits.address_space_bytes),
+            str(exec_status_fd),
             "--",
             *command,
         ],
@@ -346,11 +368,15 @@ def test_posix_rlimit_data_uses_exec_launcher_without_preexec_callback(
             "safe-exec-launcher",
             "8",
             str(64 * 1024 * 1024),
+            "18",
             "--",
             "candidate",
             "--flag",
         ]
     ]
+    assert observed_kwargs["pass_fds"] == (18,)
+    assert observed_status_reads == [17]
+    assert closed_descriptors == [18, 17]
     assert "preexec_fn" not in observed_kwargs
 
 

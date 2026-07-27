@@ -83,6 +83,100 @@ def test_setup_operation_order_is_frozen(tmp_path: Path) -> None:
     ]
 
 
+def test_trusted_launcher_failure_keeps_setup_not_started(
+    tmp_path: Path,
+) -> None:
+    case = capture_case(
+        "host_launcher_failure_before_target_start",
+        tmp_path,
+    )
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "setup"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["setup_isolation_evidence"]["delivered"] == "not_run"
+    assert artifact["outcome"] == "isolation_unavailable"
+
+
+def test_exec_error_before_target_start_keeps_setup_not_started(
+    tmp_path: Path,
+) -> None:
+    case = capture_case(
+        "host_exec_error_before_target_start",
+        tmp_path,
+    )
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "setup"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["setup_isolation_evidence"]["delivered"] == "not_run"
+    assert artifact["outcome"] == "setup_failed"
+
+
+def test_docker_not_found_reports_setup_isolation_unavailable(
+    tmp_path: Path,
+) -> None:
+    artifact = capture_case("docker_not_found", tmp_path)["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "setup"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["setup_isolation"] == "unavailable"
+    assert artifact["setup_isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["outcome"] == "isolation_unavailable"
+
+
+def test_docker_exec_error_before_isolation_start_reports_unavailable(
+    tmp_path: Path,
+) -> None:
+    artifact = capture_case(
+        "docker_exec_error_before_isolation_start",
+        tmp_path,
+    )["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "setup"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["setup_isolation"] == "unavailable"
+    assert artifact["setup_isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["outcome"] == "isolation_unavailable"
+
+
+def test_container_pre_snapshot_failure_does_not_claim_isolation(
+    tmp_path: Path,
+) -> None:
+    case = capture_case("docker_pre_snapshot_error", tmp_path)
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "setup"
+    assert artifact["setup_isolation"] is None
+    assert artifact["setup_isolation_evidence"] is None
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["outcome"] == "setup_failed"
+    assert "docker-run" not in {event["op"] for event in case["events"]}
+
+
 def test_repo_setup_owner_exposes_immutable_typed_contracts() -> None:
     request = repo_setup.RepoSetupRequest(
         configured_command=None,
@@ -161,16 +255,12 @@ def test_no_setup_command_performs_no_setup_specific_attribute_lookups(
     monkeypatch.setattr(
         repo_verifier,
         "execute_repo_setup",
-        lambda *_args, **_kwargs: pytest.fail(
-            "no-command path invoked repository setup"
-        ),
+        lambda *_args, **_kwargs: pytest.fail("no-command path invoked repository setup"),
     )
     monkeypatch.setattr(
         repo_verifier,
         "_resolve_host_command",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            FileNotFoundError("controlled suite stop")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("controlled suite stop")),
     )
 
     result = verifier.verify(
@@ -240,9 +330,7 @@ def test_pre_snapshot_can_change_timeout_but_not_effective_strict_policy(
 
     def runner(command, **kwargs):
         observed["timeout"] = kwargs["timeout"]
-        observed["strict"] = kwargs[
-            "require_process_group_cleanup_proof"
-        ]
+        observed["strict"] = kwargs["require_process_group_cleanup_proof"]
         raise FileNotFoundError("controlled setup stop")
 
     monkeypatch.setattr(repo_verifier, "_setup_fidelity_snapshot", snapshot)
@@ -287,9 +375,7 @@ def test_token_normalization_can_change_container_setup_trust(
     monkeypatch.setattr(
         verifier,
         "_docker_command",
-        lambda *_args, **_kwargs: pytest.fail(
-            "late trust opt-in still selected container setup"
-        ),
+        lambda *_args, **_kwargs: pytest.fail("late trust opt-in still selected container setup"),
     )
 
     def resolver(command, *, cwd, env):
@@ -386,9 +472,7 @@ def test_docker_exit_125_uses_live_network_and_runtime_fields(
     monkeypatch.setattr(
         verifier,
         "_run_docker_client",
-        lambda command, name: subprocess.CompletedProcess(
-            command, 125, "raw", "error"
-        ),
+        lambda command, name: subprocess.CompletedProcess(command, 125, "raw", "error"),
     )
 
     def distill(text: str) -> str:
@@ -405,12 +489,8 @@ def test_docker_exit_125_uses_live_network_and_runtime_fields(
 
     assert result.artifact["isolation_evidence"]["network"] == "late-network"
     assert result.artifact["isolation_evidence"]["runtime"] == "late-runtime"
-    assert result.artifact["setup_isolation_evidence"]["network"] == (
-        "late-network"
-    )
-    assert result.artifact["setup_isolation_evidence"]["runtime"] == (
-        "late-runtime"
-    )
+    assert result.artifact["setup_isolation_evidence"]["network"] == ("late-network")
+    assert result.artifact["setup_isolation_evidence"]["runtime"] == ("late-runtime")
 
 
 def test_repo_verifier_resolves_host_setup_seams_at_each_operation(

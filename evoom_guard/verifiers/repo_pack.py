@@ -324,10 +324,17 @@ def execute_repo_pack(
             trace.execution_state = "started_incomplete"
             trace.verifier_pack_started = True
         return _terminal(
-            diagnostics=(f"verifier pack timed out after {services.timeout()}s"),
+            diagnostics=(
+                f"verifier pack timed out after {services.timeout()}s"
+                if exc.container_started
+                else (
+                    f"{services.requested_isolation()} verifier-pack isolation did not "
+                    f"start: docker client timed out after {services.timeout()}s"
+                )
+            ),
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "test_timeout",
+                "outcome": ("test_timeout" if exc.container_started else "isolation_unavailable"),
                 "setup_isolation": request.setup_isolation,
                 "isolation_evidence": _suite_isolation_payload(
                     request,
@@ -338,13 +345,19 @@ def execute_repo_pack(
         )
     except ProcessOutputLimitExceeded as exc:
         docker_failure = isinstance(exc, DockerRunOutputLimit)
-        container_started = bool(getattr(exc, "container_started", True))
+        execution_started = bool(
+            getattr(
+                exc,
+                "container_started" if docker_failure else "target_started",
+                True,
+            )
+        )
         delivered = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else ("not_run" if docker_failure else "subprocess")
+            if docker_failure and execution_started
+            else ("not_run" if not execution_started else "subprocess")
         )
-        if container_started:
+        if execution_started:
             trace.execution_state = "started_incomplete"
             trace.verifier_pack_started = True
         trace.verifier_pack_isolation_evidence = services.phase_isolation_evidence()(
@@ -352,15 +365,19 @@ def execute_repo_pack(
             request.resolved_image,
             note=(
                 None
-                if container_started
-                else ("docker client output limit was reached before container start was proven")
+                if execution_started
+                else (
+                    "docker client output limit was reached before container start was proven"
+                    if docker_failure
+                    else "output limit was reached before target start was proven"
+                )
             ),
         )
         return _terminal(
             diagnostics=f"verifier pack output was rejected: {exc}",
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "test_output_limit",
+                "outcome": ("test_output_limit" if execution_started else "isolation_unavailable"),
                 "setup_isolation": request.setup_isolation,
                 "isolation_evidence": (
                     _suite_isolation_payload(request, services) if request.container_mode else None
@@ -373,13 +390,19 @@ def execute_repo_pack(
             exc,
             DockerRunContainmentError,
         )
-        container_started = bool(getattr(exc, "container_started", True))
+        execution_started = bool(
+            getattr(
+                exc,
+                "container_started" if docker_failure else "target_started",
+                True,
+            )
+        )
         delivered = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else ("not_run" if docker_failure else "subprocess")
+            if docker_failure and execution_started
+            else ("not_run" if not execution_started else "subprocess")
         )
-        if container_started:
+        if execution_started:
             trace.execution_state = "started_incomplete"
             trace.verifier_pack_started = True
         trace.verifier_pack_isolation_evidence = services.phase_isolation_evidence()(
@@ -388,14 +411,20 @@ def execute_repo_pack(
             note=(
                 "docker container cleanup was not proven"
                 if docker_failure
-                else "subprocess cleanup was not proven"
+                else (
+                    "subprocess cleanup was not proven"
+                    if execution_started
+                    else "target process did not start"
+                )
             ),
         )
         return _terminal(
             diagnostics=f"verifier pack containment failed: {exc}",
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "runtime_containment_error",
+                "outcome": (
+                    "runtime_containment_error" if execution_started else "isolation_unavailable"
+                ),
                 "setup_isolation": request.setup_isolation,
                 "isolation_evidence": (
                     _suite_isolation_payload(request, services) if request.container_mode else None
@@ -403,18 +432,30 @@ def execute_repo_pack(
                 **services.runtime_evidence(),
             },
         )
-    except subprocess.TimeoutExpired:
-        trace.execution_state = "started_incomplete"
-        trace.verifier_pack_started = True
+    except subprocess.TimeoutExpired as exc:
+        target_started = getattr(exc, "target_started", True) is not False
+        if target_started:
+            trace.execution_state = "started_incomplete"
+            trace.verifier_pack_started = True
         trace.verifier_pack_isolation_evidence = services.phase_isolation_evidence()(
-            "subprocess",
+            "subprocess" if target_started else "not_run",
             request.resolved_image,
+            note=(
+                None if target_started else "target exec was not reached before launcher timeout"
+            ),
         )
         return _terminal(
-            diagnostics=(f"verifier pack timed out after {services.timeout()}s"),
+            diagnostics=(
+                (
+                    "verifier pack timed out"
+                    if target_started
+                    else "verifier pack target did not start before timeout"
+                )
+                + f" after {services.timeout()}s"
+            ),
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "test_timeout",
+                "outcome": ("test_timeout" if target_started else "isolation_unavailable"),
                 "setup_isolation": request.setup_isolation,
                 "isolation_evidence": (
                     _suite_isolation_payload(request, services) if request.container_mode else None
@@ -428,14 +469,80 @@ def execute_repo_pack(
             request.resolved_image,
         )
         return _terminal(
-            diagnostics=("verifier pack needs pytest/python in the judge environment"),
+            diagnostics=(
+                f"{services.requested_isolation()} isolation requested "
+                "but the docker CLI was not found"
+                if request.container_mode
+                else "verifier pack needs pytest/python in the judge environment"
+            ),
             artifact={
                 "files_changed": list(request.files_changed),
-                "outcome": "test_command_unavailable",
+                "outcome": (
+                    "isolation_unavailable"
+                    if request.container_mode
+                    else "test_command_unavailable"
+                ),
                 "setup_isolation": request.setup_isolation,
                 "isolation_evidence": (
                     _suite_isolation_payload(request, services) if request.container_mode else None
                 ),
+                **services.runtime_evidence(),
+            },
+        )
+    except OSError as exc:
+        if getattr(exc, "target_exec_failed", None) is not True:
+            raise
+        trace.verifier_pack_isolation_evidence = services.phase_isolation_evidence()(
+            "unavailable" if request.container_mode else "not_run",
+            request.resolved_image,
+            note=(
+                "docker client exec failed before verifier-pack isolation start"
+                if request.container_mode
+                else "verifier-pack command exec failed before target start"
+            ),
+        )
+        return _terminal(
+            diagnostics=(
+                (
+                    f"{services.requested_isolation()} verifier-pack isolation "
+                    "could not start"
+                    if request.container_mode
+                    else "verifier-pack command could not start"
+                )
+                + f": {type(exc).__name__}: {exc}"
+            ),
+            artifact={
+                "files_changed": list(request.files_changed),
+                "outcome": (
+                    "isolation_unavailable"
+                    if request.container_mode
+                    else "test_command_unavailable"
+                ),
+                "setup_isolation": request.setup_isolation,
+                "isolation_evidence": (
+                    _suite_isolation_payload(request, services)
+                    if request.container_mode
+                    else None
+                ),
+                **services.runtime_evidence(),
+            },
+        )
+
+    if getattr(process, "target_started", True) is False:
+        trace.verifier_pack_isolation_evidence = services.phase_isolation_evidence()(
+            "not_run",
+            request.resolved_image,
+            note="trusted resource-limit launcher failed before target exec",
+        )
+        return _terminal(
+            diagnostics=(
+                "verifier pack target did not start: "
+                + services.distill_diagnostics()(process.stdout + "\n" + process.stderr)
+            ),
+            artifact={
+                "files_changed": list(request.files_changed),
+                "outcome": "isolation_unavailable",
+                "setup_isolation": request.setup_isolation,
                 **services.runtime_evidence(),
             },
         )

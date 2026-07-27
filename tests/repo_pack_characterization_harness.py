@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import os
 import subprocess
@@ -35,6 +36,7 @@ SCHEMA_VERSION = "repo-pack-characterization-v1"
 CASE_NAMES = (
     "docker_containment_started",
     "docker_containment_unstarted",
+    "docker_exec_error_before_isolation_start",
     "docker_exit_125",
     "docker_not_found",
     "docker_output_limit_started",
@@ -44,6 +46,8 @@ CASE_NAMES = (
     "docker_timeout_unstarted",
     "gvisor_pass",
     "host_containment",
+    "host_exec_error_before_target_start",
+    "host_launcher_failure_before_target_start",
     "host_not_found",
     "host_output_limit",
     "host_pass_strict",
@@ -102,6 +106,30 @@ def _docker_output_limit(*, started: bool) -> DockerRunOutputLimit:
     )
 
 
+def _completed_before_target_start(
+    command: list[str],
+) -> subprocess.CompletedProcess[str]:
+    completed = subprocess.CompletedProcess(
+        command,
+        125,
+        "launcher stdout",
+        "launcher stderr",
+    )
+    completed.target_started = False  # type: ignore[attr-defined]
+    return completed
+
+
+def _exec_error_before_target_start(command: list[str]) -> PermissionError:
+    error = PermissionError(
+        errno.EACCES,
+        "controlled target exec denial",
+        command[0],
+    )
+    error.target_exec_failed = True  # type: ignore[attr-defined]
+    error.target_started = False  # type: ignore[attr-defined]
+    return error
+
+
 def _runner_effect(case_name: str) -> object:
     completed = subprocess.CompletedProcess(
         ["pack"],
@@ -118,6 +146,9 @@ def _runner_effect(case_name: str) -> object:
             "docker cleanup missing",
             container_started=False,
         ),
+        "docker_exec_error_before_isolation_start": (
+            _exec_error_before_target_start(["docker", "pack"])
+        ),
         "docker_exit_125": subprocess.CompletedProcess(
             ["docker", "pack"],
             125,
@@ -132,6 +163,12 @@ def _runner_effect(case_name: str) -> object:
         "docker_timeout_unstarted": _docker_timeout(started=False),
         "gvisor_pass": completed,
         "host_containment": ProcessContainmentError("host cleanup missing"),
+        "host_exec_error_before_target_start": (
+            _exec_error_before_target_start(["resolved-pack"])
+        ),
+        "host_launcher_failure_before_target_start": (
+            _completed_before_target_start(["resolved-pack"])
+        ),
         "host_not_found": FileNotFoundError("python"),
         "host_output_limit": ProcessOutputLimitExceeded(99),
         "host_pass_strict": completed,
@@ -243,12 +280,12 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
             isolation if container_mode else "subprocess",
             request.resolved_image,
         )
+        services.trace.repo_suite_isolation_evidence = suite_evidence
         services.trace.execution_state = "started_incomplete"
         services.trace.execution_phase = "repo_suite"
         services.trace.test_command_started = True
         services.trace.test_command_completed = True
         services.trace.delivered_isolation = isolation if container_mode else "subprocess"
-        services.trace.repo_suite_isolation_evidence = suite_evidence
         if container_mode:
             services.trace.primary_isolation_evidence = suite_evidence
         return RepoSuiteExecutionOutcome(
