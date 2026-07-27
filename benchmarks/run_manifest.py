@@ -215,29 +215,41 @@ def _path_descriptor_identity(
     )
 
 
-def read_stable_regular_file(
+def _read_stable_regular_file(
     path: Path,
     *,
     max_bytes: int,
     label: str,
+    follow_symlinks: bool,
 ) -> StableFileSnapshot:
-    """Read one non-symlink regular file once and reject observable swaps."""
+    """Read one regular file once and reject observable path/target swaps."""
     if max_bytes <= 0:
         raise ValueError("stable-read bound must be positive")
     path = Path(path)
     before_path = path.lstat()
-    if stat.S_ISLNK(before_path.st_mode) or not stat.S_ISREG(before_path.st_mode):
+    if not follow_symlinks and (
+        stat.S_ISLNK(before_path.st_mode) or not stat.S_ISREG(before_path.st_mode)
+    ):
         raise ValueError(f"{label} must be a non-symlink regular file")
+    before_target = path.stat() if follow_symlinks else before_path
+    if not stat.S_ISREG(before_target.st_mode):
+        qualifier = " target" if follow_symlinks else ""
+        raise ValueError(f"{label}{qualifier} must be a regular file")
 
     flags = os.O_RDONLY
     flags |= getattr(os, "O_BINARY", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
+    if follow_symlinks:
+        # A path can be retargeted after the pre-open stat. Nonblocking mode
+        # prevents a raced FIFO from hanging before fstat can reject it.
+        flags |= getattr(os, "O_NONBLOCK", 0)
+    else:
+        flags |= getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise ValueError(f"{label} descriptor is not a regular file")
-        if _path_descriptor_identity(before_path) != _path_descriptor_identity(before):
+        if _path_descriptor_identity(before_target) != _path_descriptor_identity(before):
             raise RuntimeError(f"{label} changed before its stable read")
         chunks: list[bytes] = []
         size = 0
@@ -256,7 +268,15 @@ def read_stable_regular_file(
         os.close(descriptor)
 
     after_path = path.lstat()
-    if (
+    if follow_symlinks:
+        if _stat_identity(before_path) != _stat_identity(after_path):
+            raise RuntimeError(f"{label} link changed during its stable read")
+        after_target = path.stat()
+        if not stat.S_ISREG(after_target.st_mode) or _path_descriptor_identity(
+            after_target
+        ) != _path_descriptor_identity(after):
+            raise RuntimeError(f"{label} target was replaced during its stable read")
+    elif (
         stat.S_ISLNK(after_path.st_mode)
         or not stat.S_ISREG(after_path.st_mode)
         or _path_descriptor_identity(after_path) != _path_descriptor_identity(after)
@@ -270,6 +290,36 @@ def read_stable_regular_file(
         size=after.st_size,
         mtime_ns=after.st_mtime_ns,
         ctime_ns=after.st_ctime_ns,
+    )
+
+
+def read_stable_regular_file(
+    path: Path,
+    *,
+    max_bytes: int,
+    label: str,
+) -> StableFileSnapshot:
+    """Read one non-symlink regular file once and reject observable swaps."""
+    return _read_stable_regular_file(
+        path,
+        max_bytes=max_bytes,
+        label=label,
+        follow_symlinks=False,
+    )
+
+
+def _read_stable_interpreter_executable(
+    path: Path,
+    *,
+    max_bytes: int,
+    label: str,
+) -> StableFileSnapshot:
+    """Read a stable regular interpreter target without retaining its path."""
+    return _read_stable_regular_file(
+        path,
+        max_bytes=max_bytes,
+        label=label,
+        follow_symlinks=True,
     )
 
 
@@ -540,12 +590,8 @@ def _release_promotion_source_bundle(
     payload = current.files.get(RELEASE_VERSION_SOURCE_PATH)
     if payload is None:
         raise ValueError("release version source is absent from benchmark inventory")
-    stable_assignment = (
-        f'__version__ = "{current_engine_version}"'.encode("ascii")
-    )
-    development_assignment = (
-        f'__version__ = "{recorded_engine_version}"'.encode("ascii")
-    )
+    stable_assignment = f'__version__ = "{current_engine_version}"'.encode("ascii")
+    development_assignment = f'__version__ = "{recorded_engine_version}"'.encode("ascii")
     if payload.count(stable_assignment) != 1 or development_assignment in payload:
         raise ValueError("release version source is not an exact stable assignment")
     normalized = dict(current.files)
@@ -956,8 +1002,8 @@ def collect_tool_identities(
 
 
 def collect_interpreter_identity() -> dict[str, object]:
-    """Return a path-free, byte-verifiable identity for the Python runtime."""
-    executable_sha256, executable_bytes = _sha256_file(
+    """Return a path-free identity for Python executable bytes and metadata."""
+    executable = _read_stable_interpreter_executable(
         Path(sys.executable),
         max_bytes=MAX_EXECUTABLE_BYTES,
         label="Python interpreter executable",
@@ -969,8 +1015,8 @@ def collect_interpreter_identity() -> dict[str, object]:
         "cache_tag": sys.implementation.cache_tag,
         "compiler": platform.python_compiler(),
         "build": list(platform.python_build()),
-        "executable_sha256": executable_sha256,
-        "executable_bytes": executable_bytes,
+        "executable_sha256": _sha256(executable.payload),
+        "executable_bytes": executable.size,
     }
     identity["identity_sha256"] = _framed_digest(
         INTERPRETER_DIGEST_DOMAIN,
@@ -1456,9 +1502,7 @@ def _head_tree_entries(
 ) -> dict[Path, tuple[str, str] | None] | None:
     """Read exact Git modes and object kinds for selected paths at one commit."""
     resolved_paths = tuple(dict.fromkeys(path.resolve() for path in paths))
-    output: dict[Path, tuple[str, str] | None] = {
-        path: None for path in resolved_paths
-    }
+    output: dict[Path, tuple[str, str] | None] = {path: None for path in resolved_paths}
     relative_to_path: dict[bytes, Path] = {}
     for path in resolved_paths:
         relative = _git_relative_path(git_root, path)
@@ -1681,9 +1725,7 @@ def _claim_record(
     evidence_commit_bound: bool,
 ) -> dict[str, object]:
     if evidence_commit_bound:
-        content_identity = (
-            "source-and-results-git-commits-plus-content-digests"
-        )
+        content_identity = "source-and-results-git-commits-plus-content-digests"
     elif source_commit_bound:
         content_identity = "source-git-commit-plus-content-digests"
     else:
@@ -1852,8 +1894,7 @@ def build_run_manifest(
         bound_paths=tuple(source_files),
         source_paths=source_files,
         bound_payloads={
-            root / relative: payload
-            for relative, payload in source_bundle.files.items()
+            root / relative: payload for relative, payload in source_bundle.files.items()
         },
     )
     source_commit = _source_commit_record(source_git)
@@ -2185,11 +2226,7 @@ def _create_windows_staged_file(path: Path, payload: bytes) -> tuple[int, tuple[
     invalid_handle = ctypes.c_void_p(-1).value
     raw_handle = create_file(
         str(path),
-        generic_read
-        | generic_write
-        | delete_access
-        | file_read_attributes
-        | synchronize,
+        generic_read | generic_write | delete_access | file_read_attributes | synchronize,
         0,
         None,
         create_new,
@@ -2569,9 +2606,7 @@ def _target_matches_published(
     if os.name == "nt":
         if published.windows_handle is None:
             return False
-        _attributes, handle_identity = _windows_handle_information(
-            published.windows_handle
-        )
+        _attributes, handle_identity = _windows_handle_information(published.windows_handle)
         return (
             handle_identity == published.identity
             and target.directory.identity[0] == published.identity[0]
@@ -2786,10 +2821,7 @@ def validate_evidence_destinations(
     if (
         replace
         and existence[0] is not existence[1]
-        and not (
-            _allow_results_only_initialization
-            and existence == (True, False)
-        )
+        and not (_allow_results_only_initialization and existence == (True, False))
     ):
         raise ValueError("refusing to replace a pre-existing torn evidence pair")
     return results, manifest
@@ -2813,20 +2845,12 @@ def validate_initial_evidence_destinations(
         replace=True,
         _allow_results_only_initialization=True,
     )
-    canonical_results = (root / "benchmarks" / "results.jsonl").resolve(
-        strict=False
-    )
-    canonical_manifest = (root / "benchmarks" / "run-manifest.json").resolve(
-        strict=False
-    )
+    canonical_results = (root / "benchmarks" / "results.jsonl").resolve(strict=False)
+    canonical_manifest = (root / "benchmarks" / "run-manifest.json").resolve(strict=False)
     if (results, manifest) != (canonical_results, canonical_manifest):
-        raise ValueError(
-            "initial evidence publication is limited to the canonical benchmark pair"
-        )
+        raise ValueError("initial evidence publication is limited to the canonical benchmark pair")
     if not results.exists() or manifest.exists():
-        raise ValueError(
-            "initial evidence publication requires existing results and no manifest"
-        )
+        raise ValueError("initial evidence publication requires existing results and no manifest")
     snapshot = read_stable_regular_file(
         results,
         max_bytes=MAX_RESULTS_BYTES,
@@ -2834,25 +2858,17 @@ def validate_initial_evidence_destinations(
     )
     results_stat = results.lstat()
     if results_stat.st_nlink != 1:
-        raise ValueError(
-            "initial evidence publication refuses hard-linked canonical results"
-        )
+        raise ValueError("initial evidence publication refuses hard-linked canonical results")
     git = collect_git_state(
         root,
         bound_paths=(results,),
         bound_payloads={results: snapshot.payload},
     )
     if git.get("source_and_results_commit_bound") is not True:
-        raise ValueError(
-            "initial evidence publication requires clean results matching Git HEAD"
-        )
+        raise ValueError("initial evidence publication requires clean results matching Git HEAD")
     head = git.get("head")
     top_result = _git(root, ("rev-parse", "--show-toplevel"))
-    if (
-        not isinstance(head, str)
-        or top_result is None
-        or top_result.returncode != 0
-    ):
+    if not isinstance(head, str) or top_result is None or top_result.returncode != 0:
         raise ValueError("initial evidence publication Git identity is unavailable")
     git_root = Path(top_result.stdout.strip()).resolve()
     entries = _head_tree_entries(git_root, head, (results, manifest))
@@ -3011,8 +3027,7 @@ def _restore_target(
     if published is not None:
         if not _target_matches_published(target, published):
             raise RuntimeError(
-                "benchmark evidence changed before rollback; "
-                "automatic recovery was refused"
+                "benchmark evidence changed before rollback; automatic recovery was refused"
             )
     disposed_by_windows_handle = False
     if published is not None and published.windows_handle is not None:
@@ -3123,18 +3138,10 @@ def publish_evidence_pair(
         if not replace and any(existence):
             raise FileExistsError("benchmark evidence exists; replacement was not requested")
         if initialization is not None and not replace:
-            raise ValueError(
-                "initial evidence publication requires explicit replacement"
-            )
+            raise ValueError("initial evidence publication requires explicit replacement")
         if initialization is not None and existence != (True, False):
-            raise ValueError(
-                "initial evidence publication state changed before publication"
-            )
-        if (
-            replace
-            and existence[0] is not existence[1]
-            and initialization is None
-        ):
+            raise ValueError("initial evidence publication state changed before publication")
+        if replace and existence[0] is not existence[1] and initialization is None:
             raise ValueError("refusing to replace a pre-existing torn evidence pair")
         if (
             results_stat is not None
@@ -3154,14 +3161,10 @@ def publish_evidence_pair(
                 manifest_target.path.resolve(strict=False),
             )
             if actual_paths != expected_paths:
-                raise ValueError(
-                    "initial evidence publication capability targets another pair"
-                )
+                raise ValueError("initial evidence publication capability targets another pair")
             if (
-                results_target.directory.identity
-                != initialization.results_parent_identity
-                or manifest_target.directory.identity
-                != initialization.manifest_parent_identity
+                results_target.directory.identity != initialization.results_parent_identity
+                or manifest_target.directory.identity != initialization.manifest_parent_identity
             ):
                 raise RuntimeError(
                     "canonical benchmark parent changed after initialization preflight"
@@ -3184,17 +3187,13 @@ def publish_evidence_pair(
             current_git = collect_git_state(
                 initialization.root,
                 bound_paths=(results_target.path,),
-                bound_payloads={
-                    results_target.path: initialization.results_snapshot.payload
-                },
+                bound_payloads={results_target.path: initialization.results_snapshot.payload},
             )
             if (
                 current_git.get("head") != initialization.head
                 or current_git.get("source_and_results_commit_bound") is not True
             ):
-                raise RuntimeError(
-                    "Git state changed after evidence initialization preflight"
-                )
+                raise RuntimeError("Git state changed after evidence initialization preflight")
         if replace and all(existence):
             old_results = _read_pinned_regular_file(
                 results_target,
@@ -3235,8 +3234,7 @@ def publish_evidence_pair(
                 if (
                     current_results_stat is None
                     or results_stat is None
-                    or _stat_identity(current_results_stat)
-                    != _stat_identity(results_stat)
+                    or _stat_identity(current_results_stat) != _stat_identity(results_stat)
                     or _target_lstat(manifest_target) is not None
                 ):
                     raise RuntimeError(
@@ -3445,9 +3443,7 @@ def _validate_source_commit_record(value: object) -> tuple[tuple[str, ...], bool
     }
     if not isinstance(value, dict) or set(value) != expected_keys:
         return (("source commit provenance schema invalid",), False)
-    if value.get("observation_point") != (
-        "after result assembly and before pair publication"
-    ):
+    if value.get("observation_point") != ("after result assembly and before pair publication"):
         return (("source commit observation point invalid",), False)
     head = value.get("commit")
     bound = value.get("bound")
@@ -3478,10 +3474,7 @@ def _validate_source_commit_record(value: object) -> tuple[tuple[str, ...], bool
         return tuple(errors), False
     if not _is_git_oid(head):
         errors.append("source commit identity invalid")
-    if not all(
-        type(item) is bool
-        for item in (dirty, tracked, paths_match, inventory_match)
-    ):
+    if not all(type(item) is bool for item in (dirty, tracked, paths_match, inventory_match)):
         errors.append("source commit provenance booleans invalid")
         return tuple(errors), False
     assert isinstance(dirty, bool)
@@ -3535,9 +3528,7 @@ def _validate_evidence_commit_record(value: object) -> tuple[tuple[str, ...], bo
         "results_match_commit": True,
         "final_manifest_in_commit": False,
         "reason": "source_and_results_match_commit_final_manifest_excluded",
-        "observation_point": (
-            "after results commit and before final manifest publication"
-        ),
+        "observation_point": ("after results commit and before final manifest publication"),
     }
     if any(value.get(key) != expected for key, expected in expected_values.items()):
         errors.append("evidence commit provenance is contradictory")
@@ -3574,11 +3565,7 @@ def _verify_provenance_commit_chain(
             root,
             ("rev-parse", "--verify", f"{required_history_tip}^{{commit}}"),
         )
-        if (
-            tip is None
-            or tip.returncode != 0
-            or not _is_git_oid(tip.stdout.strip())
-        ):
+        if tip is None or tip.returncode != 0 or not _is_git_oid(tip.stdout.strip()):
             errors.append("required provenance history tip is invalid")
         else:
             tip_commit = tip.stdout.strip()
@@ -3589,9 +3576,7 @@ def _verify_provenance_commit_chain(
             if relation is None or relation.returncode not in {0, 1}:
                 errors.append("evidence-to-tip commit ancestry is unverifiable")
             elif relation.returncode == 1:
-                errors.append(
-                    "evidence commit is not an ancestor of required history tip"
-                )
+                errors.append("evidence commit is not an ancestor of required history tip")
     return tuple(errors)
 
 
@@ -3707,9 +3692,7 @@ def _collect_evidence_commit_record(
         "results_match_commit": True,
         "final_manifest_in_commit": False,
         "reason": "source_and_results_match_commit_final_manifest_excluded",
-        "observation_point": (
-            "after results commit and before final manifest publication"
-        ),
+        "observation_point": ("after results commit and before final manifest publication"),
     }
 
 
@@ -4026,10 +4009,7 @@ def verify_run_manifest(
         "reason",
         "observation_point",
     }
-    if (
-        not isinstance(git, dict)
-        or set(git) != git_keys
-    ):
+    if not isinstance(git, dict) or set(git) != git_keys:
         errors.append("Git observation schema invalid")
     else:
         errors.extend(_validate_historical_git_observation(git))
@@ -4069,10 +4049,7 @@ def verify_run_manifest(
         errors.extend(source_errors)
         errors.extend(evidence_errors)
         source_record = provenance.get("source_commit")
-        if (
-            source_bound
-            and isinstance(source_record, dict)
-        ):
+        if source_bound and isinstance(source_record, dict):
             errors.extend(
                 _verify_commit_bound_source_blobs(
                     root,
@@ -4105,9 +4082,7 @@ def verify_run_manifest(
                 )
             )
         elif required_history_tip is not None:
-            errors.append(
-                "required provenance history tip needs bound source and evidence commits"
-            )
+            errors.append("required provenance history tip needs bound source and evidence commits")
 
     if not isinstance(claims, dict) or set(claims) != expected_claim_keys:
         errors.append("claims record schema invalid")
@@ -4160,10 +4135,7 @@ def finalize_run_manifest_provenance(
     if before.payload != after.payload:
         raise RuntimeError("benchmark manifest draft changed during finalization")
     if verification_errors:
-        raise ValueError(
-            "benchmark manifest draft is invalid: "
-            + "; ".join(verification_errors)
-        )
+        raise ValueError("benchmark manifest draft is invalid: " + "; ".join(verification_errors))
     manifest = json.loads(
         before.payload.decode("utf-8"),
         object_pairs_hook=_unique_object,
@@ -4177,17 +4149,13 @@ def finalize_run_manifest_provenance(
         or provenance.get("workflow") != PROVENANCE_WORKFLOW
         or provenance.get("evidence_commit") is not None
     ):
-        raise ValueError(
-            "benchmark manifest is not an unfinalized two-phase draft"
-        )
+        raise ValueError("benchmark manifest is not an unfinalized two-phase draft")
     recorded_results = manifest.get("results")
     selected_results = results_path
     if selected_results is None:
         selected_results = _results_path_from_evidence(root, recorded_results)
     if selected_results is None:
-        raise ValueError(
-            "external results require an explicit path for provenance finalization"
-        )
+        raise ValueError("external results require an explicit path for provenance finalization")
     result_snapshot = read_stable_regular_file(
         selected_results,
         max_bytes=MAX_RESULTS_BYTES,
@@ -4203,9 +4171,7 @@ def finalize_run_manifest_provenance(
         if isinstance(recorded_results, dict)
         else recorded_results
     )
-    expected_identity = {
-        key: value for key, value in expected_results.items() if key != "path"
-    }
+    expected_identity = {key: value for key, value in expected_results.items() if key != "path"}
     if recorded_identity != expected_identity:
         raise ValueError("benchmark results changed before provenance finalization")
     if manifest.get("source") != collect_source_evidence(root):
@@ -4213,10 +4179,7 @@ def finalize_run_manifest_provenance(
     source_record = provenance.get("source_commit")
     source_errors, source_bound = _validate_source_commit_record(source_record)
     if source_errors:
-        raise ValueError(
-            "benchmark source provenance is invalid: "
-            + "; ".join(source_errors)
-        )
+        raise ValueError("benchmark source provenance is invalid: " + "; ".join(source_errors))
     if not source_bound:
         raise ValueError(
             "benchmark source provenance is not commit-bound; "
@@ -4234,10 +4197,7 @@ def finalize_run_manifest_provenance(
         evidence_commit=evidence_commit.get("commit"),
     )
     if chain_errors:
-        raise ValueError(
-            "benchmark provenance commit chain is invalid: "
-            + "; ".join(chain_errors)
-        )
+        raise ValueError("benchmark provenance commit chain is invalid: " + "; ".join(chain_errors))
     finalized = dict(manifest)
     finalized["provenance"] = {
         "workflow": PROVENANCE_WORKFLOW,

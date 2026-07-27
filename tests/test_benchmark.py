@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import math
 import os
@@ -1030,9 +1031,7 @@ def test_published_manifest_binds_current_sources_corpus_and_results() -> None:
     assert claims["source_and_results_commit_bound"] is True
     assert claims["final_manifest_in_evidence_commit"] is False
     assert claims["execution_source_snapshot_bound"] is True
-    assert claims["content_identity"] == (
-        "source-and-results-git-commits-plus-content-digests"
-    )
+    assert claims["content_identity"] == ("source-and-results-git-commits-plus-content-digests")
     assert "manifest_sha256" not in json.dumps(manifest, sort_keys=True)
 
 
@@ -1058,10 +1057,7 @@ def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
         engine_version=ENGINE_VERSION,
         require_release_promotion=True,
     )
-    assert (
-        "exact dev0 release-promotion relation is not satisfied"
-        in exact_relation_errors
-    )
+    assert "exact dev0 release-promotion relation is not satisfied" in exact_relation_errors
     version_path = repo / "evoom_guard" / "__init__.py"
     development_assignment = f'__version__ = "{ENGINE_VERSION}"'
     stable_assignment = f'__version__ = "{stable_version}"'
@@ -1115,13 +1111,10 @@ def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
             engine_version=invalid_current_version,
             require_release_promotion=True,
         )
-        assert (
-            "exact dev0 release-promotion relation is not satisfied"
-            in invalid_errors
-        )
+        assert "exact dev0 release-promotion relation is not satisfied" in invalid_errors
 
     version_path.write_text(
-        stable_source + f'{stable_assignment}\n',
+        stable_source + f"{stable_assignment}\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -1134,10 +1127,7 @@ def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
         engine_version=stable_version,
         require_release_promotion=True,
     )
-    assert (
-        "exact dev0 release-promotion relation is not satisfied"
-        in duplicate_assignment_errors
-    )
+    assert "exact dev0 release-promotion relation is not satisfied" in duplicate_assignment_errors
 
     version_path.write_text(
         stable_source.replace(
@@ -1156,10 +1146,7 @@ def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
         engine_version=stable_version,
         require_release_promotion=True,
     )
-    assert (
-        "exact dev0 release-promotion relation is not satisfied"
-        in non_dev0_assignment_errors
-    )
+    assert "exact dev0 release-promotion relation is not satisfied" in non_dev0_assignment_errors
 
     version_path.write_text(
         stable_source + "# unrelated source change\n",
@@ -1198,10 +1185,7 @@ def test_release_promotion_flag_requires_manifest_verification(
     from benchmarks.run_live import main
 
     assert main(["--require-release-promotion"]) == 2
-    assert (
-        "--require-release-promotion requires --verify-manifest"
-        in capsys.readouterr().err
-    )
+    assert "--require-release-promotion requires --verify-manifest" in capsys.readouterr().err
 
 
 def test_release_promotion_cli_reports_the_required_relation(
@@ -1228,10 +1212,7 @@ def test_release_promotion_cli_reports_the_required_relation(
         == 0
     )
     assert observed["require_release_promotion"] is True
-    assert (
-        "relation=exact-release-version-transition"
-        in capsys.readouterr().out
-    )
+    assert "relation=exact-release-version-transition" in capsys.readouterr().out
 
 
 def test_manifest_verifier_detects_results_corpus_and_settings_drift(
@@ -2002,6 +1983,139 @@ def test_stable_reader_rejects_symlinks_and_oversized_files(
         )
 
 
+def test_interpreter_identity_hashes_a_stable_symlink_target_without_its_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    payload = b"setup-python interpreter target"
+    target = tmp_path / "python-real"
+    target.write_bytes(payload)
+    link = tmp_path / "python"
+    try:
+        link.symlink_to(target.name)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    monkeypatch.setattr(run_manifest_module.sys, "executable", str(link))
+    identity = collect_interpreter_identity()
+
+    assert identity["executable_sha256"] == hashlib.sha256(payload).hexdigest()
+    assert identity["executable_bytes"] == len(payload)
+    strings = _all_strings(identity)
+    assert str(link) not in strings
+    assert str(target) not in strings
+
+
+def test_interpreter_identity_rejects_a_non_regular_symlink_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    target = tmp_path / "directory"
+    target.mkdir()
+    link = tmp_path / "python"
+    try:
+        link.symlink_to(target.name, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    monkeypatch.setattr(run_manifest_module.sys, "executable", str(link))
+    with pytest.raises(ValueError, match="target must be a regular file"):
+        collect_interpreter_identity()
+
+
+def test_interpreter_identity_rejects_symlink_retargeting_during_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    first = tmp_path / "python-first"
+    first.write_bytes(b"a" * (2 * 1024 * 1024))
+    second = tmp_path / "python-second"
+    second.write_bytes(b"b" * (2 * 1024 * 1024))
+    link = tmp_path / "python"
+    try:
+        link.symlink_to(first.name)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    original_read = run_manifest_module.os.read
+    retargeted = False
+
+    def racing_read(descriptor: int, size: int) -> bytes:
+        nonlocal retargeted
+        chunk = original_read(descriptor, size)
+        if chunk and not retargeted:
+            retargeted = True
+            link.unlink()
+            link.symlink_to(second.name)
+        return chunk
+
+    monkeypatch.setattr(run_manifest_module.os, "read", racing_read)
+    monkeypatch.setattr(run_manifest_module.sys, "executable", str(link))
+    with pytest.raises(
+        RuntimeError,
+        match="link changed during|target was replaced",
+    ):
+        collect_interpreter_identity()
+    assert retargeted is True
+
+
+def test_interpreter_identity_rejects_symlink_retargeting_before_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    first = tmp_path / "python-first"
+    first.write_bytes(b"first")
+    second = tmp_path / "python-second"
+    second.write_bytes(b"second")
+    link = tmp_path / "python"
+    try:
+        link.symlink_to(first.name)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    original_open = run_manifest_module.os.open
+    retargeted = False
+
+    def racing_open(path: os.PathLike[str], flags: int) -> int:
+        nonlocal retargeted
+        if not retargeted:
+            retargeted = True
+            link.unlink()
+            link.symlink_to(second.name)
+        return original_open(path, flags)
+
+    monkeypatch.setattr(run_manifest_module.os, "open", racing_open)
+    monkeypatch.setattr(run_manifest_module.sys, "executable", str(link))
+    with pytest.raises(RuntimeError, match="changed before"):
+        collect_interpreter_identity()
+    assert retargeted is True
+
+
+def test_interpreter_identity_rejects_a_dangling_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import benchmarks.run_manifest as run_manifest_module
+
+    link = tmp_path / "python"
+    try:
+        link.symlink_to("missing-python")
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    monkeypatch.setattr(run_manifest_module.sys, "executable", str(link))
+    with pytest.raises(OSError):
+        collect_interpreter_identity()
+
+
 def test_staged_source_is_immune_to_live_change_and_restore(
     tmp_path: Path,
 ) -> None:
@@ -2218,13 +2332,11 @@ def _initialization_fixture(
         ["git", "-C", str(repo), "commit", "-q", "-m", "results-only fixture"],
         check=True,
     )
-    _results, _manifest, initialization = (
-        validate_initial_evidence_destinations(
-            root=repo,
-            results_path=results_path,
-            manifest_path=manifest_path,
-            replace=True,
-        )
+    _results, _manifest, initialization = validate_initial_evidence_destinations(
+        root=repo,
+        results_path=results_path,
+        manifest_path=manifest_path,
+        replace=True,
     )
     return results_path, manifest_path, initialization
 
@@ -2952,13 +3064,11 @@ def test_initial_evidence_destination_requires_canonical_clean_committed_results
             replace=True,
         )
 
-    validated_results, validated_manifest, initialization = (
-        validate_initial_evidence_destinations(
-            root=repo,
-            results_path=results,
-            manifest_path=manifest,
-            replace=True,
-        )
+    validated_results, validated_manifest, initialization = validate_initial_evidence_destinations(
+        root=repo,
+        results_path=results,
+        manifest_path=manifest,
+        replace=True,
     )
     assert validated_results == results.resolve()
     assert validated_manifest == manifest.resolve()
