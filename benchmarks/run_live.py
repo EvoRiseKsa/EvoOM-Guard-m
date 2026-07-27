@@ -824,6 +824,12 @@ def _run_windows_job_worker(
     """Launch a handshake-paused worker in a kill-on-close Windows Job."""
     if os.name != "nt":
         raise ProcessContainmentError("Windows Job worker requires Windows")
+    startupinfo_factory = getattr(subprocess, "STARTUPINFO", None)
+    set_handle_inheritable = getattr(os, "set_handle_inheritable", None)
+    if not callable(startupinfo_factory) or not callable(set_handle_inheritable):
+        raise ProcessContainmentError(
+            "Windows worker handle inheritance APIs are unavailable"
+        )
     effective_limits = ProcessLimits() if limits is None else limits
     capture = BoundedOutput(effective_limits.max_output_bytes)
     job = _WindowsKillOnCloseJob()
@@ -836,7 +842,7 @@ def _run_windows_job_worker(
     deadline = time.monotonic() + max(0.0, float(timeout))
     try:
         start_event = _create_windows_start_event()
-        startupinfo = subprocess.STARTUPINFO()
+        startupinfo = startupinfo_factory()
         startupinfo.lpAttributeList = {"handle_list": [start_event]}
         launch_command = [
             *command,
@@ -853,7 +859,7 @@ def _run_windows_job_worker(
             close_fds=True,
             startupinfo=startupinfo,
         )
-        os.set_handle_inheritable(start_event, False)
+        set_handle_inheritable(start_event, False)
         stdout = process.stdout
         stderr = process.stderr
         streams = [stream for stream in (stdout, stderr) if stream is not None]

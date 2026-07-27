@@ -21,6 +21,9 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+    env:
+      FUZZ_OUT_VOLUME: >-
+        evoguard-cflite-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.sanitizer }}-out
     strategy:
       fail-fast: false
       matrix:
@@ -36,12 +39,19 @@ jobs:
       - name: Pull immutable fuzz builder
         run: docker pull "$FUZZ_BUILDER_IMAGE"
 
+      - name: Create isolated fuzz volumes
+        run: |
+          set -euo pipefail
+          docker volume create \
+            --label "evoguard.run=$GITHUB_RUN_ID" \
+            --label "evoguard.attempt=$GITHUB_RUN_ATTEMPT" \
+            "$FUZZ_OUT_VOLUME" >/dev/null
+
       - name: Build fuzzers in a credential-free, offline container
         env:
           SANITIZER: ${{ matrix.sanitizer }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/fuzz-out" "$RUNNER_TEMP/fuzz-work"
           docker run --rm \
             --network none \
             --cap-drop ALL \
@@ -58,8 +68,8 @@ jobs:
             -e OUT=/out \
             -e WORK=/work \
             -v "$GITHUB_WORKSPACE:/input/evoom-guard:ro" \
-            -v "$RUNNER_TEMP/fuzz-out:/out:rw" \
-            -v "$RUNNER_TEMP/fuzz-work:/work:rw" \
+            --mount "type=volume,source=$FUZZ_OUT_VOLUME,target=/out,volume-nocopy" \
+            --mount "type=volume,target=/work,volume-nocopy" \
             "$FUZZ_BUILDER_IMAGE" \
             /bin/bash -c \
             'cp -R --no-preserve=ownership /input/evoom-guard /src/evoom-guard &&
@@ -80,7 +90,7 @@ jobs:
               --tmpfs /tmp:rw,nosuid,nodev,exec,size=1g \
               -e "TARGET=$target" \
               -v "$GITHUB_WORKSPACE:/src/evoom-guard:ro" \
-              -v "$RUNNER_TEMP/fuzz-out:/out:ro" \
+              --mount "type=volume,source=$FUZZ_OUT_VOLUME,target=/out,readonly" \
               "$FUZZ_BUILDER_IMAGE" \
               /bin/sh -c \
               'mkdir -p "/tmp/corpus/$TARGET" /tmp/artifacts &&
@@ -89,3 +99,11 @@ jobs:
               exec "/out/$TARGET" -max_total_time=180 -timeout=10 -rss_limit_mb=2048 \
               -artifact_prefix=/tmp/artifacts/ "/tmp/corpus/$TARGET"'
           done
+
+      - name: Remove isolated fuzz volumes
+        if: always()
+        run: |
+          set -euo pipefail
+          if docker volume inspect "$FUZZ_OUT_VOLUME" >/dev/null 2>&1; then
+            docker volume rm "$FUZZ_OUT_VOLUME" >/dev/null
+          fi

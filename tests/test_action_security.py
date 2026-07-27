@@ -734,6 +734,23 @@ def test_fuzz_container_copies_do_not_require_chown_capability() -> None:
     assert text.count("cp -R --no-preserve=ownership") == 2
 
 
+def test_fuzz_outputs_use_run_scoped_docker_volumes() -> None:
+    text = CFLITE_WORKFLOW.read_text(encoding="utf-8")
+    assert "$RUNNER_TEMP/fuzz-out" not in text
+    assert "$RUNNER_TEMP/fuzz-work" not in text
+    assert "github.run_id" in text
+    assert "github.run_attempt" in text
+    assert '"$FUZZ_OUT_VOLUME" >/dev/null' in text
+    assert text.count("source=$FUZZ_OUT_VOLUME") == 2
+    assert text.count("volume-nocopy") == 2
+    assert "type=volume,target=/work,volume-nocopy" in text
+    assert "chmod 777" not in text
+    assert "volume prune" not in text
+    assert "if: always()" in text
+    assert 'docker volume inspect "$FUZZ_OUT_VOLUME"' in text
+    assert 'docker volume rm "$FUZZ_OUT_VOLUME"' in text
+
+
 def test_fuzz_workflow_runs_on_main_and_pull_requests() -> None:
     text = CFLITE_WORKFLOW.read_text(encoding="utf-8")
     assert "push:\n    branches: [main]" in text
@@ -784,7 +801,7 @@ def test_fuzz_execution_is_bounded_and_source_is_read_only() -> None:
         "--cpus",
         "$GITHUB_WORKSPACE:/input/evoom-guard:ro",
         "$GITHUB_WORKSPACE:/src/evoom-guard:ro",
-        "$RUNNER_TEMP/fuzz-out:/out:ro",
+        "source=$FUZZ_OUT_VOLUME,target=/out,readonly",
         "--read-only",
         '"/tmp/corpus/$TARGET"',
         "-artifact_prefix=/tmp/artifacts/",

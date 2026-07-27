@@ -1956,13 +1956,45 @@ def _file_identity(value: os.stat_result) -> tuple[int, int]:
     return (value.st_dev, value.st_ino)
 
 
+def _load_windows_library(name: str, *, use_last_error: bool = False) -> Any:
+    if os.name != "nt":
+        raise RuntimeError("Windows library loading requires Windows")
+    import ctypes
+
+    loader = getattr(ctypes, "WinDLL", None)
+    if not callable(loader):
+        raise RuntimeError("ctypes WinDLL support is unavailable")
+    return loader(name, use_last_error=use_last_error)
+
+
+def _format_windows_error(error: int) -> str:
+    import ctypes
+
+    format_error = getattr(ctypes, "FormatError", None)
+    if not callable(format_error):
+        raise RuntimeError("ctypes Windows error formatting is unavailable")
+    return str(format_error(error))
+
+
+def _windows_last_error() -> tuple[int, str]:
+    import ctypes
+
+    get_last_error = getattr(ctypes, "get_last_error", None)
+    if not callable(get_last_error):
+        raise RuntimeError("ctypes Windows last-error support is unavailable")
+    error = int(get_last_error())
+    return error, _format_windows_error(error)
+
+
 def _close_windows_handle(handle: int) -> None:
     if os.name != "nt":
         return
-    import ctypes
     from ctypes import wintypes
 
-    close_handle = ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle
+    close_handle = _load_windows_library(
+        "kernel32",
+        use_last_error=True,
+    ).CloseHandle
     close_handle.argtypes = [wintypes.HANDLE]
     close_handle.restype = wintypes.BOOL
     close_handle(wintypes.HANDLE(handle))
@@ -1986,7 +2018,7 @@ def _windows_handle_information(handle: int) -> tuple[int, tuple[int, int]]:
             ("nFileIndexLow", wintypes.DWORD),
         ]
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = _load_windows_library("kernel32", use_last_error=True)
     get_information = kernel32.GetFileInformationByHandle
     get_information.argtypes = [
         wintypes.HANDLE,
@@ -1996,8 +2028,8 @@ def _windows_handle_information(handle: int) -> tuple[int, tuple[int, int]]:
 
     information = _ByHandleFileInformation()
     if not get_information(wintypes.HANDLE(handle), ctypes.byref(information)):
-        error = ctypes.get_last_error()
-        raise OSError(error, ctypes.FormatError(error))
+        error, detail = _windows_last_error()
+        raise OSError(error, detail)
     identity = (
         int(information.dwVolumeSerialNumber),
         (int(information.nFileIndexHigh) << 32) | int(information.nFileIndexLow),
@@ -2010,7 +2042,7 @@ def _open_windows_directory(path: Path) -> tuple[int, tuple[int, int]]:
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = _load_windows_library("kernel32", use_last_error=True)
     create_file = kernel32.CreateFileW
     create_file.argtypes = [
         wintypes.LPCWSTR,
@@ -2042,8 +2074,8 @@ def _open_windows_directory(path: Path) -> tuple[int, tuple[int, int]]:
     )
     handle = int(raw_handle) if raw_handle is not None else 0
     if handle == invalid_handle:
-        error = ctypes.get_last_error()
-        raise OSError(error, ctypes.FormatError(error), str(path))
+        error, detail = _windows_last_error()
+        raise OSError(error, detail, str(path))
 
     file_attribute_directory = 0x00000010
     file_attribute_reparse_point = 0x00000400
@@ -2065,7 +2097,7 @@ def _create_windows_staged_file(path: Path, payload: bytes) -> tuple[int, tuple[
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = _load_windows_library("kernel32", use_last_error=True)
     create_file = kernel32.CreateFileW
     create_file.argtypes = [
         wintypes.LPCWSTR,
@@ -2114,10 +2146,10 @@ def _create_windows_staged_file(path: Path, payload: bytes) -> tuple[int, tuple[
     )
     handle = int(raw_handle) if raw_handle is not None else 0
     if handle == invalid_handle:
-        error = ctypes.get_last_error()
+        error, detail = _windows_last_error()
         if error in {80, 183}:
-            raise FileExistsError(error, ctypes.FormatError(error), str(path))
-        raise OSError(error, ctypes.FormatError(error), str(path))
+            raise FileExistsError(error, detail, str(path))
+        raise OSError(error, detail, str(path))
     try:
         if payload:
             buffer = ctypes.create_string_buffer(payload)
@@ -2129,11 +2161,11 @@ def _create_windows_staged_file(path: Path, payload: bytes) -> tuple[int, tuple[
                 ctypes.byref(written),
                 None,
             ) or written.value != len(payload):
-                error = ctypes.get_last_error()
-                raise OSError(error, ctypes.FormatError(error), str(path))
+                error, detail = _windows_last_error()
+                raise OSError(error, detail, str(path))
         if not flush_file(wintypes.HANDLE(handle)):
-            error = ctypes.get_last_error()
-            raise OSError(error, ctypes.FormatError(error), str(path))
+            error, detail = _windows_last_error()
+            raise OSError(error, detail, str(path))
         attributes, identity = _windows_handle_information(handle)
         if attributes & (0x00000010 | 0x00000400):
             raise ValueError("benchmark staging object is not a regular file")
@@ -2185,7 +2217,7 @@ def _windows_rename_relative(
         len(encoded_name),
     )
 
-    ntdll = ctypes.WinDLL("ntdll")
+    ntdll = _load_windows_library("ntdll")
     try:
         set_information = ntdll.NtSetInformationFile
         convert_status = ntdll.RtlNtStatusToDosError
@@ -2215,10 +2247,10 @@ def _windows_rename_relative(
         if error in {80, 183}:
             raise FileExistsError(
                 error,
-                ctypes.FormatError(error),
+                _format_windows_error(error),
                 destination_name,
             )
-        raise OSError(error, ctypes.FormatError(error), destination_name)
+        raise OSError(error, _format_windows_error(error), destination_name)
 
 
 def _dispose_windows_file(handle: int) -> None:
@@ -2228,7 +2260,7 @@ def _dispose_windows_file(handle: int) -> None:
     class _FileDispositionInformation(ctypes.Structure):
         _fields_ = [("DeleteFile", wintypes.BOOLEAN)]
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = _load_windows_library("kernel32", use_last_error=True)
     set_information = kernel32.SetFileInformationByHandle
     set_information.argtypes = [
         wintypes.HANDLE,
@@ -2245,8 +2277,8 @@ def _dispose_windows_file(handle: int) -> None:
         ctypes.byref(information),
         ctypes.sizeof(information),
     ):
-        error = ctypes.get_last_error()
-        raise OSError(error, ctypes.FormatError(error))
+        error, detail = _windows_last_error()
+        raise OSError(error, detail)
 
 
 def _open_pinned_directory(path: Path) -> _PinnedDirectory:
@@ -2508,7 +2540,7 @@ def _read_windows_published_file(
     import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = _load_windows_library("kernel32", use_last_error=True)
     get_size = kernel32.GetFileSizeEx
     get_size.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_longlong)]
     get_size.restype = wintypes.BOOL
@@ -2532,8 +2564,8 @@ def _read_windows_published_file(
 
     size = ctypes.c_longlong()
     if not get_size(wintypes.HANDLE(staged.windows_handle), ctypes.byref(size)):
-        error = ctypes.get_last_error()
-        raise OSError(error, ctypes.FormatError(error), label)
+        error, detail = _windows_last_error()
+        raise OSError(error, detail, label)
     if size.value < 0 or size.value > max_bytes:
         raise ValueError(f"{label} exceeds the {max_bytes}-byte bound")
     new_position = ctypes.c_longlong()
@@ -2543,8 +2575,8 @@ def _read_windows_published_file(
         ctypes.byref(new_position),
         0,
     ):
-        error = ctypes.get_last_error()
-        raise OSError(error, ctypes.FormatError(error), label)
+        error, detail = _windows_last_error()
+        raise OSError(error, detail, label)
 
     chunks: list[bytes] = []
     remaining = size.value
@@ -2559,8 +2591,8 @@ def _read_windows_published_file(
             ctypes.byref(received),
             None,
         ):
-            error = ctypes.get_last_error()
-            raise OSError(error, ctypes.FormatError(error), label)
+            error, detail = _windows_last_error()
+            raise OSError(error, detail, label)
         if received.value == 0 or received.value > requested:
             raise RuntimeError(f"{label} returned an invalid read length")
         chunks.append(buffer.raw[: received.value])
