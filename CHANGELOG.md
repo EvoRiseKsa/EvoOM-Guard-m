@@ -18,9 +18,9 @@ retained evidence say so.
 
 ## [Unreleased]
 
-## [4.4.0] — release candidate (unpublished)
+## [4.4.0] — unreleased development
 
-The entries in this section describe the current source candidate. They are not
+The entries in this section describe the current development source. They are not
 evidence of a `v4.4.0` consumer release, a completed A-through-H publication
 round, or hostile-code production readiness.
 
@@ -177,8 +177,8 @@ round, or hostile-code production readiness.
   dependency graph. Host-subprocess execution is not filesystem isolation:
   checkpoints prove identity only when observed and can miss a temporary
   mutation restored before the next observation.
-- The source tree remains a `4.4.0` release candidate. It is not yet a
-  production claim for hostile code and has not completed a release-bound
+- The source tree remains an unreleased `4.4.0.dev0` development snapshot. It
+  is not yet a production claim for hostile code and has not completed a release-bound
   A-through-H chain for the final commit.
 - Current local evidence does not substitute for a third-party held-out corpus,
   an independent launcher/runtime attestation, multi-OS toolchain conformance,

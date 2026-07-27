@@ -287,8 +287,8 @@ GitHub Release is published. **Before copying any versioned pin, confirm that
 exact tag exists in [GitHub Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases).**
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
 records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
@@ -589,7 +589,7 @@ to `subprocess`.
 ## Signed verdicts and portable evidence
 
 The acknowledgement flag and key-output failure contract in this section
-describe the current, **unpublished 4.4.0 release-candidate source**. They are
+describe the current, **unreleased 4.4.0.dev0 development source**. They are
 not claims about the ledger-recorded `v4.3.0` consumer release; follow the
 documentation at the exact version you install.
 

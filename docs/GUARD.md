@@ -449,7 +449,7 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
-**Current unpublished 4.4.0 release-candidate source only:** for a named,
+**Current unreleased 4.4.0.dev0 development source only:** for a named,
 fail-closed combination of these controls, use
 `--operating-profile local|protected|hostile`. The profile is included in the
 effective policy and its digest only when explicitly selected. `protected`

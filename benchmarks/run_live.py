@@ -34,6 +34,9 @@ Usage:
     python -I benchmarks/run_live.py \
         --finalize-provenance benchmarks/run-manifest.json --replace
     python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json
+    # Only after an exact, separately validated X.Y.Z.dev0 -> X.Y.Z promotion:
+    python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json \
+        --require-release-promotion
 
 Exit code 0 when every case matches its EXPECTED verdict, 1 otherwise — so this
 doubles as an end-to-end regression harness.
@@ -1737,6 +1740,14 @@ def main(argv: list[str]) -> int:
         help="also compare current interpreter/environment/tool identities",
     )
     ap.add_argument(
+        "--require-release-promotion",
+        action="store_true",
+        help=(
+            "during manifest verification only, allow the exact recorded "
+            "X.Y.Z.dev0 to current X.Y.Z version-assignment promotion"
+        ),
+    )
+    ap.add_argument(
         "--replace",
         action="store_true",
         help="explicitly replace an existing complete evidence pair",
@@ -1750,6 +1761,12 @@ def main(argv: list[str]) -> int:
         ),
     )
     args = ap.parse_args(argv)
+    if args.require_release_promotion and not args.verify_manifest:
+        print(
+            "--require-release-promotion requires --verify-manifest",
+            file=sys.stderr,
+        )
+        return 2
     worker_cases = [
         value
         for value in (args._worker_case, args._baseline_worker_case)
@@ -1862,6 +1879,7 @@ def main(argv: list[str]) -> int:
                     if args.results_path is not None
                     else None
                 ),
+                require_release_promotion=args.require_release_promotion,
             )
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
             print(f"benchmark manifest error: {exc}", file=sys.stderr)
@@ -1870,9 +1888,14 @@ def main(argv: list[str]) -> int:
             for error in errors:
                 print(f"benchmark manifest drift: {error}", file=sys.stderr)
             return 1
+        relation = (
+            "exact-release-version-transition"
+            if args.require_release_promotion
+            else "exact-source"
+        )
         print(
             "benchmark historical self-consistency verified "
-            "(unsigned and unauthenticated)"
+            f"(unsigned and unauthenticated; relation={relation})"
         )
         if args.check_current_environment:
             environment_errors = verify_reproduction_environment(

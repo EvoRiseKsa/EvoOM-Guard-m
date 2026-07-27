@@ -136,6 +136,10 @@ SOURCE_GLOBS = (
     "evoom_guard/**/*.py",
     "evoom_guard/**/*.json",
 )
+RELEASE_VERSION_SOURCE_PATH = "evoom_guard/__init__.py"
+_STABLE_RELEASE_VERSION_RE = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z"
+)
 
 
 @dataclass(frozen=True)
@@ -463,20 +467,15 @@ def source_inventory_paths(root: Path) -> tuple[str, ...]:
     return tuple(sorted(selected))
 
 
-def collect_source_bundle(root: Path) -> SourceBundle:
-    """Read and retain the exact stable bytes used for execution staging."""
-    root = root.resolve()
+def _source_bundle_from_files(files: Mapping[str, bytes]) -> SourceBundle:
+    """Build canonical source evidence from an already captured exact inventory."""
     inventory: list[dict[str, object]] = []
     framed: list[tuple[str, bytes]] = []
-    files: dict[str, bytes] = {}
     total_bytes = 0
-    for relative in source_inventory_paths(root):
-        snapshot = read_stable_regular_file(
-            root / relative,
-            max_bytes=MAX_SOURCE_FILE_BYTES,
-            label=f"benchmark source {relative}",
-        )
-        payload = snapshot.payload
+    for relative in sorted(files):
+        payload = files[relative]
+        if len(payload) > MAX_SOURCE_FILE_BYTES:
+            raise ValueError(f"benchmark source exceeds its byte bound: {relative}")
         total_bytes += len(payload)
         if total_bytes > MAX_SOURCE_TOTAL_BYTES:
             raise ValueError("benchmark source inventory exceeds its aggregate byte bound")
@@ -488,7 +487,6 @@ def collect_source_bundle(root: Path) -> SourceBundle:
             }
         )
         framed.append((relative, payload))
-        files[relative] = payload
     evidence: dict[str, object] = {
         "algorithm": "sha256",
         "format": "length-prefixed path and exact bytes",
@@ -502,7 +500,61 @@ def collect_source_bundle(root: Path) -> SourceBundle:
         "total_bytes": total_bytes,
         "files": inventory,
     }
-    return SourceBundle(evidence=evidence, files=files)
+    return SourceBundle(evidence=evidence, files=dict(files))
+
+
+def collect_source_bundle(root: Path) -> SourceBundle:
+    """Read and retain the exact stable bytes used for execution staging."""
+    root = root.resolve()
+    files: dict[str, bytes] = {}
+    for relative in source_inventory_paths(root):
+        snapshot = read_stable_regular_file(
+            root / relative,
+            max_bytes=MAX_SOURCE_FILE_BYTES,
+            label=f"benchmark source {relative}",
+        )
+        files[relative] = snapshot.payload
+    return _source_bundle_from_files(files)
+
+
+def _release_promotion_source_bundle(
+    root: Path,
+    *,
+    recorded_engine_version: object,
+    current_engine_version: str,
+) -> SourceBundle:
+    """Reconstruct the exact dev0 source represented by a stable promotion.
+
+    This is a verification-only compatibility rule. It accepts precisely one
+    stable ``X.Y.Z`` assignment in the current version file and rewrites that
+    byte sequence to the manifest's exact ``X.Y.Z.dev0`` value. Every other
+    captured source byte remains exact and must still match the manifest.
+    """
+    if (
+        not isinstance(recorded_engine_version, str)
+        or not _STABLE_RELEASE_VERSION_RE.fullmatch(current_engine_version)
+        or recorded_engine_version != f"{current_engine_version}.dev0"
+    ):
+        raise ValueError("benchmark engine versions are not an exact dev0 promotion")
+    current = collect_source_bundle(root)
+    payload = current.files.get(RELEASE_VERSION_SOURCE_PATH)
+    if payload is None:
+        raise ValueError("release version source is absent from benchmark inventory")
+    stable_assignment = (
+        f'__version__ = "{current_engine_version}"'.encode("ascii")
+    )
+    development_assignment = (
+        f'__version__ = "{recorded_engine_version}"'.encode("ascii")
+    )
+    if payload.count(stable_assignment) != 1 or development_assignment in payload:
+        raise ValueError("release version source is not an exact stable assignment")
+    normalized = dict(current.files)
+    normalized[RELEASE_VERSION_SOURCE_PATH] = payload.replace(
+        stable_assignment,
+        development_assignment,
+        1,
+    )
+    return _source_bundle_from_files(normalized)
 
 
 def collect_source_evidence(root: Path) -> dict[str, object]:
@@ -3699,8 +3751,16 @@ def verify_run_manifest(
     baseline_definition: Mapping[str, object],
     engine_version: str,
     results_path: Path | None = None,
+    require_release_promotion: bool = False,
 ) -> tuple[str, ...]:
-    """Verify historical self-consistency without claiming authentication."""
+    """Verify historical self-consistency without claiming authentication.
+
+    ``require_release_promotion`` is a narrow carry-forward rule for a manifest
+    measured on ``X.Y.Z.dev0`` and verified on ``X.Y.Z``. It normalizes only
+    the exact version-assignment bytes for comparison, requires that relation
+    to be used, and keeps all recorded source, result, and commit bindings
+    mandatory.
+    """
     root = root.resolve()
     manifest = load_run_manifest(path)
     errors: list[str] = []
@@ -3734,14 +3794,28 @@ def verify_run_manifest(
         errors.append("schema_version drift")
     if manifest.get("benchmark_id") != BENCHMARK_ID:
         errors.append("benchmark_id drift")
-    if manifest.get("engine_version") != engine_version:
+    recorded_engine_version = manifest.get("engine_version")
+    verification_engine_version = engine_version
+    expected_source_bundle = collect_source_bundle(root)
+    if require_release_promotion:
+        try:
+            expected_source_bundle = _release_promotion_source_bundle(
+                root,
+                recorded_engine_version=recorded_engine_version,
+                current_engine_version=engine_version,
+            )
+        except ValueError:
+            errors.append("exact dev0 release-promotion relation is not satisfied")
+        else:
+            assert isinstance(recorded_engine_version, str)
+            verification_engine_version = recorded_engine_version
+    if recorded_engine_version != verification_engine_version:
         errors.append("engine_version drift")
     run_id = manifest.get("run_id")
     if not isinstance(run_id, str) or not RUN_ID_PATTERN.fullmatch(run_id):
         errors.append("run_id invalid")
         run_id = ""
 
-    expected_source_bundle = collect_source_bundle(root)
     expected_source = expected_source_bundle.evidence
     if manifest.get("source") != expected_source:
         errors.append("source content drift")
@@ -3833,7 +3907,7 @@ def verify_run_manifest(
                 rows,
                 corpus=corpus,
                 run_id=run_id,
-                engine_version=engine_version,
+                engine_version=verification_engine_version,
                 source_digest=source_digest,
                 execution_environment_digest=environment_digest,
                 interpreter_digest=interpreter_digest,
@@ -4063,11 +4137,6 @@ def finalize_run_manifest_provenance(
         raise ValueError("benchmark results changed before provenance finalization")
     if manifest.get("source") != collect_source_evidence(root):
         raise ValueError("benchmark source changed before provenance finalization")
-    evidence_commit = _collect_evidence_commit_record(
-        root,
-        source=manifest.get("source"),
-        results=recorded_results,
-    )
     source_record = provenance.get("source_commit")
     source_errors, source_bound = _validate_source_commit_record(source_record)
     if source_errors:
@@ -4075,6 +4144,16 @@ def finalize_run_manifest_provenance(
             "benchmark source provenance is invalid: "
             + "; ".join(source_errors)
         )
+    if not source_bound:
+        raise ValueError(
+            "benchmark source provenance is not commit-bound; "
+            "rerun the measurement from a clean source commit"
+        )
+    evidence_commit = _collect_evidence_commit_record(
+        root,
+        source=manifest.get("source"),
+        results=recorded_results,
+    )
     finalized = dict(manifest)
     finalized["provenance"] = {
         "workflow": PROVENANCE_WORKFLOW,

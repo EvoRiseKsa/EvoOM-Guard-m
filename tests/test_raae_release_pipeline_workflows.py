@@ -209,7 +209,6 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
         "PROJECT_STATUS.json",
         "README.md",
         "ROADMAP.md",
-        "benchmarks/results.jsonl",
         "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
         "docs/PROJECT_STATUS.md",
         "docs/RELEASE_STATUS.md",
@@ -235,6 +234,8 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert policy["trust_setup_on_host"] is False
     assert policy["require_report_integrity"] == "external_process_isolated"
     assert policy["require_candidate_isolation"] == "docker"
+    assert "benchmarks/results.jsonl" not in policy["allow"]
+    assert "benchmarks/run-manifest.json" not in policy["allow"]
     assert "evidence/release-ledgers/*" in policy["protected"]
     assert "security/release-ledger-roots/*" in policy["protected"]
     assert "security/release-source-pack/*" in policy["protected"]
@@ -288,6 +289,20 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert candidate_scope.ALLOWED_PATHS == tuple(policy["allow"])
     assert "target.parents.length !== 1" in source
     assert "branch.protected !== true" in source
+    assert source.count("fetch-depth: 0") >= 2
+    assert (
+        "Verify exact dev0 benchmark evidence carry-forward with parent code"
+        in source
+    )
+    assert "sys.path.insert(0, str(base))" in source
+    assert "candidate / 'benchmarks/run-manifest.json'" in source
+    assert "base / 'benchmarks/run-manifest.json'" in source
+    assert "ENGINE_VERSION != '4.4.0.dev0'" in source
+    assert "trusted parent benchmark rejected" in source
+    assert "engine_version='4.4.0'" in source
+    assert "require_release_promotion=True" in source
+    assert "relation=exact-release-version-transition" in source
+    assert "benchmarks/results.jsonl" not in source
 
 
 def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
@@ -401,6 +416,28 @@ def test_release_scope_validator_accepts_only_the_exact_version_byte_change(
         "README.md",
         "evoom_guard/__init__.py",
     )
+
+
+@pytest.mark.parametrize(
+    "evidence_path",
+    (
+        "benchmarks/results.jsonl",
+        "benchmarks/run-manifest.json",
+    ),
+)
+def test_release_scope_validator_rejects_benchmark_evidence_refresh(
+    evidence_path: str,
+) -> None:
+    with pytest.raises(
+        candidate_scope.CandidateScopeError,
+        match=re.escape(evidence_path),
+    ):
+        candidate_scope.validate_changed_paths(
+            (
+                evidence_path,
+                candidate_scope.VERSION_PATH,
+            )
+        )
 
 
 @pytest.mark.parametrize(

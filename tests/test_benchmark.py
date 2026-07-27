@@ -42,7 +42,6 @@ from benchmarks.run_manifest import (
     verify_run_manifest,
     write_run_manifest,
 )
-from evoom_guard import __version__
 
 ROOT = Path(__file__).parents[1]
 RESULTS = ROOT / "benchmarks" / "results.jsonl"
@@ -151,6 +150,7 @@ def _commit_bound_benchmark_fixture(
                 "truth": case["truth"],
                 "expected_verdict": case["expect"],
                 "note": case["note"],
+                "engine_version": ENGINE_VERSION,
                 "execution_source_sha256": source_digest,
                 "execution_environment_sha256": environment_digest,
                 "interpreter_identity_sha256": interpreter_digest,
@@ -335,6 +335,75 @@ def test_two_phase_provenance_finalizes_committed_results_without_rerun(
         )
         == ()
     )
+
+
+def test_provenance_finalization_rejects_an_unbound_source_observation(
+    tmp_path: Path,
+) -> None:
+    from benchmarks.run_live import (
+        BASELINE_DEFINITION,
+        ENGINE_VERSION,
+        RUN_SETTINGS,
+        corpus_definition,
+    )
+
+    repo, manifest_path, draft = _commit_bound_benchmark_fixture(tmp_path)
+    unbound = deepcopy(draft)
+    git = unbound["git"]
+    provenance = unbound["provenance"]
+    claims = unbound["claims"]
+    assert isinstance(git, dict)
+    assert isinstance(provenance, dict)
+    assert isinstance(claims, dict)
+    source_commit = provenance["source_commit"]
+    assert isinstance(source_commit, dict)
+
+    git.update(
+        {
+            "dirty": True,
+            "porcelain_dirty": True,
+            "source_and_results_commit_bound": False,
+            "binding": "content-digests-only",
+            "reason": "dirty_worktree",
+        }
+    )
+    source_commit.update(
+        {
+            "bound": False,
+            "binding": "content-digests-only",
+            "worktree_dirty": True,
+            "reason": "dirty_worktree",
+        }
+    )
+    claims.update(
+        {
+            "source_commit_bound": False,
+            "source_and_results_commit_bound": False,
+            "content_identity": "content-digests-only",
+        }
+    )
+    write_run_manifest(manifest_path, unbound, replace=True)
+    assert (
+        verify_run_manifest(
+            manifest_path,
+            root=repo,
+            corpus=corpus_definition(),
+            settings=RUN_SETTINGS,
+            baseline_definition=BASELINE_DEFINITION,
+            engine_version=ENGINE_VERSION,
+        )
+        == ()
+    )
+
+    with pytest.raises(ValueError, match="source provenance is not commit-bound"):
+        finalize_run_manifest_provenance(
+            manifest_path,
+            root=repo,
+            corpus=corpus_definition(),
+            settings=RUN_SETTINGS,
+            baseline_definition=BASELINE_DEFINITION,
+            engine_version=ENGINE_VERSION,
+        )
 
 
 def test_provenance_finalization_rejects_results_not_present_at_head(
@@ -738,7 +807,9 @@ def test_published_live_results_match_their_labels() -> None:
     assert baseline["fp"] == 0
     assert baseline["abstain"] == 1
     rows = _load_rows(RESULTS)
-    assert {row.get("engine_version") for row in rows} == {__version__}
+    observed_versions = {row.get("engine_version") for row in rows}
+    manifest = load_run_manifest(MANIFEST)
+    assert observed_versions == {manifest["engine_version"]}
     assert all(isinstance(row.get("baseline"), dict) for row in rows)
     assert all(row.get("python_isolated") is True for row in rows)
     assert all(row.get("pytest_plugin_autoload") is False for row in rows)
@@ -783,6 +854,7 @@ def test_published_manifest_binds_current_sources_corpus_and_results() -> None:
             settings=RUN_SETTINGS,
             baseline_definition=BASELINE_DEFINITION,
             engine_version=ENGINE_VERSION,
+            require_release_promotion=not ENGINE_VERSION.endswith(".dev0"),
         )
         == ()
     )
@@ -813,6 +885,204 @@ def test_published_manifest_binds_current_sources_corpus_and_results() -> None:
         "source-and-results-git-commits-plus-content-digests"
     )
     assert "manifest_sha256" not in json.dumps(manifest, sort_keys=True)
+
+
+def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
+    tmp_path: Path,
+) -> None:
+    from benchmarks.run_live import (
+        BASELINE_DEFINITION,
+        ENGINE_VERSION,
+        RUN_SETTINGS,
+        corpus_definition,
+    )
+
+    assert ENGINE_VERSION.endswith(".dev0")
+    stable_version = ENGINE_VERSION.removesuffix(".dev0")
+    repo, manifest_path, _manifest = _commit_bound_benchmark_fixture(tmp_path)
+    exact_relation_errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=ENGINE_VERSION,
+        require_release_promotion=True,
+    )
+    assert (
+        "exact dev0 release-promotion relation is not satisfied"
+        in exact_relation_errors
+    )
+    version_path = repo / "evoom_guard" / "__init__.py"
+    development_assignment = f'__version__ = "{ENGINE_VERSION}"'
+    stable_assignment = f'__version__ = "{stable_version}"'
+    source = version_path.read_text(encoding="utf-8")
+    assert source.count(development_assignment) == 1
+    stable_source = source.replace(
+        development_assignment,
+        stable_assignment,
+        1,
+    )
+    version_path.write_text(
+        stable_source,
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    strict_errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=stable_version,
+    )
+    assert "engine_version drift" in strict_errors
+    assert "source content drift" in strict_errors
+    assert (
+        verify_run_manifest(
+            manifest_path,
+            root=repo,
+            corpus=corpus_definition(),
+            settings=RUN_SETTINGS,
+            baseline_definition=BASELINE_DEFINITION,
+            engine_version=stable_version,
+            require_release_promotion=True,
+        )
+        == ()
+    )
+
+    for invalid_current_version in (
+        f"{stable_version}.dev1",
+        f"{stable_version}rc1",
+        "4.4.1",
+    ):
+        invalid_errors = verify_run_manifest(
+            manifest_path,
+            root=repo,
+            corpus=corpus_definition(),
+            settings=RUN_SETTINGS,
+            baseline_definition=BASELINE_DEFINITION,
+            engine_version=invalid_current_version,
+            require_release_promotion=True,
+        )
+        assert (
+            "exact dev0 release-promotion relation is not satisfied"
+            in invalid_errors
+        )
+
+    version_path.write_text(
+        stable_source + f'{stable_assignment}\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    duplicate_assignment_errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=stable_version,
+        require_release_promotion=True,
+    )
+    assert (
+        "exact dev0 release-promotion relation is not satisfied"
+        in duplicate_assignment_errors
+    )
+
+    version_path.write_text(
+        stable_source.replace(
+            stable_assignment,
+            f'__version__ = "{stable_version}.dev1"',
+        ),
+        encoding="utf-8",
+        newline="\n",
+    )
+    non_dev0_assignment_errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=stable_version,
+        require_release_promotion=True,
+    )
+    assert (
+        "exact dev0 release-promotion relation is not satisfied"
+        in non_dev0_assignment_errors
+    )
+
+    version_path.write_text(
+        stable_source + "# unrelated source change\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    promoted_errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=stable_version,
+        require_release_promotion=True,
+    )
+    assert "source content drift" in promoted_errors
+
+    version_path.write_text(stable_source, encoding="utf-8", newline="\n")
+    added_source = repo / "evoom_guard" / "promotion_extra.py"
+    added_source.write_text("VALUE = 1\n", encoding="utf-8", newline="\n")
+    inventory_errors = verify_run_manifest(
+        manifest_path,
+        root=repo,
+        corpus=corpus_definition(),
+        settings=RUN_SETTINGS,
+        baseline_definition=BASELINE_DEFINITION,
+        engine_version=stable_version,
+        require_release_promotion=True,
+    )
+    assert "source content drift" in inventory_errors
+
+
+def test_release_promotion_flag_requires_manifest_verification(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from benchmarks.run_live import main
+
+    assert main(["--require-release-promotion"]) == 2
+    assert (
+        "--require-release-promotion requires --verify-manifest"
+        in capsys.readouterr().err
+    )
+
+
+def test_release_promotion_cli_reports_the_required_relation(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import benchmarks.run_live as run_live_module
+
+    observed: dict[str, object] = {}
+
+    def verified(_path: Path, **kwargs: object) -> tuple[str, ...]:
+        observed.update(kwargs)
+        return ()
+
+    monkeypatch.setattr(run_live_module, "verify_run_manifest", verified)
+    assert (
+        run_live_module.main(
+            [
+                "--verify-manifest",
+                "unused.json",
+                "--require-release-promotion",
+            ]
+        )
+        == 0
+    )
+    assert observed["require_release_promotion"] is True
+    assert (
+        "relation=exact-release-version-transition"
+        in capsys.readouterr().out
+    )
 
 
 def test_manifest_verifier_detects_results_corpus_and_settings_drift(

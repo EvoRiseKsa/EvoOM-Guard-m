@@ -25,10 +25,10 @@ evo-guard keygen --key judge.pem --pub judge.pub
 
 The pinned `v4.3.0` release supports its frozen schema-1.11 bundle contract.
 Schema 1.12 support and the key-generation failure hardening described below
-belong to the current, **unpublished 4.4.0 release-candidate source**. Consumers
+belong to the current, **unreleased 4.4.0.dev0 development source**. Consumers
 must follow the documentation shipped at the exact version they run.
 
-Current release-candidate key generation uses the same fail-closed
+Current development-source key generation uses the same fail-closed
 [two-file failure contract](SIGNED_VERDICTS.md#usage): a failed run can leave
 zero-length reservations that must be inspected and explicitly removed before
 retrying.
@@ -77,7 +77,7 @@ evo-guard bundle-evidence verdict.json \
   --material log=judge.log
 ```
 
-In the current 4.4.0 release-candidate source, the command strict-parses and
+In the current 4.4.0.dev0 development source, the command strict-parses and
 semantically verifies supported schema 1.11 or 1.12 again inside the bundle
 writer before signing the exact bytes. It refuses an inconsistent record.
 Output publication is atomic and no-clobber by default; `--force` is explicit.

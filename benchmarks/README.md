@@ -33,6 +33,9 @@ git commit -m "test(benchmark): finalize result provenance"
 python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json
 python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json \
   --check-current-environment
+# Only for the protected exact X.Y.Z.dev0 -> X.Y.Z source promotion:
+python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json \
+  --require-release-promotion
 python -I benchmarks/evaluate.py benchmarks/results.jsonl   # metrics only
 ```
 
@@ -214,6 +217,21 @@ subsequent commit. That later commit retains the manifest but is not
 retroactively described as the measurement or evidence commit. A draft,
 dirty-source run, external result path, or result file not committed byte for
 byte cannot be finalized.
+
+The source commit, results evidence commit, and later manifest commit must
+remain reachable in durable repository history. Squash and GitHub
+rebase-and-merge both rewrite or discard the recorded commit IDs and invalidate
+verification in a clean clone. Merge benchmark-evidence changes with a merge
+commit that retains the three branch commits unchanged.
+
+The protected stable-release candidate deliberately does not rewrite benchmark
+results or this manifest. Its parent-owned validator permits only the exact
+`X.Y.Z.dev0` to `X.Y.Z` assignment bytes in executable source and excludes both
+benchmark evidence files from candidate scope. In that one case,
+`--require-release-promotion` verifies the manifest against a reconstructed dev0
+source bundle: only the version assignment is normalized, while every other
+source byte, result digest, and recorded Git object remains mandatory. The
+manifest continues to identify the dev0 engine that was actually measured.
 
 The harness also compares the complete source snapshot used for staged
 execution with the worktree at manifest assembly. Git probes use a reviewed

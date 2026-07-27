@@ -109,6 +109,28 @@ gate.
 
 ## Protected A-H release-ledger v2 readiness
 
+- Before creating the stable source candidate, verify the development snapshot
+  exactly. The current live corpus has 17 labelled cases; this is separate from
+  the frozen v4.0.1 baseline's historical 16-row snapshot.
+
+  ```text
+  python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json
+  ```
+
+  The recorded source commit, results commit, and later final-manifest commit
+  must remain reachable with their original IDs. Merge that evidence chain with
+  a merge commit; squash and GitHub rebase-and-merge are invalid.
+- The stable candidate must leave both `benchmarks/results.jsonl` and
+  `benchmarks/run-manifest.json` byte-for-byte unchanged. Its parent-owned A
+  workflow must require, not merely permit, the exact carry-forward relation:
+
+  ```text
+  python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json `
+    --require-release-promotion
+  ```
+
+  Success must report `relation=exact-release-version-transition`; exact-mode
+  success or an unrelated source change is not a substitute.
 - `tests/baseline/schema/release-ledger-v2.schema.json` is the contract for a
   future post-publication protected A-H ledger. It does not apply retroactively
   to v1 ledgers and must not be used to rewrite a frozen baseline.
