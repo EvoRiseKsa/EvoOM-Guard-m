@@ -728,6 +728,12 @@ def test_fuzz_candidate_processes_receive_no_github_credentials() -> None:
     assert "--network none" in text
 
 
+def test_fuzz_container_copies_do_not_require_chown_capability() -> None:
+    text = CFLITE_WORKFLOW.read_text(encoding="utf-8")
+    assert "cp -a" not in text
+    assert text.count("cp -R --no-preserve=ownership") == 2
+
+
 def test_fuzz_workflow_runs_on_main_and_pull_requests() -> None:
     text = CFLITE_WORKFLOW.read_text(encoding="utf-8")
     assert "push:\n    branches: [main]" in text

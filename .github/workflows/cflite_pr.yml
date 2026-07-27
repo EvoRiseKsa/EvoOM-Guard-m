@@ -62,7 +62,8 @@ jobs:
             -v "$RUNNER_TEMP/fuzz-work:/work:rw" \
             "$FUZZ_BUILDER_IMAGE" \
             /bin/bash -c \
-            'cp -a /input/evoom-guard /src/evoom-guard && exec /bin/bash /src/evoom-guard/.clusterfuzzlite/build.sh'
+            'cp -R --no-preserve=ownership /input/evoom-guard /src/evoom-guard &&
+            exec /bin/bash /src/evoom-guard/.clusterfuzzlite/build.sh'
 
       - name: Run coverage-guided fuzzers offline
         run: |
@@ -83,7 +84,8 @@ jobs:
               "$FUZZ_BUILDER_IMAGE" \
               /bin/sh -c \
               'mkdir -p "/tmp/corpus/$TARGET" /tmp/artifacts &&
-              cp -a "/src/evoom-guard/tools/fuzz/corpus/$TARGET/." "/tmp/corpus/$TARGET/" &&
+              cp -R --no-preserve=ownership \
+              "/src/evoom-guard/tools/fuzz/corpus/$TARGET/." "/tmp/corpus/$TARGET/" &&
               exec "/out/$TARGET" -max_total_time=180 -timeout=10 -rss_limit_mb=2048 \
               -artifact_prefix=/tmp/artifacts/ "/tmp/corpus/$TARGET"'
           done

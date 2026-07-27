@@ -70,12 +70,19 @@ def main() -> None:
     network_port = int(os.environ["EVOGUARD_CONFORMANCE_NETWORK_PORT"])
     network_timeout = float(os.environ["EVOGUARD_CONFORMANCE_NETWORK_TIMEOUT"])
     uname = platform.uname()
-    getuid = cast(Callable[[], int], os.getuid)  # type: ignore[attr-defined]
-    getgid = cast(Callable[[], int], os.getgid)  # type: ignore[attr-defined]
-    getgroups = cast(
-        Callable[[], list[int]],
-        os.getgroups,  # type: ignore[attr-defined]
-    )
+    os_members = vars(os)
+    getuid_member = os_members.get("getuid")
+    getgid_member = os_members.get("getgid")
+    getgroups_member = os_members.get("getgroups")
+    if not (
+        callable(getuid_member)
+        and callable(getgid_member)
+        and callable(getgroups_member)
+    ):
+        raise RuntimeError("isolation probe requires POSIX identity APIs")
+    getuid = cast(Callable[[], int], getuid_member)
+    getgid = cast(Callable[[], int], getgid_member)
+    getgroups = cast(Callable[[], list[int]], getgroups_member)
     result = {
         "schema_version": "evoom-isolation-probe-1",
         "identity": {
