@@ -151,6 +151,17 @@ def test_action_smoke_exercises_only_reviewed_locked_environments() -> None:
     assert "required-coverage-available" in text
 
 
+def test_action_smoke_neutralizes_host_git_credential_helpers() -> None:
+    text = ACTION_SMOKE.read_text(encoding="utf-8")
+    boundary = text.index("Create a candidate-safe Git configuration boundary")
+    action = text.index("Run the local composite Action")
+    assert boundary < action
+    assert 'SAFE_GIT_CONFIG="$RUNNER_TEMP/evoguard-empty-global.gitconfig"' in text
+    assert 'GIT_CONFIG_NOSYSTEM: "1"' in text
+    assert "GIT_CONFIG_GLOBAL: ${{ steps.candidate-git.outputs.global-config }}" in text
+    assert 'GIT_TERMINAL_PROMPT: "0"' in text
+
+
 def test_trusted_dependency_inputs_are_codeowner_protected() -> None:
     codeowners = CODEOWNERS.read_text(encoding="utf-8")
     for path in (

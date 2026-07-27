@@ -49,6 +49,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Create a candidate-safe Git configuration boundary
+        id: candidate-git
+        shell: bash
+        run: |
+          set -euo pipefail
+          SAFE_GIT_CONFIG="$RUNNER_TEMP/evoguard-empty-global.gitconfig"
+          : > "$SAFE_GIT_CONFIG"
+          echo "global-config=$SAFE_GIT_CONFIG" >> "$GITHUB_OUTPUT"
+
       - name: Preprovision pytest without coverage.py
         if: matrix.scenario != 'required-coverage-available'
         shell: bash
@@ -104,6 +113,12 @@ jobs:
           # even when a runner happens to have network access.
           PIP_NO_INDEX: "1"
           PIP_REQUIRE_VIRTUALENV: "1"
+          # Git for Windows installs a system credential helper even on an
+          # ephemeral hosted runner. Keep candidate execution fail-closed while
+          # presenting an explicitly empty system/global credential boundary.
+          GIT_CONFIG_NOSYSTEM: "1"
+          GIT_CONFIG_GLOBAL: ${{ steps.candidate-git.outputs.global-config }}
+          GIT_TERMINAL_PROMPT: "0"
         with:
           base-ref: ${{ steps.consumer.outputs.base }}
           test-command: "python -m pytest -q"
