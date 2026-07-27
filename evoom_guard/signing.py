@@ -1262,6 +1262,17 @@ def verify_bytes_with_key_id(
         return True, key_id
     except InvalidSignature:
         return False, key_id
+    except Exception as exc:
+        # Reloading cryptography's process-resident extension can leave its
+        # live InvalidSignature class distinct from the freshly imported
+        # Python wrapper class. Preserve the public "invalid => False"
+        # contract while allowing every other verification error to surface.
+        if (
+            type(exc).__name__ == "InvalidSignature"
+            and type(exc).__module__ == "cryptography.exceptions"
+        ):
+            return False, key_id
+        raise
 
 
 def public_key_id(public_key_path: str) -> str:

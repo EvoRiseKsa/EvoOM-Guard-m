@@ -1668,6 +1668,27 @@ class SigningRoundtripTests(unittest.TestCase):
         self.assertFalse(verify_bytes(payload, bytes(corrupted), self.pub))
         self.assertFalse(verify_bytes(payload, signature[:-1], self.pub))
 
+    def test_bytes_api_handles_reloaded_invalid_signature_class(self) -> None:
+        from cryptography import exceptions
+
+        from evoom_guard.signing import sign_bytes, verify_bytes
+
+        payload = b"process-resident cryptography exception"
+        signature = bytearray(sign_bytes(payload, self.key))
+        signature[-1] ^= 0x01
+
+        class ReloadedInvalidSignature(Exception):
+            pass
+
+        ReloadedInvalidSignature.__name__ = "InvalidSignature"
+        ReloadedInvalidSignature.__module__ = "cryptography.exceptions"
+        with mock.patch.object(
+            exceptions,
+            "InvalidSignature",
+            ReloadedInvalidSignature,
+        ):
+            self.assertFalse(verify_bytes(payload, bytes(signature), self.pub))
+
     def test_bytes_api_requires_bytes_without_implicit_coercion(self) -> None:
         from evoom_guard.signing import sign_bytes, verify_bytes
 
