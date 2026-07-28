@@ -587,11 +587,17 @@ jobs:
             sha256sum --check --strict SHA256SUMS
           )
 
-          cp "/run/evoguard-raae-detached-approved/inputs/evo-guard.pyz" "$RUNNER_TEMP/tampered-artifact.pyz"
+          install -m 0600 \
+            "/run/evoguard-raae-detached-approved/inputs/evo-guard.pyz" \
+            "$RUNNER_TEMP/tampered-artifact.pyz"
           printf 'x' >> "$RUNNER_TEMP/tampered-artifact.pyz"
-          cp "/run/evoguard-raae-detached-approved/inputs/evo-guard.spdx.json" "$RUNNER_TEMP/tampered-sbom.json"
+          install -m 0600 \
+            "/run/evoguard-raae-detached-approved/inputs/evo-guard.spdx.json" \
+            "$RUNNER_TEMP/tampered-sbom.json"
           printf ' ' >> "$RUNNER_TEMP/tampered-sbom.json"
-          cp "/run/evoguard-raae-detached-approved/inputs/evo-guard.pyz.raae" "$RUNNER_TEMP/tampered.raae"
+          install -m 0600 \
+            "/run/evoguard-raae-detached-approved/inputs/evo-guard.pyz.raae" \
+            "$RUNNER_TEMP/tampered.raae"
           python - "$RUNNER_TEMP/tampered.raae" <<'PY'
           import pathlib, sys
           path = pathlib.Path(sys.argv[1])
