@@ -147,6 +147,12 @@ publication round, or hostile-code production readiness.
   negative-test fixtures with an explicit owner-writable mode. The immutable
   root-owned F inputs remain read-only while G can exercise the intended seven
   rejection cases instead of failing during fixture preparation.
+- Publication no longer calls the administration-only Immutable Releases
+  endpoint with an under-privileged `GITHUB_TOKEN`. The repository owner first
+  verifies that endpoint outside Actions and authorizes only the reviewed
+  candidate by setting the publication gate to its exact commit SHA; both
+  protected H jobs recheck that binding, and H succeeds only when GitHub
+  reports the resulting release as immutable.
 
 ### Changed
 

@@ -15,7 +15,8 @@ jobs:
   preflight:
     if: >-
       vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED == 'true' &&
-      vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED == 'true'
+      vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED ==
+      github.event.workflow_run.head_sha
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -1103,6 +1104,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          PUBLICATION_AUTHORIZED_TARGET: ${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}
         run: |
           set -euo pipefail
           record="$RUNNER_TEMP/publication-ready/publication-ready.json"
@@ -1110,13 +1112,13 @@ jobs:
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
-          immutable_enabled="$(
-            gh api \
-              -H "X-GitHub-Api-Version: 2026-03-10" \
-              "repos/$GITHUB_REPOSITORY/immutable-releases" \
-              --jq .enabled
-          )"
-          test "$immutable_enabled" = "true"
+          # GITHUB_TOKEN cannot receive repository Administration:read, which
+          # GitHub requires for GET /immutable-releases. The repository owner
+          # therefore sets the publication variable to this exact target only
+          # after checking that endpoint; both protected reviewers recheck the
+          # target binding, and the published release must still report
+          # immutable=true before H can succeed.
+          test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
           set +e
           gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
             > "$RUNNER_TEMP/draft-approval-tag.response" \
@@ -1264,6 +1266,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          PUBLICATION_AUTHORIZED_TARGET: ${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
         run: |
@@ -1273,13 +1276,7 @@ jobs:
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
-          immutable_enabled="$(
-            gh api \
-              -H "X-GitHub-Api-Version: 2026-03-10" \
-              "repos/$GITHUB_REPOSITORY/immutable-releases" \
-              --jq .enabled
-          )"
-          test "$immutable_enabled" = "true"
+          test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
           prove_tag_absent() {
             local phase="$1"
             local response="$RUNNER_TEMP/tag-ref-$phase.response"
@@ -1522,6 +1519,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_DEPLOY_KEY: ${{ secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          PUBLICATION_AUTHORIZED_TARGET: ${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
           RELEASE_ID: ${{ steps.create.outputs.release_id }}
@@ -1805,13 +1803,7 @@ jobs:
           test "$(git -C "$tag_repo" rev-parse refs/remotes/origin/main)" = "$TARGET_SHA"
           current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
-          immutable_enabled="$(
-            gh api \
-              -H "X-GitHub-Api-Version: 2026-03-10" \
-              "repos/$GITHUB_REPOSITORY/immutable-releases" \
-              --jq .enabled
-          )"
-          test "$immutable_enabled" = "true"
+          test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             > "$RUNNER_TEMP/release-before-publication.json"
           set +e
