@@ -1,9 +1,9 @@
 # Independent blind-evaluation protocol
 
 > **Availability:** this protocol depends on the explicit operating-profile and
-> schema `1.12` contracts in the current unreleased `4.4.0.dev0` development
-> source. It is not a `v4.3.0` consumer interface, and publishing the protocol
-> is not evidence that an independent party has run it.
+> schema `1.12` contracts in the `4.4.0` source line. It is not a `v4.3.0`
+> consumer interface. Presence of the protocol is neither evidence of immutable
+> `v4.4.0` publication nor evidence that an independent party ran it.
 
 `tools/evaluation/blind_protocol.py` makes a held-out evaluation auditable
 without pretending that the project author is an independent evaluator. It

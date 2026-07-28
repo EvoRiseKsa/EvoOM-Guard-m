@@ -98,6 +98,8 @@ def _all_strings(value: object) -> list[str]:
 
 def _commit_bound_benchmark_fixture(
     tmp_path: Path,
+    *,
+    engine_version: str | None = None,
 ) -> tuple[Path, Path, dict[str, object]]:
     from benchmarks.run_live import (
         BASELINE_DEFINITION,
@@ -108,10 +110,22 @@ def _commit_bound_benchmark_fixture(
 
     repo = tmp_path / "repo"
     repo.mkdir()
+    fixture_version = engine_version or ENGINE_VERSION
     for relative in source_inventory_paths(ROOT):
         destination = repo / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, destination)
+    if fixture_version != ENGINE_VERSION:
+        version_path = repo / "evoom_guard" / "__init__.py"
+        current_assignment = f'__version__ = "{ENGINE_VERSION}"'
+        fixture_assignment = f'__version__ = "{fixture_version}"'
+        source = version_path.read_text(encoding="utf-8")
+        assert source.count(current_assignment) == 1
+        version_path.write_text(
+            source.replace(current_assignment, fixture_assignment, 1),
+            encoding="utf-8",
+            newline="\n",
+        )
     results = repo / "benchmarks" / "results.jsonl"
     execution_environment, environment_evidence = build_execution_environment()
     environment_digest = environment_evidence["effective_environment_sha256"]
@@ -151,7 +165,7 @@ def _commit_bound_benchmark_fixture(
                 "truth": case["truth"],
                 "expected_verdict": case["expect"],
                 "note": case["note"],
-                "engine_version": ENGINE_VERSION,
+                "engine_version": fixture_version,
                 "execution_source_sha256": source_digest,
                 "execution_environment_sha256": environment_digest,
                 "interpreter_identity_sha256": interpreter_digest,
@@ -204,7 +218,7 @@ def _commit_bound_benchmark_fixture(
         settings=RUN_SETTINGS,
         baseline_definition=BASELINE_DEFINITION,
         run_id=run_id,
-        engine_version=ENGINE_VERSION,
+        engine_version=fixture_version,
         execution_environment=environment_evidence,
         effective_environment=execution_environment,
     )
@@ -1045,21 +1059,24 @@ def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
         corpus_definition,
     )
 
-    assert ENGINE_VERSION.endswith(".dev0")
     stable_version = ENGINE_VERSION.removesuffix(".dev0")
-    repo, manifest_path, _manifest = _commit_bound_benchmark_fixture(tmp_path)
+    development_version = f"{stable_version}.dev0"
+    repo, manifest_path, _manifest = _commit_bound_benchmark_fixture(
+        tmp_path,
+        engine_version=development_version,
+    )
     exact_relation_errors = verify_run_manifest(
         manifest_path,
         root=repo,
         corpus=corpus_definition(),
         settings=RUN_SETTINGS,
         baseline_definition=BASELINE_DEFINITION,
-        engine_version=ENGINE_VERSION,
+        engine_version=development_version,
         require_release_promotion=True,
     )
     assert "exact dev0 release-promotion relation is not satisfied" in exact_relation_errors
     version_path = repo / "evoom_guard" / "__init__.py"
-    development_assignment = f'__version__ = "{ENGINE_VERSION}"'
+    development_assignment = f'__version__ = "{development_version}"'
     stable_assignment = f'__version__ = "{stable_version}"'
     source = version_path.read_text(encoding="utf-8")
     assert source.count(development_assignment) == 1
@@ -1225,6 +1242,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         corpus_definition,
     )
 
+    require_release_promotion = not ENGINE_VERSION.endswith(".dev0")
     changed_results = tmp_path / "results.jsonl"
     shutil.copyfile(RESULTS, changed_results)
     assert (
@@ -1236,6 +1254,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
             baseline_definition=BASELINE_DEFINITION,
             engine_version=ENGINE_VERSION,
             results_path=changed_results,
+            require_release_promotion=require_release_promotion,
         )
         == ()
     )
@@ -1248,6 +1267,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         baseline_definition=BASELINE_DEFINITION,
         engine_version=ENGINE_VERSION,
         results_path=changed_results,
+        require_release_promotion=require_release_promotion,
     )
     assert "results drift" in result_errors
 
@@ -1263,6 +1283,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         settings=RUN_SETTINGS,
         baseline_definition=BASELINE_DEFINITION,
         engine_version=ENGINE_VERSION,
+        require_release_promotion=require_release_promotion,
     )
     assert "corpus drift" in corpus_errors
 
@@ -1274,6 +1295,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         settings=changed_settings,
         baseline_definition=BASELINE_DEFINITION,
         engine_version=ENGINE_VERSION,
+        require_release_promotion=require_release_promotion,
     )
     assert "settings drift" in settings_errors
 
@@ -1285,6 +1307,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         settings=RUN_SETTINGS,
         baseline_definition=changed_baseline,
         engine_version=ENGINE_VERSION,
+        require_release_promotion=require_release_promotion,
     )
     assert "baseline definition drift" in baseline_errors
 
@@ -1304,6 +1327,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         baseline_definition=BASELINE_DEFINITION,
         engine_version=ENGINE_VERSION,
         results_path=contract_results,
+        require_release_promotion=require_release_promotion,
     )
     assert any(error.startswith("results/corpus contract:") for error in contract_errors)
 
@@ -1329,6 +1353,7 @@ def test_manifest_verifier_detects_results_corpus_and_settings_drift(
         settings=RUN_SETTINGS,
         baseline_definition=BASELINE_DEFINITION,
         engine_version=ENGINE_VERSION,
+        require_release_promotion=require_release_promotion,
     )
     assert "Guard metrics drift" in metric_errors
     assert "baseline metrics drift" in metric_errors
@@ -1700,8 +1725,15 @@ def test_live_benchmark_cli_draft_commit_finalize_and_verify_end_to_end(
     fresh = evaluate(out)
     committed = evaluate(RESULTS)
     assert fresh == committed
-    assert _without_environmental_timing(_load_rows(out)) == (
-        _without_environmental_timing(_load_rows(RESULTS))
+    fresh_rows = _load_rows(out)
+    committed_rows = _load_rows(RESULTS)
+    if not ENGINE_VERSION.endswith(".dev0"):
+        measured_version = f"{ENGINE_VERSION}.dev0"
+        for row in committed_rows:
+            assert row["engine_version"] == measured_version
+            row["engine_version"] = ENGINE_VERSION
+    assert _without_environmental_timing(fresh_rows) == (
+        _without_environmental_timing(committed_rows)
     )
 
     subprocess.run(

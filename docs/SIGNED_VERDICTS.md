@@ -27,14 +27,13 @@ pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m
 
 The pinned release has its own frozen CLI and signing implementation. The
 `--acknowledge-local-key-exposure` flag and the descriptor/reservation
-hardening documented below describe the current, **unreleased 4.4.0.dev0
-development source**, not `v4.3.0`. Do not infer that those additions are
-available from the pinned consumer release; consult the documentation at the
-exact version you run.
+hardening documented below belong to the `4.4.0` source line, not `v4.3.0`.
+Do not infer availability from the pinned consumer release; consult the
+documentation at the exact version you run.
 
 ## Usage
 
-To run the development-source example, install the current checkout in a
+To run the repository-source example, install the current checkout in a
 disposable trusted development environment:
 
 ```bash

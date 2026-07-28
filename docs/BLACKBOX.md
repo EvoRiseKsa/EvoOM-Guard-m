@@ -7,11 +7,11 @@
 
 # The external black-box judge (`--blackbox`)
 
-> **Release boundary:** the black-box and Docker/gVisor isolation mechanisms
-> documented here are available in the latest immutable consumer release
-> `v4.3.0` under its frozen schema `1.11` contract. Passages about explicit
-> operating profiles or schema `1.12` apply only to the current unreleased
-> `4.4.0.dev0` development source.
+> **Release boundary:** the black-box and Docker/gVisor mechanisms documented
+> here are available in `v4.3.0` under schema `1.11`. Passages about explicit
+> operating profiles or schema `1.12` describe the `4.4.0` source line and are
+> not part of the frozen `v4.3.0` contract; confirm the immutable release you
+> run.
 
 The default judge runs your tests **in the same process** as the code under
 test, so a patch that writes deliberate forgery into source — an `atexit` hook

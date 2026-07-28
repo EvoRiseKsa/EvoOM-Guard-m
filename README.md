@@ -51,9 +51,9 @@ records publication by this pipeline. An admitted release is contracted to exact
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
 
-The repository documentation follows the development source and may describe
-features not present in `v4.3.0`. Each advanced document states its version and
-evidence boundary; confirm that boundary before copying a command.
+The repository documentation follows the repository source and may describe
+features not present in the latest ledger-recorded consumer release. Confirm
+each page's version and evidence boundary before copying a command.
 
 ## Install and run
 
@@ -146,7 +146,7 @@ never checks out or executes candidate code.
 | Add organization-owned checks outside the candidate tree | Verifier pack | [`VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) |
 | Judge a CLI through an external report channel | Black-box, preferably `--blackbox-only` | [`BLACKBOX.md`](docs/BLACKBOX.md) |
 | Add a delivered container or gVisor boundary | Isolated execution | [`BLACKBOX.md`](docs/BLACKBOX.md#boundary-evidence-is-observed-never-inferred-from-policy) |
-| Evaluate named assurance profiles in unreleased source | Development-only profiles | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
+| Evaluate named assurance profiles in the `4.4.0` source line | `4.4.0` profiles (verify release status) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
 | Produce portable, authenticated evidence | Signed verdict or evidence bundle | [`SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) |
 | Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
 

@@ -25,10 +25,10 @@ evo-guard keygen --key judge.pem --pub judge.pub
 
 The pinned `v4.3.0` release supports its frozen schema-1.11 bundle contract.
 Schema 1.12 support and the key-generation failure hardening described below
-belong to the current, **unreleased 4.4.0.dev0 development source**. Consumers
-must follow the documentation shipped at the exact version they run.
+belong to the `4.4.0` source line, not the `v4.3.0` contract. Consumers must
+follow the documentation shipped at the exact version they run.
 
-Current development-source key generation uses the same fail-closed
+In the `4.4.0` source line, key generation uses the same fail-closed
 [two-file failure contract](SIGNED_VERDICTS.md#usage): a failed run can leave
 zero-length reservations that must be inspected and explicitly removed before
 retrying.
@@ -57,10 +57,10 @@ alone:
 portable meaning is the SHA-256 of the exact executable distribution bytes that
 produced the verdict. For the standalone release, use the `evo-guard.pyz` digest
 from `SHA256SUMS` after verifying the download. A source checkout does not have
-that distribution identity. The next, unreleased composite Action builds a
+that distribution identity. The `4.4.0` source-line composite Action builds a
 temporary zipapp without a resolver, but does not expose a canonical digest
-output for finalizer binding; do not invent one. Use the released zipapp for
-this workflow until an Action digest contract and output are specified.
+output for finalizer binding; do not invent one. Use a ledger-recorded release
+zipapp until an Action digest contract and output are specified.
 
 `run_attempt` is mandatory because GitHub keeps the same run ID when a workflow
 is re-run. Together the two fields identify one execution attempt rather than
@@ -77,7 +77,7 @@ evo-guard bundle-evidence verdict.json \
   --material log=judge.log
 ```
 
-In the current 4.4.0.dev0 development source, the command strict-parses and
+In the `4.4.0` source line, the command strict-parses and
 semantically verifies supported schema 1.11 or 1.12 again inside the bundle
 writer before signing the exact bytes. It refuses an inconsistent record.
 Output publication is atomic and no-clobber by default; `--force` is explicit.

@@ -33,9 +33,9 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 <!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
 
 - Verdict schema `1.11` is the frozen `v4.3.0` consumer-release contract.
-  Schema `1.12` adds the explicit `operating_profile` field only in the current
-  unpublished `4.4.0.dev0` development source; its presence here is not
-  evidence of publication.
+  Schema `1.12` adds the explicit `operating_profile` field in the `4.4.0`
+  source line; its presence here is not evidence that `v4.4.0` has been
+  published.
 - **Protected-path gating** — edits or deletions of tests, their configuration,
   CI, or auto-executed files are rejected before the suite runs.
 - **Structured, judge-owned verdicts** across eight test runners (verdict read
@@ -44,8 +44,8 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
   multi-phase run.
 - **Independent record verification** — the bounded, strict `v4.3.0` verifier
   checks schema-1.11 lifecycle, policy, receipt, isolation, pack, and
-  verdict-source invariants without executing candidate code. The current
-  unreleased `4.4.0.dev0` source extends that verifier to schema `1.12`.
+  verdict-source invariants without executing candidate code. The `4.4.0`
+  source line extends that verifier to schema `1.12`.
 - **Authenticated evidence envelopes** — deterministic bundles bind the exact
   record and optional materials to external repository/run/revision context and
   an Ed25519 key; verification requires the key and expected context out of band.
@@ -191,9 +191,10 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 
 ## Current limits (stated plainly)
 
-- The current unreleased `4.4.0.dev0` source adds operating-profile and
-  conformance/evaluation tooling, but those mechanisms are development source,
-  not a consumer release. They do not certify a hostile production deployment.
+- The `4.4.0` source line adds operating-profile and conformance/evaluation
+  tooling. Consumer availability is determined by an immutable GitHub Release,
+  not by presence in the repository. These mechanisms do not certify a hostile
+  production deployment.
   The missing evidence remains a release-bound gVisor/VM run, a real multi-OS
   runner matrix, a third-party held-out evaluation with an independently
   controlled launcher when execution identity matters, and provider-backed

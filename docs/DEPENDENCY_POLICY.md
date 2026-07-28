@@ -69,11 +69,11 @@ mutable `python:3.12-slim` tag. Both the workflow and
 
 ## Deliberate boundary for Action consumers
 
-On the next, unreleased Action revision, `action.yml` builds the reviewed
+In the `4.4.0` source line, `action.yml` builds the reviewed
 standard-library-only sources from `github.action_path` into a temporary
 `evo-guard.pyz`, then runs that archive with Python isolated mode. The Action
 bootstrap does not invoke a package resolver, build backend, or PyPI. This
-change is not part of the immutable `v4.3.0` Action.
+behavior is not part of the immutable `v4.3.0` Action.
 
 Optional changed-line measurement is deliberately not installed by the Action.
 When a policy requests it, `coverage.py` must already be available in the

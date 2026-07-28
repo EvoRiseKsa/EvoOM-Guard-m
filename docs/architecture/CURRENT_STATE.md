@@ -1,8 +1,8 @@
 # Current architecture state
 
-This page is the short, present-tense architecture entry point for EvoOM Guard
-source `4.4.0.dev0`. It describes the current unreleased development source
-tree, not the capabilities of the latest consumer release `v4.3.0`. Only
+This page is the present-tense architecture entry point for the exact checked
+out EvoOM Guard source tree. It is not a promise about a consumer release;
+consult [`../RELEASE_STATUS.md`](../RELEASE_STATUS.md) for that boundary. Only
 merged `main` is covered by the repository's protected-branch controls.
 
 ## Layer ownership

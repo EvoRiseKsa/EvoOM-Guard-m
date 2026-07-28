@@ -19,6 +19,7 @@ from unittest import mock
 from jsonschema import Draft202012Validator
 
 from ops import render_project_status
+from tools.ci import validate_release_candidate_scope as candidate_scope
 
 ROOT = Path(__file__).parents[1]
 
@@ -488,6 +489,64 @@ class ProjectStatusTests(unittest.TestCase):
             if path.read_bytes() != expected
         }
         self.assertEqual(stale, set())
+
+    def test_release_candidate_generated_paths_are_exactly_authorized(self) -> None:
+        base_context = render_project_status.load_context(ROOT, verify_git=False)
+        development_context = replace(
+            base_context,
+            source_version="4.4.0.dev0",
+            status=replace(
+                base_context.status,
+                lifecycle="unreleased-development",
+            ),
+        )
+        candidate_context = replace(
+            base_context,
+            source_version="4.4.0",
+            status=replace(
+                base_context.status,
+                lifecycle="release-candidate",
+            ),
+        )
+        with mock.patch.object(
+            render_project_status,
+            "load_context",
+            return_value=development_context,
+        ):
+            development_rendered = render_project_status.build_rendered_files(
+                ROOT,
+                verify_git=False,
+            )
+        with mock.patch.object(
+            render_project_status,
+            "load_context",
+            return_value=candidate_context,
+        ):
+            candidate_rendered = render_project_status.build_rendered_files(
+                ROOT,
+                verify_git=False,
+            )
+
+        changed = {
+            path.relative_to(ROOT).as_posix()
+            for path, development_bytes in development_rendered.items()
+            if development_bytes != candidate_rendered[path]
+        }
+        self.assertEqual(
+            changed,
+            {
+                "CHANGELOG.md",
+                "README.md",
+                "ROADMAP.md",
+                "SECURITY.md",
+                "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
+                "docs/PROJECT_STATUS.md",
+                "docs/RELEASE_STATUS.md",
+                "docs/SBOM.md",
+                "docs/architecture/REFACTOR_PROGRAM.md",
+            },
+        )
+        self.assertLessEqual(changed, set(candidate_scope.ALLOWED_PATHS))
 
     def test_markers_are_unique_and_outside_metadata_and_fences(self) -> None:
         rendered = render_project_status.build_rendered_files(
