@@ -72,7 +72,8 @@ The validator therefore also requires:
 - one canonical 19-observation repository-control record: public repository
   identity, including trusted namespace IDs `1293651176` (repository) and
   `231647061` (the `EvoRiseKsa` user owner),
-  main ref/protection (including all nine check context/app identities),
+  main ref/protection (including all eleven check context/app identities,
+  including both fuzz sanitizers),
   Actions permissions and SHA pinning, immutable-release owner state, tag
   ruleset include/exclude/rules/bypass, every deploy-key page, all four
   Environments and stable reviewer/rule/policy identities, all three activation
@@ -188,6 +189,15 @@ and must fail validation. Placeholders are never accepted as release evidence.
    SBOM attestation. Retain the final F controls artifact named
    `evoguard-release-artifact-v1-complete-controls-<attempt>`; the earlier
    preflight artifact is incomplete and is not ledger evidence.
+
+   Provision the validator's locked Python runtime and dependency roots outside
+   the checkout, current working directory, system temporary directory,
+   evidence directory, candidate, and trusted-parent repository. None of those
+   paths may contain the runtime or be contained by it. An overlapping
+   environment fails closed because its validation dependencies could be
+   candidate-controlled. `python -I` does not make an in-checkout `.venv`
+   trusted.
+
 5. Assemble a complete draft whose schema descriptor hashes the exact
    repository schema bytes. The schema, validator, and repository-control
    collector descriptors record SHA-256, Git blob ID, and the same

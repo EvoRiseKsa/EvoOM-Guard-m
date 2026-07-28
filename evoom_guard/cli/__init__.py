@@ -8,8 +8,8 @@
 
 Subcommands:
 
-  * ``evo-guard guard`` — verify a candidate change against a repo's tests, rejecting
-    any edit to the tests or their configuration.
+  * ``evo-guard guard`` — verify a candidate change against a repo's selected
+    judge, rejecting edits/deletions to the active protected path set.
   * ``evo-guard verify-record`` — verify a verdict's structural/semantic contract.
   * ``evo-guard verify-bundle`` — authenticate a portable verdict envelope.
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
@@ -97,6 +97,10 @@ from evoom_guard.cli import (
 )
 from evoom_guard.cli import signing_commands as _signing_command_owner
 from evoom_guard.cli import trusted_finalizer_commands as _trusted_finalizer_command_owner
+from evoom_guard.domain import (
+    is_verifier_pack_sha256,
+    operating_profile_violations,
+)
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
     PackManifestError,
@@ -106,6 +110,7 @@ from evoom_guard.pack_manifest import (
 )
 from evoom_guard.policy.config import ConfigError
 from evoom_guard.policy.config import load_config as _load_config
+from evoom_guard.policy.harness import HarnessInputPolicyError
 
 if TYPE_CHECKING:
     from evoom_guard.evidence_bundle import EvidenceMaterial
@@ -173,10 +178,8 @@ _IMMUTABLE_RELEASE_REF_RE = re.compile(r"(?:v\d+\.\d+\.\d+|[0-9a-f]{40})\Z")
 def _github_actions_credential_key(value: object) -> str:
     """Validate the *name* of a GitHub Actions credential reference.
 
-    ``evo-guard init --private-evoguard`` never receives a PAT value. It writes
-    a literal ``${{ secrets.NAME }}`` expression into a workflow for GitHub to
-    resolve later. Restricting ``NAME`` prevents a caller from injecting YAML,
-    shell syntax, or a second expression into that generated template.
+    The secret-bearing private scaffold is disabled, but this parser-level
+    validation remains for a precise fail-closed compatibility error.
     """
     return _init_command_owner.validate_github_actions_credential_key(
         value,
@@ -482,6 +485,7 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
         REASON_VERIFIER_PACK_INVALID,
         _UnverifiableChangedPathsError,
         blocks_from_dirs,
+        build_effective_policy_payload,
         guard,
         guard_from_diff,
         input_error_result,
@@ -514,10 +518,7 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
         join_path=lambda *parts: os.path.join(*parts),
         current_directory=lambda: os.getcwd(),
         path_is_file=lambda path: os.path.isfile(path),
-        is_hex_sha256=lambda value: re.fullmatch(
-            r"[0-9a-fA-F]{64}", value
-        )
-        is not None,
+        is_hex_sha256=lambda value: is_verifier_pack_sha256(value),
         is_finite=lambda value: math.isfinite(value),
         no_verifiable_changes_reason=REASON_NO_VERIFIABLE_CHANGES,
         invalid_verifier_pack_reason=REASON_VERIFIER_PACK_INVALID,
@@ -533,17 +534,23 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
         write_sarif=write_sarif,
         write_report=write_report,
         sign_file_provider=sign_file_provider,
+        operating_profile_violations=operating_profile_violations,
+        effective_policy=build_effective_policy_payload,
     )
 
 
 def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -> int:
     """Execute ``evo-guard guard`` through the extracted typed owner."""
 
-    return _guard_command_owner.execute_guard_command(
-        args,
-        services=_guard_command_services(),
-        out=out,
-    )
+    try:
+        return _guard_command_owner.execute_guard_command(
+            args,
+            services=_guard_command_services(),
+            out=out,
+        )
+    except HarnessInputPolicyError as exc:
+        out(f"usage: invalid trusted harness_inputs policy: {exc}")
+        return 2
 
 
 def doctor_report() -> dict[str, object]:
@@ -584,13 +591,7 @@ def _workflow_yaml(ref: str) -> str:
 
 
 def _workflow_yaml_private(ref: str, credential_key: str = "EVOGUARD_TOKEN") -> str:
-    """EvoGuard workflow for private EvoGuard repos — installs via pip + a PAT secret.
-
-    Use when the EvoGuard repo is private and cannot be accessed by the default
-    GITHUB_TOKEN (cross-repo private action access is not supported). The PAT must
-    have at least read access to the EvoGuard repo and be stored as an Actions secret
-    (Settings → Secrets and variables → Actions).
-    """
+    """Refuse the historical secret-bearing private pull-request scaffold."""
     return _init_command_owner.render_private_workflow(ref, credential_key)
 
 
@@ -630,9 +631,10 @@ def cmd_init(args: argparse.Namespace, *, out: Callable[[str], None] = print) ->
     Writes the workflow and, when absent, a trusted ``.evoguard.json`` policy.
     The workflow is refused when it exists unless ``--force`` is given; an
     existing policy is deliberately preserved so initialization cannot erase an
-    adopter's judge contract. ``--stdout`` prints only the workflow. Pass
-    ``--private-evoguard`` to generate a pip-install workflow for repos where the
-    EvoGuard action is not accessible via the default GITHUB_TOKEN.
+    adopter's judge contract. ``--stdout`` prints only the workflow.
+    ``--private-evoguard`` is retained only to return a fail-closed migration
+    message; candidate-controlled workflow YAML must never receive the private
+    repository credential.
     """
     return _init_command_owner.execute_init_command(
         args,

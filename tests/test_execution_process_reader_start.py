@@ -305,10 +305,19 @@ def test_post_start_baseexception_cleans_even_completed_tree_without_masking(
         "_terminate_process_tree",
         lambda candidate, _limits: cleanup_calls.append(candidate) or True,
     )
+    clock_calls = 0
+
+    def fail_after_start_clock() -> float:
+        nonlocal clock_calls
+        clock_calls += 1
+        if clock_calls == 1:
+            return 0.0
+        raise primary
+
     monkeypatch.setattr(
         process_module.time,
         "monotonic",
-        lambda: (_ for _ in ()).throw(primary),
+        fail_after_start_clock,
     )
     monkeypatch.setattr(
         process_module,

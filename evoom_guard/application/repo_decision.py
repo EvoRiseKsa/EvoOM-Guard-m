@@ -119,9 +119,9 @@ def compose_repo_decision(
             verdict=REJECTED,
             reason_code=REASON_PROTECTED_HARNESS_EDIT,
             reason=(
-                "reward-hack guard: the patch edits or deletes the judging tests, their "
-                "configuration, the gate's CI/config, or an auto-executed file — fix "
-                "the source under test, not the harness "
+                "protected-path policy: the patch edits or deletes a path covered "
+                "by the active judge policy; use the candidate lane for source "
+                "changes and a separately trusted maintenance lane for judge inputs "
                 f"({', '.join(protected_violations)})"
             ),
         )
@@ -172,7 +172,10 @@ def compose_repo_decision(
         return GuardDecision(
             verdict=PASS,
             reason_code=REASON_TESTS_PASSED,
-            reason=("all repo tests pass and the patch leaves the test harness untouched"),
+            reason=(
+                "the selected repo judge passed, and the patch did not edit or "
+                "delete a path covered by the active harness policy"
+            ),
         )
     if evidence is not None and evidence.tests_total:
         tests_passed = evidence.tests_passed if evidence.tests_passed_present else 0

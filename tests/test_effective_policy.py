@@ -19,9 +19,12 @@ from evoom_guard.guard import (
     _effective_policy as legacy_effective_policy,
 )
 from evoom_guard.guard import (
+    build_effective_policy_payload,
+    guard,
+)
+from evoom_guard.guard import (
     effective_policy_sha256 as legacy_effective_policy_sha256,
 )
-from evoom_guard.guard import guard
 
 
 def _defaults() -> dict[str, object]:
@@ -88,6 +91,7 @@ def test_policy_public_api_reexports_the_dependency_free_domain_type() -> None:
     assert policy_api.EffectivePolicy is domain.EffectivePolicy
     assert policy_api.build_effective_policy.__module__ == "evoom_guard.policy.effective"
     assert policy_api.effective_policy_payload.__module__ == "evoom_guard.policy.effective"
+    assert legacy_effective_policy is build_effective_policy_payload
 
 
 def test_effective_policy_is_frozen_and_uses_immutable_sequences() -> None:
@@ -131,6 +135,106 @@ def test_default_payload_and_digest_remain_frozen() -> None:
         policy_api.effective_policy_sha256(payload)
         == "38fe5c6017c500608cb50ea3ee687b89eecb35ac8dd47bb68ccc158df42caf25"
     )
+
+
+def test_selected_operating_profile_is_additive_and_digest_bound() -> None:
+    policy = policy_api.build_effective_policy(
+        **_defaults(),
+        operating_profile="local",
+    )
+    payload = policy_api.effective_policy_payload(policy)
+
+    assert payload["operating_profile"] == "local"
+    without_profile = dict(payload)
+    without_profile.pop("operating_profile")
+    assert without_profile == policy_api.effective_policy_payload(_build_defaults())
+    assert policy_api.effective_policy_sha256(payload) != (
+        policy_api.effective_policy_sha256(without_profile)
+    )
+
+
+@pytest.mark.parametrize(
+    ("profile", "overrides", "expected"),
+    [
+        ("local", {}, ()),
+        (
+            "protected",
+            {
+                "isolation": "docker",
+                "docker_image_present": True,
+                "verifier_pack_required": True,
+                "expect_verifier_pack_sha256": "a" * 64,
+                "blackbox": True,
+                "blackbox_only": True,
+                "require_report_integrity": "external_process_isolated",
+                "require_candidate_isolation": "docker",
+            },
+            (),
+        ),
+        (
+            "hostile",
+            {
+                "isolation": "gvisor",
+                "docker_image_present": True,
+                "verifier_pack_required": True,
+                "expect_verifier_pack_sha256": "a" * 64,
+                "blackbox": True,
+                "blackbox_only": True,
+                "require_report_integrity": "external_process_isolated",
+                "require_candidate_isolation": "gvisor",
+            },
+            (),
+        ),
+    ],
+)
+def test_operating_profile_contracts_accept_only_complete_profiles(
+    profile: str,
+    overrides: dict[str, object],
+    expected: tuple[str, ...],
+) -> None:
+    values: dict[str, object] = {
+        "isolation": "subprocess",
+        "docker_image_present": False,
+        "docker_network": "none",
+        "setup_command_present": False,
+        "trust_setup_on_host": False,
+        "mem_limit_mb": 1024,
+        "verifier_pack_required": False,
+        "expect_verifier_pack_sha256": None,
+        "blackbox": False,
+        "blackbox_only": False,
+        "require_report_integrity": None,
+        "require_candidate_isolation": None,
+    }
+    values.update(overrides)
+
+    assert policy_api.operating_profile_violations(
+        profile,
+        **values,  # type: ignore[arg-type]
+    ) == expected
+
+
+def test_hostile_profile_rejects_weaker_runtime_claims() -> None:
+    violations = policy_api.operating_profile_violations(
+        "hostile",
+        isolation="docker",
+        docker_image_present=True,
+        docker_network="bridge",
+        setup_command_present=False,
+        trust_setup_on_host=False,
+        mem_limit_mb=0,
+        verifier_pack_required=True,
+        expect_verifier_pack_sha256="a" * 64,
+        blackbox=True,
+        blackbox_only=True,
+        require_report_integrity="external_process_isolated",
+        require_candidate_isolation="docker",
+    )
+
+    assert "requires isolation='gvisor'" in violations
+    assert "requires require_candidate_isolation='gvisor'" in violations
+    assert "requires docker_network='none'" in violations
+    assert "requires a non-zero mem_limit" in violations
 
 
 def test_full_payload_preserves_order_normalization_and_digest() -> None:
@@ -317,6 +421,8 @@ def test_guard_callable_surface_is_frozen_during_internal_extraction() -> None:
         "require_demonstrated_fix",
         "strict_harness",
         "file_blocks",
+        "operating_profile",
+        "harness_inputs",
     )
     assert signature.parameters["repo_path"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     assert signature.parameters["candidate"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD

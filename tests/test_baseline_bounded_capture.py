@@ -63,6 +63,53 @@ def test_baseline_containment_failure_in_setup_is_not_clean_evidence(tmp_path, m
     }
 
 
+def _launcher_failure(*_args, **_kwargs):
+    completed = subprocess.CompletedProcess(["trusted-launcher"], 125, "", "")
+    completed.target_started = False
+    return completed
+
+
+def test_baseline_launcher_failure_is_not_a_test_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(guard_module, "_run_bounded_subprocess", _launcher_failure)
+
+    result = _run_baseline_suite(
+        _repo(tmp_path),
+        test_command=[sys.executable, "-c", "raise SystemExit(1)"],
+        setup_command=None,
+        setup_output_globs=(),
+        timeout=10,
+        mem_limit_mb=0,
+        strict_harness=False,
+    )
+
+    assert result == {
+        "verdict": "NO_CLEAN_VERDICT",
+        "tests_passed": None,
+        "tests_total": None,
+    }
+
+
+def test_baseline_setup_launcher_failure_is_unverified(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(guard_module, "_run_bounded_subprocess", _launcher_failure)
+
+    result = _run_baseline_suite(
+        _repo(tmp_path),
+        test_command=[sys.executable, "-c", "raise SystemExit(0)"],
+        setup_command=[sys.executable, "-c", "raise SystemExit(0)"],
+        setup_output_globs=(),
+        timeout=10,
+        mem_limit_mb=0,
+        strict_harness=False,
+    )
+
+    assert result == {
+        "verdict": "NO_CLEAN_VERDICT",
+        "tests_passed": None,
+        "tests_total": None,
+        "setup_fidelity": "unverified",
+    }
+
+
 def test_baseline_reads_junit_through_bounded_oracle(tmp_path, monkeypatch) -> None:
     observed: list[str] = []
 

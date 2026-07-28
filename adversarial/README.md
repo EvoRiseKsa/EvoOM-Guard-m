@@ -10,21 +10,24 @@ three states instead of treating every green test as a security guarantee:
 - `documented_exception`: trusted policy deliberately removes a path from the
   guarantee.
 
-Every fixture is constrained to pytest's temporary directory. The v3.4.2
-corpus has no unresolved `known_gap` rows. If a later investigation adds one,
-its test must remain green only while it reproduces the documented limitation;
-the corresponding fix must invert the assertion and change the corpus status.
-Silently deleting or weakening a case is not an acceptable fix.
+Every fixture is constrained to pytest's temporary directory. The registry
+retains stable case IDs while recording each case's current observed state,
+and deliberately includes owned `known_gap` rows. A known-gap test must remain
+green only while it reproduces the documented limitation, and its
+`target_phase` names the production work that owns closure. The corresponding
+fix must invert the assertion and change the corpus status. Silently deleting,
+omitting, or weakening a case is not an acceptable fix.
 
 Run the executable corpus:
 
 ```bash
-python -m pytest -q \
-  tests/test_adversarial_corpus.py \
-  tests/test_adversarial_toctou.py \
-  tests/test_adversarial_setup_outputs.py \
-  tests/test_adversarial_integrity_boundaries.py
+python -m tools.evaluation.run_adversarial_corpus
 ```
+
+The runner derives its exact pytest node list from `corpus.jsonl`; it does not
+maintain a second hand-written test list. Consequently, registered
+`known_gap` tests run alongside `enforced` and `documented_exception` cases.
+The registry contract tests separately reject duplicate or unresolved nodeids.
 
 Run the environment-labelled snapshot microbenchmark before and after a
 filesystem-hardening change with identical arguments:

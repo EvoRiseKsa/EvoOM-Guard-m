@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from evoom_guard.verifiers.harness_policy import (
+    candidate_path_targets_harness_input,
     discover_local_action_dirs,
     is_addable_new_test,
     is_allowlist_exemptible,
@@ -30,6 +31,7 @@ from evoom_guard.verifiers.harness_policy import (
     is_protected_config,
     is_safe_relpath,
     matches_globs,
+    normalize_harness_inputs,
 )
 
 # Reserved namespace from the pre-3.4 in-tree verifier-pack mount. A candidate
@@ -80,6 +82,7 @@ class CandidatePreflightRequest:
     allow: tuple[str, ...] = ()
     allow_new_tests: bool = False
     strict_harness: bool = False
+    harness_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +164,7 @@ def evaluate_candidate_preflight(
 
     changed = request.changed_paths
     deleted = request.deleted_paths
+    harness_inputs = normalize_harness_inputs(request.harness_inputs)
     deleted_touched = tuple(path for path in deleted if path not in changed)
     all_touched = changed + deleted_touched
     unsafe = tuple(
@@ -183,6 +187,12 @@ def evaluate_candidate_preflight(
     def is_violation(path: str) -> bool:
         verifier_pack_dir = services.verifier_pack_dir()
         if path == verifier_pack_dir or path.startswith(verifier_pack_dir + "/"):
+            return True
+        if candidate_path_targets_harness_input(
+            request.repo_path,
+            path,
+            harness_inputs,
+        ):
             return True
         if services.is_judge_autoexec(path):
             return True

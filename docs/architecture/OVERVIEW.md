@@ -33,6 +33,7 @@ strict behavior-preserving PR slices.
 - `domain` owns request, lifecycle, verdict and assurance models.
 - `execution` owns scheduling/observability primitives.
 - `isolation` owns containment and transport of runtime evidence.
+- `runners` owns runner recognition and judge-owned report instrumentation.
 - `verifiers` owns executor orchestration and report interpretation.
 - `application` owns pipeline and policy/assurance composition.
 - `api` / `cli` / `integrations` own compatibility boundaries.
@@ -50,8 +51,9 @@ policy contracts directly instead of verifier-private compatibility seams.
 The first `domain/verification.py` slice owns dependency-free JUnit and
 repository/pack phase contracts behind exact legacy aliases. A dedicated
 strict-Mypy gate protects that package. `domain/verdict.py` separately owns
-generic verdict/lifecycle/reason semantics; schema-1.11 policy and wire fields
-remain in their versioned contract. `domain/policy.py` now owns the immutable
+generic verdict/lifecycle/reason semantics; frozen schema-1.11 and additive
+schema-1.12 policy/wire fields remain in their versioned contracts.
+`domain/policy.py` now owns the immutable
 effective-policy value, while `policy/effective.py` owns canonical construction,
 payload projection, and digesting; the finalizer no longer imports Guard's
 private policy builder. `domain/request.py` now captures an owned repository,

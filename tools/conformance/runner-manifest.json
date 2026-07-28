@@ -1,0 +1,728 @@
+{
+  "$schema": "runner-manifest.schema.json",
+  "schema_version": "evoom-runner-conformance-manifest-1",
+  "suite_id": "evoom-runner-adapters-offline-v1",
+  "report_path": "/judge/runner-report.xml",
+  "discovery_timeout_seconds": 5,
+  "owners": [
+    {
+      "id": "shell",
+      "module": "evoom_guard.runners.shell",
+      "class": "ShellAdapter",
+      "adapter_name": "sh -c",
+      "discovery_argv": ["sh", "--version"]
+    },
+    {
+      "id": "pytest",
+      "module": "evoom_guard.runners.pytest",
+      "class": "PytestAdapter",
+      "adapter_name": "pytest",
+      "discovery_argv": ["python", "-I", "-m", "pytest", "--version"]
+    },
+    {
+      "id": "node_test",
+      "module": "evoom_guard.runners.node_test",
+      "class": "NodeTestAdapter",
+      "adapter_name": "node --test",
+      "discovery_argv": ["node", "--version"]
+    },
+    {
+      "id": "vitest",
+      "module": "evoom_guard.runners.vitest",
+      "class": "VitestAdapter",
+      "adapter_name": "vitest",
+      "discovery_argv": ["vitest", "--version"]
+    },
+    {
+      "id": "jest",
+      "module": "evoom_guard.runners.jest",
+      "class": "JestAdapter",
+      "adapter_name": "jest",
+      "discovery_argv": ["jest", "--version"]
+    },
+    {
+      "id": "gotestsum",
+      "module": "evoom_guard.runners.gotestsum",
+      "class": "GotestsumAdapter",
+      "adapter_name": "gotestsum",
+      "discovery_argv": ["gotestsum", "--version"]
+    },
+    {
+      "id": "rspec",
+      "module": "evoom_guard.runners.rspec",
+      "class": "RspecAdapter",
+      "adapter_name": "rspec",
+      "discovery_argv": ["rspec", "--version"]
+    },
+    {
+      "id": "mocha",
+      "module": "evoom_guard.runners.mocha",
+      "class": "MochaAdapter",
+      "adapter_name": "mocha",
+      "discovery_argv": ["mocha", "--version"]
+    },
+    {
+      "id": "maven",
+      "module": "evoom_guard.runners.maven",
+      "class": "MavenAdapter",
+      "adapter_name": "maven",
+      "discovery_argv": ["mvn", "--version"]
+    }
+  ],
+  "registry_order": [
+    "shell",
+    "pytest",
+    "node_test",
+    "vitest",
+    "jest",
+    "gotestsum",
+    "rspec",
+    "mocha",
+    "maven"
+  ],
+  "inner_registry_order": [
+    "pytest",
+    "node_test",
+    "vitest",
+    "jest",
+    "gotestsum",
+    "rspec",
+    "mocha",
+    "maven"
+  ],
+  "cases": [
+    {
+      "id": "shell-accept-pytest-final-segment",
+      "owner": "shell",
+      "category": "accept",
+      "argv": ["sh", "-c", "prepare && pytest -q"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "sh",
+          "-c",
+          "prepare && pytest -q --junitxml=/judge/runner-report.xml -o junit_family=xunit2"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "shell-decline-inner-runner-owned-reporter",
+      "owner": "shell",
+      "category": "decline",
+      "argv": ["sh", "-c", "vitest --reporter=json"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["sh", "-c", "vitest --reporter=json"],
+        "env": {}
+      }
+    },
+    {
+      "id": "shell-mismatch-without-c",
+      "owner": "shell",
+      "category": "mismatch",
+      "argv": ["sh", "pytest", "-q"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["sh", "pytest", "-q"],
+        "env": {}
+      }
+    },
+    {
+      "id": "shell-windows-executable-path",
+      "owner": "shell",
+      "category": "windows_path",
+      "argv": ["C:\\Tools\\bash.exe", "-c", "pytest -q"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\Tools\\bash.exe",
+          "-c",
+          "pytest -q --junitxml=/judge/runner-report.xml -o junit_family=xunit2"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "shell-node-fixed-position-instrumentation",
+      "owner": "shell",
+      "category": "shell",
+      "argv": ["bash", "-c", "prepare; node --test test/example.test.js"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "bash",
+          "-c",
+          "prepare; node --test --test-reporter=junit --test-reporter-destination=/judge/runner-report.xml --test-reporter=spec --test-reporter-destination=stdout test/example.test.js"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "shell-jest-env-embedded",
+      "owner": "shell",
+      "category": "shell",
+      "argv": ["bash", "-c", "setup && jest --runInBand"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "bash",
+          "-c",
+          "setup && JEST_JUNIT_OUTPUT_FILE=/judge/runner-report.xml jest --runInBand --reporters=default --reporters=jest-junit"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "pytest-accept-python-module",
+      "owner": "pytest",
+      "category": "accept",
+      "argv": ["python", "-m", "pytest", "-q"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "python",
+          "-m",
+          "pytest",
+          "-q",
+          "--junitxml=/judge/runner-report.xml",
+          "-o",
+          "junit_family=xunit2"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "pytest-mismatch-runner-as-argument",
+      "owner": "pytest",
+      "category": "mismatch",
+      "argv": ["tool", "pytest", "-q"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "pytest", "-q"],
+        "env": {}
+      }
+    },
+    {
+      "id": "pytest-windows-executable-path",
+      "owner": "pytest",
+      "category": "windows_path",
+      "argv": ["C:\\Python312\\Scripts\\pytest.exe", "-q"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\Python312\\Scripts\\pytest.exe",
+          "-q",
+          "--junitxml=/judge/runner-report.xml",
+          "-o",
+          "junit_family=xunit2"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "node-test-accept",
+      "owner": "node_test",
+      "category": "accept",
+      "argv": ["node", "--test", "test/example.test.js"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "node",
+          "--test",
+          "--test-reporter=junit",
+          "--test-reporter-destination=/judge/runner-report.xml",
+          "--test-reporter=spec",
+          "--test-reporter-destination=stdout",
+          "test/example.test.js"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "node-test-decline-owned-reporter",
+      "owner": "node_test",
+      "category": "decline",
+      "argv": ["node", "--test", "--test-reporter=tap"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["node", "--test", "--test-reporter=tap"],
+        "env": {}
+      }
+    },
+    {
+      "id": "node-test-mismatch-through-wrapper",
+      "owner": "node_test",
+      "category": "mismatch",
+      "argv": ["npm", "exec", "--", "node", "--test"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["npm", "exec", "--", "node", "--test"],
+        "env": {}
+      }
+    },
+    {
+      "id": "node-test-windows-executable-path",
+      "owner": "node_test",
+      "category": "windows_path",
+      "argv": ["C:\\Program Files\\nodejs\\node.exe", "--test", "test.js"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\Program Files\\nodejs\\node.exe",
+          "--test",
+          "--test-reporter=junit",
+          "--test-reporter-destination=/judge/runner-report.xml",
+          "--test-reporter=spec",
+          "--test-reporter-destination=stdout",
+          "test.js"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "vitest-accept-npx-wrapper",
+      "owner": "vitest",
+      "category": "accept",
+      "argv": ["npx", "--yes", "vitest", "run"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "npx",
+          "--yes",
+          "vitest",
+          "run",
+          "--reporter=default",
+          "--reporter=junit",
+          "--outputFile=/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "vitest-decline-owned-reporter",
+      "owner": "vitest",
+      "category": "decline",
+      "argv": ["vitest", "run", "--reporter=json"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["vitest", "run", "--reporter=json"],
+        "env": {}
+      }
+    },
+    {
+      "id": "vitest-mismatch-runner-as-argument",
+      "owner": "vitest",
+      "category": "mismatch",
+      "argv": ["tool", "vitest", "run"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "vitest", "run"],
+        "env": {}
+      }
+    },
+    {
+      "id": "vitest-windows-executable-path",
+      "owner": "vitest",
+      "category": "windows_path",
+      "argv": ["C:\\repo\\node_modules\\.bin\\vitest.cmd", "run"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\repo\\node_modules\\.bin\\vitest.cmd",
+          "run",
+          "--reporter=default",
+          "--reporter=junit",
+          "--outputFile=/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "jest-accept-npm-exec-wrapper",
+      "owner": "jest",
+      "category": "accept",
+      "argv": ["npm", "exec", "--", "jest", "--runInBand"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "npm",
+          "exec",
+          "--",
+          "jest",
+          "--runInBand",
+          "--reporters=default",
+          "--reporters=jest-junit"
+        ],
+        "env": {
+          "JEST_JUNIT_OUTPUT_FILE": "/judge/runner-report.xml"
+        }
+      }
+    },
+    {
+      "id": "jest-decline-owned-reporter",
+      "owner": "jest",
+      "category": "decline",
+      "argv": ["jest", "--reporters=default"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["jest", "--reporters=default"],
+        "env": {}
+      }
+    },
+    {
+      "id": "jest-mismatch-runner-as-argument",
+      "owner": "jest",
+      "category": "mismatch",
+      "argv": ["tool", "jest", "--runInBand"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "jest", "--runInBand"],
+        "env": {}
+      }
+    },
+    {
+      "id": "jest-windows-executable-path",
+      "owner": "jest",
+      "category": "windows_path",
+      "argv": ["C:\\repo\\node_modules\\.bin\\jest.cmd", "--runInBand"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\repo\\node_modules\\.bin\\jest.cmd",
+          "--runInBand",
+          "--reporters=default",
+          "--reporters=jest-junit"
+        ],
+        "env": {
+          "JEST_JUNIT_OUTPUT_FILE": "/judge/runner-report.xml"
+        }
+      }
+    },
+    {
+      "id": "gotestsum-accept-before-double-dash",
+      "owner": "gotestsum",
+      "category": "accept",
+      "argv": ["gotestsum", "--format", "standard-verbose", "--", "./..."],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "gotestsum",
+          "--format",
+          "standard-verbose",
+          "--junitfile=/judge/runner-report.xml",
+          "--",
+          "./..."
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "gotestsum-decline-owned-report",
+      "owner": "gotestsum",
+      "category": "decline",
+      "argv": ["gotestsum", "--junitfile=existing.xml", "./..."],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["gotestsum", "--junitfile=existing.xml", "./..."],
+        "env": {}
+      }
+    },
+    {
+      "id": "gotestsum-mismatch-runner-as-argument",
+      "owner": "gotestsum",
+      "category": "mismatch",
+      "argv": ["tool", "gotestsum", "./..."],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "gotestsum", "./..."],
+        "env": {}
+      }
+    },
+    {
+      "id": "gotestsum-windows-executable-path",
+      "owner": "gotestsum",
+      "category": "windows_path",
+      "argv": ["C:\\Go\\bin\\gotestsum.exe", "./..."],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\Go\\bin\\gotestsum.exe",
+          "./...",
+          "--junitfile=/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "rspec-accept-bundle-exec",
+      "owner": "rspec",
+      "category": "accept",
+      "argv": ["bundle", "exec", "rspec", "spec"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "bundle",
+          "exec",
+          "rspec",
+          "spec",
+          "--format",
+          "progress",
+          "--format",
+          "RspecJunitFormatter",
+          "--out",
+          "/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "rspec-decline-owned-format",
+      "owner": "rspec",
+      "category": "decline",
+      "argv": ["rspec", "spec", "--format", "documentation"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["rspec", "spec", "--format", "documentation"],
+        "env": {}
+      }
+    },
+    {
+      "id": "rspec-mismatch-runner-as-argument",
+      "owner": "rspec",
+      "category": "mismatch",
+      "argv": ["tool", "rspec", "spec"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "rspec", "spec"],
+        "env": {}
+      }
+    },
+    {
+      "id": "rspec-windows-executable-path",
+      "owner": "rspec",
+      "category": "windows_path",
+      "argv": ["C:\\Ruby\\bin\\rspec.cmd", "spec"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\Ruby\\bin\\rspec.cmd",
+          "spec",
+          "--format",
+          "progress",
+          "--format",
+          "RspecJunitFormatter",
+          "--out",
+          "/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "mocha-accept-pnpm-exec",
+      "owner": "mocha",
+      "category": "accept",
+      "argv": ["pnpm", "exec", "mocha", "test/**/*.js"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "pnpm",
+          "exec",
+          "mocha",
+          "test/**/*.js",
+          "--reporter",
+          "mocha-junit-reporter",
+          "--reporter-options",
+          "mochaFile=/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "mocha-decline-owned-reporter",
+      "owner": "mocha",
+      "category": "decline",
+      "argv": ["mocha", "test", "--reporter", "spec"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["mocha", "test", "--reporter", "spec"],
+        "env": {}
+      }
+    },
+    {
+      "id": "mocha-mismatch-runner-as-argument",
+      "owner": "mocha",
+      "category": "mismatch",
+      "argv": ["tool", "mocha", "test"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "mocha", "test"],
+        "env": {}
+      }
+    },
+    {
+      "id": "mocha-windows-executable-path",
+      "owner": "mocha",
+      "category": "windows_path",
+      "argv": ["C:\\repo\\node_modules\\.bin\\mocha.cmd", "test"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\repo\\node_modules\\.bin\\mocha.cmd",
+          "test",
+          "--reporter",
+          "mocha-junit-reporter",
+          "--reporter-options",
+          "mochaFile=/judge/runner-report.xml"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "maven-accept-wrapper",
+      "owner": "maven",
+      "category": "accept",
+      "argv": ["./mvnw", "test"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "./mvnw",
+          "test",
+          "-Dsurefire.reportsDirectory=/judge/runner-report.xml.d"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "maven-decline-owned-directory",
+      "owner": "maven",
+      "category": "decline",
+      "argv": ["mvn", "test", "-Dsurefire.reportsDirectory=existing"],
+      "expected": {
+        "matched": true,
+        "applied": false,
+        "argv": ["mvn", "test", "-Dsurefire.reportsDirectory=existing"],
+        "env": {}
+      }
+    },
+    {
+      "id": "maven-mismatch-runner-as-argument",
+      "owner": "maven",
+      "category": "mismatch",
+      "argv": ["tool", "mvn", "test"],
+      "expected": {
+        "matched": false,
+        "applied": false,
+        "argv": ["tool", "mvn", "test"],
+        "env": {}
+      }
+    },
+    {
+      "id": "maven-windows-wrapper-path",
+      "owner": "maven",
+      "category": "windows_path",
+      "argv": ["C:\\repo\\mvnw.cmd", "test"],
+      "expected": {
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "C:\\repo\\mvnw.cmd",
+          "test",
+          "-Dsurefire.reportsDirectory=/judge/runner-report.xml.d"
+        ],
+        "env": {}
+      }
+    }
+  ],
+  "registry_cases": [
+    {
+      "id": "registry-shell-precedes-inner-pytest",
+      "argv": ["sh", "-c", "pytest -q"],
+      "expected": {
+        "selected_owner": "shell",
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "sh",
+          "-c",
+          "pytest -q --junitxml=/judge/runner-report.xml -o junit_family=xunit2"
+        ],
+        "env": {}
+      }
+    },
+    {
+      "id": "registry-direct-jest-env",
+      "argv": ["jest", "--runInBand"],
+      "expected": {
+        "selected_owner": "jest",
+        "matched": true,
+        "applied": true,
+        "argv": [
+          "jest",
+          "--runInBand",
+          "--reporters=default",
+          "--reporters=jest-junit"
+        ],
+        "env": {
+          "JEST_JUNIT_OUTPUT_FILE": "/judge/runner-report.xml"
+        }
+      }
+    },
+    {
+      "id": "registry-unknown-command",
+      "argv": ["unknown-test-tool", "--run"],
+      "expected": {
+        "selected_owner": null,
+        "matched": false,
+        "applied": false,
+        "argv": ["unknown-test-tool", "--run"],
+        "env": {}
+      }
+    },
+    {
+      "id": "registry-shell-decline-does-not-fall-through",
+      "argv": ["sh", "-c", "vitest --reporter=json"],
+      "expected": {
+        "selected_owner": "shell",
+        "matched": true,
+        "applied": false,
+        "argv": ["sh", "-c", "vitest --reporter=json"],
+        "env": {}
+      }
+    }
+  ]
+}

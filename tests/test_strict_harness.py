@@ -17,8 +17,8 @@ import evoom_guard.execution.process as process_module
 from evoom_guard.guard import (
     ERROR,
     PASS,
+    REASON_ASSURANCE_REQUIREMENT_NOT_MET,
     REASON_NO_TEST_VERDICT,
-    REASON_RUNTIME_CLEANUP_FAILED,
     REJECTED,
     guard,
 )
@@ -167,7 +167,10 @@ def test_strict_harness_refuses_unsupported_group_proof_before_launch(
     )
 
     assert result.verdict == ERROR
-    assert result.reason_code == REASON_RUNTIME_CLEANUP_FAILED
+    assert result.reason_code == REASON_ASSURANCE_REQUIREMENT_NOT_MET
+    assert result.execution_state == "not_started"
+    assert result.test_command_ran is False
+    assert result.isolation == "not_run"
     assert launches == []
 
 

@@ -126,6 +126,66 @@ def test_terminal_suite_failure_never_starts_the_pack(tmp_path: Path) -> None:
     assert set(artifact["verifier_pack_sha256"]) <= set("0123456789abcdef")
 
 
+def test_trusted_launcher_failure_keeps_suite_not_started(
+    tmp_path: Path,
+) -> None:
+    case = capture_case(
+        "host_launcher_failure_before_target_start",
+        tmp_path,
+    )
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "repo_suite"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["repo_suite_isolation_evidence"]["delivered"] == "not_run"
+    assert artifact["outcome"] == "isolation_unavailable"
+
+
+def test_exec_error_before_target_start_keeps_suite_not_started(
+    tmp_path: Path,
+) -> None:
+    case = capture_case(
+        "host_exec_error_before_target_start",
+        tmp_path,
+    )
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "repo_suite"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["repo_suite_isolation_evidence"]["delivered"] == "not_run"
+    assert artifact["outcome"] == "test_command_unavailable"
+
+
+def test_docker_exec_error_before_isolation_start_reports_unavailable(
+    tmp_path: Path,
+) -> None:
+    artifact = capture_case(
+        "docker_exec_error_before_isolation_start",
+        tmp_path,
+    )["result"]["artifact"]
+
+    assert artifact["execution_state"] == "not_started"
+    assert artifact["execution_phase"] == "repo_suite"
+    assert artifact["test_command_started"] is False
+    assert artifact["test_command_completed"] is False
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "not_run"
+    assert artifact["repo_suite_isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["outcome"] == "isolation_unavailable"
+
+
 def test_suite_dependencies_are_resolved_live_in_historical_order(
     tmp_path: Path,
 ) -> None:

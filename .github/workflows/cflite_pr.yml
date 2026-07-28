@@ -1,0 +1,109 @@
+name: ClusterFuzzLite PR fuzzing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Checkout needs read access, but candidate-controlled build and fuzz processes
+# run in Docker without the runner token, secrets, credentials, or a network.
+permissions:
+  contents: read
+
+env:
+  FUZZ_BUILDER_IMAGE: >-
+    gcr.io/oss-fuzz-base/base-builder-python@sha256:bfd6d19416d9f7a791857d3f5746bc9050138a1843aa7e98b617469d8d631bab
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      FUZZ_OUT_VOLUME: >-
+        evoguard-cflite-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.sanitizer }}-out
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, undefined]
+    steps:
+      - name: Check out without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      # Pulling is judge setup. It happens before any repository script runs,
+      # and the exact image content is selected by digest rather than by tag.
+      - name: Pull immutable fuzz builder
+        run: docker pull "$FUZZ_BUILDER_IMAGE"
+
+      - name: Create isolated fuzz volumes
+        run: |
+          set -euo pipefail
+          docker volume create \
+            --label "evoguard.run=$GITHUB_RUN_ID" \
+            --label "evoguard.attempt=$GITHUB_RUN_ATTEMPT" \
+            "$FUZZ_OUT_VOLUME" >/dev/null
+
+      - name: Build fuzzers in a credential-free, offline container
+        env:
+          SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --network none \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 512 \
+            --memory 4g \
+            --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,exec,size=1g \
+            -e "SANITIZER=$SANITIZER" \
+            -e FUZZING_ENGINE=libfuzzer \
+            -e FUZZING_LANGUAGE=python \
+            -e ARCHITECTURE=x86_64 \
+            -e SRC=/src \
+            -e OUT=/out \
+            -e WORK=/work \
+            -v "$GITHUB_WORKSPACE:/input/evoom-guard:ro" \
+            --mount "type=volume,source=$FUZZ_OUT_VOLUME,target=/out,volume-nocopy" \
+            --mount "type=volume,target=/work,volume-nocopy" \
+            "$FUZZ_BUILDER_IMAGE" \
+            /bin/bash -c \
+            'cp -R --no-preserve=ownership /input/evoom-guard /src/evoom-guard &&
+            exec /bin/bash /src/evoom-guard/.clusterfuzzlite/build.sh'
+
+      - name: Run coverage-guided fuzzers offline
+        run: |
+          set -euo pipefail
+          for target in strict_json_fuzzer junit_fuzzer; do
+            docker run --rm \
+              --network none \
+              --read-only \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 512 \
+              --memory 3g \
+              --cpus 2 \
+              --tmpfs /tmp:rw,nosuid,nodev,exec,size=1g \
+              -e "TARGET=$target" \
+              -v "$GITHUB_WORKSPACE:/src/evoom-guard:ro" \
+              --mount "type=volume,source=$FUZZ_OUT_VOLUME,target=/out,readonly" \
+              "$FUZZ_BUILDER_IMAGE" \
+              /bin/sh -c \
+              'mkdir -p "/tmp/corpus/$TARGET" /tmp/artifacts &&
+              cp -R --no-preserve=ownership \
+              "/src/evoom-guard/tools/fuzz/corpus/$TARGET/." "/tmp/corpus/$TARGET/" &&
+              exec "/out/$TARGET" -max_total_time=180 -timeout=10 -rss_limit_mb=2048 \
+              -artifact_prefix=/tmp/artifacts/ "/tmp/corpus/$TARGET"'
+          done
+
+      - name: Remove isolated fuzz volumes
+        if: always()
+        run: |
+          set -euo pipefail
+          if docker volume inspect "$FUZZ_OUT_VOLUME" >/dev/null 2>&1; then
+            docker volume rm "$FUZZ_OUT_VOLUME" >/dev/null
+          fi

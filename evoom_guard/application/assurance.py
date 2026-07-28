@@ -392,9 +392,9 @@ def assurance_profile(
                     )
                     + "candidate_isolation is what was OBSERVED during a launcher "
                     f"invocation ('{effective_candidate_isolation}'); preparing "
-                    f"'{isolation}' alone is not evidence. A container boundary also "
-                    "removes the pack from "
-                    "the candidate's reach. "
+                    f"'{isolation}' alone is not evidence. Container modes omit the "
+                    "pack mount and use a read-only candidate mount; those scoped "
+                    "controls are not proof against container escape. "
                     + (
                         "Execution did not complete, so no clean verdict source is claimed. "
                         if execution_state != EXECUTION_COMPLETED
@@ -430,9 +430,11 @@ def assurance_profile(
             note=(
                 "report_integrity is same_process_candidate_writable: a determined "
                 "in-process patch can forge the JUnit report and exit code together. "
-                "Guard blocks the harness edits/deletions and stdout forgery agents do "
-                "in practice; it does not stop deliberate process-level forgery in "
-                "source. The container modes isolate the host, not the report. Use "
+                "Guard blocks candidate edits/deletions to the modelled protected "
+                "path set and detects persistent declared-input drift at execution "
+                "checkpoints; it does not discover every transitive harness dependency "
+                "or stop deliberate process-level forgery in source. The container "
+                "modes isolate the host, not the report. Use "
                 "--blackbox for external_process_isolated. "
                 + (
                     "Execution did not complete, so no clean verdict source is claimed. "

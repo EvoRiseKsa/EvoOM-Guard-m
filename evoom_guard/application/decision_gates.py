@@ -172,7 +172,7 @@ def apply_demonstrated_fix_gate(
                 "demonstrated: the pristine base "
                 f"{baseline_state}"
                 " — --require-demonstrated-fix demands baseline FAIL → "
-                "candidate PASS under an unchanged harness"
+                "candidate PASS under the same base-owned judge policy"
             ),
         )
     return decision

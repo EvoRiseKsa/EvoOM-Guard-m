@@ -304,7 +304,8 @@ class AttestationTests(unittest.TestCase):
             jout = os.path.join(tmp, "v.json")
             rc = cli.main([
                 "guard", repo, "--patch", patch, "--json", jout,
-                "--sign-key", key, "--report", os.path.join(tmp, "r.md"),
+                "--sign-key", key, "--acknowledge-local-key-exposure",
+                "--report", os.path.join(tmp, "r.md"),
             ])
             self.assertEqual(rc, 0)
             with open(jout, encoding="utf-8") as f:

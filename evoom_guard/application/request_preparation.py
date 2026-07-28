@@ -28,8 +28,13 @@ from evoom_guard.domain import (
     CandidateInput,
     EffectivePolicy,
     GuardRequest,
+    HarnessInputPolicyError,
     RepositoryInput,
     SourceIdentity,
+    is_verifier_pack_sha256,
+    normalize_harness_inputs,
+    operating_profile_violations,
+    setup_output_harness_conflicts,
     validate_isolation_mode,
 )
 
@@ -78,6 +83,8 @@ class _EffectivePolicyFactory(Protocol):
         strict_harness: bool,
         policy_id: str | None,
         policy_version: str | None,
+        operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> EffectivePolicy: ...
 
 
@@ -131,6 +138,8 @@ class GuardRequestPreparationInput:
     require_demonstrated_fix: bool
     strict_harness: bool
     file_blocks: Mapping[str, str] | None
+    operating_profile: str | None = None
+    harness_inputs: Sequence[str] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +199,8 @@ class GuardCompatibilityProjection:
     baseline_evidence: bool
     require_demonstrated_fix: bool
     strict_harness: bool
+    operating_profile: str | None = None
+    harness_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +231,16 @@ def prepare_guard_request(
         raise ValueError("mem_limit_mb must be a non-negative integer")
     if type(raw.strict_harness) is not bool:
         raise ValueError("strict_harness must be a boolean")
+    declared_harness_inputs = normalize_harness_inputs(raw.harness_inputs)
+    fidelity_conflicts = setup_output_harness_conflicts(
+        declared_harness_inputs,
+        raw.setup_output_globs,
+    )
+    if fidelity_conflicts:
+        raise HarnessInputPolicyError(
+            "setup_output_globs cannot exclude harness_inputs: "
+            + ", ".join(fidelity_conflicts)
+        )
     validate_isolation_mode(raw.isolation)
     if (
         raw.min_diff_coverage is not None
@@ -238,8 +259,36 @@ def prepare_guard_request(
     )
     if raw.blackbox_only and not raw.blackbox:
         raise ValueError("blackbox_only requires blackbox")
-    if raw.expect_verifier_pack_sha256 and not raw.verifier_pack_path:
+    if (
+        raw.expect_verifier_pack_sha256 is not None
+        and not is_verifier_pack_sha256(raw.expect_verifier_pack_sha256)
+    ):
+        raise ValueError(
+            "expect_verifier_pack_sha256 must be exactly 64 hexadecimal characters"
+        )
+    if raw.expect_verifier_pack_sha256 is not None and not raw.verifier_pack_path:
         raise ValueError("expect_verifier_pack_sha256 requires verifier_pack")
+    profile_violations = operating_profile_violations(
+        raw.operating_profile,
+        isolation=raw.isolation,
+        docker_image_present=bool(raw.docker_image),
+        docker_network=raw.docker_network,
+        setup_command_present=bool(raw.setup_command),
+        trust_setup_on_host=raw.trust_setup_on_host,
+        mem_limit_mb=raw.mem_limit_mb,
+        verifier_pack_required=bool(raw.verifier_pack_path),
+        expect_verifier_pack_sha256=raw.expect_verifier_pack_sha256,
+        blackbox=raw.blackbox,
+        blackbox_only=raw.blackbox_only,
+        require_report_integrity=raw.require_report_integrity,
+        require_candidate_isolation=raw.require_candidate_isolation,
+    )
+    if profile_violations:
+        profile = raw.operating_profile
+        raise ValueError(
+            f"operating profile {profile!r} is not satisfied: "
+            + "; ".join(profile_violations)
+        )
 
     # Python resolves the outer callable first, then each nested callable
     # immediately before that nested call's arguments. Keep those positions
@@ -284,6 +333,8 @@ def prepare_guard_request(
         strict_harness=raw.strict_harness,
         policy_id=raw.policy_id,
         policy_version=raw.policy_version,
+        operating_profile=raw.operating_profile,
+        harness_inputs=declared_harness_inputs,
     )
     request = guard_request_factory(
         repository=repository,
@@ -341,6 +392,8 @@ def prepare_guard_request(
         baseline_evidence=request.policy.baseline_evidence,
         require_demonstrated_fix=request.policy.require_demonstrated_fix,
         strict_harness=request.policy.strict_harness,
+        operating_profile=request.policy.operating_profile,
+        harness_inputs=request.policy.harness_inputs,
     )
     return PreparedGuardRequest(
         request=request,

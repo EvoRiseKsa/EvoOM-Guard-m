@@ -32,7 +32,7 @@ following fixed or externally supplied constraints:
 8. `--deny-self-hosted-runners`; and
 9. an attestation lookup limit of one, so the result cardinality is exact.
 
-After `gh` succeeds, EvoGuard also parses the signed
+After `gh` succeeds, EvoOM Guard also parses the signed
 `verificationResult.statement` and certificate identity instead of accepting a
 merely non-empty JSON object. It requires one exact SHA-256 subject, the SLSA
 v1 predicate, the expected repository, signer workflow/digest, source
@@ -88,7 +88,7 @@ cannot silently describe a different signer/source/issuer policy.
 
 Do not widen the claim beyond what executes:
 
-- EvoGuard does not implement or independently reproduce GitHub/Sigstore/DSSE
+- EvoOM Guard does not implement or independently reproduce GitHub/Sigstore/DSSE
   cryptographic verification; it trusts the protected `gh` execution for that
   operation.
 - A later `verify_github_attestation_receipt()` checks the retained artifact,
@@ -104,7 +104,7 @@ Do not widen the claim beyond what executes:
 - Outside the explicitly cross-checked repository/ref/digest dependency,
   hosted-runner fact, builder identity, and invocation URI, the adapter does
   not treat predicate parameters, materials, annotations, or arbitrary
-  attestation metadata as trusted EvoGuard facts. GitHub CLI itself warns that
+  attestation metadata as trusted EvoOM Guard facts. GitHub CLI itself warns that
   predicate data can be influenced by the originating workflow.
 - It does not prove a release was published, an OCI digest exists, an image has
   the claimed media type, a deployment occurred, or the finalizer became a

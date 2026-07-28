@@ -4,22 +4,21 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-"""Docker E2E: prove the black-box candidate boundary ISOLATES, on a real daemon.
+"""Docker E2E: exercise selected black-box isolation controls on a real daemon.
 
 The unit tests prove the *fail-closed* half — a container that cannot be
-delivered never yields a PASS. They cannot prove the other half: that when Docker
-IS available, the candidate is really confined and cannot reach the host, the
-judge-owned pack, or the judge's report. That is an operating-system property of
-a live container, so it is proven here against a real daemon on a POSIX host
-(skipped on native Windows or when no daemon is reachable; run in Linux CI,
-which has Docker).
+delivered never yields a PASS. They cannot exercise live mount/network/runtime
+controls, so this module probes a bounded selection against a real daemon on a
+POSIX host (skipped on native Windows or when no daemon is reachable; run in
+Linux CI, which has Docker). It does not prove the operating system or container
+runtime free of escape paths.
 
-The design makes the isolation proof self-certifying: a **malicious probe
-candidate** actively tries every escape (write the read-only repo mount, write
-the container root, open a network socket, locate the pack/report) and prints the
-outcome; a judge-owned pack asserts every attempt was BLOCKED/ABSENT. So a
-`PASS` verdict *is* the proof the boundary held — and any breach flips the pack to
-a `FAIL`, failing this test loudly rather than silently shipping a hole.
+The test uses a **malicious probe candidate** for a bounded set of controls:
+write the read-only repo mount, write the container root, open one network
+socket, and search selected locations for the pack/report. A judge-owned pack
+asserts those attempts were BLOCKED/ABSENT. A `PASS` is regression evidence for
+those exact probes on that daemon; it is not a proof against every container
+escape, kernel vulnerability, alternate path, or policy bypass.
 """
 
 from __future__ import annotations

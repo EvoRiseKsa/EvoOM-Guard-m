@@ -551,6 +551,7 @@ def test_pyz_build_is_byte_reproducible(tmp_path):
             "evoom_guard/schemas/evidence-context-1.schema.json",
             "evoom_guard/schemas/evidence-manifest-1.schema.json",
             "evoom_guard/schemas/verdict-record-1.11.schema.json",
+            "evoom_guard/schemas/verdict-record-1.12.schema.json",
         } <= names
         assert archive.read("LICENSE") == (
             Path(__file__).parents[1].joinpath("LICENSE").read_bytes()

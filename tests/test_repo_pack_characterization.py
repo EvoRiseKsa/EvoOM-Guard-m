@@ -115,6 +115,104 @@ def test_container_pack_delivery_and_trace_are_frozen(
     assert evidence["runtime"] == runtime
 
 
+def test_trusted_launcher_failure_preserves_prior_suite_facts(
+    tmp_path: Path,
+) -> None:
+    case = capture_case(
+        "host_launcher_failure_before_target_start",
+        tmp_path,
+    )
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "started_incomplete"
+    assert artifact["execution_phase"] == "verifier_pack"
+    assert artifact["test_command_started"] is True
+    assert artifact["test_command_completed"] is True
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "subprocess"
+    assert artifact["verifier_pack_isolation_evidence"]["delivered"] == "not_run"
+    assert artifact["outcome"] == "isolation_unavailable"
+
+
+def test_exec_error_before_target_start_does_not_start_pack(
+    tmp_path: Path,
+) -> None:
+    case = capture_case(
+        "host_exec_error_before_target_start",
+        tmp_path,
+    )
+    artifact = case["result"]["artifact"]
+
+    assert artifact["execution_state"] == "started_incomplete"
+    assert artifact["execution_phase"] == "verifier_pack"
+    assert artifact["test_command_started"] is True
+    assert artifact["test_command_completed"] is True
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "subprocess"
+    assert artifact["verifier_pack_isolation_evidence"]["delivered"] == "not_run"
+    assert artifact["outcome"] == "test_command_unavailable"
+    assert artifact["repo_suite_started"] is True
+    assert artifact["repo_suite_completed"] is True
+    assert artifact["repo_suite_state"] == "repo_phase_completed"
+    assert artifact["repo_suite_passed"] is True
+    assert artifact["repo_suite_tests_passed"] == 2
+    assert artifact["repo_suite_tests_total"] == 2
+    assert artifact["repo_suite_returncode"] == 0
+    assert artifact["repo_suite_junit_sha256"] == ("b" * 64)
+    assert artifact["repo_suite_verdict_source"] == "junit+exit"
+
+
+def test_docker_not_found_reports_pack_isolation_unavailable(
+    tmp_path: Path,
+) -> None:
+    artifact = capture_case("docker_not_found", tmp_path)["result"]["artifact"]
+
+    assert artifact["execution_state"] == "started_incomplete"
+    assert artifact["execution_phase"] == "verifier_pack"
+    assert artifact["test_command_started"] is True
+    assert artifact["test_command_completed"] is True
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "docker"
+    assert artifact["verifier_pack_isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["isolation_evidence"]["delivered"] == "docker"
+    assert artifact["outcome"] == "isolation_unavailable"
+    assert artifact["repo_suite_started"] is True
+    assert artifact["repo_suite_completed"] is True
+    assert artifact["repo_suite_passed"] is True
+
+
+def test_docker_exec_error_before_isolation_start_preserves_prior_suite_facts(
+    tmp_path: Path,
+) -> None:
+    artifact = capture_case(
+        "docker_exec_error_before_isolation_start",
+        tmp_path,
+    )["result"]["artifact"]
+
+    assert artifact["execution_state"] == "started_incomplete"
+    assert artifact["execution_phase"] == "verifier_pack"
+    assert artifact["test_command_started"] is True
+    assert artifact["test_command_completed"] is True
+    assert artifact["verifier_pack_started"] is False
+    assert artifact["verifier_pack_completed"] is False
+    assert artifact["delivered_isolation"] == "docker"
+    assert artifact["verifier_pack_isolation_evidence"]["delivered"] == "unavailable"
+    assert artifact["isolation_evidence"]["delivered"] == "docker"
+    assert artifact["outcome"] == "isolation_unavailable"
+    assert artifact["repo_suite_started"] is True
+    assert artifact["repo_suite_completed"] is True
+    assert artifact["repo_suite_state"] == "repo_phase_completed"
+    assert artifact["repo_suite_passed"] is True
+    assert artifact["repo_suite_tests_passed"] == 2
+    assert artifact["repo_suite_tests_total"] == 2
+    assert artifact["repo_suite_returncode"] == 0
+    assert artifact["repo_suite_junit_sha256"] == ("b" * 64)
+    assert artifact["repo_suite_verdict_source"] == "junit+exit"
+
+
 @pytest.mark.parametrize(
     "case_name",
     (
@@ -230,12 +328,8 @@ def test_repo_pack_owner_exposes_separate_immutable_contracts() -> None:
         completed=completed,
     )
 
-    assert repo_pack.execute_repo_pack.__module__ == (
-        "evoom_guard.verifiers.repo_pack"
-    )
-    assert repo_pack.interpret_repo_pack.__module__ == (
-        "evoom_guard.verifiers.repo_pack"
-    )
+    assert repo_pack.execute_repo_pack.__module__ == ("evoom_guard.verifiers.repo_pack")
+    assert repo_pack.interpret_repo_pack.__module__ == ("evoom_guard.verifiers.repo_pack")
     with pytest.raises(FrozenInstanceError):
         completed.returncode = 1  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):

@@ -5,15 +5,17 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# EvoGuard — Live Proof
+# EvoGuard — historical demonstration record
 
-The canonical record of EvoGuard verifying real, AI-shaped changes **end-to-end
-through the GitHub Action on a real repository** — the workflow trigger, the
-diff-against-base resolution, the verdict, the PR-comment report, and the
-check-status gating — not a local command-path simulation.
+This page preserves historical demonstration narratives for EvoGuard on real
+repositories. It is not a current release evidence bundle, independent
+assessment, or canonical production audit record unless a section explicitly
+links the immutable inputs, raw outputs, identities, and digests needed for that
+narrow claim.
 
 > **Scope policy (read this first).** The target below — **EvoERB**, a real
-> TypeScript/pnpm ERP monorepo — is used **only as an external fixture / proof**.
+> TypeScript/pnpm ERP monorepo — is used **only as an external fixture /
+> demonstration**.
 > EvoGuard is **not** developed inside it, and it is **not** part of EvoGuard's
 > roadmap. Any second repository is **validation only**: take the evidence,
 > record it here, and stop. EvoGuard evolves **only inside this repository**.
@@ -53,8 +55,9 @@ lockfile, or CI touched).
 | Files changed | 1 (`installments.ts`) |
 | Check status | **success** (gate green) |
 
-Proves the strong path: real counts read from a report the **judge** owns, never
-scraped from candidate stdout.
+The historical result was intended to demonstrate the structured path: real
+counts read from a report the **judge** owns, never scraped from candidate
+stdout.
 
 ## Result 2 — reward-hack (test edit) → ⛔ REJECTED
 
@@ -68,47 +71,52 @@ repo's own `test` job is fooled — EvoGuard is not.
 |---|---|
 | Verdict | **⛔ REJECTED** |
 | Reason | protected harness file edited (`installments.test.ts`) |
-| When | **before the suite runs** (harness-edit pre-gate) |
+| When | **before the suite runs** (effective-policy protected-path pre-gate) |
 | Check status | **failure** (merge blocked) |
 
 This is exactly the case EvoGuard exists for: the change the ordinary test run
 cannot catch.
 
-## What this proves — and what it does not
+## What this demonstration recorded — and what it does not establish
 
-**Proves, live on real code:** Action trigger + base resolution; the two headline
-verdicts (`PASS` with `junit+exit` real counts, and `REJECTED` on a harness
-edit); the sticky PR-comment report; and correct check-status gating (PASS →
+**The historical narrative records:** Action trigger + base resolution; the two
+headline verdicts (`PASS` with `junit+exit` real counts, and `REJECTED` on a
+harness edit); the sticky PR-comment report; and check-status gating (PASS →
 success, non-PASS → failure).
 
-**Does not claim:** that the suite is *good* (a weak suite still `PASS`es), to
-catch a novel exploit it does not model, or to sandbox hostile code. See the
-honest scope in [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) and
-[`GUARD.md`](GUARD.md).
+**It does not establish:** a current-version replay, independent review, that
+the suite is *good* (a weak suite still `PASS`es), detection of a novel exploit
+it does not model, or a sandbox for hostile code. See the honest scope in
+[`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) and [`GUARD.md`](GUARD.md).
 
-## gVisor isolation — live on a separate guest kernel
+## Historical gVisor observation — not current release evidence
 
-Phase 2d-i (`--isolation gvisor`) was validated live on an ordinary **Ubuntu 24.04
+The original Phase 2d-i narrative says `--isolation gvisor` was exercised on an **Ubuntu 24.04
 KVM-guest VPS** (4 vCPU / 16 GB) with **no `/dev/kvm`** — nested virtualization is
 unavailable there, so Firecracker is out, but gVisor's user-space `systrap`
-platform needs no KVM. Docker + the gVisor `runsc` runtime were installed;
-`docker run --runtime=runsc alpine uname -a` reports a **`4.19.0-gvisor`** kernel —
-a separate, user-space guest kernel.
+platform needs no KVM. It reports that Docker + the gVisor `runsc` runtime were
+installed and that `docker run --runtime=runsc alpine uname -a` returned a
+**`4.19.0-gvisor`** kernel.
 
-The same two demos, run through the binary with
-`--isolation gvisor --docker-image node:22-slim`. The host has **no `node`** at
-all, so the suite can only have executed **inside the gVisor sandbox**:
+It also reports the following two demos through
+`--isolation gvisor --docker-image node:22-slim` on a host without `node`:
 
 | Scenario | Verdict | Evidence |
 |---|---|---|
 | clean fix to `src.mjs` | ✅ `PASS` | `1/1`, `verdict_source: junit+exit`, exit `0` |
 | reward-hack edit to `test/c.test.mjs` | ⛔ `REJECTED` | before the suite runs, exit `1` |
 
-First live run of the **separate-kernel** judge: identical verdicts to the
-subprocess / docker judges, but the candidate's test code executed under gVisor,
-not the host kernel. See [`VM_ISOLATION.md`](VM_ISOLATION.md).
+Those statements are not independently re-derived here. The narrative predates
+the current evidence protocol and does not retain an
+exact EvoGuard commit, immutable image digest, policy/profile, run/attempt ID,
+runtime configuration, raw output, or signed evidence bundle. It is therefore
+an anecdotal historical observation, **not** reproducible proof for v4.4 or a
+hostile-input production gate. When `runsc` is absent, the conformance kit
+reports gVisor as `UNSUPPORTED` rather than substituting Docker.
+See [`ISOLATION_CONFORMANCE.md`](ISOLATION_CONFORMANCE.md) and
+[`VM_ISOLATION.md`](VM_ISOLATION.md).
 
-## Reproduce (any repo)
+## Run the current command path (any repo)
 
 ```bash
 git diff <base>...<head> | evo-guard guard --diff - --no-config --report report.md --json verdict.json
@@ -117,19 +125,19 @@ git diff <base>...<head> | evo-guard guard --diff - --no-config --report report.
 
 The structured (`junit+exit`) oracle covers **eight runners** today — pytest,
 `node --test`, vitest, jest, gotestsum, RSpec, mocha and Maven Surefire (this
-proof predates the last five); see [`ADOPTION.md`](ADOPTION.md) for the full
+demonstration predates the last five); see [`ADOPTION.md`](ADOPTION.md) for the full
 compatibility matrix and the monorepo invocation note.
 
 ---
 
-# v2.1.0 live proof — the `reeltest` hard benchmark
+# Historical v2.1.0 `reeltest` benchmark narrative
 
-A second, harder validation, run against **reeltest** — a private benchmark by
-the same author built to be *ungameable*: a failing stub, **no reference
-solution committed**, small-`n` answers checked against a fresh random brute
-force **every run**, huge-`n` answers checked with **oracle-free identities**
-at a fresh random `n ≈ 10^9` every run, and a strict per-call time budget that
-rejects anything not sub-linear in `n`. The task: count length-`n` binary
+A second historical validation used **reeltest** — a private benchmark by the
+same author designed to resist the shortcut classes listed here: a failing
+stub, no reference solution committed, small-`n` answers checked against a
+fresh random brute force, huge-`n` answers checked with oracle-free identities
+at a fresh random `n ≈ 10^9`, and a strict per-call time budget. The task:
+count length-`n` binary
 strings with no two adjacent ones whose popcount ≡ `r` (mod `m`), modulo a
 possibly **composite** `mod` — for `n` up to one billion.
 
@@ -155,19 +163,24 @@ verdict: REJECTED   reason_code: protected_harness_edit   (suite never ran)
 verdict: PASS   reason_code: tests_passed   exit code: 0
 ```
 
-The pair is the whole point in miniature: the same gate that **rejects the
-harness edit before a single test runs** hands a **PASS** to a genuinely
-correct, genuinely efficient fix — graded by the benchmark's own
-fresh-randomized suite, with nothing to memorize and nothing to forge.
+The pair records that the same gate rejected the listed harness edit before a
+test ran and that the candidate solution passed that benchmark's recorded
+randomized suite and time budget.
 
+Only this narrative and the high-level verdicts are retained here. The raw
+randomized inputs and outputs, exact execution environment, and bound Guard
+artifact are not retained, so this historical run is not independently
+reproducible and does not prove general correctness, optimality, or immunity to
+other forms of forgery.
 
 ---
 
-# Self-hosting proof — Guard judged by Guard (post-v3.2.2 hardening)
+# Historical self-hosting narrative (post-v3.2.2 hardening)
 
-The strongest fixture available without a third party: **this repository run
-through its own gate**, with the real CLI (`git diff | evo-guard guard --diff -`)
-and the real built `.pyz` artifact. Four scenarios, reproduced live:
+The same-author self-hosting fixture recorded **this repository run through its
+own gate**, with the CLI (`git diff | evo-guard guard --diff -`) and a built
+`.pyz` artifact. It is useful regression history, not independent or
+release-bound evidence. The narrative records four scenarios:
 
 > **Historical note.** The S2 allowlist run below documents a prior behavior.
 > Current Guard never allowlist-exempts built-in tests, config, or CI; use a
@@ -180,10 +193,11 @@ and the real built `.pyz` artifact. Four scenarios, reproduced live:
 | S3 | A cheat patch weakening one of Guard's own tests | ⛔ `REJECTED` | instant, `test_command_ran: false` |
 | S4 | The same cheat judged by the **built `evo-guard.pyz` release artifact** | ⛔ `REJECTED` | the shipped single-file form enforces the same gate |
 
-**What this historical run proved:** the gate worked on a real, non-toy repository (this
-one), the pre-gate fires before execution for both edits and deletions, and the
-The former `--allow` exception shown in S2 is intentionally no longer available
-for built-in judge-owned paths.
+**What this historical run recorded:** the gate worked on this real, non-toy
+repository and the pre-gate fired before execution for the displayed edits.
+The scenarios above do not display deletion coverage. The former `--allow`
+exception shown in S2 is intentionally no longer available for built-in
+judge-owned paths.
 **What it does not prove:** third-party validation (same author), or coverage
 of ecosystems this repo does not use.
 

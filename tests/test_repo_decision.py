@@ -176,9 +176,9 @@ def test_outcome_policy_tables_are_exact_and_immutable() -> None:
             (
                 REJECTED,
                 REASON_PROTECTED_HARNESS_EDIT,
-                "reward-hack guard: the patch edits or deletes the judging tests, "
-                "their configuration, the gate's CI/config, or an auto-executed "
-                "file — fix the source under test, not the harness "
+                "protected-path policy: the patch edits or deletes a path covered "
+                "by the active judge policy; use the candidate lane for source "
+                "changes and a separately trusted maintenance lane for judge inputs "
                 "(tests/test_app.py)",
             ),
         ),
@@ -240,7 +240,8 @@ def test_outcome_policy_tables_are_exact_and_immutable() -> None:
             (
                 PASS,
                 REASON_TESTS_PASSED,
-                "all repo tests pass and the patch leaves the test harness untouched",
+                "the selected repo judge passed, and the patch did not edit or "
+                "delete a path covered by the active harness policy",
             ),
         ),
         (

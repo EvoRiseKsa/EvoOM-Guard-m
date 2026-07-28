@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import subprocess
 import types
@@ -27,14 +28,18 @@ SCHEMA_VERSION = "repo-setup-characterization-v1"
 CASE_NAMES = (
     "docker_containment_started",
     "docker_containment_unstarted",
+    "docker_exec_error_before_isolation_start",
     "docker_exit_125",
     "docker_not_found",
     "docker_output_limit_started",
     "docker_output_limit_unstarted",
+    "docker_pre_snapshot_error",
     "docker_timeout_started",
     "docker_timeout_unstarted",
     "fidelity_change",
     "host_containment",
+    "host_exec_error_before_target_start",
+    "host_launcher_failure_before_target_start",
     "host_nonzero",
     "host_not_found",
     "host_output_limit",
@@ -78,6 +83,30 @@ def _docker_output_limit(*, started: bool) -> DockerRunOutputLimit:
     )
 
 
+def _completed_before_target_start(
+    command: list[str],
+) -> subprocess.CompletedProcess[str]:
+    completed = subprocess.CompletedProcess(
+        command,
+        125,
+        "launcher stdout",
+        "launcher stderr",
+    )
+    completed.target_started = False  # type: ignore[attr-defined]
+    return completed
+
+
+def _exec_error_before_target_start(command: list[str]) -> PermissionError:
+    error = PermissionError(
+        errno.EACCES,
+        "controlled target exec denial",
+        command[0],
+    )
+    error.target_exec_failed = True  # type: ignore[attr-defined]
+    error.target_started = False  # type: ignore[attr-defined]
+    return error
+
+
 def _runner_effect(case_name: str) -> object:
     effects: dict[str, object] = {
         "docker_containment_started": DockerRunContainmentError(
@@ -86,16 +115,26 @@ def _runner_effect(case_name: str) -> object:
         "docker_containment_unstarted": DockerRunContainmentError(
             "docker cleanup missing", container_started=False
         ),
+        "docker_exec_error_before_isolation_start": (
+            _exec_error_before_target_start(["docker", "setup"])
+        ),
         "docker_exit_125": subprocess.CompletedProcess(
             ["docker", "setup"], 125, "raw stdout", "raw stderr"
         ),
         "docker_not_found": FileNotFoundError("docker"),
         "docker_output_limit_started": _docker_output_limit(started=True),
         "docker_output_limit_unstarted": _docker_output_limit(started=False),
+        "docker_pre_snapshot_error": subprocess.CompletedProcess(
+            ["docker", "setup"], 0, "raw stdout", "raw stderr"
+        ),
         "docker_timeout_started": _docker_timeout(started=True),
         "docker_timeout_unstarted": _docker_timeout(started=False),
         "fidelity_change": subprocess.CompletedProcess(["setup"], 0, "raw stdout", "raw stderr"),
         "host_containment": ProcessContainmentError("host cleanup missing"),
+        "host_exec_error_before_target_start": (
+            _exec_error_before_target_start(["setup"])
+        ),
+        "host_launcher_failure_before_target_start": (_completed_before_target_start(["setup"])),
         "host_nonzero": subprocess.CompletedProcess(["setup"], 3, "raw stdout", "raw stderr"),
         "host_not_found": FileNotFoundError("setup"),
         "host_output_limit": ProcessOutputLimitExceeded(99),
@@ -151,7 +190,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
                 "op": f"snapshot-{phase}",
             }
         )
-        if case_name == "pre_snapshot_error" and baseline is None:
+        if case_name in {"docker_pre_snapshot_error", "pre_snapshot_error"} and baseline is None:
             raise SetupFidelityError("controlled pre-snapshot failure")
         if case_name == "post_snapshot_error" and baseline is not None:
             raise SetupFidelityError("controlled post-snapshot failure")

@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypedDict, TypeVar
 
 
 class _GuardResult(Protocol):
@@ -85,6 +85,8 @@ class _GuardCall(Protocol[_ResultCo]):
         require_demonstrated_fix: bool = ...,
         strict_harness: bool = ...,
         file_blocks: dict[str, str] | None = ...,
+        operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> _ResultCo: ...
 
 
@@ -123,6 +125,8 @@ class _GuardFromDiffCall(Protocol[_ResultCo]):
         baseline_evidence: bool = ...,
         require_demonstrated_fix: bool = ...,
         strict_harness: bool = ...,
+        operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
     ) -> tuple[_ResultCo, list[str]]: ...
 
 
@@ -135,7 +139,49 @@ class _InputErrorResult(Protocol[_ResultCo]):
         source: str,
         base_reconstruction: str | None = ...,
         verifier_pack: str | None = ...,
+        effective_policy: dict[str, Any] | None = ...,
+        test_command: list[str] | None = ...,
+        base_sha: str | None = ...,
+        head_sha: str | None = ...,
+        base_tree_sha: str | None = ...,
+        head_tree_sha: str | None = ...,
+        policy_id: str | None = ...,
+        policy_version: str | None = ...,
     ) -> _ResultCo: ...
+
+
+class _EffectivePolicy(Protocol):
+    def __call__(
+        self,
+        *,
+        mode: str,
+        isolation: str,
+        docker_image: str | None,
+        docker_network: str,
+        test_command: list[str] | None,
+        setup_command: list[str] | None,
+        trust_setup_on_host: bool,
+        setup_output_globs: tuple[str, ...],
+        protected: tuple[str, ...],
+        allow: tuple[str, ...],
+        allow_new_tests: bool,
+        timeout: int,
+        mem_limit_mb: int,
+        verifier_pack: str | None,
+        expect_verifier_pack_sha256: str | None,
+        blackbox: bool,
+        blackbox_only: bool,
+        require_report_integrity: str | None,
+        require_candidate_isolation: str | None,
+        min_diff_coverage: float | None,
+        baseline_evidence: bool,
+        require_demonstrated_fix: bool,
+        strict_harness: bool,
+        policy_id: str | None,
+        policy_version: str | None,
+        operating_profile: str | None = ...,
+        harness_inputs: tuple[str, ...] = ...,
+    ) -> dict[str, Any]: ...
 
 
 class _RenderReport(Protocol[_ResultContra]):
@@ -160,6 +206,45 @@ class _WriteJson(Protocol[_ResultContra]):
 
 class _WriteSarif(Protocol[_ResultContra]):
     def __call__(self, result: _ResultContra, path: str) -> None: ...
+
+
+class _OperatingProfileViolations(Protocol):
+    def __call__(
+        self,
+        operating_profile: str | None,
+        *,
+        isolation: str,
+        docker_image_present: bool,
+        docker_network: str,
+        setup_command_present: bool,
+        trust_setup_on_host: bool,
+        mem_limit_mb: int,
+        verifier_pack_required: bool,
+        expect_verifier_pack_sha256: str | None,
+        blackbox: bool,
+        blackbox_only: bool,
+        require_report_integrity: str | None,
+        require_candidate_isolation: str | None,
+    ) -> tuple[str, ...]: ...
+
+
+class _OperatingProfileOptions(TypedDict, total=False):
+    operating_profile: str
+
+
+class _HarnessInputOptions(TypedDict, total=False):
+    harness_inputs: tuple[str, ...]
+
+
+class _InputErrorProfileOptions(TypedDict, total=False):
+    effective_policy: dict[str, Any]
+    test_command: list[str] | None
+    base_sha: str | None
+    head_sha: str | None
+    base_tree_sha: str | None
+    head_tree_sha: str | None
+    policy_id: str | None
+    policy_version: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +277,8 @@ class GuardCommandServices(Generic[_ResultT]):
     write_sarif: _WriteSarif[_ResultT]
     write_report: Callable[[str, str], None]
     sign_file_provider: Callable[[], Callable[[str, str], str]]
+    operating_profile_violations: _OperatingProfileViolations
+    effective_policy: _EffectivePolicy
 
 
 def execute_guard_command(
@@ -201,6 +288,19 @@ def execute_guard_command(
     out: Callable[[str], None] = print,
 ) -> int:
     """Execute the already-parsed ``guard`` command through typed services."""
+
+    sign_key = getattr(args, "sign_key", None)
+    if sign_key and not args.json_out:
+        out("--sign-key needs --json: the signature covers the JSON verdict file")
+        return 2
+    if sign_key and not getattr(args, "acknowledge_local_key_exposure", False):
+        out(
+            "refusing direct --sign-key: guard executes candidate-controlled code "
+            "before signing under the same OS identity. Use Trusted Finalizer for "
+            "untrusted candidates, or pass --acknowledge-local-key-exposure only "
+            "for trusted local inputs."
+        )
+        return 2
 
     # Effective settings: an explicit CLI flag wins; else a policy loaded from
     # the trusted baseline; else the built-in default. In --diff mode a trusted
@@ -221,6 +321,24 @@ def execute_guard_command(
         if not isinstance(exc, services.config_error_type()):
             raise
         out(f"config error (fail-closed): {exc}")
+        return 2
+
+    cfg_operating_profile = cfg.get("operating_profile")
+    operating_profile: str | None = (
+        args.operating_profile
+        if getattr(args, "operating_profile", None) is not None
+        else (
+            cfg_operating_profile
+            if isinstance(cfg_operating_profile, str)
+            else None
+        )
+    )
+    if sign_key and operating_profile in {"protected", "hostile"}:
+        out(
+            f"refusing direct --sign-key under operating profile "
+            f"{operating_profile!r}: candidate execution and key custody must be "
+            "separated; use Trusted Finalizer"
+        )
         return 2
 
     def _policy_bool(key: str, cli_value: bool | None) -> bool:
@@ -335,6 +453,13 @@ def execute_guard_command(
             else ()
         )
 
+    cfg_harness_inputs = cfg.get("harness_inputs")
+    harness_inputs = (
+        tuple(str(path) for path in cfg_harness_inputs)
+        if isinstance(cfg_harness_inputs, list)
+        else ()
+    )
+
     cfg_to = cfg.get("timeout")
     timeout = (
         args.timeout
@@ -342,6 +467,7 @@ def execute_guard_command(
         else (cfg_to if isinstance(cfg_to, int) else 120)
     )
     cfg_ml = cfg.get("mem_limit")
+    mem_limit_is_explicit = args.mem_limit is not None or type(cfg_ml) is int
     mem_limit = (
         args.mem_limit
         if args.mem_limit is not None
@@ -395,8 +521,14 @@ def execute_guard_command(
     diff_coverage = diff_coverage_requested or min_diff_coverage is not None
 
     # V8 reserves a large virtual address range. Keep the historical Node
-    # auto-detection when the default address-space limit remains effective.
-    if mem_limit == 1024:
+    # auto-detection only for the implicit legacy default. An explicit 1024 MiB
+    # policy is still a policy, and hostile mode must never weaken its required
+    # non-zero memory ceiling merely because the repository contains Node.
+    if (
+        mem_limit == 1024
+        and not mem_limit_is_explicit
+        and operating_profile != "hostile"
+    ):
         node_root = args.repo or args.head or args.base or services.current_directory()
         if services.path_is_file(services.join_path(node_root, "package.json")):
             mem_limit = 0
@@ -423,12 +555,90 @@ def execute_guard_command(
             else "none"
         )
     )
+    profile_violations = services.operating_profile_violations(
+        operating_profile,
+        isolation=isolation,
+        docker_image_present=bool(docker_image),
+        docker_network=docker_network,
+        setup_command_present=bool(setup_command),
+        trust_setup_on_host=trust_setup_on_host,
+        mem_limit_mb=mem_limit,
+        verifier_pack_required=bool(verifier_pack),
+        expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+        blackbox=blackbox,
+        blackbox_only=blackbox_only,
+        require_report_integrity=require_report_integrity,
+        require_candidate_isolation=require_candidate_isolation,
+    )
+    if profile_violations:
+        out(
+            f"usage: operating profile {operating_profile!r} is not satisfied: "
+            + "; ".join(profile_violations)
+        )
+        return 2
     if isolation in ("docker", "gvisor") and not docker_image:
         out(
             f"usage: --isolation {isolation} requires --docker-image <image> "
             "(an image carrying the repo's test runner, e.g. node:22-slim)"
         )
         return 2
+
+    # Preserve the historical injected-call surface when no profile is chosen.
+    # Compatibility consumers may provide a guard callable that predates the
+    # optional keyword, so an absent profile must not become ``profile=None``.
+    profile_options: _OperatingProfileOptions = (
+        {"operating_profile": operating_profile}
+        if operating_profile is not None
+        else {}
+    )
+    harness_input_options: _HarnessInputOptions = (
+        {"harness_inputs": harness_inputs}
+        if harness_inputs
+        else {}
+    )
+
+    def _input_error_profile_options() -> _InputErrorProfileOptions:
+        """Bind profiled early errors to the same complete policy as a run."""
+        if operating_profile is None and not harness_inputs:
+            return {}
+        return {
+            "effective_policy": services.effective_policy(
+                mode="blackbox" if blackbox else "repo",
+                isolation=isolation,
+                docker_image=docker_image,
+                docker_network=docker_network,
+                test_command=test_command,
+                setup_command=setup_command,
+                trust_setup_on_host=trust_setup_on_host,
+                setup_output_globs=setup_output_globs,
+                protected=protected,
+                allow=allow,
+                allow_new_tests=allow_new_tests,
+                timeout=timeout,
+                mem_limit_mb=mem_limit,
+                verifier_pack=verifier_pack,
+                expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+                blackbox=blackbox,
+                blackbox_only=blackbox_only,
+                require_report_integrity=require_report_integrity,
+                require_candidate_isolation=require_candidate_isolation,
+                min_diff_coverage=min_diff_coverage,
+                baseline_evidence=baseline_evidence,
+                require_demonstrated_fix=require_demonstrated_fix,
+                strict_harness=strict_harness,
+                policy_id=policy_id,
+                policy_version=policy_version,
+                operating_profile=operating_profile,
+                **harness_input_options,
+            ),
+            "test_command": test_command,
+            "base_sha": args.base_sha,
+            "head_sha": args.head_sha,
+            "base_tree_sha": args.base_tree_sha,
+            "head_tree_sha": args.head_tree_sha,
+            "policy_id": policy_id,
+            "policy_version": policy_version,
+        }
 
     deleted: list[str] = []
 
@@ -466,6 +676,8 @@ def execute_guard_command(
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
+            **profile_options,
+            **harness_input_options,
         )
     elif args.base and args.head:
         pack_trust_problem = services.verifier_pack_trust_error(
@@ -477,6 +689,7 @@ def execute_guard_command(
                 reason_code=services.invalid_verifier_pack_reason,
                 source="base/head",
                 verifier_pack=verifier_pack,
+                **_input_error_profile_options(),
             )
         else:
             try:
@@ -490,6 +703,7 @@ def execute_guard_command(
                     reason_code=services.no_verifiable_changes_reason,
                     source="base/head",
                     verifier_pack=verifier_pack,
+                    **_input_error_profile_options(),
                 )
             else:
                 candidate = services.serialize_candidate_blocks(file_blocks)
@@ -527,6 +741,8 @@ def execute_guard_command(
                     baseline_evidence=baseline_evidence,
                     require_demonstrated_fix=require_demonstrated_fix,
                     strict_harness=strict_harness,
+                    **profile_options,
+                    **harness_input_options,
                 )
                 result.source = "base/head"
     elif args.repo and args.patch:
@@ -562,6 +778,8 @@ def execute_guard_command(
             baseline_evidence=baseline_evidence,
             require_demonstrated_fix=require_demonstrated_fix,
             strict_harness=strict_harness,
+            **profile_options,
+            **harness_input_options,
         )
         result.source = "edit blocks"
     else:
@@ -580,12 +798,9 @@ def execute_guard_command(
         out(report)
     if args.json_out:
         services.write_json(result, args.json_out, deleted=deleted)
-    if getattr(args, "sign_key", None):
-        if not args.json_out:
-            out("--sign-key needs --json: the signature covers the JSON verdict file")
-            return 2
+    if sign_key:
         sign_file = services.sign_file_provider()
-        signature = sign_file(args.json_out, args.sign_key)
+        signature = sign_file(args.json_out, sign_key)
         out(f"signed {args.json_out} -> {signature}")
     if args.sarif:
         services.write_sarif(result, args.sarif)

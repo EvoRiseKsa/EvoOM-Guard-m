@@ -1,5 +1,13 @@
 # Refactor program (execution file)
 
+> **Audience and reading order:** this is the chronological maintainer record
+> for the refactor. Statements such as "pending" or "in progress" describe the
+> point in time at which each bounded slice was recorded; they are not the
+> current project status. Read
+> [`CURRENT_STATE.md`](CURRENT_STATE.md) for the concise present-tense
+> architecture, then use the machine-maintained status near the end of this
+> file as the authoritative refactor summary.
+
 ## Objective
 
 Lock the baseline and refactor incrementally from monolith modules into stable typed
@@ -504,8 +512,8 @@ remain in their established facades.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
-is **complete**; the overall refactor program is **in-progress**. Source version `4.4.0`
-remains unreleased.
+is **complete**; the overall refactor program is **in-progress**. Source version
+`4.4.0.dev0` remains unreleased.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. Release

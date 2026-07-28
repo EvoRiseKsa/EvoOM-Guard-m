@@ -1713,7 +1713,10 @@ def assemble(
             trusted_parent["tree_sha"],
             executable=trusted_git,
         )
-        with validator._trusted_parent_first_party(first_party_contracts):
+        with validator._trusted_parent_first_party(
+            first_party_contracts,
+            blocked_roots=(root,),
+        ):
             extracted_facts = _derive_embedded_facts(ledger, root)
             _derive_file_bindings(ledger, root)
             inventory = _validate_completed_evidence(

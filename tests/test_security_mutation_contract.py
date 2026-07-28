@@ -15,6 +15,7 @@ import evoom_guard.execution.process as process_module
 from evoom_guard.execution import (
     BoundedOutput,
     BoundedProcessRequest,
+    PosixRLimitSpec,
     ProcessContainmentError,
     ProcessLimits,
     ProcessOutputLimitExceeded,
@@ -111,8 +112,11 @@ def _install_fake_launcher(
     capture_type: type,
     *,
     observed_kwargs: dict[str, Any] | None = None,
+    observed_commands: list[list[str]] | None = None,
 ) -> None:
-    def fake_popen(_command: list[str], **kwargs: Any) -> _FakeProcess:
+    def fake_popen(command: list[str], **kwargs: Any) -> _FakeProcess:
+        if observed_commands is not None:
+            observed_commands.append(command)
         if observed_kwargs is not None:
             observed_kwargs.update(kwargs)
         return process
@@ -286,6 +290,94 @@ def test_execute_passes_the_process_group_contract_to_popen(
     )
 
     assert observed.get("start_new_session") is True
+
+
+def test_posix_rlimit_data_uses_exec_launcher_without_preexec_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_kwargs: dict[str, Any] = {}
+    observed_commands: list[list[str]] = []
+    observed_status_reads: list[int] = []
+    closed_descriptors: list[int] = []
+    process = _FakeProcess(poll_result=0)
+    _install_fake_launcher(
+        monkeypatch,
+        process,
+        _NeverExceededCapture,
+        observed_kwargs=observed_kwargs,
+        observed_commands=observed_commands,
+    )
+    monkeypatch.setattr(
+        process_module,
+        "os",
+        SimpleNamespace(
+            name="posix",
+            killpg=lambda *_args: None,
+            close=closed_descriptors.append,
+        ),
+    )
+    monkeypatch.setattr(
+        process_module,
+        "process_group_popen_kwargs",
+        lambda: {"start_new_session": True},
+    )
+    monkeypatch.setattr(
+        process_module,
+        "_open_posix_exec_status_pipe",
+        lambda: (17, 18),
+    )
+
+    def read_exec_status(descriptor: int, *, deadline: float) -> None:
+        del deadline
+        observed_status_reads.append(descriptor)
+
+    monkeypatch.setattr(
+        process_module,
+        "_read_posix_exec_status",
+        read_exec_status,
+    )
+    monkeypatch.setattr(
+        process_module,
+        "_posix_rlimit_launcher_command",
+        lambda command, limits, exec_status_fd: [
+            "safe-exec-launcher",
+            str(limits.cpu_seconds),
+            str(limits.address_space_bytes),
+            str(exec_status_fd),
+            "--",
+            *command,
+        ],
+    )
+    monkeypatch.setattr(process_module, "join_pipe_readers", lambda *_args: True)
+    monkeypatch.setattr(process_module, "_terminate_process_tree", lambda *_args: True)
+    request = BoundedProcessRequest.from_command(
+        ["candidate", "--flag"],
+        cwd=None,
+        env=None,
+        timeout=1,
+        preexec_fn=PosixRLimitSpec(
+            cpu_seconds=8,
+            address_space_bytes=64 * 1024 * 1024,
+        ),
+    )
+
+    execute_bounded_process(request)
+
+    assert observed_commands == [
+        [
+            "safe-exec-launcher",
+            "8",
+            str(64 * 1024 * 1024),
+            "18",
+            "--",
+            "candidate",
+            "--flag",
+        ]
+    ]
+    assert observed_kwargs["pass_fds"] == (18,)
+    assert observed_status_reads == [17]
+    assert closed_descriptors == [18, 17]
+    assert "preexec_fn" not in observed_kwargs
 
 
 def test_posix_process_group_contract(monkeypatch: pytest.MonkeyPatch) -> None:

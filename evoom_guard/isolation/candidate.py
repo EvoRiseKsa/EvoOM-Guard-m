@@ -9,10 +9,11 @@
 The black-box judge exercises the candidate only across a process boundary. The
 question this module answers honestly is: **across what kind of boundary?** A
 plain host subprocess shares the machine, the filesystem and the user with the
-judge; a container does not. The earlier design let the caller *ask* for
+judge; a container adds a separate process/mount/network view but, for Docker,
+still shares the host kernel. The earlier design let the caller *ask* for
 ``--isolation docker`` and then wrote ``candidate_isolation: docker`` into the
-verdict **without ever starting a container** — a verdict that lied about its own
-guarantee. This module removes that gap.
+verdict **without ever starting a container** — a verdict that lied about its
+own delivered boundary. This module removes that gap.
 
 A :class:`CandidateRunner` prepares a real boundary and returns
 :class:`IsolationEvidence` describing **what is available to its launcher**,
@@ -34,8 +35,9 @@ outside both the candidate copy and the judge-owned pack. The pack stays
 isolation-agnostic: it invokes ``$EVOGUARD_EXEC <argv…>`` and the launcher runs
 that argv in the delivered boundary with the repo copy as the working root. In
 Docker mode the repo copy is mounted **read-only** and the pack is **not mounted
-at all**, so candidate code cannot reach the pack to tamper with it, nor write to
-the host — the two attacks that survive a same-host subprocess.
+at all**. Those controls constrain the candidate's normal mount and network
+view; they do not prove the absence of a container escape or that arbitrary
+host paths are unreachable.
 """
 
 from __future__ import annotations

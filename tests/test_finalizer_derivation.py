@@ -23,7 +23,13 @@ from evoom_guard.finalizer_derivation import (
     resolve_raw_git_regular_blob,
     write_finalizer_bindings,
 )
-from evoom_guard.guard import blocks_from_dirs, guard, serialize_candidate_blocks
+from evoom_guard.guard import (
+    _effective_policy,
+    blocks_from_dirs,
+    effective_policy_sha256,
+    guard,
+    serialize_candidate_blocks,
+)
 from evoom_guard.pack_manifest import pack_digest
 
 
@@ -105,6 +111,25 @@ def _create_repository(tmp_path: Path, *, with_pack: bool = False) -> tuple[Path
     return repo, base, head
 
 
+def _create_harness_repository(tmp_path: Path) -> tuple[Path, str, str]:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--quiet")
+    (repo / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    harness = repo / "ci" / "run-suite.py"
+    harness.parent.mkdir()
+    harness.write_text("print('trusted judge')\n", encoding="utf-8")
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"harness_inputs": ["ci/run-suite.py"]}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    base = _commit(repo, "base")
+    (repo / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+    head = _commit(repo, "candidate")
+    return repo, base, head
+
+
 def _derived(
     repo: Path,
     base: str,
@@ -124,7 +149,14 @@ def _derived(
     )
 
 
-def _record_for_pair(tmp_path: Path, repo: Path, base: str, head: str) -> dict[str, object]:
+def _record_for_pair(
+    tmp_path: Path,
+    repo: Path,
+    base: str,
+    head: str,
+    *,
+    harness_inputs: tuple[str, ...] = (),
+) -> dict[str, object]:
     base_dir = tmp_path / "base"
     head_dir = tmp_path / "head"
     _checkout(repo, base_dir, base)
@@ -139,10 +171,107 @@ def _record_for_pair(tmp_path: Path, repo: Path, base: str, head: str) -> dict[s
         head_sha=head,
         base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
         head_tree_sha=_git(repo, "rev-parse", f"{head}^{{tree}}"),
+        harness_inputs=harness_inputs,
     )
     record = result.to_dict()
     assert record["attestation"] is not None
     return record
+
+
+def test_finalizer_policy_derivation_preserves_operating_profile() -> None:
+    raw_policy = json.dumps(
+        {
+            "operating_profile": "protected",
+            "blackbox": True,
+            "blackbox_only": True,
+            "isolation": "docker",
+            "docker_image": "judge:latest",
+            "docker_network": "none",
+            "verifier_pack": "security/judge-pack",
+            "expect_verifier_pack_sha256": "a" * 64,
+            "require_report_integrity": "external_process_isolated",
+            "require_candidate_isolation": "docker",
+        }
+    ).encode()
+
+    policy, pack, pin = finalizer_derivation._effective_policy_from_raw_config(
+        raw_policy,
+        head_has_package_json=False,
+    )
+
+    assert policy["operating_profile"] == "protected"
+    assert pack == "security/judge-pack"
+    assert pin == "a" * 64
+
+
+def test_hostile_node_finalizer_preserves_explicit_memory_limit() -> None:
+    raw_policy = json.dumps(
+        {
+            "operating_profile": "hostile",
+            "blackbox": True,
+            "blackbox_only": True,
+            "isolation": "gvisor",
+            "docker_image": "judge@sha256:" + "b" * 64,
+            "docker_network": "none",
+            "verifier_pack": "security/judge-pack",
+            "expect_verifier_pack_sha256": "a" * 64,
+            "require_report_integrity": "external_process_isolated",
+            "require_candidate_isolation": "gvisor",
+            "mem_limit": 1024,
+        }
+    ).encode()
+
+    policy, _pack, _pin = finalizer_derivation._effective_policy_from_raw_config(
+        raw_policy,
+        head_has_package_json=True,
+    )
+
+    assert policy["operating_profile"] == "hostile"
+    assert policy["mem_limit_mb"] == 1024
+
+
+def test_integer_coverage_floor_is_canonical_between_api_and_finalizer() -> None:
+    finalizer_policy, pack, pin = (
+        finalizer_derivation._effective_policy_from_raw_config(
+            json.dumps({"min_diff_coverage": 80}).encode(),
+            head_has_package_json=False,
+        )
+    )
+    api_policy = _effective_policy(
+        mode="repo",
+        isolation="subprocess",
+        docker_image=None,
+        docker_network="none",
+        test_command=None,
+        setup_command=None,
+        trust_setup_on_host=False,
+        setup_output_globs=(),
+        protected=(),
+        allow=(),
+        allow_new_tests=False,
+        timeout=120,
+        mem_limit_mb=1024,
+        verifier_pack=None,
+        expect_verifier_pack_sha256=None,
+        blackbox=False,
+        blackbox_only=False,
+        require_report_integrity=None,
+        require_candidate_isolation=None,
+        min_diff_coverage=80,
+        baseline_evidence=False,
+        require_demonstrated_fix=False,
+        strict_harness=False,
+        policy_id=None,
+        policy_version=None,
+    )
+
+    assert pack is None
+    assert pin is None
+    assert type(api_policy["min_diff_coverage"]) is float
+    assert api_policy == finalizer_policy
+    assert effective_policy_sha256(api_policy) == effective_policy_sha256(
+        finalizer_policy
+    )
 
 
 @pytest.mark.parametrize(
@@ -404,6 +533,91 @@ def test_raw_git_derivation_matches_guard_candidate_and_policy(tmp_path: Path) -
     assert source == _source(base, head)
     assert context["candidate_sha256"] == bindings.candidate_sha256
     assert context["verifier_pack_sha256"] is None
+
+
+def test_raw_git_derivation_matches_guard_with_declared_harness_input(
+    tmp_path: Path,
+) -> None:
+    repo, base, head = _create_harness_repository(tmp_path)
+    bindings = _derived(repo, base, head)
+    record = _record_for_pair(
+        tmp_path,
+        repo,
+        base,
+        head,
+        harness_inputs=("ci/run-suite.py",),
+    )
+
+    _source_payload, context = context_from_verified_bindings(bindings, record)
+
+    assert bindings.effective_policy["harness_inputs"] == ["ci/run-suite.py"]
+    assert bindings.policy_sha256 == record["attestation"]["policy_sha256"]
+    assert context["candidate_sha256"] == bindings.candidate_sha256
+
+
+def test_raw_git_derivation_rejects_missing_base_harness_input(tmp_path: Path) -> None:
+    repo, base, _head = _create_repository(tmp_path)
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"harness_inputs": ["ci/missing.py"]}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    base = _commit(repo, "policy names missing harness input")
+    (repo / "app.py").write_text("VALUE = 3\n", encoding="utf-8")
+    head = _commit(repo, "candidate")
+
+    with pytest.raises(FinalizerDerivationError, match="exact regular files"):
+        _derived(repo, base, head)
+
+
+def test_raw_git_derivation_rejects_non_regular_base_harness_input(
+    tmp_path: Path,
+) -> None:
+    repo, _base, _head = _create_repository(tmp_path)
+    link_target = repo / "link-target.txt"
+    link_target.write_text("target\n", encoding="utf-8")
+    blob = _git(repo, "hash-object", "-w", "link-target.txt")
+    _git(
+        repo,
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        f"120000,{blob},ci-judge",
+    )
+    (repo / ".evoguard.json").write_text(
+        json.dumps({"harness_inputs": ["ci-judge"]}) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _git(repo, "add", ".evoguard.json", "link-target.txt")
+    _git(
+        repo,
+        "-c",
+        "user.name=EvoGuard Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "policy names symlink harness input",
+    )
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "app.py").write_text("VALUE = 3\n", encoding="utf-8")
+    head = _commit(repo, "candidate")
+
+    with pytest.raises(FinalizerDerivationError, match="exact regular files"):
+        _derived(repo, base, head)
+
+
+def test_raw_git_derivation_rejects_changed_harness_input(tmp_path: Path) -> None:
+    repo, base, _head = _create_harness_repository(tmp_path)
+    (repo / "ci" / "run-suite.py").write_text(
+        "print('candidate judge')\n",
+        encoding="utf-8",
+    )
+    head = _commit(repo, "candidate changes judge")
+
+    with pytest.raises(FinalizerDerivationError, match="changed a policy-bound"):
+        _derived(repo, base, head)
 
 
 def test_raw_git_pack_identity_matches_checkout_bytes_for_lf_fixture(tmp_path: Path) -> None:

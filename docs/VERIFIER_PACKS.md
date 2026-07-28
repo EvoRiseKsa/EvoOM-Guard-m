@@ -13,6 +13,10 @@ replace, delete, or deselect those files. In repo-native mode Guard runs the
 repo's own suite and then runs the accepted pack snapshot as a **separate
 mandatory phase**; both must pass.
 
+Independent in this feature name means candidate-independent and judge-owned.
+It does not mean independent review, an external evaluation, or a distinct
+organizational trust domain.
+
 The judge copies the pack to a temporary snapshot **outside** the candidate
 tree and its `HOME`, records its V2 content identity, and addresses that
 snapshot explicitly with `python -m pytest`. A narrowed command such as
@@ -72,12 +76,16 @@ The Action policy is therefore:
 # .github/workflows/evoguard.yml
 - uses: EvoRiseKsa/EvoOM-Guard-m@<reviewed-full-sha>
   with:
-    comment: "true"                  # reporting only
+    comment: "false"                 # candidate jobs never receive comment authority
     fail-on: "any-non-pass"          # required on pull_request
 ```
 
 The `with:` block above deliberately contains no judge policy. For a PR, an
-input cannot replace the base policy even when it has the same text.
+input cannot replace the base policy even when it has the same text. When
+execution reaches Guard report generation, the report is appended to the job
+summary; credential/comment preflight may stop earlier with no Guard report. If
+a PR comment is required, pass only the bounded report to a separate
+metadata-only job that does not check out or execute the candidate.
 
 The expected digest is checked before candidate code runs and is included in
 `attestation.effective_policy`, so it also changes `policy_sha256`. A mismatch
@@ -113,11 +121,21 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
   post-setup runtime tree before and after the repo and pack phases. Persistent
   drift anywhere in that prepared tree is `TAMPERED` /
   `candidate_tree_changed_during_run`.
+- **Black-box declared-input continuity.** The black-box runner, including
+  `--blackbox-only`, captures explicit `harness_inputs` from the trusted source
+  before materialization, compares the materialized copy before execution, and
+  checks again after candidate/pack execution. An initial trusted-source binding
+  failure is `ERROR` / `assurance_requirement_not_met` before materialization
+  and is not candidate-attributed. Only a materialized-copy mismatch or
+  persistent post-execution drift is `TAMPERED` /
+  `candidate_tree_changed_during_run`.
 - **Centralised, versioned invariants.** One pack of security/API/permission/
   regression checks can gate many repositories and remain owned by a security
   or platform team.
 - **Overfitting pressure.** A patch that hard-codes answers to visible tests
-  still has to satisfy independent checks over different inputs.
+  still has to satisfy candidate-independent pack checks over different inputs.
+  This raises the cost of overfitting; it does not guarantee detection of every
+  overfit patch.
 
 **Does NOT guarantee (state this plainly):**
 
@@ -131,15 +149,22 @@ upgrading from 3.3.x; the earlier concatenation digest is not a V2 identity.
   `same_process_candidate_writable`.
 - **A subprocess sandbox.** Under the default host subprocess, candidate and
   judge share the OS account. Pre/post checks are evidence of observed durable
-  state, not an OS confinement boundary, and transient changes restored between
-  observations are not claimed as impossible.
+  filesystem state, not an OS or filesystem-confinement boundary, and transient
+  changes restored between observations are not claimed as impossible.
 - **Scope of trusted setup exceptions.** `setup_output_globs` and newly
   generated conventional dependency/build outputs are excluded only from the
-  setup-fidelity comparison. After setup, `EVOGUARD_RUNTIME_TREE_V1` binds the
-  complete prepared tree, including those paths, before the repository suite
-  and checks it again before and after verifier-pack execution. Never allowlist
-  source, tests, policy, or harness paths: the exception still permits setup to
-  replace those bytes before the runtime identity is captured.
+  general setup-fidelity comparison. Exact base-owned files declared in
+  `harness_inputs` are never exempted and are compared with their accepted base
+  identity at the enforced checkpoints. After setup,
+  `EVOGUARD_RUNTIME_TREE_V1` binds the complete prepared tree, including other
+  excepted paths, before the repository suite and checks it again before and
+  after verifier-pack execution. Keep broad exceptions away from unlisted
+  source/judge paths: a path absent from `harness_inputs` does not gain
+  transitive protection merely because a command later consumes it.
+
+All of these hashes are observation-point evidence. In subprocess mode a
+process may theoretically mutate and restore bytes between snapshots; equality
+at the checkpoints is not a continuous immutability claim.
 
 For checks the running code genuinely cannot observe or modify, use the shipped
 external black-box judge (`--blackbox`): the pack runs in the judge's own

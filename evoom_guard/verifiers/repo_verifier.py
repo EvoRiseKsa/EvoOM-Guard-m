@@ -37,8 +37,8 @@ as a precise diagnostic the loop feeds back, so the next generation can fix the
 anchor. ``FILE`` and ``PATCH`` blocks may be mixed; patches apply in order, after
 the file blocks.
 
-Golden rule, enforced: the candidate may NOT modify the harness that judges it
-— neither the tests nor their configuration. Paths under ``tests/``, files named
+Protected-path rule: the candidate may not edit or delete a path covered by the
+active judge policy. Paths under ``tests/``, files named
 ``test_*.py`` / ``*_test.py`` / ``conftest.py``, JavaScript/TypeScript colocated
 test files (``*.test.ts``, ``*.spec.ts``, etc.), and any extra ``protected`` globs
 are rejected outright, otherwise the loop would learn to delete its own judge. The
@@ -54,7 +54,10 @@ outright (see :func:`is_protected_ci`). The dual-purpose ``package.json`` is not
 rejected (it carries real dependencies and source metadata); instead its
 test-harness fields (``scripts.test`` and embedded ``jest``/``vitest`` config) are
 restored from the pristine original after a candidate edit — see
-:func:`restore_judge_package_json`.
+:func:`restore_judge_package_json`. Custom repository-local wrappers/helpers
+must be listed as exact regular paths in trusted ``harness_inputs``. EvoGuard
+does not parse commands, imports, package scripts, or dynamic loads to infer a
+complete transitive execution graph.
 
 Score gradient (reuses :func:`evoom_guard.verifiers.grading.fraction_score`):
 
@@ -115,6 +118,7 @@ from evoom_guard.execution import (
     DEFAULT_READER_JOIN_SECONDS,
     DEFAULT_TERMINATION_GRACE_SECONDS,
     BoundedOutput,
+    PosixRLimitSpec,
     ProcessLimits,
     drain_process_pipe,
     join_pipe_readers,
@@ -165,6 +169,11 @@ from evoom_guard.pack_manifest import (
     snapshot_pack,
     verify_pack_snapshot,
 )
+from evoom_guard.policy.harness import (
+    HarnessInputPolicyError,
+    normalize_harness_inputs,
+    setup_output_harness_conflicts,
+)
 from evoom_guard.runtime_identity import (
     RuntimeIdentity as RuntimeIdentity,
 )
@@ -208,6 +217,13 @@ from evoom_guard.verifiers.harness_policy import (
     _PROTECTED_CONFIG as _PROTECTED_CONFIG,
 )
 from evoom_guard.verifiers.harness_policy import (
+    HarnessInputIntegrityError,
+    capture_harness_input_snapshot,
+    harness_input_snapshot_changes,
+    matches_globs,
+    validate_harness_input_files,
+)
+from evoom_guard.verifiers.harness_policy import (
     _is_judge_script as _is_judge_script,
 )
 from evoom_guard.verifiers.harness_policy import (
@@ -234,7 +250,6 @@ from evoom_guard.verifiers.harness_policy import (
 from evoom_guard.verifiers.harness_policy import (
     is_safe_relpath as is_safe_relpath,
 )
-from evoom_guard.verifiers.harness_policy import matches_globs
 from evoom_guard.verifiers.harness_policy import (
     reject_unsafe_or_protected as reject_unsafe_or_protected,
 )
@@ -724,6 +739,7 @@ class RepoVerifier:
         trust_setup_on_host: bool = False,
         setup_output_globs: tuple[str, ...] = (),
         strict_harness: bool = False,
+        harness_inputs: tuple[str, ...] = (),
     ) -> None:
         validate_isolation_mode(isolation)
         self.timeout = timeout
@@ -762,26 +778,33 @@ class RepoVerifier:
         # zero-test success, and the preflight treats execution-environment
         # manifests as immutable judge inputs.
         self.strict_harness = strict_harness
+        # Command wrappers and explicitly declared helper files are judge-owned
+        # and cannot be waived through the ordinary adopter allowlist.
+        self.harness_inputs = normalize_harness_inputs(harness_inputs)
+        harness_conflicts = setup_output_harness_conflicts(
+            self.harness_inputs,
+            self.setup_output_globs,
+        )
+        if harness_conflicts:
+            raise HarnessInputPolicyError(
+                "setup_output_globs cannot exclude harness_inputs: "
+                + ", ".join(harness_conflicts)
+            )
 
     # ------------------------------------------------------------------ #
-    def _limits(self):  # pragma: no cover - exercised in the child process
-        """preexec hook: cap CPU seconds and address space before exec."""
+    def _limits(self) -> PosixRLimitSpec | None:
+        """Return inert CPU/address-space policy for the POSIX launcher."""
         if resource is None:
             return None
 
-        def apply() -> None:
-            resource_api = cast(Any, resource)
-            cpu = max(1, int(self.timeout) + 1)
-            resource_api.setrlimit(resource_api.RLIMIT_CPU, (cpu, cpu))
-            if self.mem_limit_mb <= 0:
-                return
-            mem = self.mem_limit_mb * 1024 * 1024
-            try:
-                resource_api.setrlimit(resource_api.RLIMIT_AS, (mem, mem))
-            except (ValueError, OSError):
-                pass
-
-        return apply
+        return PosixRLimitSpec(
+            cpu_seconds=max(1, int(self.timeout) + 1),
+            address_space_bytes=(
+                self.mem_limit_mb * 1024 * 1024
+                if self.mem_limit_mb > 0
+                else None
+            ),
+        )
 
     # ------------------------------------------------------------------ #
     def _command(self, problem: RepoProblem | dict) -> list[str]:
@@ -970,6 +993,56 @@ class RepoVerifier:
         result_projection: RepoResultProjection,
     ) -> VerdictResult:
         repo_path = str(problem.get("repo_path", ""))
+        problem_harness_inputs = problem.get("harness_inputs", ())
+        if not isinstance(problem_harness_inputs, (list, tuple)):
+            raise ValueError("problem['harness_inputs'] must be a list or tuple")
+        effective_harness_inputs = normalize_harness_inputs(
+            self.harness_inputs + tuple(problem_harness_inputs)
+        )
+        harness_conflicts = (
+            setup_output_harness_conflicts(
+                effective_harness_inputs,
+                self.setup_output_globs,
+            )
+            if effective_harness_inputs
+            else ()
+        )
+        if harness_conflicts:
+            raise HarnessInputPolicyError(
+                "setup_output_globs cannot exclude harness_inputs: "
+                + ", ".join(harness_conflicts)
+            )
+        harness_input_problems = validate_harness_input_files(
+            repo_path,
+            effective_harness_inputs,
+        )
+        if harness_input_problems:
+            raise HarnessInputPolicyError(
+                "invalid harness_inputs in trusted base: "
+                + "; ".join(harness_input_problems)
+            )
+        try:
+            trusted_harness_baseline = capture_harness_input_snapshot(
+                repo_path,
+                effective_harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError) as exc:
+            return VerdictResult(
+                passed=False,
+                score=0.0,
+                diagnostics=(
+                    "declared harness input integrity could not be bound in "
+                    f"the trusted base: {exc}"
+                ),
+                artifact={
+                    "files_changed": [],
+                    "outcome": "candidate_tree_changed",
+                    "tamper": True,
+                    "candidate_fidelity_changes": list(
+                        effective_harness_inputs
+                    ),
+                },
+            )
         admission = admit_repo_candidate(
             RepoCandidateAdmissionRequest(
                 hypothesis=hypothesis,
@@ -982,6 +1055,9 @@ class RepoVerifier:
                 target_files=lambda: problem.get("target_files", ()),
                 extra_protected=lambda: (
                     self.protected + tuple(problem.get("protected", ()))
+                ),
+                harness_inputs=lambda: (
+                    effective_harness_inputs
                 ),
                 allow=lambda: self.allow + tuple(problem.get("allow", ())),
                 allow_new_tests=lambda: (
@@ -1124,6 +1200,105 @@ class RepoVerifier:
             if deletion.terminal_result is not None:
                 return deletion.terminal_result
 
+            try:
+                candidate_harness_snapshot = capture_harness_input_snapshot(
+                    copy,
+                    effective_harness_inputs,
+                )
+            except (HarnessInputPolicyError, HarnessInputIntegrityError) as exc:
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        "declared harness input integrity could not be bound "
+                        f"before execution: {exc}"
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "candidate_tree_changed",
+                        "tamper": True,
+                        "candidate_fidelity_changes": list(
+                            effective_harness_inputs
+                        ),
+                    },
+                )
+            candidate_harness_changes = harness_input_snapshot_changes(
+                trusted_harness_baseline,
+                candidate_harness_snapshot,
+            )
+            if candidate_harness_changes:
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        "candidate materialization changed a declared harness "
+                        "input before execution: "
+                        + ", ".join(candidate_harness_changes)
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "candidate_tree_changed",
+                        "tamper": True,
+                        "candidate_fidelity_changes": list(
+                            candidate_harness_changes
+                        ),
+                    },
+                )
+            harness_input_baseline = trusted_harness_baseline
+
+            def verify_harness_checkpoint(
+                checkpoint: str,
+                *,
+                setup_isolation: str | None,
+            ) -> VerdictResult | None:
+                try:
+                    observed = capture_harness_input_snapshot(
+                        copy,
+                        effective_harness_inputs,
+                    )
+                except (
+                    HarnessInputPolicyError,
+                    HarnessInputIntegrityError,
+                ) as exc:
+                    return VerdictResult(
+                        passed=False,
+                        score=0.0,
+                        diagnostics=(
+                            "declared harness input integrity could not be "
+                            f"proven {checkpoint}: {exc}"
+                        ),
+                        artifact={
+                            "files_changed": changed,
+                            "outcome": "candidate_tree_changed",
+                            "tamper": True,
+                            "candidate_fidelity_changes": list(
+                                effective_harness_inputs
+                            ),
+                            "setup_isolation": setup_isolation,
+                        },
+                    )
+                changes = harness_input_snapshot_changes(
+                    harness_input_baseline,
+                    observed,
+                )
+                if not changes:
+                    return None
+                return VerdictResult(
+                    passed=False,
+                    score=0.0,
+                    diagnostics=(
+                        "declared harness input changed "
+                        f"{checkpoint}: " + ", ".join(changes)
+                    ),
+                    artifact={
+                        "files_changed": changed,
+                        "outcome": "candidate_tree_changed",
+                        "tamper": True,
+                        "candidate_fidelity_changes": list(changes),
+                        "setup_isolation": setup_isolation,
+                    },
+                )
+
             env = judge_subprocess_env(workdir)
 
             container_mode = self.isolation in ("docker", "gvisor")
@@ -1227,6 +1402,12 @@ class RepoVerifier:
                 setup_isolation = setup_outcome.setup_isolation
                 if setup_outcome.terminal_result is not None:
                     return setup_outcome.terminal_result
+            harness_failure = verify_harness_checkpoint(
+                "before the repository suite",
+                setup_isolation=setup_isolation,
+            )
+            if harness_failure is not None:
+                return harness_failure
             # A mandatory repo-native pack must judge the exact fully prepared
             # runtime tree the repo suite received. Setup fidelity deliberately
             # permits new dependency/build outputs; this second identity includes
@@ -1319,6 +1500,12 @@ class RepoVerifier:
                     perf_counter=lambda: time.perf_counter(),
                 ),
             )
+            harness_failure = verify_harness_checkpoint(
+                "after the repository suite",
+                setup_isolation=setup_isolation,
+            )
+            if harness_failure is not None:
+                return harness_failure
             if suite_execution.terminal_result is not None:
                 return suite_execution.terminal_result
             assert suite_execution.completed is not None

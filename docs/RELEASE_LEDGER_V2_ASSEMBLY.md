@@ -1,5 +1,9 @@
 # Release Ledger v2 offline assembly
 
+> **Audience:** release maintainers and evidence auditors. Consumer verification
+> starts with [`RELEASE_LEDGER_V2.md`](RELEASE_LEDGER_V2.md); this page covers
+> the privileged assembly procedure.
+
 `tools/ci/assemble_release_ledger_v2.py` is a deterministic convenience tool,
 not an evidence collector and not a release authority. It accepts:
 
@@ -70,6 +74,12 @@ ledger projection; it never treats the window as simultaneous state or an
 independent attestation.
 
 ## Command
+
+Use a dependency-locked Python runtime outside the checkout, current working
+directory, system temporary directory, evidence directory, and trusted-parent
+repository. The runtime and those roots must not contain one another. The
+assembler and validator fail closed on overlap; `python -I` does not make an
+in-checkout `.venv` a trusted operator environment.
 
 ```powershell
 python -I tools/ci/assemble_release_ledger_v2.py `

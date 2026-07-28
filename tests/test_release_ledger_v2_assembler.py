@@ -390,6 +390,22 @@ def test_assembler_emits_canonical_unsigned_draft_and_provenance_without_overwri
         "_derive_embedded_facts",
         lambda *_: {"fixture": "byte-specific owners tested separately"},
     )
+    trusted_parent_context = assembler.validator._trusted_parent_first_party
+    observed_blocked_roots: list[Path] = []
+
+    def _observe_trusted_parent_context(
+        contracts: Any,
+        *,
+        blocked_roots: tuple[Path, ...] = (),
+    ) -> Any:
+        observed_blocked_roots.extend(blocked_roots)
+        return trusted_parent_context(contracts, blocked_roots=blocked_roots)
+
+    monkeypatch.setattr(
+        assembler.validator,
+        "_trusted_parent_first_party",
+        _observe_trusted_parent_context,
+    )
 
     assembled, manifest = assembler.assemble(
         root,
@@ -409,6 +425,7 @@ def test_assembler_emits_canonical_unsigned_draft_and_provenance_without_overwri
     assert len(manifest["retained_inputs"]) == len(
         validator._collect_descriptors(assembled)
     )
+    assert root in observed_blocked_roots
 
     before = (output.read_bytes(), provenance.read_bytes())
     with pytest.raises(assembler.LedgerAssemblyError, match="refusing to overwrite"):

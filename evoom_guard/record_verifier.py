@@ -1,10 +1,10 @@
 """Offline semantic verification for EvoGuard verdict records.
 
 This module deliberately does not verify a detached signature or re-run a
-candidate.  It answers a narrower question: is a schema-1.11 record internally
-consistent with the public EvoGuard contract?  Signature verification remains
-the responsibility of ``verify-verdict``; admission systems should normally run
-both checks.
+candidate.  It answers a narrower question: is a supported verdict record
+internally consistent with its declared public EvoGuard contract? Signature
+verification remains the responsibility of ``verify-verdict``; admission
+systems should normally run both checks.
 """
 
 from __future__ import annotations
@@ -14,26 +14,31 @@ import json
 import math
 import re
 from datetime import datetime
+from fnmatch import fnmatch
 from typing import Any, TypeGuard, cast
 
 from evoom_guard import verdict_contract_v1_11 as _contract
+from evoom_guard import verdict_contract_v1_12 as _contract_v1_12
 from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT
-from evoom_guard.record_verification.isolation import (
-    check_isolation as _check_isolation,
-)
-from evoom_guard.record_verification.report import (
-    RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
-)
-from evoom_guard.record_verification.report import (
-    SUPPORTED_SCHEMA_VERSIONS as SUPPORTED_SCHEMA_VERSIONS,
-)
-from evoom_guard.record_verification.report import _Checks as _Checks
 from evoom_guard.strict_json import strict_json_loads as strict_json_loads
 from evoom_guard.verifiers.junit_oracle import (
     JUNIT_COMPOSITE_DIGEST_FORMAT,
     JUNIT_REPORT_SET_DIGEST_FORMAT,
     JUNIT_XML_DIGEST_FORMAT,
 )
+from evoom_guard.verifiers.record_isolation import (
+    check_isolation as _check_isolation,
+)
+from evoom_guard.verifiers.record_policy import (
+    check_operating_profile as _check_operating_profile,
+)
+from evoom_guard.verifiers.record_report import (
+    RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
+)
+from evoom_guard.verifiers.record_report import (
+    SUPPORTED_SCHEMA_VERSIONS as SUPPORTED_SCHEMA_VERSIONS,
+)
+from evoom_guard.verifiers.record_report import RecordChecks as _Checks
 
 _VERDICTS = _contract.VERDICTS
 _EXECUTION_STATES = _contract.EXECUTION_STATES
@@ -45,6 +50,10 @@ _ALLOWED_POLICY_KEYS = _contract.ALLOWED_POLICY_KEYS
 _REQUIRED_TOP_LEVEL = _contract.REQUIRED_TOP_LEVEL
 _REQUIRED_ASSURANCE = _contract.REQUIRED_ASSURANCE
 _REQUIRED_ATTESTATION = _contract.REQUIRED_ATTESTATION
+_POLICY_CONTRACTS = {
+    _contract.SCHEMA_VERSION: _contract,
+    _contract_v1_12.SCHEMA_VERSION: _contract_v1_12,
+}
 
 _VERDICT_SOURCES = frozenset(
     {
@@ -172,6 +181,25 @@ _BASELINE_SETUP_KEYS = frozenset({"setup_fidelity", "setup_fidelity_changes"})
 
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _UTC_SECONDS = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+_WINDOWS_SHORT_ALIAS = re.compile(r".*~[0-9]+(?:\..*)?\Z", re.IGNORECASE)
+_WINDOWS_INVALID_CHARACTERS = frozenset('<>:"|?*')
+_WINDOWS_RESERVED_STEMS = frozenset(
+    {
+        "aux",
+        "clock$",
+        "con",
+        "nul",
+        "prn",
+        *(f"com{number}" for number in range(1, 10)),
+        *(f"lpt{number}" for number in range(1, 10)),
+        "com¹",
+        "com²",
+        "com³",
+        "lpt¹",
+        "lpt²",
+        "lpt³",
+    }
+)
 
 
 def _is_int(value: object) -> TypeGuard[int]:
@@ -211,6 +239,101 @@ def _is_string_list(value: object) -> TypeGuard[list[str]]:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
+def _is_canonical_harness_input_list(value: object) -> bool:
+    """Independently validate the producer's optional exact path-root list."""
+
+    if not _is_string_list(value) or not value:
+        return False
+    if value != sorted(value) or len(value) != len(set(value)):
+        return False
+    if len({path.casefold() for path in value}) != len(value):
+        return False
+    for path in value:
+        if (
+            not path
+            or any(
+                ord(character) < 32 or ord(character) == 127
+                for character in path
+            )
+            or "\\" in path
+            or ":" in path
+            or path.startswith("/")
+            or any(character in path for character in "*?[]{}")
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+            or any(
+                _windows_ambiguous_path_segment(part)
+                for part in path.split("/")
+            )
+        ):
+            return False
+    return True
+
+
+def _windows_ambiguous_path_segment(segment: str) -> bool:
+    if (
+        not segment
+        or segment.endswith((" ", "."))
+        or any(
+            ord(character) < 32
+            or ord(character) == 127
+            or character in _WINDOWS_INVALID_CHARACTERS
+            for character in segment
+        )
+        or _WINDOWS_SHORT_ALIAS.fullmatch(segment) is not None
+    ):
+        return True
+    return (
+        segment.split(".", 1)[0].rstrip(" .").casefold()
+        in _WINDOWS_RESERVED_STEMS
+    )
+
+
+def _harness_segment_can_alias(candidate: str, declared: str) -> bool:
+    if candidate.casefold() == declared.casefold():
+        return True
+    if candidate.rstrip(" .").casefold() == declared.casefold():
+        return True
+    if candidate.split(":", 1)[0].casefold() == declared.casefold():
+        return True
+    return _WINDOWS_SHORT_ALIAS.fullmatch(candidate) is not None
+
+
+def _touched_path_can_target_harness(
+    path: str,
+    harness_inputs: list[str],
+) -> bool:
+    candidate_parts = path.split("/")
+    return any(
+        len(candidate_parts) <= len(declared_parts)
+        and all(
+            _harness_segment_can_alias(candidate, declared)
+            for candidate, declared in zip(
+                candidate_parts,
+                declared_parts,
+                strict=False,
+            )
+        )
+        for declared_parts in (
+            declared.split("/")
+            for declared in harness_inputs
+        )
+    )
+
+
+def _setup_output_hides_harness_input(path: str, patterns: list[str]) -> bool:
+    parts = path.split("/")
+    candidates = tuple(
+        "/".join(parts[:end]) + suffix
+        for end in range(1, len(parts) + 1)
+        for suffix in ("", "/")
+    )
+    return any(
+        fnmatch(candidate.casefold(), pattern.casefold())
+        for candidate in candidates
+        for pattern in patterns
+    )
+
+
 def _is_nullable_int(value: object) -> bool:
     return value is None or _is_int(value)
 
@@ -241,16 +364,30 @@ def _valid_utc_timestamp(value: object) -> bool:
     return True
 
 
-def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
+def _policy_type_errors(
+    policy: dict[str, Any],
+    schema_version: object,
+) -> list[str]:
     errors: list[str] = []
-    missing = sorted(_POLICY_KEYS - policy.keys())
+    policy_contract = (
+        _POLICY_CONTRACTS.get(schema_version, _contract)
+        if isinstance(schema_version, str)
+        else _contract
+    )
+    policy_keys = policy_contract.POLICY_KEYS
+    allowed_policy_keys = policy_contract.ALLOWED_POLICY_KEYS
+    missing = sorted(policy_keys - policy.keys())
     extra = sorted(
-        key for key in policy if isinstance(key, str) and key not in _ALLOWED_POLICY_KEYS
+        key
+        for key in policy
+        if isinstance(key, str) and key not in allowed_policy_keys
     )
     if missing:
         errors.append(f"missing keys: {', '.join(missing)}")
     if extra:
-        errors.append(f"unexpected schema-1.11 keys: {', '.join(extra)}")
+        errors.append(
+            f"unexpected schema-{schema_version} keys: {', '.join(extra)}"
+        )
     if any(not isinstance(key, str) for key in policy):
         errors.append("all policy keys must be strings")
 
@@ -292,6 +429,36 @@ def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
             errors.append(f"{field} must be a boolean")
     if "strict_harness" in policy and not isinstance(policy["strict_harness"], bool):
         errors.append("strict_harness must be a boolean when present")
+    if "harness_inputs" in policy and not _is_canonical_harness_input_list(
+        policy["harness_inputs"]
+    ):
+        errors.append(
+            "harness_inputs must be a non-empty sorted unique array of exact "
+            "canonical repository-relative paths when present"
+        )
+    elif "harness_inputs" in policy:
+        harness_inputs = cast(list[str], policy["harness_inputs"])
+        setup_globs = policy.get("setup_output_globs")
+        if _is_string_list(setup_globs):
+            conflicts = [
+                path
+                for path in harness_inputs
+                if _setup_output_hides_harness_input(path, setup_globs)
+            ]
+            if conflicts:
+                errors.append(
+                    "setup_output_globs cannot exclude harness_inputs: "
+                    + ", ".join(conflicts)
+                )
+    operating_profile_supported = "operating_profile" in allowed_policy_keys
+    operating_profile = policy.get("operating_profile")
+    if operating_profile_supported and "operating_profile" in policy and (
+        not isinstance(operating_profile, str)
+        or operating_profile not in {"local", "protected", "hostile"}
+    ):
+        errors.append(
+            "operating_profile must be local, protected, or hostile when present"
+        )
     timeout = policy.get("timeout")
     if not _is_int(timeout) or timeout <= 0:
         errors.append("timeout must be a positive integer")
@@ -330,6 +497,18 @@ def _policy_type_errors(policy: dict[str, Any]) -> list[str]:
         errors.append("blackbox_only requires blackbox")
     if expected_pack is not None and policy.get("verifier_pack_required") is not True:
         errors.append("an expected pack digest requires verifier_pack_required")
+    if operating_profile_supported and isinstance(
+        operating_profile, str
+    ) and operating_profile in {
+        "local",
+        "protected",
+        "hostile",
+    }:
+        profile_violations = _check_operating_profile(policy)
+        errors.extend(
+            f"operating_profile {operating_profile!r} {violation}"
+            for violation in profile_violations
+        )
     return errors
 
 
@@ -536,7 +715,7 @@ def _baseline_type_errors(baseline: dict[str, Any]) -> list[str]:
 
 
 def _policy_sha256(policy: dict[str, Any]) -> str:
-    """Reproduce the canonical schema-1.11 policy digest exactly."""
+    """Reproduce the canonical versioned policy digest exactly."""
     encoded = json.dumps(policy, sort_keys=True, allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -603,7 +782,7 @@ def _nested_type_checks(
         checks.expect(
             "assurance.required_fields",
             not missing,
-            "all schema-1.11 assurance fields are present",
+            "all contract assurance fields are present",
             f"missing assurance fields: {', '.join(missing)}",
         )
         errors: list[str] = []
@@ -680,7 +859,7 @@ def _nested_type_checks(
     checks.expect(
         "attestation.required_fields",
         not missing,
-        "all schema-1.11 semantic attestation fields are present",
+        "all contract semantic attestation fields are present",
         f"missing attestation fields: {', '.join(missing)}",
     )
     errors = []
@@ -901,7 +1080,11 @@ def _check_lifecycle(
     )
 
 
-def _check_verdict_and_counts(checks: _Checks, record: dict[str, Any]) -> None:
+def _check_verdict_and_counts(
+    checks: _Checks,
+    record: dict[str, Any],
+    schema_version: object,
+) -> None:
     verdict = record.get("verdict")
     passed = record.get("passed")
     exit_code = record.get("exit_code")
@@ -917,7 +1100,16 @@ def _check_verdict_and_counts(checks: _Checks, record: dict[str, Any]) -> None:
     )
 
     reason_code = record.get("reason_code")
-    reason_contract = _REASON_CONTRACT.get(reason_code) if isinstance(reason_code, str) else None
+    versioned_contract = (
+        _POLICY_CONTRACTS.get(schema_version, _contract)
+        if isinstance(schema_version, str)
+        else _contract
+    )
+    reason_contract = (
+        versioned_contract.REASON_CONTRACT.get(reason_code)
+        if isinstance(reason_code, str)
+        else None
+    )
     reason_valid = False
     if reason_contract is not None:
         verdicts, states = reason_contract
@@ -927,7 +1119,7 @@ def _check_verdict_and_counts(checks: _Checks, record: dict[str, Any]) -> None:
     checks.expect(
         "verdict.reason_code",
         reason_valid,
-        "reason_code agrees with its schema-1.11 verdict and lifecycle mapping",
+        "reason_code agrees with its contract verdict and lifecycle mapping",
         "reason_code is unknown or contradicts the verdict/execution_state",
     )
 
@@ -1025,6 +1217,7 @@ def _check_policy(
     checks: _Checks,
     record: dict[str, Any],
     attestation: dict[str, Any] | None,
+    schema_version: object,
 ) -> dict[str, Any] | None:
     if attestation is None:
         checks.skip("policy.digest", "attestation is unavailable")
@@ -1038,11 +1231,11 @@ def _check_policy(
         checks.fail("policy.contract", "effective_policy is not an object")
         checks.skip("policy.context_parity", "effective policy is invalid")
         return None
-    policy_errors = _policy_type_errors(policy)
+    policy_errors = _policy_type_errors(policy, schema_version)
     checks.expect(
         "policy.contract",
         not policy_errors,
-        "effective_policy has the complete typed schema-1.11 contract",
+        f"effective_policy has the complete typed schema-{schema_version} contract",
         "; ".join(policy_errors),
     )
     try:
@@ -1072,6 +1265,88 @@ def _check_policy(
         "attestation mode or policy identity contradicts effective_policy",
     )
     return policy
+
+
+def _check_harness_input_change_exclusion(
+    checks: _Checks,
+    record: dict[str, Any],
+    attestation: dict[str, Any] | None,
+    policy: dict[str, Any] | None,
+) -> None:
+    """Reject a PASS that claims a declared judge input was in its patch."""
+
+    if policy is None or "harness_inputs" not in policy:
+        return
+    if record.get("verdict") != "PASS":
+        checks.skip(
+            "policy.harness_change_exclusion",
+            "record is not a PASS",
+        )
+        return
+    harness_inputs = policy.get("harness_inputs")
+    changed_paths = record.get("files_changed")
+    deleted_paths = (
+        attestation.get("deleted_paths")
+        if attestation is not None
+        else None
+    )
+    if not (
+        _is_canonical_harness_input_list(harness_inputs)
+        and _is_string_list(changed_paths)
+        and _is_string_list(deleted_paths)
+    ):
+        checks.fail(
+            "policy.harness_change_exclusion",
+            "declared harness inputs or touched-path evidence is invalid",
+        )
+        return
+    declared = cast(list[str], harness_inputs)
+    intersections = sorted(
+        {
+            path
+            for path in (
+                changed_paths
+                + deleted_paths
+            )
+            if _touched_path_can_target_harness(path, declared)
+        }
+    )
+    checks.expect(
+        "policy.harness_change_exclusion",
+        not intersections,
+        "PASS touched no declared harness input or namespace alias",
+        "PASS claims edits/deletions to declared harness inputs, ancestors, "
+        "or namespace aliases: "
+        + ", ".join(intersections),
+    )
+
+
+def _check_harness_input_reason_scope(
+    checks: _Checks,
+    record: dict[str, Any],
+    policy: dict[str, Any] | None,
+    schema_version: object,
+) -> None:
+    """Bind the additive pre-execution tamper state to its 1.12 policy evidence."""
+
+    if not (
+        schema_version == "1.12"
+        and record.get("reason_code") == "candidate_tree_changed_during_run"
+        and record.get("execution_state") == "not_started"
+    ):
+        return
+    harness_inputs = (
+        policy.get("harness_inputs")
+        if policy is not None
+        else None
+    )
+    checks.expect(
+        "policy.harness_reason_scope",
+        _is_canonical_harness_input_list(harness_inputs),
+        "not-started candidate-tree tamper is scoped to canonical harness inputs",
+        "schema-1.12 not-started candidate_tree_changed_during_run requires "
+        "non-empty canonical effective_policy.harness_inputs",
+    )
 
 
 def _completed_all_pass_evidence(record: dict[str, Any]) -> bool:
@@ -2192,7 +2467,7 @@ def _verify_record(record: object) -> dict[str, Any]:
     checks.expect(
         "envelope.required_fields",
         not missing,
-        "all schema-1.11 top-level fields are present",
+        "all contract top-level fields are present",
         f"missing top-level fields: {', '.join(missing)}",
     )
     type_errors = _top_level_type_errors(record)
@@ -2250,7 +2525,7 @@ def _verify_record(record: object) -> dict[str, Any]:
         )
         and _known_string(record.get("isolation"), _ISOLATIONS),
         "verdict, risk, lifecycle, source, and isolation values are recognized",
-        "one or more schema-1.11 enum values are unknown",
+        "one or more contract enum values are unknown",
     )
     risk = record.get("risk_score")
     checks.expect(
@@ -2277,8 +2552,20 @@ def _verify_record(record: object) -> dict[str, Any]:
         )
 
     _check_lifecycle(checks, record, assurance, attestation)
-    _check_verdict_and_counts(checks, record)
-    policy = _check_policy(checks, record, attestation)
+    _check_verdict_and_counts(checks, record, schema_version)
+    policy = _check_policy(checks, record, attestation, schema_version)
+    _check_harness_input_reason_scope(
+        checks,
+        record,
+        policy,
+        schema_version,
+    )
+    _check_harness_input_change_exclusion(
+        checks,
+        record,
+        attestation,
+        policy,
+    )
     _check_evidence_contracts(checks, record, policy, attestation)
     _check_policy_runtime_bindings(checks, record, assurance, attestation, policy)
     _check_receipts(checks, record, assurance, attestation)

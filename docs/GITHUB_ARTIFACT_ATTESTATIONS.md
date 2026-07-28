@@ -10,8 +10,8 @@
 ## Status and exact scope
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
-Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
 records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
@@ -40,7 +40,7 @@ is not itself a reason to create a release. Follow the
 for an intentional versioned product change, after its version and consumer
 pins are updated and the protected release validation succeeds.
 
-The record is a GitHub/Sigstore artifact attestation. It is not an EvoGuard
+The record is a GitHub/Sigstore artifact attestation. It is not an EvoOM Guard
 verdict, an artifact-admission record, proof of a published release, or proof
 of deployment.
 
@@ -124,7 +124,7 @@ binds the downloaded zipapp to the expected SPDX predicate. The inventory
 records zipapp members; it is not vulnerability scanning, VEX, license legal
 review, or security/admission evidence.
 
-## Relation to EvoGuard Artifact Digest Admission V2
+## Relation to EvoOM Guard Artifact Digest Admission V2
 
 `EVOGUARD_ARTIFACT_BINDING_V2` deliberately treats its provenance file as
 opaque. It does not parse, authenticate, or interpret a GitHub attestation.
@@ -145,7 +145,7 @@ The only intended integration sequence is:
    The V2 signing key must remain separate from the Trusted Finalizer key and
    be available only after the GitHub verification succeeds.
 4. A consumer independently repeats both the GitHub attestation verification
-   and the EvoGuard V2 verification with external keys, source/context,
+   and the EvoOM Guard V2 verification with external keys, source/context,
    artifact digest, and receipt bytes.
 
 No candidate-controlled workflow, artifact descriptor, tag, URL, file name,
@@ -156,7 +156,7 @@ or copied receipt is an authority-bearing input in this sequence.
 Even after a successful GitHub attestation verification, this project does not
 thereby prove:
 
-- that a source-level EvoGuard finalizer approved the artifact;
+- that a source-level EvoOM Guard finalizer approved the artifact;
 - that the release asset is the artifact unless its release association and
   checksum are verified separately;
 - artifact reproducibility, vulnerability status, SBOM completeness or

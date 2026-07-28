@@ -680,22 +680,23 @@ def render_report(
     ):
         lines += [
             "",
-            "> <sub>**Assurance note:** this PASS means the repo's suite passed and the "
-            "test harness was left untouched. The result is read from a judge-owned "
-            "report, which resists stdout forgery — but the code under test runs in the "
-            "same process as the reporter, so a *deliberate* in-process forgery is not "
-            "caught here (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)). For untrusted "
-            "authors, gate on this in review.</sub>",
+            "> <sub>**Assurance note:** this PASS means the selected repo judge "
+            "accepted the candidate and path admission found no edit or deletion "
+            "covered by the active harness policy. It does not prove that every "
+            "transitive judge dependency was discovered or continuously immutable. "
+            "The same-process report channel also remains deliberately forgeable by "
+            "hostile source (see [`docs/ASSURANCE.md`](docs/ASSURANCE.md)).</sub>",
         ]
     if r.protected_violations:
         lines += [
             "",
-            "### ⛔ Reward-hack: the patch tried to edit the judging harness",
+            "### ⛔ Protected path policy triggered",
             "",
             *[f"- {_markdown_code(path)}" for path in r.protected_violations],
             "",
-            "A patch must fix the **source under test**, never the tests or their "
-            "configuration. This is rejected before the suite runs.",
+            "The candidate lane cannot edit or delete these effective-policy paths. "
+            "Use a separately trusted policy-maintenance lane when the change is "
+            "legitimate. This is rejected before the suite runs.",
         ]
     if r.diff_coverage is not None and r.diff_coverage.get("measured"):
         missed = _validated_missed_lines(r.diff_coverage)
@@ -781,8 +782,8 @@ def render_report(
     else:
         execution_note = (
             "EvoGuard reads the verdict from a judge-owned JUnit report + the "
-            "process exit code (not stdout), and rejects any edit to the tests or "
-            f"their config. The judge runs the suite {judge}."
+            "process exit code (not stdout), and rejects candidate edits/deletions "
+            f"to effective-policy protected paths. The judge runs the suite {judge}."
         )
     lines += [
         "",

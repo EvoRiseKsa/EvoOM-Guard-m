@@ -23,6 +23,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from evoom_guard.policy.harness import HarnessInputPolicyError
+from evoom_guard.verifiers.harness_policy import (
+    HarnessInputIntegrityError,
+    capture_harness_input_snapshot,
+    harness_input_snapshot_changes,
+)
+
 BaselineEvidence = dict[str, Any]
 FidelitySnapshot = dict[str, Any]
 ExceptionType = type[BaseException]
@@ -201,6 +208,7 @@ class RepoBaselineRequest:
     timeout: int
     mem_limit_mb: int
     strict_harness: bool
+    harness_inputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,10 +263,30 @@ def run_repo_baseline(
     workdir = services.workspace_factory_provider()(prefix="evo_baseline_")
     candidate_copy = services.path_join_provider()(workdir, "repo")
     try:
+        try:
+            trusted_harness_baseline = capture_harness_input_snapshot(
+                request.repository_path,
+                request.harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError):
+            return _empty_evidence()
         services.copy_repository_provider()(
             request.repository_path,
             candidate_copy,
         )
+        try:
+            copied_harness_snapshot = capture_harness_input_snapshot(
+                candidate_copy,
+                request.harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError):
+            return _empty_evidence()
+        if harness_input_snapshot_changes(
+            trusted_harness_baseline,
+            copied_harness_snapshot,
+        ):
+            return _empty_evidence()
+        harness_baseline = trusted_harness_baseline
         environment = services.judge_environment_provider()(workdir)
         if request.setup_command:
             try:
@@ -297,13 +325,21 @@ def run_repo_baseline(
                     request.setup_output_globs,
                     baseline=setup_before,
                 )
+                harness_after_setup = capture_harness_input_snapshot(
+                    candidate_copy,
+                    request.harness_inputs,
+                )
             except (
                 services.os_error_provider(),
                 services.setup_fidelity_error_provider(),
                 services.containment_error_provider(),
                 services.output_limit_error_provider(),
                 services.timeout_error_provider(),
+                HarnessInputPolicyError,
+                HarnessInputIntegrityError,
             ):
+                return _empty_evidence(setup_fidelity="unverified")
+            if getattr(setup_process, "target_started", True) is False:
                 return _empty_evidence(setup_fidelity="unverified")
             if setup_process.returncode != 0:
                 return _empty_evidence(setup_fidelity="setup_failed")
@@ -311,6 +347,13 @@ def run_repo_baseline(
                 setup_before,
                 setup_after,
             )
+            setup_changes.extend(
+                harness_input_snapshot_changes(
+                    harness_baseline,
+                    harness_after_setup,
+                )
+            )
+            setup_changes = sorted(set(setup_changes))
             if setup_changes:
                 return _empty_evidence(
                     setup_fidelity="changed_judged_tree",
@@ -362,6 +405,20 @@ def run_repo_baseline(
             services.containment_error_provider(),
             services.output_limit_error_provider(),
             services.timeout_error_provider(),
+        ):
+            return _empty_evidence()
+        if getattr(process, "target_started", True) is False:
+            return _empty_evidence()
+        try:
+            harness_after_suite = capture_harness_input_snapshot(
+                candidate_copy,
+                request.harness_inputs,
+            )
+        except (HarnessInputPolicyError, HarnessInputIntegrityError):
+            return _empty_evidence()
+        if harness_input_snapshot_changes(
+            harness_baseline,
+            harness_after_suite,
         ):
             return _empty_evidence()
 

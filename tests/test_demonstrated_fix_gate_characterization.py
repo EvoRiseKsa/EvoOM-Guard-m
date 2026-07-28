@@ -56,12 +56,12 @@ def test_required_baseline_pass_has_exact_reads_and_reason(tmp_path: Path) -> No
         "passed": False,
         "reason_code": "fix_not_demonstrated",
         "reason": (
-            "the suite passes on the candidate, but the fix is not "
-            "demonstrated: the pristine base already passes the same suite "
-            "— --require-demonstrated-fix demands baseline FAIL → candidate "
-            "PASS under an unchanged harness"
-        ),
-    }
+                "the suite passes on the candidate, but the fix is not "
+                "demonstrated: the pristine base already passes the same suite "
+                "— --require-demonstrated-fix demands baseline FAIL → candidate "
+                "PASS under the same base-owned judge policy"
+            ),
+        }
     assert case["baseline_access_trace"] == [
         "get:verdict",
         "get:verdict",

@@ -31,7 +31,7 @@ from evoom_guard.verifiers.junit_oracle import (
 from evoom_guard.verifiers.repo_verifier import RepoVerifier
 
 
-def test_testcases_override_forged_all_pass_aggregate_attributes() -> None:
+def test_forged_aggregate_disagreement_rejects_the_report() -> None:
     report = (
         '<testsuite tests="999" failures="0" errors="0">'
         '<testcase name="actually-failed"><failure message="boom"/></testcase>'
@@ -40,14 +40,13 @@ def test_testcases_override_forged_all_pass_aggregate_attributes() -> None:
 
     counts = parse_junit_xml(report)
 
-    assert counts is not None
-    assert (counts.passed, counts.total, counts.failures, counts.errors) == (0, 1, 1, 0)
+    assert counts is None
     passed, _score, tests_passed, tests_total = grade_repo_run(
         0, counts, report_expected=True
     )
     assert not passed
-    assert (tests_passed, tests_total) == (0, 1)
-    assert detect_tamper(0, counts, report_expected=True)
+    assert (tests_passed, tests_total) == (0, 0)
+    assert not detect_tamper(0, counts, report_expected=True)
 
 
 def test_junit_directory_rejects_a_symlinked_report_fail_closed(tmp_path: Path) -> None:
@@ -342,7 +341,9 @@ def test_docker_timeout_forcibly_removes_the_exact_named_container(
     )
 
 
-def test_limit_hook_sets_cpu_and_address_space_caps(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_limit_policy_carries_cpu_and_address_space_caps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class FakeResource:
         RLIMIT_CPU = 1
         RLIMIT_AS = 2
@@ -357,14 +358,14 @@ def test_limit_hook_sets_cpu_and_address_space_caps(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(repo_verifier_module, "resource", fake)
     verifier = RepoVerifier(timeout=7, mem_limit_mb=64)
 
-    apply_limits = verifier._limits()
+    limits = verifier._limits()
 
-    assert apply_limits is not None
-    apply_limits()
-    assert fake.calls == [
-        (fake.RLIMIT_CPU, (8, 8)),
-        (fake.RLIMIT_AS, (64 * 1024 * 1024, 64 * 1024 * 1024)),
-    ]
+    assert limits is not None
+    assert limits.cpu_seconds == 8
+    assert limits.address_space_bytes == 64 * 1024 * 1024
+    # Limit application belongs to the clean exec-based launcher, never this
+    # multithreaded judge process or a Python preexec callback.
+    assert fake.calls == []
 
 
 def test_container_name_sanitizes_and_bounds_an_adversarial_stage(

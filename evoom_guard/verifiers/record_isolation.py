@@ -4,17 +4,17 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # ------------------------------------------------------------------------------
-"""Isolation-parity checks for schema-1.11 verdict records."""
+"""Isolation-parity checks for supported schema-1.11/1.12 verdict records."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from evoom_guard.record_verification.report import _Checks
+from evoom_guard.verifiers.record_report import RecordChecks
 
 
 def check_isolation(
-    checks: _Checks,
+    checks: RecordChecks,
     record: dict[str, Any],
     assurance: dict[str, Any] | None,
     attestation: dict[str, Any] | None,

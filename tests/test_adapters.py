@@ -4,12 +4,12 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
-"""Per-runner report adapters (``evoom_guard/adapters.py``).
+"""Per-runner report adapters (owned by ``evoom_guard.runners``).
 
 Pure, offline tests for the command-instrumentation registry: each adapter's
-``matches`` / ``instrument`` and the ``instrument_command`` dispatch. The actual
-JUnit reading is covered by ``parse_junit_xml`` tests; the end-to-end runs live in
-``test_node_oracle.py`` / ``test_vitest_oracle.py``.
+``matches`` / ``instrument`` and the legacy ``evoom_guard.adapters`` dispatch.
+The actual JUnit reading is covered by ``parse_junit_xml`` tests; the end-to-end
+runs live in ``test_node_oracle.py`` / ``test_vitest_oracle.py``.
 """
 
 import os
@@ -37,7 +37,12 @@ def test_pytest_matches_and_instruments():
     a = PytestAdapter()
     assert a.matches(["pytest", "-q"])
     assert a.matches([sys.executable, "-m", "pytest"])
+    assert a.matches(["py.exe", "-m", "pytest"])
+    assert a.matches(["uv", "run", "python3.12", "-m", "pytest"])
     assert not a.matches(["node", "--test"])
+    assert not a.matches(["python", "build_pytest_report.py"])
+    assert not a.matches(["python-malicious", "-m", "pytest"])
+    assert not a.matches(["vitest", "run", "tests/pytest-regression.test.ts"])
     assert a.instrument(["pytest", "-q"], "/x.xml") == [
         "pytest", "-q", "--junitxml=/x.xml", "-o", "junit_family=xunit2",
     ]
@@ -73,6 +78,8 @@ def test_vitest_matches():
     a = VitestAdapter()
     assert a.matches(["vitest", "run"])
     assert a.matches(["npx", "vitest", "run"])
+    assert a.matches(["pnpm", "run", "vitest"])
+    assert a.matches(["yarn", "run", "vitest"])
     assert a.matches(["/opt/node22/bin/vitest", "run"])
     assert a.matches(["node_modules/.bin/vitest", "run"])
     assert not a.matches(["node", "--test"])
@@ -273,6 +280,8 @@ def test_shell_adapter_split_last_cmd():
     assert a._split_last_cmd("a && b && c") == ("a && b", " && ", "c")
     assert a._split_last_cmd("a; b || c") == ("a; b", " || ", "c")
     assert a._split_last_cmd("vitest run") == ("", "", "vitest run")
+    assert a._split_last_cmd("pytest -k 'a && b'") == ("", "", "pytest -k 'a && b'")
+    assert a._split_last_cmd(r"pytest -k a\;\ b") == ("", "", r"pytest -k a\;\ b")
 
 
 def test_shell_adapter_declines_when_inner_already_has_reporter():
@@ -302,6 +311,96 @@ def test_instrument_command_dispatches_per_runner():
     assert exp is True and "--outputFile=/x.xml" in cmd and env == {}
     cmd, exp, env = instrument_command(["sh", "-c", "vitest run"], "/x.xml")
     assert exp is True and "--outputFile=/x.xml" in cmd[2] and env == {}
+
+
+def test_registry_instruments_pytest_inside_shell_string():
+    cmd, expected, env = instrument_command(["sh", "-c", "pytest -q"], "/judge/result.xml")
+
+    assert expected is True
+    assert cmd[:2] == ["sh", "-c"]
+    assert len(cmd) == 3
+    assert "--junitxml=/judge/result.xml" in cmd[2]
+    assert env == {}
+
+
+def test_shell_instrumentation_preserves_expansion_globbing_and_redirection():
+    original = 'pytest "$TEST_TARGET" tests/*.py 2>&1'
+
+    cmd, expected, env = instrument_command(
+        ["sh", "-c", original],
+        "/judge/result.xml",
+    )
+
+    assert expected is True
+    assert cmd[2].startswith(original + " ")
+    assert '"$TEST_TARGET"' in cmd[2]
+    assert "tests/*.py" in cmd[2]
+    assert "--junitxml=/judge/result.xml" in cmd[2]
+    assert env == {}
+
+
+def test_shell_pipeline_instruments_only_a_safe_final_runner_segment():
+    untouched = ["sh", "-c", "pytest -q | tee results.log"]
+    cmd, expected, env = instrument_command(untouched, "/judge/result.xml")
+    assert expected is False
+    assert cmd == untouched
+    assert env == {}
+
+    cmd, expected, env = instrument_command(
+        ["sh", "-c", "printf ready | pytest -q"],
+        "/judge/result.xml",
+    )
+    assert expected is True
+    assert cmd[2].startswith("printf ready | pytest -q ")
+    assert "--junitxml=/judge/result.xml" in cmd[2]
+    assert env == {}
+
+
+def test_shell_declines_token_reordering_when_expansion_must_be_preserved():
+    for shell_command in (
+        'node --test "$TEST_FILE"',
+        'gotestsum -- "$GO_PATTERN"',
+    ):
+        original = ["sh", "-c", shell_command]
+        cmd, expected, env = instrument_command(original, "/judge/result.xml")
+        assert expected is False
+        assert cmd == original
+        assert env == {}
+
+
+def test_registry_does_not_select_pytest_from_argument_substrings():
+    vitest, expected, env = instrument_command(
+        ["vitest", "run", "tests/pytest-regression.test.ts"],
+        "/judge/result.xml",
+    )
+    assert expected is True
+    assert "--outputFile=/judge/result.xml" in vitest
+    assert "--junitxml=/judge/result.xml" not in vitest
+    assert env == {}
+
+    python = ["python", "build_pytest_report.py"]
+    untouched, expected, env = instrument_command(python, "/judge/result.xml")
+    assert expected is False
+    assert untouched == python
+    assert env == {}
+
+
+def test_registry_recognises_windows_executable_paths():
+    node, expected, env = instrument_command(
+        [r"C:\Program Files\nodejs\node.exe", "--test", "test.mjs"],
+        r"C:\judge\result.xml",
+    )
+    assert expected is True
+    assert "--test-reporter=junit" in node
+    assert env == {}
+
+    vitest, expected, env = instrument_command(
+        [r"C:\repo\node_modules\.bin\vitest.cmd", "run"],
+        r"C:\judge\result.xml",
+    )
+    assert expected is True
+    assert r"--outputFile=C:\judge\result.xml" in vitest
+    assert env == {}
 
 
 def test_instrument_command_jest_returns_reporter_env():

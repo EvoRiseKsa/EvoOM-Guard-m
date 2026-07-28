@@ -91,9 +91,7 @@ class CaptureSetupAfter(Protocol):
     ) -> FidelitySnapshot: ...
 
 
-SetupFidelityChanges = Callable[
-    [FidelitySnapshot, FidelitySnapshot], list[str]
-]
+SetupFidelityChanges = Callable[[FidelitySnapshot, FidelitySnapshot], list[str]]
 
 
 class RunHostSetup(Protocol):
@@ -250,9 +248,7 @@ def execute_repo_setup(
     if isinstance(setup_cmd_raw, str):
         setup_cmd_raw = setup_cmd_raw.split()
     setup_tokens = [str(token) for token in setup_cmd_raw]
-    setup_in_container = (
-        request.container_mode and not services.trust_setup_on_host()
-    )
+    setup_in_container = request.container_mode and not services.trust_setup_on_host()
     setup_name: str | None = None
     if setup_in_container:
         setup_isolation: str | None = services.requested_isolation()
@@ -304,11 +300,7 @@ def execute_repo_setup(
                 require_process_group_cleanup_proof=services.strict_harness(),
             )
     except DockerRunTimeout as exc:
-        delivered = (
-            services.requested_isolation()
-            if exc.container_started
-            else "not_run"
-        )
+        delivered = services.requested_isolation() if exc.container_started else "not_run"
         trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             delivered,
             request.resolved_image,
@@ -326,55 +318,78 @@ def execute_repo_setup(
         timeout = services.timeout()
         return _terminal(
             request,
-            diagnostics=f"setup command timed out after {timeout}s",
-            outcome="setup_timeout",
+            diagnostics=(
+                f"setup command timed out after {timeout}s"
+                if exc.container_started
+                else (
+                    f"{services.requested_isolation()} setup isolation did not start: "
+                    f"docker client timed out after {timeout}s"
+                )
+            ),
+            outcome=("setup_timeout" if exc.container_started else "isolation_unavailable"),
             setup_isolation=setup_isolation,
             elapsed=services.timeout(),
         )
     except ProcessOutputLimitExceeded as exc:
         docker_failure = isinstance(exc, DockerRunOutputLimit)
-        container_started = bool(getattr(exc, "container_started", True))
+        execution_started = bool(
+            getattr(
+                exc,
+                "container_started" if docker_failure else "target_started",
+                True,
+            )
+        )
         delivered = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
+            if docker_failure and execution_started
+            else ("not_run" if not execution_started else (setup_isolation or "subprocess"))
         )
         reported_setup_isolation = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else (None if docker_failure else setup_isolation)
+            if docker_failure and execution_started
+            else (None if not execution_started else setup_isolation)
         )
-        if container_started:
+        if execution_started:
             trace.execution_state = "started_incomplete"
         trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             delivered,
             request.resolved_image,
             note=(
                 None
-                if container_started
-                else ("docker client output limit was reached before container start was proven")
+                if execution_started
+                else (
+                    "docker client output limit was reached before container start was proven"
+                    if docker_failure
+                    else "output limit was reached before target start was proven"
+                )
             ),
         )
         return _terminal(
             request,
             diagnostics=f"setup command output was rejected: {exc}",
-            outcome="setup_output_limit",
+            outcome=("setup_output_limit" if execution_started else "isolation_unavailable"),
             setup_isolation=reported_setup_isolation,
         )
     except ProcessContainmentError as exc:
         docker_failure = isinstance(exc, DockerRunContainmentError)
-        container_started = bool(getattr(exc, "container_started", True))
+        execution_started = bool(
+            getattr(
+                exc,
+                "container_started" if docker_failure else "target_started",
+                True,
+            )
+        )
         delivered = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else ("not_run" if docker_failure else (setup_isolation or "subprocess"))
+            if docker_failure and execution_started
+            else ("not_run" if not execution_started else (setup_isolation or "subprocess"))
         )
         reported_setup_isolation = (
             services.requested_isolation()
-            if docker_failure and container_started
-            else (None if docker_failure else setup_isolation)
+            if docker_failure and execution_started
+            else (None if not execution_started else setup_isolation)
         )
-        if container_started:
+        if execution_started:
             trace.execution_state = "started_incomplete"
         trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             delivered,
@@ -382,27 +397,43 @@ def execute_repo_setup(
             note=(
                 "docker container cleanup was not proven"
                 if docker_failure
-                else "subprocess cleanup was not proven"
+                else (
+                    "subprocess cleanup was not proven"
+                    if execution_started
+                    else "target process did not start"
+                )
             ),
         )
         return _terminal(
             request,
             diagnostics=f"setup command containment failed: {exc}",
-            outcome="runtime_containment_error",
+            outcome=("runtime_containment_error" if execution_started else "isolation_unavailable"),
             setup_isolation=reported_setup_isolation,
         )
-    except subprocess.TimeoutExpired:
-        trace.execution_state = "started_incomplete"
+    except subprocess.TimeoutExpired as exc:
+        target_started = getattr(exc, "target_started", True) is not False
+        if target_started:
+            trace.execution_state = "started_incomplete"
         trace.setup_isolation_evidence = services.phase_isolation_evidence()(
-            setup_isolation or "subprocess",
+            (setup_isolation or "subprocess" if target_started else "not_run"),
             request.resolved_image,
+            note=(
+                None if target_started else "target exec was not reached before launcher timeout"
+            ),
         )
         timeout = services.timeout()
         return _terminal(
             request,
-            diagnostics=f"setup command timed out after {timeout}s",
-            outcome="setup_timeout",
-            setup_isolation=setup_isolation,
+            diagnostics=(
+                (
+                    "setup command timed out"
+                    if target_started
+                    else "setup command target did not start before timeout"
+                )
+                + f" after {timeout}s"
+            ),
+            outcome=("setup_timeout" if target_started else "isolation_unavailable"),
+            setup_isolation=(setup_isolation if target_started else None),
             elapsed=services.timeout(),
         )
     except FileNotFoundError:
@@ -418,14 +449,75 @@ def execute_repo_setup(
                 if setup_in_container
                 else f"setup command not found: {setup_tokens[0]!r}"
             ),
-            outcome="setup_failed",
+            outcome=("isolation_unavailable" if setup_in_container else "setup_failed"),
+            setup_isolation=("unavailable" if setup_in_container else None),
+            isolation_evidence=(
+                {
+                    "requested": services.requested_isolation(),
+                    "delivered": "unavailable",
+                    "image_digest": request.resolved_image,
+                    "network": services.docker_network(),
+                    "runtime": services.docker_runtime(),
+                }
+                if setup_in_container
+                else None
+            ),
+        )
+    except OSError as exc:
+        if getattr(exc, "target_exec_failed", None) is not True:
+            raise
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
+            "unavailable" if setup_in_container else "not_run",
+            request.resolved_image,
+            note=(
+                "docker client exec failed before setup isolation start"
+                if setup_in_container
+                else "setup command exec failed before target start"
+            ),
+        )
+        return _terminal(
+            request,
+            diagnostics=(
+                (
+                    f"{services.requested_isolation()} setup isolation could not start"
+                    if setup_in_container
+                    else f"setup command could not start: {setup_tokens[0]!r}"
+                )
+                + f": {type(exc).__name__}: {exc}"
+            ),
+            outcome=("isolation_unavailable" if setup_in_container else "setup_failed"),
+            setup_isolation=("unavailable" if setup_in_container else None),
+            isolation_evidence=(
+                {
+                    "requested": services.requested_isolation(),
+                    "delivered": "unavailable",
+                    "image_digest": request.resolved_image,
+                    "network": services.docker_network(),
+                    "runtime": services.docker_runtime(),
+                }
+                if setup_in_container
+                else None
+            ),
+        )
+
+    if getattr(r_setup, "target_started", True) is False:
+        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
+            "not_run",
+            request.resolved_image,
+            note="trusted resource-limit launcher failed before target exec",
+        )
+        return _terminal(
+            request,
+            diagnostics=(
+                "setup command target did not start: "
+                + services.distill_diagnostics()(r_setup.stdout + "\n" + r_setup.stderr)
+            ),
+            outcome="isolation_unavailable",
             setup_isolation=None,
         )
 
     if setup_in_container and r_setup.returncode == 125:
-        diag = services.distill_diagnostics()(
-            r_setup.stdout + "\n" + r_setup.stderr
-        )
+        diag = services.distill_diagnostics()(r_setup.stdout + "\n" + r_setup.stderr)
         trace.setup_isolation_evidence = services.phase_isolation_evidence()(
             "unavailable",
             request.resolved_image,
@@ -453,9 +545,7 @@ def execute_repo_setup(
         request.resolved_image,
     )
     if r_setup.returncode != 0:
-        diag = services.distill_diagnostics()(
-            r_setup.stdout + "\n" + r_setup.stderr
-        )
+        diag = services.distill_diagnostics()(r_setup.stdout + "\n" + r_setup.stderr)
         hint = (
             " (setup ran inside the container: the image must contain "
             "the setup tool, and --docker-network none blocks registries)"

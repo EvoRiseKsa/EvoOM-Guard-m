@@ -697,6 +697,33 @@ class RepoVerifierEndToEndTests(unittest.TestCase):
         self.assertEqual(r.score, 1.0)
         self.assertEqual(r.artifact["tests_passed"], r.artifact["tests_total"])
 
+    def test_pytest_passed_subtests_preserve_the_structured_verdict(self) -> None:
+        with open(
+            os.path.join(self.root, "tests", "test_subtests.py"),
+            "w",
+            encoding="utf-8",
+        ) as test_file:
+            test_file.write(
+                "import unittest\n\n"
+                "class TestSubtests(unittest.TestCase):\n"
+                "    def test_values(self):\n"
+                "        for value in (1, 2):\n"
+                "            with self.subTest(value=value):\n"
+                "                self.assertGreater(value, 0)\n"
+            )
+
+        r = self.v.verify(block("mathx.py", FIXED_MATHX), self.problem)
+
+        self.assertTrue(r.passed, r.diagnostics)
+        self.assertEqual(r.artifact["verdict_source"], "junit+exit")
+        # Pytest 9 declares six tests (four explicit cases plus two successful
+        # subtests) but emits only four testcase elements. The explicit evidence
+        # remains authoritative so the aggregate surplus cannot inflate scoring.
+        self.assertEqual(
+            (r.artifact["tests_passed"], r.artifact["tests_total"]),
+            (4, 4),
+        )
+
     def test_partial_fix_scores_between(self) -> None:
         r = self.v.verify(block("mathx.py", HALF_FIXED_MATHX), self.problem)
         self.assertFalse(r.passed)

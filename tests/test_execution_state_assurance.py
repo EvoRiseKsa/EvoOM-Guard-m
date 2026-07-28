@@ -15,6 +15,7 @@ though it produced no gradeable verdict.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -25,6 +26,7 @@ import evoom_guard.blackbox as blackbox_module
 from evoom_guard.blackbox import BlackboxResult
 from evoom_guard.candidate_runner import CandidateRunner
 from evoom_guard.contracts import VerdictResult
+from evoom_guard.execution import PosixRLimitSpec
 from evoom_guard.guard import (
     ERROR,
     PASS,
@@ -34,6 +36,7 @@ from evoom_guard.guard import (
     REASON_RUNTIME_CLEANUP_FAILED,
     REASON_SETUP_FAILED,
     REASON_SETUP_TIMEOUT,
+    REASON_TEST_COMMAND_UNAVAILABLE,
     REASON_TEST_TIMEOUT,
     REASON_TESTS_PASSED,
     REASON_VERIFIER_PACK_INVALID,
@@ -51,12 +54,9 @@ def repo(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
     tests = root / "tests"
     tests.mkdir(parents=True)
-    (root / "app.py").write_text(
-        "def answer():\n    return 42\n", encoding="utf-8"
-    )
+    (root / "app.py").write_text("def answer():\n    return 42\n", encoding="utf-8")
     (tests / "test_app.py").write_text(
-        "from app import answer\n\n"
-        "def test_answer():\n    assert answer() == 42\n",
+        "from app import answer\n\ndef test_answer():\n    assert answer() == 42\n",
         encoding="utf-8",
     )
     return root
@@ -76,7 +76,7 @@ def _candidate() -> str:
     return (
         "<<<FILE: app.py>>>\n"
         "def answer():\n"
-        "    \"\"\"Return the stable public answer.\"\"\"\n"
+        '    """Return the stable public answer."""\n'
         "    return 42\n"
         "<<<END FILE>>>\n"
     )
@@ -99,10 +99,7 @@ def _assert_public_views(
     markdown = render_report(result)
     assert f"`{state}`" in markdown
     assert f"phase `{phase}`" in markdown
-    assert (
-        f"Test command started | {'yes' if command_started else 'no'}"
-        in markdown
-    )
+    assert f"Test command started | {'yes' if command_started else 'no'}" in markdown
 
     sarif_results = to_sarif(result)["runs"][0]["results"]
     if result.verdict == PASS:
@@ -143,9 +140,7 @@ def test_unsupported_policy_is_a_truthful_preflight(repo: Path) -> None:
     assert result.attestation is not None
     assert result.attestation["effective_policy"]["isolation"] == "docker"
     assert result.attestation["isolation_evidence"] is None
-    _assert_public_views(
-        result, state="not_started", phase="preflight", command_started=False
-    )
+    _assert_public_views(result, state="not_started", phase="preflight", command_started=False)
 
 
 def test_blackbox_without_pack_never_starts_an_external_judge(
@@ -162,14 +157,10 @@ def test_blackbox_without_pack_never_starts_an_external_judge(
     assert result.verdict_source is None
     _assert_no_runtime_assurance(result)
     assert result.assurance["verifier_pack"] is None
-    _assert_public_views(
-        result, state="not_started", phase="preflight", command_started=False
-    )
+    _assert_public_views(result, state="not_started", phase="preflight", command_started=False)
 
 
-def test_invalid_repo_pack_reports_presence_but_no_execution(
-    repo: Path, tmp_path: Path
-) -> None:
+def test_invalid_repo_pack_reports_presence_but_no_execution(repo: Path, tmp_path: Path) -> None:
     pack = tmp_path / "invalid-pack"
     pack.mkdir()
     (pack / "test_protocol.py").write_text(
@@ -188,9 +179,7 @@ def test_invalid_repo_pack_reports_presence_but_no_execution(
     assert pack_assurance["present"] is True
     assert pack_assurance["integrity"] == "invalid"
     assert pack_assurance["execution_state"] == "not_started"
-    _assert_public_views(
-        result, state="not_started", phase="preflight", command_started=False
-    )
+    _assert_public_views(result, state="not_started", phase="preflight", command_started=False)
 
 
 def test_missing_repo_pack_is_not_misreported_as_invalid_present_pack(
@@ -209,9 +198,7 @@ def test_missing_repo_pack_is_not_misreported_as_invalid_present_pack(
     assert pack_assurance["present"] is False
     assert pack_assurance["integrity"] == "not_evaluated_missing"
     assert pack_assurance["execution_state"] == "not_started"
-    _assert_public_views(
-        result, state="not_started", phase="preflight", command_started=False
-    )
+    _assert_public_views(result, state="not_started", phase="preflight", command_started=False)
 
 
 @pytest.mark.parametrize("blackbox", [False, True], ids=["repo", "blackbox"])
@@ -234,9 +221,7 @@ def test_existing_non_directory_pack_is_present_but_invalid(
     pack_assurance = result.assurance["verifier_pack"]
     assert pack_assurance["present"] is True
     assert pack_assurance["integrity"] == "invalid"
-    _assert_public_views(
-        result, state="not_started", phase="preflight", command_started=False
-    )
+    _assert_public_views(result, state="not_started", phase="preflight", command_started=False)
 
 
 def test_requested_docker_without_image_claims_no_docker_delivery(repo: Path) -> None:
@@ -253,9 +238,7 @@ def test_requested_docker_without_image_claims_no_docker_delivery(repo: Path) ->
     assert isolation_evidence["requested"] == "docker"
     assert isolation_evidence["delivered"] == "unavailable"
     assert isolation_evidence["image_digest"] is None
-    _assert_public_views(
-        result, state="not_started", phase="preflight", command_started=False
-    )
+    _assert_public_views(result, state="not_started", phase="preflight", command_started=False)
 
 
 def test_missing_setup_command_does_not_claim_a_started_suite(repo: Path) -> None:
@@ -272,8 +255,83 @@ def test_missing_setup_command_does_not_claim_a_started_suite(repo: Path) -> Non
     # Merely selecting the subprocess setup path is not delivery evidence: the
     # executable was absent, so no setup boundary started either.
     assert result.assurance["setup_isolation"] is None
+    _assert_public_views(result, state="not_started", phase="setup", command_started=False)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="resource launcher is POSIX-only")
+def test_resource_launcher_failure_never_claims_the_suite_started(
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        RepoVerifier,
+        "_limits",
+        lambda _self: PosixRLimitSpec(address_space_bytes=1 << 200),
+    )
+
+    result = guard(str(repo), _candidate())
+
+    assert result.verdict == ERROR
+    assert result.reason_code == REASON_ASSURANCE_REQUIREMENT_NOT_MET
+    assert result.verdict_source is None
+    _assert_no_runtime_assurance(result)
     _assert_public_views(
-        result, state="not_started", phase="setup", command_started=False
+        result,
+        state="not_started",
+        phase="repo_suite",
+        command_started=False,
+    )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="exec errno contract is POSIX-only")
+@pytest.mark.parametrize(
+    ("exec_failure", "expected_error_type"),
+    [
+        ("permission_denied", "PermissionError"),
+        ("exec_format", "OSError"),
+        ("not_a_directory", "NotADirectoryError"),
+    ],
+)
+def test_suite_exec_errors_remain_truthful_not_started_results(
+    repo: Path,
+    exec_failure: str,
+    expected_error_type: str,
+) -> None:
+    fixture_root = repo.parent / f"exec-{exec_failure}"
+    fixture_root.mkdir()
+    if exec_failure == "permission_denied":
+        executable = fixture_root / "candidate"
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o600)
+        command = [str(executable)]
+    elif exec_failure == "exec_format":
+        executable = fixture_root / "candidate"
+        executable.write_bytes(b"not an executable image\n")
+        executable.chmod(0o700)
+        command = [str(executable)]
+    else:
+        non_directory = fixture_root / "not-a-directory"
+        non_directory.write_text("regular file\n", encoding="utf-8")
+        command = [str(non_directory / "candidate")]
+
+    result = guard(str(repo), _candidate(), test_command=command)
+
+    assert result.verdict == ERROR
+    assert result.passed is False
+    assert result.reason_code == REASON_TEST_COMMAND_UNAVAILABLE
+    assert result.verdict_source is None
+    assert expected_error_type in result.diagnostics
+    assert result.test_command_ran is False
+    assert result.attestation is not None
+    assert result.attestation["test_command_started"] is False
+    assert result.attestation["verifier_pack_started"] is False
+    assert result.attestation["verifier_pack_completed"] is False
+    _assert_no_runtime_assurance(result)
+    _assert_public_views(
+        result,
+        state="not_started",
+        phase="repo_suite",
+        command_started=False,
     )
 
 
@@ -366,9 +424,7 @@ def test_completed_repo_pass_is_the_positive_control(repo: Path) -> None:
     assert assurance["candidate_isolation"] == "subprocess"
     assert assurance["suite_isolation"] == "subprocess"
     assert assurance["report_integrity"] == "same_process_candidate_writable"
-    _assert_public_views(
-        result, state="completed", phase="repo_suite", command_started=True
-    )
+    _assert_public_views(result, state="completed", phase="repo_suite", command_started=True)
 
 
 def test_blackbox_timeout_preserves_that_external_command_started(
@@ -430,9 +486,7 @@ def test_blackbox_timeout_preserves_that_external_command_started(
 def test_blackbox_docker_prepare_timeout_is_not_started_unavailable(
     repo: Path, valid_pack: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def timed_out_prepare(
-        _runner: CandidateRunner, _workdir: str, _target: str
-    ) -> None:
+    def timed_out_prepare(_runner: CandidateRunner, _workdir: str, _target: str) -> None:
         raise subprocess.TimeoutExpired(["docker", "version"], timeout=30)
 
     def prepare_after_platform_gate(
@@ -560,9 +614,7 @@ def test_blackbox_zero_results_reports_completed_but_ungradeable_evidence(
     pack_assurance = assurance["verifier_pack"]
     assert pack_assurance["present"] is True
     assert pack_assurance["execution_state"] == "completed"
-    _assert_public_views(
-        result, state="completed", phase="blackbox_pack", command_started=True
-    )
+    _assert_public_views(result, state="completed", phase="blackbox_pack", command_started=True)
 
 
 def test_repo_pack_collecting_zero_tests_is_not_mislabelled_patch_failure(
@@ -591,9 +643,7 @@ def test_repo_pack_collecting_zero_tests_is_not_mislabelled_patch_failure(
     assert result.reason_code != "patch_apply_failed"
 
 
-def test_passing_repo_cannot_mask_zero_test_verifier_pack(
-    repo: Path, tmp_path: Path
-) -> None:
+def test_passing_repo_cannot_mask_zero_test_verifier_pack(repo: Path, tmp_path: Path) -> None:
     pack = tmp_path / "zero-pack-with-real-repo-suite"
     pack.mkdir()
     (pack / "test_none.py").write_text(

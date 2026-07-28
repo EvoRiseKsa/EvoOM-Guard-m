@@ -7,11 +7,15 @@
 
 # Repository protection is part of the gate
 
+> **Audience:** repository operators. This public document states the controls
+> the product cannot enforce from inside a pull request; live credentials,
+> incident contacts, and environment-specific secrets do not belong here.
+
 This document states a limit that a composite GitHub Action cannot solve from
 inside its own code:
 
-> EvoGuard cannot judge a pull request if that pull request prevents the
-> EvoGuard workflow from starting.
+> EvoOM Guard cannot judge a pull request if that pull request prevents the
+> EvoOM Guard workflow from starting.
 
 A pull request can edit, delete, disable, or replace a workflow file in its
 candidate merge result. The Action's base-policy handling protects the judge
@@ -22,7 +26,7 @@ implementation problem.
 
 ## What the Action does protect
 
-When the intended `pull_request` workflow starts, EvoGuard resolves the event
+When the intended `pull_request` workflow starts, EvoOM Guard resolves the event
 base SHA, materializes `.evoguard.json` from that base revision, and takes the
 active verifier pack from that same trusted revision. Candidate workflow `with:`
 values cannot weaken those judge settings. See [`GUARD.md`](GUARD.md) and
@@ -34,7 +38,7 @@ repository's merge rule immutable. Configure those separately.
 ## Required controls
 
 1. **Require the gate outside the PR.** Use a GitHub ruleset or branch
-   protection so the EvoGuard job/check must succeed before merging. Prefer an
+   protection so the EvoOM Guard job/check must succeed before merging. Prefer an
    organization-managed **required workflow** when your GitHub plan supports
    it; it is stronger than relying on a workflow file the contributor can edit.
    Otherwise require the exact, protected job/status check and confirm with a
@@ -63,11 +67,15 @@ repository's merge rule immutable. Configure those separately.
    `EvoRiseKsa/EvoOM-Guard-m` and all third-party Actions used by the workflow
    to reviewed full SHAs. Review changes to those pins as supply-chain changes.
 
-4. **Use minimal token permissions.** The normal gate needs
-   `contents: read`. Add `pull-requests: write` only when you want its optional
-   PR comment. Do not give the candidate job `contents: write`, deployment
-   credentials, `id-token: write`, package-publish permission, or long-lived
-   secrets merely to run the verifier.
+4. **Use minimal token permissions.** The candidate gate needs only
+   `contents: read`, and checkout must set `persist-credentials: false`.
+   Never give the candidate job `pull-requests: write`, `contents: write`,
+   deployment credentials, `id-token: write`, package-publish permission, or
+   long-lived secrets merely to run the verifier. If a PR comment is required,
+   post it from a separate metadata-only job that never checks out or executes
+   candidate code. Do not attach an authenticated Git remote, credential
+   helper, `GIT_ASKPASS`, SSH agent, `GH_TOKEN`, or `GITHUB_TOKEN` environment
+   value to the candidate job; the Action refuses these reachable transports.
 
 5. **Run candidate code on `pull_request`, not `pull_request_target`.** A
    `pull_request_target` workflow executes with the base repository's trust
@@ -99,14 +107,15 @@ policy belongs in the base-owned `.evoguard.json`:
 ```yaml
 permissions:
   contents: read
-  pull-requests: write # omit if PR comments are not wanted
 
 steps:
   - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-    with: { fetch-depth: 0 }
+    with:
+      fetch-depth: 0
+      persist-credentials: false
   - uses: EvoRiseKsa/EvoOM-Guard-m@<reviewed-full-sha>
     with:
-      comment: "true"
+      comment: "false"
       fail-on: "any-non-pass"
 ```
 

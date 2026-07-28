@@ -5,7 +5,7 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# EvoGuard — evidence-bound change verification
+# EvoOM Guard — evidence-bound change verification
 
 > A CI gate that evaluates one explicit policy question about an untrusted code change —
 > produced by a human, bot, supplier, or the motivating case, an **AI agent**:
@@ -18,27 +18,30 @@ Frontier agents have been observed **editing or skipping their own tests** to ma
 a suite pass, and self-modifying coding agents have **faked test logs** (documented
 in the public literature). A patch-review gate designed to block the documented
 harness-editing paths is therefore a real need as agent-authored PRs become common.
-EvoGuard addresses those paths: the candidate is judged by the **repository's own tests**, the verdict is read
-from a **judge-owned JUnit report + the process exit code** (never scraped from the
-patch's stdout), and **any edit to the tests or their configuration is rejected**
-before the suite runs.
+EvoOM Guard addresses those modelled paths: the candidate is judged by the
+**repository's own tests**, the verdict is read from a **judge-owned JUnit
+report + the process exit code** (never scraped from the patch's stdout), and a
+candidate edit or deletion targeting a conventionally recognized judge path, an
+exact base-owned `harness_inputs` path, or an ancestor of that path is rejected
+before the suite runs. Platform-ambiguous candidate spellings are unsafe, and
+existing filesystem aliases are checked where the host can compare identity.
 
 ## What it checks
 
 | Verdict | Meaning |
 |---|---|
-| ✅ `PASS` | the repo's tests pass **and** the patch left the test harness untouched |
-| ⛔ `REJECTED` | the patch edits **or deletes** the tests, their configuration, the gate's CI, or an auto-executed file (`sitecustomize.py`, `*.pth`, `Makefile`, …) — blocked before the suite runs |
+| ✅ `PASS` | the selected repository judge passed, and the patch did not edit or delete a path covered by the active harness policy |
+| ⛔ `REJECTED` | the patch edits **or deletes** an effective-policy protected path — blocked before the suite runs |
 | ❌ `FAIL` | the patch applied and the suite ran, but tests fail (also: a suite timeout, or a PASS demoted below `--min-diff-coverage`) |
-| 🚨 `TAMPERED` | the process exit code and the judge-owned JUnit report disagree — a desync/forced-exit signature; never read as a pass |
-| ⚠️ `ERROR` | no trustworthy verdict could be produced: the patch did not apply / no parseable edits, an unsafe path, a failed or timed-out setup command, a requested isolation that could not be delivered, or an unmet `--require-*` assurance floor |
+| 🚨 `TAMPERED` | the process exit code and judge-owned JUnit disagree, or an accepted candidate/pack identity later differs at an enforced materialization/runtime checkpoint |
+| ⚠️ `ERROR` | no trustworthy verdict could be produced: the patch did not apply / no parseable edits, an unsafe path, the initial trusted harness identity could not be bound, setup failed/timed out, requested isolation was unavailable, or an assurance floor was unmet |
 
 > **What `REJECTED` does — and does not — mean.** `REJECTED` is a *policy trip*:
 > the change touched a path the current harness-protection policy protects. That
 > is the right default for an AI-generated patch, but it is **not by itself proof
 > of intent to cheat** — a legitimate dependency bump that edits `pom.xml`, or a
-> real build fix in a `Makefile`, trips the same rule. Review a genuinely intended
-> built-in harness change through a separate trusted policy-maintenance workflow.
+> real build/wrapper fix, trips the same rule. Review a genuinely intended
+> protected-path change through a separate trusted policy-maintenance workflow.
 
 > **Security policy:** `--allow` applies only to adopter-defined extra `--protected`
 > globs. It cannot exempt built-in tests, configuration, CI (including local
@@ -63,13 +66,15 @@ code.
 > consumer release recorded by the protected source tree. For strict CI,
 > pin commit `b8c61315a22741415c75e4e8828feb60c0ad5149` rather than a tag.
 
-EvoGuard is not published to PyPI. Obtain it from this repository.
+EvoOM Guard is not published to PyPI. Obtain it from this repository.
 
 **GitHub Action:**
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }
+  with:
+    fetch-depth: 0
+    persist-credentials: false
 - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0
 ```
 
@@ -93,7 +98,7 @@ tag is the named consumer release. Do not use `@main` for a gate you depend on.
 git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
 evo-guard guard --diff pr.diff --no-config --report report.md --json guard.json
 
-# Verify a candidate in EvoGuard's edit-block format against a repo:
+# Verify a candidate in EvoOM Guard's edit-block format against a repo:
 evo-guard guard path/to/repo --patch candidate.txt
 echo "<<<FILE: src/x.py>>> … <<<END FILE>>>" | evo-guard guard path/to/repo --patch -
 
@@ -110,13 +115,12 @@ otherwise — drop it straight into any CI step.
   works straight from your tree — no second checkout, no worktree. Needs `git`
   (or `patch`) on the runner.
 - **`--base/--head`** diffs two explicit trees into the block format.
-- **`--patch`** takes the EvoGuard edit-block format directly.
+- **`--patch`** takes the EvoOM Guard edit-block format directly.
 
 Added/modified files are verified, and **deletions are gated too** (since schema
-1.1): deleting a protected harness file — a test, its config, the gate's CI — is
-`REJECTED` exactly like editing it (removing a check is as much a hack as
-rewriting one), while a deleted *source* file is applied to the verified copy so
-the verdict matches the real merge. `--json` writes the machine-readable verdict.
+1.1): deleting an effective-policy protected path is `REJECTED` exactly like
+editing it, while a deleted *source* file is applied to the verified copy so the
+verdict matches the real merge. `--json` writes the machine-readable verdict.
 The report shows the `Input` (`diff` / `base/head` / `edit blocks`) and, for
 `--diff`, the `Base reconstruction` (`ok` / `failed`).
 
@@ -258,10 +262,12 @@ A composite action ships at the repository root
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }
+  with:
+    fetch-depth: 0
+    persist-credentials: false
 - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0
   with:
-    comment: "true"
+    comment: "false"
     fail-on: "any-non-pass"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:GUARD_ACTION_EXAMPLE -->
@@ -290,11 +296,69 @@ the following steps instead:
 Only settings represented in the protected policy can take effect in a PR; a
 `with:` value never substitutes for a missing policy field.
 
+### Explicit repository-local harness inputs
+
+The built-in policy recognizes conventional tests, runner/build configuration,
+CI and auto-executed judge paths. A custom repository-local wrapper or helper is
+ambiguous: the same `python src/cli.py` token could be the program under test or
+part of the judge. Guard therefore does not guess. Put every repository-owned
+judge wrapper/helper in the verified base `.evoguard.json`:
+
+```json
+{
+  "test_command": ["sh", "ci/run-tests.sh"],
+  "harness_inputs": [
+    "ci/lib/assertions.sh",
+    "ci/run-tests.sh"
+  ]
+}
+```
+
+Entries are exact, normalized, repository-relative regular base files. They
+cannot be directories, globs, absolute/escaping paths, symlinks, or reparse
+points. Cross-platform canonicalization also rejects Windows
+trailing-dot/space segments, reserved device names (`CON`, `NUL`, `COM1`, and
+their equivalents), and DOS 8.3-style `~N` spellings. `allow` cannot exempt an
+edit/deletion of a declared file or any ancestor. For already-existing
+candidate paths, admission compares filesystem object identity with each
+declared file and ancestor where available and fails closed when an existing
+trusted target cannot be compared. On `pull_request`, `harness_inputs` is
+base-policy-only: the Action exposes no candidate-controlled input for it.
+
+Guard captures each declared base file's type, mode, and SHA-256 identity before
+candidate copy/materialization and compares the materialized tree with that
+trusted snapshot before candidate code runs. Repo-native paths repeat the
+comparison at their documented setup/suite checkpoints. The black-box runner
+receives the same explicit declaration and repeats the comparison after
+candidate/pack execution, including in `--blackbox-only`. An observed
+materialization or post-execution difference is `TAMPERED` /
+`candidate_tree_changed_during_run`.
+
+The first trusted-source binding is a different case: if Guard cannot establish
+that reference before materialization, it returns `ERROR` /
+`assurance_requirement_not_met`. No candidate copy or candidate code existed at
+that point, so the failure is not labelled candidate tampering.
+
+These are observation checkpoints, not continuous monitoring. In host
+`subprocess` isolation the candidate and judge share the host filesystem, so a
+temporary mutation restored before the next snapshot can escape observation.
+Require delivered Docker/gVisor isolation when a read-only candidate mount is
+part of the threat model.
+
+Guard does not analyze `test_command`, `sh -c`, package scripts, imports,
+`source`, Make includes, globs, environment-selected paths, or dynamic loading
+to derive a transitive execution graph. List every repository-owned file on
+which the judge relies. Apart from the narrow documented discovery of helper
+directories for literal local Actions referenced by verified base workflows,
+no transitive helper discovery is claimed. External command paths are
+toolchain/image evidence, not repository `harness_inputs`; use an immutable
+image or digest-pinned external verifier pack when that identity matters.
+
 ### Strict harness profile
 
 Set `"strict_harness": true` in the protected base policy when the verification
-lane must treat the execution environment itself as judge-owned. In that mode,
-dependency manifests/locks and compiler/project configuration (for example
+lane must protect the documented additional execution-environment manifests. In
+that mode, dependency manifests/locks and compiler/project configuration (for example
 `requirements*.txt`, `uv.lock`, `package.json`, `tsconfig*.json`, `go.mod`, and
 `Cargo.toml`) are non-exemptible protected paths. It also rejects a nominally
 successful command unless a non-empty structured JUnit verdict is available.
@@ -305,11 +369,12 @@ before candidate execution. Docker/gVisor execution instead relies on the
 separate container lifecycle and absence proof.
 
 This is deliberately **not** the default: dependency or build-system upgrades
-need a separately reviewed maintenance path. It strengthens harness integrity;
-it does not turn a same-process repo-native judge into an external isolation
-boundary. A managed process group is lifecycle containment, not filesystem,
-network, credential, or report-integrity isolation. Use the black-box profile
-when that stronger boundary is required.
+need a separately reviewed maintenance path. It expands a finite protected-path
+set; it does not discover every execution dependency or turn a same-process
+repo-native judge into an external isolation boundary. A managed process group
+is lifecycle containment, not filesystem, network, credential, or
+report-integrity isolation. Use the black-box profile when that stronger
+boundary is required.
 
 Put the policy in the base branch, for example:
 
@@ -347,9 +412,11 @@ untrusted code on `pull_request`; do not checkout a candidate with secrets under
 [`REPOSITORY_PROTECTION.md`](REPOSITORY_PROTECTION.md) for the concrete GitHub
 controls and their remaining limits.
 
-It writes the report to the **job summary**, posts it as a **PR comment**, exposes a
-`verdict` output, and fails the step per `fail-on`. To gate only machine-made PRs,
-add `if: github.event.pull_request.user.type == 'Bot'` to the job.
+It writes the report to the **job summary**, exposes a `verdict` output, and
+fails the step per `fail-on`. It deliberately refuses in-job PR commenting so
+candidate execution never shares `pull-requests: write`; use a separate
+metadata-only reporting job if a comment is required. To gate only machine-made
+PRs, add `if: github.event.pull_request.user.type == 'Bot'` to the job.
 
 ### Minimal workflow with a natural `git diff` (no action needed)
 
@@ -358,7 +425,9 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_NO_ACTION_EXAMPLE -->
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-  with: { fetch-depth: 0 }
+  with:
+    fetch-depth: 0
+    persist-credentials: false
 - run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
@@ -380,6 +449,15 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
+**Current unreleased 4.4.0.dev0 development source only:** for a named,
+fail-closed combination of these controls, use
+`--operating-profile local|protected|hostile`. The profile is included in the
+effective policy and its digest only when explicitly selected. `protected`
+requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
+network; `hostile` requires gVisor and an active memory limit. See
+[`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
+custody rules.
+
 The default judge runs the candidate in the **same process** as the report writer,
 so deliberate in-process source can forge the report (`report_integrity:
 same_process_candidate_writable`). The following controls add independent checks
@@ -394,13 +472,21 @@ or require a stronger boundary:
   candidate code runs. A mismatch is `ERROR verifier_pack_identity_mismatch`.
   For Action PRs, set this together with `verifier_pack` in the verified base
   `.evoguard.json`; Action `with:` values do not establish this policy.
-- `--blackbox` — after the static harness gate passes, an external phase comes
+- `--blackbox` — after static effective-policy protected-path admission passes, an external phase comes
   from the **judge's own pytest** over the pack, which never imports the
   candidate. That phase is
   `report_integrity: external_process_isolated`; the default **composite** also
   requires the repo's own suite and therefore reports the weaker repo-native
   channel overall.
-  `--blackbox-only` skips the repo suite for pure-CLI/service targets. With
+  `--blackbox-only` skips the repo suite for pure-CLI/service targets. The
+  black-box runner still captures declared `harness_inputs` from the trusted
+  source before materialization, checks the materialized copy before execution,
+  and checks it after candidate/pack execution. Failure of the initial
+  trusted-source binding is `ERROR` / `assurance_requirement_not_met` before
+  materialization and is not attributed to the candidate. A materialized-copy
+  mismatch or persistent post-execution drift is `TAMPERED` /
+  `candidate_tree_changed_during_run`; only the repo-native setup/suite
+  checkpoints are absent. With
   `--isolation docker`, the observed launcher boundary is a real, network-less,
   read-only container with the pack unmounted. A judge-owned launcher receipt
   and runtime CID establish use of that boundary; the trusted pack's assertions
@@ -420,8 +506,9 @@ unevaluated. Requested Docker/gVisor/black-box settings remain in the effective
 policy only. Runtime assurance floors do not overwrite the original static
 `REJECTED`/`ERROR` reason because no runtime verdict exists to rank.
 
-Schema 1.11 extends that rule across the whole execution lifecycle. Every JSON,
-Markdown, SARIF, and attested result records `execution_state` as one of:
+Schema 1.11 introduced that rule across the whole execution lifecycle, and
+schema 1.12 preserves it. Every JSON, Markdown, SARIF, and attested result
+records `execution_state` as one of:
 
 - `static_gate` — the static diff gate decided the result;
 - `not_started` — runtime preflight stopped before a test/judge process started;
@@ -517,12 +604,16 @@ This has practical consequences:
 - The image must contain the setup tool and, when using a verifier pack, Python
   and pytest. The default `--docker-network none` blocks package registries, so
   prefer dependencies baked into the image or an offline cache.
-- Guard compares every pre-existing file/directory/symlink/special entry and
-  permission bit before and after setup. Only **new** conventional dependency/
-  build outputs are ignored by default. `setup_output_globs` in the protected
-  `.evoguard.json` adds trusted exceptions; never include source, tests, policy,
-  or harness paths. These exceptions apply to setup validation only: after
-  setup, matching paths are included in repo/pack runtime continuity.
+- Guard compares pre-existing file/directory/symlink/special entries and
+  permission bits before and after setup, subject to the documented output
+  policy. Only **new** conventional dependency/build outputs are ignored by
+  default. `setup_output_globs` in the protected `.evoguard.json` adds trusted
+  exceptions to the general fidelity scan; keep them narrow. They never exempt
+  declared `harness_inputs` or their ancestors. In this repo-native setup path,
+  the trusted-base snapshot is captured before candidate materialization,
+  checked against the materialized tree, and checked again at the enforced
+  observation points. Other matching paths are included in repo/pack runtime
+  continuity after setup.
 - `--trust-setup-on-host` is an explicit compatibility escape hatch. It uses a
   restricted host environment, records
   `setup_isolation: subprocess_host_opt_in`, and lowers effective
@@ -550,7 +641,9 @@ between filesystem calls and cannot preempt a hung kernel call; use an outer
 job timeout for untrusted/network filesystems. Subprocess execution reports
 `snapshot_boundary_checked`:
 phase-boundary drift is detected, but a lingering process can theoretically
-mutate and restore bytes between observations. Docker/gVisor reports
+mutate and restore bytes between observations. The same observation-point
+boundary applies to exact harness-input snapshots: equality at the checkpoints
+is not a continuous immutability claim. Docker/gVisor reports
 `read_only_enforced` only when setup remained inside the requested container;
 if a configured setup command ran through `--trust-setup-on-host`, Guard does
 not make that stronger claim because the host process could survive into later

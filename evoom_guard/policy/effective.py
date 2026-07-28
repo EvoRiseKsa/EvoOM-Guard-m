@@ -13,6 +13,7 @@ import json
 from collections.abc import Mapping
 
 from evoom_guard.domain import EffectivePolicy
+from evoom_guard.policy.harness import normalize_harness_inputs
 
 DEFAULT_TEST_COMMAND_MARKER = "default:python -m pytest"
 
@@ -44,8 +45,10 @@ def build_effective_policy(
     strict_harness: bool,
     policy_id: str | None,
     policy_version: str | None,
+    operating_profile: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> EffectivePolicy:
-    """Build the immutable value behind the frozen schema-1.11 payload.
+    """Build the immutable value behind the versioned verdict-policy payload.
 
     Callers remain responsible for input validation. Keeping validation outside
     this constructor preserves Guard's historical exception timing and text.
@@ -75,19 +78,25 @@ def build_effective_policy(
         blackbox_only=blackbox_only,
         require_report_integrity=require_report_integrity,
         require_candidate_isolation=require_candidate_isolation,
-        min_diff_coverage=min_diff_coverage,
+        min_diff_coverage=(
+            float(min_diff_coverage)
+            if min_diff_coverage is not None
+            else None
+        ),
         baseline_evidence=baseline_evidence,
         require_demonstrated_fix=require_demonstrated_fix,
         strict_harness=strict_harness,
         policy_id=policy_id,
         policy_version=policy_version,
+        operating_profile=operating_profile,
+        harness_inputs=normalize_harness_inputs(harness_inputs),
     )
 
 
 def effective_policy_payload(policy: EffectivePolicy) -> dict[str, object]:
-    """Return the exact ordered payload produced by Guard since schema 1.11."""
+    """Return the exact ordered payload used by the 1.11/1.12 contracts."""
 
-    return {
+    payload: dict[str, object] = {
         "mode": policy.mode,
         "isolation": policy.isolation,
         "docker_image": policy.docker_image,
@@ -118,6 +127,14 @@ def effective_policy_payload(policy: EffectivePolicy) -> dict[str, object]:
         "policy_id": policy.policy_id,
         "policy_version": policy.policy_version,
     }
+    # Profiles belong to schema 1.12. Omitting an unselected profile preserves
+    # the exact 1.11 payload and every historical policy digest; selecting one
+    # makes it part of the signed/hashed 1.12 policy contract.
+    if policy.operating_profile is not None:
+        payload["operating_profile"] = policy.operating_profile
+    if policy.harness_inputs:
+        payload["harness_inputs"] = list(policy.harness_inputs)
+    return payload
 
 
 def effective_policy_sha256(policy: Mapping[str, object]) -> str:

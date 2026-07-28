@@ -102,6 +102,8 @@ _MARKER_FILES = {
     "docs/EVIDENCE_BUNDLES.md": ("EVIDENCE_BUNDLES_RELEASE_PIN",),
     "docs/SIGNED_VERDICTS.md": ("SIGNED_VERDICTS_RELEASE_PIN",),
     "docs/TRUSTED_FINALIZER.md": ("TRUSTED_FINALIZER_RELEASE_PIN",),
+    "SECURITY.md": ("SECURITY_SUPPORTED_VERSIONS",),
+    "CHANGELOG.md": ("CHANGELOG_RELEASE_SUPPORT",),
 }
 
 
@@ -209,7 +211,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="bdb6c21cd4fbeb68b57c4455ff862852e44771d6c4961669efa14106aabc1ea0",
+        reviewed_sha256="e764c6ba0cd8d428fdcedd0c16ed49bda1bc7f08ef0bbfdb2fa3a42ed7f909e8",
     ),
     _WorkflowSpec(
         "B",
@@ -242,7 +244,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _MAIN_ARTIFACT_GATE,
         ("build", "attest"),
-        "7367e2b316ebbc0692ff3271df010da1fca9556fc1aa8027234d1d411b56979a",
+        "1ab24066adaeef7f259a71387bc74f176b4c2c7b78aecb0399374cba541c7c60",
     ),
     _WorkflowSpec(
         "F",
@@ -277,7 +279,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "d7a498b1dfd33665a9128c98e75d8b6a7f02a56be11eb21ad22f7cbdc814921a",
+        "182785db7379644ba61b159963f7c45aa005774a15bb387b338053ad51119c37",
     ),
 )
 _LEGACY_FALSE_GATE = (
@@ -2067,7 +2069,43 @@ def _blocks(context: Context) -> dict[str, str]:
         if architecture.lifecycle == "release-line"
         else "remains unreleased"
     )
+    source_support_status = {
+        "unreleased-development": "Unreleased development source; not a consumer release",
+        "release-candidate": "Release candidate; not a consumer release",
+        "release-line": "Source on the latest ledger-recorded release line",
+    }[architecture.lifecycle]
+    source_support_row = (
+        f"| `{context.source_version}` | {source_support_status} |\n"
+        if context.source_version != version or architecture.lifecycle != "release-line"
+        else ""
+    )
+    security_support = (
+        "Security fixes are provided on a best-effort basis for the latest stable\n"
+        "consumer release only:\n\n"
+        "| Version | Status |\n"
+        "| --- | --- |\n"
+        f"| {release_link} | Latest stable release; supported |\n"
+        f"{source_support_row}"
+        "| Earlier published releases | Historical and unsupported; retained "
+        "unchanged for reproducibility, verification, and rollback |\n"
+        "| Unpublished draft candidates | Unsupported; never consumer releases |\n\n"
+        "Users should reproduce a suspected issue on the latest stable release before\n"
+        "reporting when practical. A report that affects an older release may still be\n"
+        "useful, but a fix will be delivered in a new immutable release rather than by\n"
+        "rewriting an existing tag, asset, checksum, or attestation."
+    )
+    changelog_support = (
+        f"- {release_link} is the latest stable and supported consumer release.\n"
+        f"- Source `{context.source_version}`: {source_support_status.lower()}.\n"
+        "- Earlier published versions are historical and unsupported. Their tags,\n"
+        "  release assets, checksums, attestations, and records remain available\n"
+        "  unchanged for reproducibility, verification, and rollback.\n"
+        "- Draft candidates that were never published are labelled explicitly below and\n"
+        "  are not supported releases."
+    )
     return {
+        "SECURITY_SUPPORTED_VERSIONS": security_support,
+        "CHANGELOG_RELEASE_SUPPORT": changelog_support,
         "README_RELEASE_CHANNEL": release + "\n\n" + pipeline,
         "README_QUICKSTART_PIN": textwrap.dedent(
             f"""\
@@ -2090,14 +2128,15 @@ def _blocks(context: Context) -> dict[str, str]:
             ```yaml
             permissions:
               contents: read
-              pull-requests: write   # only if comment: "true"
 
             steps:
               - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-                with: {{ fetch-depth: 0 }}
+                with:
+                  fetch-depth: 0
+                  persist-credentials: false
               - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}   # ledger-recorded release; pin a SHA for strictest CI
                 with:
-                  comment: "true"
+                  comment: "false"   # explicit for older releases; candidate jobs never comment
                   fail-on: "any-non-pass"
             ```"""
         ),
@@ -2112,7 +2151,7 @@ def _blocks(context: Context) -> dict[str, str]:
                 if ledger.sbom_recorded
                 else "; it records no SBOM release asset."
             )
-            + " Provider attestations are provenance evidence, not an EvoGuard "
+            + " Provider attestations are provenance evidence, not an EvoOM Guard "
             "verdict, artifact-admission decision, or proof of deployment. See "
             "[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`]"
             "(docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the bounded procedure."
@@ -2209,7 +2248,7 @@ def _blocks(context: Context) -> dict[str, str]:
             pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
             evo-guard init --ref {tag} --test-command "python -m pytest -q"
             git add .github/workflows/evoguard.yml .evoguard.json
-            git commit -m "ci: add EvoGuard policy" && git push
+            git commit -m "ci: add EvoOM Guard policy" && git push
             ```
 
             The no-Action alternative is `git diff | evo-guard guard --diff -`.
@@ -2221,13 +2260,15 @@ def _blocks(context: Context) -> dict[str, str]:
             > consumer release recorded by the protected source tree. For strict CI,
             > pin commit `{ledger.commit_sha}` rather than a tag.
 
-            EvoGuard is not published to PyPI. Obtain it from this repository.
+            EvoOM Guard is not published to PyPI. Obtain it from this repository.
 
             **GitHub Action:**
 
             ```yaml
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-              with: {{ fetch-depth: 0 }}
+              with:
+                fetch-depth: 0
+                persist-credentials: false
             - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}
             ```
 
@@ -2251,10 +2292,12 @@ def _blocks(context: Context) -> dict[str, str]:
 
             ```yaml
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-              with: {{ fetch-depth: 0 }}
+              with:
+                fetch-depth: 0
+                persist-credentials: false
             - uses: EvoRiseKsa/EvoOM-Guard-m@{tag}
               with:
-                comment: "true"
+                comment: "false"
                 fail-on: "any-non-pass"
             ```"""
         ),
@@ -2262,7 +2305,9 @@ def _blocks(context: Context) -> dict[str, str]:
             f"""\
             ```yaml
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-              with: {{ fetch-depth: 0 }}
+              with:
+                fetch-depth: 0
+                persist-credentials: false
             - run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@{tag}"
             - run: |
                 BASE="${{{{ github.event.pull_request.base.sha }}}}"

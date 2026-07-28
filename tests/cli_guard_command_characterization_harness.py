@@ -314,6 +314,7 @@ def capture_case(case_name: str) -> dict[str, Any]:
                     sarif_path,
                     "--sign-key",
                     os.path.join(root, "signing.key"),
+                    "--acknowledge-local-key-exposure",
                 ]
             elif case_name == "diff_policy_defaults":
                 argv = ["guard", repo, "--diff", diff_path, "--no-config"]

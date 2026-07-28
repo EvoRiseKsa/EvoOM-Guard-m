@@ -14,10 +14,10 @@ RECORD_VERIFIER_VERSION = "1.0"
 # This is intentionally pinned independently of both the producer's current
 # alias and the shared vocabulary. A future contract module must not silently
 # make this verifier claim support before its semantics are implemented.
-SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.11"})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.11", "1.12"})
 
 
-class _Checks:
+class RecordChecks:
     """Collect ordered semantic checks and render the public report envelope."""
 
     def __init__(self) -> None:

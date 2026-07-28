@@ -1,0 +1,48 @@
+# Categories for GitHub's automatically generated release notes.
+# This applies to paths that invoke GitHub's `--generate-notes`. The protected
+# A-H publication path creates its independently verified release body.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Highlights
+      labels:
+        - enhancement
+        - release-highlight
+    - title: Support
+      labels:
+        - bug
+        - support
+    - title: Upgrade notes
+      labels:
+        - R3-semantic
+        - upgrade
+    - title: Security
+      labels:
+        - security-review
+        - R4-trust-root
+        - security
+    - title: Compatibility
+      labels:
+        - R2-compatible
+        - compatibility
+        - breaking-change
+        - dependencies
+    - title: Assets and verification
+      labels:
+        - artifact-provenance
+        - release-assets
+        - sbom
+        - attestation
+    - title: Known limitations
+      labels:
+        - wontfix
+        - known-limitation
+    - title: Evidence ledger
+      labels:
+        - evidence
+        - ledger
+    - title: Changelog
+      labels:
+        - "*"

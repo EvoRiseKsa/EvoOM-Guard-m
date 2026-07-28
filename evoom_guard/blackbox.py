@@ -154,6 +154,12 @@ from evoom_guard.verifiers.blackbox_pack import (
     execute_blackbox_pack,
     interpret_blackbox_pack,
 )
+from evoom_guard.verifiers.harness_policy import (
+    HarnessInputIntegrityError,
+    HarnessInputPolicyError,
+    capture_harness_input_snapshot,
+    harness_input_snapshot_changes,
+)
 from evoom_guard.verifiers.junit_oracle import read_junit_xml
 from evoom_guard.verifiers.repo_verifier import (
     apply_blocks_to_copy,
@@ -167,6 +173,8 @@ from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
 
 _SubprocessContainmentError = ProcessContainmentError
 _SubprocessOutputLimitExceeded = ProcessOutputLimitExceeded
+_HARNESS_INPUT_CHANGED = "candidate harness input changed"
+_TRUSTED_HARNESS_BINDING_FAILED = "trusted harness input binding failed"
 
 
 class BlackboxResult(NamedTuple):
@@ -486,6 +494,7 @@ def _run_blackbox_impl(
     deleted_paths: tuple[str, ...] = (),
     file_blocks: dict[str, str] | None = None,
     expect_verifier_pack_sha256: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> BlackboxResult:
     """Judge ``candidate`` against ``repo_path`` through the black-box ``pack_dir``.
 
@@ -514,6 +523,17 @@ def _run_blackbox_impl(
     deleted_applied: list[str] = []
     iso: dict[str, Any] | None = None
     observed_candidate_container_ids: set[str] = set()
+    trusted_harness_baseline: dict[str, tuple[str, int, str]] | None = None
+
+    def harness_failure_diagnostics(
+        prefix: str,
+        detail: object,
+    ) -> str:
+        """Keep security diagnostics inside the public record's 2,000-byte cap."""
+
+        message = f"{prefix}: {detail}"
+        return message if len(message) <= 2000 else message[:1997] + "..."
+
     try:
         try:
             # The candidate inherits HOME=workdir. Keep hidden checks outside
@@ -545,6 +565,31 @@ def _run_blackbox_impl(
                 pack_manifest,
                 pack_present=True,
             )
+        if harness_inputs:
+            try:
+                trusted_harness_baseline = capture_harness_input_snapshot(
+                    repo_path,
+                    harness_inputs,
+                )
+            except (
+                HarnessInputPolicyError,
+                HarnessInputIntegrityError,
+            ) as exc:
+                return BlackboxResult(
+                    False,
+                    0,
+                    0,
+                    harness_failure_diagnostics(
+                        "declared harness input integrity could not be bound "
+                        "in the trusted black-box base",
+                        exc,
+                    ),
+                    False,
+                    _TRUSTED_HARNESS_BINDING_FAILED,
+                    pack_sha256,
+                    pack_manifest,
+                    pack_present=True,
+                )
         copy_repo_tree(repo_path, copy)
         apply_error = apply_blocks_to_copy(
             copy,
@@ -578,6 +623,54 @@ def _run_blackbox_impl(
                 pack_manifest,
                 pack_present=True,
             )
+
+        if trusted_harness_baseline is not None:
+            try:
+                candidate_harness_snapshot = capture_harness_input_snapshot(
+                    copy,
+                    harness_inputs,
+                )
+            except (
+                HarnessInputPolicyError,
+                HarnessInputIntegrityError,
+            ) as exc:
+                return BlackboxResult(
+                    False,
+                    0,
+                    0,
+                    harness_failure_diagnostics(
+                        "declared harness input integrity could not be bound "
+                        "after black-box candidate materialization",
+                        exc,
+                    ),
+                    False,
+                    _HARNESS_INPUT_CHANGED,
+                    pack_sha256,
+                    pack_manifest,
+                    deleted_applied=deleted_applied,
+                    pack_present=True,
+                )
+            materialization_changes = harness_input_snapshot_changes(
+                trusted_harness_baseline,
+                candidate_harness_snapshot,
+            )
+            if materialization_changes:
+                return BlackboxResult(
+                    False,
+                    0,
+                    0,
+                    harness_failure_diagnostics(
+                        "black-box candidate materialization changed declared "
+                        "harness inputs",
+                        ", ".join(materialization_changes),
+                    ),
+                    False,
+                    _HARNESS_INPUT_CHANGED,
+                    pack_sha256,
+                    pack_manifest,
+                    deleted_applied=deleted_applied,
+                    pack_present=True,
+                )
 
         # Deliver a REAL isolation boundary (fail-closed) and record what ran.
         invocation_recorder = _InvocationRecorder.create(workdir)
@@ -618,6 +711,49 @@ def _run_blackbox_impl(
                 observed_container_ids=observed_candidate_container_ids,
             )
 
+        def enforce_harness_postcondition(
+            result: BlackboxResult,
+        ) -> BlackboxResult:
+            """Invalidate a pending black-box verdict after persistent drift."""
+
+            if trusted_harness_baseline is None:
+                return result
+            try:
+                observed = capture_harness_input_snapshot(
+                    copy,
+                    harness_inputs,
+                )
+            except (
+                HarnessInputPolicyError,
+                HarnessInputIntegrityError,
+            ) as exc:
+                return result._replace(
+                    passed=False,
+                    ran=False,
+                    error=_HARNESS_INPUT_CHANGED,
+                    diagnostics=harness_failure_diagnostics(
+                        "declared harness input integrity could not be proven "
+                        "after black-box execution",
+                        exc,
+                    ),
+                )
+            changes = harness_input_snapshot_changes(
+                trusted_harness_baseline,
+                observed,
+            )
+            if not changes:
+                return result
+            return result._replace(
+                passed=False,
+                ran=False,
+                error=_HARNESS_INPUT_CHANGED,
+                diagnostics=harness_failure_diagnostics(
+                    "black-box candidate/pack execution changed declared "
+                    "harness inputs",
+                    ", ".join(changes),
+                ),
+            )
+
         def project_pack_verdict(
             facts: BlackboxPackVerdictFacts,
         ) -> BlackboxResult:
@@ -640,12 +776,14 @@ def _run_blackbox_impl(
                 pack_present=True,
             )
             if not facts.attach_candidate_evidence:
-                return result
-            return with_candidate_evidence(
-                result,
-                wait_for_late_container_evidence=(
-                    facts.wait_for_late_container_evidence
-                ),
+                return enforce_harness_postcondition(result)
+            return enforce_harness_postcondition(
+                with_candidate_evidence(
+                    result,
+                    wait_for_late_container_evidence=(
+                        facts.wait_for_late_container_evidence
+                    ),
+                )
             )
 
         xml_path = os.path.join(workdir, "judge-blackbox.xml")
@@ -785,6 +923,7 @@ def run_blackbox(
     deleted_paths: tuple[str, ...] = (),
     file_blocks: dict[str, str] | None = None,
     expect_verifier_pack_sha256: str | None = None,
+    harness_inputs: tuple[str, ...] = (),
 ) -> BlackboxResult:
     """Run the black-box judge and report strict post-run cleanup failures."""
     validate_isolation_mode(isolation)
@@ -802,6 +941,7 @@ def run_blackbox(
             deleted_paths=deleted_paths,
             file_blocks=file_blocks,
             expect_verifier_pack_sha256=expect_verifier_pack_sha256,
+            harness_inputs=harness_inputs,
         )
     except _BlackboxCleanupFailure as exc:
         return exc.result

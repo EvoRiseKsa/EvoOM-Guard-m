@@ -147,6 +147,8 @@ REQUIRED_MAIN_CHECKS = {
     ("test (3.12)", 15368),
     ("e2e-runners", 15368),
     ("blackbox-docker-e2e", 15368),
+    ("fuzz (address)", 15368),
+    ("fuzz (undefined)", 15368),
     ("smoke", 15368),
     ("analyze", 15368),
     ("CodeQL", 57789),
@@ -1478,6 +1480,27 @@ def _module_matches_prefix(name: str, prefixes: Sequence[str]) -> bool:
     return any(name == prefix or name.startswith(f"{prefix}.") for prefix in prefixes)
 
 
+def _require_trusted_runtime_disjoint(blocked_roots: Sequence[Path]) -> None:
+    """Reject an interpreter environment that overlaps an untrusted root."""
+
+    runtime_roots = {
+        Path(os.path.abspath(sys.prefix)),
+        Path(os.path.abspath(sys.base_prefix)),
+    }
+    blocked = tuple(Path(os.path.abspath(path)) for path in blocked_roots)
+    if any(
+        _path_is_within(runtime, root) or _path_is_within(root, runtime)
+        for runtime in runtime_roots
+        for root in blocked
+    ):
+        _fail(
+            "trusted Python runtime overlaps a blocked root; provision the "
+            "locked operator environment outside the repository, current "
+            "working directory, temporary directory, candidate, evidence, "
+            "and trusted-parent roots"
+        )
+
+
 def _safe_python_roots(*blocked_roots: Path) -> tuple[Path, ...]:
     prefixes = {
         Path(os.path.abspath(sys.prefix)),
@@ -1651,12 +1674,14 @@ def _trusted_python_imports(
     """
 
     global _TRUSTED_IMPORT_DEPTH
-    safe_roots = _safe_python_roots(
+    blocked_roots = (
         Path.cwd(),
         ROOT,
         Path(tempfile.gettempdir()),
         *blocked_roots,
     )
+    _require_trusted_runtime_disjoint(blocked_roots)
+    safe_roots = _safe_python_roots(*blocked_roots)
     allowed_roots = (*safe_roots, *((import_root,) if import_root else ()))
     saved_names = set(sys.modules)
     removed_modules = {
@@ -1762,6 +1787,8 @@ def _trusted_python_imports(
 @contextmanager
 def _trusted_parent_first_party(
     contracts: _TrustedParentContracts,
+    *,
+    blocked_roots: Sequence[Path] = (),
 ) -> Iterator[None]:
     """Import every first-party verifier dependency from one literal parent tree."""
 
@@ -1789,7 +1816,7 @@ def _trusted_parent_first_party(
             )
             with _trusted_python_imports(
                 import_root=import_root,
-                blocked_roots=(contracts.repository,),
+                blocked_roots=(contracts.repository, *blocked_roots),
             ):
                 try:
                     for name in _TRUSTED_FIRST_PARTY_MODULES:

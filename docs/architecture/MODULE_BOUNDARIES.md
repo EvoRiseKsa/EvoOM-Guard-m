@@ -8,7 +8,8 @@
 - `workspace/`: safe file operations and runtime identity.
 - `execution/`: process launch, limits, capture, cleanup, environment handling.
 - `isolation/`: subprocess/docker/gVisor/container execution contracts.
-- `verifiers/`: concrete verification engines (repo and blackbox) and adapters.
+- `runners/`: runner recognition, judge-owned report wiring, and ordered dispatch.
+- `verifiers/`: concrete verification engines (repo and blackbox) and verdict oracles.
 - `application/`: orchestration pipeline and evidence decision composition.
 - `evidence/`: canonical types, record producers, bundles, signatures.
 - `finalizer/`: PR/release source finalization workflows and handoff.
@@ -35,6 +36,17 @@
 
 ## Current extraction boundaries
 
+Runner instrumentation is owned by `evoom_guard/runners/`: `protocol.py` defines
+the dependency-free structural contract, `_command.py` owns shared executable
+recognition grammar, the nine runner owner modules contain concrete reporter
+wiring, and `registry.py` owns ordered dispatch. `runners/adapters.py` and
+`evoom_guard/adapters.py` remain compatibility facades; the latter's classes
+are exact owner aliases, while its dispatch function passes
+the facade's live registries into the owner so assignment-based monkeypatches
+retain their original call-time behavior. The package is classified alongside
+verification because it produces structured runner evidence but performs no
+process launch, report parsing, grading, policy decision, or evidence sealing.
+
 The first domain slice lives in `evoom_guard/domain/verification.py`. It owns
 only dependency-free JUnit counts plus completed-run and repository/pack phase
 result contracts. `verifiers.junit_oracle` and
@@ -45,15 +57,17 @@ trace, and serialization behavior remain outside the domain package.
 The second domain slice lives in `evoom_guard/domain/verdict.py`. It owns
 frozen verdict names, execution lifecycle states, reason codes, and the
 read-only reason compatibility table. Version-specific schema identity, policy
-keys, and required record sections remain in
-`verdict_contract_v1_11.py`; that module re-exports the same semantic objects.
-Guard consumes generic semantics from the domain and only the schema version
-from the versioned wire contract.
+keys, and required record sections remain in the frozen
+`verdict_contract_v1_11.py` and additive `verdict_contract_v1_12.py`; those
+modules re-export the same semantic objects. Guard consumes generic semantics
+from the domain and only version-specific wire fields from those contracts.
 
 The third domain slice adds the immutable `EffectivePolicy` value in
-`domain/policy.py`. Trusted normalization, canonical schema-1.11 payload
-projection, and the frozen JSON digest live in `policy/effective.py`; domain
-does not import policy. Guard's existing `_effective_policy` and
+`domain/policy.py`. Trusted normalization, canonical schema-1.11/1.12 payload
+projection, including the 1.12 `operating_profile` field, and the frozen JSON
+digest live in `policy/effective.py`; domain does not import policy. Guard's
+public `build_effective_policy_payload` and
+legacy `_effective_policy` compatibility alias, together with
 `effective_policy_sha256` names remain compatibility facades, while the raw-Git
 finalizer uses the public policy API. Validation and schema evolution remain in
 their existing owners so exception timing and published hashes do not change.
@@ -64,7 +78,22 @@ historical public scalar arguments first, then creates exactly one owned typed
 request and derives its operational values plus one canonical policy payload
 from that snapshot. The request
 contract performs no I/O, validation, serialization, or verdict composition;
-the existing 33-parameter `guard()` callable remains unchanged for adopters.
+the public `guard()` callable remains the compatibility boundary, with
+`harness_inputs` added as an optional keyword whose empty value preserves the
+1.11 policy payload.
+
+The explicit judge-input path contract lives in `domain/harness.py`. It owns
+only deterministic exact-path normalization/matching, setup-exclusion conflict
+detection, and the shared policy exception. Filesystem binding and checkpoint
+hashing remain in `verifiers/harness_policy.py`; config loading and public
+policy exports remain in `policy/`. Repo-native consumers and `blackbox.py`
+invoke those shared binding primitives at their own documented boundaries. In
+particular, black-box execution captures trusted inputs before materialization,
+checks the materialized copy before execution, and checks again after
+candidate/pack execution, including `--blackbox-only`. Initial trusted binding
+failure remains an assurance `ERROR`; later materialized/runtime mismatch is the
+candidate-drift `TAMPERED` path. Candidate coordination therefore does not
+import the downstream policy package.
 
 The first candidate slice lives in `evoom_guard/candidate/`. `edits.py` owns
 the dependency-free FILE/PATCH block grammar and `PatchBlock`; `patch.py` owns

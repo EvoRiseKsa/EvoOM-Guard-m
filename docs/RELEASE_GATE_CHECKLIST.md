@@ -1,4 +1,8 @@
-﻿# Release gate checklist (v4 baseline hardening)
+# Release gate checklist (v4 baseline hardening)
+
+> **Audience:** repository and release maintainers. This checklist documents
+> governance controls; it is not required reading for ordinary EvoOM Guard
+> users.
 
 Use this checklist for the published `v4.0.1` behavioral baseline, the minimal
 `v4.0.2`, `v4.1.0`, `v4.2.0`, and `v4.3.0` release ledgers, and as the minimum
@@ -27,7 +31,10 @@ gate.
 
 4. **Workflow scope & permissions**
    - Use `pull_request` (not `pull_request_target`) for candidate checks.
-   - Minimal permission set; include `pull-requests: write` only if a comment is needed.
+   - Give the candidate job only `contents: read` and set checkout
+     `persist-credentials: false`.
+   - Put optional PR comments in a separate metadata-only job with no candidate
+     checkout or execution; never give the candidate job `pull-requests: write`.
    - Never give the candidate job `contents: write` when it only verifies code.
 
 5. **No edit-time bypasses**
@@ -48,7 +55,7 @@ gate.
      checksum lines and byte equality in tag CI.
    - Verify build-provenance attestations for the exact zipapp and SPDX
      subjects, plus the SBOM attestation that binds the SPDX predicate to the
-     zipapp subject. None is an EvoGuard verdict or independent review.
+     zipapp subject. None is an EvoOM Guard verdict or independent review.
 
 ## Frozen baseline verification
 
@@ -106,6 +113,31 @@ gate.
 
 ## Protected A-H release-ledger v2 readiness
 
+- Before creating the stable source candidate, verify the development snapshot
+  exactly. The current live corpus has 17 labelled cases; this is separate from
+  the frozen v4.0.1 baseline's historical 16-row snapshot.
+
+  ```text
+  python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json
+  ```
+
+  The recorded source commit, results commit, and later final-manifest commit
+  must remain reachable with their original IDs. Merge that evidence chain with
+  a merge commit; squash and GitHub rebase-and-merge are invalid. Manifest
+  verification requires a distinct source-to-results ancestry chain, and Gate A
+  requires the results commit to be an ancestor of the trusted parent and
+  candidate.
+- The stable candidate must leave both `benchmarks/results.jsonl` and
+  `benchmarks/run-manifest.json` byte-for-byte unchanged. Its parent-owned A
+  workflow must require, not merely permit, the exact carry-forward relation:
+
+  ```text
+  python -I benchmarks/run_live.py --verify-manifest benchmarks/run-manifest.json `
+    --require-release-promotion
+  ```
+
+  Success must report `relation=exact-release-version-transition`; exact-mode
+  success or an unrelated source change is not a substitute.
 - `tests/baseline/schema/release-ledger-v2.schema.json` is the contract for a
   future post-publication protected A-H ledger. It does not apply retroactively
   to v1 ledgers and must not be used to rewrite a frozen baseline.
@@ -116,6 +148,12 @@ gate.
     --trusted-ledger-pub <independently-obtained-public-key> `
     --trusted-parent-repo <disjoint-trusted-parent-repository>
   ```
+
+  Run this command from a dependency-locked Python environment whose runtime
+  and dependency roots are disjoint in both directions from the checkout,
+  current working directory, system temporary directory, ledger evidence,
+  candidate, and trusted-parent roots. An in-repository `.venv` is rejected;
+  `-I` alone does not turn it into a trusted runtime.
 
   The trusted key
   path must be outside the ledger and must come from a pinned parent tree,

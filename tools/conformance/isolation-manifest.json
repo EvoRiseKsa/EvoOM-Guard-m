@@ -1,0 +1,70 @@
+{
+  "$schema": "./isolation-manifest.schema.json",
+  "schema_version": "evoom-isolation-conformance-manifest-1",
+  "suite_id": "evoom-guard-isolation-v1",
+  "default_image": "python:3.12-slim",
+  "control_timeout_seconds": 30,
+  "image_pull_timeout_seconds": 600,
+  "run_timeout_seconds": 30,
+  "timeout_probe_seconds": 3,
+  "cleanup": {
+    "total_timeout_seconds": 10,
+    "reconcile_attempts": 10,
+    "reconcile_interval_seconds": 0.05,
+    "required_final_absent_observations": 3
+  },
+  "container": {
+    "network": "none",
+    "read_only_root": true,
+    "candidate_mount_path": "/candidate",
+    "candidate_mount_mode": "ro",
+    "workdir": "/candidate",
+    "tmpfs": [
+      "/tmp:rw,exec"
+    ],
+    "pids_limit": 256,
+    "cpus": 1,
+    "cap_drop": [
+      "ALL"
+    ],
+    "security_opt": [
+      "no-new-privileges"
+    ],
+    "ulimit": [
+      "nofile=1024:1024"
+    ],
+    "user_policy": "host_uid_gid_when_available",
+    "require_non_root_when_applied": true
+  },
+  "network_probe": {
+    "host": "1.1.1.1",
+    "port": 53,
+    "timeout_seconds": 1
+  },
+  "forbidden_paths": [
+    "/verifier-pack/conformance-secret.txt",
+    "/out/conformance-secret.txt",
+    "/judge/conformance-secret.txt"
+  ],
+  "required_probes": [
+    "network_none",
+    "candidate_mount_read_only",
+    "root_filesystem_read_only",
+    "forbidden_path_read",
+    "security_profile",
+    "normal_cleanup",
+    "timeout_cleanup"
+  ],
+  "profiles": [
+    {
+      "id": "docker",
+      "runtime": null,
+      "required": true
+    },
+    {
+      "id": "gvisor",
+      "runtime": "runsc",
+      "required": false
+    }
+  ]
+}

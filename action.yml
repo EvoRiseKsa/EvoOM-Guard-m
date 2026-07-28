@@ -27,9 +27,9 @@ inputs:
     required: false
     default: ""
   comment:
-    description: "Post the report on same-repository PRs (needs pull-requests: write). Fork/Dependabot PRs keep the job summary and skip the API comment."
+    description: "Deprecated security guard. In-job PR commenting is refused because candidate code must not share a pull-requests:write token. Leave false; if a comment is required, upload report-path as a bounded artifact for a separate metadata-only job."
     required: false
-    default: "true"
+    default: "false"
   # PR runs enforce any-non-pass at runtime; rejected-only is only for trusted non-PR use.
   fail-on:
     description: "Verdicts that fail the step: 'any-non-pass' (default) or 'rejected-only'. PR runs require any-non-pass; rejected-only is accepted only for trusted non-PR invocations."
@@ -45,6 +45,10 @@ inputs:
     default: ""
   docker-network:
     description: "Container network for isolation 'docker'/'gvisor' (default: 'none' — no network, the safe choice; pass a docker network name only if the suite genuinely needs it)."
+    required: false
+    default: ""
+  operating-profile:
+    description: "Optional trust/runtime contract: 'local', 'protected', or 'hostile'. On pull_request this setting must come from the verified base .evoguard.json policy; candidate-controlled workflow input is ignored."
     required: false
     default: ""
   strict-harness:
@@ -137,6 +141,141 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Refuse in-job PR commenting
+      if: ${{ inputs.comment == 'true' }}
+      shell: bash
+      run: |
+        echo "::error::EvoGuard refuses comment=true: the candidate-execution job must not hold pull-requests:write. Leave comment=false and post from a separate metadata-only job that never checks out or executes candidate code."
+        exit 2
+
+    - name: Refuse persisted checkout credentials
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        reject_credentials() {
+          echo "::error::EvoGuard refuses to execute candidate code while checkout credentials are reachable. Set actions/checkout persist-credentials: false and remove repository-scoped credential helpers or authenticated remote URLs."
+          exit 2
+        }
+        inspect_git_config_for_credentials() {
+          local pattern="$1"
+          local config_status=0
+          git config --includes --show-origin --get-regexp "$pattern" \
+            >/dev/null 2>&1 || config_status=$?
+          case "$config_status" in
+            0)
+              reject_credentials
+              ;;
+            1)
+              return 0
+              ;;
+            *)
+              echo "::error::EvoGuard could not safely inspect Git config for persisted checkout credentials (git config exited $config_status); refusing candidate execution."
+              exit 2
+              ;;
+          esac
+        }
+        fail_remote_credential_inspection() {
+          local status="$1"
+          echo "::error::EvoGuard could not safely enumerate every Git remote fetch/push URL (git exited $status); refusing candidate execution."
+          exit 2
+        }
+        remote_url_has_userinfo() {
+          local remote_url="$1"
+          # HTTP(S) userinfo is always a credential risk. For other URI schemes,
+          # reject an explicit user:password pair while allowing ordinary
+          # username-only SSH forms such as ssh://git@host and git@host:path.
+          # Never echo remote_url: it may contain the credential.
+          [[ "$remote_url" =~ ^https?://[^/@]+@ ]] ||
+            [[ "$remote_url" =~ ^[Hh][Tt][Tt][Pp][Ss]?://[^/?#]*@ ]] ||
+            [[ "$remote_url" =~ ^[[:alpha:]][[:alnum:].+-]*://[^/?#@]*:[^/?#@]*@ ]] ||
+            [[ "$remote_url" =~ ^//[^/?#@]*:[^/?#@]*@ ]]
+        }
+        inspect_remote_urls_for_credentials() {
+          local remote_names=""
+          local remote_status=0
+          local remote_name=""
+          local remote_urls=""
+          local url_status=0
+          local direction=""
+
+          if remote_names="$(git remote 2>/dev/null)"; then
+            remote_status=0
+          else
+            remote_status=$?
+          fi
+          if [ "$remote_status" -ne 0 ]; then
+            fail_remote_credential_inspection "$remote_status"
+          fi
+          # `git remote` exits zero and emits nothing when no remotes exist.
+          if [ -z "$remote_names" ]; then
+            return 0
+          fi
+
+          while IFS= read -r remote_name; do
+            if [ -z "$remote_name" ] || [[ "$remote_name" == *$'\r'* ]] || \
+               [[ "$remote_name" == *$'\t'* ]]; then
+              fail_remote_credential_inspection 2
+            fi
+            for direction in fetch push; do
+              remote_urls=""
+              url_status=0
+              if [ "$direction" = "fetch" ]; then
+                if remote_urls="$(git remote get-url --all "$remote_name" 2>/dev/null)"; then
+                  url_status=0
+                else
+                  url_status=$?
+                fi
+              elif remote_urls="$(
+                git remote get-url --push --all "$remote_name" 2>/dev/null
+              )"; then
+                url_status=0
+              else
+                url_status=$?
+              fi
+              if [ "$url_status" -ne 0 ] || [ -z "$remote_urls" ]; then
+                unset remote_urls
+                fail_remote_credential_inspection "$url_status"
+              fi
+              while IFS= read -r remote_url; do
+                if [ -z "$remote_url" ] || [[ "$remote_url" == *$'\r'* ]] || \
+                   [[ "$remote_url" == *$'\t'* ]]; then
+                  unset remote_url remote_urls
+                  fail_remote_credential_inspection 2
+                fi
+                if remote_url_has_userinfo "$remote_url"; then
+                  unset remote_url remote_urls
+                  reject_credentials
+                fi
+                unset remote_url
+              done <<< "$remote_urls"
+              unset remote_urls
+            done
+            unset remote_name
+          done <<< "$remote_names"
+          unset remote_names
+        }
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+          echo "::error::EvoGuard requires a Git worktree checkout."
+          exit 2
+        }
+        # Never print these values: an http.*.extraheader commonly contains the
+        # base64-encoded GITHUB_TOKEN. --includes also resolves checkout v6/v7's
+        # conditional credential file under RUNNER_TEMP.
+        # `git config --get-regexp` returns 1 for a clean "no match". Any
+        # higher status means the credential sources could not be inspected and
+        # must fail closed rather than being mistaken for an empty result.
+        inspect_git_config_for_credentials '^http\..*\.extraheader$'
+        inspect_git_config_for_credentials '^credential(\..*)?\.helper$'
+        for SECRET_TRANSPORT in GIT_ASKPASS SSH_ASKPASS SSH_AUTH_SOCK GH_TOKEN GITHUB_TOKEN; do
+          if [[ -v "$SECRET_TRANSPORT" && -n "${!SECRET_TRANSPORT}" ]]; then
+            unset SECRET_TRANSPORT
+            reject_credentials
+          fi
+        done
+        unset SECRET_TRANSPORT
+        inspect_remote_urls_for_credentials
+
     - name: Set up Python
       uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
@@ -168,6 +307,7 @@ runs:
         INPUT_ISOLATION: ${{ inputs.isolation }}
         INPUT_DOCKER_IMAGE: ${{ inputs.docker-image }}
         INPUT_DOCKER_NETWORK: ${{ inputs.docker-network }}
+        INPUT_OPERATING_PROFILE: ${{ inputs.operating-profile }}
         INPUT_STRICT_HARNESS: ${{ inputs.strict-harness }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_MEM_LIMIT: ${{ inputs.mem-limit }}
@@ -186,7 +326,7 @@ runs:
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
-        set -e
+        set -euo pipefail
         # A diagnosable, fail-fast exit for setup problems (missing base, shallow
         # history): name the cause, write it to the step summary, and stop BEFORE
         # the guard runs — never let a broken diff surface as a confusing
@@ -303,6 +443,7 @@ runs:
           if [ -n "$INPUT_TEST_COMMAND" ] || [ -n "$INPUT_PROTECTED" ] || [ -n "$INPUT_ALLOW" ] || \
              [ "$INPUT_ALLOW_NEW_TESTS" = "true" ] || [ -n "$INPUT_ISOLATION" ] || \
              [ -n "$INPUT_DOCKER_IMAGE" ] || [ -n "$INPUT_DOCKER_NETWORK" ] || \
+             [ -n "$INPUT_OPERATING_PROFILE" ] || \
              [ -n "$INPUT_STRICT_HARNESS" ] || \
              [ -n "$INPUT_TIMEOUT" ] || [ -n "$INPUT_MEM_LIMIT" ] || [ -n "$INPUT_SARIF" ] || \
              [ "$INPUT_BLACKBOX" = "true" ] || [ "$INPUT_BLACKBOX_ONLY" = "true" ] || \
@@ -364,6 +505,7 @@ runs:
           if [ -n "$INPUT_ISOLATION" ]; then ARGS+=(--isolation "$INPUT_ISOLATION"); fi
           if [ -n "$INPUT_DOCKER_IMAGE" ]; then ARGS+=(--docker-image "$INPUT_DOCKER_IMAGE"); fi
           if [ -n "$INPUT_DOCKER_NETWORK" ]; then ARGS+=(--docker-network "$INPUT_DOCKER_NETWORK"); fi
+          if [ -n "$INPUT_OPERATING_PROFILE" ]; then ARGS+=(--operating-profile "$INPUT_OPERATING_PROFILE"); fi
           if [ "$INPUT_STRICT_HARNESS" = "true" ]; then
             ARGS+=(--strict-harness)
           elif [ "$INPUT_STRICT_HARNESS" = "false" ]; then
@@ -418,34 +560,3 @@ runs:
           [ "$VERDICT" = "REJECTED" ] && exit 1 || exit 0
         fi
         exit $GUARD_CODE
-
-    - name: Comment on the PR
-      # Fork and Dependabot PRs receive a read-only GITHUB_TOKEN. The report is
-      # already in GITHUB_STEP_SUMMARY, so skip the optional API write there and
-      # never let a comment-permission failure replace the Guard verdict.
-      if: ${{ always() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
-      continue-on-error: true
-      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-      with:
-        script: |
-          const fs = require('fs');
-          const p = process.env.RUNNER_TEMP + '/guard-report.md';
-          if (!fs.existsSync(p)) return;
-          // Stable hidden marker so re-runs UPDATE one sticky comment instead of
-          // appending a new one each push (see issue #16). Kept invisible (HTML
-          // comment) and unchanged across runs; the report content is unchanged.
-          const MARKER = '<!-- evoguard-report -->';
-          const body = MARKER + '\n' + fs.readFileSync(p, 'utf8');
-          const { owner, repo } = context.repo;
-          const issue_number = context.issue.number;
-          // Find a prior EvoGuard comment by our marker; update it if present,
-          // otherwise create a fresh one.
-          const comments = await github.paginate(github.rest.issues.listComments, {
-            owner, repo, issue_number, per_page: 100,
-          });
-          const existing = comments.find((c) => c.body && c.body.includes(MARKER));
-          if (existing) {
-            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
-          } else {
-            await github.rest.issues.createComment({ owner, repo, issue_number, body });
-          }

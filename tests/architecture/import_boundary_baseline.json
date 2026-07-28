@@ -28,7 +28,8 @@
         "isolation"
       ],
       [
-        "verifiers"
+        "verifiers",
+        "runners"
       ],
       [
         "application"
@@ -124,6 +125,28 @@
         "layer_violations": 0,
         "unclassified_modules": 25
       }
+    },
+    {
+      "revision": 8,
+      "ceilings": {
+        "cycle_edges": 0,
+        "cross_package_private_imports": 54,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 22
+      }
+    },
+    {
+      "revision": 9,
+      "ceilings": {
+        "cycle_edges": 0,
+        "cross_package_private_imports": 54,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 21
+      }
     }
   ],
   "violations": {
@@ -162,7 +185,6 @@
       "evoom_guard.finalizer_derivation | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
       "evoom_guard.github_attestation | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
       "evoom_guard.github_attestation | evoom_guard.evidence_bundle | _read_regular_file | contexts=from:module:runtime",
-      "evoom_guard.record_verifier | evoom_guard.record_verification.report | _Checks | contexts=from:module:runtime",
       "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _archive_bytes | contexts=from:module:runtime",
       "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _canonical_json | contexts=from:module:runtime",
       "evoom_guard.release_source_finalizer | evoom_guard.evidence_bundle | _load_json_object | contexts=from:module:runtime",
@@ -203,17 +225,13 @@
       "evoom_guard.pack_manifest",
       "evoom_guard.patch_applier",
       "evoom_guard.patchmin",
-      "evoom_guard.record_verification",
-      "evoom_guard.record_verification.isolation",
-      "evoom_guard.record_verification.report",
       "evoom_guard.record_verifier",
       "evoom_guard.release_source_finalizer",
       "evoom_guard.release_source_producer_receipt",
       "evoom_guard.runtime_identity",
       "evoom_guard.signing",
       "evoom_guard.strict_json",
-      "evoom_guard.trusted_finalizer",
-      "evoom_guard.verdict_contract_v1_11"
+      "evoom_guard.trusted_finalizer"
     ]
   }
 }

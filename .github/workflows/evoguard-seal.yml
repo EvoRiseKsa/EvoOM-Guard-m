@@ -6,13 +6,12 @@
 name: EvoGuard Seal
 
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] exact workflow ID/run-attempt controls are re-derived before Environment/key access
     workflows: ["EvoGuard Reverify"]
     types: [completed]
 
 permissions:
   actions: read
-  checks: write
   contents: read
   pull-requests: read
 
@@ -116,6 +115,11 @@ jobs:
       format('{0}', github.event.workflow_run.workflow_id) == vars.EVOGUARD_REVERIFY_WORKFLOW_ID
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+      pull-requests: read
     # Configure this environment with required reviewers and put the key only
     # in its EVOGUARD_FINALIZER_KEY secret. Do not use a generic repo secret.
     environment: evoguard-finalizer

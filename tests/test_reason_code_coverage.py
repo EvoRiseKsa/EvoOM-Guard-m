@@ -13,7 +13,8 @@ frozen artifact regenerated with ``ops/generate_reason_corpus.py``: each row
 records real ``guard()``/``guard_from_diff()`` output; the three rows whose
 runtime the host cannot provide (black-box launcher facts) stub
 ``run_blackbox`` the same way this repository's own tests do and say so in
-their ``provenance``.
+their ``provenance``. The mode-only-diff row also labels its narrowly stubbed,
+platform-dependent reverse-apply boundary.
 
 The point is drift prevention in both directions: a reason code added to the
 contract without a producing scenario fails here, and a corpus row whose
@@ -39,9 +40,15 @@ CORPUS_PATH = ROOT / "tests" / "fixtures" / "contracts" / "reason-corpus.jsonl"
 SCHEMA_PATH = ROOT / "evoom_guard" / "schemas" / "verdict-record-1.11.schema.json"
 
 # The only accepted generation paths. "producer" rows ran the real judge end to
-# end; "producer-stubbed-blackbox" rows ran the real guard() composition over a
-# stubbed run_blackbox result (launcher facts the host cannot produce natively).
-KNOWN_PROVENANCE = frozenset({"producer", "producer-stubbed-blackbox"})
+# end; the two stubbed labels make their exact unavailable/platform-dependent
+# boundary explicit while retaining the real Guard composition around it.
+KNOWN_PROVENANCE = frozenset(
+    {
+        "producer",
+        "producer-stubbed-blackbox",
+        "producer-stubbed-reconstruction",
+    }
+)
 
 
 def _corpus_rows() -> list[dict[str, Any]]:

@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "evoom-guard"
-description = "Independent, evidence-bound verification for untrusted software changes, with AI-generated patches as the primary use case."
+description = "Policy- and evidence-bound change admission, with AI-generated patches as the primary use case."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Mana Alharbi (مانع الحربي)" }]
@@ -92,8 +92,9 @@ warn_unused_ignores = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-# The 'sign'/'cov' extras are optional: type-checking must pass without them.
-module = ["cryptography.*", "coverage", "coverage.*"]
+# Signing, coverage, and fuzzing dependencies are optional: type-checking must
+# pass when those extras/tools are not installed.
+module = ["atheris", "cryptography.*", "coverage", "coverage.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]

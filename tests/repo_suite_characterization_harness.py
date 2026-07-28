@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import os
 import subprocess
@@ -28,6 +29,7 @@ SCHEMA_VERSION = "repo-suite-characterization-v1"
 CASE_NAMES = (
     "docker_containment_started",
     "docker_containment_unstarted",
+    "docker_exec_error_before_isolation_start",
     "docker_exit_125",
     "docker_junit_file_pass",
     "docker_not_found",
@@ -37,8 +39,10 @@ CASE_NAMES = (
     "docker_timeout_unstarted",
     "gvisor_junit_file_pass",
     "host_containment",
+    "host_exec_error_before_target_start",
     "host_junit_directory_pass",
     "host_junit_file_pass",
+    "host_launcher_failure_before_target_start",
     "host_not_found",
     "host_output_limit",
     "host_timeout",
@@ -100,6 +104,30 @@ def _docker_output_limit(*, started: bool) -> DockerRunOutputLimit:
     )
 
 
+def _completed_before_target_start(
+    command: list[str],
+) -> subprocess.CompletedProcess[str]:
+    completed = subprocess.CompletedProcess(
+        command,
+        125,
+        "launcher stdout",
+        "launcher stderr",
+    )
+    completed.target_started = False  # type: ignore[attr-defined]
+    return completed
+
+
+def _exec_error_before_target_start(command: list[str]) -> PermissionError:
+    error = PermissionError(
+        errno.EACCES,
+        "controlled target exec denial",
+        command[0],
+    )
+    error.target_exec_failed = True  # type: ignore[attr-defined]
+    error.target_started = False  # type: ignore[attr-defined]
+    return error
+
+
 def _runner_effect(case_name: str) -> object:
     completed = subprocess.CompletedProcess(["suite"], 0, "suite stdout", "suite stderr")
     effects: dict[str, object] = {
@@ -108,6 +136,9 @@ def _runner_effect(case_name: str) -> object:
         ),
         "docker_containment_unstarted": DockerRunContainmentError(
             "docker cleanup missing", container_started=False
+        ),
+        "docker_exec_error_before_isolation_start": (
+            _exec_error_before_target_start(["docker", "suite"])
         ),
         "docker_exit_125": subprocess.CompletedProcess(
             ["docker", "suite"], 125, "raw stdout", "raw stderr"
@@ -120,8 +151,14 @@ def _runner_effect(case_name: str) -> object:
         "docker_timeout_unstarted": _docker_timeout(started=False),
         "gvisor_junit_file_pass": completed,
         "host_containment": ProcessContainmentError("host cleanup missing"),
+        "host_exec_error_before_target_start": (
+            _exec_error_before_target_start(["resolved-suite"])
+        ),
         "host_junit_directory_pass": completed,
         "host_junit_file_pass": completed,
+        "host_launcher_failure_before_target_start": (
+            _completed_before_target_start(["resolved-suite"])
+        ),
         "host_not_found": FileNotFoundError("suite-tool"),
         "host_output_limit": ProcessOutputLimitExceeded(99),
         "host_timeout": subprocess.TimeoutExpired(["suite-tool"], 7),

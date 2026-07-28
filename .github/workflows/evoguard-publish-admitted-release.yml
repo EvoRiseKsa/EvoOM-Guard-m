@@ -721,6 +721,8 @@ jobs:
             "$output/h-sbom-attestation-receipt.json"
           verify_one() {
             local name="$1"
+            # Positional parameters expand only inside the isolated shell.
+            # shellcheck disable=SC2016
             "${isolated[@]}" /bin/sh -ceu '
               destination="$1"
               shift
@@ -1321,13 +1323,47 @@ jobs:
           tag = record['tag']
           target = record['target_sha']
           assets = record['assets']
+          repository = os.environ.get(
+              'GITHUB_REPOSITORY',
+              'EvoRiseKsa/EvoOM-Guard-m',
+          )
           names = ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
           lines = [
               f'# EvoOM Guard {tag}',
               '',
               f'Trusted release for commit `{target}`.',
               '',
-              '## Assets',
+              '## Status and support',
+              '',
+              'Published as a stable release. Current support status is defined '
+              f'by [SECURITY.md](https://github.com/{repository}/blob/main/SECURITY.md). '
+              'Earlier releases remain available for reproducibility.',
+              '',
+              '## Highlights',
+              '',
+              f'See the [{tag} changelog]'
+              f'(https://github.com/{repository}/blob/{tag}/CHANGELOG.md) '
+              'for the reviewed user-visible changes.',
+              '',
+              '## Upgrade impact',
+              '',
+              'Review the changelog before upgrading. Pin production automation '
+              f'to `{tag}` or its resolved commit, never to `main`.',
+              '',
+              '## Security boundary',
+              '',
+              'This release binds the exact admitted source, artifact bytes, '
+              'checksums, and publication record. It does not claim that every '
+              'accepted change is correct or safe. See the '
+              f'[assurance limits](https://github.com/{repository}/blob/{tag}/docs/ASSURANCE.md).',
+              '',
+              '## Compatibility',
+              '',
+              'The source package requires Python 3.10 or newer and is CI-tested '
+              'on Python 3.10–3.12. The standalone `evo-guard.pyz` is the '
+              'consumer executable published here.',
+              '',
+              '## Assets and verification',
               '',
               *[
                   f"- `{name}` — `sha256:{assets[name]['sha256']}` "
@@ -1341,10 +1377,19 @@ jobs:
               'sha256sum --check SHA256SUMS',
               '```',
               '',
+              '## Known limitations',
+              '',
+              f'Review [Honest scope and nonclaims]'
+              f'(https://github.com/{repository}/blob/{tag}/docs/ASSURANCE.md) '
+              'before using a verdict as an admission gate.',
+              '',
+              '## Evidence and full changelog',
+              '',
               'This title and description are mutable display metadata, not a trust root. '
               'The exact assets and their digests are authoritative for this release.',
               'A separate signed evidence ledger is frozen after publication; '
               'RAAE envelopes are intentionally not release assets.',
+              f'Full history: https://github.com/{repository}/blob/{tag}/CHANGELOG.md',
               '',
               os.environ['MARKER'],
           ]
@@ -1543,13 +1588,47 @@ jobs:
           tag = record['tag']
           target = record['target_sha']
           assets = record['assets']
+          repository = os.environ.get(
+              'GITHUB_REPOSITORY',
+              'EvoRiseKsa/EvoOM-Guard-m',
+          )
           names = ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS')
           lines = [
               f'# EvoOM Guard {tag}',
               '',
               f'Trusted release for commit `{target}`.',
               '',
-              '## Assets',
+              '## Status and support',
+              '',
+              'Published as a stable release. Current support status is defined '
+              f'by [SECURITY.md](https://github.com/{repository}/blob/main/SECURITY.md). '
+              'Earlier releases remain available for reproducibility.',
+              '',
+              '## Highlights',
+              '',
+              f'See the [{tag} changelog]'
+              f'(https://github.com/{repository}/blob/{tag}/CHANGELOG.md) '
+              'for the reviewed user-visible changes.',
+              '',
+              '## Upgrade impact',
+              '',
+              'Review the changelog before upgrading. Pin production automation '
+              f'to `{tag}` or its resolved commit, never to `main`.',
+              '',
+              '## Security boundary',
+              '',
+              'This release binds the exact admitted source, artifact bytes, '
+              'checksums, and publication record. It does not claim that every '
+              'accepted change is correct or safe. See the '
+              f'[assurance limits](https://github.com/{repository}/blob/{tag}/docs/ASSURANCE.md).',
+              '',
+              '## Compatibility',
+              '',
+              'The source package requires Python 3.10 or newer and is CI-tested '
+              'on Python 3.10–3.12. The standalone `evo-guard.pyz` is the '
+              'consumer executable published here.',
+              '',
+              '## Assets and verification',
               '',
               *[
                   f"- `{name}` — `sha256:{assets[name]['sha256']}` "
@@ -1563,10 +1642,19 @@ jobs:
               'sha256sum --check SHA256SUMS',
               '```',
               '',
+              '## Known limitations',
+              '',
+              f'Review [Honest scope and nonclaims]'
+              f'(https://github.com/{repository}/blob/{tag}/docs/ASSURANCE.md) '
+              'before using a verdict as an admission gate.',
+              '',
+              '## Evidence and full changelog',
+              '',
               'This title and description are mutable display metadata, not a trust root. '
               'The exact assets and their digests are authoritative for this release.',
               'A separate signed evidence ledger is frozen after publication; '
               'RAAE envelopes are intentionally not release assets.',
+              f'Full history: https://github.com/{repository}/blob/{tag}/CHANGELOG.md',
               '',
               os.environ['MARKER'],
           ]
