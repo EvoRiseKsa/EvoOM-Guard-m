@@ -1395,16 +1395,24 @@ jobs:
           )"
           printf '%s' "$body" > "$RUNNER_TEMP/release-body.md"
           cleanup_partial_draft() {
-            local failure=$?
-            local cleanup_id
+            local observed_failure=$?
+            local failure="${1:-$observed_failure}"
+            local cleanup_attempt cleanup_confirmation cleanup_get_status
+            local cleanup_http_status cleanup_id cleanup_status
             trap - ERR
             set +e
-            gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              > "$RUNNER_TEMP/cleanup-release-pages.json"
-            cleanup_id="$(
-              RELEASE_BODY="$body" python - \
-                "$record" \
-                "$RUNNER_TEMP/cleanup-release-pages.json" <<'PY'
+            cleanup_id=""
+            for cleanup_attempt in {1..10}; do
+              if ! gh api --paginate --slurp \
+                "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                > "$RUNNER_TEMP/cleanup-release-pages.json"; then
+                echo "could not enumerate releases while cleaning the incomplete draft" >&2
+                break
+              fi
+              if cleanup_id="$(
+                RELEASE_BODY="$body" python - \
+                  "$record" \
+                  "$RUNNER_TEMP/cleanup-release-pages.json" <<'PY'
           import json
           import os
           import pathlib
@@ -1413,29 +1421,110 @@ jobs:
           record_path, pages_path = map(pathlib.Path, sys.argv[1:])
           record = json.loads(record_path.read_text(encoding='utf-8'))
           pages = json.loads(pages_path.read_text(encoding='utf-8'))
-          releases = [
+          def reject(message: str) -> None:
+              print(message, file=sys.stderr)
+              raise SystemExit(2)
+
+          if not isinstance(pages, list) or not (1 <= len(pages) <= 100):
+              reject('release pagination response is outside bounds')
+          releases = []
+          for page in pages:
+              if not isinstance(page, list) or len(page) > 100:
+                  reject('release pagination page is outside bounds')
+              for release in page:
+                  if not isinstance(release, dict):
+                      reject('release pagination item is not an object')
+                  releases.append(release)
+          tag_matches = [
               release
-              for page in pages if isinstance(page, list)
-              for release in page if isinstance(release, dict)
-          ]
-          matches = [
-              release for release in releases
+              for release in releases
               if release.get('tag_name') == record['tag']
-              and release.get('name') == record['tag']
-              and release.get('target_commitish') == record['target_sha']
-              and release.get('draft') is True
-              and release.get('body') == os.environ['RELEASE_BODY']
-              and release.get('author', {}).get('login') == 'github-actions[bot]'
-              and release.get('author', {}).get('id') == 41898282
           ]
-          if len(matches) == 1 and isinstance(matches[0].get('id'), int):
-              print(matches[0]['id'])
+          if not tag_matches:
+              raise SystemExit(75)
+          if len(tag_matches) != 1:
+              reject('incomplete draft tag is not unique')
+
+          def assets_match(release: dict[str, object]) -> bool:
+              assets = release.get('assets')
+              if not isinstance(assets, list) or len(assets) != len(record['assets']):
+                  return False
+              by_name = {
+                  asset.get('name'): asset
+                  for asset in assets
+                  if isinstance(asset, dict) and isinstance(asset.get('name'), str)
+              }
+              if set(by_name) != set(record['assets']):
+                  return False
+              for name, expected in record['assets'].items():
+                  asset = by_name[name]
+                  if (
+                      asset.get('state') != 'uploaded'
+                      or asset.get('size') != expected['size']
+                      or asset.get('digest') != f"sha256:{expected['sha256']}"
+                  ):
+                      return False
+              return True
+
+          release = tag_matches[0]
+          if (
+              release.get('name') != record['tag']
+              or release.get('target_commitish') != record['target_sha']
+              or release.get('draft') is not True
+              or release.get('prerelease') is not False
+              or release.get('body') != os.environ['RELEASE_BODY']
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+              or not assets_match(release)
+          ):
+              reject('incomplete draft is not exactly attributable')
+          release_id = release.get('id')
+          if not isinstance(release_id, int) or release_id < 1:
+              reject('incomplete draft release ID is invalid')
+          print(release_id)
           PY
-            )"
+              )"; then
+                cleanup_status=0
+              else
+                cleanup_status=$?
+              fi
+              if test "$cleanup_status" -eq 0; then
+                break
+              fi
+              cleanup_id=""
+              if test "$cleanup_status" -ne 75; then
+                echo "the visible draft is not uniquely attributable; preserving it" >&2
+                break
+              fi
+              if test "$cleanup_attempt" -lt 10; then
+                sleep 2
+              fi
+            done
             if [[ "$cleanup_id" =~ ^[1-9][0-9]*$ ]]; then
-              gh api --method DELETE \
-                "repos/$GITHUB_REPOSITORY/releases/$cleanup_id" >/dev/null
-              echo "removed only the incomplete draft created by this H run: $cleanup_id" >&2
+              if ! gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/releases/$cleanup_id" >/dev/null; then
+                echo "failed to delete the uniquely attributable incomplete draft" >&2
+              else
+                cleanup_confirmation="$RUNNER_TEMP/cleanup-delete-confirmation.txt"
+                gh api --include \
+                  "repos/$GITHUB_REPOSITORY/releases/$cleanup_id" \
+                  > "$cleanup_confirmation" 2>&1
+                cleanup_get_status=$?
+                cleanup_http_status="$(
+                  awk '
+                    /^HTTP\/[0-9.]+ [0-9][0-9][0-9]( |$)/ { status = $2 }
+                    END { if (status != "") print status }
+                  ' "$cleanup_confirmation"
+                )"
+                if test "$cleanup_get_status" -ne 0 \
+                  && test "$cleanup_http_status" = 404; then
+                  echo \
+                    "removed only the incomplete draft created by this H run: $cleanup_id" \
+                    >&2
+                else
+                  echo "draft deletion could not be proven by an exact HTTP 404" >&2
+                fi
+              fi
             else
               echo "no uniquely attributable incomplete draft was safe to remove" >&2
             fi
@@ -1452,11 +1541,14 @@ jobs:
             "$RUNNER_TEMP/publication-final/evo-guard.spdx.json" \
             "$RUNNER_TEMP/publication-final/SHA256SUMS"
           prove_tag_absent after
-          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            > "$RUNNER_TEMP/created-release-pages.json"
-          release_id="$(
-            RELEASE_BODY="$body" python - \
-              "$record" "$RUNNER_TEMP/created-release-pages.json" <<'PY'
+          release_id=""
+          for discovery_attempt in {1..10}; do
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              > "$RUNNER_TEMP/created-release-pages.json"
+            if release_id="$(
+              RELEASE_BODY="$body" python - \
+                "$record" "$RUNNER_TEMP/created-release-pages.json" <<'PY'
           import json
           import os
           import pathlib
@@ -1465,18 +1557,27 @@ jobs:
           record_path, pages_path = map(pathlib.Path, sys.argv[1:])
           record = json.loads(record_path.read_text(encoding='utf-8'))
           pages = json.loads(pages_path.read_text(encoding='utf-8'))
-          if not isinstance(pages, list) or len(pages) > 100:
-              raise SystemExit('release pagination response is outside bounds')
-          releases = [
-              release
-              for page in pages if isinstance(page, list)
-              for release in page if isinstance(release, dict)
-          ]
+          def reject(message: str) -> None:
+              print(message, file=sys.stderr)
+              raise SystemExit(2)
+
+          if not isinstance(pages, list) or not (1 <= len(pages) <= 100):
+              reject('release pagination response is outside bounds')
+          releases = []
+          for page in pages:
+              if not isinstance(page, list) or len(page) > 100:
+                  reject('release pagination page is outside bounds')
+              for release in page:
+                  if not isinstance(release, dict):
+                      reject('release pagination item is not an object')
+                  releases.append(release)
           target = record['target_sha']
           tag = record['tag']
           matches = [release for release in releases if release.get('tag_name') == tag]
+          if not matches:
+              raise SystemExit(75)
           if len(matches) != 1:
-              raise SystemExit('created draft release is not unique')
+              reject('created draft release is not unique')
           release = matches[0]
           if (
               release.get('name') != tag
@@ -1487,14 +1588,14 @@ jobs:
               or release.get('author', {}).get('login') != 'github-actions[bot]'
               or release.get('author', {}).get('id') != 41898282
           ):
-              raise SystemExit('created release metadata does not match the admitted draft')
+              reject('created release metadata does not match the admitted draft')
           assets = release.get('assets')
           if not isinstance(assets, list) or {
               asset.get('name') for asset in assets if isinstance(asset, dict)
           } != set(record['assets']):
-              raise SystemExit('created release asset set is not exact')
+              reject('created release asset set is not exact')
           if len(assets) != len(record['assets']):
-              raise SystemExit('created release contains duplicate assets')
+              reject('created release contains duplicate assets')
           for asset in assets:
               name = asset['name']
               expected = record['assets'][name]
@@ -1503,13 +1604,31 @@ jobs:
                   or asset.get('size') != expected['size']
                   or asset.get('digest') != f"sha256:{expected['sha256']}"
               ):
-                  raise SystemExit(f'created release asset does not match admitted bytes: {name}')
+                  reject(f'created release asset does not match admitted bytes: {name}')
           release_id = release.get('id')
           if not isinstance(release_id, int) or release_id < 1:
-              raise SystemExit('created release ID is invalid')
+              reject('created release ID is invalid')
           print(release_id)
           PY
-          )"
+            )"; then
+              discovery_status=0
+            else
+              discovery_status=$?
+            fi
+            if test "$discovery_status" -eq 0; then
+              break
+            fi
+            release_id=""
+            if test "$discovery_status" -ne 75; then
+              echo "created draft release failed a non-retryable validation" >&2
+              cleanup_partial_draft "$discovery_status"
+            fi
+            if test "$discovery_attempt" -eq 10; then
+              echo "created draft release did not become visible within the bounded window" >&2
+              cleanup_partial_draft 1
+            fi
+            sleep 2
+          done
           [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
           printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
           trap - ERR

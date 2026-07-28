@@ -9,7 +9,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -85,31 +89,73 @@ def _literal_run_blocks(path: Path) -> list[str]:
     return blocks
 
 
+def _python_heredocs(path: Path) -> list[str]:
+    """Extract the exact Python sources embedded in literal workflow steps."""
+
+    sources: list[str] = []
+    for block_index, run in enumerate(_literal_run_blocks(path)):
+        lines = run.splitlines()
+        index = 0
+        while index < len(lines):
+            if "<<'PY'" not in lines[index]:
+                index += 1
+                continue
+            end = index + 1
+            source: list[str] = []
+            while end < len(lines) and lines[end] != "PY":
+                source.append(lines[end])
+                end += 1
+            assert end < len(lines), (
+                f"unclosed Python heredoc in {path.name} run block {block_index}"
+            )
+            sources.append("\n".join(source) + "\n")
+            index = end + 1
+    return sources
+
+
+def _working_bash() -> str | None:
+    """Return a Bash executable that can run workflow control-flow tests."""
+
+    candidates: list[Path] = []
+    discovered = shutil.which("bash")
+    if discovered:
+        candidates.append(Path(discovered))
+    git = shutil.which("git")
+    if os.name == "nt" and git:
+        git_root = Path(git).resolve().parents[1]
+        candidates.extend(
+            (git_root / "bin" / "bash.exe", git_root / "usr" / "bin" / "bash.exe")
+        )
+    for candidate in dict.fromkeys(candidates):
+        try:
+            probe = subprocess.run(
+                [str(candidate), "-c", "exit 0"],
+                check=False,
+                capture_output=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if probe.returncode == 0:
+            return str(candidate)
+    return None
+
+
+def _h_publication_run() -> str:
+    return next(
+        run
+        for run in _literal_run_blocks(H)
+        if "cleanup_partial_draft() {" in run
+        and "for discovery_attempt in {1..10}" in run
+    )
+
+
 def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
     count = 0
     for path in (F, G, H):
-        for block_index, run in enumerate(_literal_run_blocks(path)):
-            lines = run.splitlines()
-            index = 0
-            while index < len(lines):
-                if "<<'PY'" not in lines[index]:
-                    index += 1
-                    continue
-                end = index + 1
-                source: list[str] = []
-                while end < len(lines) and lines[end] != "PY":
-                    source.append(lines[end])
-                    end += 1
-                assert end < len(lines), (
-                    f"unclosed Python heredoc in {path.name} run block {block_index}"
-                )
-                compile(
-                    "\n".join(source) + "\n",
-                    f"{path.name}:run:{block_index}",
-                    "exec",
-                )
-                count += 1
-                index = end + 1
+        for source_index, source in enumerate(_python_heredocs(path)):
+            compile(source, f"{path.name}:heredoc:{source_index}", "exec")
+            count += 1
     assert count == 33
 
 
@@ -990,8 +1036,26 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "release.get('immutable') is not True" in publish
     assert "published tag does not bind the admitted target" in publish
     assert "for attempt in {1..10}" in publish
+    assert "for discovery_attempt in {1..10}" in publish
+    assert "for cleanup_attempt in {1..10}" in publish
+    assert 'if test "$discovery_status" -ne 75; then' in publish
+    assert 'if test "$cleanup_status" -ne 75; then' in publish
+    assert 'if release_id="$(' in publish
+    assert 'if cleanup_id="$(' in publish
+    assert "set +e\n            release_id=" not in publish
+    assert publish.count("raise SystemExit(75)") == 2
     assert "sleep 2" in publish
-    assert "gh release create" in publish
+    assert publish.count("gh release create") == 1
+    assert "did not become visible within the bounded window" in publish
+    assert "the visible draft is not uniquely attributable; preserving it" in publish
+    assert "release pagination page is outside bounds" in publish
+    assert "release pagination item is not an object" in publish
+    assert "incomplete draft tag is not unique" in publish
+    assert "failed to delete the uniquely attributable incomplete draft" in publish
+    assert "draft deletion could not be proven by an exact HTTP 404" in publish
+    assert "/^HTTP\\/[0-9.]+ [0-9][0-9][0-9]( |$)/" in publish
+    assert 'test "$cleanup_http_status" = 404' in publish
+    assert 'cleanup_partial_draft "$discovery_status"' in publish
     assert "--draft" in publish
     assert "H never reuses or mutates an existing ref" in publish
     assert "prove_tag_absent before" in publish
@@ -1083,6 +1147,327 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "observed != expected_tools.get(name)" in draft
     assert "observed != expected_tools.get(name)" in publish
     assert publish.count("$RUNNER_TEMP/publication-final/") >= 3
+
+
+def test_h_draft_discovery_retries_only_an_absent_release(tmp_path: Path) -> None:
+    heredocs = _python_heredocs(H)
+    discovery = next(
+        source
+        for source in heredocs
+        if "created draft release is not unique" in source
+    )
+    cleanup = next(
+        source
+        for source in heredocs
+        if "def assets_match" in source
+    )
+    target = "a" * 40
+    body = "deterministic release body"
+    record = {
+        "tag": "v4.4.0",
+        "target_sha": target,
+        "assets": {
+            "evo-guard.pyz": {"sha256": "1" * 64, "size": 11},
+            "evo-guard.spdx.json": {"sha256": "2" * 64, "size": 22},
+            "SHA256SUMS": {"sha256": "3" * 64, "size": 33},
+        },
+    }
+    release = {
+        "id": 123,
+        "tag_name": record["tag"],
+        "name": record["tag"],
+        "target_commitish": target,
+        "draft": True,
+        "prerelease": False,
+        "body": body,
+        "author": {"login": "github-actions[bot]", "id": 41898282},
+        "assets": [
+            {
+                "name": name,
+                "state": "uploaded",
+                "size": descriptor["size"],
+                "digest": f"sha256:{descriptor['sha256']}",
+            }
+            for name, descriptor in record["assets"].items()
+        ],
+    }
+    record_path = tmp_path / "record.json"
+    pages_path = tmp_path / "pages.json"
+    record_path.write_text(json.dumps(record), encoding="utf-8")
+    environment = {**os.environ, "RELEASE_BODY": body}
+
+    def invoke(source: str, pages: object) -> subprocess.CompletedProcess[str]:
+        pages_path.write_text(json.dumps(pages), encoding="utf-8")
+        return subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-",
+                str(record_path),
+                str(pages_path),
+            ],
+            input=source,
+            text=True,
+            capture_output=True,
+            check=False,
+            env=environment,
+        )
+
+    for source in (discovery, cleanup):
+        invisible = invoke(source, [[]])
+        assert invisible.returncode == 75
+        assert invisible.stdout == ""
+
+        visible = invoke(source, [[release]])
+        assert visible.returncode == 0
+        assert visible.stdout.strip() == "123"
+
+        duplicate = invoke(source, [[release, {**release, "id": 124}]])
+        assert duplicate.returncode == 2
+
+        hostile_same_tag = invoke(
+            source,
+            [[release, {**release, "id": 124, "body": "other", "target_commitish": "b" * 40}]],
+        )
+        assert hostile_same_tag.returncode == 2
+
+        wrong_body = invoke(source, [[{**release, "body": body + "\n"}]])
+        assert wrong_body.returncode == 2
+
+        wrong_asset = {
+            **release,
+            "assets": [
+                *release["assets"][:-1],
+                {**release["assets"][-1], "digest": f"sha256:{'4' * 64}"},
+            ],
+        }
+        mutated = invoke(source, [[wrong_asset]])
+        assert mutated.returncode == 2
+
+        for malformed in ([], {}, [{}], [[1]]):
+            rejected = invoke(source, malformed)
+            assert rejected.returncode == 2
+
+
+def test_h_draft_discovery_bash_control_flow_survives_err_trap(
+    tmp_path: Path,
+) -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to execute the H retry loop")
+
+    run = _h_publication_run()
+    start = run.index('release_id=""\nfor discovery_attempt in {1..10}; do')
+    end = run.index("trap - ERR", start) + len("trap - ERR")
+    retry_loop = run[start:end]
+    target = "a" * 40
+    body = "deterministic release body"
+    record = {
+        "tag": "v4.4.0",
+        "target_sha": target,
+        "assets": {
+            "evo-guard.pyz": {"sha256": "1" * 64, "size": 11},
+            "evo-guard.spdx.json": {"sha256": "2" * 64, "size": 22},
+            "SHA256SUMS": {"sha256": "3" * 64, "size": 33},
+        },
+    }
+    release = {
+        "id": 123,
+        "tag_name": record["tag"],
+        "name": record["tag"],
+        "target_commitish": target,
+        "draft": True,
+        "prerelease": False,
+        "body": body,
+        "author": {"login": "github-actions[bot]", "id": 41898282},
+        "assets": [
+            {
+                "name": name,
+                "state": "uploaded",
+                "size": descriptor["size"],
+                "digest": f"sha256:{descriptor['sha256']}",
+            }
+            for name, descriptor in record["assets"].items()
+        ],
+    }
+    (tmp_path / "record.json").write_text(json.dumps(record), encoding="utf-8")
+    (tmp_path / "valid-pages.json").write_text(
+        json.dumps([[release]]),
+        encoding="utf-8",
+    )
+    (tmp_path / "malformed-pages.json").write_text("[{}]", encoding="utf-8")
+    harness = rf"""
+set -euo pipefail
+sleep() {{ :; }}
+gh() {{
+  local attempt
+  if test -f gh-count; then
+    read -r attempt < gh-count
+  else
+    attempt=0
+  fi
+  attempt=$((attempt + 1))
+  printf '%s\n' "$attempt" > gh-count
+  case "$SCENARIO" in
+    absent_then_visible)
+      if test "$attempt" -lt 3; then
+        printf '[[]]\n'
+      else
+        cat valid-pages.json
+      fi
+      ;;
+    always_absent)
+      printf '[[]]\n'
+      ;;
+    malformed)
+      cat malformed-pages.json
+      ;;
+    *)
+      return 64
+      ;;
+  esac
+}}
+cleanup_partial_draft() {{
+  local observed_failure=$?
+  local failure="${{1:-$observed_failure}}"
+  printf 'cleanup:%s\n' "$failure" >> cleanup.log
+  exit "$failure"
+}}
+trap cleanup_partial_draft ERR
+record=record.json
+body={body!r}
+RUNNER_TEMP=.
+GITHUB_REPOSITORY=EvoRiseKsa/EvoOM-Guard-m
+GITHUB_OUTPUT=github-output
+{retry_loop}
+printf 'success:%s\n' "$release_id"
+"""
+
+    def invoke(scenario: str) -> subprocess.CompletedProcess[str]:
+        for name in ("gh-count", "cleanup.log", "github-output"):
+            path = tmp_path / name
+            if path.exists():
+                path.unlink()
+        return subprocess.run(
+            [bash, "-s"],
+            input=harness,
+            text=True,
+            capture_output=True,
+            cwd=tmp_path,
+            env={**os.environ, "SCENARIO": scenario},
+            check=False,
+            timeout=20,
+        )
+
+    eventual = invoke("absent_then_visible")
+    assert eventual.returncode == 0, eventual.stdout + eventual.stderr
+    assert (tmp_path / "gh-count").read_text(encoding="utf-8").strip() == "3"
+    assert not (tmp_path / "cleanup.log").exists()
+    assert "success:123" in eventual.stdout
+
+    malformed = invoke("malformed")
+    assert malformed.returncode != 0
+    assert (tmp_path / "gh-count").read_text(encoding="utf-8").strip() == "1"
+    assert (tmp_path / "cleanup.log").read_text(encoding="utf-8").splitlines() == [
+        "cleanup:2"
+    ]
+
+    timeout = invoke("always_absent")
+    assert timeout.returncode != 0
+    assert (tmp_path / "gh-count").read_text(encoding="utf-8").strip() == "10"
+    assert (tmp_path / "cleanup.log").read_text(encoding="utf-8").splitlines() == [
+        "cleanup:1"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected_message", "forbidden_message"),
+    (
+        (
+            "delete_fails",
+            "failed to delete the uniquely attributable incomplete draft",
+            "removed only the incomplete draft",
+        ),
+        (
+            "delete_gets_404",
+            "removed only the incomplete draft created by this H run: 123",
+            "draft deletion could not be proven",
+        ),
+        (
+            "delete_gets_500",
+            "draft deletion could not be proven by an exact HTTP 404",
+            "removed only the incomplete draft",
+        ),
+        (
+            "delete_gets_404_then_500",
+            "draft deletion could not be proven by an exact HTTP 404",
+            "removed only the incomplete draft",
+        ),
+    ),
+)
+def test_h_cleanup_claims_deletion_only_after_exact_404(
+    tmp_path: Path,
+    scenario: str,
+    expected_message: str,
+    forbidden_message: str,
+) -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to execute H cleanup")
+
+    run = _h_publication_run()
+    start = run.index("cleanup_partial_draft() {")
+    end = run.index("\n}\ntrap cleanup_partial_draft ERR", start) + len("\n}")
+    cleanup_function = run[start:end]
+    harness = rf"""
+set -u
+sleep() {{ :; }}
+python() {{
+  cat >/dev/null
+  printf '123\n'
+}}
+gh() {{
+  case " $* " in
+    *" --method DELETE "*)
+      test "$SCENARIO" != delete_fails
+      ;;
+    *" --include "*)
+      if test "$SCENARIO" = delete_gets_404; then
+        printf 'HTTP/2.0 404 Not Found\n'
+      elif test "$SCENARIO" = delete_gets_404_then_500; then
+        printf 'HTTP/2.0 404 Not Found\nHTTP/2.0 500 Internal Server Error\n'
+      else
+        printf 'HTTP/2.0 500 Internal Server Error\n'
+      fi
+      return 1
+      ;;
+    *)
+      printf '[[]]\n'
+      ;;
+  esac
+}}
+record=record.json
+body=deterministic
+RUNNER_TEMP=.
+GITHUB_REPOSITORY=EvoRiseKsa/EvoOM-Guard-m
+{cleanup_function}
+false
+cleanup_partial_draft
+"""
+    completed = subprocess.run(
+        [bash, "-s"],
+        input=harness,
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        env={**os.environ, "SCENARIO": scenario},
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 1
+    assert expected_message in completed.stderr
+    assert forbidden_message not in completed.stderr
 
 
 def test_historical_direct_release_path_is_hard_disabled() -> None:
