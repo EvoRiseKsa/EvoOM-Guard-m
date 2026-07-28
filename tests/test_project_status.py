@@ -492,6 +492,14 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_release_candidate_generated_paths_are_exactly_authorized(self) -> None:
         base_context = render_project_status.load_context(ROOT, verify_git=False)
+        development_context = replace(
+            base_context,
+            source_version="4.4.0.dev0",
+            status=replace(
+                base_context.status,
+                lifecycle="unreleased-development",
+            ),
+        )
         candidate_context = replace(
             base_context,
             source_version="4.4.0",
@@ -503,17 +511,26 @@ class ProjectStatusTests(unittest.TestCase):
         with mock.patch.object(
             render_project_status,
             "load_context",
+            return_value=development_context,
+        ):
+            development_rendered = render_project_status.build_rendered_files(
+                ROOT,
+                verify_git=False,
+            )
+        with mock.patch.object(
+            render_project_status,
+            "load_context",
             return_value=candidate_context,
         ):
-            rendered = render_project_status.build_rendered_files(
+            candidate_rendered = render_project_status.build_rendered_files(
                 ROOT,
                 verify_git=False,
             )
 
         changed = {
             path.relative_to(ROOT).as_posix()
-            for path, expected in rendered.items()
-            if path.read_bytes() != expected
+            for path, development_bytes in development_rendered.items()
+            if development_bytes != candidate_rendered[path]
         }
         self.assertEqual(
             changed,
