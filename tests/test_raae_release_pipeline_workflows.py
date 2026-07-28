@@ -209,6 +209,7 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
         "PROJECT_STATUS.json",
         "README.md",
         "ROADMAP.md",
+        "SECURITY.md",
         "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
         "docs/PROJECT_STATUS.md",
         "docs/RELEASE_STATUS.md",
@@ -378,6 +379,7 @@ def _write_scope_tree(
     *,
     version_assignment: str,
     readme: str = "base\n",
+    security: str = "base security policy\n",
     guard: str | None = None,
 ) -> None:
     package = root / "evoom_guard"
@@ -390,6 +392,11 @@ def _write_scope_tree(
         newline="\n",
     )
     (root / "README.md").write_text(readme, encoding="utf-8", newline="\n")
+    (root / "SECURITY.md").write_text(
+        security,
+        encoding="utf-8",
+        newline="\n",
+    )
     if guard is not None:
         (package / "guard.py").write_text(
             guard,
@@ -411,10 +418,12 @@ def test_release_scope_validator_accepts_only_the_exact_version_byte_change(
         candidate,
         version_assignment='__version__ = "4.4.0"',
         readme="candidate\n",
+        security="candidate security policy\n",
     )
 
     assert candidate_scope.validate_candidate_scope(base, candidate) == (
         "README.md",
+        "SECURITY.md",
         "evoom_guard/__init__.py",
     )
 
