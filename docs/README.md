@@ -13,15 +13,16 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 ## Version boundary
 
 - **Stable consumer release:** [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0).
-- **Repository source:** `4.4.0.dev0`, unreleased development.
+- **Repository source:** use the exact checked-out commit; its lifecycle is
+  reported by the status authorities below.
 - **Status authority:** [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and
   [`RELEASE_STATUS.md`](RELEASE_STATUS.md).
 
-Repository documentation follows the development source. A page may therefore
-describe behavior not available in `v4.3.0`; advanced pages state their
-implementation and evidence boundary. Use the immutable release tag or its full
-commit SHA in consumer repositories, and do not use `@main` as a production
-channel.
+Repository documentation follows the source tree and may describe behavior
+absent from the latest ledger-recorded consumer release. Advanced pages state
+their implementation and evidence boundary. Use the immutable release tag or
+its full commit SHA in consumer repositories, and do not use `@main` as a
+production channel.
 
 ## Pick a path
 

@@ -30,11 +30,11 @@ retained evidence say so.
 
 ## [Unreleased]
 
-## [4.4.0] — unreleased development
+## [4.4.0] — pending immutable publication
 
-The entries in this section describe the current development source. They are not
-evidence of a `v4.4.0` consumer release, a completed A-through-H publication
-round, or hostile-code production readiness.
+The entries in this section describe the `4.4.0` source line. Their presence is
+not evidence of a published consumer release, a completed A-through-H
+publication round, or hostile-code production readiness.
 
 ### Added
 
@@ -86,14 +86,15 @@ round, or hostile-code production readiness.
   into a recursive claim.
 - Added production-boundary, operations, independent-evaluation, fuzzing,
   telemetry, operating-profile, and conformance documentation.
-- Added a stdlib-only deterministic SPDX 2.3 generator for the next release:
+- Added a stdlib-only deterministic SPDX 2.3 generator for the `4.4.0` source
+  line:
   one package, every regular zipapp member with SHA-1/SHA-256, an SPDX package
   verification code, the exact embedded license text, and exact
   `DESCRIBES`/`CONTAINS` relationships.
 - Vendored the unmodified official SPDX 2.3 JSON Schema and license as
   test-only material with pinned upstream commit, Git blob, and byte-size
   verification.
-- The future release contract carries exactly `evo-guard.pyz`,
+- The `v4.4.0` release contract carries exactly `evo-guard.pyz`,
   `evo-guard.spdx.json`, and `SHA256SUMS`; the two generated-file digests are
   filename ordered and tag CI byte-compares all three published assets.
 - A separate clean attestation job in the default-branch release workflow
@@ -189,9 +190,9 @@ round, or hostile-code production readiness.
   dependency graph. Host-subprocess execution is not filesystem isolation:
   checkpoints prove identity only when observed and can miss a temporary
   mutation restored before the next observation.
-- The source tree remains an unreleased `4.4.0.dev0` development snapshot. It
-  is not yet a production claim for hostile code and has not completed a release-bound
-  A-through-H chain for the final commit.
+- The `4.4.0` source line is not a production claim for hostile code. At this
+  source commit, no release-bound A-through-H evidence for a final published
+  commit is recorded.
 - Current local evidence does not substitute for a third-party held-out corpus,
   an independent launcher/runtime attestation, multi-OS toolchain conformance,
   or release-bound gVisor/VM evidence.

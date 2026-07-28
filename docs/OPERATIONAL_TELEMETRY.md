@@ -1,9 +1,8 @@
 # Local operational telemetry
 
-> **Availability:** this utility belongs to the current unreleased
-> `4.4.0.dev0` development source. It is not included in the latest immutable
-> consumer release, `v4.3.0`; do not treat this document as a released
-> `v4.3.0` interface.
+> **Availability:** this utility belongs to the `4.4.0` source line and is not
+> part of `v4.3.0`. Confirm an immutable `v4.4.0` release before treating it as
+> a consumer interface.
 
 `tools/telemetry/aggregate_verdicts.py` produces a small, local operational
 summary from EvoOM Guard verdict-record JSON files. It is stdlib-only and has no

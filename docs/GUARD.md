@@ -449,14 +449,15 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
-**Current unreleased 4.4.0.dev0 development source only:** for a named,
-fail-closed combination of these controls, use
+**`4.4.0` source-line contract:** for a named, fail-closed combination of these
+controls, use
 `--operating-profile local|protected|hostile`. The profile is included in the
 effective policy and its digest only when explicitly selected. `protected`
 requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
 network; `hostile` requires gVisor and an active memory limit. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
-custody rules.
+custody rules. This contract is not part of `v4.3.0`; confirm an immutable
+`v4.4.0` release before consumer use.
 
 The default judge runs the candidate in the **same process** as the report writer,
 so deliberate in-process source can forge the report (`report_integrity:
