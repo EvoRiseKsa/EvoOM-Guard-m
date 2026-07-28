@@ -908,6 +908,22 @@ def test_g_verifies_both_envelopes_and_required_negative_matrix() -> None:
     assert "verify_slsa_receipt evo-guard.spdx.json spdx-provenance" in g
     assert "verify_spdx_attestation.py" in g
     assert "'attestation_evidence': {" in g
+    for source, destination in (
+        ("evo-guard.pyz", "tampered-artifact.pyz"),
+        ("evo-guard.spdx.json", "tampered-sbom.json"),
+        ("evo-guard.pyz.raae", "tampered.raae"),
+    ):
+        assert (
+            "install -m 0600 \\\n"
+            f'            "/run/evoguard-raae-detached-approved/inputs/{source}" \\\n'
+            f'            "$RUNNER_TEMP/{destination}"'
+            in g
+        )
+        assert (
+            f'cp "/run/evoguard-raae-detached-approved/inputs/{source}" '
+            f'"$RUNNER_TEMP/{destination}"'
+            not in g
+        )
 
 
 def test_h_reverifies_then_writes_only_an_exact_draft() -> None:

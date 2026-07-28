@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest stable and supported consumer release.
-- Source `4.4.0`: release candidate; not a consumer release.
+- Source `4.4.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -143,6 +143,10 @@ publication round, or hostile-code production readiness.
   their closed names through the privileged boundary. It no longer relies on
   shell glob expansion against the provider-owned `0700` output directory,
   which prevented F from retaining already-verified evidence.
+- Detached artifact verification now stages its three deliberately mutated
+  negative-test fixtures with an explicit owner-writable mode. The immutable
+  root-owned F inputs remain read-only while G can exercise the intended seven
+  rejection cases instead of failing during fixture preparation.
 
 ### Changed
 

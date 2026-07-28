@@ -266,7 +266,7 @@ _WORKFLOW_SPECS = (
         "detached-verify",
         _ARTIFACT_GATE,
         ("detached-verify",),
-        "a31b9268a993ca2d865cbc4061015c891169fa2a35c473402176ccb40600983b",
+        "d1e4e5296472074f60b4d19ae96be0e2540e52bf34ea7f0fa7044eed8ae5f360",
     ),
     _WorkflowSpec(
         "H",
