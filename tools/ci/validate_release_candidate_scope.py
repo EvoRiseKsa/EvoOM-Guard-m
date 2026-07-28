@@ -40,6 +40,7 @@ ALLOWED_PATHS = (
     "PROJECT_STATUS.json",
     "README.md",
     "ROADMAP.md",
+    "SECURITY.md",
     "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
     "docs/PROJECT_STATUS.md",
     "docs/RELEASE_STATUS.md",
