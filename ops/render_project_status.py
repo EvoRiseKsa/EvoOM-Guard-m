@@ -281,7 +281,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "8d661a5de6d56596e063534f8da3cfde457613ca1017f3e1482961e26f517eee",
+        "38dd7dddaf5def7f7c7a3f952697537d3d5c6d4e7ba14ad73313bdbdb4689675",
     ),
 )
 _LEGACY_FALSE_GATE = (
