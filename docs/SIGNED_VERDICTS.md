@@ -69,7 +69,7 @@ before retrying. If the error says invalidation could not be proven, treat every
 created output as sensitive and incomplete until it is inspected and removed.
 Descriptor-close failures are bounded. A descriptor number is never probed or
 retried after `close()` reports an error because the runtime may already have
-released and reused that number. Before the close attempt, EvoGuard makes a
+released and reused that number. Before the close attempt, EvoOM Guard makes a
 safe duplicate. A `KeypairCloseError` or `OutputReservationCloseError` with
 `descriptor_retained=True` owns only such proven-safe duplicate(s); call
 `release_retained_descriptors()` and inspect its Boolean result rather than

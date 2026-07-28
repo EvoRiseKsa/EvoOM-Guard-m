@@ -44,7 +44,7 @@ input, invalid UTF-8 license text, and non-finite JSON. It writes through a
 same-directory temporary regular file and atomically replaces the destination
 only after serialization and `fsync`.
 
-The release byte contract uses EvoGuard's local canonical JSON encoding:
+The release byte contract uses EvoOM Guard's local canonical JSON encoding:
 UTF-8, keys sorted lexicographically, no insignificant whitespace, non-ASCII
 characters left unescaped, non-finite numbers forbidden, and one trailing LF.
 This is not a claim of RFC 8785 conformance. The exact encoding lets admission

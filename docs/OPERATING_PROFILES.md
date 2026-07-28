@@ -7,10 +7,16 @@
 
 # Operating profiles
 
-`--operating-profile` gives a Guard run an explicit trust and runtime contract.
-It is optional: omitting it preserves the historical CLI behavior, effective
-policy payload, and policy digest exactly. When selected, the profile is stored
-in `attestation.effective_policy.operating_profile` and covered by
+> **Availability:** operating profiles are an unreleased `4.4.0.dev0`
+> development-source feature. The latest immutable consumer release, `v4.3.0`,
+> does not recognize `--operating-profile` and does not emit schema `1.12`.
+> Presence in this repository is not evidence of publication.
+
+In the current development source, `--operating-profile` gives a Guard run an
+explicit trust and runtime contract. It is optional: omitting it preserves the
+historical CLI behavior, effective policy payload, and policy digest exactly.
+When selected, the profile is stored in
+`attestation.effective_policy.operating_profile` and covered by
 `policy_sha256`; that record declares schema `1.12`. Unprofiled records continue
 to use the frozen schema `1.11`.
 

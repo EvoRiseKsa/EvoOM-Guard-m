@@ -1,7 +1,12 @@
 # Local operational telemetry
 
+> **Availability:** this utility belongs to the current unreleased
+> `4.4.0.dev0` development source. It is not included in the latest immutable
+> consumer release, `v4.3.0`; do not treat this document as a released
+> `v4.3.0` interface.
+
 `tools/telemetry/aggregate_verdicts.py` produces a small, local operational
-summary from EvoGuard verdict-record JSON files. It is stdlib-only and has no
+summary from EvoOM Guard verdict-record JSON files. It is stdlib-only and has no
 network or upload path. The current tool accepts frozen legacy records on
 schema `1.11` and profile-bearing records on schema `1.12`. A record that puts
 `operating_profile` in a `1.11` policy is rejected.

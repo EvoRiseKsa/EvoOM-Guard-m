@@ -7,11 +7,15 @@
 
 # Repository protection is part of the gate
 
+> **Audience:** repository operators. This public document states the controls
+> the product cannot enforce from inside a pull request; live credentials,
+> incident contacts, and environment-specific secrets do not belong here.
+
 This document states a limit that a composite GitHub Action cannot solve from
 inside its own code:
 
-> EvoGuard cannot judge a pull request if that pull request prevents the
-> EvoGuard workflow from starting.
+> EvoOM Guard cannot judge a pull request if that pull request prevents the
+> EvoOM Guard workflow from starting.
 
 A pull request can edit, delete, disable, or replace a workflow file in its
 candidate merge result. The Action's base-policy handling protects the judge
@@ -22,7 +26,7 @@ implementation problem.
 
 ## What the Action does protect
 
-When the intended `pull_request` workflow starts, EvoGuard resolves the event
+When the intended `pull_request` workflow starts, EvoOM Guard resolves the event
 base SHA, materializes `.evoguard.json` from that base revision, and takes the
 active verifier pack from that same trusted revision. Candidate workflow `with:`
 values cannot weaken those judge settings. See [`GUARD.md`](GUARD.md) and
@@ -34,7 +38,7 @@ repository's merge rule immutable. Configure those separately.
 ## Required controls
 
 1. **Require the gate outside the PR.** Use a GitHub ruleset or branch
-   protection so the EvoGuard job/check must succeed before merging. Prefer an
+   protection so the EvoOM Guard job/check must succeed before merging. Prefer an
    organization-managed **required workflow** when your GitHub plan supports
    it; it is stronger than relying on a workflow file the contributor can edit.
    Otherwise require the exact, protected job/status check and confirm with a

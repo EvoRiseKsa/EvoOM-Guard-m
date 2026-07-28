@@ -220,6 +220,77 @@ class DocsVersionDriftTests(unittest.TestCase):
                     hits.append(f"{path.relative_to(ROOT)}:{lineno}: {line.strip()}")
         self.assertEqual(hits, [])
 
+    def test_development_only_guides_state_the_consumer_boundary(self) -> None:
+        source_version, published_version, state = _release_status()
+        self.assertEqual(state, "pre-release")
+        paths = (
+            ROOT / "docs" / "BLACKBOX.md",
+            ROOT / "docs" / "INDEPENDENT_EVALUATION.md",
+            ROOT / "docs" / "OPERATING_PROFILES.md",
+            ROOT / "docs" / "RECORD_VERIFICATION.md",
+            ROOT / "docs" / "OPERATIONAL_TELEMETRY.md",
+        )
+        for path in paths:
+            text = path.read_text(encoding="utf-8")
+            relative = path.relative_to(ROOT)
+            self.assertIn(
+                source_version,
+                text,
+                f"{relative} must identify the development source version",
+            )
+            self.assertIn(
+                f"v{published_version}",
+                text,
+                f"{relative} must identify the latest consumer release",
+            )
+            self.assertRegex(
+                text,
+                re.compile(r"unreleased|not (?:included|available|a consumer)", re.I),
+                f"{relative} must not present a development feature as released",
+            )
+
+    def test_stable_getting_started_does_not_teach_unreleased_profile_flags(self) -> None:
+        text = (ROOT / "docs" / "START_HERE.md").read_text(encoding="utf-8")
+        source_version, _published_version, state = _release_status()
+        self.assertEqual(state, "pre-release")
+        executable_blocks = re.findall(r"```(?:bash|sh|shell)?\s*\n(.*?)```", text, re.S)
+        self.assertFalse(
+            any("--operating-profile" in block for block in executable_blocks),
+            "stable getting-started commands must not teach a development-only flag",
+        )
+        lines = text.splitlines()
+        for lineno, line in enumerate(lines):
+            if "--operating-profile" not in line:
+                continue
+            context = " ".join(lines[max(0, lineno - 2) : lineno + 3])
+            self.assertIn(source_version, context)
+            self.assertRegex(context, re.compile(r"unreleased|not available", re.I))
+        self.assertIn("unreleased development", text)
+        self.assertIn(source_version, text)
+
+    def test_current_product_name_does_not_drift_to_the_historical_brand(self) -> None:
+        historical_files = {
+            ROOT / "docs" / "PROOFS.md",
+            ROOT / "docs" / "history" / "CHANGELOG-v1.md",
+        }
+        hits: list[str] = []
+        paths = [ROOT / "README.md"] + sorted((ROOT / "docs").rglob("*.md"))
+        for path in paths:
+            if path in historical_files:
+                continue
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if "EvoGuard" not in line:
+                    continue
+                if re.search(r"\bv[1-3]\.\d+\.\d+\b", line) is not None:
+                    continue
+                hits.append(f"{path.relative_to(ROOT)}:{lineno}: {line.strip()}")
+        self.assertEqual(
+            hits,
+            [],
+            "use 'EvoOM Guard' for the current product; reserve 'EvoGuard' "
+            "for explicit historical records:\n" + "\n".join(hits),
+        )
+
     def test_public_license_documents_use_the_canonical_v4_model(self) -> None:
         title = "EVORISE SOURCE-AVAILABLE LICENSE"
         obsolete = (

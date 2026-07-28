@@ -289,17 +289,16 @@ owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy
 tests, so no ratchet count is changed merely to record the new module.
 
-The next CLI slice moves only declarative `argparse` construction into the
-dependency-free `cli.parser` owner. `cli.__init__` retains the public
-`build_parser` facade and injects its current immutable-ref validator and four
-argument-group helpers on every call, preserving the established monkeypatch
-surface. A frozen parser snapshot covers all 41 subcommands, every help page,
-representative defaults, immutable-ref rejection, and live helper lookup.
-Parser dispatch and command families not yet extracted remain in the
-compatibility facade. Extracted command families use stdlib-only typed owners;
-their public `cmd_*` facades retain dependency lookup timing and inject all
-effects. These same-package moves create no new ratchet revision or
-baseline-ceiling claim.
+Declarative `argparse` construction now lives in the dependency-free
+`cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and
+injects its immutable-ref validator and argument-group helpers on every call,
+preserving the established monkeypatch surface. A frozen parser snapshot
+covers all 41 subcommands, every help page, representative defaults,
+immutable-ref rejection, and live helper lookup. All 41 command handlers now
+delegate through typed command-family owners; their public `cmd_*` facades
+retain dependency lookup timing and inject effects. Parser dispatch and the
+public compatibility surface remain in `cli.__init__`. These same-package
+moves create no new ratchet revision or baseline-ceiling claim.
 
 ## Acceptance rules
 

@@ -7,7 +7,7 @@
 
 # Feature mode — adding new tests safely (`allow_new_tests`)
 
-By default EvoGuard rejects a candidate change to a path recognized as a test
+By default EvoOM Guard rejects a candidate change to a path recognized as a test
 before the suite runs. That protected-path pre-gate supports the bounded claim
 that the patch did not rewrite a recognized existing test; it does not prove
 complete harness discovery. The side effect is that a PR which **legitimately
@@ -53,7 +53,7 @@ residual risk:
   (and a new `*.test.ts` is collected) when the suite runs, so its module/
   collection-time code runs alongside the real tests. A *hostile* new test could,
   in principle, monkeypatch or shadow a module so other tests pass falsely — i.e.
-  mask a broken source change. EvoGuard does **not** sandbox this.
+  mask a broken source change. EvoOM Guard does **not** sandbox this.
 - What feature mode still guarantees at path admission: the candidate patch
   cannot edit/delete an **existing** recognized test or another built-in/
   explicitly declared protected path. This is not a transitive dependency or

@@ -5,7 +5,7 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# EvoGuard — architecture
+# EvoOM Guard — architecture
 
 A map of the codebase for anyone reading or extending it. The core is **stdlib-only**;
 the whole gate is a thin, model-free composition of a policy-bound judge and a
@@ -13,7 +13,7 @@ blast-radius scorer.
 
 ## One-paragraph mental model
 
-Given a code change, EvoGuard applies it to a **throwaway copy** of the repo, runs
+Given a code change, EvoOM Guard applies it to a **throwaway copy** of the repo, runs
 the repo's **own test suite** in that copy, and reads the verdict from a **JUnit
 report the judge owns** (a path *outside* the copy) plus the **process exit code** —
 never from the candidate's stdout. Before running anything, it **rejects** a
@@ -88,7 +88,7 @@ canonical evidence envelope against external key and run-context inputs.
 | `finalizer_derivation.py` | No-checkout raw-Git reader and canonical `EVOGUARD_FINALIZER_GIT_BINDINGS_V1` derivation for candidate text, ordered deletions, effective policy, and verifier-pack identity. It compares those results with an untrusted verdict before finalizer signing. |
 | `artifact_admission.py` | Narrow detached-signature `.eab` records that bind one regular file's SHA-256 and size to an externally verified Trusted Finalizer `ALLOW`. It deliberately does not implement build provenance, OCI, publication, or deployment claims. |
 | `artifact_digest_admission.py` | Experimental opt-in V2 records, released in v3.8.0, that bind one exact generic or OCI manifest-or-index SHA-256 digest plus opaque provenance-reference bytes to an externally verified Trusted Finalizer `ALLOW`. It does not parse or verify provenance, OCI registry state, build, publication, or deployment semantics. |
-| `github_attestation.py` | Experimental protected-boundary adapter, released in v3.8.0, that freezes one artifact, invokes a constrained `gh attestation verify` pinned to one repository, signer workflow/digest, source ref/digest, GitHub Actions OIDC issuer, SLSA predicate, and hosted runners, retains a canonical receipt/raw output, and can bind that receipt through V2. GitHub CLI performs cryptographic attestation verification; EvoGuard does not parse untrusted predicate data or independently recreate GitHub/Sigstore verification. |
+| `github_attestation.py` | Experimental protected-boundary adapter, released in v3.8.0, that freezes one artifact, invokes a constrained `gh attestation verify` pinned to one repository, signer workflow/digest, source ref/digest, GitHub Actions OIDC issuer, SLSA predicate, and hosted runners, retains a canonical receipt/raw output, and can bind that receipt through V2. GitHub CLI performs cryptographic attestation verification; EvoOM Guard does not parse untrusted predicate data or independently recreate GitHub/Sigstore verification. |
 | `schemas/` | Packaged JSON Schema 2020-12 contracts for verdict records, evidence contexts/manifests, and artifact bindings; shipped in both wheel and zipapp artifacts. |
 | `signing.py` | Optional Ed25519 byte/file signatures and stable DER-SPKI key identities. `cryptography` remains a lazy `sign` extra, not a core dependency. |
 | `cli/` | The `evo-guard` command package. `cli/__init__.py` remains the public compatibility facade and dispatch surface. Typed stdlib-only owners now contain the orchestration for all 41 CLI handlers: `guard`, initialization/workflow generation, signing-key generation, diagnostic/version/pack inspection, the Agent Change family, the Trusted Finalizer family, the record family (`verify-verdict`, `verify-record`, `bundle-evidence`, `finalize-record`, `verify-bundle`), Artifact Admission V1, Artifact Digest Admission V2, the GitHub attestation receipt create/retained-verify/fresh-reverify trio, the GitHub attestation admission seal/retained-verify pair, the four-command Release Source Finalizer family, the three-command non-admitting producer-receipt family, the Release Source Admission V2 seal/offline-verify pair, and the Release Artifact Admission online-seal/detached-verify pair. The facade retains dependency lookup timing, trusted `.evoguard.json` loading, flag/config precedence, and shared GitHub policy/isolation helpers. |

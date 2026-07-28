@@ -969,6 +969,28 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "group: evoguard-release-publication" in whole
     assert "release.get('name') != record['tag']" in publish
     assert "mutable display metadata, not a trust root" in publish
+    for heading in (
+        "## Status and support",
+        "## Highlights",
+        "## Upgrade impact",
+        "## Security boundary",
+        "## Compatibility",
+        "## Assets and verification",
+        "## Known limitations",
+        "## Evidence and full changelog",
+    ):
+        assert publish.count(heading) == 2
+    release_body_scripts = re.findall(
+        r'MARKER="\$marker" python - "\$record" <<\'PY\'\n'
+        r"(?P<script>.*?)\n"
+        r"\s+PY",
+        publish,
+        re.DOTALL,
+    )
+    assert len(release_body_scripts) == 2
+    assert release_body_scripts[0] == release_body_scripts[1]
+    assert publish.count("never to `main`") == 2
+    assert publish.count("docs/ASSURANCE.md") == 4
     assert "asset.get('digest') != f\"sha256:{expected['sha256']}\"" in publish
     assert "RELEASE_ID: ${{ steps.create.outputs.release_id }}" in publish
     assert "gh release edit" not in whole

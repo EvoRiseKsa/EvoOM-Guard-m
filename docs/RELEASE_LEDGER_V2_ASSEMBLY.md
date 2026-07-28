@@ -1,5 +1,9 @@
 # Release Ledger v2 offline assembly
 
+> **Audience:** release maintainers and evidence auditors. Consumer verification
+> starts with [`RELEASE_LEDGER_V2.md`](RELEASE_LEDGER_V2.md); this page covers
+> the privileged assembly procedure.
+
 `tools/ci/assemble_release_ledger_v2.py` is a deterministic convenience tool,
 not an evidence collector and not a release authority. It accepts:
 

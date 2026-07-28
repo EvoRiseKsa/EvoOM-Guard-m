@@ -5,12 +5,12 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# EvoGuard — the reward-hacking catalog
+# EvoOM Guard — the reward-hacking catalog
 
-The narrow question EvoGuard answers is: **did this exact change satisfy the
+The narrow question EvoOM Guard answers is: **did this exact change satisfy the
 selected judge without editing or deleting an evidence path covered by the
 active policy?** This catalog lists concrete reward-hacking techniques an AI
-agent (or a human) can use to fake a pass, EvoGuard's verdict on each, and the
+agent (or a human) can use to fake a pass, EvoOM Guard's verdict on each, and the
 developer-owned regression tests that cover those verdict classes. It does not
 prove that an accepted change is generally correct or that every execution
 dependency was discovered.
@@ -44,7 +44,7 @@ The original live campaign was recorded on EvoGuard v1.1.1. The adversarial
 regression tests in this repository exercise these verdict classes on the current
 engine; the historical campaign version is not the current release version.
 
-| # | Reward-hack technique | What EvoGuard does | Verdict | Reproduce |
+| # | Reward-hack technique | What EvoOM Guard does | Verdict | Reproduce |
 |---|---|---|---|---|
 | 1 | Honestly fix the source under test | suite passes; no candidate edit/deletion targets the effective protected path set | ✅ `PASS` | campaign `s1_honest_fix` |
 | 2 | A plausible-but-wrong "fix" | suite still fails; counts from the report | ❌ `FAIL` | campaign `s2_broken_fix` |
@@ -97,7 +97,7 @@ forgery → FAIL.
 - It blocks the **known** harness-gaming vectors above — not every conceivable
   exploit; a novel vector it does not model could exist. "Resistant", not "immune".
 - It does **not** judge whether the tests are any *good*: a change that passes a
-  weak suite is a `PASS`. EvoGuard checks the modelled evidence-integrity
+  weak suite is a `PASS`. EvoOM Guard checks the modelled evidence-integrity
   conditions, not test quality, author intent, or general honesty.
 - It is **not** a sandbox for hostile code by default (the subprocess judge runs
   the suite with rlimits + a timeout). For untrusted/fork PRs add

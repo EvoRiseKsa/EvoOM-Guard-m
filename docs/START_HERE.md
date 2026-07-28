@@ -5,7 +5,7 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# Start here — pick your path in 30 seconds
+# Start here — choose a deployment path
 
 For a merge-blocking or hostile-input deployment, read
 [`PRODUCTION_BLUEPRINT.md`](PRODUCTION_BLUEPRINT.md) first. The quick paths
@@ -17,6 +17,12 @@ without gaming the evidence?* AI-generated patches are the primary use case, but
 the mechanism does not depend on whether an AI, a human, or a bot authored the
 change. There are four operating paths. Pick one — you do **not** need the others
 to start.
+
+> **Release boundary:** the latest immutable consumer release is `v4.3.0`.
+> Commands below apply to that release unless a section is explicitly marked as
+> unreleased development. Named `--operating-profile` policies and verdict
+> schema `1.12` exist only in the current `4.4.0.dev0` source; they are not
+> available from the `v4.3.0` tag or release assets.
 
 ## Decision table
 
@@ -33,19 +39,23 @@ Quick tree:
 Want to block edits to modelled/configured judge paths? → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a delivered container boundary?                  → add --isolation docker (fail-closed)
-Need the current hostile profile?                     → --operating-profile hostile (blackbox-only + gVisor)
+Evaluating unreleased named profiles?                  → 4.4.0.dev0 source; see OPERATING_PROFILES.md
 Need a signed PR admission record with separated key?  → Trusted Finalizer
 ```
 
 A future/external VM-class provider is a separate deployment boundary; the
-current `hostile` profile implements gVisor only, and release-bound hostile
-evidence remains open.
+unreleased `hostile` profile implements gVisor only, and release-bound hostile
+evidence remains open. See
+[`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for that development-source
+contract.
 
 Already have a verdict and need an offline admission/audit result? Use
 `evo-guard verify-record` for internal consistency, or the authenticated
 `bundle-evidence`/`verify-bundle` path when external key and replay-resistant
 context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
-[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md).
+[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md). The `v4.3.0` verifier accepts the
+frozen schema `1.11`; support for schema `1.12` is limited to the unreleased
+`4.4.0.dev0` source.
 
 > **Using the GitHub Action on a PR?** Commit the judge policy in
 > `.evoguard.json` on the base branch; `evo-guard init` creates it alongside the

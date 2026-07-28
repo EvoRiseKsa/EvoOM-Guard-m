@@ -5,7 +5,7 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# EvoGuard — evidence-bound change verification
+# EvoOM Guard — evidence-bound change verification
 
 > A CI gate that evaluates one explicit policy question about an untrusted code change —
 > produced by a human, bot, supplier, or the motivating case, an **AI agent**:
@@ -18,7 +18,7 @@ Frontier agents have been observed **editing or skipping their own tests** to ma
 a suite pass, and self-modifying coding agents have **faked test logs** (documented
 in the public literature). A patch-review gate designed to block the documented
 harness-editing paths is therefore a real need as agent-authored PRs become common.
-EvoGuard addresses those modelled paths: the candidate is judged by the
+EvoOM Guard addresses those modelled paths: the candidate is judged by the
 **repository's own tests**, the verdict is read from a **judge-owned JUnit
 report + the process exit code** (never scraped from the patch's stdout), and a
 candidate edit or deletion targeting a conventionally recognized judge path, an
@@ -66,7 +66,7 @@ code.
 > consumer release recorded by the protected source tree. For strict CI,
 > pin commit `b8c61315a22741415c75e4e8828feb60c0ad5149` rather than a tag.
 
-EvoGuard is not published to PyPI. Obtain it from this repository.
+EvoOM Guard is not published to PyPI. Obtain it from this repository.
 
 **GitHub Action:**
 
@@ -98,7 +98,7 @@ tag is the named consumer release. Do not use `@main` for a gate you depend on.
 git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "python -m pytest -q"
 evo-guard guard --diff pr.diff --no-config --report report.md --json guard.json
 
-# Verify a candidate in EvoGuard's edit-block format against a repo:
+# Verify a candidate in EvoOM Guard's edit-block format against a repo:
 evo-guard guard path/to/repo --patch candidate.txt
 echo "<<<FILE: src/x.py>>> … <<<END FILE>>>" | evo-guard guard path/to/repo --patch -
 
@@ -115,7 +115,7 @@ otherwise — drop it straight into any CI step.
   works straight from your tree — no second checkout, no worktree. Needs `git`
   (or `patch`) on the runner.
 - **`--base/--head`** diffs two explicit trees into the block format.
-- **`--patch`** takes the EvoGuard edit-block format directly.
+- **`--patch`** takes the EvoOM Guard edit-block format directly.
 
 Added/modified files are verified, and **deletions are gated too** (since schema
 1.1): deleting an effective-policy protected path is `REJECTED` exactly like

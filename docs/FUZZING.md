@@ -1,6 +1,6 @@
 # Fuzzing
 
-EvoGuard has two coverage-guided Python targets under `tools/fuzz/`:
+EvoOM Guard has two coverage-guided Python targets under `tools/fuzz/`:
 
 - `strict_json_fuzzer` exercises the bounded strict-JSON decoder used by
   evidence consumers and checks semantic round trips for every accepted input.

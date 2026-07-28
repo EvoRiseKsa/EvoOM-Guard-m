@@ -7,12 +7,12 @@
 # Example workflow — copy to `.github/workflows/evoguard.yml` in the repo you
 # want to protect. Commit a `.evoguard.json` at the repository root too, for
 # example: { "test_command": ["python", "-m", "pytest", "-q"] }.
-# On pull_request, EvoGuard reads that policy from the verified base SHA. Do NOT
+# On pull_request, EvoOM Guard reads that policy from the verified base SHA. Do NOT
 # put test-command, verifier-pack, black-box, isolation, or other judge settings
 # in `with:`: the candidate can edit this workflow, so those values are ignored.
 # Protect this workflow with a required workflow/status check and review policy;
 # a gate cannot run if a PR removes or replaces its own workflow.
-name: EvoGuard
+name: EvoOM Guard
 
 on:
   pull_request:
@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0            # Guard needs the base commit to diff against
           persist-credentials: false
 
-      - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # published release (@<sha> strictest, @main latest)
+      - uses: EvoRiseKsa/EvoOM-Guard-m@v4.3.0   # immutable release; use its full commit SHA for the strictest pin
         with:
           comment: "false"          # explicit for older releases; use the job summary
           fail-on: "any-non-pass"   # required for pull_request security gating

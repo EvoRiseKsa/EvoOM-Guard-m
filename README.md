@@ -13,278 +13,25 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: Source-available](https://img.shields.io/badge/license-source--available-lightgrey)](LICENSE)
 
-**Policy- and evidence-bound verification for untrusted software changes — with
+**Policy- and evidence-bound verification for untrusted software changes, with
 AI-generated patches as the primary use case.**
 
-Guard asks one deliberately narrow question: did this change satisfy the
-selected judge without editing or deleting an evidence path covered by the
-active policy? It does not infer who wrote the change. A `PASS` means only that
-the change passed the recorded judge, policy, and delivered-assurance boundary;
-it is never a proof of complete harness discovery, continuous immutability,
-software correctness, or security.
+EvoOM Guard asks one narrow question: did this change satisfy the selected
+judge without editing or deleting an evidence path protected by the active
+policy? It runs the candidate in a throwaway copy, reports a stable verdict,
+and can emit machine-readable evidence for CI and offline verification.
 
-> **New here? → [`docs/START_HERE.md`](docs/START_HERE.md)** picks your path in 30
-> seconds (Basic Guard · Black-box CLI · + container isolation), with a decision
-> table and a complete runnable example. Start there instead of reading this whole page.
->
-> **See a frozen reproducible demonstration snapshot → [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo)**:
-> an honest fix passes, test tampering is rejected, a fake `9999 passed` on stdout
-> still fails, and black-box report forgery is caught. That repository records a
-> v3.5.2 scenario; it is not an independent assessment and does not validate the
-> v3.7.0 raw-Git Trusted Finalizer.
->
-> **See it judge a real historical bug → [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md)**:
-> charset-normalizer's real `TypeError`-on-comparison bug (≤3.3.2, fixed upstream in
-> 3.4.0) — the genuine fix earns `PASS` with `repair_effect: demonstrated`, the
-> test-silencing variant is `REJECTED` before a single test runs, and the do-nothing
-> patch `FAIL`s. Reconstructable on a compatible Python environment from
-> byte-pinned PyPI sdists; exact cross-environment reproducibility is not claimed.
+It does not infer who wrote a change. A `PASS` is not proof of complete
+correctness or security; it means only that the selected judge passed within
+the recorded policy and assurance boundary.
 
-> **Trusted Finalizer status.** v3.6.0 introduced the split, v3.6.1 repaired
-> its unprivileged judge runtime, and v3.7.0 independently derives raw-Git
-> candidate, deletion, policy, and verifier-pack bindings before key access. It is not
-> an enabled merge gate in this repository. Install it in a protected consumer
-> repository and complete the documented Round 1 operational audit before making
-> it a required check. The current implementation-ready workflow copies target
-> the immutable v4.3.0 zipapp; the example pair and completed pilot remain
-> frozen at v3.7.0. Read
-> [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) and
-> [`docs/ASSURANCE.md`](docs/ASSURANCE.md) before relying on it.
-
-> **Release-source boundary.** A PR decision does not prove a later squash-merge
-> commit or release artifact.  The new, separate
-> [`docs/RELEASE_SOURCE_FINALIZER.md`](docs/RELEASE_SOURCE_FINALIZER.md)
-> contract begins the protected-`main` evidence path without falsely reusing
-> PR source semantics.  V1 is deliberately `DENY`-only: it is a source-binding
-> library contract today, not an enabled release gate or artifact-admission
-> claim for this repository.  The follow-on
-> [`Authenticated Producer Receipt`](docs/AUTHENTICATED_PRODUCER_RECEIPT.md)
-> adds a non-admitting, provider-attestable receipt and reference workflow
-> topology. The published **v4.1.0 source** implements the separate
-> [`Release Source Admission V2`](docs/RELEASE_SOURCE_ADMISSION_V2.md) `ALLOW`
-> contract with signed A/B/C bindings, signed externally verified Git/`gh`
-> digest pins, mandatory provider isolation, and five distinct key domains. The
-> release is the bootstrap implementation and did not admit its own source. A
-> later disposable
-> [V2 pilot](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot)
-> completed one exact protected-main source-only round using that immutable
-> runtime. Its `ALLOW` is bound only to the recorded source and workflow
-> attempts; it is same-owner operational evidence, not artifact/publication
-> authorization, a production gate, or independent review.
-> The published `v4.2.0` source also implements the distinct
-> [`Release Artifact Admission V1`](docs/RELEASE_ARTIFACT_ADMISSION_V1.md)
-> contract. It binds one verified `.rsae` source `ALLOW`, one exact external
-> artifact, protected E/F workflow identities and raw-Git blobs, a freshly
-> constrained GitHub Artifact Attestation result, and a sixth signing-key
-> domain. The immutable `v4.2.0` bootstrap release did not exercise that
-> contract. A later public same-owner, non-production
-> [protected-main pilot](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/blob/a1937ea599204751deebcbcadbd416092d8f46f9/docs/ROUND2_EVIDENCE.md)
-> completed one exact E/F/G round with the v4.2.0 runtime: protected F returned
-> `SEALED/ALLOW`, detached G returned `VERIFIED/ALLOW` without a fresh provider
-> call, and five retained-evidence mutations were rejected. The admitted object
-> was only a 290-byte JSON descriptor—not an EvoOM release asset, package,
-> image, or deployed runtime. The result does not authorize publication or
-> deployment, prove reproducibility, establish a production gate, or constitute
-> independent review.
-> The public [receipt pilot](https://github.com/EvoRiseKsa/evoom-guard-receipt-pilot)
-> is deliberately sanitized and disabled at baseline. It has recorded one
-> clean A-to-B-to-C evidence-chain round plus failed-A and moved-`main`
-> controls, followed by wrong-workflow, wrong-run-attempt, and altered-receipt
-> negative controls. None of those historical observations is V2 admission or
-> release evidence.
-
-> **Agent Change Admission v4.3.0.** The published
-> [`Agent Change Admission V1`](docs/AGENT_CHANGE_ADMISSION.md) separates an
-> untrusted agent proposal from signed scope, independently re-derived raw-Git
-> facts, and a Trusted Finalizer `ALLOW`. The archived public
-> [same-owner pilot](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot)
-> completed one permitted round, rejected an additional tracked
-> `dist/hidden.txt` path before signing, and replayed the unchanged permitted
-> base/head pair with fresh run-bound signatures. The exact evidence is in
-> [`PILOT_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/blob/main/PILOT_RESULTS.md).
-> Publication does not make it a required or production gate,
-> hostile-runner proof, single-use authorization, or independent review.
-
-> **Governance and contribution.** The public core is source-available and
-> deliberately reviewable; signing keys, customer policy, held-out evaluation
-> data, and future operational-control-plane inputs are not public source
-> inputs. Read [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) and
-> [`CONTRIBUTING.md`](CONTRIBUTING.md) for the review boundary. The designated
-> second account is controlled by the same human maintainer and provides
-> technical separation of roles only, not independent review.
-
-> **Licensing and release status.** Copyright © 2026 EvoRise Tech. The author
-> and original creator is Mana Alharbi; EvoRise Tech is the Licensor. The
-> project is source-available under the **EvoRise Source-Available License
-> 1.0**, not open source. Machine-readable lifecycle state is maintained in
-> [`PROJECT_STATUS.json`](PROJECT_STATUS.json); the human pages
-> [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) and
-> [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) are generated views. See
-> [LICENSE](LICENSE) and
-> [COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md).
-
-> **Repository map and current evidence.** See
-> [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for the exact role and
-> version boundary of the core, demo, evaluation record, finalizer pilots,
-> receipt pilot, Release Source V2 pilot, and the published release-artifact
-> admission contract; the distinction between public code and private
-> operational assets; and the claims the current evidence does and does not
-> support.
-
-AI coding agents have learned an ugly trick: when they can't fix the code, they
-"fix" the tests. Delete the failing assertion, add a pytest `addopts = "-k
-passing"` deselect, print a fake `9999 passed` to stdout, or drop a
-`sitecustomize.py` that forces exit 0. The suite goes green; nothing was fixed.
-
-Guard closes that hole with two mechanisms:
-
-1. **Effective-policy protected paths are rejected before execution** (a robust,
-   scoped guarantee). Guard rejects a candidate edit — or **deletion** — that
-   targets a conventionally recognized test/config/CI/auto-exec path, or an exact
-   regular repository file explicitly listed by trusted policy in
-   `harness_inputs`, **or an ancestor of that file**. Candidate path admission
-   also rejects platform-ambiguous spellings and, for already-existing paths,
-   checks filesystem object identity against the declared input and its
-   ancestors where the host can compare them. This is a scoped classification
-   and checkpoint boundary: it does not claim complete harness discovery or
-   continuous runtime immutability.
-   `package.json` is dual-purpose, so instead of blocking it wholesale, its
-   recognized test-harness fields are restored from the pristine original.
-2. **The result is judge-owned, not scraped from stdout.** Tests run against a
-   throwaway copy, and the verdict is read from a **judge-owned JUnit report +
-   the process exit code** — never from stdout. A patch that prints `9999
-   passed` moves nothing, and an exit-code ⟷ report disagreement is its own
-   **`TAMPERED`** verdict. This blocks the modelled reward-hack classes exercised
-   by the adversarial tests (edits/deletions to covered paths, recognized config
-   deselects, and stdout forgery), with evidence in `tests/` and the
-   [catalogue](docs/REWARD_HACKING_CATALOG.md)).
-
-Guard does **not** parse `test_command`, `sh -c`, package scripts, imports,
-`source` statements, Make includes, globs, or dynamic loading to infer a complete
-dependency graph. A trusted base policy must explicitly list every
-repository-owned wrapper/helper it relies on. Apart from the documented narrow
-base-workflow local-Action directory rule, no transitive helper discovery is
-claimed.
-
-> **Honest boundary — read this.** By default, mechanism 2 is *not* unforgeable.
-> Your tests and the report writer run in the **same process** as the code under
-> test, so a patch that deliberately writes process-level forgery into source (an
-> `atexit` hook that overwrites the report and calls `os._exit(0)`) *can* fake a
-> `PASS`. Guard ships an adversarial test that proves this, and every verdict
-> carries an **`assurance` profile** naming its `report_integrity` as
-> `same_process_candidate_writable`. The container isolation modes protect the
-> host, **not** the report. `--blackbox` adds a judge-owned external channel in
-> which the same forgery is caught; use `--blackbox-only` when every required
-> report channel must be external. The default composite still includes the
-> weaker repo-native channel.
-> See [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
-
-### Add an external report channel: `--blackbox`
-
-For targets with a process/protocol boundary (a CLI, an HTTP service, a
-DB-backed program), the black-box phase is produced by **its own pytest over
-judge-owned tests that never import your code**. This defeats the demonstrated
-in-process `atexit`/`os._exit` report channel. Host-subprocess mode still shares
-an OS identity/filesystem and is not same-UID tamper-proof; require delivered
-container/gVisor isolation when that threat is in scope:
-
-```bash
-evo-guard guard ./repo --patch candidate.txt \
-    --verifier-pack examples/blackbox-pack --blackbox
-```
-
-The pack invokes the candidate across a process boundary (via `$EVOGUARD_EXEC`,
-which runs it under the delivered isolation) and asserts on its outputs.
-For `--blackbox-only`, that completed judge yields
-`report_integrity: external_process_isolated`; in the default composite mode the
-overall profile honestly reports the weaker repo-native report channel. The
-black-box runner receives the explicit base `harness_inputs`: it captures their
-trusted-source identity before candidate materialization, compares the
-materialized copy before candidate or pack code runs, and compares it again
-after candidate/pack execution. If the first trusted-source binding cannot be
-established, Guard stops before materialization with `ERROR` /
-`assurance_requirement_not_met`; that failure is not attributed to the
-candidate. Only a materialized-copy mismatch or persistent post-execution drift
-is `TAMPERED` / `candidate_tree_changed_during_run`, including under
-`--blackbox-only`. That option skips only the repo-native setup/suite
-checkpoints. The
-*identical* `atexit`+`os._exit` forgery that
-fakes a `PASS` under the default judge yields the correct `FAIL` (covered in
-`tests/test_blackbox.py`). A protected-harness refusal is decided earlier: it
-reports `static_gate`, `candidate_isolation: not_run`, and
-`report_integrity: not_applicable_static_gate` instead of claiming that the
-requested judge or container ran. Runtime preflight failures are separately
-`not_started` with `report_integrity: not_applicable_not_run`; a suite/judge
-timeout is `started_incomplete`, has `test_command_ran: true`, and may still have
-`verdict_source: null`. Three properties make a completed execution verdict a
-scoped, evidence-backed contract rather than a requested label:
-
-- **Boundary evidence is observed, not requested.** `candidate_isolation`
-  changes from `not_run` only after the judge observes a trusted-pack call to
-  `$EVOGUARD_EXEC` (and, for containers, a runtime-written CID). This proves the
-  launcher/runtime path was invoked; the trusted pack remains responsible for
-  checking the command's semantics and outputs. A missing daemon/image fails
-  before execution; a pack that never invokes the launcher is refused as
-  `candidate_not_exercised` even without a floor — never a vacuous `PASS` or a
-  result mislabelled `docker`. A pending verdict is also refused as
-  `runtime_cleanup_failed` if the judge process group or a candidate container
-  cannot be proven absent after execution. In a delivered container the
-  candidate tree is mounted **read-only** and the pack is not mounted into it.
-  The conformance kit can record and offline replay-check the listed
-  mount, network, identity, resource, and cleanup controls. A release claim
-  still requires retaining a result bound to the final commit and runtime.
-  These probes do not prove the absence of a container escape or make Docker a
-  hostile-code boundary; no release-bound gVisor result is currently claimed.
-- **The verdict is composite.** By default the repo's own suite **and** the
-  external pack must both pass — a green pack can never mask an internal
-  regression. Pure-CLI/service targets with no in-repo suite pass
-  `--blackbox-only`.
-- **Fail-closed policy.** `--require-report-integrity` / `--require-candidate-isolation`
-  turn the `assurance` profile into a contract: a completed `PASS` weaker than
-  required is refused, never silently downgraded. The floor does not erase a
-  more specific static, preflight, timeout/incomplete, pack, tamper, or isolation
-  cause.
-
-Pack assurance is evidence-based too: `configured`, observed `present`,
-`integrity`, `identity_verified`, pack `execution_state`, delivered `secrecy`,
-and observed `snapshot_sha256` distinguish missing, invalid, mismatched,
-accepted-before-execution, verified pre/post or read-only, and changed snapshots.
-A configured path alone is not reported as a verified pack.
-
-See [`docs/BLACKBOX.md`](docs/BLACKBOX.md) and [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
-
-Structured, judge-owned verdicts (`junit+exit`) cover **eight direct runners**:
-pytest, `node --test`, vitest, jest, gotestsum (Go), rspec (Ruby), mocha, and
-Maven/Surefire (Java), plus a Shell wrapper adapter for a supported final
-runner segment. The nine adapter owners now have a schema-versioned offline
-conformance kit; this is not yet a published multi-OS real-runner matrix. Any
-other test command is graded by exit code — still never by stdout. See
-[`docs/RUNNER_CONFORMANCE.md`](docs/RUNNER_CONFORMANCE.md).
-
-The **core runtime has zero Python dependencies** — 3.10+ standard library only
-(plus `git`/`patch` on the host). Ed25519 signing and diff-coverage are optional
-extras (`cryptography`, `coverage`).
-
-**Release-artifact scope.** The zipapp builder fixes archive entry order,
-timestamps, and modes, so repeated builds are deterministic when the source
-bytes and Python/OS/ZIP-zlib toolchain are equivalent. This is **not** a claim
-that independent Windows and Linux builds are bit-identical; checkout line
-endings and platform/toolchain details can legitimately change the SHA-256.
-Release reruns have a separate, stronger immutability rule: an asset already
-attached to a tag is byte-compared and is never replaced—different bytes make
-the workflow fail closed.
-
-The protected source now prepares an external deterministic SPDX 2.3 member
-inventory for the next release that uses the updated workflow. It records every
-regular zipapp member and its hashes; it is not dependency/vulnerability
-scanning, VEX, a security verdict, or cross-platform reproducibility proof. See
-[`docs/SBOM.md`](docs/SBOM.md).
+> **Naming:** EvoOM Guard is the product, `evo-guard` is the CLI, and
+> `evoom_guard` is the Python package.
 
 ## Release channel
 
-An exact source version becomes a consumer release only after its immutable
-GitHub Release is published. **Before copying any versioned pin, confirm that
-exact tag exists in [GitHub Releases](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases).**
+Use an immutable release tag or full commit SHA in consumer repositories. Do
+not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
 Source version `4.4.0.dev0` is **unreleased development** and is not a consumer release.
@@ -304,26 +51,14 @@ records publication by this pipeline. An admitted release is contracted to exact
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
 
-Under the license shipped with that
-exact v4 release, commercial, production, required-CI/merge-gate,
-redistribution, hosted, and managed-service use require a separate commercial
-agreement. Do not use `@main` as a production release channel. A release
-requires successful validation on the protected default branch, reviewed
-publication, and Marketplace publication where applicable. Do not cut a release
-merely to exercise artifact attestation.
+The repository documentation follows the development source and may describe
+features not present in `v4.3.0`. Each advanced document states its version and
+evidence boundary; confirm that boundary before copying a command.
 
-<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
-Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
-build-artifact attestation. The validated `v4.3.0` ledger records build provenance whose
-subject is `evo-guard.pyz` under `.github/workflows/release.yml`. Its release
-attestation separately binds `evo-guard.pyz`, `SHA256SUMS`; it records no SBOM release
-asset. Provider attestations are provenance evidence, not an EvoGuard verdict,
-artifact-admission decision, or proof of deployment. See
-[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the
-bounded procedure.
-<!-- END EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
+## Install and run
 
-## Try it in two minutes
+EvoOM Guard is not distributed through PyPI. Install the recorded release
+directly from GitHub:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 ```bash
@@ -335,34 +70,39 @@ git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "pyth
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 
-You get a PR-ready Markdown report and a CI-friendly exit code:
+For a no-install path, download `evo-guard.pyz` and `SHA256SUMS` from the
+[`v4.3.0` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0),
+verify the checksum, and run `python -I evo-guard.pyz ...`.
+
+The command never edits the checked working tree: it applies the diff to a
+throwaway copy and runs the selected judge there.
+
+## Read the verdict
 
 | Verdict | Meaning | Exit |
-|---|---|---|
-| ✅ `PASS` | the selected repository judge passed, and the patch did not edit or delete a path covered by the active harness policy | 0 |
-| ⛔ `REJECTED` | the patch edits or deletes an effective-policy protected path — blocked before the suite runs. A *policy trip*, not proof of intent: a legitimate config/dependency/wrapper change can trip it too — review it through a trusted policy-maintenance path | 1 |
-| ❌ `FAIL` | the patch applied and the suite ran, but tests fail | 1 |
-| 🚨 `TAMPERED` | the exit code and JUnit disagree, or an identity accepted from the trusted source later differs during materialization/execution | 1 |
-| ⚠️ `ERROR` | verification could not safely complete — a stale/unsafe/binary diff, an initial trusted-input binding failure, a timeout, a setup failure, required isolation unavailable, or an unmet `--require-*` assurance floor | 1 |
+|---|---|---:|
+| `PASS` | The selected judge passed and no effective-policy protected path was edited or deleted. | 0 |
+| `REJECTED` | The change tripped the protected-path policy before the suite ran. This is a policy result, not proof of intent. | 1 |
+| `FAIL` | The change was applied and the selected judge failed. | 1 |
+| `TAMPERED` | Recorded execution facts disagree, or a trusted identity changed during judgment. | 1 |
+| `ERROR` | Verification could not complete safely, including invalid input, setup failure, timeout, unavailable isolation, or an unmet assurance floor. | 1 |
 
-> **Security policy:** built-in tests, test/build configuration, CI, and judge
-> auto-exec files cannot be exempted with `--allow`. Review those changes in a
-> separate trusted policy-maintenance path.
+Every run can write JSON with a stable `schema_version`, fixed `reason_code`,
+execution state, policy identity, and assurance profile:
 
-Every run can also emit a machine-readable JSON record (`--json`) with a stable
-`schema_version` and a fixed `reason_code` for the verdict's cause, plus an
-explicit `execution_state` (`static_gate`, `not_started`,
-`started_incomplete`, or `completed`) and `execution_phase`. In schemas 1.11
-and 1.12, `test_command_ran` means the test/judge process started, so it remains
-true on a test/judge timeout even when no clean `verdict_source` exists. Requested policy
-remains in the attestation; no-run isolation is reported as `not_run`. It can
-also emit a
-SARIF 2.1.0 report (`--sarif`) for GitHub code scanning — see
-[`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md).
+```bash
+git diff main...HEAD |
+  evo-guard guard --diff - --no-config \
+    --test-command "python -m pytest -q" \
+    --json verdict.json --report verdict.md --sarif verdict.sarif
+```
 
-## In CI (GitHub Actions)
+Integrations should use `verdict`, `reason_code`, and the documented schema,
+not parse terminal text. See [JSON contract](docs/JSON_SCHEMA.md).
 
-The fastest path — scaffold the workflow from inside your repo:
+## Use it in GitHub Actions
+
+Generate a workflow and a base-owned `.evoguard.json` policy:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 ```bash
@@ -370,19 +110,11 @@ evo-guard init --ref v4.3.0 --test-command "python -m pytest -q"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 
-This writes two files when they do not already exist: the workflow and the
-base-owned judge policy `.evoguard.json`. Commit **both**. The policy, not the
-pull-request workflow, is where the test command and every setting that shapes
-the judge belong.
+Review and commit both generated files. On pull requests, the Action derives
+the policy from the verified base revision rather than candidate-controlled
+workflow inputs.
 
-`init --private-evoguard` is disabled fail-closed. A same-repository PR can
-modify its workflow definition, so putting a private-repository PAT in another
-job of that workflow does not create a trust boundary. For a private EvoGuard
-repository, use GitHub's private-action repository access with a reviewed pin,
-or publish a prebuilt internal artifact from a separately protected workflow
-that never evaluates candidate-controlled YAML.
-
-or drop the composite action in yourself:
+Alternatively, add the Action directly:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ACTION_PIN -->
 ```yaml
@@ -401,440 +133,127 @@ steps:
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_ACTION_PIN -->
 
-The candidate job intentionally has no PR-write permission. When execution
-reaches Guard report generation, that report is written to the job summary.
-Credential/comment preflight refusals can stop earlier and therefore produce no
-Guard report. If PR comments are required, transfer a bounded report artifact
-to a separate metadata-only job that never checks out or executes candidate
-code; do not add `pull-requests: write` to this job.
+Protect the workflow with repository rules, required checks, and appropriate
+review controls. A candidate job should not receive secrets or PR-write
+permissions. If comments are required, use a separate metadata-only job that
+never checks out or executes candidate code.
 
-> **Next/unreleased Action bootstrap:** current development builds the
-> stdlib-only `evo-guard.pyz` directly from the selected Action revision and
-> runs it with `python -I`; bootstrap does not invoke a package resolver, build
-> backend, or PyPI. This is not a `v4.3.0` claim and is not a whole-Action
-> zero-network claim: interpreter setup, a missing-base fetch, separately
-> authorized metadata reporting, and consumer setup/tests remain separate
-> boundaries. Optional
-> `coverage.py` must already exist in the selected Python 3.12 environment;
-> missing advisory measurement stays explicit and a configured minimum fails
-> closed.
+## Choose an assurance path
 
-For a `pull_request`, the Action materializes `.evoguard.json` from the verified
-base SHA and passes that file as the judge policy. Put policy in that file, for
-example:
+| Need | Path | Start with |
+|---|---|---|
+| Block edits to modeled test, configuration, CI, and judge paths | Basic integrity gate | [`GUARD.md`](docs/GUARD.md) |
+| Add organization-owned checks outside the candidate tree | Verifier pack | [`VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) |
+| Judge a CLI through an external report channel | Black-box, preferably `--blackbox-only` | [`BLACKBOX.md`](docs/BLACKBOX.md) |
+| Add a delivered container or gVisor boundary | Isolated execution | [`BLACKBOX.md`](docs/BLACKBOX.md#boundary-evidence-is-observed-never-inferred-from-policy) |
+| Evaluate named assurance profiles in unreleased source | Development-only profiles | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
+| Produce portable, authenticated evidence | Signed verdict or evidence bundle | [`SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) |
+| Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
+
+For an adoption decision, start with the
+[production blueprint](docs/PRODUCTION_BLUEPRINT.md). Advanced release-source,
+artifact-admission, and publication contracts are separate boundaries; none
+should be treated as proof of another.
+
+## Minimal trusted policy
+
+Store judge-shaping settings in the protected base version of
+`.evoguard.json`:
 
 ```json
 {
   "test_command": ["python", "-m", "pytest", "-q"],
   "timeout": 180,
-  "strict_harness": true
+  "strict_harness": true,
+  "harness_inputs": ["ci/run-tests.sh"]
 }
 ```
 
-For a repository-local command wrapper, list every judge-owned file explicitly:
+EvoOM Guard recognizes conventional test, build, CI, configuration, and
+auto-execution paths. It does not discover a complete transitive harness graph.
+Declare repository-owned wrappers and helpers explicitly as `harness_inputs`.
+Built-in protected paths and declared harness inputs cannot be waived by
+`allow`; legitimate changes require a separately trusted policy-maintenance
+path.
 
-```json
-{
-  "test_command": ["sh", "ci/run-tests.sh"],
-  "harness_inputs": [
-    "ci/lib/assertions.sh",
-    "ci/run-tests.sh"
-  ]
-}
-```
+## Honest limits
 
-`harness_inputs` accepts exact, normalized, repository-relative regular files
-from the trusted base only—no directories, globs, absolute paths, `..`, symlinks,
-or reparse points. Its cross-platform canonical form also rejects Windows
-trailing-dot/space segments, reserved device names, and DOS 8.3-style `~N`
-spellings. Candidate edits/deletions to a declared file or any ancestor are
-non-exemptible by `allow`; already-existing candidate paths are additionally
-compared by filesystem object identity where supported. The path list, not the
-file bytes by itself, is included in `policy_sha256`. On a pull request the
-Marketplace Action takes this field only from the verified base
-`.evoguard.json`; it has no candidate-controlled Action input. Guard never
-infers the wrapper's helpers transitively, so list each repository-owned helper
-the judge relies on. For a dynamic or impractically large dependency closure,
-use a digest-pinned external verifier pack rather than claiming that the
-repository command graph was discovered.
+- `PASS` is evidence about the selected judge, policy, candidate, and delivered
+  assurance profile. It is not merge authority or proof of correctness,
+  security, deployment, authorship, or complete harness discovery.
+- The repository-native test channel shares a process with candidate code. A
+  deliberate process-level report forgery can fake that channel. Use a
+  meaningful judge-owned verifier pack with `--blackbox-only` to remove it.
+- Host-subprocess execution shares an OS identity and filesystem. Container or
+  gVisor modes add a boundary only when the verdict records that the requested
+  isolation was actually delivered.
+- The base policy, workflow, verifier pack, keys, and final admission step must
+  remain outside candidate control. A tool cannot compensate for an
+  unprotected deployment.
+- Published same-owner demonstrations and pilots are reproducible operational
+  evidence, not independent validation. See the
+  [independent evaluation protocol](docs/INDEPENDENT_EVALUATION.md).
+- Source admission, artifact admission, publication, and deployment are
+  distinct decisions. Evidence for one does not silently authorize another.
 
-`strict_harness` is an opt-in CI profile for repositories that prefer a
-separate maintenance lane for toolchain changes. It makes dependency, lock, and
-compiler/project manifests immutable to an untrusted patch and refuses an
-exit-only or zero-test success: the judge must obtain a non-empty structured
-JUnit result. Every host command in that profile also requires positive POSIX
-process-group cleanup capability; an unsupported host-subprocess lane refuses
-the request before launching candidate code. Docker/gVisor lanes use their
-separate container-absence proof. Leave the profile off when ordinary feature
-PRs are expected to update those manifests. Process-group cleanup is lifecycle
-containment only: it is not filesystem/network isolation or report-forgery
-resistance.
+The full threat and evidence model is in
+[Assurance](docs/ASSURANCE.md), [Reward-hacking catalog](docs/REWARD_HACKING_CATALOG.md),
+and [Repository protection](docs/REPOSITORY_PROTECTION.md).
 
-The PR workflow is candidate-controlled, so its `with:` values are **not** a
-trusted policy source. In PR mode the Action ignores judge-shaping overrides
-such as `test-command`, `protected`, `allow-new-tests`, isolation, black-box,
-coverage, timeout, and assurance settings; conflicting verifier-pack inputs
-fail closed. The legacy `comment` input defaults to false and `true` is refused
-before candidate execution because a composite action cannot separate the
-candidate from its job token. The step always requires
-`fail-on: any-non-pass`, so `FAIL`, `TAMPERED`, and `ERROR` cannot turn green.
+## Documentation
 
-For a verifier pack on a PR, place both settings in the base policy:
+Use the [documentation index](docs/README.md) to choose a path by audience.
 
-```json
-{
-  "test_command": ["python", "-m", "pytest", "-q"],
-  "verifier_pack": "security/evoguard-pack",
-  "expect_verifier_pack_sha256": "<64-hex-EVOGUARD_PACK_V2-digest>"
-}
-```
-
-The path must be repository-relative. The Action archives that directory from
-the verified base commit into a temporary trusted location before candidate code
-runs; it does not judge a pack from the candidate checkout. A missing pin,
-invalid path, or conflicting PR input is an error, not a fallback.
-
-The report also lands in the job summary. The remaining Action inputs are useful
-for trusted non-PR invocations, but are not the policy mechanism for PR gates.
-See [`action.yml`](action.yml), [`docs/ADOPTION.md`](docs/ADOPTION.md), and
-[`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
-
-> **Deployment prerequisite.** This Action can only protect a PR after its
-> workflow has started. A candidate that removes or replaces the workflow can
-> prevent it from running. Protect the workflow with your repository ruleset or
-> branch protection (required workflow/status check and appropriate review or
-> CODEOWNERS controls). Do not run a candidate checkout with secrets under
-> `pull_request_target` as a substitute for that protection.
-
-## Other input shapes & useful flags
-
-```bash
-# Two checkouts (what the Action does internally):
-evo-guard guard --base ./base-checkout --head ./head-checkout --test-command "python -m pytest -q"
-
-# An agent's edit blocks (<<<FILE: path>>> ... <<<END FILE>>> /
-# <<<PATCH: path>>> <<<SEARCH>>> ... <<<REPLACE>>> ... <<<END PATCH>>>):
-evo-guard guard ./repo --patch candidate.txt
-
-# Useful flags:
-#   --protected "src/billing/*"   extra globs the patch may not touch
-#   --allow "docs/generated.txt"  allowlist for extra --protected globs only
-#   --allow-new-tests             feature mode: NEW test files allowed; edits to
-#                                 existing tests/config stay rejected
-#   --isolation docker|gvisor     run the suite in a network-less, read-only
-#                                 container (needs --docker-image + a daemon)
-#   --verifier-pack /secure/pack  org-owned tests the patch cannot modify
-#   --expect-verifier-pack-sha256 <64-hex>  require its EVOGUARD_PACK_V2 identity
-#   --blackbox                    external isolated judge (needs --verifier-pack):
-#                                 verdict from the judge's own process; composite
-#                                 with the repo suite. --blackbox-only skips it.
-#   --require-report-integrity external_process_isolated   fail-closed floor;
-#                                 requires --blackbox-only because the default
-#                                 composite includes the weaker repo-native channel
-#   --require-candidate-isolation docker                   fail-closed floor
-#   --timeout 300                 per-run suite timeout (seconds)
-#   --json out.json --report out.md --sarif out.sarif
-
-# Environment checkup / workflow scaffolding / version:
-evo-guard doctor
-evo-guard init --ref vX.Y.Z --test-command "npm test"
-evo-guard version
-```
-
-> **Trusted policy source.** For `--base/--head`, Guard reads `.evoguard.json`
-> from the baseline. For `--diff`, it requires an external trusted `--config`
-> or explicit `--no-config`; it never reads policy from the candidate checkout.
-> The Marketplace Action materializes policy from the verified PR base.
-
-Project defaults can live in a `.evoguard.json` at the repo root (itself a
-protected file — a patch cannot edit its own gate). Python API:
-`from evoom_guard.guard import guard, guard_from_diff, render_report`.
-
-### Setup and container phases in 3.4
-
-`setup_command` prepares the throwaway candidate tree before judgment. With
-`--isolation docker` or `gvisor`, setup runs **inside the resolved container
-image by default**, with the workspace writable; the repo suite and a configured
-verifier-pack phase then run in separate containers with the candidate tree
-**read-only**. The same resolved image ID is used for all phases. The default
-network is `none`, so bake dependencies into the image, use an available cache,
-or deliberately configure a network.
-
-Setup is checked before and after: changing a non-exempt pre-existing path is an
-error. Conventional new dependency/build outputs are allowed, and repositories
-can declare additional exceptions with `setup_output_globs` in
-`.evoguard.json`. Those globs are **trusted policy**: a broad pattern excludes
-matching paths from the general fidelity check, so keep them narrow and review
-the protected config. They never exempt a path declared in `harness_inputs` or
-any ancestor of that path. Guard captures the declared files' trusted-source
-byte/type/mode snapshot before candidate materialization and compares the
-materialized tree before execution. Repo-native runs repeat the comparison at
-their setup/suite checkpoints; black-box runs, including `--blackbox-only`,
-repeat it after candidate/pack execution. Failure to establish the initial
-trusted-source snapshot is `ERROR` / `assurance_requirement_not_met`, before
-materialization and without attributing the failure to the candidate. Only a
-later materialized or post-execution difference is `TAMPERED` /
-`candidate_tree_changed_during_run`. For a repo-native verifier pack, the
-post-setup runtime identity also includes paths otherwise allowed during setup.
-
-An identity snapshot proves equality only at its documented observation points.
-Host-subprocess mode is not filesystem isolation: it detects persistent drift
-at those checkpoints but cannot prove that a process did not mutate and restore
-bytes between them. Docker/gVisor can additionally deliver read-only candidate
-mounts when the recorded run satisfies that profile.
-`trust_setup_on_host: true` is a compatibility escape hatch
-for container modes; it is recorded and reduces effective candidate isolation
-to `subprocess`.
-
-## Signed verdicts and portable evidence
-
-The acknowledgement flag and key-output failure contract in this section
-describe the current, **unreleased 4.4.0.dev0 development source**. They are
-not claims about the ledger-recorded `v4.3.0` consumer release; follow the
-documentation at the exact version you install.
-
-With the `sign` extra, the judge can sign every JSON verdict with an Ed25519
-key, making post-run record modification detectable — a `FAIL` cannot be quietly
-edited into a `PASS` without invalidating the signature:
-
-```bash
-evo-guard keygen                                   # once: the judge's identity
-evo-guard guard ... --json v.json --sign-key evoguard-signing.pem \
-  --acknowledge-local-key-exposure
-evo-guard verify-verdict v.json --pub evoguard-signing.pub   # offline; exit 0/1/2
-```
-
-Failed two-file key generation never unlinks final paths and can leave
-zero-length reservations by design; inspect and remove them before retrying.
-See the key-generation failure contract in
-[`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
-
-Direct signing is a trusted-local compatibility mode: the acknowledgement says
-candidate-controlled code may share the signing key's OS identity. It is not
-safe key separation for hostile PRs. Use the
-[`Trusted Finalizer`](docs/TRUSTED_FINALIZER.md) for untrusted candidates. See
-[`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md).
-
-For one machine-consumable result that combines canonical bytes, an external
-trust key, replay-resistant repository/run/revision context, and supported
-schema-1.11/1.12 semantic verification, create an authenticated evidence bundle
-in a trusted post-run finalizer:
-
-```bash
-evo-guard verify-record v.json
-evo-guard bundle-evidence v.json --out evidence.evb \
-  --context context.json --sign-key evoguard-signing.pem
-evo-guard verify-bundle evidence.evb \
-  --trusted-pub evoguard-signing.pub --expect-context expected-context.json
-```
-
-`VERIFIED` authenticates the enclosed record and its exact context; it does not
-mean the enclosed verdict is `PASS` or that all software behavior is correct.
-A trusted consumer may add `--require-pass` when it must reject authenticated
-non-PASS records. That flag alone is not merge or deployment authorization: it
-does not separate authorities or prove an SCM admission/deployment event.
-This generic `bundle-evidence` path is a provenance primitive, not a safe
-pull-request finalizer: do not feed it an artifact from a candidate job and
-then sign it in `workflow_run`. For PR admission, use the split
-[`Trusted Finalizer`](docs/TRUSTED_FINALIZER.md) path.
-The private key must never be available to the candidate job. See
-[`docs/EVIDENCE_BUNDLES.md`](docs/EVIDENCE_BUNDLES.md) and
-[`docs/RECORD_VERIFICATION.md`](docs/RECORD_VERIFICATION.md).
-
-For a deliberately narrow relation between a single regular-file digest and an
-externally verified **pre-merge** finalizer `ALLOW`, use
-[`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md). It is not build
-provenance, release proof, OCI verification, publication authorization, or
-deployment attestation.
-
-## Evidence beyond "the tests passed"
-
-**Baseline differential evidence** (`--baseline-evidence`, v3.3): the suite also
-runs on the **pristine base** — `repair_effect: demonstrated` only when the base
-*fails* and the candidate *passes* under the same judge. "All tests pass on
-head" alone never showed the change fixed anything. `--require-demonstrated-fix`
-turns it into a gate for agent "fix" PRs (an undemonstrated PASS becomes FAIL,
-`fix_not_demonstrated`); a gate the selected judge cannot enforce is an ERROR
-(`policy_requirement_unsupported`), never silently dropped.
-
-A green suite is one signal, not a proof. Guard can attach two additional
-pieces of evidence to every verdict:
-
-> **Version boundary:** published `v4.0.2` and later include the coverage options,
-> fail-closed unavailable-measurement behavior, isolated collector startup,
-> exact-ratio comparison, conservative physical-line denominator,
-> setup/resource forwarding, and the explicit candidate-writable caveat
-> described below.
-
-```bash
-# Which changed lines did the suite actually EXECUTE? (one extra suite run and,
-# when configured, one extra setup; needs the 'cov' extra). Evidence by default;
-# --min-diff-coverage makes it a gate:
-evo-guard guard . --diff - --no-config --diff-coverage --min-diff-coverage 80
-
-# Judge-owned tests the PATCH CANNOT MODIFY (org invariants, integration
-# checks) — injected at judgment time and run as a separate mandatory phase:
-evo-guard pack-doctor /secure/org-pack
-# Copy the reported "pack sha256" into this protected policy/CI value:
-evo-guard guard . --diff - --no-config --verifier-pack /secure/org-pack \
-  --expect-verifier-pack-sha256 "$PACK_SHA256"
-```
-
-- A `PASS` whose changed lines were never executed is a **hollow pass** — the
-  report shows exactly which lines the suite never reached, and the optional
-  threshold flips it to `FAIL` (`diff_coverage_below_threshold`). If a required
-  measurement cannot be produced, the result is `ERROR`
-  (`assurance_requirement_not_met`), never `PASS`. The collector is imported in
-  isolated Python mode and ignores repository `.coveragerc`/`pyproject.toml`
-  coverage settings, so repository modules/config cannot replace the selected
-  collector or reconfigure it at startup. Trusted runner prefixes/interpreters
-  are preserved, and a configured setup is replayed under the same
-  fidelity/output policy; POSIX
-  CPU/address-space limits are forwarded to the extra processes. A changed
-  physical code line needs direct coverage evidence to count as executed;
-  source `pragma: no cover` exclusions and unknown or continuation lines count
-  as missed instead of disappearing from the denominator. Lexer failure is
-  conservative, and docstring filtering removes the string expression—not
-  other code sharing its line. The threshold uses the exact `executed/total`
-  ratio; the one-decimal `percent` is display only. Structured base/head file
-  content—not serialized marker parsing—is the coverage diff ground truth.
-  Honest limits: *executed is not asserted*. More importantly, candidate imports
-  and the collector still share one Python process. Candidate code can call
-  `Coverage.current()`, stop tracing, or add fabricated executed lines directly
-  to `CoverageData`; isolated startup and the empty rcfile do not prevent that.
-  Therefore `diff_coverage` and `min_diff_coverage` are quality/scrutiny signals
-  for non-hostile code, not evidence that can authorize an adversarial PR. Use
-  candidate-independent external verifier/finalizer evidence for hostile-code
-  admission.
-- A patch overfitted to the visible tests must also satisfy the **Independent
-  Verifier Pack** — org-owned, candidate-independent checks injected at
-  judgment time that the **patch cannot include or modify**. Independent here
-  means judge-owned rather than third-party review, and a pack does not
-  guarantee detection of every form of overfitting. Guard currently snapshots
-  the pack outside the candidate tree, verifies its framed `EVOGUARD_PACK_V2`
-  digest, then runs it as a
-  **separate mandatory phase**: repo suite and pack must both pass, and a pack
-  that collects zero tests cannot produce `PASS`. `--expect-verifier-pack-sha256`
-  pins the exact accepted identity and the attestation records the digest,
-  manifest and pack test counts. Honest scope: a repo-native pack still shares
-  the judge process with imported candidate code, so it is not a secrecy
-  boundary. For runtime separation, use black-box mode with delivered
-  Docker/gVisor isolation (the pack is not mounted into the candidate at all).
-  See [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md).
-- Every verdict now carries an **attestation block** (candidate/policy/report
-  digests, timestamp, versions) — so a signed verdict is bound to *what* was
-  judged, under *which* policy, not just to its own bytes.
-
-## What Guard honestly is (and is not)
-
-- The verdict comes from **running your repo's own test suite** in a subprocess
-  with a wall-clock timeout and, on POSIX, CPU/memory rlimits, against a
-  throwaway copy. Your working tree is never modified.
-- The default subprocess judge is **not a security sandbox**. Guard is built to
-  gate patches to **trusted repositories** (your own code). For semi-trusted
-  code, use `--isolation docker` or `gvisor` (network-less, read-only
-  container) — see [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md).
-- Resistance is **tested against specific forgery classes** (stdout forgery,
-  planted/oversized/entity-bomb reports, edits and deletions to modelled
-  protected paths, auto-exec files, path escapes — see the adversarial tests and
-  [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md)), not
-  claimed as absolute immunity.
-- **The default judge's result is forgeable by deliberate in-process code** (the
-  honest boundary above): it is trustworthy against the common cheats, not
-  against a patch that writes report-forgery into source. The black-box phase
-  comes from a process the candidate never runs in and closes that channel;
-  `--blackbox-only` is required to remove the weaker repo-native channel from
-  the end-to-end verdict. Read the `assurance` profile's `report_integrity`
-  field on every verdict — [`docs/ASSURANCE.md`](docs/ASSURANCE.md).
-- The shell-free `$EVOGUARD_EXEC` launcher used by every black-box isolation
-  mode has a **POSIX executable contract**. Native Windows therefore fails
-  closed before subprocess, Docker, or gVisor delivery; run black-box mode
-  under Linux/GitHub Actions or WSL. This is separate from ordinary repo-native
-  Guard execution on Windows.
-- Custom (non-adapter) test commands are graded by exit code only — still not
-  stdout-forgeable, but with a coarser gradient (and, like every runner today,
-  in-process-forgeable).
-- **`ModuleNotFoundError` under the judge?** Prefer `python -m pytest` over bare
-  `pytest` in `--test-command`: the `-m` form puts the repo copy's root on
-  `sys.path` (exactly like the default command), so top-level packages import
-  without a `conftest.py` or an installed package.
-
-## Docs
-
-| Doc | What it covers |
+| Entry point | Purpose |
 |---|---|
-| [`docs/START_HERE.md`](docs/START_HERE.md) | **Start here** — pick your path (Basic / Black-box CLI / container isolation) with a decision table |
-| [`examples/blackbox-cli/`](examples/blackbox-cli/) | A complete runnable example: honest → PASS, cheat → REJECTED, regression → FAIL |
-| [`evoom-guard-demo`](https://github.com/EvoRiseKsa/evoom-guard-demo) | External-repository demonstration (a separate target repo under the same account — not third-party validation): four scenarios reproduced with the published release |
-| [`docs/ADOPTION.md`](docs/ADOPTION.md) | Turn it on in one command; what each verdict means |
-| [`docs/GUARD.md`](docs/GUARD.md) | The full CLI/API guide and safety model |
-| [`docs/REPOSITORY_PROTECTION.md`](docs/REPOSITORY_PROTECTION.md) | GitHub merge/ruleset controls that a composite Action cannot enforce from inside itself |
-| [`GOVERNANCE.md`](GOVERNANCE.md) | Current ownership and trust-boundary governance, including the explicit limit of same-owner cross-account review |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution and threat-model review process for ordinary changes versus trust-boundary changes |
-| [`docs/TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) | Split re-verification and signing path for untrusted PRs: exact handoff, anti-replay bindings, and its non-negotiable limits |
-| [`docs/AGENT_CHANGE_ADMISSION.md`](docs/AGENT_CHANGE_ADMISSION.md) | Experimental v4.3.0 profile: bind an untrusted agent proposal to separate signed scope, raw-Git facts, and a Trusted Finalizer `ALLOW` without executing candidate code during offline verification |
-| [`docs/ARTIFACT_ADMISSION.md`](docs/ARTIFACT_ADMISSION.md) | Narrow pre-merge regular-file binding to an externally verified finalizer `ALLOW`; explicit non-goals for provenance, releases, and deployment |
-| [`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) | Exact scope and verification procedure for the published v4.3.0 build-artifact attestation and historical/future release runs |
-| [`docs/REWARD_HACKING_CATALOG.md`](docs/REWARD_HACKING_CATALOG.md) | The catalogue of agent reward-hacks Guard catches |
-| [`docs/PROOFS.md`](docs/PROOFS.md) | Historical demonstration narratives and their evidence limits; older gVisor observations are not current release proof |
-| [`docs/CASE-STUDY.md`](docs/CASE-STUDY.md) | A real upstream bug (charset-normalizer #537): honest fix → PASS `demonstrated`; tamper → REJECTED; fake → FAIL — from hash-pinned sdists |
-| [`docs/SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) | Ed25519-signed verdicts: tamper-evident evidence, offline verification |
-| [`docs/VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) | Candidate-independent Verifier Packs: org-owned, patch-immutable invariants (not third-party review) |
-| [`docs/ASSURANCE.md`](docs/ASSURANCE.md) | The `assurance` profile: what a PASS proves, what it doesn't, and why |
-| [`docs/OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) | Explicit `local` / `protected` / `hostile` contracts, fail-closed requirements, and key custody |
-| [`docs/BLACKBOX.md`](docs/BLACKBOX.md) | The `--blackbox` external report channel; `--blackbox-only` removes the weaker repo-native channel |
-| [`docs/FUZZING.md`](docs/FUZZING.md) | Coverage-guided strict-JSON and hostile-JUnit fuzz targets, seed corpora, and reproducible local smoke |
-| [`docs/RUNNER_CONFORMANCE.md`](docs/RUNNER_CONFORMANCE.md) | Schema-versioned exact `argv`/environment checks for all nine adapter owners; real-runner multi-OS publication remains open |
-| [`docs/ISOLATION_CONFORMANCE.md`](docs/ISOLATION_CONFORMANCE.md) | Schema-versioned Docker/gVisor probes and replay metadata; release claims require retained, final-commit-bound results |
-| [`docs/INDEPENDENT_EVALUATION.md`](docs/INDEPENDENT_EVALUATION.md) | Runnable blind label-commitment, prediction-freeze, reveal, and baseline-scoring protocol; no external evaluation is claimed |
-| [`docs/OPERATIONAL_TELEMETRY.md`](docs/OPERATIONAL_TELEMETRY.md) | Privacy-allowlisted summaries of supplied verdict files; not attempted-run inventory or deployed SLO monitoring |
-| [`docs/PRODUCTION_OPERATIONS.md`](docs/PRODUCTION_OPERATIONS.md) | Fail-closed evidence retention, key rotation, incident, SLO, upgrade, and rollback operator contract |
-| [`ROADMAP.md`](ROADMAP.md) | Shipped capabilities, current limits, and general future direction |
-| [`docs/JSON_SCHEMA.md`](docs/JSON_SCHEMA.md) | The stable JSON verdict contract (`schema_version`, `reason_code`) |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map and design decisions |
-| [`docs/PRODUCTION_BLUEPRINT.md`](docs/PRODUCTION_BLUEPRINT.md) | Product boundary, authority model, target package structure, missing operational components, and mandatory production gates |
-| [`docs/VM_ISOLATION.md`](docs/VM_ISOLATION.md) | The docker/gVisor isolation modes and their threat model |
-| [`docs/FEATURE_MODE.md`](docs/FEATURE_MODE.md) | `--allow-new-tests`: gating feature work that adds tests |
-| [`adversarial/README.md`](adversarial/README.md) | Executable adversarial corpus: enforced controls, known gaps, documented exceptions, and the environment-labelled security baseline |
-| [audit/v3.7.0/](audit/v3.7.0/) | Frozen v3.7.0 external-review companion: artifact verification, threat boundary, review matrix, and private-report template |
+| [Start here](docs/START_HERE.md) | Choose the basic, black-box, isolated, or finalizer path. |
+| [Adoption guide](docs/ADOPTION.md) | Introduce the gate into a repository and interpret results. |
+| [Guard reference](docs/GUARD.md) | CLI, policy, input forms, and execution behavior. |
+| [Assurance](docs/ASSURANCE.md) | Trust boundaries, failure modes, and non-claims. |
+| [JSON contract](docs/JSON_SCHEMA.md) | Stable machine-readable verdict fields. |
+| [Production blueprint](docs/PRODUCTION_BLUEPRINT.md) | Deployment profiles and readiness requirements. |
+| [Project and release status](docs/PROJECT_STATUS.md) | Current implementation, evidence, and release boundary. |
 
-## Where this comes from
+Historical demonstrations, release procedures, architecture decisions, and
+advanced admission contracts remain public and discoverable through the index
+without crowding this landing page.
 
-Guard is the extracted verification core of **EvoOM**, a verification-first
-measurement platform for code-generating models, built on one rule: *no result
-is accepted without traceable evidence — never trust a model's opinion of its
-own output.* Versions 1.1–1.8 of this gate were developed in an internal
-repository (EvoGuard); v2.0.0 consolidated that engine here — see
-[`CHANGELOG.md`](CHANGELOG.md).
+## Release provenance
 
-## Feedback
+<!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
+Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
+build-artifact attestation. The validated `v4.3.0` ledger records build provenance whose
+subject is `evo-guard.pyz` under `.github/workflows/release.yml`. Its release
+attestation separately binds `evo-guard.pyz`, `SHA256SUMS`; it records no SBOM release
+asset. Provider attestations are provenance evidence, not an EvoOM Guard verdict,
+artifact-admission decision, or proof of deployment. See
+[`docs/GITHUB_ARTIFACT_ATTESTATIONS.md`](docs/GITHUB_ARTIFACT_ATTESTATIONS.md) for the
+bounded procedure.
+<!-- END EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
 
-If you tried it, [tell us what happened](../../issues/new?template=guard-report.md) —
-pass, fail, wrong verdict, or install trouble. Two minutes, and it directly
-shapes whether this tool grows.
+Release assets, checksums, tags, ledgers, and attestations are retained as
+historical evidence. See [release status](docs/RELEASE_STATUS.md),
+[governance](docs/GOVERNANCE.md), and [SBOM scope](docs/SBOM.md).
+
+## Security, contribution, and feedback
+
+Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
+The public/private operating boundary is documented in
+[governance](docs/GOVERNANCE.md). Never publish signing keys, credentials,
+customer policy, held-out evaluation data, or private operational logs.
+
+Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md). For ordinary product
+feedback, wrong verdicts, or installation trouble, use the
+[Guard report form](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/new?template=guard-report.md).
 
 ## License
 
-### Historical releases through v3.8.0
+Copyright © 2026 EvoRise Tech. All rights reserved. Mana Alharbi is the author
+and original creator; EvoRise Tech is the Licensor.
 
-Every immutable release through
-[`v3.8.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v3.8.0)
-remains governed by the license shipped with that exact release. In particular,
-the published v3.8.0 license permitted commercial internal use, including the
-user's own CI, subject to its terms.
-
-### Current v4 licensing model
-
-Published v4 material carrying the **EvoRise Source-Available License 1.0**
-permits
-non-commercial study and research, good-faith security research, and a limited
-internal non-production evaluation. Commercial, production, required-CI,
-merge-gate, redistribution, hosted, and managed-service use require a separate
-commercial agreement.
-
-Use the generated [release status](docs/RELEASE_STATUS.md) to identify the
-latest immutable consumer release, then pin its corresponding commit SHA. See
-[LICENSE](LICENSE),
-[LICENSE_HISTORY.md](LICENSE_HISTORY.md),
-[COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md), and
-[docs/RELEASE_STATUS.md](docs/RELEASE_STATUS.md).
+Current v4 material is source-available under the
+[EvoRise Source-Available License 1.0](LICENSE), not open source. Commercial,
+production, required-CI or merge-gate, redistribution, hosted, and managed
+service use require a separate agreement; see
+[commercial licensing](COMMERCIAL-LICENSING.md). Historical releases retain the
+license shipped with their exact version; see [license history](LICENSE_HISTORY.md).

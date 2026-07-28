@@ -42,7 +42,7 @@ tree. It neither checks out nor imports either workflow. This verifies a
 bounded claim; it does not establish the independent trustworthiness of the A
 workflow semantics, its runner, or its actual Guard execution.
 
-The receipt is deliberately **unsigned by EvoGuard**.  It has no signing-key
+The receipt is deliberately **unsigned by EvoOM Guard**.  It has no signing-key
 argument and does not return `ALLOW`.  The authoritative provider assertion is
 a GitHub Artifact Attestation made after receipt creation.  A later consumer
 must freshly verify that attestation for the exact receipt bytes; retaining a

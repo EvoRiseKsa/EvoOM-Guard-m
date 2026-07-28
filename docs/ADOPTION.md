@@ -5,9 +5,9 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# Adopting EvoGuard — a one-page runbook
+# Adopting EvoOM Guard — a practical guide
 
-EvoGuard is a CI gate that evaluates whether a code change (with **AI-agent
+EvoOM Guard is a CI gate that evaluates whether a code change (with **AI-agent
 PRs** as the primary use case) satisfied the selected judge under the recorded
 policy and assurance boundary. It blocks the explicitly modelled
 evidence-gaming paths; it is not a universal hostile-code proof. It is a single
@@ -26,7 +26,7 @@ From the repository you want to protect:
 pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
 evo-guard init --ref v4.3.0 --test-command "python -m pytest -q"
 git add .github/workflows/evoguard.yml .evoguard.json
-git commit -m "ci: add EvoGuard policy" && git push
+git commit -m "ci: add EvoOM Guard policy" && git push
 ```
 
 The no-Action alternative is `git diff | evo-guard guard --diff -`.
@@ -376,19 +376,19 @@ other harness dependencies. Declare those exact repository files with
 
 ### In a workspace / monorepo (pnpm · yarn · npm)
 
-The verdict stays `junit+exit` **only if EvoGuard can see the runner** in your
-`test_command`. Two rules, both learned validating EvoGuard live on a real
+The verdict stays `junit+exit` **only if EvoOM Guard can see the runner** in your
+`test_command`. Two rules, both learned validating EvoOM Guard live on a real
 TypeScript/pnpm monorepo:
 
 1. **Invoke the runner binary, not a package script.** Use
    `pnpm --filter <pkg> exec vitest run` — **not** `pnpm --filter <pkg> vitest run`
    (pnpm reads `vitest` as a *script* name, fails with
-   `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT`, and the suite never starts → EvoGuard
+   `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT`, and the suite never starts → EvoOM Guard
    reports `FAIL` with `verdict_source: exit`). A `package.json` `test`-script
    wrapper (`pnpm test`) does run the suite, but hides the runner, so the verdict
    drops to exit-only. `exec vitest run` keeps the `vitest` token visible, so the
    adapter splices in its judge-owned JUnit reporter.
-2. **Install in `setup_command`, don't fuse it into the test command.** EvoGuard's
+2. **Install in `setup_command`, don't fuse it into the test command.** EvoOM Guard's
    repo copy excludes `node_modules`, so restore it *before* the suite:
 
    ```json
@@ -417,7 +417,7 @@ for **trusted** repos, **not** a sandbox. For public repos accepting fork PRs:
 
 - Run on `pull_request` (not `pull_request_target`) so untrusted code never sees
   your secrets.
-- When execution reaches Guard report generation, EvoGuard writes that report
+- When execution reaches Guard report generation, EvoOM Guard writes that report
   to the job summary. Credential/comment preflight refusals can stop earlier and
   produce no Guard report. The candidate-execution job never posts a PR comment
   and `comment: "true"` is refused. If a comment is required, transfer the
@@ -440,9 +440,10 @@ rlimits.
 
 ## 6. Pin the version
 
-EvoGuard is a *gate*, so pin what you run: use the ledger-recorded release tag
-shown in section 1, or its full commit SHA (strictest for CI). Track `@main`
-only for a quick look.
+EvoOM Guard is a *gate*, so pin what you run: use the
+[latest immutable release shown in section 1](#1-turn-it-on-one-command), or its
+full commit SHA (strictest for CI). Do not pin `@main` in protected automation:
+it is a moving development branch and may contain unpublished interfaces.
 
 ## What it does not do
 

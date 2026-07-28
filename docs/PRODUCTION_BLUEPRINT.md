@@ -7,6 +7,11 @@
 
 # Production blueprint
 
+> **Audience:** product maintainers and architecture reviewers. This is an
+> intended-state blueprint, not a claim that every capability below is present
+> in the latest consumer release. See [`RELEASE_STATUS.md`](RELEASE_STATUS.md)
+> for current release truth.
+
 This document defines the product EvoOM Guard is intended to become, the
 boundaries it must keep, and the gates that must be satisfied before describing
 an installation as production admission for hostile changes.

@@ -55,6 +55,9 @@ jobs:
       - name: Verify project status against source, ledger, workflows, and Git
         run: python -I ops/render_project_status.py --check
 
+      - name: Verify maintained Markdown links and anchors
+        run: python -I tools/ci/check_markdown_links.py
+
       - name: Lint (ruff)
         run: >-
           python -m ruff check

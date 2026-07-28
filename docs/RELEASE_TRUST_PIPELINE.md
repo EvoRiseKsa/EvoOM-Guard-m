@@ -1,5 +1,10 @@
 # Protected release trust pipeline
 
+> **Audience:** release maintainers and independent auditors. This is an
+> implementation and authority-separation contract, not an end-user setup
+> guide. Consumers should start with [`README.md`](../README.md) or
+> [`START_HERE.md`](START_HERE.md).
+
 This document describes an inert-by-default A–H release pipeline. It does not
 claim that a release has traversed the pipeline, that repository settings have
 been configured, or that any key currently exists.

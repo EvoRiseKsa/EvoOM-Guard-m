@@ -1,5 +1,9 @@
 # Release gate checklist (v4 baseline hardening)
 
+> **Audience:** repository and release maintainers. This checklist documents
+> governance controls; it is not required reading for ordinary EvoOM Guard
+> users.
+
 Use this checklist for the published `v4.0.1` behavioral baseline, the minimal
 `v4.0.2`, `v4.1.0`, `v4.2.0`, and `v4.3.0` release ledgers, and as the minimum
 gate for later releases before enforcing EvoOM Guard as a required CI merge
@@ -51,7 +55,7 @@ gate.
      checksum lines and byte equality in tag CI.
    - Verify build-provenance attestations for the exact zipapp and SPDX
      subjects, plus the SBOM attestation that binds the SPDX predicate to the
-     zipapp subject. None is an EvoGuard verdict or independent review.
+     zipapp subject. None is an EvoOM Guard verdict or independent review.
 
 ## Frozen baseline verification
 

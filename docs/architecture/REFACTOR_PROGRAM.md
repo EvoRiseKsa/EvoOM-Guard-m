@@ -1,5 +1,13 @@
 # Refactor program (execution file)
 
+> **Audience and reading order:** this is the chronological maintainer record
+> for the refactor. Statements such as "pending" or "in progress" describe the
+> point in time at which each bounded slice was recorded; they are not the
+> current project status. Read
+> [`CURRENT_STATE.md`](CURRENT_STATE.md) for the concise present-tense
+> architecture, then use the machine-maintained status near the end of this
+> file as the authoritative refactor summary.
+
 ## Objective
 
 Lock the baseline and refactor incrementally from monolith modules into stable typed

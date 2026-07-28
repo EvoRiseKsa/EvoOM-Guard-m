@@ -5,7 +5,7 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# EvoGuard JSON contract
+# EvoOM Guard JSON contract
 
 `evo-guard guard --json <path>` writes one JSON object describing the verdict.
 Integrations should read this surface instead of parsing the human Markdown
