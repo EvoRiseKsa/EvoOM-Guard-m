@@ -47,6 +47,11 @@ from benchmarks.run_manifest import (
 ROOT = Path(__file__).parents[1]
 RESULTS = ROOT / "benchmarks" / "results.jsonl"
 MANIFEST = ROOT / "benchmarks" / "run-manifest.json"
+# This is an outer CI deadlock bound, not a performance threshold. The live
+# harness retains its own 270-second worker bound; the former 180-second wrapper
+# could preempt that inner contract. Two worker bounds plus cleanup overhead
+# remain finite while tolerating hosted-runner cold starts.
+_LIVE_BENCHMARK_E2E_TIMEOUT_SECONDS = 600
 
 
 def _load_rows(path: Path) -> list[dict[str, object]]:
@@ -1689,7 +1694,7 @@ def test_live_benchmark_cli_draft_commit_finalize_and_verify_end_to_end(
         capture_output=True,
         encoding="utf-8",
         errors="replace",
-        timeout=180,
+        timeout=_LIVE_BENCHMARK_E2E_TIMEOUT_SECONDS,
     )
     assert completed.returncode == 0, completed.stderr
     result_bytes = out.read_bytes()
