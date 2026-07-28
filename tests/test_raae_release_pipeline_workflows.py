@@ -932,7 +932,10 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     publish = _job(H, "publish")
     whole = _text(H)
 
-    assert "EVOGUARD_RELEASE_PUBLICATION_ENABLED == 'true'" in preflight
+    assert (
+        "vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED ==\n"
+        "      github.event.workflow_run.head_sha"
+    ) in preflight
     assert "contents: write" not in preflight
     assert "environment:" not in preflight
     assert "verify-github-release-artifact-admission" in preflight
@@ -962,8 +965,25 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "evo-guard $RELEASE_VERSION" not in preflight
     assert "environment: evoguard-release-publication" in publish
     assert "contents: write" in publish
-    assert "immutable-releases" in draft
-    assert "immutable-releases" in publish
+    immutable_admin_api = '"repos/$GITHUB_REPOSITORY/immutable-releases"'
+    assert immutable_admin_api not in draft
+    assert immutable_admin_api not in publish
+    assert "secrets." not in draft
+    assert (
+        "PUBLICATION_AUTHORIZED_TARGET: "
+        "${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}"
+    ) in draft
+    assert (
+        "PUBLICATION_AUTHORIZED_TARGET: "
+        "${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}"
+    ) in publish
+    assert draft.count(
+        'test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"'
+    ) == 1
+    assert publish.count(
+        'test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"'
+    ) == 2
+    assert "GITHUB_TOKEN cannot receive repository Administration:read" in draft
     assert '"X-GitHub-Api-Version: 2026-03-10"' in whole
     assert "--method PATCH" in publish
     assert '{"draft":false}' in publish

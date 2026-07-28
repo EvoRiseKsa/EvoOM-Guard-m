@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest stable and supported consumer release.
-- Source `4.4.0`: release candidate; not a consumer release.
+- Source `4.4.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -147,6 +147,12 @@ publication round, or hostile-code production readiness.
   negative-test fixtures with an explicit owner-writable mode. The immutable
   root-owned F inputs remain read-only while G can exercise the intended seven
   rejection cases instead of failing during fixture preparation.
+- Publication no longer calls the administration-only Immutable Releases
+  endpoint with an under-privileged `GITHUB_TOKEN`. The repository owner first
+  verifies that endpoint outside Actions and authorizes only the reviewed
+  candidate by setting the publication gate to its exact commit SHA; both
+  protected H jobs recheck that binding, and H succeeds only when GitHub
+  reports the resulting release as immutable.
 
 ### Changed
 

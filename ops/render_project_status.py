@@ -202,7 +202,9 @@ _ARTIFACT_GATE = "vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED == 'true'"
 _MAIN_SOURCE_GATE = f"github.ref == 'refs/heads/main' && {_SOURCE_GATE}"
 _MAIN_ARTIFACT_GATE = f"github.ref == 'refs/heads/main' && {_ARTIFACT_GATE}"
 _PUBLICATION_GATE = (
-    f"{_ARTIFACT_GATE} && vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED == 'true'"
+    f"{_ARTIFACT_GATE} && "
+    "vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED == "
+    "github.event.workflow_run.head_sha"
 )
 _WORKFLOW_SPECS = (
     _WorkflowSpec(
@@ -279,7 +281,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "182785db7379644ba61b159963f7c45aa005774a15bb387b338053ad51119c37",
+        "8d661a5de6d56596e063534f8da3cfde457613ca1017f3e1482961e26f517eee",
     ),
 )
 _LEGACY_FALSE_GATE = (
