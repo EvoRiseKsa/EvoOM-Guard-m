@@ -830,6 +830,35 @@ def test_f_creates_two_fresh_provider_bound_raae_envelopes() -> None:
     assert "evoguard-release-artifact-v1-complete-controls-" in attestations
     assert "complete F control inventory" not in attestations
     assert "find \"$RUNNER_TEMP/f-controls-complete\"" in attestations
+    assert (
+        """root_attestation_evidence=(
+            build-provenance-verification.json
+            build-provenance-verification-output.json
+            spdx-provenance-verification.json
+            spdx-provenance-verification-output.json
+          )"""
+        in attestations
+    )
+    assert (
+        """provider_attestation_evidence=(
+            sbom-attestation-output.json
+            sbom-attestation-receipt.json
+          )"""
+        in attestations
+    )
+    assert 'for name in "${root_attestation_evidence[@]}"; do' in attestations
+    assert 'for name in "${provider_attestation_evidence[@]}"; do' in attestations
+    assert (
+        '            "${root_attestation_evidence[@]}" \\\n'
+        '            "${provider_attestation_evidence[@]}"; do'
+        in attestations
+    )
+    assert "/run/evoguard-spdx/output/*" not in attestations
+    assert (
+        '"/run/evoguard-spdx/output/$name" \\\n'
+        '              "$RUNNER_TEMP/f-controls-complete/$name"'
+        in attestations
+    )
 
     assert "environment: evoguard-release-artifact-v1" in seal
     assert "needs: [preflight, verify-attestations]" in _text(F)

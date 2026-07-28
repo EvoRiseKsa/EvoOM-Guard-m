@@ -610,15 +610,21 @@ jobs:
               --run-id "$BUILDER_RUN_ID" \
               --run-attempt "$BUILDER_RUN_ATTEMPT" \
               --event workflow_dispatch
-          for name in \
-            build-provenance-verification.json \
-            build-provenance-verification-output.json \
-            spdx-provenance-verification.json \
-            spdx-provenance-verification-output.json; do
+          root_attestation_evidence=(
+            build-provenance-verification.json
+            build-provenance-verification-output.json
+            spdx-provenance-verification.json
+            spdx-provenance-verification-output.json
+          )
+          provider_attestation_evidence=(
+            sbom-attestation-output.json
+            sbom-attestation-receipt.json
+          )
+          for name in "${root_attestation_evidence[@]}"; do
             test "$(sudo stat -c '%u:%g:%a' "/run/evoguard-spdx/output/$name")" = \
               "0:0:600"
           done
-          for name in sbom-attestation-output.json sbom-attestation-receipt.json; do
+          for name in "${provider_attestation_evidence[@]}"; do
             test "$(sudo stat -c '%u:%g:%a' "/run/evoguard-spdx/output/$name")" = \
               "$PROVIDER_UID:$PROVIDER_GID:600"
           done
@@ -630,9 +636,12 @@ jobs:
             install -m 0444 \
               "$path" "$RUNNER_TEMP/f-controls-complete/$(basename "$path")"
           done
-          for path in /run/evoguard-spdx/output/*; do
+          for name in \
+            "${root_attestation_evidence[@]}" \
+            "${provider_attestation_evidence[@]}"; do
             sudo install -m 0444 -o "$(id -u)" -g "$(id -g)" \
-              "$path" "$RUNNER_TEMP/f-controls-complete/$(basename "$path")"
+              "/run/evoguard-spdx/output/$name" \
+              "$RUNNER_TEMP/f-controls-complete/$name"
           done
           python - "$manifest" "$RUNNER_TEMP/f-controls-complete" <<'PY'
           import hashlib, json, pathlib, sys
