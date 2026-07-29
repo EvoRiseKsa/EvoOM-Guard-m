@@ -19,22 +19,25 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest stable and supported consumer release.
-- Source `4.4.0`: release candidate; not a consumer release.
+- [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) is the latest published stable and supported release; it has no valid protected-tree ledger.
+- [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) remains the latest ledger-recorded consumer release and is temporarily supported until a later recovery release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
-- Draft candidates that were never published are labelled explicitly below and
-  are not supported releases.
+- Draft candidates that were never published are labelled explicitly below
+  and are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
 ## [Unreleased]
 
-## [4.4.0] — pending immutable publication
+## [4.4.0] — published 2026-07-29; no valid protected-tree ledger
 
-The entries in this section describe the `4.4.0` source line. Their presence is
-not evidence of a published consumer release, a completed A-through-H
-publication round, or hostile-code production readiness.
+The entries in this section describe the immutable
+[`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0)
+publication. They are not evidence of a signed post-publication v2 repository
+ledger, completed protected A-through-H publication round, independent
+validation, or hostile-code production readiness. See the
+[release-ledger erratum](docs/errata/V4.4.0-LEDGER.md).
 
 ### Added
 
@@ -208,9 +211,11 @@ publication round, or hostile-code production readiness.
   dependency graph. Host-subprocess execution is not filesystem isolation:
   checkpoints prove identity only when observed and can miss a temporary
   mutation restored before the next observation.
-- The `4.4.0` source line is not a production claim for hostile code. At this
-  source commit, no release-bound A-through-H evidence for a final published
-  commit is recorded.
+- The published `v4.4.0` release is not a production claim for hostile code.
+  No signed v2 repository ledger currently records protected A-through-H
+  operation or publication for that release. The
+  [unsigned observation record](evidence/release-operations/v4.4.0/UNSEALED_STATUS.json)
+  preserves verified live facts without substituting for that missing ledger.
 - Current local evidence does not substitute for a third-party held-out corpus,
   an independent launcher/runtime attestation, multi-OS toolchain conformance,
   or release-bound gVisor/VM evidence.
@@ -221,9 +226,10 @@ publication round, or hostile-code production readiness.
   anti-tampering claim. Interpreter setup, conditional base fetch, a separate
   metadata-only reporter if configured by the consumer, and consumer
   setup/tests retain their existing boundaries.
-- The current immutable `v4.3.0` release has no SBOM asset; this source prepares
-  the contract only for a later release and does not mutate historical tags,
-  assets, baselines, or ledgers.
+- The published `v4.4.0` release includes `evo-guard.spdx.json` and provider
+  provenance according to the unsigned observation record, but the protected
+  tree still lacks its signed v2 ledger. The ledger-recorded `v4.3.0` release
+  has no SBOM asset and remains unchanged.
 - The SPDX document is an artifact-member inventory, not source composition
   analysis, dependency or vulnerability scanning, VEX, license legal review,
   a security verdict, artifact admission, or cross-platform reproducibility

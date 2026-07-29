@@ -2,9 +2,13 @@
 
 `release-ledger-v2` is the post-publication evidence contract for the protected
 A–H release pipeline. It is deliberately separate from the historical
-`release-ledger-v1` contract and from every frozen baseline. No `v4.4.0` ledger
-exists until an immutable `v4.4.0` release has actually completed A–H and its
-external facts have been observed.
+`release-ledger-v1` contract and from every frozen baseline. The immutable
+`v4.4.0` GitHub Release exists, but no valid `v4.4.0` ledger exists in the
+protected source tree. The live publication observation does not prove that
+protected A–H completed; see the
+[release-ledger erratum](errata/V4.4.0-LEDGER.md). Its frozen validator
+mismatch cannot be repaired retroactively. Only a new release operation may
+produce a new signed ledger.
 
 The schema is
 [`tests/baseline/schema/release-ledger-v2.schema.json`](../tests/baseline/schema/release-ledger-v2.schema.json).

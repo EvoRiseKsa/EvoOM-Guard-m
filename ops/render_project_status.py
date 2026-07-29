@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Render reviewable project-status prose from one machine-readable source.
 
-``PROJECT_STATUS.json`` contains only maintained state.  Published-release
+``PROJECT_STATUS.json`` contains only maintained state.  Ledger-recorded release
 identity and assets are read from the newest immutable release ledger, while
-source identity is read from ``evoom_guard.__version__``.  This prevents prose
-from silently turning an unreleased source tree into a published-release claim.
+source identity is read from ``evoom_guard.__version__``.  The exceptional
+``published-unledgered`` lifecycle may report that the stable source version was
+observed as published, but it never supplies release identity, assets,
+attestations, or pipeline evidence in place of a valid signed ledger, and it
+does not imply that one can be issued later.
 """
 
 from __future__ import annotations
@@ -809,7 +812,12 @@ def load_status(root: Path) -> Status:
         lifecycle=_enum(
             source["lifecycle"],
             "source.lifecycle",
-            {"unreleased-development", "release-candidate", "release-line"},
+            {
+                "unreleased-development",
+                "release-candidate",
+                "published-unledgered",
+                "release-line",
+            },
         ),
         relation=_enum(
             source["relation_to_latest_release"],
@@ -1953,18 +1961,33 @@ def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
 
 def _release_summary(context: Context) -> str:
     ledger = context.ledger
-    lifecycle = {
-        "unreleased-development": (
-            "**unreleased development** and is not a consumer release"
-        ),
-        "release-candidate": (
-            "a **release candidate** and is not yet a consumer release"
-        ),
-        "release-line": (
-            "on the **ledger-recorded release line**; this protected source tree "
-            "may be a post-tag descendant and is not a new consumer release"
-        ),
-    }.get(context.status.lifecycle)
+    lifecycle: str | None
+    if context.status.lifecycle == "published-unledgered":
+        source_release_url = (
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/"
+            f"v{context.source_version}"
+        )
+        lifecycle = (
+            f"a **published stable GitHub release** "
+            f"([`v{context.source_version}`]({source_release_url})). It has no "
+            "valid protected-tree release ledger. This maintained status is not a "
+            "signed ledger, does not establish that release's assets, attestations, "
+            "or protected A-through-H completion, and does not imply that a ledger "
+            "for this version can be issued later"
+        )
+    else:
+        lifecycle = {
+            "unreleased-development": (
+                "**unreleased development** and is not a consumer release"
+            ),
+            "release-candidate": (
+                "a **release candidate** and is not yet a consumer release"
+            ),
+            "release-line": (
+                "on the **ledger-recorded release line**; this protected source tree "
+                "may be a post-tag descendant and is not a new consumer release"
+            ),
+        }.get(context.status.lifecycle)
     if lifecycle is None:
         raise ProjectStatusError(
             f"unsupported rendered source lifecycle: {context.status.lifecycle}"
@@ -2066,14 +2089,20 @@ def _blocks(context: Context) -> dict[str, str]:
         for name in ledger.artifacts
         if name != "SHA256SUMS"
     )
-    architecture_version_state = (
-        "is on the ledger-recorded release line"
-        if architecture.lifecycle == "release-line"
-        else "remains unreleased"
-    )
+    architecture_version_state = {
+        "unreleased-development": "remains unreleased",
+        "release-candidate": "remains unreleased",
+        "published-unledgered": (
+            "is published without a valid protected-tree release ledger"
+        ),
+        "release-line": "is on the ledger-recorded release line",
+    }[architecture.lifecycle]
     source_support_status = {
         "unreleased-development": "Unreleased development source; not a consumer release",
         "release-candidate": "Release candidate; not a consumer release",
+        "published-unledgered": (
+            "Latest published stable release; supported; no valid protected-tree ledger"
+        ),
         "release-line": "Source on the latest ledger-recorded release line",
     }[architecture.lifecycle]
     source_support_row = (
@@ -2081,30 +2110,69 @@ def _blocks(context: Context) -> dict[str, str]:
         if context.source_version != version or architecture.lifecycle != "release-line"
         else ""
     )
-    security_support = (
-        "Security fixes are provided on a best-effort basis for the latest stable\n"
-        "consumer release only:\n\n"
-        "| Version | Status |\n"
-        "| --- | --- |\n"
-        f"| {release_link} | Latest stable release; supported |\n"
-        f"{source_support_row}"
-        "| Earlier published releases | Historical and unsupported; retained "
-        "unchanged for reproducibility, verification, and rollback |\n"
-        "| Unpublished draft candidates | Unsupported; never consumer releases |\n\n"
-        "Users should reproduce a suspected issue on the latest stable release before\n"
-        "reporting when practical. A report that affects an older release may still be\n"
-        "useful, but a fix will be delivered in a new immutable release rather than by\n"
-        "rewriting an existing tag, asset, checksum, or attestation."
-    )
-    changelog_support = (
-        f"- {release_link} is the latest stable and supported consumer release.\n"
-        f"- Source `{context.source_version}`: {source_support_status.lower()}.\n"
-        "- Earlier published versions are historical and unsupported. Their tags,\n"
-        "  release assets, checksums, attestations, and records remain available\n"
-        "  unchanged for reproducibility, verification, and rollback.\n"
-        "- Draft candidates that were never published are labelled explicitly below and\n"
-        "  are not supported releases."
-    )
+    if architecture.lifecycle == "published-unledgered":
+        source_release_link = (
+            f"[`v{context.source_version}`]"
+            "(https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/"
+            f"v{context.source_version})"
+        )
+        security_support = (
+            "Security fixes are provided on a best-effort basis for the latest\n"
+            "published stable release. The previous ledger-recorded consumer release\n"
+            "remains supported as an evidence-bound fallback until a later recovery\n"
+            "release:\n\n"
+            "| Version | Status |\n"
+            "| --- | --- |\n"
+            f"| {source_release_link} | Latest published stable release; supported; "
+            "no valid protected-tree ledger |\n"
+            f"| {release_link} | Latest ledger-recorded consumer release; temporarily "
+            "supported until a later recovery release |\n"
+            "| Earlier published releases | Historical and unsupported; retained "
+            "unchanged for reproducibility, verification, and rollback |\n"
+            "| Unpublished draft candidates | Unsupported; never consumer releases |\n\n"
+            "Users should reproduce a suspected issue on the latest published stable\n"
+            "release before reporting when practical. A report that affects an older\n"
+            "release may still be useful, but a fix will be delivered in a new immutable\n"
+            "release rather than by rewriting an existing tag, asset, checksum, or\n"
+            "attestation."
+        )
+        changelog_support = (
+            f"- {source_release_link} is the latest published stable and supported "
+            "release; it has no valid protected-tree ledger.\n"
+            f"- {release_link} remains the latest ledger-recorded consumer release and "
+            "is temporarily supported until a later recovery release.\n"
+            "- Earlier published versions are historical and unsupported. Their tags,\n"
+            "  release assets, checksums, attestations, and records remain available\n"
+            "  unchanged for reproducibility, verification, and rollback.\n"
+            "- Draft candidates that were never published are labelled explicitly below\n"
+            "  and are not supported releases."
+        )
+    else:
+        security_support = (
+            "Security fixes are provided on a best-effort basis for the latest stable\n"
+            "consumer release only:\n\n"
+            "| Version | Status |\n"
+            "| --- | --- |\n"
+            f"| {release_link} | Latest stable release; supported |\n"
+            f"{source_support_row}"
+            "| Earlier published releases | Historical and unsupported; retained "
+            "unchanged for reproducibility, verification, and rollback |\n"
+            "| Unpublished draft candidates | Unsupported; never consumer releases |\n\n"
+            "Users should reproduce a suspected issue on the latest stable release before\n"
+            "reporting when practical. A report that affects an older release may still be\n"
+            "useful, but a fix will be delivered in a new immutable release rather than by\n"
+            "rewriting an existing tag, asset, checksum, or attestation."
+        )
+        changelog_support = (
+            f"- {release_link} is the latest stable and supported consumer release.\n"
+            f"- Source `{context.source_version}`: {source_support_status.lower()}.\n"
+            "- Earlier published versions are historical and unsupported. Their tags,\n"
+            "  release assets, checksums, attestations, and records remain available\n"
+            "  unchanged for reproducibility, verification, and rollback.\n"
+            "- Draft candidates that were never published are labelled explicitly below "
+            "and\n"
+            "  are not supported releases."
+        )
     return {
         "SECURITY_SUPPORTED_VERSIONS": security_support,
         "CHANGELOG_RELEASE_SUPPORT": changelog_support,

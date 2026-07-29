@@ -1,8 +1,12 @@
 # Release status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
-Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.4.0` is a **published stable GitHub release**
+([`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0)). It has no
+valid protected-tree release ledger. This maintained status is not a signed ledger, does
+not establish that release's assets, attestations, or protected A-through-H completion,
+and does not imply that a ledger for this version can be issued later. The latest
+immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
 records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
@@ -17,6 +21,12 @@ records publication by this pipeline. An admitted release is contracted to exact
 `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
+
+For re-queried live publication facts, the frozen-validator failure boundary,
+and the required new-release recovery, see the
+[v4.4.0 release-ledger erratum](errata/V4.4.0-LEDGER.md). Its
+machine-readable observation is unsigned and intentionally outside
+`evidence/release-ledgers`.
 
 The `v4.3.0` release adds Agent Change Admission V1. Its archived public
 same-owner pilot retained one permitted run, one ignored tracked-path

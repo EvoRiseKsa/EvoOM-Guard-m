@@ -1,0 +1,129 @@
+{
+  "schema_version": "evoguard-unsealed-release-status-v1",
+  "recorded_utc": "2026-07-29T02:47:08Z",
+  "record_scope": "Unsigned post-publication observation; not a release ledger or substitute for one.",
+  "release": {
+    "repository": "EvoRiseKsa/EvoOM-Guard-m",
+    "repository_id": 1293651176,
+    "version": "4.4.0",
+    "tag": "v4.4.0",
+    "tag_object_type": "commit",
+    "commit_sha": "5671282c3d2e97ea0d3c4f2b8f592f2405102f1f",
+    "release_id": 361467522,
+    "state": "published",
+    "draft": false,
+    "prerelease": false,
+    "immutable": true,
+    "created_utc": "2026-07-29T01:30:39Z",
+    "created_utc_semantics": "Exact GitHub Releases API created_at value; GitHub defines it as target-commit metadata, not a draft-creation or publication time.",
+    "published_utc": "2026-07-29T01:55:50Z",
+    "release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0"
+  },
+  "assets": [
+    {
+      "name": "evo-guard.pyz",
+      "asset_id": 493455420,
+      "size": 2210594,
+      "sha256": "192157882cf9261e075116e559e92492124909b6268eff497542c4d27486f84b",
+      "url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.0/evo-guard.pyz"
+    },
+    {
+      "name": "evo-guard.spdx.json",
+      "asset_id": 493455417,
+      "size": 97884,
+      "sha256": "4e3f0adc613065e4c2dbac20b6a87be9c4bd24d79d1c95b702fa23fcb4cb153b",
+      "url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.0/evo-guard.spdx.json"
+    },
+    {
+      "name": "SHA256SUMS",
+      "asset_id": 493455418,
+      "size": 166,
+      "sha256": "17a242e0c6cce7ca1ee2f9d5bf26258c16c7c80803112f6e1fc3da9958ed0bd5",
+      "url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.0/SHA256SUMS"
+    }
+  ],
+  "verification_observations": {
+    "release_attestation": {
+      "verified": true,
+      "tag_commit_sha": "5671282c3d2e97ea0d3c4f2b8f592f2405102f1f",
+      "asset_subjects": [
+        "evo-guard.pyz",
+        "evo-guard.spdx.json",
+        "SHA256SUMS"
+      ],
+      "command": "gh release verify v4.4.0 --repo EvoRiseKsa/EvoOM-Guard-m"
+    },
+    "build_provenance": {
+      "verified": true,
+      "subjects": [
+        "evo-guard.pyz",
+        "evo-guard.spdx.json"
+      ],
+      "source_commit_sha": "5671282c3d2e97ea0d3c4f2b8f592f2405102f1f",
+      "source_ref": "refs/heads/main",
+      "signer_workflow": "EvoRiseKsa/EvoOM-Guard-m/.github/workflows/evoguard-build-release-artifact.yml",
+      "runner_environment": "github-hosted",
+      "run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/30414774208/attempts/1"
+    },
+    "tag_ci": {
+      "run_id": 30415445465,
+      "run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/30415445465",
+      "head_sha": "5671282c3d2e97ea0d3c4f2b8f592f2405102f1f",
+      "conclusion": "success",
+      "successful_jobs": 8,
+      "total_jobs": 8
+    },
+    "action_smoke": {
+      "run_id": 30415445491,
+      "run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/30415445491",
+      "head_sha": "5671282c3d2e97ea0d3c4f2b8f592f2405102f1f",
+      "conclusion": "success",
+      "successful_jobs": 8,
+      "total_jobs": 8
+    }
+  },
+  "failure_boundary": {
+    "reason_code": "FROZEN_VALIDATOR_CREATED_AT_SEMANTICS_MISMATCH",
+    "trusted_parent_commit_sha": "163ad0591ac64cada35f0643683f3afff397e2d6",
+    "trusted_parent_tree_sha": "df5821ec364e9d62a77bf3ee609a575583ae351a",
+    "validator_path": "tools/ci/validate_release_ledger_v2.py",
+    "validator_blob_sha": "d80180d7ce744fbc2f06dae44dce0718b2693fbf",
+    "validator_rule_at_publication": "Required both release.created_utc and release.published_utc to fall inside the observed phase-H window.",
+    "h_run_id": 30415174549,
+    "h_run_attempt": 1,
+    "h_run_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/30415174549/attempts/1",
+    "h_observed_window": {
+      "started_utc": "2026-07-29T01:49:58Z",
+      "completed_utc": "2026-07-29T01:55:52Z"
+    },
+    "release_created_utc": "2026-07-29T01:30:39Z",
+    "release_published_utc": "2026-07-29T01:55:50Z",
+    "release_created_before_h": true,
+    "release_published_inside_h": true,
+    "corrected_semantics_pr": 255,
+    "corrected_semantics_commit": "83c7bcff45cc710a791dd5d18f0c5075c9067495",
+    "retroactive_correction_allowed": false,
+    "explanation": "The release operation and descriptor are bound to the frozen trusted parent and validator blob. The later validator correction cannot replace those inputs retroactively."
+  },
+  "ledger_state": {
+    "sealed": false,
+    "canonical_ledger_issued": false,
+    "signature_issued": false,
+    "v4_4_0_release_ledger_present": false,
+    "reason_code": "FROZEN_VALIDATOR_CREATED_AT_SEMANTICS_MISMATCH",
+    "latest_validated_repository_ledger": "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
+    "ledger_recorded_consumer_pin": "v4.3.0",
+    "recovery_release": "v4.4.1",
+    "missing_claims": [
+      "signed post-publication v2 release ledger",
+      "ledger-bound protected A-through-H operational evidence",
+      "ledger-bound protected A-through-H publication evidence"
+    ]
+  },
+  "trust_boundary": [
+    "This file is an unsigned maintained observation and is intentionally outside evidence/release-ledgers.",
+    "It records reproducible GitHub and provider observations but does not prove protected A-through-H completion.",
+    "The v4.4.0 tag, release assets, checksums, and attestations must not be rewritten to repair the missing ledger.",
+    "No canonical v4.4.0 ledger or ledger signature can be issued retroactively from the corrected validator; recovery requires a new release."
+  ]
+}

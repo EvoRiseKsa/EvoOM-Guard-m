@@ -34,8 +34,12 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.4.0` is a **published stable GitHub release**
+([`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0)). It has no
+valid protected-tree release ledger. This maintained status is not a signed ledger, does
+not establish that release's assets, attestations, or protected A-through-H completion,
+and does not imply that a ledger for this version can be issued later. The latest
+immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
 records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
@@ -50,6 +54,11 @@ records publication by this pipeline. An admitted release is contracted to exact
 `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
+
+The current post-publication correction record is
+[`docs/errata/V4.4.0-LEDGER.md`](docs/errata/V4.4.0-LEDGER.md). Its linked
+`UNSEALED_STATUS.json` is an unsigned observation, not the missing release
+ledger.
 
 The repository documentation follows the repository source and may describe
 features not present in the latest ledger-recorded consumer release. Confirm

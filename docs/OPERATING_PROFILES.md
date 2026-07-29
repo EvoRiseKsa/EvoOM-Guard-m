@@ -9,8 +9,9 @@
 
 > **Availability:** operating profiles belong to the `4.4.0` source line.
 > `v4.3.0` does not recognize `--operating-profile` or emit schema `1.12`.
-> Presence in the repository is not publication; confirm the immutable release
-> you run.
+> The immutable `v4.4.0` release is published without a valid protected-tree
+> ledger. Repository presence alone is not ledger evidence; confirm the
+> [release status](RELEASE_STATUS.md) and exact artifact you run.
 
 In the `4.4.0` source line, `--operating-profile` gives a Guard run an
 explicit trust and runtime contract. It is optional: omitting it preserves the

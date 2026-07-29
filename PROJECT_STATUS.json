@@ -16,7 +16,7 @@
       "cli_handler_extraction": "complete",
       "overall_refactor_program": "in-progress"
     },
-    "lifecycle": "release-candidate",
+    "lifecycle": "published-unledgered",
     "relation_to_latest_release": "descendant"
   }
 }

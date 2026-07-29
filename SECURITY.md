@@ -14,20 +14,23 @@ it makes about itself — are especially welcome.
 ## Supported versions
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SECURITY_SUPPORTED_VERSIONS -->
-Security fixes are provided on a best-effort basis for the latest stable
-consumer release only:
+Security fixes are provided on a best-effort basis for the latest
+published stable release. The previous ledger-recorded consumer release
+remains supported as an evidence-bound fallback until a later recovery
+release:
 
 | Version | Status |
 | --- | --- |
-| [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) | Latest stable release; supported |
-| `4.4.0` | Release candidate; not a consumer release |
+| [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) | Latest published stable release; supported; no valid protected-tree ledger |
+| [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) | Latest ledger-recorded consumer release; temporarily supported until a later recovery release |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |
 | Unpublished draft candidates | Unsupported; never consumer releases |
 
-Users should reproduce a suspected issue on the latest stable release before
-reporting when practical. A report that affects an older release may still be
-useful, but a fix will be delivered in a new immutable release rather than by
-rewriting an existing tag, asset, checksum, or attestation.
+Users should reproduce a suspected issue on the latest published stable
+release before reporting when practical. A report that affects an older
+release may still be useful, but a fix will be delivered in a new immutable
+release rather than by rewriting an existing tag, asset, checksum, or
+attestation.
 <!-- END EVOGUARD_PROJECT_STATUS:SECURITY_SUPPORTED_VERSIONS -->
 
 ## Reporting a vulnerability
