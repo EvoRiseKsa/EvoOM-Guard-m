@@ -731,13 +731,16 @@ class ProjectStatusTests(unittest.TestCase):
             attacker_assignment,
             1,
         )
-        with TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            (root / "PROJECT_STATUS.json").write_bytes(attacker_status_bytes)
+        with mock.patch.object(
+            Path,
+            "read_bytes",
+            return_value=attacker_status_bytes,
+        ) as read_bytes:
             parsed = render_project_status.load_status(
-                root,
+                ROOT,
                 raw=trusted_status_bytes,
             )
+        read_bytes.assert_not_called()
         self.assertEqual(parsed.lifecycle, trusted_status.lifecycle)
         self.assertNotEqual(parsed.lifecycle, attacker_lifecycle)
 
