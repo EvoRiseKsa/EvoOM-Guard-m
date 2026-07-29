@@ -8,7 +8,7 @@
 # Operating profiles
 
 > **Availability:** operating profiles were introduced on the `4.4.0` source
-> line and remain in later `4.4.x` source. `v4.3.0` does not
+> line and remain in the current `4.4.2` source line. `v4.3.0` does not
 > recognize `--operating-profile` or emit schema
 > `1.12`. The immutable `v4.4.0` and `v4.4.1` releases are published without
 > valid protected-tree ledgers. Repository presence alone is not ledger evidence;

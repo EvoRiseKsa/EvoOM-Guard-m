@@ -20,9 +20,9 @@ to start.
 
 > **Release boundary:** use [`RELEASE_STATUS.md`](RELEASE_STATUS.md) as the
 > authority. Commands below apply to the ledger-recorded consumer release unless
-> a section is explicitly marked as a `4.4.x` source-line contract.
+> a section is explicitly marked as the current `4.4.2` source-line contract.
 > Named `--operating-profile` policies and verdict schema `1.12` belong to the
-> `4.4.x` source line (introduced in `4.4.0`) and are absent from
+> current `4.4.2` source line (introduced in `4.4.0`) and are absent from
 > the frozen `v4.3.0` contract.
 
 ## Decision table
