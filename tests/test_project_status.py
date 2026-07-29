@@ -718,19 +718,22 @@ class ProjectStatusTests(unittest.TestCase):
             ROOT,
             raw=trusted_status_bytes,
         )
-        attacker = json.loads(trusted_status_bytes)
         attacker_lifecycle = (
             "release-candidate"
             if trusted_status.lifecycle != "release-candidate"
             else "unreleased-development"
         )
-        attacker["source"]["lifecycle"] = attacker_lifecycle
+        trusted_assignment = f'"lifecycle": "{trusted_status.lifecycle}"'.encode()
+        attacker_assignment = f'"lifecycle": "{attacker_lifecycle}"'.encode()
+        self.assertEqual(trusted_status_bytes.count(trusted_assignment), 1)
+        attacker_status_bytes = trusted_status_bytes.replace(
+            trusted_assignment,
+            attacker_assignment,
+            1,
+        )
         with TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "PROJECT_STATUS.json").write_text(
-                json.dumps(attacker) + "\n",
-                encoding="utf-8",
-            )
+            (root / "PROJECT_STATUS.json").write_bytes(attacker_status_bytes)
             parsed = render_project_status.load_status(
                 root,
                 raw=trusted_status_bytes,
