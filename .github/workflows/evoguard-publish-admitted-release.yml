@@ -1779,7 +1779,8 @@ jobs:
           PY
           )"
           cleanup_verified_unpublished_draft() {
-            local failure=$?
+            local trapped_failure=$?
+            local failure="${1:-$trapped_failure}"
             local release_ok=false tag_absent=false tag_exact=false
             trap - ERR
             set +e
@@ -1925,24 +1926,25 @@ jobs:
           test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
           gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             > "$RUNNER_TEMP/release-before-publication.json"
-          set +e
-          gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+          if gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
             > "$RUNNER_TEMP/tag-before-publication.response" \
-            2> "$RUNNER_TEMP/tag-before-publication.error"
-          tag_probe_rc=$?
-          set -e
+            2> "$RUNNER_TEMP/tag-before-publication.error"; then
+            tag_probe_rc=0
+          else
+            tag_probe_rc=$?
+          fi
           tag_status="$(
             awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
               "$RUNNER_TEMP/tag-before-publication.response"
           )"
           if test "$tag_probe_rc" -eq 0; then
             echo "the publication tag already exists; final publication refuses tag reuse" >&2
-            exit 1
+            cleanup_verified_unpublished_draft 1
           fi
           if test "$tag_status" != "404"; then
             echo "could not prove the publication tag is absent (HTTP ${tag_status:-unknown})" >&2
             cat "$RUNNER_TEMP/tag-before-publication.error" >&2
-            exit 1
+            cleanup_verified_unpublished_draft 1
           fi
           RELEASE_BODY="$body" python - \
             "$record" "$RUNNER_TEMP/release-before-publication.json" "$RELEASE_ID" <<'PY'
@@ -1981,12 +1983,19 @@ jobs:
               ):
                   raise SystemExit(f"approved draft asset changed: {asset.get('name')}")
           PY
-          GIT_SSH_COMMAND="$tag_ssh_command" \
-          git -C "$tag_repo" push \
-            --porcelain \
-            "$tag_remote" \
-            "$TARGET_SHA:refs/tags/$tag" \
-            > "$RUNNER_TEMP/tag-create-by-deploy-key.txt" 2>&1
+          if GIT_SSH_COMMAND="$tag_ssh_command" \
+            git -C "$tag_repo" push \
+              --porcelain \
+              "$tag_remote" \
+              "$TARGET_SHA:refs/tags/$tag" \
+              > "$RUNNER_TEMP/tag-create-by-deploy-key.txt" 2>&1; then
+            :
+          else
+            tag_push_rc=$?
+            echo "deploy-key tag push failed before ref proof (exit $tag_push_rc)" >&2
+            cat "$RUNNER_TEMP/tag-create-by-deploy-key.txt" >&2
+            cleanup_verified_unpublished_draft "$tag_push_rc"
+          fi
           TAG="$tag" python - "$RUNNER_TEMP/tag-create-by-deploy-key.txt" <<'PY'
           import os
           import pathlib
