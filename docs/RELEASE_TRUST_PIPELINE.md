@@ -21,18 +21,20 @@ records publication by this pipeline. An admitted release is contracted to exact
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 
-This reviewed parent contract designates `v4.4.1` as the recovery successor to
-the immutable `v4.4.0` publication documented by the
-[release-ledger erratum](errata/V4.4.0-LEDGER.md). Its prospective `v4.4.1`
-ledger public root is only a pre-publication trust input. Neither a source
-version assignment nor that public key proves a candidate, release,
-A-through-H operation, signature, or ledger.
+This reviewed parent contract designates `v4.4.2` as the recovery successor to
+the immutable `v4.4.1` publication documented by the
+[`v4.4.1` release-ledger erratum](errata/V4.4.1-LEDGER.md). Both `v4.4.0` and
+`v4.4.1` are published-unledgered; `v4.3.0` remains the latest validated
+repository ledger. The prospective `v4.4.2` ledger public root is only a
+pre-publication trust input. Neither a source version assignment nor that
+public key proves a candidate, release, A-through-H operation, signature, or
+ledger.
 
 ## Phase contracts
 
 | Phase | Workflow | Authority and prohibited operations |
 | --- | --- | --- |
-| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, executable runtime, and v4.4.1 scope validator come from the parent or protected settings. Before candidate execution, the parent validator compares both fresh trees, requires an exact-case subset of the frozen existing release paths with unchanged file modes, rejects additions, deletions, ordinary unlisted changes, and benchmark evidence rewrites, and permits `evoom_guard/__init__.py` to differ only by the exact `4.4.1.dev0` to `4.4.1` assignment bytes. Fresh benchmark evidence must first bind the `4.4.1.dev0` engine actually measured; the explicit release-promotion verifier then normalizes only that proven assignment while requiring every other source byte, result digest, and Git binding. A has no secret, OIDC, attestation, or write authority. |
+| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, executable runtime, and v4.4.2 scope validator come from the parent or protected settings. Before candidate execution, the parent validator compares both fresh trees, requires an exact-case subset of the frozen existing release paths with unchanged file modes, rejects additions, deletions, ordinary unlisted changes, and benchmark evidence rewrites, and permits `evoom_guard/__init__.py` to differ only by the exact `4.4.2.dev0` to `4.4.2` assignment bytes. Fresh benchmark evidence must first bind the `4.4.2.dev0` engine actually measured; the explicit release-promotion verifier then normalizes only that proven assignment while requiring every other source byte, result digest, and Git binding. A has no secret, OIDC, attestation, or write authority. |
 | B | `evoguard-produce-release-source-receipt.yml` | Produces an unsigned canonical receipt and GitHub attestation for A. It never checks out or executes candidate source. |
 | C/D | `evoguard-admit-release-source.yml` | Preflight freezes external controls before Environment access; protected C freshly verifies B under a provider UID that cannot read the RSAE key; detached D verifies the envelope and negative mutations without a key or provider call. |
 | E-build | `evoguard-build-release-artifact.yml` | Verifies RSAE and checks out the admitted source. The executable builder and SPDX generator are literal `100644` Git blobs from its sole parent, whose commit and tree must equal A's admitted base. E extracts and hashes those blobs without filters, runs them in one exact digest-pinned container with `network: none` against the read-only candidate, records the container reference/digest/network plus parent commit/tree in `builder-controls.json`, and independently compares every packaged byte to source. F reconstructs and requires that exact controls object from trusted Git/API context and the downloaded bytes. E has no OIDC, attestation, secret, or write permission. |
@@ -83,7 +85,7 @@ admission.
    `evoguard-release-publication`. H has no signing secret.
 8. Merge a distinct one-parent **source candidate**. A must consume its policy,
    pack, locks, and release-scope validator from that candidate's parent; the
-   infrastructure commit cannot authorize itself. For v4.4.1, the parent
+   infrastructure commit cannot authorize itself. For v4.4.2, the parent
    validator requires literal path case and an exact development-to-stable
    version-assignment byte replacement, in addition to Guard's protected-path
    and external verifier-pack checks. The candidate may not refresh
@@ -134,11 +136,13 @@ admission.
     write deploy key.
     GitHub Actions artifacts are temporary evidence (even where repository
     retention is configured for 30 days), not a durable ledger.
-13. The published `v4.4.0` operation cannot issue a canonical ledger because
-    its descriptor is bound to the frozen validator mismatch recorded in the
-    [release-ledger erratum](errata/V4.4.0-LEDGER.md). Do not apply the corrected
-    validator retroactively. For a new `v4.4.1` recovery operation, freeze a
-    `v4.4.1` ledger after publication containing both RAAE envelopes,
+13. The published `v4.4.0` and `v4.4.1` operations cannot issue canonical
+    ledgers because each descriptor is bound to its own frozen validator
+    defect recorded in the corresponding
+    [`v4.4.0`](errata/V4.4.0-LEDGER.md) and
+    [`v4.4.1`](errata/V4.4.1-LEDGER.md) errata. Do not apply corrected
+    validators retroactively. For a new `v4.4.2` recovery operation, freeze a
+    `v4.4.2` ledger after publication containing both RAAE envelopes,
     RSAE/controls, six admission public roots and IDs, a seventh distinct
     release-ledger signing public root/ID, run/workflow/tool pins, and release
     checksums. Do not publish those trust envelopes as release assets and do
@@ -148,7 +152,7 @@ admission.
     `tests/baseline/schema/release-ledger-v2.schema.json` and pass the offline
     byte, binding, envelope, and signature checks in
     `tools/ci/validate_release_ledger_v2.py`. The schema and validator existing
-    before publication do not themselves constitute a `v4.4.1` ledger.
+    before publication do not themselves constitute a `v4.4.2` ledger.
     Validate with the independently retrieved key via
     `--trusted-ledger-pub`, commit the ledger, and validate the committed bytes
     again. This ordering is an operator procedure: the retirement receipt proves

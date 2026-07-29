@@ -34,16 +34,16 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.4.1` is a **release candidate** and is not yet a consumer release. The
-maintained unsigned exception record
-`evidence/release-operations/v4.4.0/UNSEALED_STATUS.json` reports
-[`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) as a
+Source version `4.4.2.dev0` is **unreleased development** and is not a consumer release.
+The maintained unsigned exception record
+`evidence/release-operations/v4.4.1/UNSEALED_STATUS.json` reports
+[`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) as a
 published immutable GitHub Release without a canonical protected-tree ledger. Its
-erratum is `docs/errata/V4.4.0-LEDGER.md`. Neither record is a ledger or a consumer pin.
+erratum is `docs/errata/V4.4.1-LEDGER.md`. Neither record is a ledger or a consumer pin.
 The unsigned local-key disposition
-`evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json` is
+`evidence/release-operations/v4.4.1/LEDGER_KEY_DISPOSITION.json` is
 `pending-operator-removal` and is not a retirement or erasure proof. This source is the
-unreleased `v4.4.1` recovery successor to `v4.4.0`; no release or ledger is claimed for
+unreleased `v4.4.2` recovery successor to `v4.4.1`; no release or ledger is claimed for
 the recovery version. The latest immutable consumer release recorded by the protected
 source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
@@ -61,10 +61,11 @@ records publication by this pipeline. An admitted release is contracted to exact
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
 
-The current post-publication correction record is
-[`docs/errata/V4.4.0-LEDGER.md`](docs/errata/V4.4.0-LEDGER.md). Its linked
-`UNSEALED_STATUS.json` is an unsigned observation, not the missing release
-ledger.
+The two post-publication correction records are
+[`docs/errata/V4.4.0-LEDGER.md`](docs/errata/V4.4.0-LEDGER.md) and
+[`docs/errata/V4.4.1-LEDGER.md`](docs/errata/V4.4.1-LEDGER.md). Their linked
+`UNSEALED_STATUS.json` files are separate unsigned observations, not the
+missing release ledgers. `v4.4.1` is the later exception.
 
 The repository documentation follows the repository source and may describe
 features not present in the latest ledger-recorded consumer release. Confirm

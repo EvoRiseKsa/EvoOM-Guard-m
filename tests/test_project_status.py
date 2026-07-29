@@ -29,7 +29,8 @@ def _project_status_v2_fixture() -> dict[str, object]:
     status = json.loads(
         (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
     )
-    first = status["release_exceptions"]["published_unledgered"]
+    configured = status["release_exceptions"]["published_unledgered"]
+    first = configured[0] if isinstance(configured, list) else configured
     second = {
         "record": (
             "evidence/release-operations/v4.4.1/UNSEALED_STATUS.json"
@@ -91,8 +92,12 @@ def _minimal_v2_ledger(version: str = "4.4.0") -> dict[str, object]:
 class ProjectStatusTests(unittest.TestCase):
     def test_machine_readable_status_matches_its_public_schema(self) -> None:
         status = json.loads((ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8"))
+        schema_name = {
+            "evoguard-project-status-v1": "project-status-v1.schema.json",
+            "evoguard-project-status-v2": "project-status-v2.schema.json",
+        }[status["schema_version"]]
         schema = json.loads(
-            (ROOT / "tests/status/project-status-v1.schema.json").read_text(
+            (ROOT / "tests/status" / schema_name).read_text(
                 encoding="utf-8"
             )
         )
@@ -320,9 +325,9 @@ class ProjectStatusTests(unittest.TestCase):
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
         expected_source_versions = {
-            "unreleased-development": "4.4.1.dev0",
-            "release-candidate": "4.4.1",
-            "published-unledgered": "4.4.0",
+            "unreleased-development": "4.4.2.dev0",
+            "release-candidate": "4.4.2",
+            "published-unledgered": "4.4.1",
         }
         self.assertIn(context.status.lifecycle, expected_source_versions)
         self.assertEqual(
@@ -529,22 +534,22 @@ class ProjectStatusTests(unittest.TestCase):
             {"unreleased-development", "release-candidate"},
         )
         expected_source = (
-            "4.4.1.dev0"
+            "4.4.2.dev0"
             if context.status.lifecycle == "unreleased-development"
-            else "4.4.1"
+            else "4.4.2"
         )
         self.assertEqual(context.source_version, expected_source)
         self.assertEqual(context.ledger.version, "4.3.0")
-        self.assertEqual(context.published_unledgered.version, "4.4.0")
-        self.assertEqual(context.published_unledgered.recovery_version, "4.4.1")
+        self.assertEqual(context.published_unledgered.version, "4.4.1")
+        self.assertEqual(context.published_unledgered.recovery_version, "4.4.2")
         candidate_exception = render_project_status._load_published_unledgered(
             ROOT,
             replace(context.status, lifecycle="release-candidate"),
             context.ledger,
-            "4.4.1",
+            "4.4.2",
             verify_git=False,
         )
-        self.assertEqual(candidate_exception.version, "4.4.0")
+        self.assertEqual(candidate_exception.version, "4.4.1")
 
         blocks = render_project_status._blocks(context)
         pin_blocks = (
@@ -582,7 +587,7 @@ class ProjectStatusTests(unittest.TestCase):
             support,
         )
         self.assertIn(f"`{context.source_version}`", support)
-        self.assertIn("recovery successor to `v4.4.0`", support)
+        self.assertIn("recovery successor to `v4.4.1`", support)
         self.assertIn(
             "Latest ledger-recorded consumer release; temporarily supported",
             support,
@@ -1213,7 +1218,7 @@ class ProjectStatusTests(unittest.TestCase):
                 verify_git=False,
             )
         reread.assert_not_called()
-        self.assertEqual(authority.version, "4.4.0")
+        self.assertEqual(authority.version, "4.4.1")
 
     def test_unledgered_failure_boundary_is_derived_from_git(self) -> None:
         record = json.loads(
@@ -1308,8 +1313,14 @@ class ProjectStatusTests(unittest.TestCase):
             )
 
         context = render_project_status.load_context(ROOT, verify_git=False)
+        latest_disposition = json.loads(
+            (
+                ROOT
+                / context.status.published_unledgered_key_disposition_path
+            ).read_text(encoding="utf-8")
+        )
         public_key_path = (
-            ROOT / "security/release-ledger-roots/v4.4.0.pub.pem"
+            ROOT / latest_disposition["key"]["public_key_path"]
         ).resolve()
         public_key_reads = 0
 
@@ -1379,7 +1390,7 @@ class ProjectStatusTests(unittest.TestCase):
         with render_project_status._trusted_git_session(ROOT):
             frozen_refs = render_project_status._git_refs_snapshot(
                 ROOT,
-                ("v4.4.0",),
+                ("v4.4.0", "v4.4.1"),
             )
         with (
             mock.patch.object(
@@ -1403,12 +1414,15 @@ class ProjectStatusTests(unittest.TestCase):
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
+        historical_authority = (
+            context.status.published_unledgered_authorities[0]
+        )
 
         def seed(root: Path, *, include_recovery: bool) -> None:
             for relative in (
-                context.status.published_unledgered_record_path,
-                context.status.published_unledgered_erratum_path,
-                context.status.published_unledgered_key_disposition_path,
+                historical_authority.record_path,
+                historical_authority.erratum_path,
+                historical_authority.key_disposition_path,
                 "security/release-ledger-roots/v4.4.0.pub.pem",
                 "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
             ):
@@ -1466,6 +1480,7 @@ class ProjectStatusTests(unittest.TestCase):
                         ledger,
                         source_version,
                         verify_git=False,
+                        authority=historical_authority,
                     )
                     self.assertEqual(exception.version, "4.4.0")
                     self.assertEqual(exception.recovery_version, "4.4.1")
@@ -1510,18 +1525,20 @@ class ProjectStatusTests(unittest.TestCase):
                     ),
                     "4.4.2",
                     verify_git=False,
+                    authority=historical_authority,
                 )
 
     def test_local_key_disposition_accepts_only_bounded_operator_states(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
         disposition_relative = context.status.published_unledgered_key_disposition_path
         source_disposition = json.loads((ROOT / disposition_relative).read_text(encoding="utf-8"))
+        public_key_relative = source_disposition["key"]["public_key_path"]
 
         def seed(root: Path, disposition: dict[str, object]) -> None:
             for relative in (
                 context.status.published_unledgered_record_path,
                 context.status.published_unledgered_erratum_path,
-                "security/release-ledger-roots/v4.4.0.pub.pem",
+                public_key_relative,
                 "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
             ):
                 target = root / relative
@@ -1538,7 +1555,7 @@ class ProjectStatusTests(unittest.TestCase):
             root = Path(temporary)
             removed = json.loads(json.dumps(source_disposition))
             removed["disposition"]["status"] = "local-file-removed"
-            removed["disposition"]["observed_utc"] = "2026-07-29T03:30:00Z"
+            removed["disposition"]["observed_utc"] = "2026-07-29T08:30:00Z"
             seed(root, removed)
             authority = render_project_status._load_published_unledgered(
                 root,

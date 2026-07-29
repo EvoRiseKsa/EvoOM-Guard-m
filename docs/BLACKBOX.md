@@ -10,7 +10,7 @@
 > **Release boundary:** the black-box and Docker/gVisor mechanisms documented
 > here are available in `v4.3.0` under schema `1.11`. Passages about explicit
 > operating profiles or schema `1.12` describe source versions on the `4.4.0`
-> line or later; the reviewed `4.4.1` source contract inherits them. They are not part
+> line or later, including published `v4.4.1` and current `4.4.2.dev0`. They are not part
 > of the frozen `v4.3.0` contract; confirm the immutable release you run.
 
 The default judge runs your tests **in the same process** as the code under

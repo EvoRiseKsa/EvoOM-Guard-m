@@ -265,7 +265,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="b1dd9381320bfea25d15c382e474243e5fbadd21491023b4265db59704f0b0ad",
+        reviewed_sha256="1505b2e87c3f957722419c354e38c3d9a31404a45777e501693de13cec52cf44",
     ),
     _WorkflowSpec(
         "B",

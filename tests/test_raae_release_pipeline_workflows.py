@@ -287,11 +287,11 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "security/release-ledger-roots/*" in policy["protected"]
     assert "security/release-source-pack/*" in policy["protected"]
     assert "security/release-pipeline-bootstrap.json" in policy["protected"]
-    ledger_root = ROOT / "security/release-ledger-roots/v4.4.1.pub.pem"
+    ledger_root = ROOT / "security/release-ledger-roots/v4.4.2.pub.pem"
     assert ledger_root.is_file()
     assert (
         public_key_id(str(ledger_root))
-        == "sha256:ab3501f94e2d5fe7e27d02c2d82957738c29102fb37c71500392f7f559342e6a"
+        == "sha256:2b6a4dee04814bed2003f1582ca17aef0fb9de75c765d92aed355bf01483148b"
     )
     pack_test = _text(pack / "test_release_protocol.py")
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
@@ -379,7 +379,7 @@ def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
             repo_path=str(ROOT),
             changed_paths=(
                 ".evoguard.json",
-                "security/release-ledger-roots/v4.4.1.pub.pem",
+                "security/release-ledger-roots/v4.4.2.pub.pem",
                 "tests/test_raae_release_pipeline_workflows.py",
             ),
             protected=protected,
@@ -390,7 +390,7 @@ def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
     assert protected_result.may_execute is False
     assert protected_result.protected_violations == (
         ".evoguard.json",
-        "security/release-ledger-roots/v4.4.1.pub.pem",
+        "security/release-ledger-roots/v4.4.2.pub.pem",
         "tests/test_raae_release_pipeline_workflows.py",
     )
 

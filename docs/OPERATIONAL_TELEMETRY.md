@@ -1,9 +1,9 @@
 # Local operational telemetry
 
 > **Availability:** this utility was introduced on the `4.4.0` source line and
-> is inherited by the reviewed `4.4.1` contract; it is not part of `v4.3.0`.
-> The immutable `v4.4.0` release is published without a valid
-> protected-tree ledger. Verify the [release status](RELEASE_STATUS.md) and
+> remains in later `4.4.x` source; it is not part of `v4.3.0`.
+> The immutable `v4.4.0` and `v4.4.1` releases are published without valid
+> protected-tree ledgers. Verify the [release status](RELEASE_STATUS.md) and
 > exact installed artifact before treating it as a consumer interface.
 
 `tools/telemetry/aggregate_verdicts.py` produces a small, local operational

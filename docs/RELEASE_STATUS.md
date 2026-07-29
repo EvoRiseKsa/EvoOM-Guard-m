@@ -1,16 +1,16 @@
 # Release status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
-Source version `4.4.1` is a **release candidate** and is not yet a consumer release. The
-maintained unsigned exception record
-`evidence/release-operations/v4.4.0/UNSEALED_STATUS.json` reports
-[`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) as a
+Source version `4.4.2.dev0` is **unreleased development** and is not a consumer release.
+The maintained unsigned exception record
+`evidence/release-operations/v4.4.1/UNSEALED_STATUS.json` reports
+[`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) as a
 published immutable GitHub Release without a canonical protected-tree ledger. Its
-erratum is `docs/errata/V4.4.0-LEDGER.md`. Neither record is a ledger or a consumer pin.
+erratum is `docs/errata/V4.4.1-LEDGER.md`. Neither record is a ledger or a consumer pin.
 The unsigned local-key disposition
-`evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json` is
+`evidence/release-operations/v4.4.1/LEDGER_KEY_DISPOSITION.json` is
 `pending-operator-removal` and is not a retirement or erasure proof. This source is the
-unreleased `v4.4.1` recovery successor to `v4.4.0`; no release or ledger is claimed for
+unreleased `v4.4.2` recovery successor to `v4.4.1`; no release or ledger is claimed for
 the recovery version. The latest immutable consumer release recorded by the protected
 source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
@@ -28,11 +28,12 @@ records publication by this pipeline. An admitted release is contracted to exact
 evidence that those assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
 
-For re-queried live publication facts, the frozen-validator failure boundary,
-and the required new-release recovery, see the
-[v4.4.0 release-ledger erratum](errata/V4.4.0-LEDGER.md). Its
-machine-readable observation is unsigned and intentionally outside
-`evidence/release-ledgers`.
+For re-queried live publication facts and the separate frozen-validator failure
+boundaries, see the
+[`v4.4.0`](errata/V4.4.0-LEDGER.md) and
+[`v4.4.1`](errata/V4.4.1-LEDGER.md) release-ledger errata. Their
+machine-readable observations are unsigned and intentionally outside
+`evidence/release-ledgers`; `v4.4.2` is the required new-release recovery.
 
 The `v4.3.0` release adds Agent Change Admission V1. Its archived public
 same-owner pilot retained one permitted run, one ignored tracked-path

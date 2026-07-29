@@ -27,16 +27,16 @@ validated security service.
 ## Public repository map
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
-Source version `4.4.1` is a **release candidate** and is not yet a consumer release. The
-maintained unsigned exception record
-`evidence/release-operations/v4.4.0/UNSEALED_STATUS.json` reports
-[`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) as a
+Source version `4.4.2.dev0` is **unreleased development** and is not a consumer release.
+The maintained unsigned exception record
+`evidence/release-operations/v4.4.1/UNSEALED_STATUS.json` reports
+[`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) as a
 published immutable GitHub Release without a canonical protected-tree ledger. Its
-erratum is `docs/errata/V4.4.0-LEDGER.md`. Neither record is a ledger or a consumer pin.
+erratum is `docs/errata/V4.4.1-LEDGER.md`. Neither record is a ledger or a consumer pin.
 The unsigned local-key disposition
-`evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json` is
+`evidence/release-operations/v4.4.1/LEDGER_KEY_DISPOSITION.json` is
 `pending-operator-removal` and is not a retirement or erasure proof. This source is the
-unreleased `v4.4.1` recovery successor to `v4.4.0`; no release or ledger is claimed for
+unreleased `v4.4.2` recovery successor to `v4.4.1`; no release or ledger is claimed for
 the recovery version. The latest immutable consumer release recorded by the protected
 source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
@@ -47,9 +47,11 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
 
-Verified live `v4.4.0` facts and the frozen validator mismatch are recorded in
-the [release-ledger erratum](errata/V4.4.0-LEDGER.md). The linked unsigned JSON
-record does not replace a signed v2 ledger; recovery requires a later release.
+Verified live facts and separate frozen-validator defects for `v4.4.0` and
+`v4.4.1` are recorded in their
+[`v4.4.0`](errata/V4.4.0-LEDGER.md) and
+[`v4.4.1`](errata/V4.4.1-LEDGER.md) errata. Neither linked unsigned JSON record
+replaces a signed v2 ledger; `v4.4.2` is the current recovery source.
 
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
 | --- | --- | --- | --- |

@@ -10,21 +10,27 @@ protected A–H completed; see the
 mismatch cannot be repaired retroactively. Only a new release operation may
 produce a new signed ledger.
 
-`v4.4.1` is the designated recovery release after the `v4.4.0` exception. Its
-reviewed parent tree contains a prospective `v4.4.1` ledger public root, but a
-pre-pinned public key is only a trust input. It is not a signature, ledger,
-release, or proof that A–H has run. A `v4.4.1` ledger is valid only when a
-fresh `v4.4.1` publication operation satisfies the procedure below. The
-historical `v4.4.0` exception remains governed by its erratum even after a
-later ledger advances the consumer release.
+The immutable `v4.4.1` GitHub Release also exists without a valid protected-tree
+ledger. Its frozen validator cannot cold-start against original CPython
+`pyexpat` aliases and requires compact result JSON that the frozen trusted CLI
+does not emit. The exact bounded facts and non-claims are recorded in the
+[`v4.4.1` erratum](errata/V4.4.1-LEDGER.md); the prospective validator
+correction cannot repair it retroactively.
 
-Because no canonical `v4.4.0` ledger exists, its unused prospective ledger key
-cannot follow the signed `KEY_RETIREMENT.json` procedure below. The separate
-unsigned
-[`LEDGER_KEY_DISPOSITION.json`](../evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json)
-may record only pending operator removal or an observed local-file removal. It
-must not be described as a retirement receipt, revocation, deletion proof,
-secure erasure, or proof that no copy exists.
+`v4.4.2` is the designated recovery release. Its reviewed parent tree contains
+a distinct prospective `v4.4.2` ledger public root, but a pre-pinned public key
+is only a trust input. It is not a signature, ledger, release, or proof that
+A–H has run. A `v4.4.2` ledger is valid only when a fresh `v4.4.2` publication
+operation satisfies the procedure below. Both earlier exceptions remain
+governed by their separate records after a later ledger advances the consumer
+release.
+
+Because no canonical `v4.4.0` or `v4.4.1` ledger exists, neither unused
+prospective ledger key can follow the signed `KEY_RETIREMENT.json` procedure
+below. Their separate unsigned `LEDGER_KEY_DISPOSITION.json` records may state
+only pending operator removal or an observed local-file removal. They must not
+be described as retirement receipts, revocations, deletion proofs, secure
+erasure, or proof that no copy exists.
 
 The schema is
 [`tests/baseline/schema/release-ledger-v2.schema.json`](../tests/baseline/schema/release-ledger-v2.schema.json).
