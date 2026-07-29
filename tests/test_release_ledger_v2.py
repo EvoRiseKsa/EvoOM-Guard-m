@@ -69,6 +69,13 @@ def _file(path: str) -> dict[str, Any]:
     }
 
 
+def _release_cli_json(value: dict[str, Any]) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True)
+        + "\n"
+    ).encode("utf-8")
+
+
 def _artifact(name: str, role: str, asset_id: int) -> dict[str, Any]:
     descriptor = _file(f"release-assets/{name}")
     return {
@@ -1634,6 +1641,30 @@ def test_trusted_import_context_rejects_new_originless_modules(
     assert "late.synthetic" not in sys.modules
 
 
+def test_trusted_import_context_accepts_only_original_pyexpat_aliases(
+    tmp_path: Path,
+) -> None:
+    with validator._trusted_python_imports(
+        import_root=None,
+        blocked_roots=(tmp_path,),
+    ):
+        pyexpat = importlib.import_module("pyexpat")
+        assert sys.modules["pyexpat.errors"] is pyexpat.errors
+        assert sys.modules["pyexpat.model"] is pyexpat.model
+
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="module escaped trusted import roots",
+    ):
+        with validator._trusted_python_imports(
+            import_root=None,
+            blocked_roots=(tmp_path,),
+        ):
+            sys.modules["pyexpat.errors"] = types.ModuleType(
+                "pyexpat.errors"
+            )
+
+
 def test_retained_keys_are_bound_to_ids_and_external_anchor(
     tmp_path: Path,
 ) -> None:
@@ -2385,7 +2416,7 @@ def test_actual_source_and_artifact_result_contracts_are_closed_world(
         "provider_verified": True,
     }
     source_path = tmp_path / "source-seal.json"
-    source_path.write_bytes(validator.canonical_json_bytes(source_seal))
+    source_path.write_bytes(_release_cli_json(source_seal))
     validator._validate_source_result(
         tmp_path,
         {"path": source_path.name},
@@ -2395,7 +2426,7 @@ def test_actual_source_and_artifact_result_contracts_are_closed_world(
         label="source seal",
     )
     source_seal["live_provider_reverification"] = True
-    source_path.write_bytes(validator.canonical_json_bytes(source_seal))
+    source_path.write_bytes(_release_cli_json(source_seal))
     with pytest.raises(validator.LedgerValidationError, match="keys are not exact"):
         validator._validate_source_result(
             tmp_path,
@@ -2429,7 +2460,7 @@ def test_actual_source_and_artifact_result_contracts_are_closed_world(
         "live_provider_reverification": False,
     }
     artifact_path = tmp_path / "artifact-verify.json"
-    artifact_path.write_bytes(validator.canonical_json_bytes(artifact_verify))
+    artifact_path.write_bytes(_release_cli_json(artifact_verify))
     validator._validate_artifact_result(
         tmp_path,
         {"path": artifact_path.name},
@@ -2439,7 +2470,7 @@ def test_actual_source_and_artifact_result_contracts_are_closed_world(
         label="artifact verify",
     )
     artifact_verify["live_provider_reverification"] = True
-    artifact_path.write_bytes(validator.canonical_json_bytes(artifact_verify))
+    artifact_path.write_bytes(_release_cli_json(artifact_verify))
     with pytest.raises(validator.LedgerValidationError, match="actual F/G"):
         validator._validate_artifact_result(
             tmp_path,
@@ -2448,6 +2479,33 @@ def test_actual_source_and_artifact_result_contracts_are_closed_world(
             sealed=False,
             bundle_name="unused.raae",
             label="artifact verify",
+        )
+
+
+def test_release_result_loader_rejects_ambiguous_json(
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "source-result.json"
+    source_path.write_bytes(b'{"status":"SEALED","status":"VERIFIED"}\n')
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="duplicate JSON key: status",
+    ):
+        validator._load_strict_json_descriptor(
+            tmp_path,
+            {"path": source_path.name},
+            label="source result",
+        )
+
+    source_path.write_bytes(b'{"value":NaN}\n')
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="non-finite JSON number",
+    ):
+        validator._load_strict_json_descriptor(
+            tmp_path,
+            {"path": source_path.name},
+            label="source result",
         )
 
 

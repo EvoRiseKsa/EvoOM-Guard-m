@@ -105,7 +105,13 @@ _TRUSTED_RUNTIME_PREFIXES = (
     *_TRUSTED_DEPENDENCY_PREFIXES,
     *_TRUSTED_SCHEMA_PREFIXES,
 )
+_TRUSTED_STDLIB_RELOAD_PREFIXES = ("pyexpat",)
 _TRUSTED_DEPENDENCY_MODULES = (
+    # CPython's pyexpat extension registers the originless synthetic modules
+    # ``pyexpat.errors`` and ``pyexpat.model``.  Import it before the trusted
+    # originless-module snapshot so those exact objects are allowed while a
+    # later replacement still fails closed.
+    "pyexpat",
     "cryptography",
     "cryptography.exceptions",
     "cryptography.hazmat.primitives.serialization",
@@ -1689,7 +1695,11 @@ def _trusted_python_imports(
         for name, module in sys.modules.items()
         if _module_matches_prefix(
             name,
-            (*_TRUSTED_RUNTIME_PREFIXES, _TRUSTED_FIRST_PARTY_PREFIX),
+            (
+                *_TRUSTED_RUNTIME_PREFIXES,
+                *_TRUSTED_STDLIB_RELOAD_PREFIXES,
+                _TRUSTED_FIRST_PARTY_PREFIX,
+            ),
         )
         or _module_is_outside_roots(module, safe_roots)
     }
@@ -4807,7 +4817,7 @@ def _validate_control_bytes(
                 _fail("publication-ready record does not bind the three release assets")
 
 
-def _load_canonical_json_descriptor(
+def _load_strict_json_descriptor(
     root: Path,
     descriptor: Mapping[str, Any],
     *,
@@ -4818,10 +4828,7 @@ def _load_canonical_json_descriptor(
         limit=MAX_JSON_BYTES,
         label=label,
     )
-    value = _load_json_bytes(data, label=label)
-    if canonical_json_bytes(value) != data:
-        _fail(f"{label} is not canonical JSON")
-    return value
+    return _load_json_bytes(data, label=label)
 
 
 def _validate_source_result(
@@ -4833,7 +4840,7 @@ def _validate_source_result(
     bundle_name: str,
     label: str,
 ) -> None:
-    value = _load_canonical_json_descriptor(root, descriptor, label=label)
+    value = _load_strict_json_descriptor(root, descriptor, label=label)
     common = {
         "format": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2",
         "ok": True,
@@ -4879,7 +4886,7 @@ def _validate_artifact_result(
     bundle_name: str,
     label: str,
 ) -> None:
-    value = _load_canonical_json_descriptor(root, descriptor, label=label)
+    value = _load_strict_json_descriptor(root, descriptor, label=label)
     common = {
         "format": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1",
         "ok": True,
