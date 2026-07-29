@@ -1,0 +1,62 @@
+{
+  "format": "EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_TEST_MATRIX_V1",
+  "cases": [
+    {
+      "id": "pass",
+      "reason_code": "tests_passed",
+      "verdict": "PASS",
+      "passed": true,
+      "decision": "ALLOW"
+    },
+    {
+      "id": "rejected",
+      "reason_code": "protected_harness_edit",
+      "verdict": "REJECTED",
+      "passed": false,
+      "decision": "DENY"
+    },
+    {
+      "id": "fail",
+      "reason_code": "tests_failed",
+      "verdict": "FAIL",
+      "passed": false,
+      "decision": "DENY"
+    },
+    {
+      "id": "error",
+      "reason_code": "assurance_requirement_not_met",
+      "verdict": "ERROR",
+      "passed": false,
+      "decision": "DENY"
+    },
+    {
+      "id": "tampered",
+      "reason_code": "junit_exit_mismatch",
+      "verdict": "TAMPERED",
+      "passed": false,
+      "decision": "DENY"
+    }
+  ],
+  "channel_ids": [
+    "guard_execution",
+    "raw_git_binding",
+    "repository_suite",
+    "runtime_identity",
+    "verifier_pack"
+  ],
+  "forbidden_wire_keys": [
+    "diagnostics",
+    "effective_policy",
+    "files_changed",
+    "protected_violations",
+    "reason",
+    "risk_level",
+    "risk_score",
+    "test_command"
+  ],
+  "forbidden_wire_tokens": [
+    "PRIVACY_DIAGNOSTICS_SENTINEL",
+    "PRIVACY_EXTENSION_SENTINEL",
+    "PRIVACY_REASON_SENTINEL"
+  ]
+}

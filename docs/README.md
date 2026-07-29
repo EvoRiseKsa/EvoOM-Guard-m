@@ -42,6 +42,7 @@ production channel.
 | Design a production deployment | [`PRODUCTION_BLUEPRINT.md`](PRODUCTION_BLUEPRINT.md) | [`PRODUCTION_OPERATIONS.md`](PRODUCTION_OPERATIONS.md) |
 | Review security claims | [`ASSURANCE.md`](ASSURANCE.md) | [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) |
 | Integrate machine-readable evidence | [`JSON_SCHEMA.md`](JSON_SCHEMA.md) | [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) |
+| Consume signed positive and negative attempts | [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) | [`adr/0009-change-attempt-observation-v1.md`](adr/0009-change-attempt-observation-v1.md) |
 | Maintain or release the project | [`GOVERNANCE.md`](GOVERNANCE.md) | [`RELEASE_TRUST_PIPELINE.md`](RELEASE_TRUST_PIPELINE.md) |
 | Understand the implementation | [`architecture/OVERVIEW.md`](architecture/OVERVIEW.md) | [`adr/0001-layered-architecture.md`](adr/0001-layered-architecture.md) |
 
@@ -87,6 +88,9 @@ contract does not authorize another stage such as publication or deployment.
   protected-boundary adapter for GitHub Artifact Attestations.
 - [`AGENT_CHANGE_ADMISSION.md`](AGENT_CHANGE_ADMISSION.md) — bind an untrusted
   agent proposal to signed scope, re-derived facts, and finalization.
+- [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) — project
+  authenticated `ALLOW` and `DENY` attempts into one correlated,
+  advisory-only, privacy-bounded contract.
 - [`AUTHENTICATED_PRODUCER_RECEIPT.md`](AUTHENTICATED_PRODUCER_RECEIPT.md) —
   non-admitting producer receipt contract.
 - [`RELEASE_SOURCE_FINALIZER.md`](RELEASE_SOURCE_FINALIZER.md) — release-source

@@ -1,0 +1,39 @@
+{
+  "format": "EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_GOLDEN_VECTORS_V1",
+  "producer": {
+    "case_id": "pass",
+    "fixture_prefix": "golden-pass",
+    "public_fixture_key_label": "v1-pass",
+    "public_key_pem_sha256": "2026adb1c86c38f00400783ae637f7be8cbfcfa74434abeaa1f75b45482c2b13",
+    "bundle_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0",
+    "observation_file": "golden-pass.observation.json",
+    "observation_size": 5012,
+    "observation_sha256": "bd49ada2f6b2cc3c78770bda7f6c55ec076fcd20db7adf61b6911e59615fdb33"
+  },
+  "consumer": {
+    "accept": [
+      "canonical"
+    ],
+    "reject": [
+      {
+        "id": "unknown-root-key",
+        "pointer": "/unexpected",
+        "value": true
+      },
+      {
+        "id": "decision-verdict-mismatch",
+        "pointer": "/outcome/decision",
+        "value": "DENY"
+      },
+      {
+        "id": "independence-escalation",
+        "pointer": "/evidence_channels/guard_execution/provenance/independently_countable",
+        "value": true
+      }
+    ]
+  },
+  "notes": [
+    "The deterministic fixture key is public test material and must never be used outside tests.",
+    "The vector contains only the bounded observation; it contains no private key, source code, command, path, diagnostics, stdout, stderr, raw JUnit, policy content, or verifier-pack content."
+  ]
+}

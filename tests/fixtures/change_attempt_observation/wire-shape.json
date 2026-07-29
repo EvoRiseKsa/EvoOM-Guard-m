@@ -1,0 +1,45 @@
+{
+  "format": "EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_WIRE_SHAPE_V1",
+  "root_keys": [
+    "assurance",
+    "authority",
+    "consumer_schema",
+    "evidence_channels",
+    "format",
+    "outcome",
+    "signed_evidence",
+    "source"
+  ],
+  "source_keys": [
+    "base_sha",
+    "base_tree_sha",
+    "candidate_sha256",
+    "context_run_attempt",
+    "context_run_id",
+    "effective_policy_sha256",
+    "guard_artifact_sha256",
+    "handoff_workflow_run_attempt",
+    "handoff_workflow_run_id",
+    "head_sha",
+    "head_tree_sha",
+    "pull_request_number",
+    "repository",
+    "repository_id",
+    "verifier_pack_sha256"
+  ],
+  "channel_scopes": {
+    "guard_execution": "SIGNED_RECORD_CLAIM",
+    "raw_git_binding": "RAW_GIT_BINDING",
+    "repository_suite": "SIGNED_RECORD_CLAIM",
+    "runtime_identity": "SIGNED_RECORD_CLAIM",
+    "verifier_pack": "SIGNED_RECORD_CLAIM"
+  },
+  "provenance_keys": [
+    "correlation_group_id",
+    "independently_countable",
+    "origin",
+    "producer_key_id",
+    "receipt_format",
+    "receipt_sha256"
+  ]
+}
