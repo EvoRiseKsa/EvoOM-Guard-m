@@ -19,6 +19,7 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
+- Source `4.4.1.dev0` is the unreleased recovery successor to `v4.4.0`; it is not a consumer release and has no release ledger.
 - [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) is the latest published stable and supported release; it has no valid protected-tree ledger.
 - [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) remains the latest ledger-recorded consumer release and is temporarily supported until a later recovery release.
 - Earlier published versions are historical and unsupported. Their tags,
@@ -29,6 +30,38 @@ retained evidence say so.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
 ## [Unreleased]
+
+### Changed
+
+- Advanced the protected source identity to `4.4.1.dev0` as an unreleased
+  recovery successor to the immutable `v4.4.0` publication. No `v4.4.1`
+  release, release candidate, protected A-through-H operation, or release
+  ledger is claimed by this source state.
+- Retargeted the parent-owned release-candidate scope and phase-A benchmark
+  promotion contract from `4.4.0.dev0` → `4.4.0` to the future
+  `4.4.1.dev0` → `4.4.1` transition. The existing benchmark is not rewritten
+  by this source-parent change; fresh `4.4.1.dev0` evidence remains a separate
+  required step.
+- Pinned the prospective `v4.4.1` release-ledger public root in the reviewed
+  parent tree. A pinned public root is only a pre-publication trust input; it
+  is not a release, signature, ledger, or proof that the corresponding private
+  key remains available or controlled.
+- Added a machine-authoritative `published_unledgered` exception reference to
+  `PROJECT_STATUS.json`, including the reviewed record's SHA-256. The renderer
+  parses the verified byte snapshot once and fail-closes unless the referenced
+  `v4.4.0` observation has canonical timestamps and chronology, exact bounded
+  assets and provider observations, cross-bound commits and run identities,
+  an internally consistent failure reason, and Git-derived tag, parent, tree,
+  validator-blob, and correction identities. It also requires explicit
+  unsigned/unsealed non-claims, no canonical `v4.4.0` ledger, and its
+  non-ledger erratum. The
+  historical exception remains valid after the `v4.4.1` recovery ledger and
+  later source lines without being presented as current release evidence.
+- Added an unsigned, privacy-bounded local-key disposition statement for the
+  unused prospective `v4.4.0` ledger private-key file. It is currently pending
+  operator removal and explicitly cannot serve as a retirement receipt,
+  revocation record, deletion proof, secure-erasure proof, or proof that no
+  copy exists.
 
 ## [4.4.0] — published 2026-07-29; no valid protected-tree ledger
 

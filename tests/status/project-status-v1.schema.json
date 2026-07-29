@@ -7,6 +7,7 @@
     "schema_version",
     "source",
     "published_release",
+    "release_exceptions",
     "release_pipeline"
   ],
   "properties": {
@@ -75,6 +76,44 @@
         "ledger": {
           "type": "string",
           "pattern": "^(tests/baseline|evidence/release-ledgers)/v[0-9]+\\.[0-9]+\\.[0-9]+/RELEASE_LEDGER\\.json$"
+        }
+      }
+    },
+    "release_exceptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "published_unledgered"
+      ],
+      "properties": {
+        "published_unledgered": {
+          "description": "Unsigned maintained exception authority for a real immutable publication that has no canonical protected-tree ledger. The referenced record and erratum cannot substitute for a ledger.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "record",
+            "record_sha256",
+            "erratum",
+            "key_disposition"
+          ],
+          "properties": {
+            "record": {
+              "type": "string",
+              "pattern": "^evidence/release-operations/v[0-9]+\\.[0-9]+\\.[0-9]+/UNSEALED_STATUS\\.json$"
+            },
+            "record_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "erratum": {
+              "type": "string",
+              "pattern": "^docs/errata/V[0-9]+\\.[0-9]+\\.[0-9]+-LEDGER\\.md$"
+            },
+            "key_disposition": {
+              "type": "string",
+              "pattern": "^evidence/release-operations/v[0-9]+\\.[0-9]+\\.[0-9]+/LEDGER_KEY_DISPOSITION\\.json$"
+            }
+          }
         }
       }
     },

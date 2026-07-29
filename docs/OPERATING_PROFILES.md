@@ -7,13 +7,14 @@
 
 # Operating profiles
 
-> **Availability:** operating profiles belong to the `4.4.0` source line.
-> `v4.3.0` does not recognize `--operating-profile` or emit schema `1.12`.
-> The immutable `v4.4.0` release is published without a valid protected-tree
-> ledger. Repository presence alone is not ledger evidence; confirm the
-> [release status](RELEASE_STATUS.md) and exact artifact you run.
+> **Availability:** operating profiles were introduced on the `4.4.0` source
+> line and are inherited by the reviewed `4.4.1` contract. `v4.3.0` does not
+> recognize `--operating-profile` or emit schema
+> `1.12`. The immutable `v4.4.0` release is published without a valid
+> protected-tree ledger. Repository presence alone is not ledger evidence;
+> confirm the [release status](RELEASE_STATUS.md) and exact artifact you run.
 
-In the `4.4.0` source line, `--operating-profile` gives a Guard run an
+On source versions that provide it, `--operating-profile` gives a Guard run an
 explicit trust and runtime contract. It is optional: omitting it preserves the
 historical CLI behavior, effective policy payload, and policy digest exactly.
 When selected, the profile is stored in

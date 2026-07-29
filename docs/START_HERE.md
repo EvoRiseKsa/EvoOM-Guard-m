@@ -20,9 +20,10 @@ to start.
 
 > **Release boundary:** use [`RELEASE_STATUS.md`](RELEASE_STATUS.md) as the
 > authority. Commands below apply to the ledger-recorded consumer release unless
-> a section is explicitly marked as a `4.4.0` source-line contract. Named
-> `--operating-profile` policies and verdict schema `1.12` belong to the `4.4.0`
-> source line and are absent from the frozen `v4.3.0` contract.
+> a section is explicitly marked as a `4.4.1` source-line contract.
+> Named `--operating-profile` policies and verdict schema `1.12` belong to the
+> `4.4.1` source contract (inherited from `4.4.0`) and are absent from
+> the frozen `v4.3.0` contract.
 
 ## Decision table
 
@@ -39,13 +40,13 @@ Quick tree:
 Want to block edits to modelled/configured judge paths? → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a delivered container boundary?                  → add --isolation docker (fail-closed)
-Evaluating `4.4.0` named profiles?                     → verify release status; see OPERATING_PROFILES.md
+Evaluating `4.4.1` named profiles?                     → verify release status; see OPERATING_PROFILES.md
 Need a signed PR admission record with separated key?  → Trusted Finalizer
 ```
 
 A future/external VM-class provider is a separate deployment boundary; the
-`4.4.0` `hostile` profile implements gVisor only, and release-bound hostile
-evidence remains open. See
+`4.4.1` `hostile` contract, inherited from `4.4.0`, implements gVisor only,
+and release-bound hostile evidence remains open. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for that source-line contract.
 
 Already have a verdict and need an offline admission/audit result? Use
@@ -53,8 +54,9 @@ Already have a verdict and need an offline admission/audit result? Use
 `bundle-evidence`/`verify-bundle` path when external key and replay-resistant
 context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
 [`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md). The frozen `v4.3.0` verifier
-accepts schema `1.11`; schema `1.12` support belongs to the `4.4.0` source line.
-Confirm the exact installed version before verifying a record.
+accepts schema `1.11`; schema `1.12` support belongs to the `4.4.1` source
+contract (introduced in `4.4.0`). Confirm the exact installed
+version before verifying a record.
 
 > **Using the GitHub Action on a PR?** Commit the judge policy in
 > `.evoguard.json` on the base branch; `evo-guard init` creates it alongside the
