@@ -2423,6 +2423,7 @@ def _validate_v2_ledger_with_git(
         raise ProjectStatusError("release-ledger v2 commit identities are not SHA-1")
     parent_files = (
         "tools/ci/validate_release_ledger_v2.py",
+        "tools/ci/collect_repository_controls_v2.py",
         "tests/baseline/schema/release-ledger-v2.schema.json",
         f"security/release-ledger-roots/v{version}.pub.pem",
         "ops/build_pyz.py",
