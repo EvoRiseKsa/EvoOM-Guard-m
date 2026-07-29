@@ -28,10 +28,13 @@ externally supplied copy of the parent-pinned ledger public root.
 On Python 3.10, the immutable `v4.4.2` parent validator needs the
 hash-locked `importlib-resources` compatibility backport because that frozen
 validator removes CPython's originless `typing.io` alias before loading
-`jsonschema`. The post-`v4.4.2` validator rebuilds the trusted `typing` aliases
-and preserves the already inventoried PyO3 cryptography extension across its
-nested first-party boundary. These prospective compatibility repairs do not
-rewrite the release, ledger, signature, or parent validator.
+`jsonschema`. CI installs that narrow backport from
+`requirements/python310-compat.lock`; keeping it separate preserves the
+release-promoted benchmark's exact `requirements/ci.lock` source binding. The
+post-`v4.4.2` validator rebuilds the trusted `typing` aliases and preserves the
+already inventoried PyO3 cryptography extension across its nested first-party
+boundary. These prospective compatibility repairs do not rewrite the release,
+ledger, signature, or parent validator.
 
 The pre-pinned public root alone did not establish those facts; it was only a
 trust input. The signed directory plus offline validation now establishes the
