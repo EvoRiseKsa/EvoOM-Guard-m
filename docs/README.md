@@ -12,16 +12,17 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 
 ## Version boundary
 
-- **Latest published stable release:** [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0);
+- **Latest published stable release:** [`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1);
   it has no valid protected-tree ledger.
 - **Ledger-recorded consumer pin:** [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0).
 - **Repository source:** use the exact checked-out commit; its lifecycle is
   reported by the status authorities below.
 - **Status authority:** [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and
   [`RELEASE_STATUS.md`](RELEASE_STATUS.md).
-- **Exception record:** [`errata/V4.4.0-LEDGER.md`](errata/V4.4.0-LEDGER.md)
-  records verified live facts, the frozen validator mismatch, and the
-  new-release recovery boundary without claiming to be a ledger.
+- **Exception records:** [`errata/V4.4.0-LEDGER.md`](errata/V4.4.0-LEDGER.md)
+  and [`errata/V4.4.1-LEDGER.md`](errata/V4.4.1-LEDGER.md) record the separate
+  verified publication facts, frozen validator defects, and new-release
+  recovery boundaries without claiming to be ledgers.
 
 Repository documentation follows the source tree and may describe behavior
 absent from the latest ledger-recorded consumer release. Advanced pages state

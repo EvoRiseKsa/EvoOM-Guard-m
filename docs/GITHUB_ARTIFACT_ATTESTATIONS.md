@@ -10,16 +10,16 @@
 ## Status and exact scope
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
-Source version `4.4.1` is a **release candidate** and is not yet a consumer release. The
-maintained unsigned exception record
-`evidence/release-operations/v4.4.0/UNSEALED_STATUS.json` reports
-[`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) as a
+Source version `4.4.2.dev0` is **unreleased development** and is not a consumer release.
+The maintained unsigned exception record
+`evidence/release-operations/v4.4.1/UNSEALED_STATUS.json` reports
+[`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) as a
 published immutable GitHub Release without a canonical protected-tree ledger. Its
-erratum is `docs/errata/V4.4.0-LEDGER.md`. Neither record is a ledger or a consumer pin.
+erratum is `docs/errata/V4.4.1-LEDGER.md`. Neither record is a ledger or a consumer pin.
 The unsigned local-key disposition
-`evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json` is
+`evidence/release-operations/v4.4.1/LEDGER_KEY_DISPOSITION.json` is
 `pending-operator-removal` and is not a retirement or erasure proof. This source is the
-unreleased `v4.4.1` recovery successor to `v4.4.0`; no release or ledger is claimed for
+unreleased `v4.4.2` recovery successor to `v4.4.1`; no release or ledger is claimed for
 the recovery version. The latest immutable consumer release recorded by the protected
 source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
@@ -30,11 +30,12 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:ATTESTATIONS_RELEASE_STATUS -->
 
-The unsigned
-[`v4.4.0` observation record](../evidence/release-operations/v4.4.0/UNSEALED_STATUS.json)
-records successful release-attestation and constrained build-provenance
-verification. It remains outside the signed release-ledger namespace and
-cannot be upgraded into a canonical `v4.4.0` ledger retroactively.
+The separate unsigned
+[`v4.4.0`](../evidence/release-operations/v4.4.0/UNSEALED_STATUS.json) and
+[`v4.4.1`](../evidence/release-operations/v4.4.1/UNSEALED_STATUS.json)
+observation records preserve successful release-attestation and constrained
+build-provenance verification. They remain outside the signed release-ledger
+namespace and cannot be upgraded into canonical ledgers retroactively.
 
 `v3.7.0` has a GitHub **release** attestation. It does **not** have a GitHub
 Actions build-artifact attestation for `evo-guard.pyz`. Do not describe the

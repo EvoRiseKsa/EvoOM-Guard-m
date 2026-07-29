@@ -3,12 +3,20 @@
     "ledger": "tests/baseline/v4.3.0/RELEASE_LEDGER.json"
   },
   "release_exceptions": {
-    "published_unledgered": {
-      "erratum": "docs/errata/V4.4.0-LEDGER.md",
-      "key_disposition": "evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json",
-      "record": "evidence/release-operations/v4.4.0/UNSEALED_STATUS.json",
-      "record_sha256": "f9b0fffa65c233938a95321d39ab1da73bebf2ef6293de125bf1b73f08202408"
-    }
+    "published_unledgered": [
+      {
+        "erratum": "docs/errata/V4.4.0-LEDGER.md",
+        "key_disposition": "evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json",
+        "record": "evidence/release-operations/v4.4.0/UNSEALED_STATUS.json",
+        "record_sha256": "f9b0fffa65c233938a95321d39ab1da73bebf2ef6293de125bf1b73f08202408"
+      },
+      {
+        "erratum": "docs/errata/V4.4.1-LEDGER.md",
+        "key_disposition": "evidence/release-operations/v4.4.1/LEDGER_KEY_DISPOSITION.json",
+        "record": "evidence/release-operations/v4.4.1/UNSEALED_STATUS.json",
+        "record_sha256": "314299169ab7e611606b9c3f69c5f58196dedd42cdc98bc0d7d1e76c4e0977e1"
+      }
+    ]
   },
   "release_pipeline": {
     "activation_model": "disabled-by-default",
@@ -17,14 +25,14 @@
     "implementation": "implemented",
     "legacy_workflow": "hard-disabled"
   },
-  "schema_version": "evoguard-project-status-v1",
+  "schema_version": "evoguard-project-status-v2",
   "source": {
     "architecture": {
       "behavior_preserving_r2": "complete",
       "cli_handler_extraction": "complete",
       "overall_refactor_program": "in-progress"
     },
-    "lifecycle": "release-candidate",
+    "lifecycle": "unreleased-development",
     "relation_to_latest_release": "descendant"
   }
 }

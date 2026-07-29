@@ -2,10 +2,11 @@
 
 > **Availability:** this protocol depends on the explicit operating-profile and
 > schema `1.12` contracts introduced on the `4.4.0` source line and inherited
-> by the reviewed `4.4.1` contract. It is not a `v4.3.0` consumer
-> interface. An immutable `v4.4.0` GitHub Release exists without a valid
-> protected-tree ledger. Presence of this protocol is neither that missing
-> ledger evidence nor evidence that an independent party ran it.
+> by later `4.4.x` source, including published `v4.4.1` and current
+> `4.4.2.dev0`. It is not a `v4.3.0` consumer interface. The immutable
+> `v4.4.0` and `v4.4.1` releases exist without valid protected-tree ledgers.
+> Presence of this protocol is neither that missing ledger evidence nor
+> evidence that an independent party ran it.
 
 `tools/evaluation/blind_protocol.py` makes a held-out evaluation auditable
 without pretending that the project author is an independent evaluator. It

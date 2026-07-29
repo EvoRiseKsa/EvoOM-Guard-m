@@ -21,8 +21,8 @@ release:
 
 | Version | Status |
 | --- | --- |
-| `4.4.1` | Release candidate; not a consumer release; recovery successor to `v4.4.0` |
-| [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) | Latest published stable release; supported; no valid protected-tree ledger |
+| `4.4.2.dev0` | Unreleased development source; not a consumer release; recovery successor to `v4.4.1` |
+| [`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) | Latest published stable release; supported; no valid protected-tree ledger |
 | [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) | Latest ledger-recorded consumer release; temporarily supported until a later recovery release |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |
 | Unpublished draft candidates | Unsupported; never consumer releases |

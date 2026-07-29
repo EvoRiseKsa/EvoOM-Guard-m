@@ -25,6 +25,28 @@ from tools.ci import validate_release_candidate_scope as candidate_scope
 ROOT = Path(__file__).parents[1]
 
 
+def _project_status_v2_fixture() -> dict[str, object]:
+    status = json.loads(
+        (ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8")
+    )
+    configured = status["release_exceptions"]["published_unledgered"]
+    first = configured[0] if isinstance(configured, list) else configured
+    second = {
+        "record": (
+            "evidence/release-operations/v4.4.1/UNSEALED_STATUS.json"
+        ),
+        "record_sha256": "1" * 64,
+        "erratum": "docs/errata/V4.4.1-LEDGER.md",
+        "key_disposition": (
+            "evidence/release-operations/v4.4.1/"
+            "LEDGER_KEY_DISPOSITION.json"
+        ),
+    }
+    status["schema_version"] = "evoguard-project-status-v2"
+    status["release_exceptions"]["published_unledgered"] = [first, second]
+    return status
+
+
 def _minimal_v2_ledger(version: str = "4.4.0") -> dict[str, object]:
     tag = f"v{version}"
     return {
@@ -70,8 +92,12 @@ def _minimal_v2_ledger(version: str = "4.4.0") -> dict[str, object]:
 class ProjectStatusTests(unittest.TestCase):
     def test_machine_readable_status_matches_its_public_schema(self) -> None:
         status = json.loads((ROOT / "PROJECT_STATUS.json").read_text(encoding="utf-8"))
+        schema_name = {
+            "evoguard-project-status-v1": "project-status-v1.schema.json",
+            "evoguard-project-status-v2": "project-status-v2.schema.json",
+        }[status["schema_version"]]
         schema = json.loads(
-            (ROOT / "tests/status/project-status-v1.schema.json").read_text(
+            (ROOT / "tests/status" / schema_name).read_text(
                 encoding="utf-8"
             )
         )
@@ -95,6 +121,109 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertEqual(
             list(Draft202012Validator(schema).iter_errors(v2_status)),
             [],
+        )
+
+    def test_project_status_v2_schema_and_parser_preserve_ordered_history(
+        self,
+    ) -> None:
+        status = _project_status_v2_fixture()
+        schema = json.loads(
+            (
+                ROOT / "tests/status/project-status-v2.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(schema)
+        self.assertEqual(
+            list(Draft202012Validator(schema).iter_errors(status)),
+            [],
+        )
+        parsed = render_project_status.load_status(
+            ROOT,
+            raw=(json.dumps(status) + "\n").encode(),
+        )
+        self.assertEqual(parsed.schema_version, "evoguard-project-status-v2")
+        self.assertEqual(
+            tuple(
+                authority.record_path
+                for authority in parsed.published_unledgered_authorities
+            ),
+            (
+                "evidence/release-operations/v4.4.0/UNSEALED_STATUS.json",
+                "evidence/release-operations/v4.4.1/UNSEALED_STATUS.json",
+            ),
+        )
+        self.assertEqual(
+            parsed.published_unledgered_record_path,
+            "evidence/release-operations/v4.4.1/UNSEALED_STATUS.json",
+        )
+
+    def test_project_status_v2_authority_list_fails_closed(self) -> None:
+        source = _project_status_v2_fixture()
+
+        def rejected(mutator: object) -> None:
+            candidate = json.loads(json.dumps(source))
+            assert callable(mutator)
+            mutator(candidate)
+            with self.assertRaises(render_project_status.ProjectStatusError):
+                render_project_status.load_status(
+                    ROOT,
+                    raw=(json.dumps(candidate) + "\n").encode(),
+                )
+
+        rejected(
+            lambda value: value["release_exceptions"].__setitem__(
+                "published_unledgered",
+                list(
+                    reversed(
+                        value["release_exceptions"]["published_unledgered"]
+                    )
+                ),
+            )
+        )
+        rejected(
+            lambda value: value["release_exceptions"][
+                "published_unledgered"
+            ][1].__setitem__(
+                "record_sha256",
+                value["release_exceptions"]["published_unledgered"][0][
+                    "record_sha256"
+                ],
+            )
+        )
+        rejected(
+            lambda value: value["release_exceptions"][
+                "published_unledgered"
+            ][1].__setitem__(
+                "erratum",
+                "docs/errata/V4.4.2-LEDGER.md",
+            )
+        )
+        rejected(
+            lambda value: value["release_exceptions"][
+                "published_unledgered"
+            ][1].__setitem__(
+                "record",
+                value["release_exceptions"]["published_unledgered"][0][
+                    "record"
+                ],
+            )
+        )
+        rejected(
+            lambda value: value["release_exceptions"][
+                "published_unledgered"
+            ][1].__setitem__("record_sha256", "A" * 64)
+        )
+        rejected(
+            lambda value: value["release_exceptions"].__setitem__(
+                "published_unledgered",
+                [],
+            )
+        )
+        rejected(
+            lambda value: value["release_exceptions"].__setitem__(
+                "published_unledgered",
+                value["release_exceptions"]["published_unledgered"][0],
+            )
         )
 
     def test_project_status_runs_in_matrix_and_has_one_aggregate_check(self) -> None:
@@ -196,9 +325,9 @@ class ProjectStatusTests(unittest.TestCase):
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
         expected_source_versions = {
-            "unreleased-development": "4.4.1.dev0",
-            "release-candidate": "4.4.1",
-            "published-unledgered": "4.4.0",
+            "unreleased-development": "4.4.2.dev0",
+            "release-candidate": "4.4.2",
+            "published-unledgered": "4.4.1",
         }
         self.assertIn(context.status.lifecycle, expected_source_versions)
         self.assertEqual(
@@ -405,22 +534,22 @@ class ProjectStatusTests(unittest.TestCase):
             {"unreleased-development", "release-candidate"},
         )
         expected_source = (
-            "4.4.1.dev0"
+            "4.4.2.dev0"
             if context.status.lifecycle == "unreleased-development"
-            else "4.4.1"
+            else "4.4.2"
         )
         self.assertEqual(context.source_version, expected_source)
         self.assertEqual(context.ledger.version, "4.3.0")
-        self.assertEqual(context.published_unledgered.version, "4.4.0")
-        self.assertEqual(context.published_unledgered.recovery_version, "4.4.1")
+        self.assertEqual(context.published_unledgered.version, "4.4.1")
+        self.assertEqual(context.published_unledgered.recovery_version, "4.4.2")
         candidate_exception = render_project_status._load_published_unledgered(
             ROOT,
             replace(context.status, lifecycle="release-candidate"),
             context.ledger,
-            "4.4.1",
+            "4.4.2",
             verify_git=False,
         )
-        self.assertEqual(candidate_exception.version, "4.4.0")
+        self.assertEqual(candidate_exception.version, "4.4.1")
 
         blocks = render_project_status._blocks(context)
         pin_blocks = (
@@ -458,7 +587,7 @@ class ProjectStatusTests(unittest.TestCase):
             support,
         )
         self.assertIn(f"`{context.source_version}`", support)
-        self.assertIn("recovery successor to `v4.4.0`", support)
+        self.assertIn("recovery successor to `v4.4.1`", support)
         self.assertIn(
             "Latest ledger-recorded consumer release; temporarily supported",
             support,
@@ -607,6 +736,337 @@ class ProjectStatusTests(unittest.TestCase):
             "v2 ledger",
             erratum,
         )
+
+    def test_ordered_history_accepts_v440_v1_and_synthetic_v441_v2(
+        self,
+    ) -> None:
+        context = render_project_status.load_context(ROOT, verify_git=False)
+        source_v440 = json.loads(
+            (
+                ROOT
+                / "evidence/release-operations/v4.4.0/UNSEALED_STATUS.json"
+            ).read_text(encoding="utf-8")
+        )
+        source_disposition = json.loads(
+            (
+                ROOT
+                / "evidence/release-operations/v4.4.0/"
+                "LEDGER_KEY_DISPOSITION.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        def synthetic_v441() -> tuple[dict[str, object], dict[str, object]]:
+            record = json.loads(json.dumps(source_v440))
+            record["schema_version"] = "evoguard-unsealed-release-status-v2"
+            record["recorded_utc"] = "2026-07-29T08:00:00Z"
+            release = record["release"]
+            release.update(
+                {
+                    "version": "4.4.1",
+                    "tag": "v4.4.1",
+                    "commit_sha": "2" * 40,
+                    "release_id": 2,
+                    "created_utc": "2026-07-29T07:00:00Z",
+                    "published_utc": "2026-07-29T07:30:00Z",
+                    "release_url": (
+                        "https://github.com/EvoRiseKsa/EvoOM-Guard-m/"
+                        "releases/tag/v4.4.1"
+                    ),
+                }
+            )
+            for asset in record["assets"]:
+                asset["url"] = asset["url"].replace("v4.4.0", "v4.4.1")
+            observations = record["verification_observations"]
+            observations["release_attestation"].update(
+                {
+                    "tag_commit_sha": "2" * 40,
+                    "command": (
+                        "gh release verify v4.4.1 --repo "
+                        "EvoRiseKsa/EvoOM-Guard-m"
+                    ),
+                }
+            )
+            observations["build_provenance"]["source_commit_sha"] = "2" * 40
+            for name in ("tag_ci", "action_smoke"):
+                observations[name]["head_sha"] = "2" * 40
+            record["failure_boundary"] = {
+                "reason_code": "FROZEN_VALIDATOR_CONTRACT_DEFECTS",
+                "trusted_parent_commit_sha": "3" * 40,
+                "trusted_parent_tree_sha": "4" * 40,
+                "validator_path": "tools/ci/validate_release_ledger_v2.py",
+                "validator_blob_sha": "5" * 40,
+                "defects": [
+                    {
+                        "code": "TRUSTED_IMPORT_COLD_START_ALIAS_REJECTION",
+                        "boundary": "trusted-import-cold-start",
+                        "affected_material": [],
+                        "observation": (
+                            "The frozen validator rejects an original CPython "
+                            "originless module alias during cold start."
+                        ),
+                    },
+                    {
+                        "code": "RETAINED_RESULT_JSON_ENCODING_MISMATCH",
+                        "boundary": "retained-result-encoding",
+                        "affected_material": [
+                            {
+                                "path": (
+                                    "admission/source/"
+                                    "protected-seal-result.json"
+                                ),
+                                "size_bytes": 530,
+                                "sha256": "7" * 64,
+                            }
+                        ],
+                        "observation": (
+                            "The frozen validator requires compact JSON while "
+                            "the frozen producer emits reviewed indented JSON."
+                        ),
+                    },
+                ],
+                "corrected_pr": 999,
+                "corrected_commit": "6" * 40,
+                "retroactive_correction_allowed": False,
+                "explanation": (
+                    "The release operation and descriptor are bound to the "
+                    "frozen trusted parent and validator blob. Later corrections "
+                    "cannot replace those inputs retroactively."
+                ),
+            }
+            ledger_state = record["ledger_state"]
+            ledger_state["v4_4_1_release_ledger_present"] = ledger_state.pop(
+                "v4_4_0_release_ledger_present"
+            )
+            ledger_state["reason_code"] = (
+                "FROZEN_VALIDATOR_CONTRACT_DEFECTS"
+            )
+            ledger_state["recovery_release"] = "v4.4.2"
+            record["trust_boundary"][-2:] = [
+                (
+                    "The v4.4.1 tag, release assets, checksums, and "
+                    "attestations must not be rewritten to repair the missing "
+                    "ledger."
+                ),
+                (
+                    "No canonical v4.4.1 ledger or ledger signature can be "
+                    "issued retroactively after the frozen validator contract "
+                    "has been corrected; recovery requires a new release."
+                ),
+            ]
+
+            disposition = json.loads(json.dumps(source_disposition))
+            disposition["release"].update(
+                {
+                    "version": "4.4.1",
+                    "tag": "v4.4.1",
+                    "reason_code": "FROZEN_VALIDATOR_CONTRACT_DEFECTS",
+                }
+            )
+            disposition["key"].update(
+                {
+                    "purpose": (
+                        "prospective v4.4.1 release-ledger signing only"
+                    ),
+                    "public_key_path": (
+                        "security/release-ledger-roots/v4.4.1.pub.pem"
+                    ),
+                    "public_key_id": (
+                        "sha256:"
+                        "ab3501f94e2d5fe7e27d02c2d82957738c29102fb37c7150"
+                        "0392f7f559342e6a"
+                    ),
+                    "private_file_basename": (
+                        "release-ledger-v4.4.1.private.pem"
+                    ),
+                }
+            )
+            disposition["disposition"]["trigger"] = (
+                "Canonical v4.4.1 ledger issuance is impossible under the "
+                "frozen release validator; the unused operator-local "
+                "private-key file has no remaining authorized signing purpose."
+            )
+            disposition["disposition"]["authorized_action"] = (
+                "Remove only the named operator-local private-key file after "
+                "independently confirming the v4.4.1 ledger failure boundary."
+            )
+            disposition["non_claims"][-1] = (
+                "This record does not create, sign, validate, or repair a "
+                "v4.4.1 release ledger."
+            )
+            return record, disposition
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for relative in (
+                "evidence/release-operations/v4.4.0/UNSEALED_STATUS.json",
+                "evidence/release-operations/v4.4.0/"
+                "LEDGER_KEY_DISPOSITION.json",
+                "docs/errata/V4.4.0-LEDGER.md",
+                "security/release-ledger-roots/v4.4.0.pub.pem",
+                "security/release-ledger-roots/v4.4.1.pub.pem",
+                "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / relative).read_bytes())
+
+            record, disposition = synthetic_v441()
+            record_path = (
+                root
+                / "evidence/release-operations/v4.4.1/"
+                "UNSEALED_STATUS.json"
+            )
+            disposition_path = (
+                root
+                / "evidence/release-operations/v4.4.1/"
+                "LEDGER_KEY_DISPOSITION.json"
+            )
+            erratum_path = root / "docs/errata/V4.4.1-LEDGER.md"
+            record_path.parent.mkdir(parents=True, exist_ok=True)
+            erratum_path.parent.mkdir(parents=True, exist_ok=True)
+            record_bytes = (json.dumps(record, indent=2) + "\n").encode()
+            record_path.write_bytes(record_bytes)
+            disposition_path.write_text(
+                json.dumps(disposition, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            erratum_path.write_bytes(
+                b"# v4.4.1 release-ledger erratum\n\n"
+                b"This is a post-publication correction record. It is **not** "
+                b"a release ledger.\n\n"
+                b"`evidence/release-operations/v4.4.1/UNSEALED_STATUS.json`\n\n"
+                b"Prepare `v4.4.2` as a new release.\n"
+            )
+
+            status_value = _project_status_v2_fixture()
+            status_value["source"]["lifecycle"] = "unreleased-development"
+            status_value["release_exceptions"]["published_unledgered"][1][
+                "record_sha256"
+            ] = hashlib.sha256(record_bytes).hexdigest()
+            status = render_project_status.load_status(
+                root,
+                raw=(json.dumps(status_value) + "\n").encode(),
+            )
+            history = tuple(
+                render_project_status._load_published_unledgered(
+                    root,
+                    status,
+                    context.ledger,
+                    "4.4.2.dev0",
+                    verify_git=False,
+                    authority=authority,
+                    validate_relation=False,
+                )
+                for authority in status.published_unledgered_authorities
+            )
+            render_project_status._validate_published_unledgered_chain(
+                root,
+                status,
+                context.ledger,
+                "4.4.2.dev0",
+                history,
+            )
+            self.assertEqual(
+                tuple(item.version for item in history),
+                ("4.4.0", "4.4.1"),
+            )
+            self.assertEqual(history[-1].recovery_version, "4.4.2")
+
+            skipped = replace(history[0], recovery_version="4.4.2")
+            with self.assertRaises(render_project_status.ProjectStatusError):
+                render_project_status._validate_published_unledgered_chain(
+                    root,
+                    status,
+                    context.ledger,
+                    "4.4.2.dev0",
+                    (skipped, history[1]),
+                )
+
+            failure_mutations = (
+                (
+                    "path traversal",
+                    lambda value: value["failure_boundary"]["defects"][1][
+                        "affected_material"
+                    ][0].__setitem__("path", "../protected-seal-result.json"),
+                ),
+                (
+                    "noncanonical digest",
+                    lambda value: value["failure_boundary"]["defects"][1][
+                        "affected_material"
+                    ][0].__setitem__("sha256", "A" * 64),
+                ),
+                (
+                    "duplicate defect",
+                    lambda value: value["failure_boundary"]["defects"][
+                        1
+                    ].__setitem__(
+                        "code",
+                        value["failure_boundary"]["defects"][0]["code"],
+                    ),
+                ),
+                (
+                    "duplicate material path",
+                    lambda value: value["failure_boundary"]["defects"][0][
+                        "affected_material"
+                    ].append(
+                        json.loads(
+                            json.dumps(
+                                value["failure_boundary"]["defects"][1][
+                                    "affected_material"
+                                ][0]
+                            )
+                        )
+                    ),
+                ),
+                (
+                    "unexpected key",
+                    lambda value: value["failure_boundary"]["defects"][0].__setitem__(
+                        "unsupported",
+                        True,
+                    ),
+                ),
+            )
+            for label, mutate in failure_mutations:
+                with self.subTest(v2_failure_boundary=label):
+                    candidate = json.loads(json.dumps(record))
+                    mutate(candidate)
+                    candidate_bytes = (
+                        json.dumps(candidate, indent=2) + "\n"
+                    ).encode()
+                    record_path.write_bytes(candidate_bytes)
+                    authority = replace(
+                        status.published_unledgered_authorities[1],
+                        record_sha256=hashlib.sha256(
+                            candidate_bytes
+                        ).hexdigest(),
+                    )
+                    with self.assertRaises(
+                        render_project_status.ProjectStatusError
+                    ):
+                        render_project_status._load_published_unledgered(
+                            root,
+                            status,
+                            context.ledger,
+                            "4.4.2.dev0",
+                            verify_git=False,
+                            authority=authority,
+                            validate_relation=False,
+                        )
+
+            record_path.write_bytes(record_bytes + b"\n")
+            with self.assertRaisesRegex(
+                render_project_status.ProjectStatusError,
+                "reviewed digest",
+            ):
+                render_project_status._load_published_unledgered(
+                    root,
+                    status,
+                    context.ledger,
+                    "4.4.2.dev0",
+                    verify_git=False,
+                    authority=status.published_unledgered_authorities[1],
+                    validate_relation=False,
+                )
 
     def test_published_unledgered_authority_fails_closed(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
@@ -758,7 +1218,7 @@ class ProjectStatusTests(unittest.TestCase):
                 verify_git=False,
             )
         reread.assert_not_called()
-        self.assertEqual(authority.version, "4.4.0")
+        self.assertEqual(authority.version, "4.4.1")
 
     def test_unledgered_failure_boundary_is_derived_from_git(self) -> None:
         record = json.loads(
@@ -853,8 +1313,14 @@ class ProjectStatusTests(unittest.TestCase):
             )
 
         context = render_project_status.load_context(ROOT, verify_git=False)
+        latest_disposition = json.loads(
+            (
+                ROOT
+                / context.status.published_unledgered_key_disposition_path
+            ).read_text(encoding="utf-8")
+        )
         public_key_path = (
-            ROOT / "security/release-ledger-roots/v4.4.0.pub.pem"
+            ROOT / latest_disposition["key"]["public_key_path"]
         ).resolve()
         public_key_reads = 0
 
@@ -922,11 +1388,14 @@ class ProjectStatusTests(unittest.TestCase):
             )
 
         with render_project_status._trusted_git_session(ROOT):
-            frozen_refs = render_project_status._git_ref_snapshot(ROOT, "v4.4.0")
+            frozen_refs = render_project_status._git_refs_snapshot(
+                ROOT,
+                ("v4.4.0", "v4.4.1"),
+            )
         with (
             mock.patch.object(
                 render_project_status,
-                "_git_ref_snapshot",
+                "_git_refs_snapshot",
                 side_effect=(frozen_refs, ("a" * 40, frozen_refs[1])),
             ),
             mock.patch.object(render_project_status, "_verify_tracked_bytes"),
@@ -945,12 +1414,15 @@ class ProjectStatusTests(unittest.TestCase):
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
+        historical_authority = (
+            context.status.published_unledgered_authorities[0]
+        )
 
         def seed(root: Path, *, include_recovery: bool) -> None:
             for relative in (
-                context.status.published_unledgered_record_path,
-                context.status.published_unledgered_erratum_path,
-                context.status.published_unledgered_key_disposition_path,
+                historical_authority.record_path,
+                historical_authority.erratum_path,
+                historical_authority.key_disposition_path,
                 "security/release-ledger-roots/v4.4.0.pub.pem",
                 "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
             ):
@@ -1008,6 +1480,7 @@ class ProjectStatusTests(unittest.TestCase):
                         ledger,
                         source_version,
                         verify_git=False,
+                        authority=historical_authority,
                     )
                     self.assertEqual(exception.version, "4.4.0")
                     self.assertEqual(exception.recovery_version, "4.4.1")
@@ -1052,18 +1525,20 @@ class ProjectStatusTests(unittest.TestCase):
                     ),
                     "4.4.2",
                     verify_git=False,
+                    authority=historical_authority,
                 )
 
     def test_local_key_disposition_accepts_only_bounded_operator_states(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
         disposition_relative = context.status.published_unledgered_key_disposition_path
         source_disposition = json.loads((ROOT / disposition_relative).read_text(encoding="utf-8"))
+        public_key_relative = source_disposition["key"]["public_key_path"]
 
         def seed(root: Path, disposition: dict[str, object]) -> None:
             for relative in (
                 context.status.published_unledgered_record_path,
                 context.status.published_unledgered_erratum_path,
-                "security/release-ledger-roots/v4.4.0.pub.pem",
+                public_key_relative,
                 "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
             ):
                 target = root / relative
@@ -1080,7 +1555,7 @@ class ProjectStatusTests(unittest.TestCase):
             root = Path(temporary)
             removed = json.loads(json.dumps(source_disposition))
             removed["disposition"]["status"] = "local-file-removed"
-            removed["disposition"]["observed_utc"] = "2026-07-29T03:30:00Z"
+            removed["disposition"]["observed_utc"] = "2026-07-29T08:30:00Z"
             seed(root, removed)
             authority = render_project_status._load_published_unledgered(
                 root,

@@ -207,7 +207,7 @@ jobs:
                   raise SystemExit(f'parent release policy mismatch: {key}')
           PY
 
-      - name: Enforce the exact parent-owned v4.4.1 candidate scope
+      - name: Enforce the exact parent-owned v4.4.2 candidate scope
         run: |
           set -euo pipefail
           python -I "$GITHUB_WORKSPACE/base/tools/ci/validate_release_candidate_scope.py" \
@@ -236,8 +236,8 @@ jobs:
           )
           from benchmarks.run_manifest import verify_run_manifest
 
-          if ENGINE_VERSION != '4.4.1.dev0':
-              raise SystemExit('trusted parent is not the exact 4.4.1.dev0 source')
+          if ENGINE_VERSION != '4.4.2.dev0':
+              raise SystemExit('trusted parent is not the exact 4.4.2.dev0 source')
           exact_errors = verify_run_manifest(
               base / 'benchmarks/run-manifest.json',
               root=base,
@@ -257,7 +257,7 @@ jobs:
               corpus=corpus_definition(),
               settings=RUN_SETTINGS,
               baseline_definition=BASELINE_DEFINITION,
-              engine_version='4.4.1',
+              engine_version='4.4.2',
               require_release_promotion=True,
               required_history_tip='HEAD',
             )

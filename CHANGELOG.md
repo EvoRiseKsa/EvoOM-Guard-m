@@ -19,8 +19,8 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- Source `4.4.1` is the unreleased recovery successor to `v4.4.0`; it is not a consumer release and has no release ledger.
-- [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) is the latest published stable and supported release; it has no valid protected-tree ledger.
+- Source `4.4.2.dev0` is the unreleased recovery successor to `v4.4.1`; it is not a consumer release and has no release ledger.
+- [`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) is the latest published stable and supported release; it has no valid protected-tree ledger.
 - [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) remains the latest ledger-recorded consumer release and is temporarily supported until a later recovery release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
@@ -31,37 +31,61 @@ retained evidence say so.
 
 ## [Unreleased]
 
+### Added
+
+- Added `PROJECT_STATUS` schema v2 with an ordered, bounded
+  `published_unledgered` history. It preserves the separate `v4.4.0` and
+  `v4.4.1` exception authorities, rejects duplicate or reordered versions,
+  paths, and record digests, and validates the recovery chain without turning
+  either unsigned record into a ledger.
+- Pinned a distinct prospective `v4.4.2` release-ledger public root. The
+  private key remains operator-local and outside the repository and admission
+  Environments; the public root alone is not a signature, release, or ledger.
+
 ### Changed
 
-- Advanced the protected source identity to `4.4.1.dev0` as an unreleased
-  recovery successor to the immutable `v4.4.0` publication. No `v4.4.1`
-  release, release candidate, protected A-through-H operation, or release
-  ledger is claimed by this source state.
+- Advanced the protected source identity to `4.4.2.dev0` as the unreleased
+  recovery successor to the immutable `v4.4.1` publication. No `v4.4.2`
+  release, candidate, protected A-through-H operation, or ledger is claimed by
+  this source state.
 - Retargeted the parent-owned release-candidate scope and phase-A benchmark
-  promotion contract from `4.4.0.dev0` → `4.4.0` to the future
-  `4.4.1.dev0` → `4.4.1` transition. The existing benchmark is not rewritten
-  by this source-parent change; fresh `4.4.1.dev0` evidence remains a separate
-  required step.
-- Pinned the prospective `v4.4.1` release-ledger public root in the reviewed
-  parent tree. A pinned public root is only a pre-publication trust input; it
-  is not a release, signature, ledger, or proof that the corresponding private
-  key remains available or controlled.
-- Added a machine-authoritative `published_unledgered` exception reference to
-  `PROJECT_STATUS.json`, including the reviewed record's SHA-256. The renderer
-  parses the verified byte snapshot once and fail-closes unless the referenced
-  `v4.4.0` observation has canonical timestamps and chronology, exact bounded
-  assets and provider observations, cross-bound commits and run identities,
-  an internally consistent failure reason, and Git-derived tag, parent, tree,
-  validator-blob, and correction identities. It also requires explicit
-  unsigned/unsealed non-claims, no canonical `v4.4.0` ledger, and its
-  non-ledger erratum. The
-  historical exception remains valid after the `v4.4.1` recovery ledger and
-  later source lines without being presented as current release evidence.
-- Added an unsigned, privacy-bounded local-key disposition statement for the
-  unused prospective `v4.4.0` ledger private-key file. It is currently pending
-  operator removal and explicitly cannot serve as a retirement receipt,
-  revocation record, deletion proof, secure-erasure proof, or proof that no
-  copy exists.
+  promotion contract to the exact future `4.4.2.dev0` → `4.4.2`
+  transition. Fresh `4.4.2.dev0` benchmark evidence is required before a
+  release candidate; prior benchmark bytes are not rewritten.
+- Corrected the release-ledger validator prospectively so a clean interpreter
+  accepts the original CPython `pyexpat` aliases and the strict deterministic
+  indented JSON emitted by the trusted release CLI. Duplicate keys,
+  non-finite values, extra keys, wrong values, and replacement module aliases
+  remain rejected. This correction does not validate `v4.4.1` retroactively.
+- Recorded `v4.4.1` as a second immutable published-unledgered exception with
+  exact release, asset, attestation, provenance, CI, Git-parent, validator-blob,
+  and correction identities. Its unused prospective signing key remains
+  `pending-operator-removal`; no deletion or compromise claim is made.
+
+## [4.4.1] — published 2026-07-29; no valid protected-tree ledger
+
+[`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1)
+is an immutable published and supported release. Its three assets, checksums,
+GitHub release attestation, build provenance, tag CI, and action smoke
+observations were rechecked. It is not the ledger-recorded consumer pin.
+
+The protected A-through-H runs completed and 57 retained evidence files were
+collected, but the exact frozen validator cannot cold-start against original
+CPython `pyexpat` aliases and requires compact result JSON that the frozen
+trusted CLI does not emit. Rewriting the validator or evidence after
+publication would change the frozen contract, so no canonical `v4.4.1` ledger
+or signature can be issued. See
+[`docs/errata/V4.4.1-LEDGER.md`](docs/errata/V4.4.1-LEDGER.md) and the
+[unsigned bounded record](evidence/release-operations/v4.4.1/UNSEALED_STATUS.json).
+
+### Changed
+
+- Promoted the reviewed `4.4.1.dev0` source and fresh benchmark chain through
+  an exact one-parent `4.4.1` candidate.
+- Published exactly `evo-guard.pyz`, `evo-guard.spdx.json`, and
+  `SHA256SUMS` through the protected release workflows.
+- Preserved the earlier `v4.4.0` published-unledgered exception as historical
+  truth rather than rewriting its tag, assets, evidence, or erratum.
 
 ## [4.4.0] — published 2026-07-29; no valid protected-tree ledger
 
