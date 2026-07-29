@@ -2177,7 +2177,11 @@ def _validate_timeline(ledger: Mapping[str, Any]) -> None:
         windows[phase] = (started, completed)
         prior_end = completed
 
-    created = _parse_time(
+    # GitHub defines a Release's `created_at` as the timestamp of the commit
+    # used for the Release, not as a draft-creation or publication event. Keep
+    # validating the exact API value as a canonical timestamp, but never use it
+    # to establish the phase-H publication boundary.
+    _parse_time(
         ledger["release"]["created_utc"], label="release.created_utc"
     )
     published = _parse_time(
@@ -2186,8 +2190,8 @@ def _validate_timeline(ledger: Mapping[str, Any]) -> None:
     ledger_created = _parse_time(
         ledger["ledger_scope"]["created_utc"], label="ledger_scope.created_utc"
     )
-    if not (windows["H"][0] <= created <= published <= windows["H"][1]):
-        _fail("release creation/publication must occur inside phase H")
+    if not (windows["H"][0] <= published <= windows["H"][1]):
+        _fail("release publication must occur inside phase H")
 
     attestation_times = {
         name: _parse_time(
@@ -3853,13 +3857,14 @@ def _validate_semantics(
     if release["release_url"] != expected_release_url:
         _fail("release URL does not bind the recorded repository and tag")
 
-    created = _parse_time(release["created_utc"], label="release.created_utc")
+    # This is GitHub Release `created_at`: target-commit metadata, not a
+    # release-lifecycle event. Publication chronology is anchored exclusively
+    # by `published_utc`.
+    _parse_time(release["created_utc"], label="release.created_utc")
     published = _parse_time(release["published_utc"], label="release.published_utc")
     ledger_created = _parse_time(
         ledger["ledger_scope"]["created_utc"], label="ledger_scope.created_utc"
     )
-    if published < created:
-        _fail("release publication precedes draft creation")
     if ledger_created < published:
         _fail("a post-publication ledger cannot predate publication")
 

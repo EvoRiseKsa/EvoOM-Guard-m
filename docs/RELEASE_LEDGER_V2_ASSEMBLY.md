@@ -55,7 +55,11 @@ check. Byte-semantic validation runs from a private snapshot.
 The assembler cannot derive mutable or external GitHub state from retained
 bytes. The claims file must still record reviewed:
 
-- immutable Release identity, numeric IDs, publication state and timestamps;
+- immutable Release identity, numeric IDs, publication state, the exact
+  GitHub Releases API `created_at` target-commit timestamp, and the
+  `published_at` release-lifecycle timestamp. Record them as
+  `release.created_utc` and `release.published_utc`, respectively; only the
+  latter is required to fall inside H;
 - A–H workflow IDs, workflow blobs, conclusions, job sets, and phase times
   except for identities already embedded in retained evidence;
 - GitHub Actions artifact IDs, digests, URLs, retention periods, and

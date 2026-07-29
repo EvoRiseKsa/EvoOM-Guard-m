@@ -141,6 +141,10 @@ gate.
 - `tests/baseline/schema/release-ledger-v2.schema.json` is the contract for a
   future post-publication protected A-H ledger. It does not apply retroactively
   to v1 ledgers and must not be used to rewrite a frozen baseline.
+- In that contract, `release.created_utc` records GitHub Release
+  `created_at`, which GitHub defines as the date of the commit used for the
+  Release. It is not a draft-creation event and is not constrained to H.
+  `release.published_utc` records `published_at` and must fall inside H.
 - Before a v2 ledger is committed, run:
 
   ```text

@@ -652,7 +652,7 @@ def _valid_ledger() -> dict[str, Any]:
             "state": "published",
             "prerelease": False,
             "immutable": True,
-            "created_utc": "2030-01-01T00:18:00Z",
+            "created_utc": "2030-01-01T00:00:30Z",
             "published_utc": "2030-01-01T00:20:00Z",
             "release_url": (
                 "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v9.9.9"
@@ -2186,6 +2186,43 @@ def test_timeline_mutations_fail_closed(mutation: Any, message: str) -> None:
     ledger = _valid_ledger()
     mutation(ledger)
     with pytest.raises(validator.LedgerValidationError, match=message):
+        validator.validate_structure(ledger)
+
+
+@pytest.mark.parametrize(
+    "target_commit_utc",
+    (
+        "2029-12-31T23:59:00Z",
+        "2030-01-02T00:00:00Z",
+    ),
+)
+def test_release_created_utc_is_not_a_lifecycle_clock(
+    target_commit_utc: str,
+) -> None:
+    ledger = _valid_ledger()
+    ledger["release"]["created_utc"] = target_commit_utc
+
+    validator.validate_structure(ledger)
+
+
+@pytest.mark.parametrize(
+    "published_utc",
+    (
+        "2030-01-01T00:14:59Z",
+        "2030-01-01T00:22:01Z",
+    ),
+)
+def test_release_publication_must_remain_inside_phase_h(
+    published_utc: str,
+) -> None:
+    ledger = _valid_ledger()
+    ledger["release"]["created_utc"] = "2029-12-31T23:59:00Z"
+    ledger["release"]["published_utc"] = published_utc
+
+    with pytest.raises(
+        validator.LedgerValidationError,
+        match="release publication must occur inside phase H",
+    ):
         validator.validate_structure(ledger)
 
 
