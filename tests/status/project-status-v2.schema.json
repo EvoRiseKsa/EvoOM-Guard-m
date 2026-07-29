@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvoOM Guard project status v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "published_release",
+    "release_exceptions",
+    "release_pipeline"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "evoguard-project-status-v2"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lifecycle",
+        "relation_to_latest_release",
+        "architecture"
+      ],
+      "properties": {
+        "lifecycle": {
+          "description": "Source lifecycle. published-unledgered is a maintained observation that the stable source version was published while the protected tree selects an earlier validated ledger. It is not a signed release ledger, a substitute for one, or a claim that a ledger for that version can be issued later.",
+          "enum": [
+            "unreleased-development",
+            "release-candidate",
+            "published-unledgered",
+            "release-line"
+          ]
+        },
+        "relation_to_latest_release": {
+          "const": "descendant"
+        },
+        "architecture": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "behavior_preserving_r2",
+            "cli_handler_extraction",
+            "overall_refactor_program"
+          ],
+          "properties": {
+            "behavior_preserving_r2": {
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
+            },
+            "cli_handler_extraction": {
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
+            },
+            "overall_refactor_program": {
+              "enum": [
+                "in-progress",
+                "complete"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "published_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ledger"
+      ],
+      "properties": {
+        "ledger": {
+          "type": "string",
+          "pattern": "^(tests/baseline|evidence/release-ledgers)/v[0-9]+\\.[0-9]+\\.[0-9]+/RELEASE_LEDGER\\.json$"
+        }
+      }
+    },
+    "release_exceptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "published_unledgered"
+      ],
+      "properties": {
+        "published_unledgered": {
+          "description": "A strictly version-ordered, non-empty history of unsigned maintained exception authorities. Ordering, path coherence, digest uniqueness, and referenced bytes are additionally enforced by the project-status renderer.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "record",
+              "record_sha256",
+              "erratum",
+              "key_disposition"
+            ],
+            "properties": {
+              "record": {
+                "type": "string",
+                "pattern": "^evidence/release-operations/v[0-9]+\\.[0-9]+\\.[0-9]+/UNSEALED_STATUS\\.json$"
+              },
+              "record_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "erratum": {
+                "type": "string",
+                "pattern": "^docs/errata/V[0-9]+\\.[0-9]+\\.[0-9]+-LEDGER\\.md$"
+              },
+              "key_disposition": {
+                "type": "string",
+                "pattern": "^evidence/release-operations/v[0-9]+\\.[0-9]+\\.[0-9]+/LEDGER_KEY_DISPOSITION\\.json$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "release_pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "implementation",
+        "legacy_workflow",
+        "activation_model",
+        "evidence_scope"
+      ],
+      "properties": {
+        "contract": {
+          "const": "protected-a-h-v1"
+        },
+        "implementation": {
+          "enum": [
+            "scaffolded",
+            "implemented"
+          ]
+        },
+        "legacy_workflow": {
+          "const": "hard-disabled"
+        },
+        "activation_model": {
+          "const": "disabled-by-default"
+        },
+        "evidence_scope": {
+          "const": "durable-repository-record"
+        }
+      }
+    }
+  }
+}
