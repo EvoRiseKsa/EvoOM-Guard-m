@@ -124,7 +124,7 @@
     }
   },
   "post_publication_evidence": {
-    "first_ledger": "v4.4.0",
+    "first_ledger": "v4.4.1",
     "actions_artifact_retention_is_not_durable_evidence": true,
     "required_frozen_material": [
       "two RAAE envelopes",
