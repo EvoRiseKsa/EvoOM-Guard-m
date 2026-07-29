@@ -58,6 +58,22 @@ embedded values are claims; the detached verifier requires their source,
 policy, toolchain, isolation, and public-key expectations from outside the
 bundle. See [RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md).
 
+## Change Attempt Observation contract
+
+The repository source after `v4.4.2` adds the separate closed-world
+[`change-attempt-observation-1.schema.json`](../evoom_guard/schemas/change-attempt-observation-1.schema.json)
+for `EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_V1`. It is a deterministic,
+advisory-only projection of an authenticated generic Trusted Finalizer bundle,
+including both `ALLOW` and signed `DENY` outcomes. It does not widen verdict
+schema 1.11/1.12 or Agent Change Admission V1.
+
+JSON Schema checks the bounded wire shape. The dedicated semantic verifier
+still has to authenticate the external finalizer key and source/context,
+recompute the exact projection and correlation group, enforce lifecycle/count
+relations, and compare canonical bytes. See
+[CHANGE_ATTEMPT_OBSERVATION.md](CHANGE_ATTEMPT_OBSERVATION.md) and
+[ADR-0009](adr/0009-change-attempt-observation-v1.md).
+
 ## Example (`PASS`)
 
 Records without a 1.12-only policy field continue to use schema 1.11. When

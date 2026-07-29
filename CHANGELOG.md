@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) is the latest stable and supported consumer release.
-- Source `4.4.2`: source on the latest ledger-recorded release line.
+- Source `4.5.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -29,6 +29,15 @@ retained evidence say so.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
 ## [Unreleased]
+
+### Added
+
+- Added the deterministic, advisory-only Change Attempt Observation V1
+  projection for authenticated Trusted Finalizer `ALLOW` and `DENY` bundles.
+  Its closed schema preserves five Guard outcomes and five bounded channels
+  while treating one bundle as one correlated source, excluding raw
+  code/log/policy/risk content, and granting no admission, merge, deployment,
+  promotion, or external-action authority.
 
 ## [4.4.2] — published 2026-07-29; signed protected-tree ledger
 

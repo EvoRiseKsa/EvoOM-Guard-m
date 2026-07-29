@@ -97,9 +97,9 @@
     "role": "declared CI dependency lock",
     "sha256": "eb48c40f5a3a8bc041f9512a13da2f33ffbe39e710e2136075947b567e1f6b63"
   },
-  "engine_version": "4.4.2.dev0",
+  "engine_version": "4.5.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-07-29T08:44:16.118190Z",
+    "captured_at_utc": "2026-07-29T19:31:17.759059Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -125,7 +125,7 @@
     },
     "execution_environment": {
       "all_non_allowlisted_parent_keys_removed": true,
-      "effective_environment_sha256": "c3487f864e3d7d1fdb966534f469bcbf6b8333a0b8bab9a386378da61f954765",
+      "effective_environment_sha256": "6001528033d181f92f0c39715e0a3c596960ba394b2b4e0bfdf6918b4fd93dcb",
       "effective_key_names": [
         "COMSPEC",
         "NO_COLOR",
@@ -159,7 +159,7 @@
       ],
       "inherited_value_sha256": {
         "COMSPEC": "56a79d121b8a0f187e172d87f06c86f8ae9bc3d047ba8505bf03e77030687ad4",
-        "PATH": "3f39d7127b07bf6e33717051aa6de0b0a58a2d4088370b28908add55d252ed98",
+        "PATH": "3b21894629c3ebbebc261482ae4017aea62dbc3d49d90cc954f3edadf55ce5fa",
         "PATHEXT": "a6e17897274808450499132f0802335799834f33795cbeca1c073278b006b650",
         "SYSTEMROOT": "c2bb903d586d19ec0d6eb6a2a659a882fd51244d6a137cee3595a385fda042f1",
         "TEMP": "c5064c1bae2b3a6b5888d275a10ba8ff5c0e9b6d4ef24a4cfafbe9bdfcc74024",
@@ -199,7 +199,7 @@
         "available": true,
         "distribution": "pytest",
         "installed_environment_match_claim": false,
-        "runtime_bytes": 13564878,
+        "runtime_bytes": 13400291,
         "runtime_distributions": [
           {
             "bytes": 169233,
@@ -244,11 +244,11 @@
             "version": "2.20.0"
           },
           {
-            "bytes": 3218981,
-            "files": 174,
-            "files_sha256": "f4dc02ce23d26bc58ed0e24245532a08d228bd8f49285d5a81e1919eff817cab",
+            "bytes": 3054394,
+            "files": 156,
+            "files_sha256": "1b601798829fbb7b2f648802c0f7fe607cb20b4e7041cf7b03f25c0ed1a751fd",
             "name": "pytest",
-            "version": "9.1.1"
+            "version": "8.4.2"
           },
           {
             "bytes": 292172,
@@ -265,10 +265,10 @@
             "version": "4.16.0"
           }
         ],
-        "runtime_files": 1026,
-        "runtime_sha256": "9fca8dc79bd27d314c1cc33131778b00b0f7c73331360a4cf75de65b0d8e97be",
+        "runtime_files": 1008,
+        "runtime_sha256": "01a5d2834e6194bb8c83097a7a84c1aed12bce372905fec33edd4ed9d3c5ce1d",
         "schema_version": "evoguard-benchmark-tool-identity-v2",
-        "version": "9.1.1"
+        "version": "8.4.2"
       }
     }
   },
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "1e414add2a00784ed0cbe3bdd902ea628a22caff",
+    "head": "b3c8fa4505b1083e7d4f9247e32ed4908821918b",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "918bc3c5e24f20acd5e14ea6662d770763159184",
+      "commit": "64ab380907277888073d23774ec0e397f5d9395c",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "1e414add2a00784ed0cbe3bdd902ea628a22caff",
+      "commit": "b3c8fa4505b1083e7d4f9247e32ed4908821918b",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14814,
+    "bytes": 14816,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "e0b6b9a34f1aa2d6a3326e3d915b5564e70b12bd419366469640c9f185da16cc"
+    "sha256": "29249d1f91ab58f537eee595453666d0bbcca683ec35104d7c0baa4421c11a46"
   },
-  "run_id": "d106d002-8ff9-4085-9961-5f1f7861460b",
+  "run_id": "58c09097-7b4d-4dea-b5c1-e61667b1d43b",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -482,7 +482,7 @@
   "source": {
     "algorithm": "sha256",
     "domain": "EVOGUARD_BENCHMARK_SOURCE_V1",
-    "file_count": 151,
+    "file_count": 153,
     "files": [
       {
         "bytes": 14817,
@@ -502,7 +502,7 @@
       {
         "bytes": 1903,
         "path": "evoom_guard/__init__.py",
-        "sha256": "48257b41cae67979d73bbd4f1586970d6ceb9519415ab34a158487989f403881"
+        "sha256": "acc86568ed8717e5855fc4cc6785fd272ad622bbc68ae253c2c82f53561ec625"
       },
       {
         "bytes": 3062,
@@ -618,6 +618,11 @@
         "bytes": 3692,
         "path": "evoom_guard/candidate_runner.py",
         "sha256": "ad30b482b1aaff639becea0cd321b9870cf652c9d9fa0acab25011b4363daaa1"
+      },
+      {
+        "bytes": 59751,
+        "path": "evoom_guard/change_attempt_observation.py",
+        "sha256": "8a309e8fb18c4602c36317be5834f0147ee6039fdb23b4af0bd54fe485515751"
       },
       {
         "bytes": 90392,
@@ -995,6 +1000,11 @@
         "sha256": "5700082175b0989d80305f9d8e70d849a0fdb92082950251351dda18e0a9096a"
       },
       {
+        "bytes": 25588,
+        "path": "evoom_guard/schemas/change-attempt-observation-1.schema.json",
+        "sha256": "f0cedd1e960ef4d1fdb8fbdab089902af4388ed97faacd5ec30b93f51f7eafb5"
+      },
+      {
         "bytes": 2183,
         "path": "evoom_guard/schemas/evidence-context-1.schema.json",
         "sha256": "aae3d46140aeb3aacaabf3c9d99df1c88a9def4cc9708dbe22811e2b3caa2308"
@@ -1254,13 +1264,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "8c1e5dba6e9e7e158ce6d46e38fbcc8c7aad98fc0a227d3e2afb65ed1470b14d",
-    "total_bytes": 2487521
+    "sha256": "c7742cb23d2d4214c17b26b0eb715560880b4a553a6dd59c81ac84e93fd647c9",
+    "total_bytes": 2572860
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.164,
+    "controlled_direct_pytest_median_s": 0.176,
     "guard_full_run_median_s": 0.281,
-    "guard_full_run_p95_s": 0.32,
+    "guard_full_run_p95_s": 0.3,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }

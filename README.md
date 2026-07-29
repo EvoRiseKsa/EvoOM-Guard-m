@@ -34,9 +34,8 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.4.2` is on the **ledger-recorded release line**; this protected source
-tree may be a post-tag descendant and is not a new consumer release. The latest
-immutable consumer release recorded by the protected source tree is
+Source version `4.5.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) at commit
 `699c60c22445a6af54c58f31fca34edc225b98a9`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
@@ -157,6 +156,7 @@ never checks out or executes candidate code.
 | Evaluate named assurance profiles in ledger-recorded `v4.4.2` | `v4.4.2` profiles (verify runtime evidence) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
 | Produce portable, authenticated evidence | Signed verdict or evidence bundle | [`SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) |
 | Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
+| Project signed `ALLOW` and `DENY` attempts for advisory analysis | Change Attempt Observation V1 *(source after v4.4.2)* | [`CHANGE_ATTEMPT_OBSERVATION.md`](docs/CHANGE_ATTEMPT_OBSERVATION.md) |
 
 For an adoption decision, start with the
 [production blueprint](docs/PRODUCTION_BLUEPRINT.md). Advanced release-source,

@@ -62,6 +62,7 @@ LAYER_RANK = {
 # ownership so a new schema version does not become architectural debt merely
 # to preserve its stable public path.
 FLAT_MODULE_LAYERS = {
+    "evoom_guard.change_attempt_observation": "evidence",
     "evoom_guard.verdict_contract_v1_11": "domain",
     "evoom_guard.verdict_contract_v1_12": "domain",
 }
@@ -2689,6 +2690,31 @@ def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:
         source.startswith("evoom_guard.domain.")
         and target.startswith("evoom_guard.policy")
         for source, target in analysis.internal_edges
+    )
+
+
+def test_change_attempt_projection_has_a_closed_evidence_dependency_contract() -> None:
+    """The public flat evidence projector must not absorb execution ownership."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.change_attempt_observation"
+    dependencies = {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    }
+
+    assert dependencies == {
+        "evoom_guard",
+        "evoom_guard.domain.verdict",
+        "evoom_guard.evidence_bundle",
+        "evoom_guard.runtime_identity",
+        "evoom_guard.trusted_finalizer",
+    }
+    assert module not in analysis.violations["unclassified_modules"]
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
     )
 
 

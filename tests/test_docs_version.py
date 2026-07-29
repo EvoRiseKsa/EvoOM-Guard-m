@@ -257,31 +257,31 @@ class DocsVersionDriftTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             relative = path.relative_to(ROOT)
             self.assertIn(
-                source_line,
-                text,
-                f"{relative} must identify the source line",
-            )
-            self.assertIn(
                 f"v{ledger_version}",
                 text,
                 f"{relative} must identify the latest consumer release",
             )
-            if state != "ledger-recorded":
+            if state == "ledger-recorded":
+                self.assertIn(
+                    source_line,
+                    text,
+                    f"{relative} must identify the release-line source",
+                )
+            else:
                 self.assertRegex(
                     text,
                     re.compile(
-                        r"not (?:part|a .*interface|evidence|publication)|"
-                        r"does not|contracts are intentionally distinct",
+                        r"release boundary|ledger-recorded|consumer release",
                         re.I,
                     ),
-                    f"{relative} must distinguish source-line and consumer contracts",
+                    f"{relative} must identify its stable consumer boundary",
                 )
         if state == "ledger-recorded":
             self.assertEqual(source_version, ledger_version)
 
     def test_stable_getting_started_does_not_teach_unverified_profile_flags(self) -> None:
         text = (ROOT / "docs" / "START_HERE.md").read_text(encoding="utf-8")
-        source_version, _ledger_version, state = _release_status()
+        source_version, ledger_version, state = _release_status()
         self.assertIn(
             state,
             {"pre-release", "published-unledgered", "ledger-recorded"},
@@ -297,17 +297,21 @@ class DocsVersionDriftTests(unittest.TestCase):
             if "--operating-profile" not in line:
                 continue
             context = " ".join(lines[max(0, lineno - 2) : lineno + 3])
-            self.assertIn(source_line, context)
+            self.assertIn(ledger_version, context)
             if state != "ledger-recorded":
                 self.assertRegex(
                     context,
-                    re.compile(r"source-line|absent|verify", re.I),
+                    re.compile(
+                        r"source[- ]line|included|absent|verify|release boundary",
+                        re.I,
+                    ),
                 )
         if state == "ledger-recorded":
+            self.assertEqual(source_line, ledger_version)
             self.assertIn("ledger-recorded", text)
+            self.assertIn(source_line, text)
         else:
-            self.assertIn("source-line", text)
-        self.assertIn(source_line, text)
+            self.assertIn(ledger_version, text)
 
     def test_current_product_name_does_not_drift_to_the_historical_brand(self) -> None:
         historical_files = {

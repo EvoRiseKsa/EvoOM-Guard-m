@@ -1,0 +1,1078 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/change-attempt-observation-1.schema.json",
+  "title": "EvoOM Guard Change Attempt Observation V1",
+  "description": "Closed, bounded, advisory-only projection of one authenticated Trusted Finalizer attempt.",
+  "$comment": "JSON Schema validates the wire shape. Cryptographic verification, exact source/context binding, correlation-group derivation, lifecycle consistency, and cross-field equality require the semantic verifier frozen by ADR-0009.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "consumer_schema",
+    "source",
+    "signed_evidence",
+    "outcome",
+    "assurance",
+    "evidence_channels",
+    "authority"
+  ],
+  "properties": {
+    "format": {
+      "const": "EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_V1"
+    },
+    "consumer_schema": {
+      "const": "evorise.change-advisory.attempt-observation.v1"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "signed_evidence": {
+      "$ref": "#/$defs/signedEvidence"
+    },
+    "outcome": {
+      "$ref": "#/$defs/outcome"
+    },
+    "assurance": {
+      "$ref": "#/$defs/assurance"
+    },
+    "evidence_channels": {
+      "$ref": "#/$defs/evidenceChannels"
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "properties": {
+              "decision": {
+                "const": "ALLOW"
+              }
+            },
+            "required": [
+              "decision"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "properties": {
+              "verdict": {
+                "const": "PASS"
+              },
+              "passed": {
+                "const": true
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "outcome": {
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "REJECTED",
+                  "FAIL",
+                  "ERROR",
+                  "TAMPERED"
+                ]
+              },
+              "passed": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "properties": {
+              "verifier_pack_sha256": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "verifier_pack_sha256"
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence_channels": {
+            "properties": {
+              "verifier_pack": {
+                "properties": {
+                  "availability": {
+                    "const": "NOT_APPLICABLE"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "evidence_channels": {
+            "properties": {
+              "verifier_pack": {
+                "properties": {
+                  "availability": {
+                    "enum": [
+                      "AVAILABLE",
+                      "UNAVAILABLE"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "assurance": {
+            "properties": {
+              "runtime_identity_continuity": {
+                "const": "not_applicable"
+              }
+            },
+            "required": [
+              "runtime_identity_continuity"
+            ]
+          }
+        },
+        "required": [
+          "assurance"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence_channels": {
+            "properties": {
+              "runtime_identity": {
+                "properties": {
+                  "availability": {
+                    "const": "NOT_APPLICABLE"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "evidence_channels": {
+            "properties": {
+              "runtime_identity": {
+                "properties": {
+                  "availability": {
+                    "enum": [
+                      "AVAILABLE",
+                      "UNAVAILABLE"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "keyId": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitDigest": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 64,
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "not": {
+        "pattern": "[\\r\\n\\u2028\\u2029]"
+      }
+    },
+    "boundedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "nullableBoundedCount": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/boundedCount"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableBoolean": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "repository_id",
+        "pull_request_number",
+        "handoff_workflow_run_id",
+        "handoff_workflow_run_attempt",
+        "context_run_id",
+        "context_run_attempt",
+        "base_sha",
+        "head_sha",
+        "base_tree_sha",
+        "head_tree_sha",
+        "candidate_sha256",
+        "effective_policy_sha256",
+        "verifier_pack_sha256",
+        "guard_artifact_sha256"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]+$",
+          "not": {
+            "pattern": "[\\r\\n]"
+          }
+        },
+        "repository_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]+$",
+          "not": {
+            "pattern": "[\\r\\n]"
+          }
+        },
+        "pull_request_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "handoff_workflow_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]+$",
+          "not": {
+            "pattern": "[\\r\\n]"
+          }
+        },
+        "handoff_workflow_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "context_run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\ud800-\\udfff]+$",
+          "not": {
+            "pattern": "[\\r\\n]"
+          }
+        },
+        "context_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "base_sha": {
+          "$ref": "#/$defs/gitDigest"
+        },
+        "head_sha": {
+          "$ref": "#/$defs/gitDigest"
+        },
+        "base_tree_sha": {
+          "$ref": "#/$defs/gitDigest"
+        },
+        "head_tree_sha": {
+          "$ref": "#/$defs/gitDigest"
+        },
+        "candidate_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "effective_policy_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "verifier_pack_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "guard_artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "signedEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_format",
+        "bundle_sha256",
+        "verdict_record_sha256",
+        "verdict_record_size",
+        "record_schema",
+        "record_tool",
+        "record_tool_version",
+        "signature_algorithm",
+        "finalizer_key_id",
+        "correlation_group_id"
+      ],
+      "properties": {
+        "bundle_format": {
+          "const": "EVOGUARD_EVIDENCE_BUNDLE_V1"
+        },
+        "bundle_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "verdict_record_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "verdict_record_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "record_schema": {
+          "enum": [
+            "1.11",
+            "1.12"
+          ]
+        },
+        "record_tool": {
+          "const": "evoguard"
+        },
+        "record_tool_version": {
+          "$ref": "#/$defs/version"
+        },
+        "signature_algorithm": {
+          "const": "Ed25519"
+        },
+        "finalizer_key_id": {
+          "$ref": "#/$defs/keyId"
+        },
+        "correlation_group_id": {
+          "$ref": "#/$defs/correlationGroupId"
+        }
+      }
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$",
+      "not": {
+        "pattern": "[\\r\\n\\u2028\\u2029]"
+      }
+    },
+    "correlationGroupId": {
+      "type": "string",
+      "minLength": 74,
+      "maxLength": 74,
+      "pattern": "^cg:sha256:[0-9a-f]{64}$"
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "verdict",
+        "passed",
+        "reason_code",
+        "execution_state",
+        "execution_phase",
+        "verdict_source"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ]
+        },
+        "verdict": {
+          "enum": [
+            "PASS",
+            "REJECTED",
+            "FAIL",
+            "ERROR",
+            "TAMPERED"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "enum": [
+            "tests_passed",
+            "protected_harness_edit",
+            "tests_failed",
+            "no_parseable_edits",
+            "unsafe_path",
+            "patch_apply_failed",
+            "no_test_verdict",
+            "junit_exit_mismatch",
+            "empty_diff",
+            "binary_patch",
+            "reverse_apply_failed",
+            "no_verifiable_changes",
+            "diff_coverage_below_threshold",
+            "test_timeout",
+            "setup_timeout",
+            "setup_failed",
+            "assurance_requirement_not_met",
+            "fix_not_demonstrated",
+            "policy_requirement_unsupported",
+            "verifier_pack_identity_mismatch",
+            "verifier_pack_invalid",
+            "verifier_pack_required",
+            "verifier_pack_not_found",
+            "verifier_pack_snapshot_changed",
+            "candidate_not_exercised",
+            "candidate_tree_changed_during_run",
+            "test_command_unavailable",
+            "runtime_cleanup_failed"
+          ]
+        },
+        "execution_state": {
+          "enum": [
+            "static_gate",
+            "not_started",
+            "started_incomplete",
+            "completed"
+          ]
+        },
+        "execution_phase": {
+          "enum": [
+            "pre_gate",
+            "preflight",
+            "candidate_prepare",
+            "setup",
+            "blackbox_judge",
+            "blackbox_pack",
+            "repo_suite",
+            "verifier_pack",
+            "runtime_verification",
+            "complete"
+          ]
+        },
+        "verdict_source": {
+          "enum": [
+            "junit+exit",
+            "exit",
+            "blackbox",
+            "composite:repo+verifier-pack",
+            "composite:blackbox+repo",
+            null
+          ]
+        }
+      }
+    },
+    "assurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness_integrity",
+        "report_integrity",
+        "candidate_isolation",
+        "setup_isolation",
+        "repository_suite_isolation",
+        "runtime_identity_continuity",
+        "overall_profile"
+      ],
+      "properties": {
+        "harness_integrity": {
+          "const": "pre_gate_enforced"
+        },
+        "report_integrity": {
+          "enum": [
+            "same_process_candidate_writable",
+            "external_process_isolated",
+            "not_applicable_static_gate",
+            "not_applicable_not_run"
+          ]
+        },
+        "candidate_isolation": {
+          "$ref": "#/$defs/isolation"
+        },
+        "setup_isolation": {
+          "enum": [
+            "subprocess",
+            "docker",
+            "gvisor",
+            "subprocess_host_opt_in",
+            "unavailable",
+            null
+          ]
+        },
+        "repository_suite_isolation": {
+          "$ref": "#/$defs/isolation"
+        },
+        "runtime_identity_continuity": {
+          "enum": [
+            "not_applicable",
+            "unavailable",
+            "incomplete",
+            "verification_failed",
+            "read_only_enforced",
+            "snapshot_boundary_checked"
+          ]
+        },
+        "overall_profile": {
+          "enum": [
+            "static_gate",
+            "preflight",
+            "execution_incomplete_before_tests",
+            "execution_incomplete",
+            "repo_native_same_process",
+            "isolated_repo_native",
+            "mixed_host_setup_repo_native",
+            "black_box_external_judge",
+            "composite_blackbox_repo_native",
+            "blackbox_composite_short_circuit"
+          ]
+        }
+      }
+    },
+    "isolation": {
+      "enum": [
+        "not_run",
+        "subprocess",
+        "docker",
+        "gvisor"
+      ]
+    },
+    "availability": {
+      "enum": [
+        "AVAILABLE",
+        "UNAVAILABLE",
+        "NOT_APPLICABLE"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "receipt_format",
+        "receipt_sha256",
+        "producer_key_id",
+        "correlation_group_id",
+        "independently_countable"
+      ],
+      "properties": {
+        "origin": {
+          "const": "SIGNED_FINALIZER_BUNDLE"
+        },
+        "receipt_format": {
+          "const": "EVOGUARD_EVIDENCE_BUNDLE_V1"
+        },
+        "receipt_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "producer_key_id": {
+          "$ref": "#/$defs/keyId"
+        },
+        "correlation_group_id": {
+          "$ref": "#/$defs/correlationGroupId"
+        },
+        "independently_countable": {
+          "const": false
+        }
+      }
+    },
+    "rawGitBindingChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "availability",
+        "bound_identity_count",
+        "binding_sha256",
+        "provenance"
+      ],
+      "properties": {
+        "scope": {
+          "const": "RAW_GIT_BINDING"
+        },
+        "availability": {
+          "const": "UNAVAILABLE"
+        },
+        "bound_identity_count": {
+          "type": "null"
+        },
+        "binding_sha256": {
+          "type": "null"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      }
+    },
+    "guardExecutionChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "availability",
+        "test_command_started",
+        "candidate_invocation_count",
+        "execution_evidence_sha256",
+        "provenance"
+      ],
+      "properties": {
+        "scope": {
+          "const": "SIGNED_RECORD_CLAIM"
+        },
+        "availability": {
+          "$ref": "#/$defs/availability"
+        },
+        "test_command_started": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "candidate_invocation_count": {
+          "$ref": "#/$defs/nullableBoundedCount"
+        },
+        "execution_evidence_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "AVAILABLE"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "test_command_started": {
+                "type": "boolean"
+              },
+              "execution_evidence_sha256": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "test_command_started": {
+                "type": "null"
+              },
+              "candidate_invocation_count": {
+                "type": "null"
+              },
+              "execution_evidence_sha256": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "repositorySuiteChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "availability",
+        "started",
+        "completed",
+        "passed",
+        "tests_passed",
+        "tests_total",
+        "result_sha256",
+        "provenance"
+      ],
+      "properties": {
+        "scope": {
+          "const": "SIGNED_RECORD_CLAIM"
+        },
+        "availability": {
+          "$ref": "#/$defs/availability"
+        },
+        "started": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "completed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "passed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "tests_passed": {
+          "$ref": "#/$defs/nullableBoundedCount"
+        },
+        "tests_total": {
+          "$ref": "#/$defs/nullableBoundedCount"
+        },
+        "result_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/testChannelAvailability"
+        }
+      ]
+    },
+    "verifierPackChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "availability",
+        "present",
+        "started",
+        "completed",
+        "tests_passed",
+        "tests_total",
+        "result_sha256",
+        "provenance"
+      ],
+      "properties": {
+        "scope": {
+          "const": "SIGNED_RECORD_CLAIM"
+        },
+        "availability": {
+          "$ref": "#/$defs/availability"
+        },
+        "present": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "started": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "completed": {
+          "$ref": "#/$defs/nullableBoolean"
+        },
+        "tests_passed": {
+          "$ref": "#/$defs/nullableBoundedCount"
+        },
+        "tests_total": {
+          "$ref": "#/$defs/nullableBoundedCount"
+        },
+        "result_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "AVAILABLE"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "present": {
+                "type": "boolean"
+              },
+              "started": {
+                "type": "boolean"
+              },
+              "completed": {
+                "type": "boolean"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "present": {
+                "type": "null"
+              },
+              "started": {
+                "type": "null"
+              },
+              "completed": {
+                "type": "null"
+              },
+              "tests_passed": {
+                "type": "null"
+              },
+              "tests_total": {
+                "type": "null"
+              },
+              "result_sha256": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "testChannelAvailability": {
+      "if": {
+        "properties": {
+          "availability": {
+            "const": "AVAILABLE"
+          }
+        },
+        "required": [
+          "availability"
+        ]
+      },
+      "then": {
+        "properties": {
+          "started": {
+            "type": "boolean"
+          },
+          "completed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "started": {
+            "type": "null"
+          },
+          "completed": {
+            "type": "null"
+          },
+          "passed": {
+            "type": "null"
+          },
+          "tests_passed": {
+            "type": "null"
+          },
+          "tests_total": {
+            "type": "null"
+          },
+          "result_sha256": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "runtimeIdentityChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "availability",
+        "exported_identity_count",
+        "tree_sha256",
+        "tree_entries",
+        "tree_bytes",
+        "provenance"
+      ],
+      "properties": {
+        "scope": {
+          "const": "SIGNED_RECORD_CLAIM"
+        },
+        "availability": {
+          "$ref": "#/$defs/availability"
+        },
+        "exported_identity_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "tree_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "tree_entries": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 500000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tree_bytes": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 34359738368
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "AVAILABLE"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "exported_identity_count": {
+                "const": 1
+              },
+              "tree_sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "tree_entries": {
+                "type": "integer"
+              },
+              "tree_bytes": {
+                "type": "integer"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "exported_identity_count": {
+                "const": 0
+              },
+              "tree_sha256": {
+                "type": "null"
+              },
+              "tree_entries": {
+                "type": "null"
+              },
+              "tree_bytes": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "evidenceChannels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_git_binding",
+        "guard_execution",
+        "repository_suite",
+        "verifier_pack",
+        "runtime_identity"
+      ],
+      "properties": {
+        "raw_git_binding": {
+          "$ref": "#/$defs/rawGitBindingChannel"
+        },
+        "guard_execution": {
+          "$ref": "#/$defs/guardExecutionChannel"
+        },
+        "repository_suite": {
+          "$ref": "#/$defs/repositorySuiteChannel"
+        },
+        "verifier_pack": {
+          "$ref": "#/$defs/verifierPackChannel"
+        },
+        "runtime_identity": {
+          "$ref": "#/$defs/runtimeIdentityChannel"
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "admission",
+        "merge",
+        "deployment",
+        "promotion",
+        "external_action"
+      ],
+      "properties": {
+        "mode": {
+          "const": "ADVISORY_ONLY"
+        },
+        "admission": {
+          "const": false
+        },
+        "merge": {
+          "const": false
+        },
+        "deployment": {
+          "const": false
+        },
+        "promotion": {
+          "const": false
+        },
+        "external_action": {
+          "const": false
+        }
+      }
+    }
+  }
+}

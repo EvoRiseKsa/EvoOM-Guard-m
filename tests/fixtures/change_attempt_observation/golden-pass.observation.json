@@ -1,0 +1,142 @@
+{
+  "assurance": {
+    "candidate_isolation": "subprocess",
+    "harness_integrity": "pre_gate_enforced",
+    "overall_profile": "repo_native_same_process",
+    "report_integrity": "same_process_candidate_writable",
+    "repository_suite_isolation": "subprocess",
+    "runtime_identity_continuity": "not_applicable",
+    "setup_isolation": null
+  },
+  "authority": {
+    "admission": false,
+    "deployment": false,
+    "external_action": false,
+    "merge": false,
+    "mode": "ADVISORY_ONLY",
+    "promotion": false
+  },
+  "consumer_schema": "evorise.change-advisory.attempt-observation.v1",
+  "evidence_channels": {
+    "guard_execution": {
+      "availability": "AVAILABLE",
+      "candidate_invocation_count": null,
+      "execution_evidence_sha256": "811e80691f47a0b04b312d12e669134415f9417efc8d906f903f43dfe6d19ecb",
+      "provenance": {
+        "correlation_group_id": "cg:sha256:63087536bef35ca67dca2164247eca9f24e114838e3b4e4b6ee5e2807ca3aabc",
+        "independently_countable": false,
+        "origin": "SIGNED_FINALIZER_BUNDLE",
+        "producer_key_id": "sha256:2c8976f58bb3d8b10148f853517872777df4ee87419d5a7f12990a4afe5bb287",
+        "receipt_format": "EVOGUARD_EVIDENCE_BUNDLE_V1",
+        "receipt_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0"
+      },
+      "scope": "SIGNED_RECORD_CLAIM",
+      "test_command_started": true
+    },
+    "raw_git_binding": {
+      "availability": "UNAVAILABLE",
+      "binding_sha256": null,
+      "bound_identity_count": null,
+      "provenance": {
+        "correlation_group_id": "cg:sha256:63087536bef35ca67dca2164247eca9f24e114838e3b4e4b6ee5e2807ca3aabc",
+        "independently_countable": false,
+        "origin": "SIGNED_FINALIZER_BUNDLE",
+        "producer_key_id": "sha256:2c8976f58bb3d8b10148f853517872777df4ee87419d5a7f12990a4afe5bb287",
+        "receipt_format": "EVOGUARD_EVIDENCE_BUNDLE_V1",
+        "receipt_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0"
+      },
+      "scope": "RAW_GIT_BINDING"
+    },
+    "repository_suite": {
+      "availability": "UNAVAILABLE",
+      "completed": null,
+      "passed": null,
+      "provenance": {
+        "correlation_group_id": "cg:sha256:63087536bef35ca67dca2164247eca9f24e114838e3b4e4b6ee5e2807ca3aabc",
+        "independently_countable": false,
+        "origin": "SIGNED_FINALIZER_BUNDLE",
+        "producer_key_id": "sha256:2c8976f58bb3d8b10148f853517872777df4ee87419d5a7f12990a4afe5bb287",
+        "receipt_format": "EVOGUARD_EVIDENCE_BUNDLE_V1",
+        "receipt_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0"
+      },
+      "result_sha256": null,
+      "scope": "SIGNED_RECORD_CLAIM",
+      "started": null,
+      "tests_passed": null,
+      "tests_total": null
+    },
+    "runtime_identity": {
+      "availability": "NOT_APPLICABLE",
+      "exported_identity_count": 0,
+      "provenance": {
+        "correlation_group_id": "cg:sha256:63087536bef35ca67dca2164247eca9f24e114838e3b4e4b6ee5e2807ca3aabc",
+        "independently_countable": false,
+        "origin": "SIGNED_FINALIZER_BUNDLE",
+        "producer_key_id": "sha256:2c8976f58bb3d8b10148f853517872777df4ee87419d5a7f12990a4afe5bb287",
+        "receipt_format": "EVOGUARD_EVIDENCE_BUNDLE_V1",
+        "receipt_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0"
+      },
+      "scope": "SIGNED_RECORD_CLAIM",
+      "tree_bytes": null,
+      "tree_entries": null,
+      "tree_sha256": null
+    },
+    "verifier_pack": {
+      "availability": "NOT_APPLICABLE",
+      "completed": null,
+      "present": null,
+      "provenance": {
+        "correlation_group_id": "cg:sha256:63087536bef35ca67dca2164247eca9f24e114838e3b4e4b6ee5e2807ca3aabc",
+        "independently_countable": false,
+        "origin": "SIGNED_FINALIZER_BUNDLE",
+        "producer_key_id": "sha256:2c8976f58bb3d8b10148f853517872777df4ee87419d5a7f12990a4afe5bb287",
+        "receipt_format": "EVOGUARD_EVIDENCE_BUNDLE_V1",
+        "receipt_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0"
+      },
+      "result_sha256": null,
+      "scope": "SIGNED_RECORD_CLAIM",
+      "started": null,
+      "tests_passed": null,
+      "tests_total": null
+    }
+  },
+  "format": "EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_V1",
+  "outcome": {
+    "decision": "ALLOW",
+    "execution_phase": "repo_suite",
+    "execution_state": "completed",
+    "passed": true,
+    "reason_code": "tests_passed",
+    "verdict": "PASS",
+    "verdict_source": "junit+exit"
+  },
+  "signed_evidence": {
+    "bundle_format": "EVOGUARD_EVIDENCE_BUNDLE_V1",
+    "bundle_sha256": "8b43d7373f91089bb0e4b98fe10589024709627c284422badf861fc400b826c0",
+    "correlation_group_id": "cg:sha256:63087536bef35ca67dca2164247eca9f24e114838e3b4e4b6ee5e2807ca3aabc",
+    "finalizer_key_id": "sha256:2c8976f58bb3d8b10148f853517872777df4ee87419d5a7f12990a4afe5bb287",
+    "record_schema": "1.11",
+    "record_tool": "evoguard",
+    "record_tool_version": "4.4.0",
+    "signature_algorithm": "Ed25519",
+    "verdict_record_sha256": "c00385ff0d01a1d7ef7ff1155d253f90e7fe218d43d8e77d194528668d7fe740",
+    "verdict_record_size": 4078
+  },
+  "source": {
+    "base_sha": "9d3c1cb33214e10ef210a202e52b3899e899dc30",
+    "base_tree_sha": "f1e1e92a1bcea5c7dd04d035bd700c92cd76f889",
+    "candidate_sha256": "5866a77d1068acda538c8b87470c47b7ff304e0ddf815498b9c91d5b6e2395c8",
+    "context_run_attempt": 7,
+    "context_run_id": "golden-pass-context-run",
+    "effective_policy_sha256": "f347134a9cbadba271f1cb547d8a7e71e38ed3cb4986a953c79c960d9a750d75",
+    "guard_artifact_sha256": "54a92c330221c84c5da92fd45615eb42f3732a81997e83fc40d88a9258d0e25e",
+    "handoff_workflow_run_attempt": 3,
+    "handoff_workflow_run_id": "golden-pass-handoff-run",
+    "head_sha": "2eb6e53235f20a0885bdadbffd6c1bf32b0eafce",
+    "head_tree_sha": "d99a976413dd50b80511b6226da3b4199d677aaa",
+    "pull_request_number": 42,
+    "repository": "owner/project",
+    "repository_id": "12345",
+    "verifier_pack_sha256": null
+  }
+}
