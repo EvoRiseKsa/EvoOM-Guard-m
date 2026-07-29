@@ -34,8 +34,8 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.4.2.dev0` is **unreleased development** and is not a consumer release.
-The maintained unsigned exception record
+Source version `4.4.2` is a **release candidate** and is not yet a consumer release. The
+maintained unsigned exception record
 `evidence/release-operations/v4.4.1/UNSEALED_STATUS.json` reports
 [`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) as a
 published immutable GitHub Release without a canonical protected-tree ledger. Its
