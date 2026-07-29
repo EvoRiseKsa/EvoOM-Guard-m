@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest stable and supported consumer release.
-- Source `4.4.0`: release candidate; not a consumer release.
+- Source `4.4.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -196,6 +196,10 @@ publication round, or hostile-code production readiness.
   exact typed unsupported-tool report, rather than being required to succeed.
 - Corrected artifact build and admission to bind the canonical source-admission
   parent commit and tree fields, rather than reading non-existent base fields.
+- Corrected final publication so the expected absent-tag `404` is captured
+  without firing the draft-cleanup trap before SSH tag creation. Explicit
+  tag-probe and push failures now preserve their original failure status and
+  enter the exact verified cleanup path.
 
 ### Known limitations
 

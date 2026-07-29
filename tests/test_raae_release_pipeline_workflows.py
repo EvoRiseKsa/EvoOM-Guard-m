@@ -1074,10 +1074,27 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "HostKeyAlgorithms=ssh-ed25519" in publish
     assert "IdentityAgent=none" in publish
     assert "ssh -F /dev/null" in publish
+    assert "git@github.com:$GITHUB_REPOSITORY.git" in publish
+    assert (
+        "github.com ssh-ed25519 "
+        "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+    ) in publish
+    assert "ssh://git@ssh.github.com:443" not in publish
+    assert "tag-deploy-key-authentication.txt" not in publish
+    assert 'local trapped_failure=$?' in publish
+    assert 'local failure="${1:-$trapped_failure}"' in publish
+    assert 'if gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"' in publish
+    assert (
+        'set +e\n          gh api --include '
+        '"repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"'
+    ) not in publish
+    assert publish.count("cleanup_verified_unpublished_draft 1") == 2
     assert "git -C \"$tag_repo\" push" in publish
     assert '"$TARGET_SHA:refs/tags/$tag"' in publish
     assert '":refs/tags/$tag"' in publish
     assert '--force-with-lease="refs/tags/$tag:$TARGET_SHA"' in publish
+    assert "deploy-key tag push failed before ref proof" in publish
+    assert 'cleanup_verified_unpublished_draft "$tag_push_rc"' in publish
     assert "deploy-key push did not prove a newly created tag" in publish
     assert "cleanup-exact-tag.json" in publish
     assert "cleanup-exact-tag.response" not in publish
@@ -1468,6 +1485,168 @@ cleanup_partial_draft
     assert completed.returncode == 1
     assert expected_message in completed.stderr
     assert forbidden_message not in completed.stderr
+
+
+def test_h_tag_push_failure_is_visible_and_runs_exact_cleanup(tmp_path: Path) -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to execute H tag push handling")
+
+    run = next(
+        block
+        for block in _literal_run_blocks(H)
+        if "tag-create-by-deploy-key.txt" in block
+    )
+    start = run.index('if GIT_SSH_COMMAND="$tag_ssh_command"')
+    end = run.index('\nTAG="$tag" python -', start)
+    push_block = run[start:end]
+    harness = rf"""
+set -euo pipefail
+git() {{
+  printf 'ssh: connect to host github.com port 22: denied\n' >&2
+  return 42
+}}
+cleanup_verified_unpublished_draft() {{
+  printf 'cleanup:%s\n' "$1" >&2
+  exit "$1"
+}}
+tag_ssh_command='ssh pinned'
+tag_repo=tag.git
+tag_remote=git@github.com:EvoRiseKsa/EvoOM-Guard-m.git
+TARGET_SHA={'a' * 40}
+tag=v4.4.0
+RUNNER_TEMP=.
+{push_block}
+"""
+    completed = subprocess.run(
+        [bash, "-s"],
+        input=harness,
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 42
+    assert "deploy-key tag push failed before ref proof (exit 42)" in completed.stderr
+    assert "ssh: connect to host github.com port 22: denied" in completed.stderr
+    assert "cleanup:42" in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("gh_rc", "http_status", "expected_rc", "cleanup_message"),
+    (
+        (1, "404", 0, None),
+        (0, "200", 1, "cleanup:1"),
+        (1, "500", 1, "cleanup:1"),
+    ),
+)
+def test_h_tag_absence_probe_is_err_trap_safe_and_fail_closed(
+    tmp_path: Path,
+    gh_rc: int,
+    http_status: str,
+    expected_rc: int,
+    cleanup_message: str | None,
+) -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to execute H tag absence handling")
+
+    run = next(
+        block
+        for block in _literal_run_blocks(H)
+        if "tag-before-publication.response" in block
+    )
+    start = run.index('if gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"')
+    end = run.index("\nRELEASE_BODY=", start)
+    probe_block = run[start:end]
+    harness = rf"""
+set -Eeuo pipefail
+gh() {{
+  printf 'HTTP/2.0 %s result\n' "$HTTP_STATUS"
+  return "$GH_RC"
+}}
+cleanup_verified_unpublished_draft() {{
+  printf 'cleanup:%s\n' "$1" >&2
+  exit "$1"
+}}
+trap cleanup_verified_unpublished_draft ERR
+GITHUB_REPOSITORY=EvoRiseKsa/EvoOM-Guard-m
+tag=v4.4.0
+RUNNER_TEMP=.
+{probe_block}
+printf 'probe:%s:%s\n' "$tag_probe_rc" "$tag_status"
+"""
+    completed = subprocess.run(
+        [bash, "-s"],
+        input=harness,
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "GH_RC": str(gh_rc),
+            "HTTP_STATUS": http_status,
+        },
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == expected_rc
+    if cleanup_message is None:
+        assert completed.stdout.strip() == f"probe:{gh_rc}:{http_status}"
+        assert "cleanup:" not in completed.stderr
+    else:
+        assert cleanup_message in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("invocation", "expected_rc", "expected_message"),
+    (
+        ("cleanup_verified_unpublished_draft 42", 42, "failure:42"),
+        ("trap cleanup_verified_unpublished_draft ERR\nfalse", 1, "failure:1"),
+    ),
+)
+def test_h_exact_cleanup_preserves_explicit_and_trapped_failure_status(
+    tmp_path: Path,
+    invocation: str,
+    expected_rc: int,
+    expected_message: str,
+) -> None:
+    bash = _working_bash()
+    if bash is None:
+        pytest.skip("a working Bash is required to execute H cleanup status handling")
+
+    run = next(
+        block
+        for block in _literal_run_blocks(H)
+        if "tag-before-publication.response" in block
+    )
+    start = run.index("cleanup_verified_unpublished_draft() {")
+    end = run.index("local release_ok=", start)
+    cleanup_prologue = run[start:end]
+    harness = rf"""
+set -Euo pipefail
+{cleanup_prologue}
+printf 'failure:%s\n' "$failure" >&2
+exit "$failure"
+}}
+false
+{invocation}
+"""
+    completed = subprocess.run(
+        [bash, "-s"],
+        input=harness,
+        text=True,
+        capture_output=True,
+        cwd=tmp_path,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == expected_rc
+    assert expected_message in completed.stderr
 
 
 def test_historical_direct_release_path_is_hard_disabled() -> None:
