@@ -324,8 +324,8 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(context.status.lifecycle, "release-line")
-        self.assertEqual(context.source_version, "4.4.2")
+        self.assertEqual(context.status.lifecycle, "unreleased-development")
+        self.assertEqual(context.source_version, "4.5.0.dev0")
         self.assertEqual(context.status.relation, "descendant")
         self.assertEqual(
             context.status.ledger_path,
@@ -547,12 +547,12 @@ class ProjectStatusTests(unittest.TestCase):
                 )
             )
 
-    def test_completed_recovery_advances_consumer_pins_to_validated_ledger(
+    def test_completed_recovery_remains_the_pin_during_next_development_line(
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(context.status.lifecycle, "release-line")
-        self.assertEqual(context.source_version, "4.4.2")
+        self.assertEqual(context.status.lifecycle, "unreleased-development")
+        self.assertEqual(context.source_version, "4.5.0.dev0")
         self.assertEqual(context.ledger.version, "4.4.2")
         self.assertEqual(
             tuple(
@@ -567,7 +567,7 @@ class ProjectStatusTests(unittest.TestCase):
             ROOT,
             context.status,
             context.ledger,
-            "4.4.2",
+            context.source_version,
             verify_git=False,
         )
         self.assertEqual(historical_exception.version, "4.4.1")
