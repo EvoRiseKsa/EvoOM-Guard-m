@@ -1,12 +1,11 @@
 # Independent blind-evaluation protocol
 
 > **Availability:** this protocol depends on the explicit operating-profile and
-> schema `1.12` contracts introduced on the `4.4.0` source line and inherited
-> by later `4.4.x` source, including published `v4.4.1` and current
-> `4.4.2.dev0`. It is not a `v4.3.0` consumer interface. The immutable
-> `v4.4.0` and `v4.4.1` releases exist without valid protected-tree ledgers.
-> Presence of this protocol is neither that missing ledger evidence nor
-> evidence that an independent party ran it.
+> schema `1.12` contracts introduced on the `4.4.0` source line and is included
+> in the ledger-recorded `v4.4.2` release. The release ledger authenticates the
+> released artifact and its protected publication chain; it is not evidence
+> that an independent party ran this protocol or that the resulting evaluation
+> would be independent.
 
 `tools/evaluation/blind_protocol.py` makes a held-out evaluation auditable
 without pretending that the project author is an independent evaluator. It

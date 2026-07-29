@@ -19,11 +19,11 @@ change. There are four operating paths. Pick one — you do **not** need the oth
 to start.
 
 > **Release boundary:** use [`RELEASE_STATUS.md`](RELEASE_STATUS.md) as the
-> authority. Commands below apply to the ledger-recorded consumer release unless
-> a section is explicitly marked as the current `4.4.2` source-line contract.
-> Named `--operating-profile` policies and verdict schema `1.12` belong to the
-> current `4.4.2` source line (introduced in `4.4.0`) and are absent from
-> the frozen `v4.3.0` contract.
+> authority. Commands below apply to the ledger-recorded `v4.4.2` consumer
+> release. Named `--operating-profile` policies and verdict schema `1.12` were
+> introduced on the `4.4.0` source line and are included in `v4.4.2`. The
+> release ledger establishes artifact identity and protected publication
+> provenance, not that a particular run delivered its requested profile.
 
 ## Decision table
 
@@ -40,23 +40,22 @@ Quick tree:
 Want to block edits to modelled/configured judge paths? → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a delivered container boundary?                  → add --isolation docker (fail-closed)
-Evaluating `4.4.x` named profiles?                     → verify release status; see OPERATING_PROFILES.md
+Using named profiles from `v4.4.2`?                   → verify runtime evidence; see OPERATING_PROFILES.md
 Need a signed PR admission record with separated key?  → Trusted Finalizer
 ```
 
 A future/external VM-class provider is a separate deployment boundary; the
-`4.4.x` `hostile` contract implements gVisor only,
+`v4.4.2` `hostile` contract implements gVisor only,
 and release-bound hostile evidence remains open. See
-[`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for that source-line contract.
+[`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for that contract.
 
 Already have a verdict and need an offline admission/audit result? Use
 `evo-guard verify-record` for internal consistency, or the authenticated
 `bundle-evidence`/`verify-bundle` path when external key and replay-resistant
 context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
-[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md). The frozen `v4.3.0` verifier
-accepts schema `1.11`; schema `1.12` support belongs to the `4.4.x` source
-line (introduced in `4.4.0`). Confirm the exact installed
-version before verifying a record.
+[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md). The `v4.4.2` verifier accepts
+schemas `1.11` and `1.12`; confirm the exact installed version before verifying
+a record.
 
 > **Using the GitHub Action on a PR?** Commit the judge policy in
 > `.evoguard.json` on the base branch; `evo-guard init` creates it alongside the

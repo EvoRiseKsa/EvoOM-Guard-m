@@ -12,9 +12,11 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 
 ## Version boundary
 
-- **Latest published stable release:** [`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1);
-  it has no valid protected-tree ledger.
-- **Ledger-recorded consumer pin:** [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0).
+- **Latest published stable release:** [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2).
+- **Ledger-recorded consumer pin:** `v4.4.2`, or commit
+  `699c60c22445a6af54c58f31fca34edc225b98a9` for the strictest immutable
+  identity. Its canonical signed ledger is
+  [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json).
 - **Repository source:** use the exact checked-out commit; its lifecycle is
   reported by the status authorities below.
 - **Status authority:** [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and

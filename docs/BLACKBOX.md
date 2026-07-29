@@ -8,10 +8,11 @@
 # The external black-box judge (`--blackbox`)
 
 > **Release boundary:** the black-box and Docker/gVisor mechanisms documented
-> here are available in `v4.3.0` under schema `1.11`. Passages about explicit
-> operating profiles or schema `1.12` describe source versions on the `4.4.0`
-> line or later, including published `v4.4.1` and current `4.4.2.dev0`. They are not part
-> of the frozen `v4.3.0` contract; confirm the immutable release you run.
+> here are available in the ledger-recorded `v4.4.2` release. Unprofiled
+> records use the frozen schema `1.11`; explicit operating profiles use schema
+> `1.12`. The signed release ledger proves the released artifact identity and
+> provenance, not that any particular deployment delivered the requested
+> isolation boundary; confirm the exact artifact and its runtime evidence.
 
 The default judge runs your tests **in the same process** as the code under
 test, so a patch that writes deliberate forgery into source — an `atexit` hook

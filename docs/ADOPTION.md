@@ -16,21 +16,21 @@ verdict + exit code for a pipeline.
 ## 1. Turn it on (one command)
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ADOPTION_CURRENT_RELEASE -->
-[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) is the latest immutable consumer release recorded by the
-protected source tree, at commit `b8c61315a22741415c75e4e8828feb60c0ad5149`. For stricter CI,
+[`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) is the latest immutable consumer release recorded by the
+protected source tree, at commit `699c60c22445a6af54c58f31fca34edc225b98a9`. For stricter CI,
 pin that full commit SHA.
 
 From the repository you want to protect:
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.3.0"
-evo-guard init --ref v4.3.0 --test-command "python -m pytest -q"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.4.2"
+evo-guard init --ref v4.4.2 --test-command "python -m pytest -q"
 git add .github/workflows/evoguard.yml .evoguard.json
 git commit -m "ci: add EvoOM Guard policy" && git push
 ```
 
 The no-Action alternative is `git diff | evo-guard guard --diff -`.
-Use `evo-guard init --ref v4.3.0 --stdout` to review the workflow first.
+Use `evo-guard init --ref v4.4.2 --stdout` to review the workflow first.
 <!-- END EVOGUARD_PROJECT_STATUS:ADOPTION_CURRENT_RELEASE -->
 
 > **No repo access / no pip?** Download the single-file `evo-guard.pyz` from the

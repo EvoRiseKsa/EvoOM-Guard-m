@@ -3,9 +3,8 @@
 The versioned contracts are intentionally distinct:
 
 - `v4.3.0` verifies schema `1.11`.
-- source versions on the `4.4.0` line or later, including published `v4.4.1`
-  and current `4.4.2.dev0`, verify schemas `1.11` and `1.12`; schema `1.12` carries
-  the operating-profile contract.
+- the ledger-recorded `v4.4.2` release verifies schemas `1.11` and `1.12`;
+  schema `1.12` carries the operating-profile contract.
 
 `evo-guard verify-record` validates the schemas supported by the installed
 version without running candidate code:

@@ -19,17 +19,24 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- Source `4.4.2` is the unreleased recovery successor to `v4.4.1`; it is not a consumer release and has no release ledger.
-- [`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) is the latest published stable and supported release; it has no valid protected-tree ledger.
-- [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) remains the latest ledger-recorded consumer release and is temporarily supported until a later recovery release.
+- [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) is the latest stable and supported consumer release.
+- Source `4.4.2`: source on the latest ledger-recorded release line.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
-- Draft candidates that were never published are labelled explicitly below
-  and are not supported releases.
+- Draft candidates that were never published are labelled explicitly below and
+  are not supported releases.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
 ## [Unreleased]
+
+## [4.4.2] — published 2026-07-29; signed protected-tree ledger
+
+[`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2)
+is the latest stable and supported consumer release. Its signed
+[`release-ledger-v2`](evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
+records the protected A-through-H operation and resulting immutable
+publication within the exact evidence boundaries below.
 
 ### Added
 
@@ -38,21 +45,23 @@ retained evidence say so.
   `v4.4.1` exception authorities, rejects duplicate or reordered versions,
   paths, and record digests, and validates the recovery chain without turning
   either unsigned record into a ledger.
-- Pinned a distinct prospective `v4.4.2` release-ledger public root. The
-  private key remains operator-local and outside the repository and admission
-  Environments; the public root alone is not a signature, release, or ledger.
+- Added the signed `v4.4.2` `release-ledger-v2` directory, including the exact
+  A–H run identities and attempts, release assets and checksums, RSAE/RAAE and
+  attestation receipts, tag-CI observations, repository-control observations,
+  and the seventh independently pinned ledger-signing root. Its canonical
+  bytes validate against the admitted parent and an externally supplied copy
+  of that root; the ledger establishes only the retained byte and binding
+  claims implemented by its validator.
 
 ### Changed
 
-- Advanced the protected source identity to `4.4.2.dev0` as the unreleased
-  recovery successor to the immutable `v4.4.1` publication. No `v4.4.2`
-  release, candidate, protected A-through-H operation, or ledger is claimed by
-  this source state.
-- Retargeted the parent-owned release-candidate scope and phase-A benchmark
-  promotion contract to the exact future `4.4.2.dev0` → `4.4.2`
-  transition. Fresh `4.4.2.dev0` benchmark evidence is required before a
-  release candidate; prior benchmark bytes are not rewritten.
-- Corrected the release-ledger validator prospectively so a clean interpreter
+- Promoted the measured `4.4.2.dev0` line through the exact one-parent
+  `4.4.2` candidate and protected A-through-H publication. `v4.4.2` is now the
+  latest stable release and the release selected by `PROJECT_STATUS.json`; the
+  earlier `v4.4.0` and `v4.4.1` published-unledgered exceptions remain
+  unchanged.
+- Corrected the release-ledger validator for recovery operations beginning
+  with `v4.4.2` so a clean interpreter
   accepts the original CPython `pyexpat` aliases and the strict deterministic
   indented JSON emitted by the trusted release CLI. Duplicate keys,
   non-finite values, extra keys, wrong values, and replacement module aliases
@@ -61,6 +70,12 @@ retained evidence say so.
   exact release, asset, attestation, provenance, CI, Git-parent, validator-blob,
   and correction identities. Its unused prospective signing key remains
   `pending-operator-removal`; no deletion or compromise claim is made.
+- Recorded `v4.4.2` publication-authority retirement as
+  `pending-post-ledger`. The signed ledger must be committed to protected main
+  and revalidated before the exact publication deploy key and Environment
+  secret are removed. Completion requires a separate signed
+  `KEY_RETIREMENT.json` receipt; neither the ledger nor that receipt proves
+  destruction of external key copies.
 
 ## [4.4.1] — published 2026-07-29; no valid protected-tree ledger
 
