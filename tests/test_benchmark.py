@@ -1122,7 +1122,7 @@ def test_exact_dev0_release_promotion_is_opt_in_and_byte_scoped(
     for invalid_current_version in (
         f"{stable_version}.dev1",
         f"{stable_version}rc1",
-        "4.4.1",
+        f"{stable_version}.post1",
     ):
         invalid_errors = verify_run_manifest(
             manifest_path,
