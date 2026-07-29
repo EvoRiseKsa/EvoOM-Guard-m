@@ -23,9 +23,11 @@
       ],
       "properties": {
         "lifecycle": {
+          "description": "Source lifecycle. published-unledgered is a maintained observation that the stable source version was published while the protected tree selects an earlier validated ledger. It is not a signed release ledger, a substitute for one, or a claim that a ledger for that version can be issued later.",
           "enum": [
             "unreleased-development",
             "release-candidate",
+            "published-unledgered",
             "release-line"
           ]
         },

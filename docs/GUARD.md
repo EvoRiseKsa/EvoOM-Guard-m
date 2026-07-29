@@ -456,8 +456,9 @@ effective policy and its digest only when explicitly selected. `protected`
 requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
 network; `hostile` requires gVisor and an active memory limit. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
-custody rules. This contract is not part of `v4.3.0`; confirm an immutable
-`v4.4.0` release before consumer use.
+custody rules. This contract is not part of `v4.3.0`; confirm the exact
+`v4.4.0` artifact before consumer use. That release is published without a
+valid protected-tree ledger; see [`RELEASE_STATUS.md`](RELEASE_STATUS.md).
 
 The default judge runs the candidate in the **same process** as the report writer,
 so deliberate in-process source can forge the report (`report_integrity:

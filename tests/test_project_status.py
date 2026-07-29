@@ -197,6 +197,7 @@ class ProjectStatusTests(unittest.TestCase):
         expected_source_versions = {
             "unreleased-development": "4.4.0.dev0",
             "release-candidate": "4.4.0",
+            "published-unledgered": "4.4.0",
         }
         self.assertIn(context.status.lifecycle, expected_source_versions)
         self.assertEqual(
@@ -266,6 +267,36 @@ class ProjectStatusTests(unittest.TestCase):
         candidate_summary = render_project_status._release_summary(candidate)
         self.assertIn("release candidate", candidate_summary)
         self.assertNotIn("unreleased development", candidate_summary)
+        published_unledgered = replace(
+            context,
+            source_version="4.4.0",
+            status=replace(
+                context.status,
+                lifecycle="published-unledgered",
+            ),
+        )
+        render_project_status._verify_source_relation(
+            published_unledgered.status,
+            published_unledgered.ledger,
+            published_unledgered.source_version,
+        )
+        published_summary = " ".join(
+            render_project_status._release_summary(published_unledgered).split()
+        )
+        self.assertIn("published stable GitHub release", published_summary)
+        self.assertIn(
+            "has no valid protected-tree release ledger",
+            published_summary,
+        )
+        self.assertIn("not a signed ledger", published_summary)
+        self.assertIn(
+            "does not imply that a ledger for this version can be issued later",
+            published_summary,
+        )
+        self.assertIn(
+            "latest immutable consumer release recorded by the protected source tree",
+            published_summary,
+        )
         release_line = replace(
             context,
             source_version="4.3.0",
@@ -283,6 +314,12 @@ class ProjectStatusTests(unittest.TestCase):
         with self.assertRaises(render_project_status.ProjectStatusError):
             render_project_status._verify_source_relation(
                 replace(context.status, lifecycle="release-candidate"),
+                context.ledger,
+                "4.3.0",
+            )
+        with self.assertRaises(render_project_status.ProjectStatusError):
+            render_project_status._verify_source_relation(
+                replace(context.status, lifecycle="published-unledgered"),
                 context.ledger,
                 "4.3.0",
             )
@@ -357,6 +394,198 @@ class ProjectStatusTests(unittest.TestCase):
                     status=replace(context.status, lifecycle="unknown"),
                 )
             )
+
+    def test_published_unledgered_keeps_consumer_pins_on_validated_ledger(
+        self,
+    ) -> None:
+        context = render_project_status.load_context(ROOT, verify_git=False)
+        self.assertEqual(context.status.lifecycle, "published-unledgered")
+        self.assertEqual(context.source_version, "4.4.0")
+        self.assertEqual(context.ledger.version, "4.3.0")
+
+        blocks = render_project_status._blocks(context)
+        pin_blocks = (
+            "README_QUICKSTART_PIN",
+            "README_INIT_PIN",
+            "README_ACTION_PIN",
+            "RELEASE_STATUS_CONSUMER_PIN",
+            "ADOPTION_CURRENT_RELEASE",
+            "GUARD_ACTION_EXAMPLE",
+            "GUARD_NO_ACTION_EXAMPLE",
+            "EVIDENCE_BUNDLES_RELEASE_PIN",
+            "SIGNED_VERDICTS_RELEASE_PIN",
+            "TRUSTED_FINALIZER_RELEASE_PIN",
+        )
+        for block in pin_blocks:
+            with self.subTest(block=block):
+                rendered = blocks[block]
+                self.assertIn("v4.3.0", rendered)
+                self.assertNotRegex(rendered, r"(?:@|--ref\s+)v4\.4\.0\b")
+
+        pipeline = " ".join(
+            blocks["PROJECT_STATUS_RELEASE_PIPELINE"].split()
+        )
+        self.assertIn(
+            "No externally anchored signed v2 ledger records a completed",
+            pipeline,
+        )
+        self.assertIn(
+            "No externally anchored signed v2 ledger records publication",
+            pipeline,
+        )
+        support = blocks["SECURITY_SUPPORTED_VERSIONS"]
+        self.assertIn(
+            "Latest published stable release; supported; no valid protected-tree ledger",
+            support,
+        )
+        self.assertIn(
+            "Latest ledger-recorded consumer release; temporarily supported",
+            support,
+        )
+        self.assertIn("until a later recovery release", support)
+
+    def test_v440_unsealed_status_is_explicitly_not_a_release_ledger(self) -> None:
+        record_path = (
+            ROOT
+            / "evidence"
+            / "release-operations"
+            / "v4.4.0"
+            / "UNSEALED_STATUS.json"
+        )
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        release = record["release"]
+        self.assertEqual(
+            record["schema_version"],
+            "evoguard-unsealed-release-status-v1",
+        )
+        self.assertIn("not a release ledger", record["record_scope"])
+        self.assertEqual(release["version"], "4.4.0")
+        self.assertEqual(release["tag"], "v4.4.0")
+        self.assertEqual(
+            release["commit_sha"],
+            "5671282c3d2e97ea0d3c4f2b8f592f2405102f1f",
+        )
+        self.assertEqual(release["state"], "published")
+        self.assertFalse(release["draft"])
+        self.assertFalse(release["prerelease"])
+        self.assertTrue(release["immutable"])
+        self.assertEqual(release["created_utc"], "2026-07-29T01:30:39Z")
+        self.assertIn("target-commit metadata", release["created_utc_semantics"])
+        self.assertEqual(release["published_utc"], "2026-07-29T01:55:50Z")
+        self.assertEqual(
+            {
+                asset["name"]: (asset["size"], asset["sha256"])
+                for asset in record["assets"]
+            },
+            {
+                "evo-guard.pyz": (
+                    2210594,
+                    "192157882cf9261e075116e559e92492124909b6268eff497542c4d27486f84b",
+                ),
+                "evo-guard.spdx.json": (
+                    97884,
+                    "4e3f0adc613065e4c2dbac20b6a87be9c4bd24d79d1c95b702fa23fcb4cb153b",
+                ),
+                "SHA256SUMS": (
+                    166,
+                    "17a242e0c6cce7ca1ee2f9d5bf26258c16c7c80803112f6e1fc3da9958ed0bd5",
+                ),
+            },
+        )
+        observations = record["verification_observations"]
+        self.assertTrue(observations["release_attestation"]["verified"])
+        self.assertTrue(observations["build_provenance"]["verified"])
+        self.assertEqual(
+            set(observations["build_provenance"]["subjects"]),
+            {"evo-guard.pyz", "evo-guard.spdx.json"},
+        )
+        for run_name in ("tag_ci", "action_smoke"):
+            with self.subTest(run=run_name):
+                run = observations[run_name]
+                self.assertEqual(run["conclusion"], "success")
+                self.assertEqual(run["successful_jobs"], run["total_jobs"])
+                self.assertEqual(run["total_jobs"], 8)
+        failure = record["failure_boundary"]
+        self.assertEqual(
+            failure["reason_code"],
+            "FROZEN_VALIDATOR_CREATED_AT_SEMANTICS_MISMATCH",
+        )
+        self.assertEqual(
+            failure["trusted_parent_commit_sha"],
+            "163ad0591ac64cada35f0643683f3afff397e2d6",
+        )
+        self.assertEqual(
+            failure["trusted_parent_tree_sha"],
+            "df5821ec364e9d62a77bf3ee609a575583ae351a",
+        )
+        self.assertEqual(
+            failure["validator_blob_sha"],
+            "d80180d7ce744fbc2f06dae44dce0718b2693fbf",
+        )
+        self.assertEqual(failure["h_run_id"], 30415174549)
+        self.assertEqual(failure["h_run_attempt"], 1)
+        self.assertLess(
+            failure["release_created_utc"],
+            failure["h_observed_window"]["started_utc"],
+        )
+        self.assertLessEqual(
+            failure["h_observed_window"]["started_utc"],
+            failure["release_published_utc"],
+        )
+        self.assertLessEqual(
+            failure["release_published_utc"],
+            failure["h_observed_window"]["completed_utc"],
+        )
+        self.assertTrue(failure["release_created_before_h"])
+        self.assertTrue(failure["release_published_inside_h"])
+        self.assertEqual(failure["corrected_semantics_pr"], 255)
+        self.assertEqual(
+            failure["corrected_semantics_commit"],
+            "83c7bcff45cc710a791dd5d18f0c5075c9067495",
+        )
+        self.assertFalse(failure["retroactive_correction_allowed"])
+        ledger_state = record["ledger_state"]
+        self.assertFalse(ledger_state["sealed"])
+        self.assertFalse(ledger_state["canonical_ledger_issued"])
+        self.assertFalse(ledger_state["signature_issued"])
+        self.assertFalse(ledger_state["v4_4_0_release_ledger_present"])
+        self.assertEqual(
+            ledger_state["reason_code"],
+            "FROZEN_VALIDATOR_CREATED_AT_SEMANTICS_MISMATCH",
+        )
+        self.assertEqual(
+            ledger_state["latest_validated_repository_ledger"],
+            "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
+        )
+        self.assertEqual(ledger_state["recovery_release"], "v4.4.1")
+        self.assertFalse(
+            (
+                ROOT
+                / "evidence"
+                / "release-ledgers"
+                / "v4.4.0"
+                / "RELEASE_LEDGER.json"
+            ).exists()
+        )
+        erratum = (
+            ROOT / "docs" / "errata" / "V4.4.0-LEDGER.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("not** a release ledger", erratum)
+        self.assertIn("UNSEALED_STATUS.json", erratum)
+        self.assertIn(
+            "Do not move `v4.4.0` or rewrite its release",
+            erratum,
+        )
+        self.assertIn("Prepare `v4.4.1`", erratum)
+        self.assertIn(
+            "Keep `v4.4.0` permanently recorded",
+            erratum,
+        )
+        self.assertNotIn(
+            "Assemble and independently validate a truthful post-publication "
+            "v2 ledger",
+            erratum,
+        )
 
     def test_workflow_gate_is_structural_not_a_comment_substring(self) -> None:
         spec = render_project_status._WORKFLOW_SPECS[0]
@@ -490,7 +719,7 @@ class ProjectStatusTests(unittest.TestCase):
         }
         self.assertEqual(stale, set())
 
-    def test_release_candidate_generated_paths_are_exactly_authorized(self) -> None:
+    def test_source_lifecycle_generated_paths_are_exactly_authorized(self) -> None:
         base_context = render_project_status.load_context(ROOT, verify_git=False)
         development_context = replace(
             base_context,
@@ -506,6 +735,14 @@ class ProjectStatusTests(unittest.TestCase):
             status=replace(
                 base_context.status,
                 lifecycle="release-candidate",
+            ),
+        )
+        published_context = replace(
+            base_context,
+            source_version="4.4.0",
+            status=replace(
+                base_context.status,
+                lifecycle="published-unledgered",
             ),
         )
         with mock.patch.object(
@@ -526,27 +763,41 @@ class ProjectStatusTests(unittest.TestCase):
                 ROOT,
                 verify_git=False,
             )
+        with mock.patch.object(
+            render_project_status,
+            "load_context",
+            return_value=published_context,
+        ):
+            published_rendered = render_project_status.build_rendered_files(
+                ROOT,
+                verify_git=False,
+            )
 
-        changed = {
+        development_to_candidate = {
             path.relative_to(ROOT).as_posix()
             for path, development_bytes in development_rendered.items()
             if development_bytes != candidate_rendered[path]
         }
-        self.assertEqual(
-            changed,
-            {
-                "CHANGELOG.md",
-                "README.md",
-                "ROADMAP.md",
-                "SECURITY.md",
-                "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
-                "docs/PROJECT_STATUS.md",
-                "docs/RELEASE_STATUS.md",
-                "docs/SBOM.md",
-                "docs/architecture/REFACTOR_PROGRAM.md",
-            },
-        )
-        self.assertLessEqual(changed, set(candidate_scope.ALLOWED_PATHS))
+        candidate_to_published = {
+            path.relative_to(ROOT).as_posix()
+            for path, candidate_bytes in candidate_rendered.items()
+            if candidate_bytes != published_rendered[path]
+        }
+        expected = {
+            "CHANGELOG.md",
+            "README.md",
+            "ROADMAP.md",
+            "SECURITY.md",
+            "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
+            "docs/PROJECT_STATUS.md",
+            "docs/RELEASE_STATUS.md",
+            "docs/SBOM.md",
+            "docs/architecture/REFACTOR_PROGRAM.md",
+        }
+        self.assertEqual(development_to_candidate, expected)
+        self.assertEqual(candidate_to_published, expected)
+        self.assertLessEqual(development_to_candidate, set(candidate_scope.ALLOWED_PATHS))
+        self.assertLessEqual(candidate_to_published, set(candidate_scope.ALLOWED_PATHS))
 
     def test_markers_are_unique_and_outside_metadata_and_fences(self) -> None:
         rendered = render_project_status.build_rendered_files(

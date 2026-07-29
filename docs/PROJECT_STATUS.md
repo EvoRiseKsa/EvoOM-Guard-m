@@ -27,8 +27,12 @@ validated security service.
 ## Public repository map
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
-Source version `4.4.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.4.0` is a **published stable GitHub release**
+([`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0)). It has no
+valid protected-tree release ledger. This maintained status is not a signed ledger, does
+not establish that release's assets, attestations, or protected A-through-H completion,
+and does not imply that a ledger for this version can be issued later. The latest
+immutable consumer release recorded by the protected source tree is
 [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
 `b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
 records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
@@ -36,6 +40,10 @@ records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestatio
 `evo-guard.pyz`. The ledger records no SBOM release asset. Canonical ledger:
 `tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
+
+Verified live `v4.4.0` facts and the frozen validator mismatch are recorded in
+the [release-ledger erratum](errata/V4.4.0-LEDGER.md). The linked unsigned JSON
+record does not replace a signed v2 ledger; recovery requires a later release.
 
 | Component | Public role | Evidence/version boundary | What it does **not** establish |
 | --- | --- | --- | --- |
@@ -107,9 +115,12 @@ depending on them. The following boundary is intentional.
 
 The public source is not a trade secret. Historical releases through v3.8.0
 remain governed by the licenses shipped with those exact releases. The current
-published immutable [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0)
-release ships the EvoRise Source-Available License 1.0. It does not prevent
-someone from studying the design or independently implementing the ideas.
+published immutable
+[`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0)
+release ships the EvoRise Source-Available License 1.0; it has no valid
+protected-tree ledger, while `v4.3.0` remains the latest validated repository
+ledger. The license does not prevent someone from studying the design or
+independently implementing the ideas.
 Long-term differentiation therefore has to come from independently validated
 operational practice, high-quality private policy/packs and data, trustworthy
 service operation, and customer integrations—not from obscuring already

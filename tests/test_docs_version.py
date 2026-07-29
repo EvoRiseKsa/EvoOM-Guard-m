@@ -4,15 +4,17 @@
 # Source-available — see LICENSE for permitted use.
 """Documentation and runtime version-drift gate.
 
-Every user-facing install/pin reference must use the latest published consumer
-release. A source tree may legitimately prepare a newer runtime before its
-immutable GitHub Release exists; ``docs/RELEASE_STATUS.md`` records the source
-and latest-published versions explicitly. ``evo-guard init`` must never guess a
-release ref: every documented invocation supplies an exact tag or full SHA.
-JSON-schema examples use explicit runtime placeholders unless the example is
-intentionally bound to one immutable release. The byte-pinned v3.7 Trusted
-Finalizer templates remain the sole historical pin exception because changing
-those URLs without matching reviewed SHA-256 values would be unsafe.
+Every user-facing install/pin reference must use the latest validated
+ledger-recorded consumer release. A source tree may legitimately prepare a
+newer runtime before its immutable GitHub Release exists, or observe a stable
+publication before its signed repository ledger is committed.
+``docs/RELEASE_STATUS.md`` records those boundaries explicitly. ``evo-guard
+init`` must never guess a release ref: every documented invocation supplies an
+exact tag or full SHA. JSON-schema examples use explicit runtime placeholders
+unless the example is intentionally bound to one immutable release. The
+byte-pinned v3.7 Trusted Finalizer templates remain the sole historical pin
+exception because changing those URLs without matching reviewed SHA-256 values
+would be unsafe.
 """
 
 from __future__ import annotations
@@ -77,11 +79,12 @@ def _release_status() -> tuple[str, str, str]:
     ledger_path = status["published_release"]["ledger"]
     ledger = json.loads((ROOT / ledger_path).read_text(encoding="utf-8"))
     lifecycle = status["source"]["lifecycle"]
-    state = (
-        "pre-release"
-        if lifecycle in {"unreleased-development", "release-candidate"}
-        else "published"
-    )
+    state = {
+        "unreleased-development": "pre-release",
+        "release-candidate": "pre-release",
+        "published-unledgered": "published-unledgered",
+        "release-line": "ledger-recorded",
+    }[lifecycle]
     return __version__, ledger["project"]["version"], state
 
 
@@ -89,11 +92,11 @@ class DocsVersionDriftTests(unittest.TestCase):
     def test_every_taught_pin_matches_the_latest_published_version(self) -> None:
         stale: list[str] = []
         prepublication_conditions: list[str] = []
-        source_version, published_version, state = _release_status()
+        source_version, ledger_version, state = _release_status()
         self.assertEqual(source_version, __version__)
-        allowed_pins = {published_version}
-        if state == "published":
-            self.assertEqual(published_version, __version__)
+        allowed_pins = {ledger_version}
+        if state == "ledger-recorded":
+            self.assertEqual(ledger_version, __version__)
             allowed_pins.add(__version__)
 
         for path in _DOC_FILES:
@@ -107,9 +110,10 @@ class DocsVersionDriftTests(unittest.TestCase):
                         if pinned not in allowed_pins and (relative, pinned) not in _FROZEN_RELEASE_PINS:
                             stale.append(
                                 f"{relative}:{lineno}: pins v{pinned} but the latest "
-                                f"published consumer version is v{published_version}"
+                                "validated ledger-recorded consumer version is "
+                                f"v{ledger_version}"
                             )
-                        if pinned == __version__ and state == "published":
+                        if pinned == __version__ and state == "ledger-recorded":
                             context = " ".join(lines[max(0, lineno - 5) : lineno + 2])
                             if _PREPUBLICATION_CONDITION_RE.search(context) is not None:
                                 prepublication_conditions.append(
@@ -121,7 +125,8 @@ class DocsVersionDriftTests(unittest.TestCase):
             stale,
             [],
             "docs teach an install/pin that is neither the latest published "
-            "consumer release nor an explicit frozen byte-pinned reference:\n"
+            "ledger-recorded consumer release nor an explicit frozen byte-pinned "
+            "reference:\n"
             + "\n".join(stale),
         )
         self.assertEqual(
@@ -132,11 +137,11 @@ class DocsVersionDriftTests(unittest.TestCase):
         )
 
     def test_release_status_and_consumer_docs_are_consistent(self) -> None:
-        source_version, published_version, state = _release_status()
+        source_version, ledger_version, state = _release_status()
         self.assertEqual(source_version, __version__)
         release_url = (
             "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/"
-            f"v{published_version}"
+            f"v{ledger_version}"
         )
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         status = (ROOT / "docs" / "PROJECT_STATUS.md").read_text(encoding="utf-8")
@@ -149,9 +154,9 @@ class DocsVersionDriftTests(unittest.TestCase):
             self.assertRegex(
                 text,
                 re.compile(
-                    rf"latest immutable consumer release recorded by "
-                    rf"the protected source tree is\s*"
-                    rf"\[`v{re.escape(published_version)}`\]",
+                    rf"latest\s+immutable\s+consumer\s+release\s+recorded\s+by\s+"
+                    rf"the\s+protected\s+source\s+tree\s+is\s*"
+                    rf"\[`v{re.escape(ledger_version)}`\]",
                     re.IGNORECASE,
                 ),
                 f"{relative} must identify the protected-tree recorded release",
@@ -164,8 +169,22 @@ class DocsVersionDriftTests(unittest.TestCase):
                 release_status,
                 re.compile(r"unreleased|not (?:yet )?a consumer release", re.I),
             )
+        elif state == "published-unledgered":
+            self.assertNotEqual(ledger_version, __version__)
+            self.assertIn(__version__, release_status)
+            self.assertRegex(
+                release_status,
+                re.compile(
+                    r"published stable GitHub release.*"
+                    r"has\s+no\s+valid\s+protected-tree\s+release\s+ledger",
+                    re.I | re.S,
+                ),
+            )
+            self.assertIn("not a signed ledger", release_status)
+            self.assertIn(f"`v{ledger_version}`", release_status)
         else:
-            self.assertEqual(published_version, __version__)
+            self.assertEqual(state, "ledger-recorded")
+            self.assertEqual(ledger_version, __version__)
 
     def test_documented_init_commands_supply_an_explicit_ref(self) -> None:
         paths = (ROOT / "README.md", ROOT / "docs" / "ADOPTION.md", ROOT / "docs" / "GUARD.md")
@@ -221,8 +240,8 @@ class DocsVersionDriftTests(unittest.TestCase):
         self.assertEqual(hits, [])
 
     def test_source_line_guides_state_the_consumer_boundary(self) -> None:
-        source_version, published_version, state = _release_status()
-        self.assertEqual(state, "pre-release")
+        source_version, ledger_version, state = _release_status()
+        self.assertIn(state, {"pre-release", "published-unledgered"})
         source_line = source_version.removesuffix(".dev0")
         paths = (
             ROOT / "docs" / "BLACKBOX.md",
@@ -240,7 +259,7 @@ class DocsVersionDriftTests(unittest.TestCase):
                 f"{relative} must identify the source line",
             )
             self.assertIn(
-                f"v{published_version}",
+                f"v{ledger_version}",
                 text,
                 f"{relative} must identify the latest consumer release",
             )
@@ -256,8 +275,8 @@ class DocsVersionDriftTests(unittest.TestCase):
 
     def test_stable_getting_started_does_not_teach_unverified_profile_flags(self) -> None:
         text = (ROOT / "docs" / "START_HERE.md").read_text(encoding="utf-8")
-        source_version, _published_version, state = _release_status()
-        self.assertEqual(state, "pre-release")
+        source_version, _ledger_version, state = _release_status()
+        self.assertIn(state, {"pre-release", "published-unledgered"})
         source_line = source_version.removesuffix(".dev0")
         executable_blocks = re.findall(r"```(?:bash|sh|shell)?\s*\n(.*?)```", text, re.S)
         self.assertFalse(

@@ -126,17 +126,21 @@ admission.
     write deploy key.
     GitHub Actions artifacts are temporary evidence (even where repository
     retention is configured for 30 days), not a durable ledger.
-13. After the first publication, freeze a `v4.4.0` ledger containing both RAAE
-    envelopes, RSAE/controls, six admission public roots and IDs, a seventh
-    distinct release-ledger signing public root/ID, run/workflow/tool pins, and
-    release checksums. Do not publish those trust envelopes as release
-    assets and do not create, move, or rewrite any tag from the ledger step.
-    Never rewrite a frozen release, historical baseline, or prior ledger.
+13. The published `v4.4.0` operation cannot issue a canonical ledger because
+    its descriptor is bound to the frozen validator mismatch recorded in the
+    [release-ledger erratum](errata/V4.4.0-LEDGER.md). Do not apply the corrected
+    validator retroactively. For a new `v4.4.1` recovery operation, freeze a
+    `v4.4.1` ledger after publication containing both RAAE envelopes,
+    RSAE/controls, six admission public roots and IDs, a seventh distinct
+    release-ledger signing public root/ID, run/workflow/tool pins, and release
+    checksums. Do not publish those trust envelopes as release assets and do
+    not create, move, or rewrite any tag from the ledger step. Never rewrite a
+    frozen release, historical baseline, or prior ledger.
     The post-publication ledger must validate against
     `tests/baseline/schema/release-ledger-v2.schema.json` and pass the offline
     byte, binding, envelope, and signature checks in
     `tools/ci/validate_release_ledger_v2.py`. The schema and validator existing
-    before publication do not themselves constitute a `v4.4.0` ledger.
+    before publication do not themselves constitute a `v4.4.1` ledger.
     Validate with the independently retrieved key via
     `--trusted-ledger-pub`, commit the ledger, and validate the committed bytes
     again. This ordering is an operator procedure: the retirement receipt proves
