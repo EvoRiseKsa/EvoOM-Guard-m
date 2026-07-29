@@ -19,7 +19,7 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- Source `4.4.1.dev0` is the unreleased recovery successor to `v4.4.0`; it is not a consumer release and has no release ledger.
+- Source `4.4.1` is the unreleased recovery successor to `v4.4.0`; it is not a consumer release and has no release ledger.
 - [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) is the latest published stable and supported release; it has no valid protected-tree ledger.
 - [`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) remains the latest ledger-recorded consumer release and is temporarily supported until a later recovery release.
 - Earlier published versions are historical and unsupported. Their tags,
