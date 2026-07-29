@@ -18,18 +18,18 @@ key or whether the recorded run was honest.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 Requires the `sign` extra (the core gate stays stdlib-only). Install it from
-ledger-recorded release `v4.3.0`:
+ledger-recorded release `v4.4.2`:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.3.0"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.4.2"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 
-The pinned release has its own frozen CLI and signing implementation. The
+The pinned `v4.4.2` release includes the
 `--acknowledge-local-key-exposure` flag and the descriptor/reservation
-hardening documented below belong to the `4.4.0` source line, not `v4.3.0`.
-Do not infer availability from the pinned consumer release; consult the
-documentation at the exact version you run.
+hardening documented below. Consult the documentation at the exact version
+you run; the release ledger authenticates bytes and provenance, not key
+custody or the honesty of a signing workflow.
 
 ## Usage
 

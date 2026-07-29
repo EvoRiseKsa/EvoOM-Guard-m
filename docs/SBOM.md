@@ -10,24 +10,16 @@
 ## Exact status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SBOM_EXACT_STATUS -->
-Source version `4.4.2` is a **release candidate** and is not yet a consumer release. The
-maintained unsigned exception record
-`evidence/release-operations/v4.4.1/UNSEALED_STATUS.json` reports
-[`v4.4.1`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.1) as a
-published immutable GitHub Release without a canonical protected-tree ledger. Its
-erratum is `docs/errata/V4.4.1-LEDGER.md`. Neither record is a ledger or a consumer pin.
-The unsigned local-key disposition
-`evidence/release-operations/v4.4.1/LEDGER_KEY_DISPOSITION.json` is
-`pending-operator-removal` and is not a retirement or erasure proof. This source is the
-unreleased `v4.4.2` recovery successor to `v4.4.1`; no release or ledger is claimed for
-the recovery version. The latest immutable consumer release recorded by the protected
-source tree is
-[`v4.3.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0) at commit
-`b8c61315a22741415c75e4e8828feb60c0ad5149`. Its `evoguard-release-ledger-v1` ledger
-records the release assets `evo-guard.pyz`, `SHA256SUMS`. Its release attestation binds
-`evo-guard.pyz`, `SHA256SUMS`, while its build-provenance attestation binds
-`evo-guard.pyz`. The ledger records no SBOM release asset. Canonical ledger:
-`tests/baseline/v4.3.0/RELEASE_LEDGER.json`.
+Source version `4.4.2` is on the **ledger-recorded release line**; this protected source
+tree may be a post-tag descendant and is not a new consumer release. The latest
+immutable consumer release recorded by the protected source tree is
+[`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) at commit
+`699c60c22445a6af54c58f31fca34edc225b98a9`. Its `evoguard-release-ledger-v2` ledger
+records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
+release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
+its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
+release asset and its provenance. Canonical ledger:
+`evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:SBOM_EXACT_STATUS -->
 
 The separate unsigned
@@ -35,7 +27,8 @@ The separate unsigned
 [`v4.4.1`](../evidence/release-operations/v4.4.1/UNSEALED_STATUS.json)
 observation records bind each live `evo-guard.spdx.json` asset and its verified
 provider provenance. Neither can be promoted into a canonical ledger
-retroactively; `v4.4.2` is the current recovery source.
+retroactively. They remain historical published-unledgered exceptions;
+`v4.4.2` is the separate signed, ledger-recorded recovery release.
 
 ## What the generated document records
 
@@ -79,13 +72,13 @@ material and are not packaged into the zipapp.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SBOM_PIPELINE -->
 The protected A-H release pipeline is implemented in source and **disabled by default**.
-The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
-records a completed protected A-H operation. No externally anchored signed v2 ledger
-records publication by this pipeline. An admitted release is contracted to exactly
-`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
-evidence that those assets were published. The deterministic SPDX generator exists in
-source; SBOM publication status is derived only from the validated release ledger's
-artifact and attestation records.
+The legacy release workflow is hard-disabled. The externally anchored signed v2 ledger
+records a completed protected A-H operation. That validated ledger also records the
+resulting publication. An admitted release is contracted to exactly `evo-guard.pyz`,
+`evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not evidence that those
+assets were published. The deterministic SPDX generator exists in source; SBOM
+publication status is derived only from the validated release ledger's artifact and
+attestation records.
 <!-- END EVOGUARD_PROJECT_STATUS:SBOM_PIPELINE -->
 
 First confirm that the release actually publishes all three expected assets.

@@ -1,6 +1,6 @@
 {
   "published_release": {
-    "ledger": "tests/baseline/v4.3.0/RELEASE_LEDGER.json"
+    "ledger": "evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json"
   },
   "release_exceptions": {
     "published_unledgered": [
@@ -32,7 +32,7 @@
       "cli_handler_extraction": "complete",
       "overall_refactor_program": "in-progress"
     },
-    "lifecycle": "release-candidate",
+    "lifecycle": "release-line",
     "relation_to_latest_release": "descendant"
   }
 }

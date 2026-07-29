@@ -1,0 +1,7 @@
+tampered-pyz=REJECTED
+tampered-sbom=REJECTED
+tampered-bundle=REJECTED
+cross-artifact-substitution=REJECTED
+wrong-raae-root=REJECTED
+wrong-outer-git-pin=REJECTED
+wrong-source-gh-pin=REJECTED

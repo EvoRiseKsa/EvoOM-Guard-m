@@ -324,22 +324,18 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        expected_source_versions = {
-            "unreleased-development": "4.4.2.dev0",
-            "release-candidate": "4.4.2",
-            "published-unledgered": "4.4.1",
-        }
-        self.assertIn(context.status.lifecycle, expected_source_versions)
-        self.assertEqual(
-            context.source_version,
-            expected_source_versions[context.status.lifecycle],
-        )
+        self.assertEqual(context.status.lifecycle, "release-line")
+        self.assertEqual(context.source_version, "4.4.2")
         self.assertEqual(context.status.relation, "descendant")
-        self.assertEqual(context.ledger.version, "4.3.0")
-        self.assertEqual(context.ledger.tag, "v4.3.0")
+        self.assertEqual(
+            context.status.ledger_path,
+            "evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json",
+        )
+        self.assertEqual(context.ledger.version, "4.4.2")
+        self.assertEqual(context.ledger.tag, "v4.4.2")
         self.assertEqual(
             context.ledger.artifacts,
-            ("evo-guard.pyz", "SHA256SUMS"),
+            ("evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"),
         )
         self.assertTrue(context.ledger.release_attestation_recorded)
         self.assertTrue(context.ledger.build_provenance_recorded)
@@ -353,11 +349,11 @@ class ProjectStatusTests(unittest.TestCase):
         )
         self.assertEqual(
             context.ledger.schema_version,
-            "evoguard-release-ledger-v1",
+            "evoguard-release-ledger-v2",
         )
-        self.assertFalse(context.ledger.sbom_recorded)
-        self.assertFalse(context.ledger.pipeline_operational_evidence_recorded)
-        self.assertFalse(context.ledger.pipeline_publication_evidence_recorded)
+        self.assertTrue(context.ledger.sbom_recorded)
+        self.assertTrue(context.ledger.pipeline_operational_evidence_recorded)
+        self.assertTrue(context.ledger.pipeline_publication_evidence_recorded)
         self.assertEqual(context.status.cli_extraction, "complete")
         generated = render_project_status._blocks(context)
         attestation_scope = " ".join(
@@ -371,7 +367,8 @@ class ProjectStatusTests(unittest.TestCase):
             attestation_scope,
         )
         self.assertIn(
-            "release attestation separately binds `evo-guard.pyz`, `SHA256SUMS`",
+            "release attestation separately binds `evo-guard.pyz`, "
+            "`evo-guard.spdx.json`, `SHA256SUMS`",
             attestation_scope,
         )
         self.assertNotIn(
@@ -379,7 +376,8 @@ class ProjectStatusTests(unittest.TestCase):
             attestation_scope,
         )
         self.assertIn(
-            "release attestation binds `evo-guard.pyz`, `SHA256SUMS`",
+            "release attestation binds `evo-guard.pyz`, "
+            "`evo-guard.spdx.json`, `SHA256SUMS`",
             evidence_row,
         )
         self.assertIn(
@@ -389,17 +387,41 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_every_supported_status_enum_changes_rendered_truth(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
+        development = replace(
+            context,
+            source_version="4.4.3.dev0",
+            status=replace(
+                context.status,
+                lifecycle="unreleased-development",
+            ),
+        )
+        render_project_status._verify_source_relation(
+            development.status,
+            development.ledger,
+            development.source_version,
+        )
+        development_summary = render_project_status._release_summary(
+            development
+        )
+        self.assertIn("unreleased development", development_summary)
+        self.assertNotIn("release candidate", development_summary)
+
         candidate = replace(
             context,
-            source_version="4.4.1",
+            source_version="4.4.3",
             status=replace(context.status, lifecycle="release-candidate"),
+        )
+        render_project_status._verify_source_relation(
+            candidate.status,
+            candidate.ledger,
+            candidate.source_version,
         )
         candidate_summary = render_project_status._release_summary(candidate)
         self.assertIn("release candidate", candidate_summary)
         self.assertNotIn("unreleased development", candidate_summary)
         published_unledgered = replace(
             context,
-            source_version="4.4.0",
+            source_version="4.4.3",
             status=replace(
                 context.status,
                 lifecycle="published-unledgered",
@@ -429,7 +451,7 @@ class ProjectStatusTests(unittest.TestCase):
         )
         release_line = replace(
             context,
-            source_version="4.3.0",
+            source_version=context.ledger.version,
             status=replace(context.status, lifecycle="release-line"),
         )
         render_project_status._verify_source_relation(
@@ -445,13 +467,13 @@ class ProjectStatusTests(unittest.TestCase):
             render_project_status._verify_source_relation(
                 replace(context.status, lifecycle="release-candidate"),
                 context.ledger,
-                "4.3.0",
+                context.ledger.version,
             )
         with self.assertRaises(render_project_status.ProjectStatusError):
             render_project_status._verify_source_relation(
                 replace(context.status, lifecycle="published-unledgered"),
                 context.ledger,
-                "4.3.0",
+                context.ledger.version,
             )
 
         summary = render_project_status._pipeline_summary(
@@ -525,31 +547,30 @@ class ProjectStatusTests(unittest.TestCase):
                 )
             )
 
-    def test_pending_recovery_keeps_consumer_pins_on_validated_ledger(
+    def test_completed_recovery_advances_consumer_pins_to_validated_ledger(
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertIn(
-            context.status.lifecycle,
-            {"unreleased-development", "release-candidate"},
+        self.assertEqual(context.status.lifecycle, "release-line")
+        self.assertEqual(context.source_version, "4.4.2")
+        self.assertEqual(context.ledger.version, "4.4.2")
+        self.assertEqual(
+            tuple(
+                release.version
+                for release in context.published_unledgered_history
+            ),
+            ("4.4.0", "4.4.1"),
         )
-        expected_source = (
-            "4.4.2.dev0"
-            if context.status.lifecycle == "unreleased-development"
-            else "4.4.2"
-        )
-        self.assertEqual(context.source_version, expected_source)
-        self.assertEqual(context.ledger.version, "4.3.0")
         self.assertEqual(context.published_unledgered.version, "4.4.1")
         self.assertEqual(context.published_unledgered.recovery_version, "4.4.2")
-        candidate_exception = render_project_status._load_published_unledgered(
+        historical_exception = render_project_status._load_published_unledgered(
             ROOT,
-            replace(context.status, lifecycle="release-candidate"),
+            context.status,
             context.ledger,
             "4.4.2",
             verify_git=False,
         )
-        self.assertEqual(candidate_exception.version, "4.4.1")
+        self.assertEqual(historical_exception.version, "4.4.1")
 
         blocks = render_project_status._blocks(context)
         pin_blocks = (
@@ -567,32 +588,29 @@ class ProjectStatusTests(unittest.TestCase):
         for block in pin_blocks:
             with self.subTest(block=block):
                 rendered = blocks[block]
-                self.assertIn("v4.3.0", rendered)
+                self.assertIn("v4.4.2", rendered)
+                self.assertNotIn("v4.3.0", rendered)
                 self.assertNotRegex(rendered, r"(?:@|--ref\s+)v4\.4\.[01]\b")
 
         pipeline = " ".join(
             blocks["PROJECT_STATUS_RELEASE_PIPELINE"].split()
         )
         self.assertIn(
-            "No externally anchored signed v2 ledger records a completed",
+            "externally anchored signed v2 ledger records a completed",
             pipeline,
         )
         self.assertIn(
-            "No externally anchored signed v2 ledger records publication",
+            "validated ledger also records the resulting publication",
             pipeline,
         )
         support = blocks["SECURITY_SUPPORTED_VERSIONS"]
         self.assertIn(
-            "Latest published stable release; supported; no valid protected-tree ledger",
+            "Latest stable release; supported",
             support,
         )
-        self.assertIn(f"`{context.source_version}`", support)
-        self.assertIn("recovery successor to `v4.4.1`", support)
-        self.assertIn(
-            "Latest ledger-recorded consumer release; temporarily supported",
-            support,
-        )
-        self.assertIn("until a later recovery release", support)
+        self.assertIn("[`v4.4.2`]", support)
+        self.assertNotIn("temporarily supported", support)
+        self.assertNotIn("recovery successor", support)
 
     def test_v440_unsealed_status_is_explicitly_not_a_release_ledger(self) -> None:
         record_path = (
@@ -905,6 +923,7 @@ class ProjectStatusTests(unittest.TestCase):
                 "security/release-ledger-roots/v4.4.0.pub.pem",
                 "security/release-ledger-roots/v4.4.1.pub.pem",
                 "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
+                "evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json",
             ):
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -939,7 +958,6 @@ class ProjectStatusTests(unittest.TestCase):
             )
 
             status_value = _project_status_v2_fixture()
-            status_value["source"]["lifecycle"] = "unreleased-development"
             status_value["release_exceptions"]["published_unledgered"][1][
                 "record_sha256"
             ] = hashlib.sha256(record_bytes).hexdigest()
@@ -952,7 +970,7 @@ class ProjectStatusTests(unittest.TestCase):
                     root,
                     status,
                     context.ledger,
-                    "4.4.2.dev0",
+                    context.source_version,
                     verify_git=False,
                     authority=authority,
                     validate_relation=False,
@@ -963,7 +981,7 @@ class ProjectStatusTests(unittest.TestCase):
                 root,
                 status,
                 context.ledger,
-                "4.4.2.dev0",
+                context.source_version,
                 history,
             )
             self.assertEqual(
@@ -978,7 +996,7 @@ class ProjectStatusTests(unittest.TestCase):
                     root,
                     status,
                     context.ledger,
-                    "4.4.2.dev0",
+                    context.source_version,
                     (skipped, history[1]),
                 )
 
@@ -1540,6 +1558,7 @@ class ProjectStatusTests(unittest.TestCase):
                 context.status.published_unledgered_erratum_path,
                 public_key_relative,
                 "tests/baseline/v4.3.0/RELEASE_LEDGER.json",
+                "evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json",
             ):
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -2406,6 +2425,7 @@ class ProjectStatusTests(unittest.TestCase):
             trusted_key.write_text("PUBLIC KEY\n", encoding="utf-8")
             for relative in (
                 "tests/baseline/schema/release-ledger-v2.schema.json",
+                "tools/ci/collect_repository_controls_v2.py",
                 "ops/build_pyz.py",
                 "ops/generate_spdx_sbom.py",
                 "tools/ci/verify_spdx_attestation.py",

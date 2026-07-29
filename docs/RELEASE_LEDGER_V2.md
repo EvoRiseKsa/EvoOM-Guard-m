@@ -17,13 +17,31 @@ does not emit. The exact bounded facts and non-claims are recorded in the
 [`v4.4.1` erratum](errata/V4.4.1-LEDGER.md); the prospective validator
 correction cannot repair it retroactively.
 
-`v4.4.2` is the designated recovery release. Its reviewed parent tree contains
-a distinct prospective `v4.4.2` ledger public root, but a pre-pinned public key
-is only a trust input. It is not a signature, ledger, release, or proof that
-A–H has run. A `v4.4.2` ledger is valid only when a fresh `v4.4.2` publication
-operation satisfies the procedure below. Both earlier exceptions remain
-governed by their separate records after a later ledger advances the consumer
-release.
+`v4.4.2` completed the recovery release operation. Its canonical signed
+[`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
+is present and selected by [`PROJECT_STATUS.json`](../PROJECT_STATUS.json). It
+records the exact release commit and tree, protected A–H runs, three release
+assets, admission and attestation evidence, tag CI, and repository-control
+observations. Its canonical bytes validate against the admitted parent and an
+externally supplied copy of the parent-pinned ledger public root.
+
+On Python 3.10, the immutable `v4.4.2` parent validator needs the
+hash-locked `importlib-resources` compatibility backport because that frozen
+validator removes CPython's originless `typing.io` alias before loading
+`jsonschema`. CI installs that narrow backport from
+`requirements/python310-compat.lock`; keeping it separate preserves the
+release-promoted benchmark's exact `requirements/ci.lock` source binding. The
+post-`v4.4.2` validator rebuilds the trusted `typing` aliases and preserves the
+already inventoried PyO3 cryptography extension across its nested first-party
+boundary. These prospective compatibility repairs do not rewrite the release,
+ledger, signature, or parent validator.
+
+The pre-pinned public root alone did not establish those facts; it was only a
+trust input. The signed directory plus offline validation now establishes the
+retained byte and binding claims implemented by the validator, not independent
+review or mutable GitHub state beyond the recorded observation window. Both
+earlier published-unledgered exceptions remain governed by their separate
+records.
 
 Because no canonical `v4.4.0` or `v4.4.1` ledger exists, neither unused
 prospective ledger key can follow the signed `KEY_RETIREMENT.json` procedure
@@ -190,6 +208,11 @@ and must fail validation. Placeholders are never accepted as release evidence.
 
 ## Post-publication procedure
 
+The signed `v4.4.2` ledger is the output of steps 1–7 below. Completion of
+step 8 means committing it to protected main and revalidating those committed
+bytes, not merely validating a working branch. Publication authority
+retirement remains intentionally pending until that ordering has completed.
+
 1. Before the trusted parent/candidate is merged, generate a fresh per-release
    Ed25519 ledger key. Pin its public PEM and key ID in the reviewed parent tree
    or another independently authenticated, immutable channel; keep its private
@@ -290,9 +313,10 @@ and must fail validation. Placeholders are never accepted as release evidence.
    external copy exists, do not prove simultaneous repository state, and do not
    prevent a later re-addition. The release
    ledger must record publication authority retirement as pending, never as
-   already completed. As an operator procedure, commit and revalidate the signed
-   ledger before removing the publication deploy-key secret and exact write
-   deploy key. Then create and validate the separately signed
+   already completed. The signed `v4.4.2` ledger records
+   `pending-post-ledger`. As an operator procedure, commit and revalidate the
+   signed ledger before removing the publication deploy-key secret and exact
+   write deploy key. Then create and validate the separately signed
    `KEY_RETIREMENT.json` and destroy the per-release ledger private key. The
    receipt and its detached signature live outside the already closed ledger
    directory and are verified under the same independently pinned ledger public

@@ -1665,6 +1665,33 @@ def test_trusted_import_context_accepts_only_original_pyexpat_aliases(
             )
 
 
+def test_trusted_import_context_rebuilds_original_typing_aliases(
+    tmp_path: Path,
+) -> None:
+    with validator._trusted_python_imports(
+        import_root=None,
+        blocked_roots=(tmp_path,),
+    ):
+        typing = importlib.import_module("typing")
+        assert sys.modules["typing.io"] is typing.io
+        assert sys.modules["typing.re"] is typing.re
+
+
+def test_nested_trusted_import_context_retains_safe_rust_extension(
+    tmp_path: Path,
+) -> None:
+    with validator._trusted_python_imports(
+        import_root=None,
+        blocked_roots=(tmp_path,),
+    ):
+        rust = importlib.import_module("cryptography.hazmat.bindings._rust")
+        with validator._trusted_python_imports(
+            import_root=None,
+            blocked_roots=(tmp_path,),
+        ):
+            assert sys.modules["cryptography.hazmat.bindings._rust"] is rust
+
+
 def test_retained_keys_are_bound_to_ids_and_external_anchor(
     tmp_path: Path,
 ) -> None:

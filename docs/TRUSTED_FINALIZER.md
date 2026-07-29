@@ -37,7 +37,7 @@ They are not enforced as required merge gates by default in this repository.
 Each consumer must apply its own branch protection, Environment/reviewer
 controls, protected Guard-artifact digest, and audit.
 
-The implementation-ready workflows download ledger-recorded release `v4.3.0`.
+The implementation-ready workflows download ledger-recorded release `v4.4.2`.
 Before enabling them, download that release's `evo-guard.pyz` and
 `SHA256SUMS`, verify the manifest and release attestation, and copy the
 reviewed runtime digest into protected variable
@@ -45,8 +45,8 @@ reviewed runtime digest into protected variable
 from the downloaded executable or a mutable URL.
 
 The `examples/trusted-finalizer/` pair remains a frozen v3.7.0 reference and
-must not be silently rewritten. New exercises should use `v4.3.0` (version
-`4.3.0`) or its exact commit pin and complete the audit before
+must not be silently rewritten. New exercises should use `v4.4.2` (version
+`4.4.2`) or its exact commit pin and complete the audit before
 enforcement.
 <!-- END EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->
 The raw-Git derivation contract is specified in

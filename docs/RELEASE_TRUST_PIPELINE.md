@@ -5,30 +5,37 @@
 > guide. Consumers should start with [`README.md`](../README.md) or
 > [`START_HERE.md`](START_HERE.md).
 
-This document describes an inert-by-default A–H release pipeline. It does not
-claim that a release has traversed the pipeline, that repository settings have
-been configured, or that any corresponding private signing key currently
-exists or remains controlled.
+This document describes an inert-by-default A–H release pipeline. Except for
+the exact retained `v4.4.2` evidence named under **Current state**, its
+procedural sections do not claim that another release has traversed the
+pipeline, that mutable repository settings remain configured, or that any
+corresponding private signing key currently exists or remains controlled.
 
 ## Current state
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 The protected A-H release pipeline is implemented in source and **disabled by default**.
-The legacy release workflow is hard-disabled. No externally anchored signed v2 ledger
-records a completed protected A-H operation. No externally anchored signed v2 ledger
-records publication by this pipeline. An admitted release is contracted to exactly
-`evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not
-evidence that those assets were published.
+The legacy release workflow is hard-disabled. The externally anchored signed v2 ledger
+records a completed protected A-H operation. That validated ledger also records the
+resulting publication. An admitted release is contracted to exactly `evo-guard.pyz`,
+`evo-guard.spdx.json`, `SHA256SUMS`; this source contract is not evidence that those
+assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 
-This reviewed parent contract designates `v4.4.2` as the recovery successor to
-the immutable `v4.4.1` publication documented by the
-[`v4.4.1` release-ledger erratum](errata/V4.4.1-LEDGER.md). Both `v4.4.0` and
-`v4.4.1` are published-unledgered; `v4.3.0` remains the latest validated
-repository ledger. The prospective `v4.4.2` ledger public root is only a
-pre-publication trust input. Neither a source version assignment nor that
-public key proves a candidate, release, A-through-H operation, signature, or
-ledger.
+`v4.4.2` completed the recovery operation designated by its reviewed parent
+contract. Its canonical signed
+[`release-ledger-v2`](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
+is present and selected by `PROJECT_STATUS.json`; it records the protected
+A-through-H operation and resulting publication. Both `v4.4.0` and `v4.4.1`
+remain published-unledgered under their separate errata, including the
+[`v4.4.1` release-ledger erratum](errata/V4.4.1-LEDGER.md).
+
+The parent-pinned `v4.4.2` public root was only a prerequisite; it did not
+itself prove a release, signature, or pipeline execution. The canonical signed
+directory and offline validator now establish only the retained byte and
+binding claims. They do not turn mutable GitHub state into an independent
+attestation. Publication-authority retirement remains a separate
+post-ledger operation and is not claimed complete by the ledger.
 
 ## Phase contracts
 
@@ -141,23 +148,24 @@ admission.
     defect recorded in the corresponding
     [`v4.4.0`](errata/V4.4.0-LEDGER.md) and
     [`v4.4.1`](errata/V4.4.1-LEDGER.md) errata. Do not apply corrected
-    validators retroactively. For a new `v4.4.2` recovery operation, freeze a
-    `v4.4.2` ledger after publication containing both RAAE envelopes,
-    RSAE/controls, six admission public roots and IDs, a seventh distinct
-    release-ledger signing public root/ID, run/workflow/tool pins, and release
-    checksums. Do not publish those trust envelopes as release assets and do
-    not create, move, or rewrite any tag from the ledger step. Never rewrite a
-    frozen release, historical baseline, or prior ledger.
-    The post-publication ledger must validate against
-    `tests/baseline/schema/release-ledger-v2.schema.json` and pass the offline
+    validators retroactively. The `v4.4.2` recovery operation produced a signed
+    post-publication ledger containing both RAAE envelopes, RSAE/controls, six
+    admission public roots and IDs, a seventh distinct release-ledger signing
+    public root/ID, run/workflow/tool pins, and release checksums. Those trust
+    envelopes were not published as release assets, and the ledger step must
+    never create, move, or rewrite a tag. Never rewrite a frozen release,
+    historical baseline, or prior ledger.
+    The retained post-publication ledger validates against
+    `tests/baseline/schema/release-ledger-v2.schema.json` and passes the offline
     byte, binding, envelope, and signature checks in
-    `tools/ci/validate_release_ledger_v2.py`. The schema and validator existing
-    before publication do not themselves constitute a `v4.4.2` ledger.
+    `tools/ci/validate_release_ledger_v2.py`. The schema, validator, and
+    pre-pinned root alone did not constitute that ledger.
     Validate with the independently retrieved key via
-    `--trusted-ledger-pub`, commit the ledger, and validate the committed bytes
-    again. This ordering is an operator procedure: the retirement receipt proves
-    signed observation timestamps after the ledger's `created_utc`, not that a
-    Git commit existed first. Retain the offline ledger private key only through
+    `--trusted-ledger-pub`, commit the ledger to protected main, and validate
+    the committed bytes again before removing publication authority. This
+    ordering is an operator procedure: the retirement receipt proves signed
+    observation timestamps after the ledger's `created_utc`, not that a Git
+    commit existed first. Retain the offline ledger private key only through
     the separate retirement-receipt signature and validation, then destroy it.
     GitHub permits editing an immutable release's title and description, so
     neither field is authoritative trust metadata. The immutable tag, exact

@@ -1,0 +1,2 @@
+# Narrow compatibility input for the immutable v4.4.2 parent validator.
+importlib-resources==6.5.2

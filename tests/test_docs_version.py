@@ -241,7 +241,10 @@ class DocsVersionDriftTests(unittest.TestCase):
 
     def test_source_line_guides_state_the_consumer_boundary(self) -> None:
         source_version, ledger_version, state = _release_status()
-        self.assertIn(state, {"pre-release", "published-unledgered"})
+        self.assertIn(
+            state,
+            {"pre-release", "published-unledgered", "ledger-recorded"},
+        )
         source_line = source_version.removesuffix(".dev0")
         paths = (
             ROOT / "docs" / "BLACKBOX.md",
@@ -263,20 +266,26 @@ class DocsVersionDriftTests(unittest.TestCase):
                 text,
                 f"{relative} must identify the latest consumer release",
             )
-            self.assertRegex(
-                text,
-                re.compile(
-                    r"not (?:part|a .*interface|evidence|publication)|"
-                    r"does not|contracts are intentionally distinct",
-                    re.I,
-                ),
-                f"{relative} must distinguish source-line and consumer contracts",
-            )
+            if state != "ledger-recorded":
+                self.assertRegex(
+                    text,
+                    re.compile(
+                        r"not (?:part|a .*interface|evidence|publication)|"
+                        r"does not|contracts are intentionally distinct",
+                        re.I,
+                    ),
+                    f"{relative} must distinguish source-line and consumer contracts",
+                )
+        if state == "ledger-recorded":
+            self.assertEqual(source_version, ledger_version)
 
     def test_stable_getting_started_does_not_teach_unverified_profile_flags(self) -> None:
         text = (ROOT / "docs" / "START_HERE.md").read_text(encoding="utf-8")
         source_version, _ledger_version, state = _release_status()
-        self.assertIn(state, {"pre-release", "published-unledgered"})
+        self.assertIn(
+            state,
+            {"pre-release", "published-unledgered", "ledger-recorded"},
+        )
         source_line = source_version.removesuffix(".dev0")
         executable_blocks = re.findall(r"```(?:bash|sh|shell)?\s*\n(.*?)```", text, re.S)
         self.assertFalse(
@@ -289,8 +298,15 @@ class DocsVersionDriftTests(unittest.TestCase):
                 continue
             context = " ".join(lines[max(0, lineno - 2) : lineno + 3])
             self.assertIn(source_line, context)
-            self.assertRegex(context, re.compile(r"source-line|absent|verify", re.I))
-        self.assertIn("source-line", text)
+            if state != "ledger-recorded":
+                self.assertRegex(
+                    context,
+                    re.compile(r"source-line|absent|verify", re.I),
+                )
+        if state == "ledger-recorded":
+            self.assertIn("ledger-recorded", text)
+        else:
+            self.assertIn("source-line", text)
         self.assertIn(source_line, text)
 
     def test_current_product_name_does_not_drift_to_the_historical_brand(self) -> None:
