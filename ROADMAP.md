@@ -22,8 +22,8 @@ evidence level allowed by that blueprint.
 ## Current source capabilities and consumer-release boundary
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
-Source version `4.4.1.dev0` is **unreleased development** and is not a consumer release.
-The maintained unsigned exception record
+Source version `4.4.1` is a **release candidate** and is not yet a consumer release. The
+maintained unsigned exception record
 `evidence/release-operations/v4.4.0/UNSEALED_STATUS.json` reports
 [`v4.4.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.0) as a
 published immutable GitHub Release without a canonical protected-tree ledger. Its
