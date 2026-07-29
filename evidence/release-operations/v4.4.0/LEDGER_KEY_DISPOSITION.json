@@ -1,0 +1,30 @@
+{
+  "schema_version": "evoguard-local-key-disposition-v1",
+  "record_scope": "Unsigned operator-local disposition statement; not a retirement receipt, revocation record, deletion proof, or secure-erasure proof.",
+  "release": {
+    "version": "4.4.0",
+    "tag": "v4.4.0",
+    "canonical_ledger_issued": false,
+    "signature_issued": false,
+    "reason_code": "FROZEN_VALIDATOR_CREATED_AT_SEMANTICS_MISMATCH"
+  },
+  "key": {
+    "purpose": "prospective v4.4.0 release-ledger signing only",
+    "public_key_path": "security/release-ledger-roots/v4.4.0.pub.pem",
+    "public_key_id": "sha256:20cc7a937e94b716dd14642dc668ef365e0d74af11c84009237e7fe847df6e0f",
+    "private_file_basename": "release-ledger-v4.4.0.private.pem",
+    "storage_scope": "operator-local-outside-repository"
+  },
+  "disposition": {
+    "status": "pending-operator-removal",
+    "observed_utc": null,
+    "trigger": "Canonical v4.4.0 ledger issuance is impossible under the frozen release validator; the unused operator-local private-key file has no remaining authorized signing purpose.",
+    "authorized_action": "Remove only the named operator-local private-key file after independently confirming the v4.4.0 ledger failure boundary."
+  },
+  "non_claims": [
+    "This unsigned statement is not KEY_RETIREMENT.json and is not a signed retirement receipt.",
+    "Pending status does not claim that the local file has been removed.",
+    "A future local-file-removed status may record only an operator observation, not secure erasure, revocation, absence of copies, or loss of key capability.",
+    "This record does not create, sign, validate, or repair a v4.4.0 release ledger."
+  ]
+}

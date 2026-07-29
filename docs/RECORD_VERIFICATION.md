@@ -3,8 +3,9 @@
 The versioned contracts are intentionally distinct:
 
 - `v4.3.0` verifies schema `1.11`.
-- the `4.4.0` source line verifies schemas `1.11` and `1.12`; schema `1.12`
-  carries the operating-profile contract.
+- source versions on the `4.4.0` line or later, including the reviewed `4.4.1`
+  contract, verify schemas `1.11` and `1.12`; schema `1.12` carries
+  the operating-profile contract.
 
 `evo-guard verify-record` validates the schemas supported by the installed
 version without running candidate code:
@@ -60,9 +61,9 @@ arrays where objects were expected, invalid nested fields, and non-canonical
 policy objects produce failed checks rather than an exception or a partial
 success report. Excessive parser nesting is reported as invalid JSON.
 
-The structural JSON Schemas in the current source are
-[1.11](../evoom_guard/schemas/verdict-record-1.11.schema.json) and the `4.4.0`
-source-line [1.12](../evoom_guard/schemas/verdict-record-1.12.schema.json).
+The structural JSON Schemas for the profile-capable source line are
+[1.11](../evoom_guard/schemas/verdict-record-1.11.schema.json) and the
+[1.12](../evoom_guard/schemas/verdict-record-1.12.schema.json) contract.
 JSON Schema cannot express all cross-field invariants, so consumers should run
 the command as well as structural validation.
 

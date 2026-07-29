@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """Render reviewable project-status prose from one machine-readable source.
 
-``PROJECT_STATUS.json`` contains only maintained state.  Ledger-recorded release
-identity and assets are read from the newest immutable release ledger, while
-source identity is read from ``evoom_guard.__version__``.  The exceptional
-``published-unledgered`` lifecycle may report that the stable source version was
-observed as published, but it never supplies release identity, assets,
-attestations, or pipeline evidence in place of a valid signed ledger, and it
-does not imply that one can be issued later.
+``PROJECT_STATUS.json`` contains only maintained state and explicit authority
+paths. Ledger-recorded release identity and assets are read from the newest
+immutable release ledger, while source identity is read from
+``evoom_guard.__version__``. A separately referenced, unsigned
+``published_unledgered`` exception may preserve bounded publication facts while
+development advances. It never supplies release identity, assets, attestations,
+or pipeline evidence in place of a valid signed ledger, and it does not imply
+that one can be issued later.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import hashlib
 import json
 import os
@@ -27,6 +29,7 @@ import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -52,6 +55,18 @@ _V1_LEDGER_PATH_RE = re.compile(
 _V2_LEDGER_PATH_RE = re.compile(
     r"evidence/release-ledgers/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
     r"\.(?:0|[1-9][0-9]*))/RELEASE_LEDGER\.json\Z"
+)
+_UNSEALED_RECORD_PATH_RE = re.compile(
+    r"evidence/release-operations/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"\.(?:0|[1-9][0-9]*))/UNSEALED_STATUS\.json\Z"
+)
+_LEDGER_ERRATUM_PATH_RE = re.compile(
+    r"docs/errata/V((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"\.(?:0|[1-9][0-9]*))-LEDGER\.md\Z"
+)
+_KEY_DISPOSITION_PATH_RE = re.compile(
+    r"evidence/release-operations/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"\.(?:0|[1-9][0-9]*))/LEDGER_KEY_DISPOSITION\.json\Z"
 )
 _LEDGER_DIRECTORY_RE = re.compile(
     r"v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
@@ -122,6 +137,10 @@ class Status:
     cli_extraction: str
     refactor_program: str
     ledger_path: str
+    published_unledgered_record_path: str
+    published_unledgered_record_sha256: str
+    published_unledgered_erratum_path: str
+    published_unledgered_key_disposition_path: str
     pipeline_implementation: str
 
 
@@ -144,10 +163,24 @@ class Ledger:
 
 
 @dataclass(frozen=True)
+class PublishedUnledgeredRelease:
+    version: str
+    tag: str
+    release_url: str
+    record_path: str
+    erratum_path: str
+    recovery_version: str
+    key_disposition_path: str
+    key_disposition_status: str
+    authority_sha256: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class Context:
     status: Status
     ledger: Ledger
     source_version: str
+    published_unledgered: PublishedUnledgeredRelease
 
 
 @dataclass(frozen=True)
@@ -216,7 +249,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="c2e63eb28f90687319cd6e12c06de319b25219f5f422da52463c65c60fca950f",
+        reviewed_sha256="b1dd9381320bfea25d15c382e474243e5fbadd21491023b4265db59704f0b0ad",
     ),
     _WorkflowSpec(
         "B",
@@ -712,8 +745,7 @@ def _duplicate_safe_object(pairs: list[tuple[str, object]]) -> dict[str, object]
     return result
 
 
-def _load_json(root: Path, path: Path) -> object:
-    raw, _ = _read_stable_bytes(root, path)
+def _load_json_bytes(raw: bytes, path: Path) -> object:
     if raw.startswith(b"\xef\xbb\xbf"):
         raise ProjectStatusError(f"UTF-8 BOM is forbidden: {path}")
     try:
@@ -724,6 +756,11 @@ def _load_json(root: Path, path: Path) -> object:
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ProjectStatusError(f"invalid UTF-8 JSON: {path}") from exc
+
+
+def _load_json(root: Path, path: Path) -> object:
+    raw, _ = _read_stable_bytes(root, path)
+    return _load_json_bytes(raw, path)
 
 
 def _mapping(value: object, where: str) -> dict[str, object]:
@@ -757,6 +794,12 @@ def _string(value: object, where: str) -> str:
     return value
 
 
+def _positive_integer(value: object, where: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ProjectStatusError(f"{where} must be a positive integer")
+    return value
+
+
 def _enum(value: object, where: str, allowed: set[str]) -> str:
     result = _string(value, where)
     if result not in allowed:
@@ -764,12 +807,39 @@ def _enum(value: object, where: str, allowed: set[str]) -> str:
     return result
 
 
-def load_status(root: Path) -> Status:
-    top = _mapping(_load_json(root, root / _STATUS_PATH), "PROJECT_STATUS.json")
+def _canonical_utc(value: object, where: str) -> datetime:
+    text = _string(value, where)
+    if re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
+        text,
+    ) is None:
+        raise ProjectStatusError(f"{where} must be canonical UTC")
+    try:
+        parsed = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError as exc:
+        raise ProjectStatusError(f"{where} is not a real UTC timestamp") from exc
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != text:
+        raise ProjectStatusError(f"{where} must be canonical UTC")
+    return parsed
+
+
+def load_status(root: Path, *, raw: bytes | None = None) -> Status:
+    status_path = root / _STATUS_PATH
+    if raw is None:
+        raw, _ = _read_stable_bytes(root, status_path)
+    top = _mapping(_load_json_bytes(raw, status_path), "PROJECT_STATUS.json")
     _exact_keys(
         top,
         "PROJECT_STATUS.json",
-        {"schema_version", "source", "published_release", "release_pipeline"},
+        {
+            "schema_version",
+            "source",
+            "published_release",
+            "release_exceptions",
+            "release_pipeline",
+        },
     )
     if top["schema_version"] != "evoguard-project-status-v1":
         raise ProjectStatusError("unsupported PROJECT_STATUS.json schema_version")
@@ -788,6 +858,50 @@ def load_status(root: Path) -> Status:
     )
     published = _mapping(top["published_release"], "published_release")
     _exact_keys(published, "published_release", {"ledger"})
+    exceptions = _mapping(top["release_exceptions"], "release_exceptions")
+    _exact_keys(exceptions, "release_exceptions", {"published_unledgered"})
+    published_unledgered = _mapping(
+        exceptions["published_unledgered"],
+        "release_exceptions.published_unledgered",
+    )
+    _exact_keys(
+        published_unledgered,
+        "release_exceptions.published_unledgered",
+        {"record", "record_sha256", "erratum", "key_disposition"},
+    )
+    unsealed_record = _string(
+        published_unledgered["record"],
+        "release_exceptions.published_unledgered.record",
+    )
+    unsealed_record_sha256 = _string(
+        published_unledgered["record_sha256"],
+        "release_exceptions.published_unledgered.record_sha256",
+    )
+    if re.fullmatch(r"[0-9a-f]{64}", unsealed_record_sha256) is None:
+        raise ProjectStatusError(
+            "release_exceptions.published_unledgered.record_sha256 is not canonical"
+        )
+    ledger_erratum = _string(
+        published_unledgered["erratum"],
+        "release_exceptions.published_unledgered.erratum",
+    )
+    key_disposition = _string(
+        published_unledgered["key_disposition"],
+        "release_exceptions.published_unledgered.key_disposition",
+    )
+    record_match = _UNSEALED_RECORD_PATH_RE.fullmatch(unsealed_record)
+    erratum_match = _LEDGER_ERRATUM_PATH_RE.fullmatch(ledger_erratum)
+    disposition_match = _KEY_DISPOSITION_PATH_RE.fullmatch(key_disposition)
+    if (
+        record_match is None
+        or erratum_match is None
+        or disposition_match is None
+        or record_match.group(1) != erratum_match.group(1)
+        or record_match.group(1) != disposition_match.group(1)
+    ):
+        raise ProjectStatusError(
+            "published-unledgered record and erratum must name one canonical version"
+        )
     pipeline = _mapping(top["release_pipeline"], "release_pipeline")
     _exact_keys(
         pipeline,
@@ -840,6 +954,10 @@ def load_status(root: Path) -> Status:
             {"in-progress", "complete"},
         ),
         ledger_path=_string(published["ledger"], "published_release.ledger"),
+        published_unledgered_record_path=unsealed_record,
+        published_unledgered_record_sha256=unsealed_record_sha256,
+        published_unledgered_erratum_path=ledger_erratum,
+        published_unledgered_key_disposition_path=key_disposition,
         pipeline_implementation=_enum(
             pipeline["implementation"],
             "release_pipeline.implementation",
@@ -886,6 +1004,948 @@ def _version_tuple(version: str, *, development: bool = False) -> tuple[int, int
         kind = "development" if development else "stable"
         raise ProjectStatusError(f"invalid canonical {kind} version: {version!r}")
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _verify_published_unledgered_git_bindings(
+    root: Path,
+    *,
+    trusted_head: str,
+    trusted_exception_tag_commit: str,
+    tag: str,
+    release_commit: str,
+    trusted_parent_commit: str,
+    trusted_parent_tree: str,
+    validator_path: str,
+    validator_blob: str,
+    corrected_commit: str,
+    corrected_pr: int,
+) -> None:
+    tagged_commit = _git(
+        root,
+        "rev-parse",
+        "--verify",
+        f"refs/tags/{tag}^{{commit}}",
+    )
+    ancestry = _git(
+        root,
+        "rev-list",
+        "--parents",
+        "-n",
+        "1",
+        tagged_commit,
+    ).split()
+    if (
+        tagged_commit != trusted_exception_tag_commit
+        or trusted_exception_tag_commit != release_commit
+        or len(ancestry) != 2
+        or ancestry[0] != release_commit
+        or ancestry[1] != trusted_parent_commit
+    ):
+        raise ProjectStatusError(
+            "published-unledgered release and trusted parent are not bound to Git"
+        )
+    actual_parent_tree = _git(
+        root,
+        "rev-parse",
+        "--verify",
+        f"{trusted_parent_commit}^{{tree}}",
+    )
+    actual_validator_blob = _git(
+        root,
+        "rev-parse",
+        "--verify",
+        f"{trusted_parent_commit}:{validator_path}",
+    )
+    actual_corrected_commit = _git(
+        root,
+        "rev-parse",
+        "--verify",
+        f"{corrected_commit}^{{commit}}",
+    )
+    corrected_subject = _git(
+        root,
+        "show",
+        "-s",
+        "--format=%s",
+        actual_corrected_commit,
+    )
+    if (
+        actual_parent_tree != trusted_parent_tree
+        or actual_validator_blob != validator_blob
+        or actual_corrected_commit != corrected_commit
+        or not corrected_subject.endswith(f"(#{corrected_pr})")
+    ):
+        raise ProjectStatusError(
+            "published-unledgered failure boundary is not derived from Git"
+        )
+    _git(
+        root,
+        "merge-base",
+        "--is-ancestor",
+        release_commit,
+        corrected_commit,
+    )
+    _git(
+        root,
+        "merge-base",
+        "--is-ancestor",
+        corrected_commit,
+        trusted_head,
+    )
+
+
+def _load_published_unledgered(
+    root: Path,
+    status: Status,
+    ledger: Ledger,
+    source_version: str,
+    *,
+    verify_git: bool,
+    trusted_head: str | None = None,
+    trusted_exception_tag_commit: str | None = None,
+) -> PublishedUnledgeredRelease:
+    if verify_git and (
+        trusted_head is None
+        or trusted_exception_tag_commit is None
+        or re.fullmatch(r"[0-9a-f]{40}", trusted_head) is None
+        or re.fullmatch(r"[0-9a-f]{40}", trusted_exception_tag_commit) is None
+    ):
+        raise ProjectStatusError(
+            "published-unledgered Git verification requires frozen references"
+        )
+    record_relative = status.published_unledgered_record_path
+    erratum_relative = status.published_unledgered_erratum_path
+    disposition_relative = status.published_unledgered_key_disposition_path
+    record_match = _UNSEALED_RECORD_PATH_RE.fullmatch(record_relative)
+    erratum_match = _LEDGER_ERRATUM_PATH_RE.fullmatch(erratum_relative)
+    disposition_match = _KEY_DISPOSITION_PATH_RE.fullmatch(disposition_relative)
+    if (
+        record_match is None
+        or erratum_match is None
+        or disposition_match is None
+        or record_match.group(1) != erratum_match.group(1)
+        or record_match.group(1) != disposition_match.group(1)
+    ):
+        raise ProjectStatusError("published-unledgered authority paths are inconsistent")
+    path_version = record_match.group(1)
+
+    record_path = root / record_relative
+    record_bytes, _ = _read_stable_bytes(root, record_path)
+    if verify_git:
+        assert trusted_head is not None
+        _verify_tracked_bytes(
+            root,
+            record_relative,
+            record_bytes,
+            revision=trusted_head,
+        )
+    if (
+        hashlib.sha256(record_bytes).hexdigest()
+        != status.published_unledgered_record_sha256
+    ):
+        raise ProjectStatusError(
+            "published-unledgered exception bytes differ from the reviewed digest"
+        )
+    record = _mapping(
+        _load_json_bytes(record_bytes, record_path),
+        "published-unledgered exception record",
+    )
+    current_record_bytes, _ = _read_stable_bytes(root, record_path)
+    if current_record_bytes != record_bytes:
+        raise ProjectStatusError("published-unledgered exception record changed during validation")
+    _exact_keys(
+        record,
+        "published-unledgered exception record",
+        {
+            "schema_version",
+            "recorded_utc",
+            "record_scope",
+            "release",
+            "assets",
+            "verification_observations",
+            "failure_boundary",
+            "ledger_state",
+            "trust_boundary",
+        },
+    )
+    if record["schema_version"] != "evoguard-unsealed-release-status-v1":
+        raise ProjectStatusError("published-unledgered exception schema is unsupported")
+    if record["record_scope"] != (
+        "Unsigned post-publication observation; not a release ledger or substitute for one."
+    ):
+        raise ProjectStatusError("published-unledgered exception overstates its scope")
+    recorded_utc = _canonical_utc(
+        record["recorded_utc"],
+        "published-unledgered recorded_utc",
+    )
+
+    release = _mapping(record["release"], "published-unledgered release")
+    _exact_keys(
+        release,
+        "published-unledgered release",
+        {
+            "repository",
+            "repository_id",
+            "version",
+            "tag",
+            "tag_object_type",
+            "commit_sha",
+            "release_id",
+            "state",
+            "draft",
+            "prerelease",
+            "immutable",
+            "created_utc",
+            "created_utc_semantics",
+            "published_utc",
+            "release_url",
+        },
+    )
+    version = _string(release["version"], "published-unledgered release.version")
+    tag = _string(release["tag"], "published-unledgered release.tag")
+    release_url = _string(
+        release["release_url"],
+        "published-unledgered release.release_url",
+    )
+    commit_sha = _string(
+        release["commit_sha"],
+        "published-unledgered release.commit_sha",
+    )
+    created_utc = _canonical_utc(
+        release["created_utc"],
+        "published-unledgered release.created_utc",
+    )
+    published_utc = _canonical_utc(
+        release["published_utc"],
+        "published-unledgered release.published_utc",
+    )
+    repository_id = _positive_integer(
+        release["repository_id"],
+        "published-unledgered release.repository_id",
+    )
+    release_id = _positive_integer(
+        release["release_id"],
+        "published-unledgered release.release_id",
+    )
+    expected_url = f"https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v{version}"
+    if (
+        version != path_version
+        or tag != f"v{version}"
+        or release["repository"] != "EvoRiseKsa/EvoOM-Guard-m"
+        or repository_id <= 0
+        or release_id <= 0
+        or release["tag_object_type"] != "commit"
+        or re.fullmatch(r"[0-9a-f]{40}", commit_sha) is None
+        or release["state"] != "published"
+        or release["draft"] is not False
+        or release["prerelease"] is not False
+        or release["immutable"] is not True
+        or release["created_utc_semantics"]
+        != (
+            "Exact GitHub Releases API created_at value; GitHub defines it as "
+            "target-commit metadata, not a draft-creation or publication time."
+        )
+        or release_url != expected_url
+        or created_utc > published_utc
+        or recorded_utc < published_utc
+    ):
+        raise ProjectStatusError(
+            "published-unledgered exception does not identify one immutable publication"
+        )
+
+    raw_assets = record["assets"]
+    if not isinstance(raw_assets, list) or len(raw_assets) != len(_PIPELINE_ASSETS):
+        raise ProjectStatusError(
+            "published-unledgered assets must be the exact ordered release set"
+        )
+    asset_names: list[str] = []
+    asset_ids: list[int] = []
+    asset_digests: list[str] = []
+    for index, raw_asset in enumerate(raw_assets):
+        asset = _mapping(raw_asset, f"published-unledgered assets[{index}]")
+        _exact_keys(
+            asset,
+            f"published-unledgered assets[{index}]",
+            {"name", "asset_id", "size", "sha256", "url"},
+        )
+        name = _string(asset["name"], f"published-unledgered assets[{index}].name")
+        asset_id = _positive_integer(
+            asset["asset_id"],
+            f"published-unledgered assets[{index}].asset_id",
+        )
+        _positive_integer(
+            asset["size"],
+            f"published-unledgered assets[{index}].size",
+        )
+        digest = _string(
+            asset["sha256"],
+            f"published-unledgered assets[{index}].sha256",
+        )
+        expected_asset_url = (
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/"
+            f"{tag}/{name}"
+        )
+        if (
+            name != _PIPELINE_ASSETS[index]
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or asset["url"] != expected_asset_url
+        ):
+            raise ProjectStatusError(
+                "published-unledgered asset identity is not canonical"
+            )
+        asset_names.append(name)
+        asset_ids.append(asset_id)
+        asset_digests.append(digest)
+    if len(set(asset_ids)) != len(asset_ids) or len(set(asset_digests)) != len(
+        asset_digests
+    ):
+        raise ProjectStatusError("published-unledgered asset identities are not unique")
+
+    observations = _mapping(
+        record["verification_observations"],
+        "published-unledgered verification_observations",
+    )
+    _exact_keys(
+        observations,
+        "published-unledgered verification_observations",
+        {"release_attestation", "build_provenance", "tag_ci", "action_smoke"},
+    )
+    release_attestation = _mapping(
+        observations["release_attestation"],
+        "published-unledgered release_attestation",
+    )
+    _exact_keys(
+        release_attestation,
+        "published-unledgered release_attestation",
+        {"verified", "tag_commit_sha", "asset_subjects", "command"},
+    )
+    if (
+        release_attestation["verified"] is not True
+        or release_attestation["tag_commit_sha"] != commit_sha
+        or release_attestation["asset_subjects"] != asset_names
+        or release_attestation["command"]
+        != f"gh release verify {tag} --repo EvoRiseKsa/EvoOM-Guard-m"
+    ):
+        raise ProjectStatusError(
+            "published-unledgered release attestation is not cross-bound"
+        )
+
+    build_provenance = _mapping(
+        observations["build_provenance"],
+        "published-unledgered build_provenance",
+    )
+    _exact_keys(
+        build_provenance,
+        "published-unledgered build_provenance",
+        {
+            "verified",
+            "subjects",
+            "source_commit_sha",
+            "source_ref",
+            "signer_workflow",
+            "runner_environment",
+            "run_url",
+        },
+    )
+    if (
+        build_provenance["verified"] is not True
+        or build_provenance["subjects"] != asset_names[:2]
+        or build_provenance["source_commit_sha"] != commit_sha
+        or build_provenance["source_ref"] != "refs/heads/main"
+        or build_provenance["signer_workflow"]
+        != (
+            "EvoRiseKsa/EvoOM-Guard-m/"
+            ".github/workflows/evoguard-build-release-artifact.yml"
+        )
+        or build_provenance["runner_environment"] != "github-hosted"
+        or re.fullmatch(
+            r"https://github\.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/"
+            r"[1-9][0-9]*/attempts/[1-9][0-9]*",
+            _string(
+                build_provenance["run_url"],
+                "published-unledgered build_provenance.run_url",
+            ),
+        )
+        is None
+    ):
+        raise ProjectStatusError(
+            "published-unledgered build provenance is not cross-bound"
+        )
+
+    ci_run_ids: list[int] = []
+    for observation_name in ("tag_ci", "action_smoke"):
+        ci_observation = _mapping(
+            observations[observation_name],
+            f"published-unledgered {observation_name}",
+        )
+        _exact_keys(
+            ci_observation,
+            f"published-unledgered {observation_name}",
+            {
+                "run_id",
+                "run_url",
+                "head_sha",
+                "conclusion",
+                "successful_jobs",
+                "total_jobs",
+            },
+        )
+        run_id = _positive_integer(
+            ci_observation["run_id"],
+            f"published-unledgered {observation_name}.run_id",
+        )
+        successful_jobs = _positive_integer(
+            ci_observation["successful_jobs"],
+            f"published-unledgered {observation_name}.successful_jobs",
+        )
+        total_jobs = _positive_integer(
+            ci_observation["total_jobs"],
+            f"published-unledgered {observation_name}.total_jobs",
+        )
+        if (
+            ci_observation["run_url"]
+            != (
+                "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/"
+                f"{run_id}"
+            )
+            or ci_observation["head_sha"] != commit_sha
+            or ci_observation["conclusion"] != "success"
+            or successful_jobs != total_jobs
+        ):
+            raise ProjectStatusError(
+                f"published-unledgered {observation_name} is not cross-bound"
+            )
+        ci_run_ids.append(run_id)
+    if len(set(ci_run_ids)) != len(ci_run_ids):
+        raise ProjectStatusError("published-unledgered CI observations are ambiguous")
+
+    failure_boundary = _mapping(
+        record["failure_boundary"],
+        "published-unledgered failure_boundary",
+    )
+    _exact_keys(
+        failure_boundary,
+        "published-unledgered failure_boundary",
+        {
+            "reason_code",
+            "trusted_parent_commit_sha",
+            "trusted_parent_tree_sha",
+            "validator_path",
+            "validator_blob_sha",
+            "validator_rule_at_publication",
+            "h_run_id",
+            "h_run_attempt",
+            "h_run_url",
+            "h_observed_window",
+            "release_created_utc",
+            "release_published_utc",
+            "release_created_before_h",
+            "release_published_inside_h",
+            "corrected_semantics_pr",
+            "corrected_semantics_commit",
+            "retroactive_correction_allowed",
+            "explanation",
+        },
+    )
+    reason_code = _string(
+        failure_boundary["reason_code"],
+        "published-unledgered failure_boundary.reason_code",
+    )
+    trusted_parent_commit = _string(
+        failure_boundary["trusted_parent_commit_sha"],
+        "published-unledgered failure_boundary.trusted_parent_commit_sha",
+    )
+    trusted_parent_tree = _string(
+        failure_boundary["trusted_parent_tree_sha"],
+        "published-unledgered failure_boundary.trusted_parent_tree_sha",
+    )
+    validator_blob = _string(
+        failure_boundary["validator_blob_sha"],
+        "published-unledgered failure_boundary.validator_blob_sha",
+    )
+    validator_path = _string(
+        failure_boundary["validator_path"],
+        "published-unledgered failure_boundary.validator_path",
+    )
+    corrected_commit = _string(
+        failure_boundary["corrected_semantics_commit"],
+        "published-unledgered failure_boundary.corrected_semantics_commit",
+    )
+    h_run_id = _positive_integer(
+        failure_boundary["h_run_id"],
+        "published-unledgered failure_boundary.h_run_id",
+    )
+    h_run_attempt = _positive_integer(
+        failure_boundary["h_run_attempt"],
+        "published-unledgered failure_boundary.h_run_attempt",
+    )
+    corrected_pr = _positive_integer(
+        failure_boundary["corrected_semantics_pr"],
+        "published-unledgered failure_boundary.corrected_semantics_pr",
+    )
+    h_window = _mapping(
+        failure_boundary["h_observed_window"],
+        "published-unledgered failure_boundary.h_observed_window",
+    )
+    _exact_keys(
+        h_window,
+        "published-unledgered failure_boundary.h_observed_window",
+        {"started_utc", "completed_utc"},
+    )
+    h_started = _canonical_utc(
+        h_window["started_utc"],
+        "published-unledgered failure_boundary.h_observed_window.started_utc",
+    )
+    h_completed = _canonical_utc(
+        h_window["completed_utc"],
+        "published-unledgered failure_boundary.h_observed_window.completed_utc",
+    )
+    if (
+        reason_code != "FROZEN_VALIDATOR_CREATED_AT_SEMANTICS_MISMATCH"
+        or re.fullmatch(r"[0-9a-f]{40}", trusted_parent_commit) is None
+        or re.fullmatch(r"[0-9a-f]{40}", trusted_parent_tree) is None
+        or re.fullmatch(r"[0-9a-f]{40}", validator_blob) is None
+        or re.fullmatch(r"[0-9a-f]{40}", corrected_commit) is None
+        or trusted_parent_commit == corrected_commit
+        or validator_path != "tools/ci/validate_release_ledger_v2.py"
+        or failure_boundary["validator_rule_at_publication"]
+        != (
+            "Required both release.created_utc and release.published_utc to fall "
+            "inside the observed phase-H window."
+        )
+        or failure_boundary["h_run_url"]
+        != (
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/"
+            f"{h_run_id}/attempts/{h_run_attempt}"
+        )
+        or failure_boundary["release_created_utc"] != release["created_utc"]
+        or failure_boundary["release_published_utc"] != release["published_utc"]
+        or h_started > published_utc
+        or published_utc > h_completed
+        or recorded_utc < h_completed
+        or failure_boundary["release_created_before_h"] is not (
+            created_utc < h_started
+        )
+        or failure_boundary["release_published_inside_h"] is not (
+            h_started <= published_utc <= h_completed
+        )
+        or failure_boundary["retroactive_correction_allowed"] is not False
+        or failure_boundary["explanation"]
+        != (
+            "The release operation and descriptor are bound to the frozen trusted "
+            "parent and validator blob. The later validator correction cannot "
+            "replace those inputs retroactively."
+        )
+    ):
+        raise ProjectStatusError(
+            "published-unledgered failure boundary is not internally consistent"
+        )
+    if verify_git:
+        assert trusted_head is not None
+        assert trusted_exception_tag_commit is not None
+        _verify_published_unledgered_git_bindings(
+            root,
+            trusted_head=trusted_head,
+            trusted_exception_tag_commit=trusted_exception_tag_commit,
+            tag=tag,
+            release_commit=commit_sha,
+            trusted_parent_commit=trusted_parent_commit,
+            trusted_parent_tree=trusted_parent_tree,
+            validator_path=validator_path,
+            validator_blob=validator_blob,
+            corrected_commit=corrected_commit,
+            corrected_pr=corrected_pr,
+        )
+
+    ledger_state = _mapping(
+        record["ledger_state"],
+        "published-unledgered ledger_state",
+    )
+    presence_key = f"v{version.replace('.', '_')}_release_ledger_present"
+    _exact_keys(
+        ledger_state,
+        "published-unledgered ledger_state",
+        {
+            "sealed",
+            "canonical_ledger_issued",
+            "signature_issued",
+            presence_key,
+            "reason_code",
+            "latest_validated_repository_ledger",
+            "ledger_recorded_consumer_pin",
+            "recovery_release",
+            "missing_claims",
+        },
+    )
+    recovery_tag = _string(
+        ledger_state["recovery_release"],
+        "published-unledgered ledger_state.recovery_release",
+    )
+    if not recovery_tag.startswith("v") or _STABLE_VERSION_RE.fullmatch(recovery_tag[1:]) is None:
+        raise ProjectStatusError("published-unledgered recovery release is not a canonical tag")
+    recovery_version = recovery_tag[1:]
+    observed_ledger_path = _string(
+        ledger_state["latest_validated_repository_ledger"],
+        "published-unledgered ledger_state.latest_validated_repository_ledger",
+    )
+    observed_ledger_match = _V1_LEDGER_PATH_RE.fullmatch(
+        observed_ledger_path
+    ) or _V2_LEDGER_PATH_RE.fullmatch(observed_ledger_path)
+    observed_consumer_pin = _string(
+        ledger_state["ledger_recorded_consumer_pin"],
+        "published-unledgered ledger_state.ledger_recorded_consumer_pin",
+    )
+    missing_claims = [
+        "signed post-publication v2 release ledger",
+        "ledger-bound protected A-through-H operational evidence",
+        "ledger-bound protected A-through-H publication evidence",
+    ]
+    if (
+        ledger_state["sealed"] is not False
+        or ledger_state["canonical_ledger_issued"] is not False
+        or ledger_state["signature_issued"] is not False
+        or ledger_state[presence_key] is not False
+        or ledger_state["reason_code"] != reason_code
+        or observed_ledger_match is None
+        or observed_consumer_pin != f"v{observed_ledger_match.group(1)}"
+        or ledger_state["missing_claims"] != missing_claims
+    ):
+        raise ProjectStatusError(
+            "published-unledgered exception cannot substitute for a release ledger"
+        )
+    _safe_path(root, root / observed_ledger_path, leaf="file")
+
+    source_stable = (
+        source_version.removesuffix(".dev0")
+        if status.lifecycle == "unreleased-development"
+        else source_version
+    )
+    ledger_version = _version_tuple(ledger.version)
+    exception_version = _version_tuple(version)
+    recovery_version_tuple = _version_tuple(recovery_version)
+    observed_ledger_version = _version_tuple(observed_ledger_match.group(1))
+    source_stable_version = _version_tuple(source_stable)
+    if not (
+        observed_ledger_version < exception_version < recovery_version_tuple
+        and observed_consumer_pin == f"v{observed_ledger_match.group(1)}"
+    ):
+        raise ProjectStatusError(
+            "published-unledgered observed, exception, and recovery versions "
+            "are not strictly ordered"
+        )
+
+    exception_ledger_paths = (
+        root / "tests" / "baseline" / f"v{version}" / "RELEASE_LEDGER.json",
+        root
+        / "evidence"
+        / "release-ledgers"
+        / f"v{version}"
+        / "RELEASE_LEDGER.json",
+    )
+    if any(os.path.lexists(path) for path in exception_ledger_paths):
+        raise ProjectStatusError(
+            "published-unledgered exception conflicts with an existing release ledger"
+        )
+
+    recovery_ledger_paths = (
+        root
+        / "tests"
+        / "baseline"
+        / f"v{recovery_version}"
+        / "RELEASE_LEDGER.json",
+        root
+        / "evidence"
+        / "release-ledgers"
+        / f"v{recovery_version}"
+        / "RELEASE_LEDGER.json",
+    )
+    recovery_in_inventory = False
+    for recovery_ledger_path in recovery_ledger_paths:
+        if os.path.lexists(recovery_ledger_path):
+            _safe_path(root, recovery_ledger_path, leaf="file")
+            recovery_in_inventory = True
+
+    if status.lifecycle == "published-unledgered":
+        relation_is_valid = (
+            ledger_version == observed_ledger_version
+            and source_stable_version == exception_version
+            and observed_ledger_path == status.ledger_path
+            and observed_consumer_pin == ledger.tag
+        )
+    elif status.lifecycle in {"unreleased-development", "release-candidate"}:
+        if ledger_version < recovery_version_tuple:
+            relation_is_valid = (
+                ledger_version == observed_ledger_version
+                and source_stable_version == recovery_version_tuple
+                and observed_ledger_path == status.ledger_path
+                and observed_consumer_pin == ledger.tag
+            )
+        else:
+            relation_is_valid = (
+                exception_version
+                < recovery_version_tuple
+                <= ledger_version
+                < source_stable_version
+                and recovery_in_inventory
+            )
+    elif status.lifecycle == "release-line":
+        relation_is_valid = (
+            exception_version
+            < recovery_version_tuple
+            <= ledger_version
+            == source_stable_version
+            and recovery_in_inventory
+        )
+    else:
+        relation_is_valid = False
+    if not relation_is_valid:
+        raise ProjectStatusError(
+            "published-unledgered exception is inconsistent with source recovery"
+        )
+
+    expected_trust_boundary = [
+        (
+            "This file is an unsigned maintained observation and is intentionally "
+            "outside evidence/release-ledgers."
+        ),
+        (
+            "It records reproducible GitHub and provider observations but does not "
+            "prove protected A-through-H completion."
+        ),
+        (
+            f"The {tag} tag, release assets, checksums, and attestations must not be "
+            "rewritten to repair the missing ledger."
+        ),
+        (
+            f"No canonical {tag} ledger or ledger signature can be issued "
+            "retroactively from the corrected validator; recovery requires a new "
+            "release."
+        ),
+    ]
+    if record["trust_boundary"] != expected_trust_boundary:
+        raise ProjectStatusError(
+            "published-unledgered trust boundary contains an unsupported claim"
+        )
+
+    disposition_path = root / disposition_relative
+    disposition_bytes, _ = _read_stable_bytes(root, disposition_path)
+    if verify_git:
+        assert trusted_head is not None
+        _verify_tracked_bytes(
+            root,
+            disposition_relative,
+            disposition_bytes,
+            revision=trusted_head,
+        )
+    disposition_record = _mapping(
+        _load_json_bytes(disposition_bytes, disposition_path),
+        "published-unledgered key disposition",
+    )
+    current_disposition_bytes, _ = _read_stable_bytes(root, disposition_path)
+    if current_disposition_bytes != disposition_bytes:
+        raise ProjectStatusError("published-unledgered key disposition changed during validation")
+    _exact_keys(
+        disposition_record,
+        "published-unledgered key disposition",
+        {
+            "schema_version",
+            "record_scope",
+            "release",
+            "key",
+            "disposition",
+            "non_claims",
+        },
+    )
+    if disposition_record[
+        "schema_version"
+    ] != "evoguard-local-key-disposition-v1" or disposition_record["record_scope"] != (
+        "Unsigned operator-local disposition statement; not a retirement "
+        "receipt, revocation record, deletion proof, or secure-erasure proof."
+    ):
+        raise ProjectStatusError("local key disposition overstates its authority")
+
+    disposition_release = _mapping(
+        disposition_record["release"],
+        "published-unledgered key disposition.release",
+    )
+    _exact_keys(
+        disposition_release,
+        "published-unledgered key disposition.release",
+        {
+            "version",
+            "tag",
+            "canonical_ledger_issued",
+            "signature_issued",
+            "reason_code",
+        },
+    )
+    if (
+        disposition_release["version"] != version
+        or disposition_release["tag"] != tag
+        or disposition_release["canonical_ledger_issued"] is not False
+        or disposition_release["signature_issued"] is not False
+        or disposition_release["reason_code"] != reason_code
+    ):
+        raise ProjectStatusError(
+            "local key disposition is not bound to the unledgered release failure"
+        )
+
+    disposition_key = _mapping(
+        disposition_record["key"],
+        "published-unledgered key disposition.key",
+    )
+    _exact_keys(
+        disposition_key,
+        "published-unledgered key disposition.key",
+        {
+            "purpose",
+            "public_key_path",
+            "public_key_id",
+            "private_file_basename",
+            "storage_scope",
+        },
+    )
+    public_key_relative = f"security/release-ledger-roots/v{version}.pub.pem"
+    public_key_id = _string(
+        disposition_key["public_key_id"],
+        "published-unledgered key disposition.key.public_key_id",
+    )
+    if (
+        disposition_key["purpose"] != f"prospective v{version} release-ledger signing only"
+        or disposition_key["public_key_path"] != public_key_relative
+        or disposition_key["private_file_basename"] != f"release-ledger-v{version}.private.pem"
+        or disposition_key["storage_scope"] != "operator-local-outside-repository"
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", public_key_id) is None
+    ):
+        raise ProjectStatusError("local key disposition contains a non-canonical key identity")
+    public_key_path = root / public_key_relative
+    public_key_bytes, _ = _read_stable_bytes(root, public_key_path)
+    if verify_git:
+        assert trusted_head is not None
+        _verify_tracked_bytes(
+            root,
+            public_key_relative,
+            public_key_bytes,
+            revision=trusted_head,
+        )
+    public_key_lines = public_key_bytes.splitlines()
+    try:
+        public_key_der = base64.b64decode(public_key_lines[1], validate=True)
+    except (IndexError, ValueError) as exc:
+        raise ProjectStatusError("local key disposition public key is not canonical PEM") from exc
+    if (
+        len(public_key_lines) != 3
+        or public_key_lines[0] != b"-----BEGIN PUBLIC KEY-----"
+        or public_key_lines[2] != b"-----END PUBLIC KEY-----"
+        or len(public_key_der) != 44
+        or not public_key_der.startswith(bytes.fromhex("302a300506032b6570032100"))
+        or public_key_id != f"sha256:{hashlib.sha256(public_key_der).hexdigest()}"
+    ):
+        raise ProjectStatusError("local key disposition public key bytes do not match its key ID")
+
+    disposition = _mapping(
+        disposition_record["disposition"],
+        "published-unledgered key disposition.disposition",
+    )
+    _exact_keys(
+        disposition,
+        "published-unledgered key disposition.disposition",
+        {"status", "observed_utc", "trigger", "authorized_action"},
+    )
+    disposition_status = _enum(
+        disposition["status"],
+        "published-unledgered key disposition.disposition.status",
+        {"pending-operator-removal", "local-file-removed"},
+    )
+    observed_utc = disposition["observed_utc"]
+    if disposition_status == "pending-operator-removal":
+        disposition_time_is_valid = observed_utc is None
+    else:
+        removed_utc = _canonical_utc(
+            observed_utc,
+            "published-unledgered key disposition.disposition.observed_utc",
+        )
+        disposition_time_is_valid = removed_utc >= recorded_utc
+    if (
+        disposition["trigger"]
+        != (
+            f"Canonical v{version} ledger issuance is impossible under the frozen "
+            "release validator; the unused operator-local private-key file has no "
+            "remaining authorized signing purpose."
+        )
+        or disposition["authorized_action"]
+        != (
+            "Remove only the named operator-local private-key file after "
+            f"independently confirming the v{version} ledger failure boundary."
+        )
+        or not disposition_time_is_valid
+    ):
+        raise ProjectStatusError("local key disposition status is contradictory")
+
+    non_claims = disposition_record["non_claims"]
+    expected_non_claims = [
+        "This unsigned statement is not KEY_RETIREMENT.json and is not a signed "
+        "retirement receipt.",
+        "Pending status does not claim that the local file has been removed.",
+        "A future local-file-removed status may record only an operator observation, "
+        "not secure erasure, revocation, absence of copies, or loss of key capability.",
+        f"This record does not create, sign, validate, or repair a v{version} release ledger.",
+    ]
+    if non_claims != expected_non_claims:
+        raise ProjectStatusError("local key disposition non-claims are incomplete")
+
+    erratum_path = root / erratum_relative
+    erratum_bytes, _ = _read_stable_bytes(root, erratum_path)
+    if verify_git:
+        assert trusted_head is not None
+        _verify_tracked_bytes(
+            root,
+            erratum_relative,
+            erratum_bytes,
+            revision=trusted_head,
+        )
+    try:
+        erratum = erratum_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectStatusError("published-unledgered erratum is not UTF-8") from exc
+    if (
+        erratum.startswith(f"# v{version} release-ledger erratum\n") is False
+        or "This is a post-publication correction record." not in erratum
+        or "**not** a release ledger" not in erratum
+        or f"`{record_relative}`" not in erratum
+        or f"Prepare `v{recovery_version}`" not in erratum
+    ):
+        raise ProjectStatusError(
+            "published-unledgered erratum does not preserve the required non-claim"
+        )
+    for stable_path, expected_bytes, label in (
+        (record_path, record_bytes, "exception record"),
+        (disposition_path, disposition_bytes, "key disposition"),
+        (erratum_path, erratum_bytes, "erratum"),
+        (public_key_path, public_key_bytes, "public key"),
+    ):
+        final_bytes, _ = _read_stable_bytes(root, stable_path)
+        if final_bytes != expected_bytes:
+            raise ProjectStatusError(
+                f"published-unledgered {label} changed during validation"
+            )
+
+    return PublishedUnledgeredRelease(
+        version=version,
+        tag=tag,
+        release_url=release_url,
+        record_path=record_relative,
+        erratum_path=erratum_relative,
+        recovery_version=recovery_version,
+        key_disposition_path=disposition_relative,
+        key_disposition_status=disposition_status,
+        authority_sha256=(
+            (record_relative, hashlib.sha256(record_bytes).hexdigest()),
+            (erratum_relative, hashlib.sha256(erratum_bytes).hexdigest()),
+            (disposition_relative, hashlib.sha256(disposition_bytes).hexdigest()),
+            (public_key_relative, hashlib.sha256(public_key_bytes).hexdigest()),
+        ),
+    )
 
 
 def _discover_ledgers(
@@ -1904,15 +2964,23 @@ def _verify_clean_directory(root: Path, relative: str) -> None:
         raise ProjectStatusError(f"frozen repository material is dirty: {relative}")
 
 
-def _verify_tracked_bytes(root: Path, relative: str, working_bytes: bytes) -> None:
+def _verify_tracked_bytes(
+    root: Path,
+    relative: str,
+    working_bytes: bytes,
+    *,
+    revision: str = "HEAD",
+) -> None:
     parent = Path(relative).parent.as_posix()
     _verify_clean_directory(root, relative if parent == "." else parent)
-    tree_entry = _git(root, "ls-tree", "HEAD", "--", relative)
+    tree_entry = _git(root, "ls-tree", revision, "--", relative)
     if re.fullmatch(rf"100644 blob [0-9a-f]{{40}}\t{re.escape(relative)}", tree_entry) is None:
         raise ProjectStatusError(f"ledger is not one tracked regular Git blob: {relative}")
-    committed = _git_bytes(root, "show", f"HEAD:{relative}")
+    committed = _git_bytes(root, "show", f"{revision}:{relative}")
     if committed != working_bytes:
-        raise ProjectStatusError(f"working ledger bytes differ from HEAD:{relative}")
+        raise ProjectStatusError(
+            f"working ledger bytes differ from {revision}:{relative}"
+        )
 
 
 def _verify_git(root: Path, status: Status, ledger: Ledger) -> None:
@@ -1932,24 +3000,100 @@ def _verify_git(root: Path, status: Status, ledger: Ledger) -> None:
         raise ProjectStatusError(f"{ledger.tag} does not resolve to its ledger commit")
 
 
+def _git_ref_snapshot(root: Path, exception_tag: str) -> tuple[str, str]:
+    values = _git(
+        root,
+        "rev-parse",
+        "HEAD^{commit}",
+        f"refs/tags/{exception_tag}^{{commit}}",
+    ).splitlines()
+    if len(values) != 2 or any(
+        re.fullmatch(r"[0-9a-f]{40}", value) is None for value in values
+    ):
+        raise ProjectStatusError("cannot freeze project-status Git references")
+    return values[0], values[1]
+
+
 def _load_context_with_trusted_git(root: Path, *, verify_git: bool) -> Context:
     _safe_path(root, root, leaf="directory")
-    status_bytes: bytes | None = None
+    status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
+    status = load_status(root, raw=status_bytes)
+    trusted_head: str | None = None
+    trusted_exception_tag_commit: str | None = None
     if verify_git:
-        status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
-        _verify_tracked_bytes(root, _STATUS_PATH.as_posix(), status_bytes)
-    status = load_status(root)
-    if verify_git:
+        record_match = _UNSEALED_RECORD_PATH_RE.fullmatch(
+            status.published_unledgered_record_path
+        )
+        if record_match is None:
+            raise ProjectStatusError(
+                "cannot derive the published-unledgered tag from PROJECT_STATUS.json"
+            )
+        exception_tag = f"v{record_match.group(1)}"
+        trusted_head, trusted_exception_tag_commit = _git_ref_snapshot(
+            root,
+            exception_tag,
+        )
+        _verify_tracked_bytes(
+            root,
+            _STATUS_PATH.as_posix(),
+            status_bytes,
+            revision=trusted_head,
+        )
         current_status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
         if current_status_bytes != status_bytes:
             raise ProjectStatusError("PROJECT_STATUS.json changed during validation")
     ledger = _load_ledger(root, status, verify_git=verify_git)
     source_version = _extract_source_version(root)
     _verify_source_relation(status, ledger, source_version)
+    published_unledgered = _load_published_unledgered(
+        root,
+        status,
+        ledger,
+        source_version,
+        verify_git=verify_git,
+        trusted_head=trusted_head,
+        trusted_exception_tag_commit=trusted_exception_tag_commit,
+    )
     _verify_pipeline(root, status)
     if verify_git:
+        assert trusted_head is not None
+        assert trusted_exception_tag_commit is not None
         _verify_git(root, status, ledger)
-    return Context(status, ledger, source_version)
+        for authority_relative, expected_sha256 in (
+            published_unledgered.authority_sha256
+        ):
+            authority_bytes, _ = _read_stable_bytes(
+                root,
+                root / authority_relative,
+            )
+            if hashlib.sha256(authority_bytes).hexdigest() != expected_sha256:
+                raise ProjectStatusError(
+                    "published-unledgered authority changed during validation: "
+                    f"{authority_relative}"
+                )
+            _verify_tracked_bytes(
+                root,
+                authority_relative,
+                authority_bytes,
+                revision=trusted_head,
+            )
+        final_status_bytes, _ = _read_stable_bytes(root, root / _STATUS_PATH)
+        if final_status_bytes != status_bytes:
+            raise ProjectStatusError("PROJECT_STATUS.json changed during validation")
+        _verify_tracked_bytes(
+            root,
+            _STATUS_PATH.as_posix(),
+            final_status_bytes,
+            revision=trusted_head,
+        )
+        if _git_ref_snapshot(root, published_unledgered.tag) != (
+            trusted_head,
+            trusted_exception_tag_commit,
+        ):
+            raise ProjectStatusError(
+                "project-status Git references changed during validation"
+            )
+    return Context(status, ledger, source_version, published_unledgered)
 
 
 def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
@@ -1961,6 +3105,7 @@ def load_context(root: Path = _ROOT, *, verify_git: bool = True) -> Context:
 
 def _release_summary(context: Context) -> str:
     ledger = context.ledger
+    exception = context.published_unledgered
     lifecycle: str | None
     if context.status.lifecycle == "published-unledgered":
         source_release_url = (
@@ -1992,6 +3137,27 @@ def _release_summary(context: Context) -> str:
         raise ProjectStatusError(
             f"unsupported rendered source lifecycle: {context.status.lifecycle}"
         )
+    exception_note = ""
+    recovery_is_pending = _version_tuple(ledger.version) < _version_tuple(
+        exception.recovery_version
+    )
+    if (
+        context.status.lifecycle in {"unreleased-development", "release-candidate"}
+        and recovery_is_pending
+    ):
+        exception_note = (
+            f"The maintained unsigned exception record "
+            f"`{exception.record_path}` reports "
+            f"[`{exception.tag}`]({exception.release_url}) as a published immutable "
+            "GitHub Release without a canonical protected-tree ledger. Its erratum "
+            f"is `{exception.erratum_path}`. Neither record is a ledger or a consumer "
+            f"pin. The unsigned local-key disposition "
+            f"`{exception.key_disposition_path}` is "
+            f"`{exception.key_disposition_status}` and is not a retirement or erasure "
+            f"proof. This source is the unreleased `v{exception.recovery_version}` "
+            f"recovery successor to `{exception.tag}`; no release or ledger is claimed "
+            "for the recovery version. "
+        )
     artifacts = "`, `".join(ledger.artifacts)
     release_subjects = "`, `".join(ledger.release_attestation_subjects)
     build_subjects = "`, `".join(ledger.build_provenance_subjects)
@@ -2002,6 +3168,7 @@ def _release_summary(context: Context) -> str:
     )
     return _wrap(
         f"Source version `{context.source_version}` is {lifecycle}. "
+        f"{exception_note}"
         f"The latest immutable consumer release recorded by the protected source "
         f"tree is [`{ledger.tag}`]({ledger.release_url}) at commit "
         f"`{ledger.commit_sha}`. Its `{ledger.schema_version}` ledger records "
@@ -2063,6 +3230,7 @@ def _blocks(context: Context) -> dict[str, str]:
     pipeline = _pipeline_summary(context)
     architecture = context.status
     ledger = context.ledger
+    published_unledgered = context.published_unledgered
     tag = ledger.tag
     version = ledger.version
     release_link = f"[`{tag}`]({ledger.release_url})"
@@ -2110,11 +3278,25 @@ def _blocks(context: Context) -> dict[str, str]:
         if context.source_version != version or architecture.lifecycle != "release-line"
         else ""
     )
-    if architecture.lifecycle == "published-unledgered":
-        source_release_link = (
-            f"[`v{context.source_version}`]"
-            "(https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/"
-            f"v{context.source_version})"
+    unledgered_is_active = _version_tuple(published_unledgered.version) > _version_tuple(
+        version
+    ) and architecture.lifecycle in {
+        "unreleased-development",
+        "release-candidate",
+        "published-unledgered",
+    }
+    if unledgered_is_active:
+        unledgered_release_link = (
+            f"[`{published_unledgered.tag}`]({published_unledgered.release_url})"
+        )
+        recovery_source_row = (
+            f"| `{context.source_version}` | {source_support_status}; recovery successor "
+            f"to `{published_unledgered.tag}` |\n"
+            if not (
+                architecture.lifecycle == "published-unledgered"
+                and context.source_version == published_unledgered.version
+            )
+            else ""
         )
         security_support = (
             "Security fixes are provided on a best-effort basis for the latest\n"
@@ -2123,7 +3305,8 @@ def _blocks(context: Context) -> dict[str, str]:
             "release:\n\n"
             "| Version | Status |\n"
             "| --- | --- |\n"
-            f"| {source_release_link} | Latest published stable release; supported; "
+            f"{recovery_source_row}"
+            f"| {unledgered_release_link} | Latest published stable release; supported; "
             "no valid protected-tree ledger |\n"
             f"| {release_link} | Latest ledger-recorded consumer release; temporarily "
             "supported until a later recovery release |\n"
@@ -2137,8 +3320,15 @@ def _blocks(context: Context) -> dict[str, str]:
             "attestation."
         )
         changelog_support = (
-            f"- {source_release_link} is the latest published stable and supported "
-            "release; it has no valid protected-tree ledger.\n"
+            (
+                f"- Source `{context.source_version}` is the unreleased recovery "
+                f"successor to `{published_unledgered.tag}`; it is not a consumer "
+                "release and has no release ledger.\n"
+                if recovery_source_row
+                else ""
+            )
+            + f"- {unledgered_release_link} is the latest published stable and "
+            "supported release; it has no valid protected-tree ledger.\n"
             f"- {release_link} remains the latest ledger-recorded consumer release and "
             "is temporarily supported until a later recovery release.\n"
             "- Earlier published versions are historical and unsupported. Their tags,\n"

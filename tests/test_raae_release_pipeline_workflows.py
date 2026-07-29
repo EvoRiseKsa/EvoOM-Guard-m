@@ -224,7 +224,7 @@ def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() 
     assert "v*" in bootstrap["activation_prerequisites"]["repository"][
         "release_tag_ruleset"
     ]
-    assert bootstrap["post_publication_evidence"]["first_ledger"] == "v4.4.0"
+    assert bootstrap["post_publication_evidence"]["first_ledger"] == "v4.4.1"
     frozen = bootstrap["post_publication_evidence"]["required_frozen_material"]
     assert "six admission public roots and key IDs" in frozen
     assert "one distinct release-ledger signing public root and key ID" in frozen
@@ -287,11 +287,11 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "security/release-ledger-roots/*" in policy["protected"]
     assert "security/release-source-pack/*" in policy["protected"]
     assert "security/release-pipeline-bootstrap.json" in policy["protected"]
-    ledger_root = ROOT / "security/release-ledger-roots/v4.4.0.pub.pem"
+    ledger_root = ROOT / "security/release-ledger-roots/v4.4.1.pub.pem"
     assert ledger_root.is_file()
     assert (
         public_key_id(str(ledger_root))
-        == "sha256:20cc7a937e94b716dd14642dc668ef365e0d74af11c84009237e7fe847df6e0f"
+        == "sha256:ab3501f94e2d5fe7e27d02c2d82957738c29102fb37c71500392f7f559342e6a"
     )
     pack_test = _text(pack / "test_release_protocol.py")
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
@@ -344,9 +344,9 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "sys.path.insert(0, str(base))" in source
     assert "candidate / 'benchmarks/run-manifest.json'" in source
     assert "base / 'benchmarks/run-manifest.json'" in source
-    assert "ENGINE_VERSION != '4.4.0.dev0'" in source
+    assert "ENGINE_VERSION != '4.4.1.dev0'" in source
     assert "trusted parent benchmark rejected" in source
-    assert "engine_version='4.4.0'" in source
+    assert "engine_version='4.4.1'" in source
     assert "require_release_promotion=True" in source
     assert source.count("required_history_tip='HEAD'") == 2
     assert "relation=exact-release-version-transition" in source
@@ -379,7 +379,7 @@ def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
             repo_path=str(ROOT),
             changed_paths=(
                 ".evoguard.json",
-                "security/release-ledger-roots/v4.4.0.pub.pem",
+                "security/release-ledger-roots/v4.4.1.pub.pem",
                 "tests/test_raae_release_pipeline_workflows.py",
             ),
             protected=protected,
@@ -390,7 +390,7 @@ def test_release_candidate_scope_is_enforced_by_the_real_preflight() -> None:
     assert protected_result.may_execute is False
     assert protected_result.protected_violations == (
         ".evoguard.json",
-        "security/release-ledger-roots/v4.4.0.pub.pem",
+        "security/release-ledger-roots/v4.4.1.pub.pem",
         "tests/test_raae_release_pipeline_workflows.py",
     )
 
@@ -458,11 +458,11 @@ def test_release_scope_validator_accepts_only_the_exact_version_byte_change(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.4.0.dev0"',
+        version_assignment='__version__ = "4.4.1.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.4.0"',
+        version_assignment='__version__ = "4.4.1"',
         readme="candidate\n",
         security="candidate security policy\n",
     )
@@ -521,12 +521,12 @@ def test_release_scope_validator_rejects_an_unlisted_source_edit(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.4.0.dev0"',
+        version_assignment='__version__ = "4.4.1.dev0"',
         guard="VALUE = 1\n",
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.4.0"',
+        version_assignment='__version__ = "4.4.1"',
         guard="VALUE = 2\n",
     )
 
@@ -544,12 +544,12 @@ def test_release_scope_validator_rejects_an_unlisted_source_deletion(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.4.0.dev0"',
+        version_assignment='__version__ = "4.4.1.dev0"',
         guard="VALUE = 1\n",
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.4.0"',
+        version_assignment='__version__ = "4.4.1"',
     )
 
     with pytest.raises(
@@ -566,11 +566,11 @@ def test_release_scope_validator_rejects_an_allowed_path_deletion(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.4.0.dev0"',
+        version_assignment='__version__ = "4.4.1.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.4.0"',
+        version_assignment='__version__ = "4.4.1"',
     )
     (candidate / "README.md").unlink()
 
@@ -584,15 +584,15 @@ def test_release_scope_validator_rejects_an_allowed_path_deletion(
 @pytest.mark.parametrize(
     "candidate_init",
     (
-        '# frozen prefix\n__version__ = "4.4.0"\n# changed suffix\n',
-        '# frozen prefix\n__version__ = "4.4.1"\n# frozen suffix\n',
+        '# frozen prefix\n__version__ = "4.4.1"\n# changed suffix\n',
+        '# frozen prefix\n__version__ = "4.4.2"\n# frozen suffix\n',
         (
-            '# frozen prefix\n__version__ = "4.4.0"\n'
-            'SECOND_VERSION = "4.4.0"\n# frozen suffix\n'
+            '# frozen prefix\n__version__ = "4.4.1"\n'
+            'SECOND_VERSION = "4.4.1"\n# frozen suffix\n'
         ),
         (
             "# frozen prefix\n"
-            'import os\n__version__ = "4.4.0"\n# frozen suffix\n'
+            'import os\n__version__ = "4.4.1"\n# frozen suffix\n'
         ),
     ),
 )
@@ -604,11 +604,11 @@ def test_release_scope_validator_rejects_version_file_mutations(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.4.0.dev0"',
+        version_assignment='__version__ = "4.4.1.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.4.0"',
+        version_assignment='__version__ = "4.4.1"',
     )
     (candidate / candidate_scope.VERSION_PATH).write_text(
         candidate_init,

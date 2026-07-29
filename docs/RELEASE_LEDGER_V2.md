@@ -10,6 +10,22 @@ protected A–H completed; see the
 mismatch cannot be repaired retroactively. Only a new release operation may
 produce a new signed ledger.
 
+`v4.4.1` is the designated recovery release after the `v4.4.0` exception. Its
+reviewed parent tree contains a prospective `v4.4.1` ledger public root, but a
+pre-pinned public key is only a trust input. It is not a signature, ledger,
+release, or proof that A–H has run. A `v4.4.1` ledger is valid only when a
+fresh `v4.4.1` publication operation satisfies the procedure below. The
+historical `v4.4.0` exception remains governed by its erratum even after a
+later ledger advances the consumer release.
+
+Because no canonical `v4.4.0` ledger exists, its unused prospective ledger key
+cannot follow the signed `KEY_RETIREMENT.json` procedure below. The separate
+unsigned
+[`LEDGER_KEY_DISPOSITION.json`](../evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json)
+may record only pending operator removal or an observed local-file removal. It
+must not be described as a retirement receipt, revocation, deletion proof,
+secure erasure, or proof that no copy exists.
+
 The schema is
 [`tests/baseline/schema/release-ledger-v2.schema.json`](../tests/baseline/schema/release-ledger-v2.schema.json).
 The offline validator is

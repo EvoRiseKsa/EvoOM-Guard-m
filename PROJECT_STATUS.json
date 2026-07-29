@@ -2,6 +2,14 @@
   "published_release": {
     "ledger": "tests/baseline/v4.3.0/RELEASE_LEDGER.json"
   },
+  "release_exceptions": {
+    "published_unledgered": {
+      "erratum": "docs/errata/V4.4.0-LEDGER.md",
+      "key_disposition": "evidence/release-operations/v4.4.0/LEDGER_KEY_DISPOSITION.json",
+      "record": "evidence/release-operations/v4.4.0/UNSEALED_STATUS.json",
+      "record_sha256": "f9b0fffa65c233938a95321d39ab1da73bebf2ef6293de125bf1b73f08202408"
+    }
+  },
   "release_pipeline": {
     "activation_model": "disabled-by-default",
     "contract": "protected-a-h-v1",
@@ -16,7 +24,7 @@
       "cli_handler_extraction": "complete",
       "overall_refactor_program": "in-progress"
     },
-    "lifecycle": "published-unledgered",
+    "lifecycle": "unreleased-development",
     "relation_to_latest_release": "descendant"
   }
 }

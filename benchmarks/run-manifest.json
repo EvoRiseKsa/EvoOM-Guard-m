@@ -97,9 +97,9 @@
     "role": "declared CI dependency lock",
     "sha256": "eb48c40f5a3a8bc041f9512a13da2f33ffbe39e710e2136075947b567e1f6b63"
   },
-  "engine_version": "4.4.0.dev0",
+  "engine_version": "4.4.1.dev0",
   "environment": {
-    "captured_at_utc": "2026-07-27T09:20:14.690311Z",
+    "captured_at_utc": "2026-07-29T04:36:00.639378Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "4720350d01fb4d11159a7332b26f7e7f568c4918",
+    "head": "7fbbb53e41927271335598ecebac47b091d7f903",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "caed5a9eb8e2d4239589a26120b59bcb38fb6c61",
+      "commit": "aaa93301d996257a6b212140eb098088e133f2e1",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "4720350d01fb4d11159a7332b26f7e7f568c4918",
+      "commit": "7fbbb53e41927271335598ecebac47b091d7f903",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14817,
+    "bytes": 14814,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "f7511fc93e6171206522fbea95cfae5d73b814835cb5a3368a875bc02e9a7233"
+    "sha256": "92fd33302313ea411fb562dad48f952b14ea95b282293c72b80a07c593bb44a8"
   },
-  "run_id": "f531ba0d-0811-4ead-8e50-fec201cf26f7",
+  "run_id": "3b2bca6d-1803-47b6-ade2-e861495d4a85",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -502,7 +502,7 @@
       {
         "bytes": 1903,
         "path": "evoom_guard/__init__.py",
-        "sha256": "9d5aa9b8fdef3e5dd81b2a2a0ecde437f866ba41d98e0f2b59f6d5575fc0ebda"
+        "sha256": "56251a4dace72e8ff757e0c2642220349858b10f8f4caa5c92b5b9f5d1e03771"
       },
       {
         "bytes": 3062,
@@ -1254,14 +1254,14 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "5cdc5cba267d9066f068578fe15a99c2672a50ca1075a699d4e5fe662478e8b8",
+    "sha256": "44ce6351561a29cbead866bd3bd034d403749f972cb8cd7ccdf28868502a2678",
     "total_bytes": 2487521
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.178,
-    "guard_full_run_median_s": 0.269,
-    "guard_full_run_p95_s": 0.356,
-    "pre_gate_only_median_s": 0.003,
+    "controlled_direct_pytest_median_s": 0.174,
+    "guard_full_run_median_s": 0.312,
+    "guard_full_run_p95_s": 0.37,
+    "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
 }
