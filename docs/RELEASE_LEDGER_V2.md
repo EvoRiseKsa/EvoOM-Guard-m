@@ -67,8 +67,15 @@ The validator therefore also requires:
   equal the retained canonical `evo-guard.spdx.json` object;
 - pinned runtime, networkless OCI image, Git, `gh`, provider UID/GID, sole
   parent commit/tree, and exact parent-tree build tool blobs;
-- canonical whole-second UTC timestamps, non-overlapping Aâ€“H phase order, and
-  post-publication observations bounded by the signed ledger timestamp;
+- the exact [GitHub Releases API `created_at`
+  value](https://docs.github.com/en/rest/releases/releases) as
+  `release.created_utc`. GitHub defines that field as the date of the commit
+  used for the Release, not the time the draft or Release was created; Git
+  commit dates are not trusted lifecycle clocks, so the field is canonical
+  metadata rather than a phase-H chronology boundary;
+- `release.published_utc` inside phase H, canonical whole-second UTC
+  timestamps, non-overlapping Aâ€“H phase order, and post-publication
+  observations bounded by the signed ledger timestamp;
 - one canonical 19-observation repository-control record: public repository
   identity, including trusted namespace IDs `1293651176` (repository) and
   `231647061` (the `EvoRiseKsa` user owner),
@@ -165,6 +172,10 @@ and must fail validation. Placeholders are never accepted as release evidence.
    exact immutable release assets and all recorded A–H artifacts by their
    reviewed run IDs and attempts.
 3. Query the release, tag target, workflow runs, tag CI, and Marketplace state.
+   Copy the GitHub Releases API `created_at` field exactly into
+   `release.created_utc`; do not substitute a draft-creation time or require it
+   to fall inside H. Copy `published_at` into `release.published_utc`; that is
+   the release-lifecycle timestamp that must fall inside H.
    After H, run the reviewed trusted-parent repository-control recorder:
 
    ```powershell
