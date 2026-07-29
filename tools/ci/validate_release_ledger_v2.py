@@ -105,13 +105,19 @@ _TRUSTED_RUNTIME_PREFIXES = (
     *_TRUSTED_DEPENDENCY_PREFIXES,
     *_TRUSTED_SCHEMA_PREFIXES,
 )
-_TRUSTED_STDLIB_RELOAD_PREFIXES = ("pyexpat",)
+_TRUSTED_STDLIB_RELOAD_PREFIXES = ("pyexpat", "typing")
 _TRUSTED_DEPENDENCY_MODULES = (
     # CPython's pyexpat extension registers the originless synthetic modules
     # ``pyexpat.errors`` and ``pyexpat.model``.  Import it before the trusted
     # originless-module snapshot so those exact objects are allowed while a
     # later replacement still fails closed.
     "pyexpat",
+    # CPython registers ``typing.io`` and ``typing.re`` as originless aliases.
+    # Reloading the trusted stdlib module recreates those aliases after the
+    # ambient-module purge.  Python 3.10's ``importlib.resources`` still imports
+    # ``typing.io`` while loading jsonschema, so leaving only the parent module
+    # resident makes the locked validator fail before ledger verification.
+    "typing",
     "cryptography",
     "cryptography.exceptions",
     "cryptography.hazmat.primitives.serialization",
@@ -1583,6 +1589,28 @@ def _module_is_outside_roots(module: Any, roots: Sequence[Path]) -> bool:
     return any(not any(_path_is_within(path, root) for root in roots) for path in paths)
 
 
+def _is_safe_resident_extension(
+    name: str,
+    module: Any,
+    safe_roots: Sequence[Path],
+) -> bool:
+    """Retain one non-reinitializable extension from a safe runtime root."""
+
+    if name != "cryptography.hazmat.bindings._rust":
+        return False
+    spec = getattr(module, "__spec__", None)
+    if not isinstance(
+        getattr(spec, "loader", None),
+        importlib.machinery.ExtensionFileLoader,
+    ):
+        return False
+    paths = _module_origin_paths(module)
+    return bool(paths) and all(
+        any(_path_is_within(path, root) for root in safe_roots)
+        for path in paths
+    )
+
+
 def _loaded_dependency_files(
     safe_roots: Sequence[Path],
 ) -> dict[Path, _TrustedDependencyFile]:
@@ -1693,15 +1721,18 @@ def _trusted_python_imports(
     removed_modules = {
         name: module
         for name, module in sys.modules.items()
-        if _module_matches_prefix(
-            name,
-            (
-                *_TRUSTED_RUNTIME_PREFIXES,
-                *_TRUSTED_STDLIB_RELOAD_PREFIXES,
-                _TRUSTED_FIRST_PARTY_PREFIX,
-            ),
+        if not _is_safe_resident_extension(name, module, safe_roots)
+        and (
+            _module_matches_prefix(
+                name,
+                (
+                    *_TRUSTED_RUNTIME_PREFIXES,
+                    *_TRUSTED_STDLIB_RELOAD_PREFIXES,
+                    _TRUSTED_FIRST_PARTY_PREFIX,
+                ),
+            )
+            or _module_is_outside_roots(module, safe_roots)
         )
-        or _module_is_outside_roots(module, safe_roots)
     }
     saved_path = list(sys.path)
     saved_meta_path = list(sys.meta_path)
@@ -1783,6 +1814,9 @@ def _trusted_python_imports(
             _TRUSTED_IMPORT_DEPTH -= 1
         for name in list(sys.modules):
             if name not in saved_names or name in removed_modules:
+                module = sys.modules[name]
+                if _is_safe_resident_extension(name, module, safe_roots):
+                    continue
                 sys.modules.pop(name, None)
         sys.modules.update(removed_modules)
         sys.path[:] = saved_path

@@ -25,6 +25,14 @@ assets, admission and attestation evidence, tag CI, and repository-control
 observations. Its canonical bytes validate against the admitted parent and an
 externally supplied copy of the parent-pinned ledger public root.
 
+On Python 3.10, the immutable `v4.4.2` parent validator needs the
+hash-locked `importlib-resources` compatibility backport because that frozen
+validator removes CPython's originless `typing.io` alias before loading
+`jsonschema`. The post-`v4.4.2` validator rebuilds the trusted `typing` aliases
+and preserves the already inventoried PyO3 cryptography extension across its
+nested first-party boundary. These prospective compatibility repairs do not
+rewrite the release, ledger, signature, or parent validator.
+
 The pre-pinned public root alone did not establish those facts; it was only a
 trust input. The signed directory plus offline validation now establishes the
 retained byte and binding claims implemented by the validator, not independent

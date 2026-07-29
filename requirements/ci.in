@@ -10,3 +10,4 @@ mypy>=1.10
 coverage>=7
 cryptography>=41
 jsonschema>=4.23
+importlib-resources==6.5.2; python_version < "3.11"
