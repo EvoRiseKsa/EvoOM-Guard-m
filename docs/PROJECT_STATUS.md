@@ -56,6 +56,20 @@ exceptions; `v4.4.2` is the separate ledger-recorded recovery release.
 | [`evoom-guard-release-source-v2-pilot`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot) *(public archive)* | Frozen non-production protected-main evidence for Release Source Admission V2 and Release Artifact Admission V1. | Round 1 used the immutable `v4.1.0` runtime for one source-only A/B/C/D chain. Round 2 used `v4.2.0` for target `382a24774e2da7d1117f8969455816bd7b941af2` and completed A through G. E/F/G attempts `29963621119/1`, `29963656590/1`, and `29963877837/1` produced a 290-byte descriptor, protected `SEALED/ALLOW`, detached `VERIFIED/ALLOW`, and five retained-evidence mutation rejections. Exact non-secret outputs, attestation bundles, six public roots, and checksums are durable in [`evidence/round2`](https://github.com/EvoRiseKsa/evoom-guard-release-source-v2-pilot/tree/a1937ea599204751deebcbcadbd416092d8f46f9/evidence/round2). | A distributable package/image/release, publication or deployment authority, reproducibility, production readiness, or independent review. |
 | [`evoom-guard-agent-change-pilot`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot) *(public archive)* | Frozen bounded consumer pilot for Agent Change Admission V1. | The fixed record in [`PILOT_RESULTS.md`](https://github.com/EvoRiseKsa/evoom-guard-agent-change-pilot/blob/main/PILOT_RESULTS.md) covers permitted run `29983466826`, ignored tracked-path rejection `29983731021`, and exact-change replay `29983835620`. Retained positive/replay bundles verified offline; the negative produced no signed authorization or final bundle. | Independent validation, production merge gate, arbitrary hostile-code isolation, patch correctness outside the pack, or single-use authorization. |
 
+### Development-only change-attempt corpus
+
+A restricted same-owner workspace now joins exact Guard evidence, signed
+Finalizer bundles, Change Attempt Observation V1, and a pinned private
+Cognitive consumer. Its sanitized
+[five-case engineering record](evidence/change-attempt-corpus-v1.md) identifies
+the exact unreleased snapshots, signed-manifest hashes, observed terminal
+outcomes, and residual limits. Raw evidence, Cognitive source, workflow
+identifiers, and signing material remain restricted.
+
+This is not a consumer release, held-out or real-PR evaluation, accuracy or
+error-rate estimate, independent validation, production admission, or public
+full-pipeline reproduction.
+
 The second GitHub account, [`MANA-awam`](https://github.com/MANA-awam), is used
 for technical separation of review/deployment roles in the pilot. Both accounts
 are controlled by the same human maintainer. The resulting review trail is useful

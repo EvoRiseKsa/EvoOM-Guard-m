@@ -1,0 +1,85 @@
+{
+  "format": "EVORISE_PUBLIC_CHANGE_ATTEMPT_CORPUS_SUMMARY_V1",
+  "recorded_on": "2026-07-30",
+  "evidence_class": "SAME_OWNER_ENGINEERING_CONFORMANCE",
+  "independent": false,
+  "publicly_reproducible": false,
+  "summary_signed": false,
+  "population": {
+    "case_count": 5,
+    "selection": "synthetic_author_selected",
+    "purpose": "one designed case per Guard terminal verdict"
+  },
+  "guard": {
+    "commit": "766e040ff221e3a177f2873a8aa88772c16a3829",
+    "package_tree_sha256": "a1d722cc3768b0066efe1d05628211ef80dec8fc90ec0688290be137507da6bd",
+    "executable_sha256": "ea9a11b2e6145304ebab5b4dc043b31ff88b55be776a63256db85781873f69ef",
+    "version": "4.5.0.dev0",
+    "release_state": "UNRELEASED_DEVELOPMENT"
+  },
+  "consumer": {
+    "commit": "a366dd94572e4f9b00d40c560a556c9c2db782c0",
+    "package_tree_sha256": "0a8b2ac1444c1f1eb3c078540b7bc2960c43e126009667d5465bfe8940d32013",
+    "source_visibility": "RESTRICTED",
+    "schema": "evorise.change-advisory.attempt-observation.v1"
+  },
+  "signed_source": {
+    "manifest_sha256": "02dd727abcfdbd2973822d72c8b0e892fba88bd19f9a30fdaf35756ed9ed895c",
+    "signature_descriptor_sha256": "bcfd81f2979e5a9a67e316a28c2719e19e9244018d6083e28b5d3d273c30ea8b",
+    "signature_algorithm": "Ed25519",
+    "issuer_key_id": "sha256:519da7896fc492a170bc4c0c29e8aaff967fc8f7d6ed055f464f7c360975929b",
+    "source_visibility": "RESTRICTED",
+    "signature_scope": "SOURCE_MANIFEST_NOT_THIS_PUBLIC_SUMMARY"
+  },
+  "outcomes": [
+    {
+      "case": "passing_change",
+      "verdict": "PASS",
+      "reason_code": "tests_passed",
+      "decision": "ALLOW",
+      "observation_sha256": "2375ef94cb5950f5a87656fa85370020cb2792f5199854c245ad8c4e8b42e808",
+      "report_sha256": "6fcb80a2ef181c55f784369e510f395b060420b9ef020ba1fb59eea540a7a5f4"
+    },
+    {
+      "case": "protected_harness_edit",
+      "verdict": "REJECTED",
+      "reason_code": "protected_harness_edit",
+      "decision": "DENY",
+      "observation_sha256": "441b65202110d74825f130b7623940c4ae68cead1b9a6e2ed1863009c1b1bc14",
+      "report_sha256": "54c2ceb6a719f80e276d20a61b72762ddf3f1e49595203c11de661eeb217338b"
+    },
+    {
+      "case": "failing_judge",
+      "verdict": "FAIL",
+      "reason_code": "tests_failed",
+      "decision": "DENY",
+      "observation_sha256": "744fb20e17195b50d07f43a2d2ed0bcec00a339291f735385956a7add11c32bb",
+      "report_sha256": "849a945883fcdf0d84055e9d09ac841709dc3975c35014e3bb9fb8da89436b48"
+    },
+    {
+      "case": "unmet_assurance_floor",
+      "verdict": "ERROR",
+      "reason_code": "assurance_requirement_not_met",
+      "decision": "DENY",
+      "observation_sha256": "bb08c8d8ea8c5fdbdf8744322ace9f64765b2e5e4c2d27b1499025f777d07d52",
+      "report_sha256": "a86e70d4aada378839036855bd0e2821e8c81801ca3d32e31d69dcb8335bfcb1"
+    },
+    {
+      "case": "candidate_tree_mutation",
+      "verdict": "TAMPERED",
+      "reason_code": "candidate_tree_changed_during_run",
+      "decision": "DENY",
+      "observation_sha256": "2606ce8011cf52d2a214d0e3af3ee5c36a2005c0531fe8defb023596b0c574da",
+      "report_sha256": "ee0c3da61d509b7eab59897f720676437f87129bd98fab592279127900bbf8a7"
+    }
+  ],
+  "claim_limits": [
+    "NOT_AN_EFFICACY_EVALUATION",
+    "NOT_AN_ACCURACY_OR_ERROR_RATE",
+    "NOT_INDEPENDENT_VALIDATION",
+    "NOT_A_CONSUMER_RELEASE",
+    "NOT_PRODUCTION_ADMISSION",
+    "NOT_PUBLIC_FULL_PIPELINE_REPRODUCTION",
+    "NOT_MACHINE_LEARNING_VALIDATION"
+  ]
+}

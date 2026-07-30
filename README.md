@@ -158,6 +158,10 @@ never checks out or executes candidate code.
 | Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
 | Project signed `ALLOW` and `DENY` attempts for advisory analysis | Change Attempt Observation V1 *(source after v4.4.2)* | [`CHANGE_ATTEMPT_OBSERVATION.md`](docs/CHANGE_ATTEMPT_OBSERVATION.md) |
 
+The bounded, same-owner development-snapshot corpus for Change Attempt
+Observation V1 is recorded with exact hashes and explicit non-claims in
+[`change-attempt-corpus-v1.md`](docs/evidence/change-attempt-corpus-v1.md).
+
 For an adoption decision, start with the
 [production blueprint](docs/PRODUCTION_BLUEPRINT.md). Advanced release-source,
 artifact-admission, and publication contracts are separate boundaries; none
