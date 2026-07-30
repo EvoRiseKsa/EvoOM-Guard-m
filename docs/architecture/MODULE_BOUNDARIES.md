@@ -134,10 +134,24 @@ tuple, filtered `copytree(..., symlinks=True)` operation, Windows
 junction/non-symlink-reparse rejection at each observed directory visit, and
 multi-workspace cleanup sequencing with explicit primary-exception precedence.
 Repository copying still requires a quiescent source and does not claim an
-atomic scan-to-open snapshot. Cleanup accepts a recursive
-`FileNotFoundError` only after a fresh root-absence observation; that
-observation is not a stable-absence claim against later recreation. The
-`repo_verifier` compatibility facades inject their current `COPY_IGNORE`,
+atomic scan-to-open snapshot. RepoVerifier allocation transactionally wraps
+each trusted temporary-directory result in a string-compatible ownership lease
+that captures the root and parent identities; capture failure rolls back the
+still-empty unclaimed root with non-recursive `rmdir` while preserving the
+capture exception. An observed populated or identity-shifted unclaimed path is
+left untouched and reported. Cleanup revalidates those identities, repairs
+Windows `READONLY` only for an observed single-link regular file or real
+directory confined beneath that lease, rejects multiply linked files and
+symlink/junction/reparse components, and requires a fresh root-absence
+observation after successful recursive removal.
+Plain strings retain only the historical compatibility remover and never gain
+the repair capability. A recursive `FileNotFoundError` is accepted only after
+the same fresh absence proof; neither proof is a stable-absence claim against
+later recreation. Windows path validation is a fail-closed, quiescent-tree
+check, not an atomic Win32 handle guarantee against a concurrent replacement
+race. Allocation rollback has the same quiescent-namespace precondition and is
+not an atomic handle-bound transaction. The `repo_verifier` compatibility
+facades inject their current `COPY_IGNORE`,
 `shutil.copytree`, `shutil.ignore_patterns`, `shutil.rmtree`, and cleanup-note
 provider on every invocation. This preserves the established module-level
 monkeypatch timing used by repository verification and by the exact facade

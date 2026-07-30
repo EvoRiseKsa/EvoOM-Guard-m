@@ -1090,7 +1090,12 @@ class RepoVerifier:
 
         workspace_lifetime = RepositoryWorkspaceLifetime.create(
             prefix="evo_repo_",
-            create_workspace=lambda *, prefix: tempfile.mkdtemp(prefix=prefix),
+            create_workspace=lambda *, prefix: (
+                _repository_workspace.allocate_owned_workspace(
+                    prefix=prefix,
+                    create_workspace=tempfile.mkdtemp,
+                )
+            ),
             join_path=lambda root, path: os.path.join(root, path),
         )
         workdir = workspace_lifetime.candidate_root
@@ -1130,8 +1135,11 @@ class RepoVerifier:
             def create_pack_workspace(prefix: str) -> str:
                 return workspace_lifetime.create_pack(
                     prefix,
-                    create_workspace=lambda *, prefix: tempfile.mkdtemp(
-                        prefix=prefix
+                    create_workspace=lambda *, prefix: (
+                        _repository_workspace.allocate_owned_workspace(
+                            prefix=prefix,
+                            create_workspace=tempfile.mkdtemp,
+                        )
                     ),
                 )
 

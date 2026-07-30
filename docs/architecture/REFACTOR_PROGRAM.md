@@ -279,11 +279,21 @@ remain in their established facades.
   historical copy-ignore tuple, filtered symlink-preserving repository copy,
   Windows symlink/reparse-root rejection, observed child
   junction/non-symlink-reparse rejection, and all-workspace cleanup
-  sequencing. Recursive `FileNotFoundError` is ignored only after a fresh
-  root-absence observation. Repository copying requires a quiescent source and
-  makes no atomic-snapshot claim; cleanup does not claim stable absence against
-  later recreation. `repo_verifier` keeps live compatibility facades and
-  retains higher-level repository orchestration.
+  sequencing. RepoVerifier temporary roots now carry allocation-time root and
+  parent identity in a string-compatible ownership lease; a failed identity
+  capture transaction uses non-recursive `rmdir` to roll back only a still-empty
+  unclaimed allocator result without replacing the capture exception. A
+  currently observed populated or identity-shifted path fails closed; the
+  check-to-`rmdir` interval is not atomic. That capability
+  gates confined Windows `READONLY` repair, rejects observed multiply linked
+  files and symlink/junction/reparse components, and requires a fresh absence
+  proof after successful removal. Plain compatibility strings do not receive
+  that repair capability. Recursive `FileNotFoundError` is ignored only after
+  the same fresh root-absence observation. Repository copying and Windows
+  repair require a quiescent tree and make no atomic path-replacement claim;
+  cleanup does not claim stable absence against later recreation.
+  `repo_verifier` keeps live compatibility facades and retains higher-level
+  repository orchestration.
 - The dependency-free `workspace/repository_lifetime.py` owner now records one
   judgment's candidate root/copy and optional verifier-pack root. It registers
   the pack root before snapshotting can start, preserves the historical
