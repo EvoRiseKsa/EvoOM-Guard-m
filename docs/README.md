@@ -91,6 +91,9 @@ contract does not authorize another stage such as publication or deployment.
 - [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) — project
   authenticated `ALLOW` and `DENY` attempts into one correlated,
   advisory-only, privacy-bounded contract.
+- [`evidence/change-attempt-corpus-v1.md`](evidence/change-attempt-corpus-v1.md)
+  — same-owner engineering evidence for the signed five-case development
+  corpus, with exact identities, outcomes, and non-claims.
 - [`AUTHENTICATED_PRODUCER_RECEIPT.md`](AUTHENTICATED_PRODUCER_RECEIPT.md) —
   non-admitting producer receipt contract.
 - [`RELEASE_SOURCE_FINALIZER.md`](RELEASE_SOURCE_FINALIZER.md) — release-source
@@ -211,6 +214,9 @@ Repository-level maintainer documents:
 
 ## History and evidence
 
+- [`evidence/change-attempt-corpus-v1.md`](evidence/change-attempt-corpus-v1.md)
+  — sanitized development-snapshot conformance record for Change Attempt
+  Observation V1.
 - [`PROOFS.md`](PROOFS.md) — historical same-owner demonstrations and their
   stated limitations.
 - [`CASE-STUDY.md`](CASE-STUDY.md) — historical real-bug reconstruction.
