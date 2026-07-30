@@ -27,7 +27,7 @@ from jsonschema import Draft202012Validator
 from evoom_guard import change_attempt_observation as change_attempt
 from evoom_guard import trusted_finalizer
 from evoom_guard.evidence_bundle import canonical_json_bytes
-from evoom_guard.signing import generate_keypair
+from evoom_guard.signing import SigningUnavailableError, generate_keypair
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "change_attempt_observation"
@@ -1168,6 +1168,20 @@ def test_verification_errors_do_not_echo_untrusted_input_paths(
 
     assert sentinel not in str(error.value)
     assert not output.exists()
+
+
+def test_missing_optional_signing_runtime_remains_an_operational_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = _signed_attempt_fixture(tmp_path, CASES[0], prefix="signing-unavailable")
+
+    def unavailable(*_args: Any, **_kwargs: Any) -> None:
+        raise SigningUnavailableError("cryptography unavailable")
+
+    monkeypatch.setattr(change_attempt, "verify_finalized_bundle", unavailable)
+    with pytest.raises(SigningUnavailableError, match="cryptography unavailable"):
+        _produce(fixture, tmp_path / "must-not-exist.json")
 
 
 def test_producer_writes_only_the_requested_output_not_beside_the_bundle(

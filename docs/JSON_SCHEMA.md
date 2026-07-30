@@ -140,8 +140,8 @@ deleting a protected test/config/CI/auto-exec path is `REJECTED`.
 | `files_changed` | string[] | Repo-relative paths added or modified by the candidate. |
 | `deleted` | string[] | Repo-relative deleted paths when supplied by a diff/base-head run. |
 | `protected_violations` | string[] | Effective-policy protected paths the patch tried to edit or delete. |
-| `risk_level` | string | `low` \| `medium` \| `high`. |
-| `risk_score` | number | Blast-radius score in `0..1`. |
+| `risk_level` | string | Frozen compatibility name for blast-radius level: `low` \| `medium` \| `high`. |
+| `risk_score` | number | Frozen compatibility name for a blast-radius score in `0..1`; not a semantic/security-risk probability. |
 | `tests_passed` / `tests_total` | int \| null | Judge-owned counts; completed composite repo+pack or black-box+repo verdicts contain summed phase totals. Incomplete composites use `null` rather than presenting a partial total as complete. |
 | `test_command_ran` | bool | Whether a test/judge process actually started. It remains `true` when that process times out or otherwise ends without a clean verdict. |
 | `execution_state` | string | `static_gate` \| `not_started` \| `started_incomplete` \| `completed`; see below. |

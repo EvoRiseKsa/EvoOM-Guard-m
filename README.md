@@ -77,9 +77,12 @@ git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "pyth
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 
-For a no-install path, download `evo-guard.pyz` and `SHA256SUMS` from the
-[`v4.3.0` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.3.0),
-verify the checksum, and run `python -I evo-guard.pyz ...`.
+For a no-install path, download
+[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.2/evo-guard.pyz),
+[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.2/evo-guard.spdx.json),
+and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.2/SHA256SUMS)
+from the [`v4.4.2` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2).
+Run `sha256sum -c SHA256SUMS`, then `python -I evo-guard.pyz ...`.
 
 The command never edits the checked working tree: it applies the diff to a
 throwaway copy and runs the selected judge there.

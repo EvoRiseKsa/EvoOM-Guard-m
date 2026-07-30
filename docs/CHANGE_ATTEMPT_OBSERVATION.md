@@ -44,6 +44,27 @@ Publication is canonical, atomic, and no-clobber by default. `force=True` is
 an explicit overwrite opt-in. The output path may never equal or alias the
 input bundle or trusted public-key path, even with `force=True`.
 
+## CLI projector
+
+The unreleased `4.5.0.dev0` source also exposes the same authenticated
+projection through the zipapp/CLI:
+
+```bash
+evo-guard project-change-attempt-observation finalized.evb \
+  --trusted-pub finalizer.pub \
+  --expected-source expected-source.json \
+  --expected-context expected-context.json \
+  --out attempt-observation.json
+```
+
+The command returns exit `0` when authentication, projection, and publication
+succeed for either `ALLOW` or `DENY`. It is deliberately not an admission gate:
+its machine report states `authority=ADVISORY_ONLY` and
+`external_action=false`. Invalid evidence or a context/key mismatch exits `1`;
+an unreadable trusted JSON input or unavailable signing runtime exits `2`.
+Existing outputs are no-clobber by default; `--force` can replace only a
+distinct output and never permits an alias to a security input.
+
 ## Python consumer
 
 ```python

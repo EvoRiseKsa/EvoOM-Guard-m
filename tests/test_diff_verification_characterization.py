@@ -172,7 +172,7 @@ def test_success_serializes_and_forwards_every_historical_input(
         "path:join:base",
         "copy:HEAD:True",
         "path:join:patch.diff",
-        "write:open:True:w:utf-8",
+        "write:open:True:w:utf-8:'\\n'",
         "write:enter",
         f"write:data:{TEXT_DIFF!r}",
         "write:exit",

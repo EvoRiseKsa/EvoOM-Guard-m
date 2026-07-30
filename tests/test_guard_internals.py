@@ -12,6 +12,7 @@ needs only copytree + apply (still no pytest). They pin behaviour the end-to-end
 tests in ``test_guard.py`` do not isolate.
 """
 
+import builtins
 import json
 import os
 import sys
@@ -29,6 +30,7 @@ from evoom_guard.guard import (
     _risk_map,
     _TreeEntry,
     _walk_tree_entries,
+    _write_diff_file,
     guard,
     render_report,
     write_json,
@@ -51,6 +53,17 @@ def _result(verdict: str, **kw) -> GuardResult:
     )
     base.update(kw)
     return GuardResult(**base)
+
+
+def test_blast_radius_properties_preserve_frozen_wire_fields():
+    result = _result(PASS, risk_level="medium", risk_score=0.42)
+
+    assert result.blast_radius_level == "medium"
+    assert result.blast_radius_score == 0.42
+    assert "blast_radius_level" not in result.to_dict()
+    assert "blast_radius_score" not in result.to_dict()
+    assert result.to_dict()["risk_level"] == "medium"
+    assert result.to_dict()["risk_score"] == 0.42
 
 
 # ───────────────────────────── _risk_map ────────────────────────────────────
@@ -91,6 +104,25 @@ def test_directory_mode_change_is_unrepresentable():
 def test_diff_target_paths_excludes_dev_null():
     diff = "--- /dev/null\n+++ b/new.py\n@@ -0,0 +1 @@\n+x\n"
     assert _diff_target_paths(diff) == ["new.py"]
+
+
+# ───────────────────────────── _write_diff_file ─────────────────────────────
+def test_write_diff_file_forces_protocol_lf_on_every_platform(
+    tmp_path, monkeypatch
+):
+    captured: dict[str, object] = {}
+    real_open = builtins.open
+
+    def tracked_open(*args, **kwargs):
+        captured["newline"] = kwargs.get("newline")
+        return real_open(*args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", tracked_open)
+    path = tmp_path / "change.diff"
+    _write_diff_file(str(path), "first\nsecond\n")
+
+    assert captured["newline"] == "\n"
+    assert path.read_bytes() == b"first\nsecond\n"
 
 
 # ───────────────────────────── guard ERROR (bad anchor) ─────────────────────

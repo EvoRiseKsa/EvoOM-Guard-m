@@ -2693,6 +2693,57 @@ def test_effective_policy_contracts_follow_public_layer_boundaries() -> None:
     )
 
 
+def test_cli_change_attempt_observation_has_a_stdlib_owner_and_public_facade() -> None:
+    """Observation orchestration stays injected and separate from CLI effects."""
+
+    modules, _ = _discover_modules(PACKAGE_ROOT)
+    analysis = analyze_package(PACKAGE_ROOT)
+    facade_module = "evoom_guard.cli"
+    owner_module = "evoom_guard.cli.change_attempt_observation_commands"
+    facade_path = PACKAGE_ROOT / "cli" / "__init__.py"
+    owner_path = PACKAGE_ROOT / "cli" / "change_attempt_observation_commands.py"
+
+    assert modules[owner_module] == owner_path
+    assert owner_module not in analysis.violations["unclassified_modules"]
+    assert (facade_module, owner_module) in analysis.internal_edges
+    assert {
+        fact.target
+        for fact in analysis.facts
+        if fact.source == owner_module
+        and fact.target is not None
+        and not fact.type_checking
+    } == set()
+
+    owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
+    owner_functions = {
+        node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert owner_functions == {"execute_project_change_attempt_observation"}
+    import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(owner_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert import_roots <= {
+        "__future__",
+        "argparse",
+        "collections",
+        "dataclasses",
+        "typing",
+    }
+
+    facade_tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    facade_functions = {
+        node.name for node in facade_tree.body if isinstance(node, ast.FunctionDef)
+    }
+    assert "cmd_project_change_attempt_observation" in facade_functions
+
+
 def test_change_attempt_projection_has_a_closed_evidence_dependency_contract() -> None:
     """The public flat evidence projector must not absorb execution ownership."""
 
@@ -2709,6 +2760,7 @@ def test_change_attempt_projection_has_a_closed_evidence_dependency_contract() -
         "evoom_guard.domain.verdict",
         "evoom_guard.evidence_bundle",
         "evoom_guard.runtime_identity",
+        "evoom_guard.signing",
         "evoom_guard.trusted_finalizer",
     }
     assert module not in analysis.violations["unclassified_modules"]

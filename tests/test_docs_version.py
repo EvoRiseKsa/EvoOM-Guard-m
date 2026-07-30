@@ -212,6 +212,17 @@ class DocsVersionDriftTests(unittest.TestCase):
         text = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("EvoRiseKsa/EvoOM-Guard-m@", text)
 
+    def test_no_install_assets_use_the_complete_current_checksum_set(self) -> None:
+        _source_version, ledger_version, _state = _release_status()
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        base = (
+            "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/"
+            f"v{ledger_version}/"
+        )
+        for asset in ("evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"):
+            self.assertIn(base + asset, text)
+        self.assertIn("sha256sum -c SHA256SUMS", text)
+
     def test_user_facing_github_actions_are_commit_pinned(self) -> None:
         paths = _DOC_FILES + [ROOT / "evoom_guard" / "cli" / "__init__.py"]
         unpinned: list[str] = []

@@ -216,11 +216,19 @@ Until all gates close, release notes must use **release candidate**, **beta**, o
 
 ## Release sequence
 
-1. **4.4 release-candidate hardening:** close token/key authority issues, parser
-   and process correctness defects, add explicit optional operating profiles,
-   and publish honest benchmark metrics.
-2. **4.4 bounded beta:** run protected-profile pilots on several real
-   repositories; measure onboarding, ERROR, false-positive, and latency rates.
+1. **v4.4.2 release foundation — completed, bounded:** the protected A-H
+   publication record closes the release-chain work claimed by that ledger. It
+   does not establish reproducibility, independent efficacy, hostile-code
+   production readiness, or external adoption.
+2. **[Current field-pilot gate #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
+   — open:** pre-register 50–100 held-out cases from
+   multiple projects and ecosystems before execution. Freeze the sampling
+   unit, duplicate rule, label balance, exclusions, policy, profile, baseline,
+   authority identities, key separation, and ownership/control disclosure.
+   Measure onboarding, ERROR abstentions,
+   false-reject/false-accept counts, p50/p95 latency, configuration effort, and
+   delivered isolation. This is a protocol and onboarding pilot, not a
+   production-accuracy claim.
 3. **5.0 profile enforcement:** require an explicit profile for protected
    deployments, remove the unprofiled compatibility path from admission, and
    complete the runner/isolation conformance matrix and migration guide.
