@@ -564,6 +564,41 @@ def build_parser(
         help="also act as a gate: exit 0 only for a verified semantic PASS",
     )
 
+    # ----- advisory change-attempt observation ---------------------------- #
+    pcao_p = sub.add_parser(
+        "project-change-attempt-observation",
+        help="authenticate a finalizer bundle and publish an advisory-only projection",
+    )
+    pcao_p.add_argument(
+        "finalizer_bundle",
+        help="signed Trusted Finalizer .evb containing an ALLOW or DENY decision",
+    )
+    pcao_p.add_argument(
+        "--trusted-pub",
+        required=True,
+        help="externally trusted Ed25519 public key for the finalizer",
+    )
+    pcao_p.add_argument(
+        "--expected-source",
+        required=True,
+        help="external finalizer source JSON; exact match is required",
+    )
+    pcao_p.add_argument(
+        "--expected-context",
+        required=True,
+        help="external finalizer context JSON; exact match is required",
+    )
+    pcao_p.add_argument(
+        "--out",
+        required=True,
+        help="new canonical advisory observation JSON",
+    )
+    pcao_p.add_argument(
+        "--force",
+        action="store_true",
+        help="replace a distinct existing output; security inputs can never be aliases",
+    )
+
     # ----- Agent Change admission profile ---------------------------------- #
     acp_p = sub.add_parser(
         "validate-agent-change-proposal",

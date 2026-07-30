@@ -44,6 +44,7 @@ from evoom_guard.runtime_identity import (
     RUNTIME_IDENTITY_MAX_ENTRIES,
     RUNTIME_IDENTITY_MAX_LOGICAL_BYTES,
 )
+from evoom_guard.signing import SigningUnavailableError
 from evoom_guard.trusted_finalizer import (
     VerifiedFinalizedBundle,
     verify_finalized_bundle,
@@ -1432,6 +1433,10 @@ def _verified_bundle_snapshot(
                 expected_source=expected_source,
                 expected_context=expected_context,
             )
+    except SigningUnavailableError:
+        # Optional signing support being absent is an operational condition,
+        # not evidence that the supplied bundle is cryptographically invalid.
+        raise
     except (OSError, RuntimeError, ValueError):
         raise ChangeAttemptObservationError(
             "trusted finalizer bundle verification failed"

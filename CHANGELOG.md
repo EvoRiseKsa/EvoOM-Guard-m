@@ -38,6 +38,20 @@ retained evidence say so.
   while treating one bundle as one correlated source, excluding raw
   code/log/policy/risk content, and granting no admission, merge, deployment,
   promotion, or external-action authority.
+- Added `project-change-attempt-observation`, a machine-readable CLI/zipapp
+  projector over the same authenticated V1 contract. A verified `DENY` is a
+  successful observation projection, not an admission failure or authority
+  upgrade.
+- Added `BlastRadiusScore` and `blast_radius_score` as exact Python API aliases.
+  The frozen verdict wire names remain `risk_level` and `risk_score`; the
+  measurement is explicitly not semantic or security-risk probability.
+
+### Changed
+
+- Updated the no-install instructions to use the complete `v4.4.2` checksum
+  set: zipapp, SPDX SBOM, and `SHA256SUMS`.
+- Preserved LF protocol newlines when materializing unified diffs on Windows so
+  valid `--diff` inputs reverse-apply instead of failing during reconstruction.
 
 ## [4.4.2] — published 2026-07-29; signed protected-tree ledger
 

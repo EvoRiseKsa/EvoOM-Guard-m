@@ -252,11 +252,20 @@ needs — not feature accumulation. The order matters:
    or a deployment decision would require a separate versioned contract and
    evidence; neither the current `.raae` nor the release ledger grants that
    authority.
-2. **Independent evidence.** The active frozen request is
-   [`v4.1.0` issue #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
-   Completion requires an external reviewer and genuinely blind evaluation;
-   same-owner cross-account review remains operational separation, not
-   independence.
+2. **Independent evidence.** The frozen
+   [`v4.1.0` security-review request #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
+   remains a frozen historical target whose exact release artifacts remain
+   immutable; it must not be rewritten as a current-release review. The separate
+   [current field-pilot #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
+   must
+   pre-register 50–100 held-out cases from multiple projects and ecosystems,
+   including its sampling unit, duplicate rule, label balance, exclusions,
+   policy/profile, baselines, declared label/execution/finalizer authorities,
+   distinct key identities, and ownership/control relationships before
+   execution. That round measures protocol/onboarding behavior; it is not by
+   itself a production or accuracy proof. Same-owner cross-account review
+   remains operational separation, not independence; only externally
+   independent organizational control closes the independent-evidence gate.
 3. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and onboarding failures. They are not assumed product needs.

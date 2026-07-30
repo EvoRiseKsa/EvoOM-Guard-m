@@ -15,6 +15,8 @@ Subcommands:
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
   * ``evo-guard finalizer-handoff`` — bind a re-verification record to source metadata.
   * ``evo-guard seal-finalizer`` — sign only a handoff matched to external metadata.
+  * ``evo-guard project-change-attempt-observation`` — authenticate a finalizer
+    bundle and publish its deterministic advisory-only projection.
   * ``evo-guard release-source-handoff`` — bind a protected-main re-verification
     record to a distinct release-source contract.
   * ``evo-guard seal-release-source-finalizer`` — sign that release-source handoff
@@ -71,6 +73,9 @@ from evoom_guard.cli import agent_change_commands as _agent_change_command_owner
 from evoom_guard.cli import artifact_admission_commands as _artifact_admission_command_owner
 from evoom_guard.cli import (
     artifact_digest_admission_commands as _artifact_digest_admission_command_owner,
+)
+from evoom_guard.cli import (
+    change_attempt_observation_commands as _change_attempt_observation_command_owner,
 )
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import (
@@ -1259,6 +1264,43 @@ def cmd_verify_finalized(
     )
 
 
+def cmd_project_change_attempt_observation(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Authenticate one finalizer bundle and publish an advisory projection."""
+
+    from evoom_guard.change_attempt_observation import (
+        ChangeAttemptObservationError,
+        produce_change_attempt_observation,
+    )
+    from evoom_guard.signing import SigningUnavailableError
+
+    return (
+        _change_attempt_observation_command_owner
+        .execute_project_change_attempt_observation(
+            args,
+            services=(
+                _change_attempt_observation_command_owner.ProjectObservationServices(
+                    read_external_object=lambda object_path, *, label: (
+                        _read_external_finalizer_object(object_path, label=label)
+                    ),
+                    project_observation=produce_change_attempt_observation,
+                    invalid_errors=(ChangeAttemptObservationError,),
+                    operational_errors=(OSError, SigningUnavailableError),
+                    machine_report=lambda report_out, value: _machine_report(
+                        report_out,
+                        value,
+                    ),
+                    absolute_path=os.path.abspath,
+                )
+            ),
+            out=out,
+        )
+    )
+
+
 def cmd_release_source_handoff(
     args: argparse.Namespace,
     *,
@@ -2315,6 +2357,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_seal_finalizer(args)
     if args.command == "verify-finalized":
         return cmd_verify_finalized(args)
+    if args.command == "project-change-attempt-observation":
+        return cmd_project_change_attempt_observation(args)
     if args.command == "validate-agent-change-proposal":
         return cmd_validate_agent_change_proposal(args)
     if args.command == "derive-agent-change-bindings":

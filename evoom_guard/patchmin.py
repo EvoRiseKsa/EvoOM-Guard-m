@@ -5,7 +5,7 @@
 # Source-available — see LICENSE for permitted use.
 # ─────────────────────────────────────────────────────────────────────────────
 
-"""Patch minimization + blast-radius risk scoring — pure, additive primitives.
+"""Patch minimization + blast-radius scoring — pure, additive primitives.
 
 This module holds two small, *model-free* helpers that reason about a patch
 without ever applying it or talking to a model/verifier:
@@ -17,11 +17,17 @@ without ever applying it or talking to a model/verifier:
    in production the predicate applies the candidate subset and runs the repo
    verifier; in tests it is a trivial membership check.
 
-2. :func:`risk_score` (with :func:`parse_unified_diff`) — turns a unified-diff
+2. :func:`blast_radius_score` (with :func:`parse_unified_diff`) — turns a unified-diff
    string (or a precomputed ``{file: (added, removed)}`` map) into a bounded,
-   deterministic :class:`RiskScore` describing the blast radius: how many files
+   deterministic :class:`BlastRadiusScore` describing the blast radius: how many files
    are touched, how many lines change, whether any *protected* path is hit, and
    a single ``0..1`` score plus a coarse ``low``/``medium``/``high`` level.
+
+``RiskScore`` and ``risk_score`` remain the published compatibility names;
+``BlastRadiusScore`` and ``blast_radius_score`` are exact identity aliases.
+The frozen verdict wire fields remain ``risk_level``/``risk_score``. The value
+is not a probability of vulnerability, maliciousness, correctness, or
+production suitability.
 
 Nothing here imports the engine, the serving layer, or the verifier. Everything
 is standard library and deterministic, so it is trivially testable and reusable.
@@ -35,6 +41,8 @@ from fnmatch import fnmatch
 from typing import TypeAlias, TypeVar
 
 __all__ = [
+    "BlastRadiusScore",
+    "blast_radius_score",
     "minimize_patch",
     "RiskScore",
     "parse_unified_diff",
@@ -96,7 +104,7 @@ def minimize_patch(edits: list[T], passes: Callable[[list[T]], bool]) -> list[T]
 # ─────────────────────────── A2. risk scoring ───────────────────────────────
 @dataclass(frozen=True)
 class RiskScore:
-    """Blast-radius summary of a patch (see :func:`risk_score`)."""
+    """Blast-radius summary of a patch (see :func:`blast_radius_score`)."""
 
     files_touched: int
     lines_added: int
@@ -246,3 +254,10 @@ def risk_score(
         score=score,
         level=level,
     )
+
+
+# Additive public terminology for the actual model. These are identity aliases
+# rather than wrappers so signatures, return types, monkeypatch seams, and every
+# published wire byte remain unchanged.
+BlastRadiusScore = RiskScore
+blast_radius_score = risk_score

@@ -51,9 +51,11 @@ existing filesystem aliases are checked where the host can compare identity.
 The verdict and its stable `reason_code` are emitted as JSON for integrations — see
 [`JSON_SCHEMA.md`](JSON_SCHEMA.md).
 
-Every run also reports a **blast-radius risk** (`low`/`medium`/`high`) from the
-files and lines touched and any protected-path hit, and the **verdict source**
-(`junit+exit` for the hardened path).
+Every run also reports a **blast radius** (`low`/`medium`/`high`) from the files
+and lines touched and any protected-path hit, and the **verdict source**
+(`junit+exit` for the hardened path). The published JSON keys remain
+`risk_level`/`risk_score` for compatibility; they are not a vulnerability,
+maliciousness, correctness, or production-readiness probability.
 
 A forged `9999 passed` printed by the patch's own code **cannot** flip the verdict —
 the score comes from the structured JUnit report, cross-checked against the exit

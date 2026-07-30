@@ -458,6 +458,18 @@ class GuardResult:
                 else "preflight"
             )
 
+    @property
+    def blast_radius_level(self) -> str:
+        """Coarse change-size level; the frozen wire name is ``risk_level``."""
+
+        return self.risk_level
+
+    @property
+    def blast_radius_score(self) -> float:
+        """Change-size score; not a semantic, security, or maliciousness risk."""
+
+        return self.risk_score
+
     def to_dict(self) -> dict[str, Any]:
         schema_version = SCHEMA_VERSION
         if isinstance(self.attestation, Mapping):
@@ -1980,7 +1992,10 @@ def _diff_base_sha(diff_text: str) -> str | None:
 
 def _write_diff_file(diff_file: str, diff_text: str) -> None:
     """Write the normalized unified diff through Guard's effectful facade."""
-    with open(diff_file, "w", encoding="utf-8") as f:
+    # Unified diffs are protocol text. Force LF even on Windows: the default
+    # text-mode CRLF translation leaves ``\r`` on context lines and can make
+    # ``git apply -R`` reject an otherwise valid base...HEAD diff.
+    with open(diff_file, "w", encoding="utf-8", newline="\n") as f:
         f.write(diff_text if diff_text.endswith("\n") else diff_text + "\n")
 
 

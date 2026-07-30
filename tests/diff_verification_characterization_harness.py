@@ -199,9 +199,11 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         mode: str,
         *,
         encoding: str,
+        newline: str | None = None,
     ) -> MemoryWriter:
         timeline.append(
-            f"write:open:{path.endswith('patch.diff')}:{mode}:{encoding}"
+            f"write:open:{path.endswith('patch.diff')}:{mode}:{encoding}:"
+            f"{newline!r}"
         )
         return MemoryWriter(timeline, fail=spec["raise_at"] == "write")
 

@@ -14,7 +14,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from evoom_guard.patchmin import (
+    BlastRadiusScore,
     RiskScore,
+    blast_radius_score,
     minimize_patch,
     parse_unified_diff,
     risk_score,
@@ -156,6 +158,10 @@ deleted file mode 100644
 
 
 class RiskScoreTests(unittest.TestCase):
+    def test_blast_radius_names_are_exact_compatibility_aliases(self) -> None:
+        self.assertIs(BlastRadiusScore, RiskScore)
+        self.assertIs(blast_radius_score, risk_score)
+
     def test_small_diff_is_low(self) -> None:
         diff = "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-a\n+b\n"
         rs = risk_score(diff)
