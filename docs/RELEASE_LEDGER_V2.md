@@ -337,6 +337,16 @@ retirement remains intentionally pending until that ordering has completed.
    observation; it does not prove destruction of copies outside GitHub and does
    not prevent a new key or secret from being added later.
 
+The exact deploy key and Environment secret recorded for `v4.4.2` were later
+removed, and their authenticated GitHub API absence was recorded in the
+unsigned
+[`PUBLICATION_AUTHORITY_RETIREMENT_OBSERVATION.json`](../evidence/release-operations/v4.4.2/PUBLICATION_AUTHORITY_RETIREMENT_OBSERVATION.json).
+The offline ledger private key was not available to that operation. Therefore
+the retained record is a same-owner point-in-time observation, not the signed
+`KEY_RETIREMENT.json` receipt described above. The immutable ledger remains
+unchanged and correctly says `pending-post-ledger` for the state known when it
+was signed.
+
 The former absence of a collection command has been replaced by the bounded
 repository-control recorder. The recorder is a transport recorder, not an
 authoritative generator: it has no

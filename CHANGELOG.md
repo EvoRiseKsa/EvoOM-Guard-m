@@ -56,6 +56,11 @@ retained evidence say so.
   parser. Caller-provided mappings now reject malformed, negative, boolean,
   floating-point, and non-finite line counts instead of producing invalid
   measurements.
+- Removed the exact `v4.4.2` publication deploy key and publication Environment
+  secret after the signed ledger was committed. The retained same-owner API
+  observation is explicitly unsigned and is not represented as the signed
+  `KEY_RETIREMENT.json` receipt that could not be produced without the offline
+  ledger private key.
 
 ### Fixed
 
