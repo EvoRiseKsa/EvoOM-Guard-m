@@ -296,7 +296,9 @@ def test_primary_exceptions_propagate_after_cleanup(
     assert case["timeline"][-2:] == required_tail
 
 
-def test_cleanup_exception_preserves_historical_masking(tmp_path: Path) -> None:
+def test_cleanup_exception_is_visible_instead_of_returning_success(
+    tmp_path: Path,
+) -> None:
     case = capture_case("cleanup_exception_masks_success", tmp_path)
 
     assert case["decision"] is None
@@ -311,17 +313,55 @@ def test_cleanup_exception_preserves_historical_masking(tmp_path: Path) -> None:
     ]
 
 
-def test_base_path_join_failure_occurs_outside_cleanup_boundary(
+def test_cleanup_does_not_use_callers_ambient_exception_as_primary(
     tmp_path: Path,
 ) -> None:
-    case = capture_case("workspace_join_exception_precedes_cleanup", tmp_path)
+    ambient = RuntimeError("caller is handling this")
+
+    try:
+        raise ambient
+    except RuntimeError:
+        case = capture_case("cleanup_exception_masks_success", tmp_path)
+
+    assert case["decision"] is None
+    assert case["exception"] == {
+        "type": "ProbeError",
+        "message": "synthetic cleanup failure",
+    }
+    assert getattr(ambient, "__notes__", []) == []
+
+
+def test_active_primary_survives_cleanup_failure_with_diagnostic_note(
+    tmp_path: Path,
+) -> None:
+    case = capture_case("guard_and_cleanup_exception", tmp_path)
+
+    assert case["decision"] is None
+    assert case["exception"] == {
+        "type": "ProbeError",
+        "message": "synthetic guard failure",
+    }
+    assert case["exception_notes"] == [
+        "DiffVerification reconstruction workspace cleanup failed while "
+        "preserving the primary exception: ProbeError: synthetic cleanup failure"
+    ]
+    assert case["timeline"][-2:] == [
+        "guard:early",
+        "workspace:cleanup:True:True",
+    ]
+
+
+def test_base_path_join_failure_is_inside_cleanup_boundary(
+    tmp_path: Path,
+) -> None:
+    case = capture_case("workspace_join_exception_cleans_up", tmp_path)
 
     assert case["exception"] == {
         "type": "ProbeError",
         "message": "synthetic base-path failure",
     }
-    assert case["timeline"][-2:] == [
+    assert case["timeline"][-3:] == [
         "workspace:create:evo_guard_diff_",
         "path:join:base",
+        "workspace:cleanup:True:True",
     ]
-    assert not any(event.startswith("workspace:cleanup") for event in case["timeline"])

@@ -11008,10 +11008,63 @@ MUTATIONS = (
         name="diff-verification-workspace-cleanup-bypass",
         path="evoom_guard/application/diff_verification.py",
         before=(
-            "        services.cleanup_workspace_provider()"
-            "(workdir, ignore_errors=True)\n"
+            "        cleanup_workspace(\n"
+            "            workdir,\n"
+            "            primary=cleanup_primary,\n"
+            "        )\n"
         ),
         after="        None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-cleanup-provider-preallocation-order-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "    cleanup_workspace = services.cleanup_workspace_provider()\n"
+            "    workdir = services.workspace_factory_provider()("
+            "prefix=\"evo_guard_diff_\")\n"
+        ),
+        after=(
+            "    workdir = services.workspace_factory_provider()("
+            "prefix=\"evo_guard_diff_\")\n"
+            "    cleanup_workspace = services.cleanup_workspace_provider()\n"
+        ),
+        test=(
+            "tests/test_diff_verification_application.py::"
+            "test_cleanup_provider_lookup_failure_precedes_workspace_factory"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-active-primary-cleanup-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            primary=cleanup_primary,\n",
+        after="            primary=None,\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_active_primary_survives_cleanup_failure_with_diagnostic_note"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-caller-ambient-primary-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            primary=cleanup_primary,\n",
+        after="            primary=__import__(\"sys\").exc_info()[1],\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_cleanup_does_not_use_callers_ambient_exception_as_primary"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-owned-allocation-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "            workspace_factory_provider="
+            "lambda: _allocate_diff_workspace,\n"
+        ),
+        after="            workspace_factory_provider=lambda: tempfile.mkdtemp,\n",
         test=(
             "tests/test_diff_verification_characterization.py::"
             "test_success_serializes_and_forwards_every_historical_input"
