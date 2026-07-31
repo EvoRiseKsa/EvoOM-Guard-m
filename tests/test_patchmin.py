@@ -10,6 +10,7 @@
 import os
 import sys
 import unittest
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -247,6 +248,27 @@ class RiskScoreTests(unittest.TestCase):
     def test_returns_riskscore_dataclass(self) -> None:
         rs = risk_score({"a.py": (1, 0)})
         self.assertIsInstance(rs, RiskScore)
+
+    def test_mapping_rejects_negative_counts(self) -> None:
+        for mapping in ({"a.py": (-1, 0)}, {"a.py": (0, -1)}):
+            with self.subTest(mapping=mapping):
+                with self.assertRaisesRegex(ValueError, "must be non-negative"):
+                    risk_score(mapping)
+
+    def test_mapping_rejects_non_integer_and_malformed_counts(self) -> None:
+        invalid: list[tuple[Any, str]] = [
+            ({"a.py": (1.0, 0)}, "counts must be integers"),
+            ({"a.py": (float("nan"), 0)}, "counts must be integers"),
+            ({"a.py": (float("inf"), 0)}, "counts must be integers"),
+            ({"a.py": (True, 0)}, "counts must be integers"),
+            ({"a.py": [1, 0]}, "values must be"),
+            ({"a.py": (1,)}, "values must be"),
+            ({1: (1, 0)}, "paths must be strings"),
+        ]
+        for mapping, message in invalid:
+            with self.subTest(mapping=mapping):
+                with self.assertRaisesRegex(TypeError, message):
+                    risk_score(mapping)
 
 
 if __name__ == "__main__":

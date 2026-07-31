@@ -27,7 +27,8 @@ without ever applying it or talking to a model/verifier:
 ``BlastRadiusScore`` and ``blast_radius_score`` are exact identity aliases.
 The frozen verdict wire fields remain ``risk_level``/``risk_score``. The value
 is not a probability of vulnerability, maliciousness, correctness, or
-production suitability.
+production suitability.  The accepted V1 input subset and its raw-diff
+limitations are documented in ``docs/BLAST_RADIUS.md``.
 
 Nothing here imports the engine, the serving layer, or the verifier. Everything
 is standard library and deterministic, so it is trivially testable and reusable.
@@ -172,6 +173,33 @@ def _strip_diff_path(token: str) -> str:
 DiffLike: TypeAlias = "str | Mapping[str, tuple[int, int]]"
 
 
+def _validated_precomputed_counts(
+    file_counts: Mapping[str, tuple[int, int]],
+) -> dict[str, tuple[int, int]]:
+    """Snapshot a caller-provided V1 mapping under its published type contract."""
+
+    validated: dict[str, tuple[int, int]] = {}
+    for path, pair in file_counts.items():
+        if not isinstance(path, str):
+            raise TypeError("blast-radius mapping paths must be strings")
+        if not isinstance(pair, tuple) or len(pair) != 2:
+            raise TypeError(
+                "blast-radius mapping values must be (added, removed) tuples"
+            )
+        added, removed = pair
+        if (
+            not isinstance(added, int)
+            or isinstance(added, bool)
+            or not isinstance(removed, int)
+            or isinstance(removed, bool)
+        ):
+            raise TypeError("blast-radius line counts must be integers")
+        if added < 0 or removed < 0:
+            raise ValueError("blast-radius line counts must be non-negative")
+        validated[str(path)] = (int(added), int(removed))
+    return validated
+
+
 def risk_score(
     diff: DiffLike,
     *,
@@ -188,7 +216,10 @@ def risk_score(
     ``{file: (added, removed)}`` mapping. ``protected`` is a list of fnmatch
     globs; any touched file matching one is a *protected hit* (matched
     case-insensitively against the whole path, mirroring the verifier's
-    protected-path convention).
+    protected-path convention). Mapping paths must be strings and both counts
+    must be non-negative integers; invalid caller-provided mappings raise
+    :class:`TypeError` or :class:`ValueError` instead of producing an
+    out-of-range score.
 
     Returns
     -------
@@ -213,7 +244,11 @@ def risk_score(
     ``1.0`` (any touch is treated as maximal) to avoid division by zero. The
     result is deterministic and pure.
     """
-    file_counts = diff if isinstance(diff, Mapping) else parse_unified_diff(diff)
+    file_counts = (
+        _validated_precomputed_counts(diff)
+        if isinstance(diff, Mapping)
+        else parse_unified_diff(diff)
+    )
 
     touched = list(file_counts.keys())
     files_touched = len(touched)

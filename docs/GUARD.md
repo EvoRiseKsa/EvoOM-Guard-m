@@ -51,11 +51,15 @@ existing filesystem aliases are checked where the host can compare identity.
 The verdict and its stable `reason_code` are emitted as JSON for integrations — see
 [`JSON_SCHEMA.md`](JSON_SCHEMA.md).
 
-Every run also reports a **blast radius** (`low`/`medium`/`high`) from the files
-and lines touched and any protected-path hit, and the **verdict source**
-(`junit+exit` for the hardened path). The published JSON keys remain
-`risk_level`/`risk_score` for compatibility; they are not a vulnerability,
-maliciousness, correctness, or production-readiness probability.
+A Guard result also carries a **blast radius** (`low`/`medium`/`high`) from the
+files and lines represented by the materialized change and any protected-path
+hit, plus the **verdict source** (`junit+exit` for the hardened path). Failures
+that happen before a complete change can be represented can retain the
+compatibility `low`/`0.0` default; that is not a claim that the rejected input
+was small. The published JSON keys remain `risk_level`/`risk_score` for
+compatibility; they are not a vulnerability, maliciousness, correctness, or
+production-readiness probability. See the exact V1 input contract and direct
+raw-diff limitations in [`BLAST_RADIUS.md`](BLAST_RADIUS.md).
 
 A forged `9999 passed` printed by the patch's own code **cannot** flip the verdict —
 the score comes from the structured JUnit report, cross-checked against the exit

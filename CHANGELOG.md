@@ -52,6 +52,29 @@ retained evidence say so.
   set: zipapp, SPDX SBOM, and `SHA256SUMS`.
 - Preserved LF protocol newlines when materializing unified diffs on Windows so
   valid `--diff` inputs reverse-apply instead of failing during reconstruction.
+- Documented the exact Blast Radius V1 mapping contract and limited raw-diff
+  parser. Caller-provided mappings now reject malformed, negative, boolean,
+  floating-point, and non-finite line counts instead of producing invalid
+  measurements.
+- Removed the exact `v4.4.2` publication deploy key and publication Environment
+  secret after the signed ledger was committed. The retained same-owner API
+  observation is explicitly unsigned and is not represented as the signed
+  `KEY_RETIREMENT.json` receipt that could not be produced without the offline
+  ledger private key.
+- Made generic bounded-process cancellation retain the exact active
+  `BaseException` while attaching bounded secondary diagnostics when managed
+  process-tree or output-reader abort cleanup raises or is not positively
+  proven. Normal process results and verdict schemas are unchanged. The
+  specialized judge, raw-Git finalizer, and GitHub Attestation process owners
+  remain separate follow-up scopes rather than being represented as covered by
+  this generic runner change.
+
+### Fixed
+
+- Completed deletion-aware blast-radius measurement before returning
+  `verifier_pack_required` from black-box preflight. The verdict remains
+  `ERROR`; only the advisory measurement now matches the executable black-box
+  path for the same materialized deletion.
 
 ## [4.4.2] — published 2026-07-29; signed protected-tree ledger
 

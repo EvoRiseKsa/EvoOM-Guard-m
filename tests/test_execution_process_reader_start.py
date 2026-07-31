@@ -25,6 +25,16 @@ class _ReaderStartFailure(RuntimeError):
     """Distinct primary failure used to prove exception identity."""
 
 
+_TREE_FALSE_NOTE = (
+    "Managed subprocess-tree abort cleanup was not proven while preserving "
+    "the primary exception"
+)
+_READER_FALSE_NOTE = (
+    "Managed subprocess output-reader abort cleanup was not proven while "
+    "preserving the primary exception"
+)
+
+
 class _FakePipe:
     def __init__(self, close_error: BaseException | None = None) -> None:
         self.close_calls = 0
@@ -226,6 +236,174 @@ def test_reader_start_primary_survives_cleanup_baseexceptions(
     assert process.stdout.close_calls == 0
     assert process.stderr is not None
     assert process.stderr.close_calls == 1
+    assert getattr(primary, "__notes__", []) == [
+        "Managed subprocess-tree abort cleanup raised while preserving the "
+        "primary exception: SystemExit: cleanup failed",
+        "Managed subprocess output-reader abort cleanup raised while preserving "
+        "the primary exception: KeyboardInterrupt: join failed",
+    ]
+
+
+def _exercise_abort_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    primary: BaseException,
+    tree_effect: object,
+    reader_effect: object,
+) -> tuple[list[str], list[str]]:
+    process = _FakeProcess(returncode=None)
+    _install_process(monkeypatch, process)
+    _install_reader_factory(
+        monkeypatch,
+        failure_index=0,
+        primary=primary,
+        starts_before_failure=True,
+    )
+    events: list[str] = []
+
+    def apply(effect: object) -> object:
+        if isinstance(effect, BaseException):
+            raise effect
+        return effect
+
+    def terminate(*_args: object) -> object:
+        events.append("terminate")
+        return apply(tree_effect)
+
+    def join(*_args: object) -> object:
+        events.append("join")
+        return apply(reader_effect)
+
+    monkeypatch.setattr(process_module, "_terminate_process_tree", terminate)
+    monkeypatch.setattr(process_module, "_join_attempted_pipe_readers", join)
+
+    with pytest.raises(type(primary)) as exc:
+        execute_bounded_process(_request())
+
+    assert exc.value is primary
+    return events, list(getattr(primary, "__notes__", []))
+
+
+@pytest.mark.parametrize(
+    ("tree_effect", "reader_effect", "expected_notes"),
+    [
+        pytest.param(False, True, [_TREE_FALSE_NOTE], id="terminate-false"),
+        pytest.param(
+            SystemExit("terminate raised"),
+            True,
+            [
+                "Managed subprocess-tree abort cleanup raised while preserving "
+                "the primary exception: SystemExit: terminate raised"
+            ],
+            id="terminate-raised",
+        ),
+        pytest.param(True, False, [_READER_FALSE_NOTE], id="join-false"),
+        pytest.param(
+            True,
+            GeneratorExit("join raised"),
+            [
+                "Managed subprocess output-reader abort cleanup raised while "
+                "preserving the primary exception: GeneratorExit: join raised"
+            ],
+            id="join-raised",
+        ),
+        pytest.param(True, True, [], id="both-proven"),
+        pytest.param(1, True, [_TREE_FALSE_NOTE], id="terminate-truthy-non-bool"),
+        pytest.param(True, 1, [_READER_FALSE_NOTE], id="join-truthy-non-bool"),
+    ],
+)
+def test_abort_cleanup_single_outcomes_are_observable(
+    monkeypatch: pytest.MonkeyPatch,
+    tree_effect: object,
+    reader_effect: object,
+    expected_notes: list[str],
+) -> None:
+    """False and raised cleanup outcomes are evidence, never new primaries."""
+
+    primary = KeyboardInterrupt("operator cancellation")
+
+    events, notes = _exercise_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=tree_effect,
+        reader_effect=reader_effect,
+    )
+
+    assert events == ["terminate", "join"]
+    assert notes == expected_notes
+
+
+def test_abort_cleanup_preserves_two_failures_and_runs_both_stages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = KeyboardInterrupt("operator cancellation")
+
+    events, notes = _exercise_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=SystemExit("terminate raised"),
+        reader_effect=False,
+    )
+
+    assert events == ["terminate", "join"]
+    assert notes == [
+        "Managed subprocess-tree abort cleanup raised while preserving the "
+        "primary exception: SystemExit: terminate raised",
+        _READER_FALSE_NOTE,
+    ]
+
+
+def test_abort_cleanup_note_survives_hostile_exception_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UnprintableCleanupFailure(SystemExit):
+        def __str__(self) -> str:
+            raise RuntimeError("hostile cleanup __str__")
+
+    primary = KeyboardInterrupt("operator cancellation")
+
+    events, notes = _exercise_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=UnprintableCleanupFailure(),
+        reader_effect=True,
+    )
+
+    assert events == ["terminate", "join"]
+    assert notes == [
+        "Managed subprocess-tree abort cleanup raised while preserving the "
+        "primary exception: UnprintableCleanupFailure: <unprintable; __str__ "
+        "raised RuntimeError>"
+    ]
+
+
+@pytest.mark.parametrize("primary_kind", ["python-310", "hostile-add-note"])
+def test_abort_cleanup_note_uses_safe_legacy_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    primary_kind: str,
+) -> None:
+    class Python310Primary(KeyboardInterrupt):
+        add_note = None
+
+    class HostileAddNotePrimary(KeyboardInterrupt):
+        def add_note(self, _note: str) -> None:
+            raise RuntimeError("hostile add_note")
+
+    primary: BaseException
+    if primary_kind == "python-310":
+        primary = Python310Primary("operator cancellation")
+    else:
+        primary = HostileAddNotePrimary("operator cancellation")
+
+    events, notes = _exercise_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=False,
+        reader_effect=True,
+    )
+
+    assert events == ["terminate", "join"]
+    assert notes == [_TREE_FALSE_NOTE]
 
 
 def test_second_reader_constructor_failure_cleans_tree_and_both_pipes(
