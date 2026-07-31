@@ -37,6 +37,12 @@ binding claims. They do not turn mutable GitHub state into an independent
 attestation. Publication-authority retirement remains a separate
 post-ledger operation and is not claimed complete by the ledger.
 
+The prospective `v4.5.0` ledger-signing public root is pinned at
+[`v4.5.0.pub.pem`](../security/release-ledger-roots/v4.5.0.pub.pem) with key ID
+`sha256:0d5dd1a57b8f2b4ec80a197f99bdf73908e7edba82be42ad4666a9fe485b7478`.
+This pins only the reviewed public identity; it does not prove private-key
+custody, offline storage, a signature, pipeline execution, or publication.
+
 ## Phase contracts
 
 | Phase | Workflow | Authority and prohibited operations |
