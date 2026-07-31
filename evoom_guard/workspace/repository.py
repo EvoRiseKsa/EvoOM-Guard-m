@@ -628,8 +628,8 @@ def copy_repo_tree(
 def note_cleanup_failure(primary: BaseException, message: str) -> None:
     """Attach secondary cleanup diagnostics without replacing ``primary``."""
 
-    message = _bounded_cleanup_diagnostic(message)
     try:
+        message = _bounded_cleanup_diagnostic(message)
         add_note = getattr(primary, "add_note", None)
         if callable(add_note):
             add_note(message)
@@ -648,16 +648,62 @@ def note_cleanup_failure(primary: BaseException, message: str) -> None:
 
 
 _MAX_CLEANUP_DIAGNOSTIC_CHARS = 2_000
+_MAX_CALLBACK_FAILURE_SUFFIX_CHARS = 1_000
 _CLEANUP_DIAGNOSTIC_ELLIPSIS = "..."
 
 
-def _bounded_cleanup_diagnostic(message: str) -> str:
+def _exact_cleanup_text(value: object) -> str:
+    """Normalize arbitrary text to an exact built-in ``str`` without hooks."""
+
+    try:
+        if isinstance(value, str):
+            normalized = value if type(value) is str else str.__str__(value)
+        else:
+            rendered = str(value)
+            normalized = (
+                rendered
+                if type(rendered) is str
+                else str.__str__(rendered)
+            )
+    except BaseException:
+        return "<unprintable>"
+    return normalized if type(normalized) is str else "<unprintable>"
+
+
+def _bounded_cleanup_text(message: object, *, limit: int) -> str:
+    """Return exact text truncated to ``limit`` without subclass hooks."""
+
+    normalized = _exact_cleanup_text(message)
+    if len(normalized) <= limit:
+        return normalized
+    retained = limit - len(_CLEANUP_DIAGNOSTIC_ELLIPSIS)
+    if retained <= 0:
+        return _CLEANUP_DIAGNOSTIC_ELLIPSIS[:limit]
+    return normalized[:retained] + _CLEANUP_DIAGNOSTIC_ELLIPSIS
+
+
+def _bounded_cleanup_diagnostic(message: object) -> str:
     """Return one deterministic, bounded cleanup diagnostic."""
 
-    if len(message) <= _MAX_CLEANUP_DIAGNOSTIC_CHARS:
-        return message
-    retained = _MAX_CLEANUP_DIAGNOSTIC_CHARS - len(_CLEANUP_DIAGNOSTIC_ELLIPSIS)
-    return message[:retained] + _CLEANUP_DIAGNOSTIC_ELLIPSIS
+    return _bounded_cleanup_text(
+        message,
+        limit=_MAX_CLEANUP_DIAGNOSTIC_CHARS,
+    )
+
+
+def _bounded_cleanup_diagnostic_with_suffix(
+    message: object,
+    suffix: object,
+) -> str:
+    """Bound a diagnostic while retaining a higher-priority suffix."""
+
+    normalized_suffix = _bounded_cleanup_text(
+        suffix,
+        limit=_MAX_CALLBACK_FAILURE_SUFFIX_CHARS,
+    )
+    prefix_limit = _MAX_CLEANUP_DIAGNOSTIC_CHARS - len(normalized_suffix)
+    normalized_message = _bounded_cleanup_text(message, limit=prefix_limit)
+    return normalized_message + normalized_suffix
 
 
 def _exception_type_name(error: BaseException) -> str:
@@ -675,7 +721,8 @@ def _cleanup_exception_summary(error: BaseException) -> str:
 
     error_type = _exception_type_name(error)
     try:
-        detail = str(error)
+        rendered = str(error)
+        detail = _exact_cleanup_text(rendered)
     except BaseException as stringify_error:
         detail = (
             "<unprintable; __str__ raised "
@@ -696,9 +743,14 @@ def _report_cleanup_failure(
     try:
         note_failure(target, diagnostic)
     except BaseException as report_error:
-        fallback = _bounded_cleanup_diagnostic(
-            f"{diagnostic} [cleanup diagnostic callback failed: "
-            f"{_cleanup_exception_summary(report_error)}]"
+        callback_suffix = (
+            " [cleanup diagnostic callback failed: "
+            + _cleanup_exception_summary(report_error)
+            + "]"
+        )
+        fallback = _bounded_cleanup_diagnostic_with_suffix(
+            diagnostic,
+            callback_suffix,
         )
         try:
             # The built-in reporter is fail-safe, but retain this outer guard so
@@ -748,8 +800,10 @@ def cleanup_repo_workspaces(
     if note_failure is None:
         note_failure = note_cleanup_failure
 
+    safe_owner_name = _exact_cleanup_text(owner_name)
     failures: list[tuple[str, BaseException]] = []
     for label, path in workspaces:
+        safe_label = _exact_cleanup_text(label)
         if path is None:
             continue
         try:
@@ -772,11 +826,11 @@ def cleanup_repo_workspaces(
                 if path_absent(path) is True:
                     continue
             except BaseException as proof_error:
-                failures.append((label, proof_error))
+                failures.append((safe_label, proof_error))
                 continue
-            failures.append((label, exc))
+            failures.append((safe_label, exc))
         except BaseException as exc:
-            failures.append((label, exc))
+            failures.append((safe_label, exc))
 
     if not failures:
         return
@@ -785,8 +839,11 @@ def cleanup_repo_workspaces(
         for label, cleanup_error in failures:
             _report_cleanup_failure(
                 primary,
-                f"{owner_name} {label} cleanup failed while preserving the "
-                f"primary exception: {_cleanup_exception_summary(cleanup_error)}",
+                safe_owner_name
+                + " "
+                + label
+                + " cleanup failed while preserving the primary exception: "
+                + _cleanup_exception_summary(cleanup_error),
                 note_failure=note_failure,
             )
         return
@@ -794,14 +851,18 @@ def cleanup_repo_workspaces(
     first_label, first_error = failures[0]
     _report_cleanup_failure(
         first_error,
-        f"{owner_name} {first_label} cleanup failed",
+        safe_owner_name + " " + first_label + " cleanup failed",
         note_failure=note_failure,
     )
     for label, cleanup_error in failures[1:]:
         _report_cleanup_failure(
             first_error,
-            f"Additional {owner_name} {label} cleanup failure: "
-            f"{_cleanup_exception_summary(cleanup_error)}",
+            "Additional "
+            + safe_owner_name
+            + " "
+            + label
+            + " cleanup failure: "
+            + _cleanup_exception_summary(cleanup_error),
             note_failure=note_failure,
         )
     raise first_error

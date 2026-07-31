@@ -16,6 +16,35 @@ class HostileStringError(RuntimeError):
         raise KeyboardInterrupt("secondary stringification interrupted")
 
 
+class HostileText(str):
+    """A valid str subclass whose ordinary protocol hooks are unsafe."""
+
+    def __str__(self) -> str:
+        raise SystemExit("hostile text __str__")
+
+    def __format__(self, _format_spec: str) -> str:
+        raise SystemExit("hostile text __format__")
+
+    def __len__(self) -> int:
+        raise SystemExit("hostile text __len__")
+
+    def __getitem__(self, _key: object) -> str:
+        raise SystemExit("hostile text __getitem__")
+
+    def __add__(self, _other: object) -> str:
+        raise SystemExit("hostile text __add__")
+
+    def __radd__(self, _other: object) -> str:
+        raise SystemExit("hostile text __radd__")
+
+
+class HostileReturnedStringError(RuntimeError):
+    """An exception returning a hostile but valid str subclass."""
+
+    def __str__(self) -> str:
+        return HostileText("hostile returned detail")
+
+
 def _raise(error: BaseException) -> None:
     raise error
 
@@ -73,6 +102,44 @@ def test_hostile_secondary_stringification_preserves_first_cleanup_failure() -> 
             "HostileStringError: <unprintable; __str__ raised KeyboardInterrupt>",
         ),
     ]
+
+
+def test_hostile_returned_str_subclass_cannot_mask_active_primary() -> None:
+    primary = KeyboardInterrupt("exact primary")
+    cleanup_error = HostileReturnedStringError()
+    notes: list[str] = []
+
+    workspace_owner.cleanup_repo_workspaces(
+        (("candidate workspace", "candidate"),),
+        primary=primary,
+        remove_tree=lambda _path: _raise(cleanup_error),
+        note_failure=lambda _target, message: notes.append(message),
+    )
+
+    assert notes == [
+        "RepoVerifier candidate workspace cleanup failed while preserving the "
+        "primary exception: HostileReturnedStringError: hostile returned detail"
+    ]
+
+
+def test_hostile_returned_str_subclass_preserves_first_cleanup_failure() -> None:
+    first = OSError("first cleanup failure")
+    hostile = HostileReturnedStringError()
+    failures = iter((first, hostile))
+    notes: list[str] = []
+
+    with pytest.raises(OSError) as caught:
+        workspace_owner.cleanup_repo_workspaces(
+            (("candidate workspace", "candidate"), ("pack workspace", "pack")),
+            primary=None,
+            remove_tree=lambda _path: _raise(next(failures)),
+            note_failure=lambda _target, message: notes.append(message),
+        )
+
+    assert caught.value is first
+    assert notes[-1].endswith(
+        "HostileReturnedStringError: hostile returned detail"
+    )
 
 
 def test_active_primary_cleanup_diagnostic_is_deterministically_bounded() -> None:
@@ -164,6 +231,76 @@ def test_note_callback_baseexception_cannot_replace_first_cleanup_failure() -> N
     assert len(notes[0]) <= 2_000
 
 
+def test_oversized_diagnostic_retains_callback_failure_evidence() -> None:
+    primary = KeyboardInterrupt("exact primary")
+    cleanup_error = OSError("X" * 200_000)
+    callback_error = SystemExit("reporter exited")
+
+    workspace_owner.cleanup_repo_workspaces(
+        (("candidate workspace", "candidate"),),
+        primary=primary,
+        remove_tree=lambda _path: _raise(cleanup_error),
+        note_failure=lambda _target, _message: _raise(callback_error),
+    )
+
+    notes = getattr(primary, "__notes__", ())
+    assert len(notes) == 1
+    assert len(notes[0]) == 2_000
+    assert "cleanup diagnostic callback failed: SystemExit: reporter exited" in notes[0]
+
+
+def test_callback_error_returning_hostile_str_cannot_mask_primary() -> None:
+    primary = KeyboardInterrupt("exact primary")
+    cleanup_error = OSError("cleanup denied")
+    callback_error = HostileReturnedStringError()
+
+    workspace_owner.cleanup_repo_workspaces(
+        (("candidate workspace", "candidate"),),
+        primary=primary,
+        remove_tree=lambda _path: _raise(cleanup_error),
+        note_failure=lambda _target, _message: _raise(callback_error),
+    )
+
+    notes = getattr(primary, "__notes__", ())
+    assert len(notes) == 1
+    assert "HostileReturnedStringError: hostile returned detail" in notes[0]
+
+
+def test_hostile_owner_and_label_text_cannot_mask_active_primary() -> None:
+    primary = KeyboardInterrupt("exact primary")
+    cleanup_error = OSError("cleanup denied")
+    notes: list[str] = []
+
+    workspace_owner.cleanup_repo_workspaces(
+        ((HostileText("candidate workspace"), "candidate"),),
+        primary=primary,
+        remove_tree=lambda _path: _raise(cleanup_error),
+        note_failure=lambda _target, message: notes.append(message),
+        owner_name=HostileText("Owner"),
+    )
+
+    assert notes == [
+        "Owner candidate workspace cleanup failed while preserving the "
+        "primary exception: OSError: cleanup denied"
+    ]
+
+
+def test_hostile_owner_and_label_text_preserve_first_cleanup_failure() -> None:
+    first = OSError("first cleanup failure")
+
+    with pytest.raises(OSError) as caught:
+        workspace_owner.cleanup_repo_workspaces(
+            ((HostileText("candidate workspace"), "candidate"),),
+            primary=None,
+            remove_tree=lambda _path: _raise(first),
+            owner_name=HostileText("Owner"),
+        )
+
+    assert caught.value is first
+    notes = getattr(first, "__notes__", ())
+    assert notes == ["Owner candidate workspace cleanup failed"]
+
+
 def test_default_note_reporter_bounds_direct_diagnostics() -> None:
     target = RuntimeError("target")
 
@@ -173,3 +310,11 @@ def test_default_note_reporter_bounds_direct_diagnostics() -> None:
     assert len(notes) == 1
     assert len(notes[0]) == 2_000
     assert notes[0].endswith("...")
+
+
+def test_default_note_reporter_normalizes_hostile_str_subclass() -> None:
+    target = KeyboardInterrupt("exact primary")
+
+    workspace_owner.note_cleanup_failure(target, HostileText("safe note"))
+
+    assert getattr(target, "__notes__", ()) == ["safe note"]

@@ -2451,11 +2451,11 @@ MUTATIONS = (
         path="evoom_guard/workspace/repository.py",
         before=(
             "        except BaseException as exc:\n"
-            "            failures.append((label, exc))\n"
+            "            failures.append((safe_label, exc))\n"
         ),
         after=(
             "        except BaseException as exc:\n"
-            "            failures.append((label, exc)); break\n"
+            "            failures.append((safe_label, exc)); break\n"
         ),
         test=(
             "tests/test_repository_workspace_owner.py::"
@@ -2467,7 +2467,8 @@ MUTATIONS = (
         path="evoom_guard/workspace/repository.py",
         before=(
             "    try:\n"
-            "        detail = str(error)\n"
+            "        rendered = str(error)\n"
+            "        detail = _exact_cleanup_text(rendered)\n"
             "    except BaseException as stringify_error:\n"
             "        detail = (\n"
             '            "<unprintable; __str__ raised "\n'
@@ -2476,7 +2477,8 @@ MUTATIONS = (
         ),
         after=(
             "    try:\n"
-            "        detail = str(error)\n"
+            "        rendered = str(error)\n"
+            "        detail = _exact_cleanup_text(rendered)\n"
             "    except Exception as stringify_error:\n"
             "        detail = (\n"
             '            "<unprintable; __str__ raised "\n'
@@ -2486,6 +2488,58 @@ MUTATIONS = (
         test=(
             "tests/test_workspace_cleanup_reporting.py::"
             "test_hostile_cleanup_stringification_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-str-subclass-normalization-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "            normalized = value if type(value) is str else "
+            "str.__str__(value)\n"
+        ),
+        after="            normalized = value\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_default_note_reporter_normalizes_hostile_str_subclass"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-owner-normalization-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    safe_owner_name = _exact_cleanup_text(owner_name)\n",
+        after="    safe_owner_name = owner_name\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_owner_and_label_text_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-label-normalization-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        safe_label = _exact_cleanup_text(label)\n",
+        after="        safe_label = label\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_owner_and_label_text_preserve_first_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-callback-suffix-priority-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "        fallback = _bounded_cleanup_diagnostic_with_suffix(\n"
+            "            diagnostic,\n"
+            "            callback_suffix,\n"
+            "        )\n"
+        ),
+        after=(
+            "        fallback = _bounded_cleanup_diagnostic(\n"
+            "            diagnostic + callback_suffix\n"
+            "        )\n"
+        ),
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_oversized_diagnostic_retains_callback_failure_evidence"
         ),
     ),
     Mutation(
@@ -2521,8 +2575,8 @@ MUTATIONS = (
     Mutation(
         name="repository-cleanup-default-note-bound-bypass",
         path="evoom_guard/workspace/repository.py",
-        before="    message = _bounded_cleanup_diagnostic(message)\n",
-        after="    message = message\n",
+        before="        message = _bounded_cleanup_diagnostic(message)\n",
+        after="        message = message\n",
         test=(
             "tests/test_workspace_cleanup_reporting.py::"
             "test_default_note_reporter_bounds_direct_diagnostics"
