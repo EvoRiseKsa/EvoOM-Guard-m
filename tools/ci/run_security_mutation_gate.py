@@ -7663,6 +7663,18 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="diff-coverage-hostile-cleanup-diagnostic-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "        + _coverage_cleanup_exception_summary(error)\n"
+        ),
+        after="        + f\"{type(error).__name__}: {error}\"\n",
+        test=(
+            "tests/test_evidence_containment.py::"
+            "test_coverage_cleanup_hostile_formatting_cannot_replace_unmeasured_result"
+        ),
+    ),
+    Mutation(
         name="diff-coverage-required-unmeasured-pass-bypass",
         path="evoom_guard/application/decision_gates.py",
         before='    if coverage_evidence.get("measured") is not True:\n',

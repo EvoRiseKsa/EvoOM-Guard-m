@@ -110,16 +110,43 @@ _MAX_COVERAGE_REPORT_BYTES = 16 * 1024 * 1024
 _MAX_COVERAGE_CLEANUP_NOTE_CHARS = 2000
 
 
+def _coverage_cleanup_exception_type_name(error: BaseException) -> str:
+    """Return one exact built-in exception type name without instance hooks."""
+
+    try:
+        name = type(error).__name__
+        if type(name) is str:
+            return name
+        if isinstance(name, str):
+            return str.__str__(name)
+    except BaseException:
+        pass
+    return "BaseException"
+
+
+def _coverage_cleanup_exception_summary(error: BaseException) -> str:
+    """Describe a cleanup failure without trusting formatting hooks."""
+
+    error_type = _coverage_cleanup_exception_type_name(error)
+    try:
+        rendered = str(error)
+        if type(rendered) is not str:
+            rendered = str.__str__(rendered)
+    except BaseException as stringify_error:
+        rendered = (
+            "<unprintable; __str__ raised "
+            + _coverage_cleanup_exception_type_name(stringify_error)
+            + ">"
+        )
+    return error_type + ": " + rendered
+
+
 def _coverage_cleanup_failure_note(error: BaseException) -> str:
     """Bound one reportable coverage-workspace cleanup failure."""
 
-    details = [f"{type(error).__name__}: {error}"]
-    notes = getattr(error, "__notes__", ())
-    if isinstance(notes, (list, tuple)):
-        details.extend(str(note) for note in notes)
     message = (
         "the coverage workspace cleanup could not be proven: "
-        + "; ".join(details)
+        + _coverage_cleanup_exception_summary(error)
     )
     if len(message) <= _MAX_COVERAGE_CLEANUP_NOTE_CHARS:
         return message

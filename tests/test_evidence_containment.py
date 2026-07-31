@@ -53,6 +53,59 @@ def test_coverage_cleanup_diagnostic_is_bounded_and_schema_valid() -> None:
     assert record_verifier._diff_coverage_type_errors(coverage) == []
 
 
+def test_coverage_cleanup_hostile_formatting_cannot_replace_unmeasured_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class HostileCleanupError(OSError):
+        def __str__(self) -> str:
+            raise RuntimeError("cleanup formatting escaped")
+
+        def __format__(self, _format_spec: str) -> str:
+            raise ValueError("cleanup formatting escaped")
+
+    repo = _repo(tmp_path)
+    workspace = tmp_path / "coverage-workspace"
+    cleanup_error = HostileCleanupError("coverage workspace busy")
+
+    monkeypatch.setattr(
+        evidence.tempfile,
+        "mkdtemp",
+        _fixed_workspace_allocator(workspace),
+    )
+    monkeypatch.setattr(
+        evidence.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(cleanup_error),
+    )
+
+    result = evidence.collect_diff_coverage(
+        str(repo),
+        _candidate(),
+        test_command=["make", "test"],
+    )
+
+    assert result["measured"] is False
+    assert result["note"] == (
+        "the coverage workspace cleanup could not be proven: "
+        "HostileCleanupError: <unprintable; __str__ raised RuntimeError>"
+    )
+    assert workspace.is_dir()
+
+
+def test_coverage_cleanup_control_flow_during_stringification_is_contained() -> None:
+    class HostileCleanupError(OSError):
+        def __str__(self) -> str:
+            raise SystemExit("cleanup formatting escaped")
+
+    note = evidence._coverage_cleanup_failure_note(HostileCleanupError())
+
+    assert note == (
+        "the coverage workspace cleanup could not be proven: "
+        "HostileCleanupError: <unprintable; __str__ raised SystemExit>"
+    )
+
+
 def test_coverage_report_reader_rejects_oversized_file_before_decode(
     tmp_path: Path, monkeypatch
 ) -> None:
