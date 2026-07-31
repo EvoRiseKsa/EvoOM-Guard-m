@@ -691,6 +691,7 @@ def collect_diff_coverage(
         create_workspace=tempfile.mkdtemp,
     )
     cleanup_failure_note: str | None = None
+    cleanup_primary: BaseException | None = None
     try:
         data_file = os.path.join(workdir, "judge-coverage.db")
         wrapped = _coverage_wrap(cmd, data_file)
@@ -874,8 +875,15 @@ def collect_diff_coverage(
             normalized = _normalize_coverage_report_path(measured_path, copy)
             if normalized is not None:
                 files[normalized] = entry
+    except BaseException as error:
+        # ``sys.exc_info()`` can expose an exception still handled by our
+        # caller even when this operation completed normally. Capture only an
+        # exception raised by this operation so ambient caller state cannot
+        # cause a cleanup failure to be misclassified as secondary and ignored.
+        cleanup_primary = error
+        raise
     finally:
-        primary = sys.exc_info()[1]
+        primary = cleanup_primary
         try:
             _repository_workspace.cleanup_repo_workspaces(
                 (("coverage workspace", workdir),),

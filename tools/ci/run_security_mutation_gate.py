@@ -7675,6 +7675,16 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="diff-coverage-caller-ambient-primary-bypass",
+        path="evoom_guard/evidence.py",
+        before="        primary = cleanup_primary\n",
+        after="        primary = sys.exc_info()[1]\n",
+        test=(
+            "tests/test_evidence_containment.py::"
+            "test_coverage_cleanup_ignores_caller_ambient_exception"
+        ),
+    ),
+    Mutation(
         name="diff-coverage-required-unmeasured-pass-bypass",
         path="evoom_guard/application/decision_gates.py",
         before='    if coverage_evidence.get("measured") is not True:\n',

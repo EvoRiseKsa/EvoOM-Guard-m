@@ -106,6 +106,41 @@ def test_coverage_cleanup_control_flow_during_stringification_is_contained() -> 
     )
 
 
+def test_coverage_cleanup_ignores_caller_ambient_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _repo(tmp_path)
+    workspace = tmp_path / "coverage-workspace"
+    ambient = RuntimeError("caller is handling this")
+
+    monkeypatch.setattr(
+        evidence.tempfile,
+        "mkdtemp",
+        _fixed_workspace_allocator(workspace),
+    )
+    monkeypatch.setattr(
+        evidence.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(OSError("cleanup denied")),
+    )
+
+    try:
+        raise ambient
+    except RuntimeError:
+        result = evidence.collect_diff_coverage(
+            str(repo),
+            _candidate(),
+            test_command=["make", "test"],
+        )
+
+    assert result["measured"] is False
+    assert "coverage workspace cleanup could not be proven" in result["note"]
+    assert "cleanup denied" in result["note"]
+    assert getattr(ambient, "__notes__", []) == []
+    assert workspace.is_dir()
+
+
 def test_coverage_report_reader_rejects_oversized_file_before_decode(
     tmp_path: Path, monkeypatch
 ) -> None:
