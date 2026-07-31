@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import stat
 import subprocess
 import tempfile
 from dataclasses import FrozenInstanceError
@@ -14,6 +16,7 @@ import pytest
 import evoom_guard.adapters as adapters
 import evoom_guard.guard as guard_module
 from evoom_guard.verifiers import fidelity, repo_baseline, repo_verifier
+from evoom_guard.workspace import repository as workspace_owner
 
 
 def _install_successful_baseline(
@@ -22,6 +25,7 @@ def _install_successful_baseline(
 ) -> tuple[list[object], Path]:
     events: list[object] = []
     workspace = tmp_path / "owned-baseline"
+    real_rmtree = shutil.rmtree
 
     class FakeVerifier:
         def __init__(
@@ -152,8 +156,9 @@ def _install_successful_baseline(
         events.append(("tamper", returncode, observed, report_expected))
         return False
 
-    def cleanup(path: str, *, ignore_errors: bool) -> None:
-        events.append(("cleanup", path, ignore_errors))
+    def cleanup(path: str) -> None:
+        events.append(("cleanup", path))
+        real_rmtree(path)
 
     monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
     monkeypatch.setattr(tempfile, "mkdtemp", make_workspace)
@@ -249,7 +254,10 @@ def test_baseline_effect_order_trust_boundary_and_cleanup_are_frozen(
         ["LIMITS", "LIMITS"] if os.name == "posix" else [None, None]
     )
     assert [event[-1] for event in run_events] == [True, True]
-    assert events[-1] == ("cleanup", str(workspace), True)
+    assert events[-1] == ("cleanup", str(workspace))
+    cleanup_path = events[-1][1]
+    assert isinstance(cleanup_path, str)
+    assert type(cleanup_path) is not str
 
 
 def test_baseline_resolves_host_effects_at_each_historical_operation(
@@ -317,6 +325,7 @@ def test_baseline_cleanup_runs_after_unhandled_primary_failure(
 ) -> None:
     events: list[object] = []
     workspace = tmp_path / "owned-baseline"
+    real_rmtree = shutil.rmtree
 
     class FakeVerifier:
         def __init__(self, **_kwargs: object) -> None:
@@ -333,8 +342,9 @@ def test_baseline_cleanup_runs_after_unhandled_primary_failure(
         events.append("copy")
         raise primary
 
-    def cleanup(path: str, *, ignore_errors: bool) -> None:
-        events.append(("cleanup", path, ignore_errors))
+    def cleanup(path: str) -> None:
+        events.append(("cleanup", path))
+        real_rmtree(path)
 
     monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
     monkeypatch.setattr(tempfile, "mkdtemp", make_workspace)
@@ -357,11 +367,250 @@ def test_baseline_cleanup_runs_after_unhandled_primary_failure(
         "verifier:init",
         ("workspace", "evo_baseline_"),
         "copy",
-        ("cleanup", str(workspace), True),
+        ("cleanup", str(workspace)),
     ]
 
 
-def test_cleanup_provider_lookup_failure_historically_masks_keyboard_interrupt(
+def test_baseline_path_join_failure_still_removes_the_claimed_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "owned-baseline"
+    primary = RuntimeError("path join failed")
+    cleanup_paths: list[str] = []
+    real_rmtree = shutil.rmtree
+
+    class FakeVerifier:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    def make_workspace(*, prefix: str) -> str:
+        assert prefix == "evo_baseline_"
+        workspace.mkdir()
+        return str(workspace)
+
+    def fail_join(*_parts: str) -> str:
+        raise primary
+
+    def cleanup(path: str) -> None:
+        cleanup_paths.append(path)
+        real_rmtree(path)
+
+    monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
+    monkeypatch.setattr(tempfile, "mkdtemp", make_workspace)
+    monkeypatch.setattr(
+        guard_module,
+        "os",
+        SimpleNamespace(
+            name=os.name,
+            path=SimpleNamespace(join=fail_join),
+        ),
+    )
+    monkeypatch.setattr(guard_module.shutil, "rmtree", cleanup)
+
+    with pytest.raises(RuntimeError) as caught:
+        guard_module._run_baseline_suite(
+            str(tmp_path / "source"),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is primary
+    assert cleanup_paths == [str(workspace)]
+    assert not workspace.exists()
+
+
+def test_baseline_cleanup_requires_absence_after_remover_returns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _events, workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    monkeypatch.setattr(guard_module.shutil, "rmtree", lambda _path: None)
+
+    with pytest.raises(workspace_owner.OwnedWorkspaceRemovalUnproven):
+        guard_module._run_baseline_suite(
+            str(source),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert workspace.is_dir()
+
+
+def test_baseline_child_file_not_found_is_not_success_while_root_remains(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _events, workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    cleanup_failure = FileNotFoundError("a raced child disappeared")
+
+    def fail_cleanup(_path: str) -> None:
+        raise cleanup_failure
+
+    monkeypatch.setattr(guard_module.shutil, "rmtree", fail_cleanup)
+
+    with pytest.raises(FileNotFoundError) as caught:
+        guard_module._run_baseline_suite(
+            str(source),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is cleanup_failure
+    assert workspace.is_dir()
+
+
+def test_baseline_file_not_found_is_success_only_after_fresh_root_absence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events, workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    remove_workspace = guard_module.shutil.rmtree
+
+    def remove_then_report_race(path: str) -> None:
+        remove_workspace(path)
+        raise FileNotFoundError("a child disappeared during removal")
+
+    monkeypatch.setattr(
+        guard_module.shutil,
+        "rmtree",
+        remove_then_report_race,
+    )
+
+    result = guard_module._run_baseline_suite(
+        str(source),
+        test_command=["suite"],
+        setup_command=None,
+        setup_output_globs=(),
+        timeout=17,
+        mem_limit_mb=23,
+        strict_harness=True,
+    )
+
+    assert result["verdict"] == "PASS"
+    assert not workspace.exists()
+    assert events[-1] == ("cleanup", str(workspace))
+
+
+def test_baseline_rejects_root_identity_replacement_and_preserves_primary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "owned-baseline"
+    displaced = tmp_path / "displaced-baseline"
+    primary = RuntimeError("copy failed after root replacement")
+    cleanup_attempts: list[str] = []
+
+    class FakeVerifier:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    def make_workspace(*, prefix: str) -> str:
+        assert prefix == "evo_baseline_"
+        workspace.mkdir()
+        return str(workspace)
+
+    def replace_root_then_fail(_source: str, destination: str) -> None:
+        assert Path(destination).parent == workspace
+        workspace.rename(displaced)
+        workspace.mkdir()
+        (workspace / "replacement.txt").write_text(
+            "must survive\n",
+            encoding="utf-8",
+        )
+        raise primary
+
+    monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
+    monkeypatch.setattr(tempfile, "mkdtemp", make_workspace)
+    monkeypatch.setattr(
+        guard_module,
+        "copy_repo_tree",
+        replace_root_then_fail,
+    )
+    monkeypatch.setattr(
+        guard_module.shutil,
+        "rmtree",
+        lambda path: cleanup_attempts.append(path),
+    )
+
+    with pytest.raises(RuntimeError) as caught:
+        guard_module._run_baseline_suite(
+            str(tmp_path / "source"),
+            test_command=["suite"],
+            setup_command=None,
+            setup_output_globs=(),
+            timeout=17,
+            mem_limit_mb=23,
+            strict_harness=True,
+        )
+
+    assert caught.value is primary
+    assert cleanup_attempts == []
+    assert displaced.is_dir()
+    assert workspace.joinpath("replacement.txt").read_text(encoding="utf-8") == (
+        "must survive\n"
+    )
+    assert any(
+        "UnsafeOwnedWorkspace" in note and "root identity changed" in note
+        for note in getattr(primary, "__notes__", [])
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows READONLY semantics")
+def test_baseline_removes_readonly_candidate_residue_on_windows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _events, workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+
+    def copy_with_readonly_residue(_source: str, destination: str) -> None:
+        candidate = Path(destination)
+        candidate.mkdir()
+        readonly = candidate / "readonly.txt"
+        readonly.write_text("candidate residue\n", encoding="utf-8")
+        os.chmod(readonly, stat.S_IREAD)
+
+    monkeypatch.setattr(
+        guard_module,
+        "copy_repo_tree",
+        copy_with_readonly_residue,
+    )
+
+    result = guard_module._run_baseline_suite(
+        str(source),
+        test_command=["suite"],
+        setup_command=None,
+        setup_output_globs=(),
+        timeout=17,
+        mem_limit_mb=23,
+        strict_harness=True,
+    )
+
+    assert result["verdict"] == "PASS"
+    assert not workspace.exists()
+
+
+def test_cleanup_provider_lookup_failure_preserves_keyboard_interrupt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -391,7 +640,7 @@ def test_cleanup_provider_lookup_failure_historically_masks_keyboard_interrupt(
     monkeypatch.setattr(guard_module, "copy_repo_tree", fail_copy)
     monkeypatch.setattr(guard_module, "shutil", BrokenCleanupProvider())
 
-    with pytest.raises(SystemExit) as caught:
+    with pytest.raises(KeyboardInterrupt) as caught:
         guard_module._run_baseline_suite(
             str(tmp_path / "source"),
             test_command=["suite"],
@@ -402,11 +651,14 @@ def test_cleanup_provider_lookup_failure_historically_masks_keyboard_interrupt(
             strict_harness=True,
         )
 
-    assert caught.value is lookup_failure
-    assert caught.value.__context__ is primary
+    assert caught.value is primary
+    assert any(
+        "SystemExit: cleanup provider lookup exited" in note
+        for note in getattr(primary, "__notes__", [])
+    )
 
 
-def test_cleanup_call_keyboard_interrupt_historically_masks_primary(
+def test_cleanup_call_keyboard_interrupt_preserves_primary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -426,8 +678,7 @@ def test_cleanup_call_keyboard_interrupt_historically_masks_primary(
     def fail_copy(_source: str, _destination: str) -> None:
         raise primary
 
-    def fail_cleanup(_path: str, *, ignore_errors: bool) -> None:
-        assert ignore_errors is True
+    def fail_cleanup(_path: str) -> None:
         raise cleanup_failure
 
     class InterruptingCleanupProvider:
@@ -444,7 +695,7 @@ def test_cleanup_call_keyboard_interrupt_historically_masks_primary(
         InterruptingCleanupProvider(),
     )
 
-    with pytest.raises(KeyboardInterrupt) as caught:
+    with pytest.raises(RuntimeError) as caught:
         guard_module._run_baseline_suite(
             str(tmp_path / "source"),
             test_command=["suite"],
@@ -455,8 +706,11 @@ def test_cleanup_call_keyboard_interrupt_historically_masks_primary(
             strict_harness=True,
         )
 
-    assert caught.value is cleanup_failure
-    assert caught.value.__context__ is primary
+    assert caught.value is primary
+    assert any(
+        "KeyboardInterrupt: cleanup interrupted" in note
+        for note in getattr(primary, "__notes__", [])
+    )
 
 
 def test_cleanup_lookup_failure_is_primary_without_an_original_exception(
@@ -498,8 +752,7 @@ def test_cleanup_keyboard_interrupt_is_primary_after_a_pending_result(
     source.mkdir()
     cleanup_failure = KeyboardInterrupt("cleanup interrupted after result")
 
-    def fail_cleanup(_path: str, *, ignore_errors: bool) -> None:
-        assert ignore_errors is True
+    def fail_cleanup(_path: str) -> None:
         raise cleanup_failure
 
     class InterruptingCleanupProvider:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -26,6 +27,7 @@ def _install_success_path(
 ) -> tuple[list[object], object]:
     events: list[object] = []
     workspace = tmp_path / "owned-baseline"
+    real_rmtree = shutil.rmtree
     limits = object()
 
     class FakeVerifier:
@@ -44,6 +46,7 @@ def _install_success_path(
 
     def make_workspace(*, prefix: str) -> str:
         events.append(("workspace", prefix))
+        workspace.mkdir()
         return str(workspace)
 
     def copy_repository(source: str, destination: str) -> None:
@@ -106,8 +109,9 @@ def _install_success_path(
             run_hook(command)
         return subprocess.CompletedProcess(command, 0)
 
-    def cleanup(path: str, *, ignore_errors: bool) -> None:
-        events.append(("cleanup", path, ignore_errors))
+    def cleanup(path: str) -> None:
+        events.append(("cleanup", path))
+        real_rmtree(path)
 
     monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
     monkeypatch.setattr("tempfile.mkdtemp", make_workspace)
@@ -139,15 +143,15 @@ def _install_success_path(
     return events, limits
 
 
-def test_baseline_cleanup_failure_historically_masks_an_active_primary(
+def test_baseline_cleanup_failure_preserves_an_active_primary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """R2 extraction retains ``try/finally`` masking; hardening is a later R3."""
+    """R3 hardening reports cleanup failure without replacing the primary."""
 
     workspace = tmp_path / "owned-baseline"
     primary = RuntimeError("repository copy failed")
-    cleanup_failure = KeyboardInterrupt("cleanup interrupted")
+    cleanup_failure = OSError("cleanup denied")
 
     class FakeVerifier:
         def __init__(self, **_kwargs: object) -> None:
@@ -155,13 +159,13 @@ def test_baseline_cleanup_failure_historically_masks_an_active_primary(
 
     def make_workspace(*, prefix: str) -> str:
         assert prefix == "evo_baseline_"
+        workspace.mkdir()
         return str(workspace)
 
     def fail_copy(_source: str, _destination: str) -> None:
         raise primary
 
-    def fail_cleanup(_path: str, *, ignore_errors: bool) -> None:
-        assert ignore_errors is True
+    def fail_cleanup(_path: str) -> None:
         raise cleanup_failure
 
     monkeypatch.setattr(repo_verifier, "RepoVerifier", FakeVerifier)
@@ -169,7 +173,7 @@ def test_baseline_cleanup_failure_historically_masks_an_active_primary(
     monkeypatch.setattr(guard_module, "copy_repo_tree", fail_copy)
     monkeypatch.setattr(guard_module.shutil, "rmtree", fail_cleanup)
 
-    with pytest.raises(KeyboardInterrupt) as caught:
+    with pytest.raises(RuntimeError) as caught:
         guard_module._run_baseline_suite(
             str(tmp_path / "source"),
             test_command=["suite"],
@@ -180,8 +184,11 @@ def test_baseline_cleanup_failure_historically_masks_an_active_primary(
             strict_harness=True,
         )
 
-    assert caught.value is cleanup_failure
-    assert caught.value.__context__ is primary
+    assert caught.value is primary
+    assert any(
+        "OSError: cleanup denied" in note
+        for note in getattr(primary, "__notes__", [])
+    )
 
 
 def test_baseline_commands_keep_caller_lists_live_until_historical_use(

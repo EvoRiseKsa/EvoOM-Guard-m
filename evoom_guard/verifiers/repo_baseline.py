@@ -19,6 +19,7 @@ compatibility seams at the same operation sites.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -29,6 +30,7 @@ from evoom_guard.verifiers.harness_policy import (
     capture_harness_input_snapshot,
     harness_input_snapshot_changes,
 )
+from evoom_guard.workspace import repository as _repository_workspace
 
 BaselineEvidence = dict[str, Any]
 FidelitySnapshot = dict[str, Any]
@@ -181,9 +183,9 @@ class DetectBaselineTamper(Protocol):
 
 
 class CleanupWorkspace(Protocol):
-    """Remove the owned workspace with the historical cleanup policy."""
+    """Remove one workspace through the live compatibility provider."""
 
-    def __call__(self, path: str, *, ignore_errors: bool) -> None: ...
+    def __call__(self, path: str) -> None: ...
 
 
 class JoinPath(Protocol):
@@ -260,9 +262,12 @@ def run_repo_baseline(
         mem_limit_mb=request.mem_limit_mb,
         strict_harness=request.strict_harness,
     )
-    workdir = services.workspace_factory_provider()(prefix="evo_baseline_")
-    candidate_copy = services.path_join_provider()(workdir, "repo")
+    workdir = _repository_workspace.allocate_owned_workspace(
+        prefix="evo_baseline_",
+        create_workspace=services.workspace_factory_provider(),
+    )
     try:
+        candidate_copy = services.path_join_provider()(workdir, "repo")
         try:
             trusted_harness_baseline = capture_harness_input_snapshot(
                 request.repository_path,
@@ -461,9 +466,14 @@ def run_repo_baseline(
             "tests_total": tests_total,
         }
     finally:
-        services.cleanup_workspace_provider()(
-            workdir,
-            ignore_errors=True,
+        _repository_workspace.cleanup_repo_workspaces(
+            (("baseline workspace", workdir),),
+            primary=sys.exc_info()[1],
+            # Resolve the historical facade provider inside the owned cleanup
+            # attempt. Provider lookup failures are therefore secondary to an
+            # active baseline exception instead of replacing it from finally.
+            remove_tree=lambda path: services.cleanup_workspace_provider()(path),
+            owner_name="RepoBaseline",
         )
 
 
