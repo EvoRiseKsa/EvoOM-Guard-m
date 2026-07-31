@@ -2463,6 +2463,82 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repository-cleanup-hostile-stringification-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "    try:\n"
+            "        detail = str(error)\n"
+            "    except BaseException as stringify_error:\n"
+            "        detail = (\n"
+            '            "<unprintable; __str__ raised "\n'
+            "            f\"{_exception_type_name(stringify_error)}>\"\n"
+            "        )\n"
+        ),
+        after=(
+            "    try:\n"
+            "        detail = str(error)\n"
+            "    except Exception as stringify_error:\n"
+            "        detail = (\n"
+            '            "<unprintable; __str__ raised "\n'
+            "            f\"{_exception_type_name(stringify_error)}>\"\n"
+            "        )\n"
+        ),
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_cleanup_stringification_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-diagnostic-bound-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    diagnostic = _bounded_cleanup_diagnostic(message)\n",
+        after="    diagnostic = message\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_active_primary_cleanup_diagnostic_is_deterministically_bounded"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-note-callback-baseexception-mask",
+        path="evoom_guard/workspace/repository.py",
+        before="    except BaseException as report_error:\n",
+        after="    except Exception as report_error:\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_note_callback_baseexception_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-note-callback-fallback-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="            note_cleanup_failure(target, fallback)\n",
+        after="            None\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_note_callback_baseexception_cannot_replace_first_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-default-note-bound-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    message = _bounded_cleanup_diagnostic(message)\n",
+        after="    message = message\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_default_note_reporter_bounds_direct_diagnostics"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-first-failure-precedence-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    raise first_error\n",
+        after="    raise failures[-1][1]\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_secondary_stringification_preserves_first_cleanup_failure"
+        ),
+    ),
+    Mutation(
         name="guard-output-markdown-reason-sanitization-bypass",
         path="evoom_guard/integrations/guard_output.py",
         before='        f"**{_markdown_text(r.reason)}**",\n',

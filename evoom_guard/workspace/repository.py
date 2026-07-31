@@ -628,6 +628,7 @@ def copy_repo_tree(
 def note_cleanup_failure(primary: BaseException, message: str) -> None:
     """Attach secondary cleanup diagnostics without replacing ``primary``."""
 
+    message = _bounded_cleanup_diagnostic(message)
     try:
         add_note = getattr(primary, "add_note", None)
         if callable(add_note):
@@ -644,6 +645,67 @@ def note_cleanup_failure(primary: BaseException, message: str) -> None:
         # Cleanup diagnostics are secondary by contract. Even a hostile or
         # constrained exception object cannot replace the primary failure.
         pass
+
+
+_MAX_CLEANUP_DIAGNOSTIC_CHARS = 2_000
+_CLEANUP_DIAGNOSTIC_ELLIPSIS = "..."
+
+
+def _bounded_cleanup_diagnostic(message: str) -> str:
+    """Return one deterministic, bounded cleanup diagnostic."""
+
+    if len(message) <= _MAX_CLEANUP_DIAGNOSTIC_CHARS:
+        return message
+    retained = _MAX_CLEANUP_DIAGNOSTIC_CHARS - len(_CLEANUP_DIAGNOSTIC_ELLIPSIS)
+    return message[:retained] + _CLEANUP_DIAGNOSTIC_ELLIPSIS
+
+
+def _exception_type_name(error: BaseException) -> str:
+    """Return an exception type name without consulting the exception instance."""
+
+    try:
+        name = type(error).__name__
+    except BaseException:
+        return "BaseException"
+    return name if type(name) is str else "BaseException"
+
+
+def _cleanup_exception_summary(error: BaseException) -> str:
+    """Describe a cleanup failure without trusting its ``__str__`` method."""
+
+    error_type = _exception_type_name(error)
+    try:
+        detail = str(error)
+    except BaseException as stringify_error:
+        detail = (
+            "<unprintable; __str__ raised "
+            f"{_exception_type_name(stringify_error)}>"
+        )
+    return f"{error_type}: {detail}"
+
+
+def _report_cleanup_failure(
+    target: BaseException,
+    message: str,
+    *,
+    note_failure: NoteFailure,
+) -> None:
+    """Report one bounded diagnostic without changing exception precedence."""
+
+    diagnostic = _bounded_cleanup_diagnostic(message)
+    try:
+        note_failure(target, diagnostic)
+    except BaseException as report_error:
+        fallback = _bounded_cleanup_diagnostic(
+            f"{diagnostic} [cleanup diagnostic callback failed: "
+            f"{_cleanup_exception_summary(report_error)}]"
+        )
+        try:
+            # The built-in reporter is fail-safe, but retain this outer guard so
+            # even a runtime rebind cannot replace the exception being reported.
+            note_cleanup_failure(target, fallback)
+        except BaseException:
+            pass
 
 
 def repository_path_absent(path: str) -> bool:
@@ -721,23 +783,26 @@ def cleanup_repo_workspaces(
 
     if primary is not None:
         for label, cleanup_error in failures:
-            note_failure(
+            _report_cleanup_failure(
                 primary,
                 f"{owner_name} {label} cleanup failed while preserving the "
-                f"primary exception: {type(cleanup_error).__name__}: {cleanup_error}",
+                f"primary exception: {_cleanup_exception_summary(cleanup_error)}",
+                note_failure=note_failure,
             )
         return
 
     first_label, first_error = failures[0]
-    note_failure(
+    _report_cleanup_failure(
         first_error,
         f"{owner_name} {first_label} cleanup failed",
+        note_failure=note_failure,
     )
     for label, cleanup_error in failures[1:]:
-        note_failure(
+        _report_cleanup_failure(
             first_error,
             f"Additional {owner_name} {label} cleanup failure: "
-            f"{type(cleanup_error).__name__}: {cleanup_error}",
+            f"{_cleanup_exception_summary(cleanup_error)}",
+            note_failure=note_failure,
         )
     raise first_error
 
