@@ -4918,11 +4918,11 @@ MUTATIONS = (
         path="evoom_guard/blackbox.py",
         before=(
             "            if not facts.attach_candidate_evidence:\n"
-            "                return enforce_harness_postcondition(result)\n"
+            "                pending_result = enforce_harness_postcondition(result)\n"
         ),
         after=(
             "            if not facts.attach_candidate_evidence:\n"
-            "                return result\n"
+            "                pending_result = result\n"
         ),
         test=(
             "tests/test_harness_input_mutation_contract.py::"
@@ -4933,22 +4933,22 @@ MUTATIONS = (
         name="blackbox-harness-evidenced-postcondition-bypass",
         path="evoom_guard/blackbox.py",
         before=(
-            "            return enforce_harness_postcondition(\n"
-            "                with_candidate_evidence(\n"
+            "                pending_result = enforce_harness_postcondition(\n"
+            "                    with_candidate_evidence(\n"
+            "                        result,\n"
+            "                        wait_for_late_container_evidence=(\n"
+            "                            facts.wait_for_late_container_evidence\n"
+            "                        ),\n"
+            "                    )\n"
+            "                )\n"
+        ),
+        after=(
+            "                pending_result = with_candidate_evidence(\n"
             "                    result,\n"
             "                    wait_for_late_container_evidence=(\n"
             "                        facts.wait_for_late_container_evidence\n"
             "                    ),\n"
             "                )\n"
-            "            )\n"
-        ),
-        after=(
-            "            return with_candidate_evidence(\n"
-            "                result,\n"
-            "                wait_for_late_container_evidence=(\n"
-            "                    facts.wait_for_late_container_evidence\n"
-            "                ),\n"
-            "            )\n"
         ),
         test=(
             "tests/test_harness_input_mutation_contract.py::"
