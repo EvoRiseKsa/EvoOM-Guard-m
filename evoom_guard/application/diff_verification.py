@@ -15,7 +15,6 @@ are resolved through live providers at their historical operation boundaries.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypedDict, TypeVar
@@ -260,6 +259,7 @@ def verify_diff(
     # an owned root, and a later primary must use this already-bound callable.
     cleanup_workspace = services.cleanup_workspace_provider()
     workdir = services.workspace_factory_provider()(prefix="evo_guard_diff_")
+    cleanup_primary: BaseException | None = None
     try:
         # Allocation establishes the cleanup boundary. Every later operation,
         # including the first path-provider lookup/join, must therefore remain
@@ -369,8 +369,15 @@ def verify_diff(
         result.source = "diff"
         result.base_reconstruction = "ok"
         return DiffVerificationOutcome(result=result, deleted=deleted)
+    except BaseException as error:
+        # Do not use ``sys.exc_info()`` here: it can expose an exception still
+        # handled by our caller even when this operation completed normally.
+        # Only a failure raised inside this operation may take cleanup-second
+        # precedence.
+        cleanup_primary = error
+        raise
     finally:
         cleanup_workspace(
             workdir,
-            primary=sys.exc_info()[1],
+            primary=cleanup_primary,
         )

@@ -11010,7 +11010,7 @@ MUTATIONS = (
         before=(
             "        cleanup_workspace(\n"
             "            workdir,\n"
-            "            primary=sys.exc_info()[1],\n"
+            "            primary=cleanup_primary,\n"
             "        )\n"
         ),
         after="        None\n",
@@ -11040,11 +11040,21 @@ MUTATIONS = (
     Mutation(
         name="diff-verification-active-primary-cleanup-bypass",
         path="evoom_guard/application/diff_verification.py",
-        before="            primary=sys.exc_info()[1],\n",
+        before="            primary=cleanup_primary,\n",
         after="            primary=None,\n",
         test=(
             "tests/test_diff_verification_characterization.py::"
             "test_active_primary_survives_cleanup_failure_with_diagnostic_note"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-caller-ambient-primary-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            primary=cleanup_primary,\n",
+        after="            primary=__import__(\"sys\").exc_info()[1],\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_cleanup_does_not_use_callers_ambient_exception_as_primary"
         ),
     ),
     Mutation(

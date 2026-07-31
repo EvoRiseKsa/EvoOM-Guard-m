@@ -313,6 +313,24 @@ def test_cleanup_exception_is_visible_instead_of_returning_success(
     ]
 
 
+def test_cleanup_does_not_use_callers_ambient_exception_as_primary(
+    tmp_path: Path,
+) -> None:
+    ambient = RuntimeError("caller is handling this")
+
+    try:
+        raise ambient
+    except RuntimeError:
+        case = capture_case("cleanup_exception_masks_success", tmp_path)
+
+    assert case["decision"] is None
+    assert case["exception"] == {
+        "type": "ProbeError",
+        "message": "synthetic cleanup failure",
+    }
+    assert getattr(ambient, "__notes__", []) == []
+
+
 def test_active_primary_survives_cleanup_failure_with_diagnostic_note(
     tmp_path: Path,
 ) -> None:
