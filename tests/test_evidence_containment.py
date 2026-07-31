@@ -190,6 +190,46 @@ def test_coverage_cleanup_preserves_exact_active_primary_and_notes_secondary(
     assert workspace.is_dir()
 
 
+def test_coverage_cleanup_active_primary_diagnostic_is_bounded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _repo(tmp_path)
+    workspace = tmp_path / "coverage-workspace"
+    primary = KeyboardInterrupt("operator interrupted coverage copy")
+    cleanup_error = OSError("cleanup denied: " + "x" * 10_000)
+
+    monkeypatch.setattr(
+        evidence.tempfile,
+        "mkdtemp",
+        _fixed_workspace_allocator(workspace),
+    )
+    monkeypatch.setattr(
+        evidence,
+        "copy_repo_tree",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(primary),
+    )
+    monkeypatch.setattr(
+        evidence.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(cleanup_error),
+    )
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        evidence.collect_diff_coverage(str(repo), _candidate())
+
+    notes = getattr(primary, "__notes__", [])
+    assert caught.value is primary
+    assert len(notes) == 1
+    assert len(notes[0]) == 2000
+    assert notes[0].startswith(
+        "DiffCoverage coverage workspace cleanup failed while preserving the "
+        "primary exception: OSError: cleanup denied"
+    )
+    assert notes[0].endswith("...")
+    assert workspace.is_dir()
+
+
 def test_coverage_cleanup_control_flow_baseexception_remains_visible(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -125,6 +125,14 @@ def _coverage_cleanup_failure_note(error: BaseException) -> str:
         return message
     return message[: _MAX_COVERAGE_CLEANUP_NOTE_CHARS - 3] + "..."
 
+
+def _note_coverage_cleanup_failure(primary: BaseException, message: str) -> None:
+    """Attach one bounded secondary coverage-cleanup diagnostic."""
+
+    if len(message) > _MAX_COVERAGE_CLEANUP_NOTE_CHARS:
+        message = message[: _MAX_COVERAGE_CLEANUP_NOTE_CHARS - 3] + "..."
+    _repository_workspace.note_cleanup_failure(primary, message)
+
 # Import the installed coverage package while isolated mode still excludes the
 # candidate working directory. Only after that trusted import succeeds do we
 # add the repository root for pytest/project imports. ``coverage`` remains
@@ -852,6 +860,7 @@ def collect_diff_coverage(
             _repository_workspace.cleanup_repo_workspaces(
                 (("coverage workspace", workdir),),
                 primary=primary,
+                note_failure=_note_coverage_cleanup_failure,
                 # Resolve the live remover inside the owned cleanup attempt so
                 # even provider lookup failure cannot replace an active primary.
                 remove_tree=lambda path: shutil.rmtree(path),
