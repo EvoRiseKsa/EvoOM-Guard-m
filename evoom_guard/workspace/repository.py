@@ -288,14 +288,14 @@ def allocate_owned_workspace(
                 note_cleanup_failure(
                     primary,
                     "RepositoryWorkspaceAllocator rollback failed while "
-                    f"preserving the capture exception: "
-                    f"{type(rollback_error).__name__}: {rollback_error}",
+                    "preserving the capture exception: "
+                    + _cleanup_exception_summary(rollback_error),
                 )
             note_cleanup_failure(
                 primary,
                 "RepositoryWorkspaceAllocator absence proof failed while "
-                f"preserving the capture exception: "
-                f"{type(proof_error).__name__}: {proof_error}",
+                "preserving the capture exception: "
+                + _cleanup_exception_summary(proof_error),
             )
         else:
             if absent is not True:
@@ -303,8 +303,8 @@ def allocate_owned_workspace(
                     note_cleanup_failure(
                         primary,
                         "RepositoryWorkspaceAllocator rollback failed while "
-                        f"preserving the capture exception: "
-                        f"{type(rollback_error).__name__}: {rollback_error}",
+                        "preserving the capture exception: "
+                        + _cleanup_exception_summary(rollback_error),
                     )
                 note_cleanup_failure(
                     primary,

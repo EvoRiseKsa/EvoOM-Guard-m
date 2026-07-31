@@ -2593,6 +2593,52 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="repository-allocator-rollback-formatting-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "            if rollback_error is not None:\n"
+            "                note_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    \"RepositoryWorkspaceAllocator rollback failed while \"\n"
+            "                    \"preserving the capture exception: \"\n"
+            "                    + _cleanup_exception_summary(rollback_error),\n"
+            "                )\n"
+            "            note_cleanup_failure(\n"
+        ),
+        after=(
+            "            if rollback_error is not None:\n"
+            "                note_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    \"RepositoryWorkspaceAllocator rollback failed while \"\n"
+            "                    \"preserving the capture exception: \"\n"
+            "                    f\"{rollback_error}\",\n"
+            "                )\n"
+            "            note_cleanup_failure(\n"
+        ),
+        test=(
+            "tests/test_owned_repository_workspace_cleanup.py::"
+            "test_hostile_rollback_formatting_cannot_mask_capture_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-allocator-proof-formatting-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "                \"RepositoryWorkspaceAllocator absence proof failed while \"\n"
+            "                \"preserving the capture exception: \"\n"
+            "                + _cleanup_exception_summary(proof_error),\n"
+        ),
+        after=(
+            "                \"RepositoryWorkspaceAllocator absence proof failed while \"\n"
+            "                \"preserving the capture exception: \"\n"
+            "                f\"{proof_error}\",\n"
+        ),
+        test=(
+            "tests/test_owned_repository_workspace_cleanup.py::"
+            "test_hostile_absence_proof_formatting_cannot_mask_capture_primary"
+        ),
+    ),
+    Mutation(
         name="guard-output-markdown-reason-sanitization-bypass",
         path="evoom_guard/integrations/guard_output.py",
         before='        f"**{_markdown_text(r.reason)}**",\n',
