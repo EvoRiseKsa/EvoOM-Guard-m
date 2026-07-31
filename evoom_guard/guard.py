@@ -45,7 +45,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
@@ -563,6 +563,34 @@ def _risk_map(
     return out
 
 
+def _risk_score_with_deletions(
+    repo_path: str,
+    candidate: str,
+    file_blocks: dict[str, str] | None,
+    *,
+    all_touched_paths: Sequence[str],
+    deleted_paths: Sequence[str],
+    protected: Sequence[str] = (),
+) -> RiskScore:
+    """Score a materialized candidate, completing old-side deletion counts.
+
+    ``_risk_map`` owns additions and modifications.  A deleted file has no
+    destination block, so complete the same map from the trusted base before
+    invoking the compatibility scorer.  Both black-box exits use this helper so
+    an early error cannot silently report a smaller blast radius than the
+    executable black-box path for the same candidate.
+    """
+
+    risk_map = _risk_map(repo_path, candidate, file_blocks)
+    for touched_path in all_touched_paths:
+        if touched_path in deleted_paths and touched_path not in risk_map:
+            risk_map[touched_path] = (
+                0,
+                len(_read_repo_file(repo_path, touched_path).splitlines()),
+            )
+    return risk_score(risk_map, protected=protected)
+
+
 def changed_paths(candidate: str, file_blocks: dict[str, str] | None = None) -> list[str]:
     """All repo-relative paths a candidate would create or modify."""
     if file_blocks:
@@ -893,12 +921,20 @@ def guard(
         from evoom_guard.blackbox import run_blackbox
 
         if not verifier_pack:
+            preflight_risk = _risk_score_with_deletions(
+                repo_path,
+                candidate,
+                file_blocks,
+                all_touched_paths=all_touched,
+                deleted_paths=deleted,
+                protected=_PROTECTED_GLOBS + tuple(protected),
+            )
             return GuardResult(
                 verdict=ERROR, passed=False,
                 reason="--blackbox requires --verifier-pack (the judge-owned protocol tests)",
                 files_changed=changed, protected_violations=[],
-                risk_level=risk_score(_risk_map(repo_path, candidate, file_blocks)).level,
-                risk_score=risk_score(_risk_map(repo_path, candidate, file_blocks)).score,
+                risk_level=preflight_risk.level,
+                risk_score=preflight_risk.score,
                 reason_code=REASON_VERIFIER_PACK_REQUIRED,
                 isolation="not_run",
                 execution_state=EXECUTION_NOT_STARTED,
@@ -939,19 +975,12 @@ def guard(
         )
 
         def assess_blackbox_risk() -> RiskScore:
-            risk_map = _risk_map(repo_path, candidate, file_blocks)
-            for touched_path in all_touched:
-                if touched_path in deleted and touched_path not in risk_map:
-                    risk_map[touched_path] = (
-                        0,
-                        len(
-                            _read_repo_file(
-                                repo_path, touched_path
-                            ).splitlines()
-                        ),
-                    )
-            return risk_score(
-                risk_map,
+            return _risk_score_with_deletions(
+                repo_path,
+                candidate,
+                file_blocks,
+                all_touched_paths=all_touched,
+                deleted_paths=deleted,
                 protected=_PROTECTED_GLOBS + tuple(protected),
             )
 

@@ -345,6 +345,29 @@ class ReasonCodeAndRiskTests(unittest.TestCase):
             )
             self.assertEqual(r.risk_level, "high")  # 300 removed lines dominate
 
+    def test_missing_blackbox_pack_still_counts_deleted_lines(self) -> None:
+        from evoom_guard.guard import ERROR, REASON_VERIFIER_PACK_REQUIRED
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, "repo")
+            _write(
+                repo,
+                "pkg/big.py",
+                "\n".join(f"x{i} = {i}" for i in range(300)) + "\n",
+            )
+
+            result = guard(
+                repo,
+                "",
+                deleted=("pkg/big.py",),
+                blackbox=True,
+            )
+
+            self.assertEqual(result.verdict, ERROR)
+            self.assertEqual(result.reason_code, REASON_VERIFIER_PACK_REQUIRED)
+            self.assertEqual(result.risk_level, "high")
+            self.assertGreater(result.risk_score, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

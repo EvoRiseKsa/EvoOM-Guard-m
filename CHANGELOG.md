@@ -52,6 +52,17 @@ retained evidence say so.
   set: zipapp, SPDX SBOM, and `SHA256SUMS`.
 - Preserved LF protocol newlines when materializing unified diffs on Windows so
   valid `--diff` inputs reverse-apply instead of failing during reconstruction.
+- Documented the exact Blast Radius V1 mapping contract and limited raw-diff
+  parser. Caller-provided mappings now reject malformed, negative, boolean,
+  floating-point, and non-finite line counts instead of producing invalid
+  measurements.
+
+### Fixed
+
+- Completed deletion-aware blast-radius measurement before returning
+  `verifier_pack_required` from black-box preflight. The verdict remains
+  `ERROR`; only the advisory measurement now matches the executable black-box
+  path for the same materialized deletion.
 
 ## [4.4.2] — published 2026-07-29; signed protected-tree ledger
 
