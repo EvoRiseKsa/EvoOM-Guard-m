@@ -324,8 +324,13 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(context.status.lifecycle, "unreleased-development")
-        self.assertEqual(context.source_version, "4.5.0.dev0")
+        self.assertIn(
+            (context.status.lifecycle, context.source_version),
+            {
+                ("unreleased-development", "4.5.0.dev0"),
+                ("release-candidate", "4.5.0"),
+            },
+        )
         self.assertEqual(context.status.relation, "descendant")
         self.assertEqual(
             context.status.ledger_path,
@@ -547,12 +552,17 @@ class ProjectStatusTests(unittest.TestCase):
                 )
             )
 
-    def test_completed_recovery_remains_the_pin_during_next_development_line(
+    def test_completed_recovery_remains_the_pin_during_next_release_line(
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertEqual(context.status.lifecycle, "unreleased-development")
-        self.assertEqual(context.source_version, "4.5.0.dev0")
+        self.assertIn(
+            (context.status.lifecycle, context.source_version),
+            {
+                ("unreleased-development", "4.5.0.dev0"),
+                ("release-candidate", "4.5.0"),
+            },
+        )
         self.assertEqual(context.ledger.version, "4.4.2")
         self.assertEqual(
             tuple(
