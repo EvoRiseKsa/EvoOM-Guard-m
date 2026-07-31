@@ -7625,6 +7625,44 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="diff-coverage-owned-allocation-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "    workdir = _repository_workspace.allocate_owned_workspace(\n"
+            "        prefix=\"evo_guard_cov_\",\n"
+            "        create_workspace=tempfile.mkdtemp,\n"
+            "    )\n"
+        ),
+        after="    workdir = tempfile.mkdtemp(prefix=\"evo_guard_cov_\")\n",
+        test=(
+            "tests/test_evidence_containment.py::"
+            "test_coverage_workspace_cleanup_failure_is_explicitly_unmeasured"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-active-primary-cleanup-bypass",
+        path="evoom_guard/evidence.py",
+        before="                primary=primary,\n",
+        after="                primary=None,\n",
+        test=(
+            "tests/test_evidence_containment.py::"
+            "test_coverage_cleanup_preserves_exact_active_primary_and_notes_secondary"
+        ),
+    ),
+    Mutation(
+        name="diff-coverage-success-after-cleanup-failure-bypass",
+        path="evoom_guard/evidence.py",
+        before=(
+            "            cleanup_failure_note = "
+            "_coverage_cleanup_failure_note(cleanup_error)\n"
+        ),
+        after="            cleanup_failure_note = None\n",
+        test=(
+            "tests/test_evidence_containment.py::"
+            "test_successful_coverage_measurement_is_not_returned_when_cleanup_is_unproven"
+        ),
+    ),
+    Mutation(
         name="diff-coverage-required-unmeasured-pass-bypass",
         path="evoom_guard/application/decision_gates.py",
         before='    if coverage_evidence.get("measured") is not True:\n',

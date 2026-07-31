@@ -92,6 +92,7 @@ from evoom_guard.verifiers.repo_verifier import (
     setup_fidelity_snapshot,
 )
 from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
+from evoom_guard.workspace import repository as _repository_workspace
 
 # The honesty line shipped inside every measurement (report + JSON).
 EXECUTED_IS_NOT_ASSERTED = (
@@ -106,6 +107,23 @@ EXECUTED_IS_NOT_ASSERTED = (
 # Coverage evidence is optional; refusing a pathological report is safer than
 # allowing an unbounded evidence-only allocation.
 _MAX_COVERAGE_REPORT_BYTES = 16 * 1024 * 1024
+_MAX_COVERAGE_CLEANUP_NOTE_CHARS = 2000
+
+
+def _coverage_cleanup_failure_note(error: BaseException) -> str:
+    """Bound one reportable coverage-workspace cleanup failure."""
+
+    details = [f"{type(error).__name__}: {error}"]
+    notes = getattr(error, "__notes__", ())
+    if isinstance(notes, (list, tuple)):
+        details.extend(str(note) for note in notes)
+    message = (
+        "the coverage workspace cleanup could not be proven: "
+        + "; ".join(details)
+    )
+    if len(message) <= _MAX_COVERAGE_CLEANUP_NOTE_CHARS:
+        return message
+    return message[: _MAX_COVERAGE_CLEANUP_NOTE_CHARS - 3] + "..."
 
 # Import the installed coverage package while isolated mode still excludes the
 # candidate working directory. Only after that trusted import succeeds do we
@@ -640,7 +658,11 @@ def collect_diff_coverage(
             "no:cacheprovider",
         ]
     )
-    workdir = tempfile.mkdtemp(prefix="evo_guard_cov_")
+    workdir = _repository_workspace.allocate_owned_workspace(
+        prefix="evo_guard_cov_",
+        create_workspace=tempfile.mkdtemp,
+    )
+    cleanup_failure_note: str | None = None
     try:
         data_file = os.path.join(workdir, "judge-coverage.db")
         wrapped = _coverage_wrap(cmd, data_file)
@@ -825,7 +847,28 @@ def collect_diff_coverage(
             if normalized is not None:
                 files[normalized] = entry
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        primary = sys.exc_info()[1]
+        try:
+            _repository_workspace.cleanup_repo_workspaces(
+                (("coverage workspace", workdir),),
+                primary=primary,
+                # Resolve the live remover inside the owned cleanup attempt so
+                # even provider lookup failure cannot replace an active primary.
+                remove_tree=lambda path: shutil.rmtree(path),
+                owner_name="DiffCoverage",
+            )
+        except Exception as cleanup_error:
+            # Coverage is evidence, not the verdict-producing channel.  An
+            # ordinary cleanup failure therefore makes this optional evidence
+            # explicitly unavailable.  Operator/control-flow BaseExceptions
+            # remain visible, while an exception already unwinding stays the
+            # exact primary and receives cleanup notes in the workspace owner.
+            cleanup_failure_note = _coverage_cleanup_failure_note(cleanup_error)
+            base["measured"] = False
+            base["note"] = cleanup_failure_note
+
+    if cleanup_failure_note is not None:
+        return base
 
     per_file: dict[str, Any] = {}
     executed_total = 0
