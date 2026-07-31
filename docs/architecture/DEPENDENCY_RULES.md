@@ -119,7 +119,11 @@ ceiling changes. Windows copy visits reject observed junctions and other
 non-symlink reparse objects, but the source must remain quiescent: this is not
 an atomic source-tree snapshot. Cleanup treats a recursive
 `FileNotFoundError` as idempotent success only after its live path provider
-observes the workspace root absent.
+observes the workspace root absent. Production repository-verifier roots are
+claimed immediately after trusted allocation, carry captured root/parent
+identity, and must prove absence after successful removal. Only that nominal
+capability permits confined Windows `READONLY` repair; a plain compatibility
+string never does.
 
 The repository-workspace lifetime slice adds the dependency-free
 `workspace.repository_lifetime` owner. It records candidate/pack workspace

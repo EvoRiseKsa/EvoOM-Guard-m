@@ -41,8 +41,21 @@ The implementation must preserve these invariants across every refactor PR.
     absence contract instead. This
     process-group contract is lifecycle containment, not filesystem, network,
     credential, or `setsid()` isolation.
-15. Same-process and isolated execution modes must be explicit and named in state transitions.
-16. Record verifier is an independent semantic consumer of a recorded verdict.
+15. Repository-verifier workspace cleanup must operate on roots claimed
+    immediately after trusted allocation. Failed identity capture may
+    non-recursively remove only a still-empty unclaimed allocator result while
+    preserving the capture exception; an observed populated or
+    identity-shifted path remains untouched and observable. This check requires
+    a quiescent namespace and is not atomic. Normal cleanup preserves the active
+    primary exception, attempts every registered root, and finishes only after
+    a fresh root-absence proof.
+    Windows `READONLY` repair is limited to real files and
+    directories confined beneath the captured root/parent identity; a regular
+    file must have exactly one hard link. Observed multiply linked file,
+    symlink, junction, reparse, identity-drift, or absence-proof doubt fails
+    closed.
+16. Same-process and isolated execution modes must be explicit and named in state transitions.
+17. Record verifier is an independent semantic consumer of a recorded verdict.
     It checks lifecycle and cross-field consistency but does not produce the
     execution evidence and does not prove that the recorded execution occurred.
 

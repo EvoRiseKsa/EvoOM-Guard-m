@@ -176,6 +176,9 @@ def test_pack_snapshot_exception_cleans_registered_workspaces_in_order(
 
     def create_workspace(*, prefix: str) -> str:
         path = next(workspaces)
+        # Preserve tempfile.mkdtemp's contract: allocation returns an existing
+        # directory whose identity can be captured immediately.
+        path.mkdir()
         allocations.append((prefix, str(path)))
         return str(path)
 
@@ -208,3 +211,7 @@ def test_pack_snapshot_exception_cleans_registered_workspaces_in_order(
         str(candidate_workspace),
         str(pack_workspace),
     ]
+    assert all(
+        isinstance(path, str) and type(path) is not str
+        for path in cleanup_attempts
+    )

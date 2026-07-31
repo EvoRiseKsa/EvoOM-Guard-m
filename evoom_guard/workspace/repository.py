@@ -19,6 +19,7 @@ import os
 import shutil
 import stat
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 # Basenames never copied into a throwaway candidate working copy.
 COPY_IGNORE = (
@@ -33,6 +34,7 @@ COPY_IGNORE = (
     "dist",
     "build",
 )
+_MAX_WINDOWS_READONLY_REPAIRS = 1024
 
 CopyTree = Callable[..., object]
 CopyIgnore = Callable[[str, list[str]], Iterable[str]]
@@ -45,6 +47,450 @@ UnsafeReparseProbe = Callable[[str], bool]
 
 class UnsafeRepositoryTree(ValueError):
     """A source tree cannot be copied without following an unsafe path."""
+
+
+class UnsafeOwnedWorkspace(RuntimeError):
+    """A claimed judge workspace no longer has its captured path identity."""
+
+
+class OwnedWorkspaceRemovalUnproven(RuntimeError):
+    """Recursive removal returned without proving that the owned root is absent."""
+
+
+@dataclass(frozen=True, slots=True)
+class _PathIdentity:
+    """Stable fields that identify one observed filesystem object."""
+
+    device: int
+    inode: int
+    file_type: int
+
+    @classmethod
+    def capture(cls, observed: os.stat_result) -> _PathIdentity:
+        return cls(
+            device=int(observed.st_dev),
+            inode=int(observed.st_ino),
+            file_type=stat.S_IFMT(observed.st_mode),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _OwnedWorkspaceLease:
+    """Allocation-time identity for one judge-created temporary directory."""
+
+    root_path: str
+    root_identity: _PathIdentity
+    parent_path: str
+    parent_identity: _PathIdentity
+    platform_name: str
+
+
+class _OwnedWorkspacePath(str):
+    """String-compatible path carrying a nominal judge-ownership lease.
+
+    This is capability separation inside the judge, not a Python sandbox:
+    candidate code runs out of process and never receives this object. Keeping
+    the concrete value string-compatible preserves the historical cleanup
+    facade while distinguishing roots captured immediately after trusted
+    allocation from arbitrary caller-supplied strings.
+    """
+
+    __slots__ = ("_owned_workspace_lease",)
+    _owned_workspace_lease: _OwnedWorkspaceLease
+
+    def __new__(
+        cls,
+        path: str,
+        lease: _OwnedWorkspaceLease,
+    ) -> _OwnedWorkspacePath:
+        owned = str.__new__(cls, path)
+        owned._owned_workspace_lease = lease
+        return owned
+
+
+def _windows_reparse_observed(observed: os.stat_result) -> bool:
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(getattr(observed, "st_file_attributes", 0) & reparse_flag)
+
+
+def _require_real_directory(
+    path: str,
+    observed: os.stat_result,
+    *,
+    platform_name: str,
+    role: str,
+) -> None:
+    if (
+        not stat.S_ISDIR(observed.st_mode)
+        or stat.S_ISLNK(observed.st_mode)
+        or (platform_name == "nt" and _windows_reparse_observed(observed))
+    ):
+        raise UnsafeOwnedWorkspace(
+            f"refusing {role} that is not a real directory: {path!r}"
+        )
+
+
+def _claim_owned_workspace(
+    path: str,
+    *,
+    platform_name: str | None = None,
+    expected_root_identity: _PathIdentity | None = None,
+    expected_parent_identity: _PathIdentity | None = None,
+) -> _OwnedWorkspacePath:
+    """Capture one trusted allocator result as a judge-owned cleanup capability.
+
+    This function is intentionally strict: callers must invoke it immediately
+    after a trusted temporary-directory allocator returns.  It does not turn
+    an arbitrary path into a general force-delete capability.
+    """
+
+    platform = os.name if platform_name is None else platform_name
+    root_path = os.path.abspath(path)
+    parent_path = os.path.dirname(root_path)
+    root_observed = os.lstat(root_path)
+    parent_observed = os.lstat(parent_path)
+    _require_real_directory(
+        root_path,
+        root_observed,
+        platform_name=platform,
+        role="owned workspace root",
+    )
+    _require_real_directory(
+        parent_path,
+        parent_observed,
+        platform_name=platform,
+        role="owned workspace parent",
+    )
+    root_identity = _PathIdentity.capture(root_observed)
+    parent_identity = _PathIdentity.capture(parent_observed)
+    if (
+        expected_root_identity is not None
+        and root_identity != expected_root_identity
+    ):
+        raise UnsafeOwnedWorkspace(
+            f"allocated workspace root identity changed: {root_path!r}"
+        )
+    if (
+        expected_parent_identity is not None
+        and parent_identity != expected_parent_identity
+    ):
+        raise UnsafeOwnedWorkspace(
+            f"allocated workspace parent identity changed: {parent_path!r}"
+        )
+    return _OwnedWorkspacePath(
+        root_path,
+        _OwnedWorkspaceLease(
+            root_path=root_path,
+            root_identity=root_identity,
+            parent_path=parent_path,
+            parent_identity=parent_identity,
+            platform_name=platform,
+        ),
+    )
+
+
+def allocate_owned_workspace(
+    *,
+    prefix: str,
+    create_workspace: Callable[..., str],
+    platform_name: str | None = None,
+) -> str:
+    """Allocate and immediately claim one judge-owned temporary directory.
+
+    The public operation accepts the trusted allocator capability and its
+    prefix, not an arbitrary pre-existing path.  Its concrete result remains
+    string-compatible for the historical repository-verifier facade.
+    """
+
+    path = os.path.abspath(create_workspace(prefix=prefix))
+    parent_path = os.path.dirname(path)
+    platform = os.name if platform_name is None else platform_name
+    allocated_root_identity: _PathIdentity | None = None
+    allocated_parent_identity: _PathIdentity | None = None
+    try:
+        root_observed = os.lstat(path)
+        _require_real_directory(
+            path,
+            root_observed,
+            platform_name=platform,
+            role="allocated workspace root",
+        )
+        allocated_root_identity = _PathIdentity.capture(root_observed)
+        parent_observed = os.lstat(parent_path)
+        _require_real_directory(
+            parent_path,
+            parent_observed,
+            platform_name=platform,
+            role="allocated workspace parent",
+        )
+        allocated_parent_identity = _PathIdentity.capture(parent_observed)
+        return _claim_owned_workspace(
+            path,
+            platform_name=platform,
+            expected_root_identity=allocated_root_identity,
+            expected_parent_identity=allocated_parent_identity,
+        )
+    except BaseException as primary:
+        # Allocation has succeeded but no ownership capability can be
+        # returned. An allocator result must still be empty at this point, so
+        # rollback uses non-recursive rmdir. If the path was populated or
+        # replaced before it could be claimed, fail closed and leave it for
+        # operator inspection instead of recursively deleting an unowned tree.
+        rollback_error: BaseException | None
+        if (
+            allocated_root_identity is None
+            or allocated_parent_identity is None
+        ):
+            rollback_error = UnsafeOwnedWorkspace(
+                "cannot roll back an unclaimed workspace without its "
+                "allocation-time root and parent identities"
+            )
+        else:
+            rollback_error = None
+            try:
+                parent_observed = os.lstat(parent_path)
+                root_observed = os.lstat(path)
+                _require_real_directory(
+                    parent_path,
+                    parent_observed,
+                    platform_name=platform,
+                    role="unclaimed workspace parent",
+                )
+                _require_real_directory(
+                    path,
+                    root_observed,
+                    platform_name=platform,
+                    role="unclaimed workspace root",
+                )
+                if not _same_path_identity(
+                    allocated_parent_identity,
+                    parent_observed,
+                ):
+                    raise UnsafeOwnedWorkspace(
+                        "unclaimed workspace parent identity changed before "
+                        f"rollback: {parent_path!r}"
+                    )
+                if not _same_path_identity(
+                    allocated_root_identity,
+                    root_observed,
+                ):
+                    raise UnsafeOwnedWorkspace(
+                        "unclaimed workspace root identity changed before "
+                        f"rollback: {path!r}"
+                    )
+                os.rmdir(path)
+            except BaseException as exc:
+                rollback_error = exc
+        try:
+            absent = repository_path_absent(path)
+        except BaseException as proof_error:
+            if rollback_error is not None:
+                note_cleanup_failure(
+                    primary,
+                    "RepositoryWorkspaceAllocator rollback failed while "
+                    f"preserving the capture exception: "
+                    f"{type(rollback_error).__name__}: {rollback_error}",
+                )
+            note_cleanup_failure(
+                primary,
+                "RepositoryWorkspaceAllocator absence proof failed while "
+                f"preserving the capture exception: "
+                f"{type(proof_error).__name__}: {proof_error}",
+            )
+        else:
+            if absent is not True:
+                if rollback_error is not None:
+                    note_cleanup_failure(
+                        primary,
+                        "RepositoryWorkspaceAllocator rollback failed while "
+                        f"preserving the capture exception: "
+                        f"{type(rollback_error).__name__}: {rollback_error}",
+                    )
+                note_cleanup_failure(
+                    primary,
+                    "RepositoryWorkspaceAllocator rollback returned without "
+                    "proving absence of the unclaimed workspace",
+                )
+        raise
+
+
+def _same_path_identity(
+    expected: _PathIdentity,
+    observed: os.stat_result,
+) -> bool:
+    return expected == _PathIdentity.capture(observed)
+
+
+def _validate_owned_workspace(lease: _OwnedWorkspaceLease) -> None:
+    try:
+        parent_observed = os.lstat(lease.parent_path)
+        root_observed = os.lstat(lease.root_path)
+    except OSError as exc:
+        raise UnsafeOwnedWorkspace(
+            "cannot re-establish the allocated workspace identity before cleanup"
+        ) from exc
+
+    _require_real_directory(
+        lease.parent_path,
+        parent_observed,
+        platform_name=lease.platform_name,
+        role="owned workspace parent",
+    )
+    _require_real_directory(
+        lease.root_path,
+        root_observed,
+        platform_name=lease.platform_name,
+        role="owned workspace root",
+    )
+    if not _same_path_identity(lease.parent_identity, parent_observed):
+        raise UnsafeOwnedWorkspace(
+            f"owned workspace parent identity changed: {lease.parent_path!r}"
+        )
+    if not _same_path_identity(lease.root_identity, root_observed):
+        raise UnsafeOwnedWorkspace(
+            f"owned workspace root identity changed: {lease.root_path!r}"
+        )
+
+
+def _canonical_cleanup_path(path: str) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _confined_workspace_components(
+    lease: _OwnedWorkspaceLease,
+    failed_path: str,
+) -> tuple[str, ...]:
+    root = _canonical_cleanup_path(lease.root_path)
+    target = _canonical_cleanup_path(failed_path)
+    try:
+        common = os.path.commonpath((root, target))
+    except ValueError as exc:
+        raise UnsafeOwnedWorkspace(
+            f"cleanup retry escaped the owned workspace: {failed_path!r}"
+        ) from exc
+    if common != root:
+        raise UnsafeOwnedWorkspace(
+            f"cleanup retry escaped the owned workspace: {failed_path!r}"
+        )
+
+    relative = os.path.relpath(target, root)
+    if relative == os.curdir:
+        return (lease.root_path,)
+    components = [lease.root_path]
+    current = lease.root_path
+    for part in relative.split(os.sep):
+        if part in {"", os.curdir, os.pardir}:
+            raise UnsafeOwnedWorkspace(
+                f"cleanup retry used an unsafe path component: {failed_path!r}"
+            )
+        current = os.path.join(current, part)
+        components.append(current)
+    return tuple(components)
+
+
+def _repair_windows_readonly_entry(
+    lease: _OwnedWorkspaceLease,
+    failed_path: str,
+) -> bool:
+    """Clear READONLY only after revalidating a confined, non-reparse object.
+
+    Windows does not provide ``os.chmod(..., follow_symlinks=False)`` on the
+    supported Python versions.  The verifier therefore requires a quiescent
+    process tree, revalidates every observed component, and fails closed on any
+    symlink/reparse object.  This is a bounded best-effort check, not an atomic
+    Win32 handle guarantee against a concurrent path-replacement race.
+    """
+
+    _validate_owned_workspace(lease)
+    components = _confined_workspace_components(lease, failed_path)
+    final_observed: os.stat_result | None = None
+    for index, component in enumerate(components):
+        try:
+            observed = os.lstat(component)
+        except OSError as exc:
+            raise UnsafeOwnedWorkspace(
+                f"cannot classify cleanup retry target: {failed_path!r}"
+            ) from exc
+        if stat.S_ISLNK(observed.st_mode) or _windows_reparse_observed(observed):
+            raise UnsafeOwnedWorkspace(
+                "refusing to repair a symlink, junction, or reparse object "
+                f"during owned workspace cleanup: {component!r}"
+            )
+        if index < len(components) - 1 and not stat.S_ISDIR(observed.st_mode):
+            raise UnsafeOwnedWorkspace(
+                f"cleanup retry traversed a non-directory: {component!r}"
+            )
+        final_observed = observed
+
+    assert final_observed is not None
+    if not (
+        stat.S_ISREG(final_observed.st_mode)
+        or stat.S_ISDIR(final_observed.st_mode)
+    ):
+        raise UnsafeOwnedWorkspace(
+            "refusing to repair a non-file, non-directory cleanup target: "
+            f"{failed_path!r}"
+        )
+    if stat.S_ISREG(final_observed.st_mode) and final_observed.st_nlink != 1:
+        raise UnsafeOwnedWorkspace(
+            "refusing to repair a multiply linked file during owned workspace "
+            f"cleanup: {failed_path!r}"
+        )
+    file_attributes = getattr(final_observed, "st_file_attributes", None)
+    if file_attributes is None:
+        readonly_observed = not bool(final_observed.st_mode & stat.S_IWRITE)
+    else:
+        readonly_flag = getattr(stat, "FILE_ATTRIBUTE_READONLY", 0x1)
+        readonly_observed = bool(file_attributes & readonly_flag)
+    if not readonly_observed:
+        return False
+    os.chmod(failed_path, final_observed.st_mode | stat.S_IWRITE)
+    return True
+
+
+def _remove_owned_workspace_tree(
+    path: _OwnedWorkspacePath,
+    *,
+    remove_tree: RemoveTree,
+    path_absent: PathAbsent,
+) -> None:
+    """Remove one claimed workspace, repair Windows READONLY, and prove absence."""
+
+    if not isinstance(path, _OwnedWorkspacePath):
+        raise TypeError("owned workspace removal requires an allocated lease")
+    lease = path._owned_workspace_lease
+    if path_absent(path) is True:
+        return
+    _validate_owned_workspace(lease)
+    repaired_paths: set[str] = set()
+
+    while True:
+        try:
+            remove_tree(path)
+            break
+        except PermissionError as exc:
+            if lease.platform_name != "nt":
+                raise
+            failed_path = exc.filename
+            if not isinstance(failed_path, str):
+                raise
+            canonical = _canonical_cleanup_path(failed_path)
+            if canonical in repaired_paths:
+                raise
+            if len(repaired_paths) >= _MAX_WINDOWS_READONLY_REPAIRS:
+                raise UnsafeOwnedWorkspace(
+                    "owned workspace cleanup exceeded the bounded Windows "
+                    "READONLY repair limit"
+                ) from exc
+            if not _repair_windows_readonly_entry(lease, failed_path):
+                raise
+            repaired_paths.add(canonical)
+
+    if path_absent(path) is not True:
+        raise OwnedWorkspaceRemovalUnproven(
+            "recursive removal returned without proving absence of the "
+            f"judge-owned workspace root: {lease.root_path!r}"
+        )
 
 
 def _unsafe_windows_copy_reparse(path: str) -> bool:
@@ -245,7 +691,17 @@ def cleanup_repo_workspaces(
         if path is None:
             continue
         try:
-            remove_tree(path)
+            if isinstance(path, _OwnedWorkspacePath):
+                _remove_owned_workspace_tree(
+                    path,
+                    remove_tree=remove_tree,
+                    path_absent=path_absent,
+                )
+            else:
+                # Plain strings retain the historical compatibility seam.
+                # Production allocation claims its roots before they reach
+                # this branch; this is not an arbitrary-path force remover.
+                remove_tree(path)
         except FileNotFoundError as exc:
             # rmtree can surface FileNotFoundError for a raced child while the
             # workspace root remains. Only a fresh positive root observation
@@ -288,7 +744,10 @@ def cleanup_repo_workspaces(
 
 __all__ = (
     "COPY_IGNORE",
+    "OwnedWorkspaceRemovalUnproven",
     "UnsafeRepositoryTree",
+    "UnsafeOwnedWorkspace",
+    "allocate_owned_workspace",
     "cleanup_repo_workspaces",
     "copy_repo_tree",
     "note_cleanup_failure",
