@@ -200,7 +200,18 @@ judge's process again and the guarantee is gone. Use `subprocess` (CLI/`-m`),
   `subprocess` also shares the filesystem: declared-input checkpoints detect
   persistent observed drift, not a temporary mutation restored before the next
   snapshot. Candidate containers are removed by CID, and inability to prove
-  their absence is `ERROR runtime_cleanup_failed`, never `PASS`.
+  their absence is `ERROR runtime_cleanup_failed`, never `PASS`. The candidate
+  copy and verifier-pack snapshot roots are also claimed immediately after
+  trusted allocation, removed in all exit paths, and checked by a fresh root
+  lookup. If either root's absence cannot be proven, a pending verdict is
+  replaced by `ERROR runtime_cleanup_failed`; an already-active exception keeps
+  its identity and receives bounded cleanup notes.
+
+The owned-root check binds allocation-time root and parent identity before
+recursive removal. Windows READONLY repair is confined to observed regular
+files/directories and rejects symlinks, junctions, reparse objects, and multiply
+linked files. These checks assume a quiescent workspace tree; they are not an
+atomic Win32 handle-based deletion guarantee against concurrent path replacement.
 
 ## Scope
 

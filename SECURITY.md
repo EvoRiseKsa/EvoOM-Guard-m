@@ -64,9 +64,9 @@ above for a potential vulnerability.
   while Guard still returns `PASS`.
 - A container verdict that claims setup/suite isolation inconsistent with the
   recorded `setup_isolation`, resolved image ID, or read-only suite/pack mounts.
-- A `PASS` after the judge process group or an observed candidate container
-  could not be proven absent; that condition must fail closed as
-  `runtime_cleanup_failed`.
+- A `PASS` after the judge process group, an observed candidate container, or a
+  judge-owned candidate/pack workspace could not be proven absent; that
+  condition must fail closed as `runtime_cleanup_failed`.
 - A POSIX workspace operation that escapes the descriptor-relative/no-follow
   root while Guard still reports a clean result, or runtime-continuity evidence
   inconsistent with the tree/boundary that actually ran.

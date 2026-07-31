@@ -4918,11 +4918,11 @@ MUTATIONS = (
         path="evoom_guard/blackbox.py",
         before=(
             "            if not facts.attach_candidate_evidence:\n"
-            "                return enforce_harness_postcondition(result)\n"
+            "                pending_result = enforce_harness_postcondition(result)\n"
         ),
         after=(
             "            if not facts.attach_candidate_evidence:\n"
-            "                return result\n"
+            "                pending_result = result\n"
         ),
         test=(
             "tests/test_harness_input_mutation_contract.py::"
@@ -4933,22 +4933,22 @@ MUTATIONS = (
         name="blackbox-harness-evidenced-postcondition-bypass",
         path="evoom_guard/blackbox.py",
         before=(
-            "            return enforce_harness_postcondition(\n"
-            "                with_candidate_evidence(\n"
+            "                pending_result = enforce_harness_postcondition(\n"
+            "                    with_candidate_evidence(\n"
+            "                        result,\n"
+            "                        wait_for_late_container_evidence=(\n"
+            "                            facts.wait_for_late_container_evidence\n"
+            "                        ),\n"
+            "                    )\n"
+            "                )\n"
+        ),
+        after=(
+            "                pending_result = with_candidate_evidence(\n"
             "                    result,\n"
             "                    wait_for_late_container_evidence=(\n"
             "                        facts.wait_for_late_container_evidence\n"
             "                    ),\n"
             "                )\n"
-            "            )\n"
-        ),
-        after=(
-            "            return with_candidate_evidence(\n"
-            "                result,\n"
-            "                wait_for_late_container_evidence=(\n"
-            "                    facts.wait_for_late_container_evidence\n"
-            "                ),\n"
-            "            )\n"
         ),
         test=(
             "tests/test_harness_input_mutation_contract.py::"
@@ -10740,6 +10740,462 @@ MUTATIONS = (
             "tests/test_blackbox_pack_characterization.py::"
             "test_blackbox_pack_branch_order_identity_and_errors_are_frozen"
             "[exit_0_pass]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-workspace-owned-allocation-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "    workdir = allocate_owned_workspace(\n"
+            '        prefix="evo_blackbox_",\n'
+            "        create_workspace=lambda **kwargs: tempfile.mkdtemp(**kwargs),\n"
+            "    )\n"
+        ),
+        after='    workdir = tempfile.mkdtemp(prefix="evo_blackbox_")\n',
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_blackbox_removes_both_nominally_owned_workspaces"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-workspace-owned-allocation-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            pack_workdir = "
+            "allocate_owned_workspace(\n"
+            '                prefix="evo_blackbox_pack_",\n'
+            "                create_workspace=lambda **kwargs: "
+            "tempfile.mkdtemp(**kwargs),\n"
+            "            )\n"
+        ),
+        after=(
+            "            pack_workdir = tempfile.mkdtemp("
+            'prefix="evo_blackbox_pack_")\n'
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_blackbox_removes_both_nominally_owned_workspaces"
+        ),
+    ),
+    Mutation(
+        name="blackbox-candidate-workspace-cleanup-bypass",
+        path="evoom_guard/blackbox.py",
+        before='                    ("candidate workspace", workdir),\n',
+        after='                    ("candidate workspace", None),\n',
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_blackbox_removes_both_nominally_owned_workspaces"
+        ),
+    ),
+    Mutation(
+        name="blackbox-pack-workspace-cleanup-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            '                    ("verifier-pack snapshot workspace", '
+            "pack_workdir),\n"
+        ),
+        after=(
+            '                    ("verifier-pack snapshot workspace", '
+            "None),\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_blackbox_removes_both_nominally_owned_workspaces"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-active-primary-cleanup-bypass",
+        path="evoom_guard/blackbox.py",
+        before="                workspace_primary = observe_cleanup_primary()\n",
+        after="                workspace_primary = None\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_workspace_cleanup_failures_are_notes_on_the_exact_active_primary"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-cleanup-stage-join-escape",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "        try:\n"
+            "            if cidfile_dir is not None:\n"
+            "                try:\n"
+        ),
+        after=(
+            "        try:\n"
+            "            cidfile_dir = os.path.join("
+            "workdir, CANDIDATE_CID_DIRNAME)\n"
+            "            if cidfile_dir is not None:\n"
+            "                try:\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_cleanup_stage_reuses_prebound_cid_path_and_attempts_both_owned_roots"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-cleanup-baseexception-conversion",
+        path="evoom_guard/blackbox.py",
+        before="                    if isinstance(first_failure, Exception):\n",
+        after="                    if isinstance(first_failure, BaseException):\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_cleanup_keyboard_interrupt_is_visible_and_does_not_skip_pack_root"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-cleanup-note-projection-bypass",
+        path="evoom_guard/blackbox.py",
+        before="        return _cleanup_failure_result_with_notes(exc)\n",
+        after="        return exc.result\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_workspace_failures_remain_visible_beneath_reportable_container_failure"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-cleanup-reason-mapping-bypass",
+        path="evoom_guard/application/blackbox_finalization.py",
+        before='            "black-box workspace cleanup failed",\n',
+        after="",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_workspace_cleanup_error_maps_to_runtime_cleanup_reason"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-owner-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "    cleanup_repo_workspaces = "
+            "_repository_workspace.cleanup_repo_workspaces\n"
+        ),
+        after=(
+            "    cleanup_repo_workspaces = lambda *args, **kwargs: (\n"
+            "        _repository_workspace.cleanup_repo_workspaces("
+            "*args, **kwargs)\n"
+            "    )\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-exc-info-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    cleanup_exc_info = sys.exc_info\n",
+        after="    cleanup_exc_info = lambda: sys.exc_info()\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-rmtree-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    remove_workspace_tree = shutil.rmtree\n",
+        after="    remove_workspace_tree = lambda path: shutil.rmtree(path)\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-path-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    join_path = os.path.join\n",
+        after="    join_path = lambda *parts: os.path.join(*parts)\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-cid-dirname-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before="        cidfile_dir = join_path(workdir, candidate_cid_dirname)\n",
+        after="        cidfile_dir = join_path(workdir, CANDIDATE_CID_DIRNAME)\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-container-cleanup-provider-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "    cleanup_candidate_containers_provider = "
+            "_cleanup_candidate_containers\n"
+        ),
+        after=(
+            "    cleanup_candidate_containers_provider = "
+            "lambda *args, **kwargs: _cleanup_candidate_containers("
+            "*args, **kwargs)\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-exc-info-deferred-primary-bypass",
+        path="evoom_guard/blackbox.py",
+        before="            deferred_primary = exc_info_error\n",
+        after="            deferred_primary = None\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_exc_info_call_failure_is_deferred_until_both_roots_are_cleaned"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-ambient-primary-adoption-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            if observed_primary is ambient_primary:\n"
+            "                return None\n"
+        ),
+        after="            if False:\n                return None\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_outer_handled_exception_is_not_adopted_as_the_cleanup_primary"
+            "[container]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-path-absence-prebind-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "    workspace_path_absent = "
+            "_repository_workspace.repository_path_absent\n"
+        ),
+        after=(
+            "    workspace_path_absent = lambda path: "
+            "_repository_workspace.repository_path_absent(path)\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_finalization_dependencies_are_bound_before_first_owned_allocation"
+            "[return]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-recorder-stale-primary-bypass",
+        path="evoom_guard/blackbox.py",
+        before="            recorder_primary = observe_cleanup_primary()\n",
+        after="            recorder_primary = container_primary\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_recorder_close_cannot_replace_container_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="blackbox-recorder-close-live-lookup-bypass",
+        path="evoom_guard/blackbox.py",
+        before="                        invocation_recorder_close()\n",
+        after="                        invocation_recorder.close()\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_recorder_close_method_is_bound_before_candidate_execution"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-hostile-string-baseexception-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    except BaseException as stringify_error:\n",
+        after="    except Exception as stringify_error:\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_hostile_container_cleanup_stringification_returns_bounded_failure"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-hostile-note-string-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    except BaseException as stringify_error:\n",
+        after="    except Exception as stringify_error:\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_hostile_and_excess_cleanup_notes_are_projected_safely"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-hostile-str-subclass-normalization-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "            if type(rendered) is not str:\n"
+            "                rendered = str.__str__(rendered)\n"
+        ),
+        after="",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_cleanup_text_normalizes_hostile_str_subclass_before_bounding"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-note-callback-baseexception-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    except BaseException as report_error:\n",
+        after="    except Exception as report_error:\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_active_primary_receives_safe_container_and_recorder_cleanup_notes"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-note-python310-storage-bypass",
+        path="evoom_guard/blackbox.py",
+        before='                primary.__dict__["__notes__"] = [fallback]\n',
+        after="                pass\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_cleanup_note_callback_fallback_supports_python310_notes_storage"
+        ),
+    ),
+    Mutation(
+        name="blackbox-cleanup-note-count-bound-bypass",
+        path="evoom_guard/blackbox.py",
+        before="    if len(notes) > _MAX_BLACKBOX_CLEANUP_NOTES:\n",
+        after="    if False:\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_hostile_and_excess_cleanup_notes_are_projected_safely"
+        ),
+    ),
+    Mutation(
+        name="blackbox-container-cleanup-active-primary-bypass",
+        path="evoom_guard/blackbox.py",
+        before="                    if container_primary is not None:\n",
+        after="                    if False:\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_active_primary_receives_safe_container_and_recorder_cleanup_notes"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-owner-active-primary-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                if workspace_failures and "
+            "workspace_primary is not None:\n"
+        ),
+        after="                if False:\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_active_primary_survives_hostile_workspace_cleanup_reporting"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-owner-safe-note-adapter-bypass",
+        path="evoom_guard/blackbox.py",
+        before="                            note_failure=discard_owner_note,\n",
+        after="                            note_failure=note_cleanup_failure,\n",
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_workspace_owner_projects_each_cleanup_note_exactly_once"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-secondary-hostile-formatting-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                    for workspace_label, failure in "
+            "workspace_failures[1:]:\n"
+            "                        _report_blackbox_cleanup_secondary(\n"
+            "                            first_failure,\n"
+            "                            workspace_label,\n"
+            "                            failure,\n"
+            "                            note_failure=note_cleanup_failure,\n"
+            "                        )\n"
+        ),
+        after=(
+            "                    for workspace_label, failure in "
+            "workspace_failures[1:]:\n"
+            "                        note_cleanup_failure(\n"
+            "                            first_failure,\n"
+            "                            f\"Blackbox {workspace_label} cleanup "
+            "failed: {failure}\",\n"
+            "                        )\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_two_hostile_workspace_failures_preserve_the_first_and_both_attempts"
+        ),
+    ),
+    Mutation(
+        name="blackbox-secondary-cleanup-label-bypass",
+        path="evoom_guard/blackbox.py",
+        before='        "secondary cleanup",\n',
+        after='        "workspace cleanup",\n',
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_recorder_close_cannot_replace_container_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="blackbox-container-cleanup-evidence-redrain-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                            cleanup_result = "
+            "_retain_pending_candidate_evidence(\n"
+            "                                cleanup_result,\n"
+            "                                pending_result,\n"
+            "                            )\n"
+            "                        control_failure = "
+            "_BlackboxCleanupFailure(cleanup_result)\n"
+        ),
+        after=(
+            "                            cleanup_result = "
+            "_attach_candidate_execution_evidence(\n"
+            "                                cleanup_result,\n"
+            "                                recorder=invocation_recorder,\n"
+            "                                cidfile_dir=cidfile_dir,\n"
+            "                                observed_container_ids="
+            "observed_candidate_container_ids,\n"
+            "                            )\n"
+            "                        control_failure = "
+            "_BlackboxCleanupFailure(cleanup_result)\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_cleanup_results_reuse_evidence_without_a_second_live_drain"
+            "[container]"
+        ),
+    ),
+    Mutation(
+        name="blackbox-workspace-cleanup-evidence-redrain-bypass",
+        path="evoom_guard/blackbox.py",
+        before=(
+            "                        cleanup_result = "
+            "_retain_pending_candidate_evidence(\n"
+            "                            cleanup_result,\n"
+            "                            pending_result,\n"
+            "                        )\n"
+            "                        control_failure = "
+            "_BlackboxCleanupFailure(cleanup_result)\n"
+        ),
+        after=(
+            "                        cleanup_result = "
+            "_attach_candidate_execution_evidence(\n"
+            "                            cleanup_result,\n"
+            "                            recorder=invocation_recorder,\n"
+            "                            cidfile_dir=cidfile_dir,\n"
+            "                            observed_container_ids="
+            "observed_candidate_container_ids,\n"
+            "                        )\n"
+            "                        control_failure = "
+            "_BlackboxCleanupFailure(cleanup_result)\n"
+        ),
+        test=(
+            "tests/test_blackbox_workspace_cleanup.py::"
+            "test_cleanup_results_reuse_evidence_without_a_second_live_drain"
+            "[workspace]"
         ),
     ),
     Mutation(

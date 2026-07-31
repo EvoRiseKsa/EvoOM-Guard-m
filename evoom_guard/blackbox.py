@@ -60,6 +60,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from typing import Any, Literal, NamedTuple, cast
 
 from evoom_guard.candidate import parse_file_blocks, parse_patch_blocks
@@ -170,11 +171,17 @@ from evoom_guard.verifiers.repo_verifier import (
     parse_junit_xml,
 )
 from evoom_guard.workspace import UnsafeWorkspacePath, delete_path_within_root
+from evoom_guard.workspace import repository as _repository_workspace
 
 _SubprocessContainmentError = ProcessContainmentError
 _SubprocessOutputLimitExceeded = ProcessOutputLimitExceeded
 _HARNESS_INPUT_CHANGED = "candidate harness input changed"
 _TRUSTED_HARNESS_BINDING_FAILED = "trusted harness input binding failed"
+_BLACKBOX_WORKSPACE_CLEANUP_FAILED = "black-box workspace cleanup failed"
+_MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS = 2000
+_MAX_BLACKBOX_CLEANUP_NOTES = 16
+
+CleanupNoteReporter = Callable[[BaseException, str], None]
 
 
 class BlackboxResult(NamedTuple):
@@ -368,6 +375,255 @@ class _BlackboxCleanupFailure(RuntimeError):
         self.result = result
 
 
+def _truncate_blackbox_cleanup_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    if limit <= 3:
+        return value[:limit]
+    return value[: limit - 3] + "..."
+
+
+def _blackbox_cleanup_exception_type_name(failure: BaseException) -> str:
+    """Return a cleanup exception type without trusting its instance."""
+
+    try:
+        name = type(failure).__name__
+    except BaseException:
+        return "BaseException"
+    return name if type(name) is str else "BaseException"
+
+
+def _safe_blackbox_cleanup_text(value: object, *, unavailable: str) -> str:
+    """Render one diagnostic value without letting ``__str__`` take control."""
+
+    try:
+        if type(value) is str:
+            rendered = value
+        else:
+            rendered = str(value)
+            if type(rendered) is not str:
+                rendered = str.__str__(rendered)
+            if type(rendered) is not str:
+                raise TypeError("cleanup diagnostic did not normalize to str")
+        return _truncate_blackbox_cleanup_text(
+            rendered,
+            _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS,
+        )
+    except BaseException as stringify_error:
+        fallback = (
+            f"<{unavailable}; text projection raised "
+            f"{_blackbox_cleanup_exception_type_name(stringify_error)}>"
+        )
+        return _truncate_blackbox_cleanup_text(
+            fallback,
+            _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS,
+        )
+
+
+def _blackbox_cleanup_exception_summary(failure: BaseException) -> str:
+    """Return one bounded, non-throwing cleanup exception summary."""
+
+    detail = _safe_blackbox_cleanup_text(
+        failure,
+        unavailable="unprintable cleanup exception",
+    )
+    return _truncate_blackbox_cleanup_text(
+        f"{_blackbox_cleanup_exception_type_name(failure)}: {detail}",
+        _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS,
+    )
+
+
+def _blackbox_cleanup_note_details(failure: BaseException) -> tuple[str, ...]:
+    """Read only a bounded number of cleanup notes through guarded projections."""
+
+    try:
+        notes = getattr(failure, "__notes__", ())
+    except BaseException as note_read_error:
+        return (
+            "cleanup notes unavailable: "
+            + _blackbox_cleanup_exception_summary(note_read_error),
+        )
+    if type(notes) not in (list, tuple):
+        return ()
+    details = tuple(
+        _safe_blackbox_cleanup_text(
+            note,
+            unavailable="unprintable cleanup note",
+        )
+        for note in notes[:_MAX_BLACKBOX_CLEANUP_NOTES]
+    )
+    if len(notes) > _MAX_BLACKBOX_CLEANUP_NOTES:
+        details += (
+            f"{len(notes) - _MAX_BLACKBOX_CLEANUP_NOTES} additional cleanup "
+            "notes omitted",
+        )
+    return details
+
+
+def _attach_blackbox_cleanup_note(
+    primary: BaseException,
+    diagnostic: str,
+    *,
+    note_failure: CleanupNoteReporter,
+) -> None:
+    """Attach one bounded note even when the configured reporter fails."""
+
+    bounded = _safe_blackbox_cleanup_text(
+        diagnostic,
+        unavailable="unprintable cleanup diagnostic",
+    )
+    try:
+        note_failure(primary, bounded)
+    except BaseException as report_error:
+        fallback = _bounded_blackbox_cleanup_details(
+            "cleanup diagnostic callback failed",
+            (bounded, _blackbox_cleanup_exception_summary(report_error)),
+        )
+        try:
+            add_note = getattr(primary, "add_note", None)
+            if callable(add_note):
+                add_note(fallback)
+                return
+            notes = getattr(primary, "__notes__", None)
+            if type(notes) is list:
+                notes.append(fallback)
+            else:
+                primary.__dict__["__notes__"] = [fallback]
+        except BaseException:
+            pass
+
+
+def _report_blackbox_cleanup_secondary(
+    primary: BaseException,
+    label: str,
+    failure: BaseException,
+    *,
+    note_failure: CleanupNoteReporter,
+) -> None:
+    """Attach one bounded cleanup failure without changing exception precedence."""
+
+    diagnostic = _truncate_blackbox_cleanup_text(
+        f"Blackbox {label} cleanup failed while preserving the primary "
+        f"exception: {_blackbox_cleanup_exception_summary(failure)}",
+        _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS,
+    )
+    _attach_blackbox_cleanup_note(
+        primary,
+        diagnostic,
+        note_failure=note_failure,
+    )
+
+
+def _bounded_blackbox_cleanup_details(
+    prefix: str,
+    details: tuple[str, ...],
+) -> str:
+    """Bound diagnostics without allowing one detail to hide every sibling."""
+
+    if not details:
+        return _truncate_blackbox_cleanup_text(
+            prefix,
+            _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS,
+        )
+    header = f"{prefix}: "
+    separator = "; "
+    detail_budget = max(
+        0,
+        _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS
+        - len(header)
+        - (len(details) - 1) * len(separator),
+    )
+    per_detail = detail_budget // len(details)
+    rendered = separator.join(
+        _truncate_blackbox_cleanup_text(detail, per_detail)
+        for detail in details
+    )
+    return header + rendered
+
+
+def _bounded_blackbox_cleanup_diagnostics(
+    prefix: str,
+    failure: BaseException,
+) -> str:
+    """Project cleanup errors and secondary notes into the bounded record."""
+
+    details = (
+        _blackbox_cleanup_exception_summary(failure),
+        *_blackbox_cleanup_note_details(failure),
+    )
+    return _bounded_blackbox_cleanup_details(prefix, details)
+
+
+def _cleanup_failure_result_with_notes(
+    failure: _BlackboxCleanupFailure,
+) -> BlackboxResult:
+    """Expose cleanup notes attached while preserving an earlier reportable failure."""
+
+    notes = _blackbox_cleanup_note_details(failure)
+    if not notes:
+        return failure.result
+    cleanup = _bounded_blackbox_cleanup_details(
+        "secondary cleanup",
+        notes,
+    )
+    diagnostics = failure.result.diagnostics
+    separator = "\nprior diagnostics: "
+    remaining = (
+        _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS
+        - len(cleanup)
+        - len(separator)
+    )
+    message = cleanup
+    if diagnostics and remaining > 0:
+        message += separator + _truncate_blackbox_cleanup_text(
+            diagnostics,
+            remaining,
+        )
+    return failure.result._replace(diagnostics=message)
+
+
+def _retain_pending_candidate_evidence(
+    result: BlackboxResult,
+    pending_result: BlackboxResult | None,
+) -> BlackboxResult:
+    """Copy already-observed candidate evidence without another live drain."""
+
+    if pending_result is None:
+        return result
+    return result._replace(
+        isolation=pending_result.isolation,
+        candidate_invocations=pending_result.candidate_invocations,
+        candidate_launcher_invocation_observed=(
+            pending_result.candidate_launcher_invocation_observed
+        ),
+    )
+
+
+def _cleanup_failure_result_from_pending(
+    pending_result: BlackboxResult,
+    *,
+    prefix: str,
+    failure: BaseException,
+) -> BlackboxResult:
+    """Retain an incomplete result while making a cleanup failure visible."""
+
+    cleanup = _bounded_blackbox_cleanup_diagnostics(prefix, failure)
+    prior = pending_result.diagnostics
+    separator = "\nprior diagnostics: "
+    remaining = (
+        _MAX_BLACKBOX_CLEANUP_DIAGNOSTICS_CHARS
+        - len(cleanup)
+        - len(separator)
+    )
+    diagnostics = cleanup
+    if prior and remaining > 0:
+        diagnostics += separator + _truncate_blackbox_cleanup_text(
+            prior,
+            remaining,
+        )
+    return pending_result._replace(diagnostics=diagnostics)
+
+
 def _signal_judge_process_group(
     process: subprocess.Popen[Any], sig: int
 ) -> None:
@@ -513,17 +769,20 @@ def _run_blackbox_impl(
             pack_present=False,
         )
 
-    workdir = tempfile.mkdtemp(prefix="evo_blackbox_")
-    copy = os.path.join(workdir, "repo")
     pack_workdir: str | None = None
+    cidfile_dir: str | None = None
     pack_lifecycle = BlackboxPackLifecycle()
     invocation_recorder: _InvocationRecorder | None = None
+    invocation_recorder_close: Callable[[], None] | None = None
     pack_sha256: str | None = None
     pack_manifest: dict | None = None
     deleted_applied: list[str] = []
     iso: dict[str, Any] | None = None
     observed_candidate_container_ids: set[str] = set()
     trusted_harness_baseline: dict[str, tuple[str, int, str]] | None = None
+    pending_result: BlackboxResult | None = None
+    cleanup_primary: BaseException | None = None
+    deferred_primary: BaseException | None = None
 
     def harness_failure_diagnostics(
         prefix: str,
@@ -534,12 +793,60 @@ def _run_blackbox_impl(
         message = f"{prefix}: {detail}"
         return message if len(message) <= 2000 else message[:1997] + "..."
 
+    # Freeze every cleanup dependency before the first owned root exists. A
+    # later provider rebind must not disable the only code capable of deleting
+    # either root during exception unwinding.
+    allocate_owned_workspace = _repository_workspace.allocate_owned_workspace
+    cleanup_repo_workspaces = _repository_workspace.cleanup_repo_workspaces
+    note_cleanup_failure = _repository_workspace.note_cleanup_failure
+    workspace_path_absent = _repository_workspace.repository_path_absent
+    cleanup_exc_info = sys.exc_info
+    remove_workspace_tree = shutil.rmtree
+    join_path = os.path.join
+    candidate_cid_dirname = CANDIDATE_CID_DIRNAME
+    cleanup_candidate_containers_provider = _cleanup_candidate_containers
+    ambient_primary = cleanup_exc_info()[1]
+
+    def discard_owner_note(
+        _primary: BaseException,
+        _message: str,
+    ) -> None:
+        """Let the black-box owner project each failure after all attempts."""
+
+    def observe_cleanup_primary() -> BaseException | None:
+        """Return the tracked primary, failing closed on an exc-info failure."""
+
+        nonlocal cleanup_primary, deferred_primary
+        if cleanup_primary is not None:
+            return cleanup_primary
+        try:
+            observed_primary = cleanup_exc_info()[1]
+        except BaseException as exc_info_error:
+            cleanup_primary = exc_info_error
+            deferred_primary = exc_info_error
+        else:
+            if observed_primary is ambient_primary:
+                return None
+            cleanup_primary = observed_primary
+        return cleanup_primary
+
+    workdir = allocate_owned_workspace(
+        prefix="evo_blackbox_",
+        create_workspace=lambda **kwargs: tempfile.mkdtemp(**kwargs),
+    )
     try:
+        # Compute the CID location exactly once while the candidate root is
+        # already protected by this try/finally and before any runner can start.
+        cidfile_dir = join_path(workdir, candidate_cid_dirname)
+        copy = join_path(workdir, "repo")
         try:
             # The candidate inherits HOME=workdir. Keep hidden checks outside
             # that tree so subprocess mode does not hand it $HOME/pack.
-            pack_workdir = tempfile.mkdtemp(prefix="evo_blackbox_pack_")
-            pack_snapshot = os.path.join(pack_workdir, "pack")
+            pack_workdir = allocate_owned_workspace(
+                prefix="evo_blackbox_pack_",
+                create_workspace=lambda **kwargs: tempfile.mkdtemp(**kwargs),
+            )
+            pack_snapshot = join_path(pack_workdir, "pack")
             pack_identity = snapshot_pack(pack_dir, pack_snapshot)
             pack_sha256, pack_manifest = pack_identity
         except PackManifestError as exc:
@@ -674,6 +981,11 @@ def _run_blackbox_impl(
 
         # Deliver a REAL isolation boundary (fail-closed) and record what ran.
         invocation_recorder = _InvocationRecorder.create(workdir)
+        if invocation_recorder is not None:
+            # Bind the close method as soon as the recorder exists. Its lookup
+            # is protected by the owned-workspace try and cannot be replaced by
+            # later candidate-pack effects.
+            invocation_recorder_close = invocation_recorder.close
         runner = CandidateRunner(
             isolation=isolation, docker_image=docker_image,
             docker_network=docker_network, docker_runtime=docker_runtime,
@@ -698,7 +1010,6 @@ def _run_blackbox_impl(
                 pack_present=True,
             )
         iso = evidence.as_dict()
-        cidfile_dir = os.path.join(workdir, CANDIDATE_CID_DIRNAME)
 
         def with_candidate_evidence(
             result: BlackboxResult, *, wait_for_late_container_evidence: bool = False
@@ -757,6 +1068,7 @@ def _run_blackbox_impl(
         def project_pack_verdict(
             facts: BlackboxPackVerdictFacts,
         ) -> BlackboxResult:
+            nonlocal pending_result
             result = BlackboxResult(
                 facts.passed,
                 facts.tests_passed,
@@ -776,17 +1088,19 @@ def _run_blackbox_impl(
                 pack_present=True,
             )
             if not facts.attach_candidate_evidence:
-                return enforce_harness_postcondition(result)
-            return enforce_harness_postcondition(
-                with_candidate_evidence(
-                    result,
-                    wait_for_late_container_evidence=(
-                        facts.wait_for_late_container_evidence
-                    ),
+                pending_result = enforce_harness_postcondition(result)
+            else:
+                pending_result = enforce_harness_postcondition(
+                    with_candidate_evidence(
+                        result,
+                        wait_for_late_container_evidence=(
+                            facts.wait_for_late_container_evidence
+                        ),
+                    )
                 )
-            )
+            return pending_result
 
-        xml_path = os.path.join(workdir, "judge-blackbox.xml")
+        xml_path = join_path(workdir, "judge-blackbox.xml")
         env = {
             **judge_subprocess_env(workdir),
             # How the pack reaches the candidate. EVOGUARD_TARGET stays for
@@ -836,77 +1150,196 @@ def _run_blackbox_impl(
             ),
         )
         return project_pack_verdict(verdict)
+    except BaseException as exc:
+        # Keep the exact body exception available to every nested cleanup stage.
+        cleanup_primary = exc
+        raise
     finally:
         # A timed-out/interrupted pytest can leave its Docker descendant alive.
-        # Clean it before deleting the cidfiles. Expected operational cleanup
-        # failures are handled inside the helper. A KeyboardInterrupt/SystemExit
-        # raised by cleanup itself must remain visible after a normal run; only
-        # suppress it while an earlier unhandled exception is already unwinding.
-        primary_exception_active = sys.exc_info()[0] is not None
-        cidfile_dir = os.path.join(workdir, CANDIDATE_CID_DIRNAME)
+        # Clean it before deleting the cidfiles. Every phase observes the current
+        # tracked primary, including a failure introduced by an earlier phase.
+        container_primary = observe_cleanup_primary()
         try:
-            try:
-                _cleanup_candidate_containers(
-                    cidfile_dir,
-                    wait_for_late_cidfiles=pack_lifecycle.active,
-                    # A caught timeout/incomplete result or an unhandled
-                    # operator exception remains primary. A normally completed
-                    # judge must prove every candidate container absent before
-                    # its pending PASS/FAIL can be returned.
-                    strict=not pack_lifecycle.active,
-                    known_container_ids=observed_candidate_container_ids,
-                )
-            except CandidateContainerCleanupError as exc:
-                if primary_exception_active or pack_lifecycle.active:
-                    pass
-                else:
-                    cleanup_result = BlackboxResult(
-                        False,
-                        0,
-                        0,
-                        str(exc),
-                        False,
-                        "candidate container cleanup failed",
-                        pack_sha256,
-                        pack_manifest,
-                        None,
-                        iso,
-                        deleted_applied,
-                        started=pack_lifecycle.started,
-                        completed=False,
-                        execution_state=(
-                            "started_incomplete"
-                            if pack_lifecycle.started
-                            else "not_started"
-                        ),
-                        execution_phase=(
-                            "blackbox_pack" if pack_lifecycle.started else "preflight"
-                        ),
-                        pack_present=True if pack_sha256 else None,
+            if cidfile_dir is not None:
+                try:
+                    cleanup_candidate_containers_provider(
+                        cidfile_dir,
+                        wait_for_late_cidfiles=pack_lifecycle.active,
+                        # A caught timeout/incomplete result or an unhandled
+                        # operator exception remains primary. A normally completed
+                        # judge must prove every candidate container absent before
+                        # its pending PASS/FAIL can be returned.
+                        strict=not pack_lifecycle.active,
+                        known_container_ids=observed_candidate_container_ids,
                     )
-                    if pack_lifecycle.started:
-                        cleanup_result = _attach_candidate_execution_evidence(
-                            cleanup_result,
-                            recorder=invocation_recorder,
-                            cidfile_dir=cidfile_dir,
-                            observed_container_ids=observed_candidate_container_ids,
+                except CandidateContainerCleanupError as exc:
+                    if container_primary is not None:
+                        _report_blackbox_cleanup_secondary(
+                            container_primary,
+                            "candidate container",
+                            exc,
+                            note_failure=note_cleanup_failure,
                         )
-                    raise _BlackboxCleanupFailure(cleanup_result) from exc
-            except BaseException:
-                if not primary_exception_active:
-                    raise
+                    else:
+                        if pack_lifecycle.active and pending_result is not None:
+                            cleanup_result = _cleanup_failure_result_from_pending(
+                                pending_result,
+                                prefix=(
+                                    "candidate container cleanup failed while "
+                                    "preserving the incomplete black-box result"
+                                ),
+                                failure=exc,
+                            )
+                        else:
+                            cleanup_result = BlackboxResult(
+                                False,
+                                0,
+                                0,
+                                _safe_blackbox_cleanup_text(
+                                    exc,
+                                    unavailable=(
+                                        "unprintable candidate container "
+                                        "cleanup failure"
+                                    ),
+                                ),
+                                False,
+                                "candidate container cleanup failed",
+                                pack_sha256,
+                                pack_manifest,
+                                None,
+                                iso,
+                                deleted_applied,
+                                started=pack_lifecycle.started,
+                                completed=False,
+                                execution_state=(
+                                    "started_incomplete"
+                                    if pack_lifecycle.started
+                                    else "not_started"
+                                ),
+                                execution_phase=(
+                                    "blackbox_pack"
+                                    if pack_lifecycle.started
+                                    else "preflight"
+                                ),
+                                pack_present=True if pack_sha256 else None,
+                            )
+                            cleanup_result = _retain_pending_candidate_evidence(
+                                cleanup_result,
+                                pending_result,
+                            )
+                        control_failure = _BlackboxCleanupFailure(cleanup_result)
+                        cleanup_primary = control_failure
+                        raise control_failure from exc
+                except BaseException as exc:
+                    if container_primary is None:
+                        cleanup_primary = exc
+                        raise
+                    _report_blackbox_cleanup_secondary(
+                        container_primary,
+                        "candidate container",
+                        exc,
+                        note_failure=note_cleanup_failure,
+                    )
         finally:
+            recorder_primary = observe_cleanup_primary()
             try:
-                if invocation_recorder is not None:
+                if invocation_recorder_close is not None:
                     try:
-                        invocation_recorder.close()
-                    except BaseException:
-                        if not primary_exception_active:
+                        invocation_recorder_close()
+                    except BaseException as exc:
+                        if recorder_primary is None:
+                            cleanup_primary = exc
                             raise
+                        _report_blackbox_cleanup_secondary(
+                            recorder_primary,
+                            "invocation recorder",
+                            exc,
+                            note_failure=note_cleanup_failure,
+                        )
             finally:
-                shutil.rmtree(workdir, ignore_errors=True)
-                if pack_workdir is not None:
-                    shutil.rmtree(pack_workdir, ignore_errors=True)
+                workspace_primary = observe_cleanup_primary()
+                workspace_failures: list[tuple[str, BaseException]] = []
+                for workspace_label, workspace_path in (
+                    ("candidate workspace", workdir),
+                    ("verifier-pack snapshot workspace", pack_workdir),
+                ):
+                    if workspace_path is None:
+                        continue
+                    try:
+                        cleanup_repo_workspaces(
+                            ((workspace_label, workspace_path),),
+                            primary=None,
+                            remove_tree=remove_workspace_tree,
+                            path_absent=workspace_path_absent,
+                            note_failure=discard_owner_note,
+                            owner_name="Blackbox",
+                        )
+                    except BaseException as exc:
+                        workspace_failures.append((workspace_label, exc))
+
+                if workspace_failures and workspace_primary is not None:
+                    for workspace_label, failure in workspace_failures:
+                        _report_blackbox_cleanup_secondary(
+                            workspace_primary,
+                            workspace_label,
+                            failure,
+                            note_failure=note_cleanup_failure,
+                        )
+                elif workspace_failures:
+                    first_label, first_failure = workspace_failures[0]
+                    _attach_blackbox_cleanup_note(
+                        first_failure,
+                        f"Blackbox {first_label} cleanup failed",
+                        note_failure=note_cleanup_failure,
+                    )
+                    for workspace_label, failure in workspace_failures[1:]:
+                        _report_blackbox_cleanup_secondary(
+                            first_failure,
+                            workspace_label,
+                            failure,
+                            note_failure=note_cleanup_failure,
+                        )
+                    if isinstance(first_failure, Exception):
+                        cleanup_result = BlackboxResult(
+                            False,
+                            0,
+                            0,
+                            _bounded_blackbox_cleanup_diagnostics(
+                                "black-box workspace absence could not be proven",
+                                first_failure,
+                            ),
+                            False,
+                            _BLACKBOX_WORKSPACE_CLEANUP_FAILED,
+                            pack_sha256,
+                            pack_manifest,
+                            None,
+                            iso,
+                            deleted_applied,
+                            started=pack_lifecycle.started,
+                            completed=False,
+                            execution_state=(
+                                "started_incomplete"
+                                if pack_lifecycle.started
+                                else "not_started"
+                            ),
+                            execution_phase=(
+                                "blackbox_pack"
+                                if pack_lifecycle.started
+                                else "preflight"
+                            ),
+                            pack_present=True if pack_sha256 else None,
+                        )
+                        cleanup_result = _retain_pending_candidate_evidence(
+                            cleanup_result,
+                            pending_result,
+                        )
+                        control_failure = _BlackboxCleanupFailure(cleanup_result)
+                        cleanup_primary = control_failure
+                        raise control_failure from first_failure
+                    cleanup_primary = first_failure
+                    raise first_failure
+                if deferred_primary is not None:
+                    raise deferred_primary
 
 
 def run_blackbox(
@@ -944,4 +1377,4 @@ def run_blackbox(
             harness_inputs=harness_inputs,
         )
     except _BlackboxCleanupFailure as exc:
-        return exc.result
+        return _cleanup_failure_result_with_notes(exc)
