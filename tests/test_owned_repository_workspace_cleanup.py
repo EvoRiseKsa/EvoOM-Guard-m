@@ -98,9 +98,11 @@ def test_failed_capture_preserves_primary_when_rollback_also_fails(
     assert root.is_dir()
 
 
+@pytest.mark.parametrize("proof_raises", [False, True])
 def test_hostile_rollback_formatting_cannot_mask_capture_primary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    proof_raises: bool,
 ) -> None:
     root = tmp_path / "allocated"
     primary = KeyboardInterrupt("identity capture interrupted")
@@ -120,11 +122,14 @@ def test_hostile_rollback_formatting_cannot_mask_capture_primary(
         "rmdir",
         lambda _path: (_ for _ in ()).throw(rollback),
     )
-    monkeypatch.setattr(
-        workspace_owner,
-        "repository_path_absent",
-        lambda _path: (_ for _ in ()).throw(OSError("absence proof unavailable")),
-    )
+    if proof_raises:
+        monkeypatch.setattr(
+            workspace_owner,
+            "repository_path_absent",
+            lambda _path: (_ for _ in ()).throw(
+                OSError("absence proof unavailable")
+            ),
+        )
 
     with pytest.raises(KeyboardInterrupt) as caught:
         workspace_owner.allocate_owned_workspace(
