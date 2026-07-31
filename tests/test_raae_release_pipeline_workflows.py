@@ -293,6 +293,16 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
         public_key_id(str(ledger_root))
         == "sha256:2b6a4dee04814bed2003f1582ca17aef0fb9de75c765d92aed355bf01483148b"
     )
+    prospective_root = ROOT / "security/release-ledger-roots/v4.5.0.pub.pem"
+    prospective_key_id = (
+        "sha256:0d5dd1a57b8f2b4ec80a197f99bdf73908e7edba82be42ad4666a9fe485b7478"
+    )
+    assert prospective_root.is_file()
+    assert public_key_id(str(prospective_root)) == prospective_key_id
+    assert public_key_id(str(prospective_root)) != public_key_id(str(ledger_root))
+    release_contract = _text(ROOT / "docs/RELEASE_TRUST_PIPELINE.md")
+    assert "release-ledger-roots/v4.5.0.pub.pem" in release_contract
+    assert prospective_key_id in release_contract
     pack_test = _text(pack / "test_release_protocol.py")
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
     assert "len(names) == len(set(names))" in pack_test
