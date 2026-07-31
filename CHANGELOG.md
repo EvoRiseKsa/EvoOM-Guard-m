@@ -61,6 +61,13 @@ retained evidence say so.
   observation is explicitly unsigned and is not represented as the signed
   `KEY_RETIREMENT.json` receipt that could not be produced without the offline
   ledger private key.
+- Made generic bounded-process cancellation retain the exact active
+  `BaseException` while attaching bounded secondary diagnostics when managed
+  process-tree or output-reader abort cleanup raises or is not positively
+  proven. Normal process results and verdict schemas are unchanged. The
+  specialized judge, raw-Git finalizer, and GitHub Attestation process owners
+  remain separate follow-up scopes rather than being represented as covered by
+  this generic runner change.
 
 ### Fixed
 
