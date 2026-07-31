@@ -23,6 +23,11 @@ from evoom_guard.verifiers.repo_verifier import RepoVerifier
 from evoom_guard.workspace import repository as workspace_owner
 
 
+class _HostileFormatError(OSError):
+    def __format__(self, _format_spec: str) -> str:
+        raise SystemExit("secondary formatting escaped")
+
+
 def _claim(root: Path, *, platform_name: str | None = None):
     return workspace_owner.allocate_owned_workspace(
         prefix="owned-test-",
@@ -80,7 +85,6 @@ def test_failed_capture_preserves_primary_when_rollback_also_fails(
         "rmdir",
         lambda _path: (_ for _ in ()).throw(rollback),
     )
-
     with pytest.raises(KeyboardInterrupt) as caught:
         workspace_owner.allocate_owned_workspace(
             prefix="owned-test-",
@@ -91,6 +95,51 @@ def test_failed_capture_preserves_primary_when_rollback_also_fails(
     notes = getattr(primary, "__notes__", [])
     assert any("OSError: rollback denied" in note for note in notes)
     assert any("without proving absence" in note for note in notes)
+    assert root.is_dir()
+
+
+@pytest.mark.parametrize("proof_raises", [False, True])
+def test_hostile_rollback_formatting_cannot_mask_capture_primary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    proof_raises: bool,
+) -> None:
+    root = tmp_path / "allocated"
+    primary = KeyboardInterrupt("identity capture interrupted")
+    rollback = _HostileFormatError("rollback denied")
+
+    def create_workspace(*, prefix: str) -> str:
+        root.mkdir()
+        return str(root)
+
+    monkeypatch.setattr(
+        workspace_owner,
+        "_claim_owned_workspace",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(primary),
+    )
+    monkeypatch.setattr(
+        workspace_owner.os,
+        "rmdir",
+        lambda _path: (_ for _ in ()).throw(rollback),
+    )
+    if proof_raises:
+        monkeypatch.setattr(
+            workspace_owner,
+            "repository_path_absent",
+            lambda _path: (_ for _ in ()).throw(
+                OSError("absence proof unavailable")
+            ),
+        )
+
+    with pytest.raises(KeyboardInterrupt) as caught:
+        workspace_owner.allocate_owned_workspace(
+            prefix="owned-test-",
+            create_workspace=create_workspace,
+        )
+
+    assert caught.value is primary
+    notes = getattr(primary, "__notes__", ())
+    assert any("_HostileFormatError: rollback denied" in note for note in notes)
     assert root.is_dir()
 
 
@@ -199,6 +248,40 @@ def test_failed_capture_preserves_primary_when_absence_probe_raises(
         "SystemExit: absence probe exited" in note
         for note in getattr(primary, "__notes__", [])
     )
+
+
+def test_hostile_absence_proof_formatting_cannot_mask_capture_primary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "allocated"
+    primary = RuntimeError("identity capture failed")
+    proof_error = _HostileFormatError("absence proof denied")
+
+    def create_workspace(*, prefix: str) -> str:
+        root.mkdir()
+        return str(root)
+
+    monkeypatch.setattr(
+        workspace_owner,
+        "_claim_owned_workspace",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(primary),
+    )
+    monkeypatch.setattr(
+        workspace_owner,
+        "repository_path_absent",
+        lambda _path: (_ for _ in ()).throw(proof_error),
+    )
+
+    with pytest.raises(RuntimeError) as caught:
+        workspace_owner.allocate_owned_workspace(
+            prefix="owned-test-",
+            create_workspace=create_workspace,
+        )
+
+    assert caught.value is primary
+    notes = getattr(primary, "__notes__", ())
+    assert any("_HostileFormatError: absence proof denied" in note for note in notes)
 
 
 def test_claimed_workspace_is_string_compatible_and_proves_removal(

@@ -2451,15 +2451,223 @@ MUTATIONS = (
         path="evoom_guard/workspace/repository.py",
         before=(
             "        except BaseException as exc:\n"
-            "            failures.append((label, exc))\n"
+            "            failures.append((safe_label, exc))\n"
         ),
         after=(
             "        except BaseException as exc:\n"
-            "            failures.append((label, exc)); break\n"
+            "            failures.append((safe_label, exc)); break\n"
         ),
         test=(
             "tests/test_repository_workspace_owner.py::"
             "test_repository_workspace_cleanup_attempts_every_path_and_preserves_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-hostile-stringification-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "    try:\n"
+            "        rendered = str(error)\n"
+            "        detail = _exact_cleanup_text(rendered)\n"
+            "    except BaseException as stringify_error:\n"
+            "        detail = (\n"
+            '            "<unprintable; __str__ raised "\n'
+            "            f\"{_exception_type_name(stringify_error)}>\"\n"
+            "        )\n"
+        ),
+        after=(
+            "    try:\n"
+            "        rendered = str(error)\n"
+            "        detail = _exact_cleanup_text(rendered)\n"
+            "    except Exception as stringify_error:\n"
+            "        detail = (\n"
+            '            "<unprintable; __str__ raised "\n'
+            "            f\"{_exception_type_name(stringify_error)}>\"\n"
+            "        )\n"
+        ),
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_cleanup_stringification_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-str-subclass-normalization-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "            normalized = value if type(value) is str else "
+            "str.__str__(value)\n"
+        ),
+        after="            normalized = value\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_default_note_reporter_normalizes_hostile_str_subclass"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-owner-normalization-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    safe_owner_name = _exact_cleanup_text(owner_name)\n",
+        after="    safe_owner_name = owner_name\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_owner_and_label_text_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-label-normalization-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        safe_label = _exact_cleanup_text(label)\n",
+        after="        safe_label = label\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_owner_and_label_text_preserve_first_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-callback-suffix-priority-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "        fallback = _bounded_cleanup_diagnostic_with_suffix(\n"
+            "            diagnostic,\n"
+            "            callback_suffix,\n"
+            "        )\n"
+        ),
+        after=(
+            "        fallback = _bounded_cleanup_diagnostic(\n"
+            "            diagnostic + callback_suffix\n"
+            "        )\n"
+        ),
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_oversized_diagnostic_retains_callback_failure_evidence"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-diagnostic-bound-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    diagnostic = _bounded_cleanup_diagnostic(message)\n",
+        after="    diagnostic = message\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_active_primary_cleanup_diagnostic_is_deterministically_bounded"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-note-callback-baseexception-mask",
+        path="evoom_guard/workspace/repository.py",
+        before="    except BaseException as report_error:\n",
+        after="    except Exception as report_error:\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_note_callback_baseexception_cannot_mask_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-note-callback-fallback-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="            note_cleanup_failure(target, fallback)\n",
+        after="            None\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_note_callback_baseexception_cannot_replace_first_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-default-note-bound-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="        message = _bounded_cleanup_diagnostic(message)\n",
+        after="        message = message\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_default_note_reporter_bounds_direct_diagnostics"
+        ),
+    ),
+    Mutation(
+        name="repository-cleanup-first-failure-precedence-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before="    raise first_error\n",
+        after="    raise failures[-1][1]\n",
+        test=(
+            "tests/test_workspace_cleanup_reporting.py::"
+            "test_hostile_secondary_stringification_preserves_first_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="repository-allocator-rollback-formatting-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "            if rollback_error is not None:\n"
+            "                note_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    \"RepositoryWorkspaceAllocator rollback failed while \"\n"
+            "                    \"preserving the capture exception: \"\n"
+            "                    + _cleanup_exception_summary(rollback_error),\n"
+            "                )\n"
+            "            note_cleanup_failure(\n"
+        ),
+        after=(
+            "            if rollback_error is not None:\n"
+            "                note_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    \"RepositoryWorkspaceAllocator rollback failed while \"\n"
+            "                    \"preserving the capture exception: \"\n"
+            "                    f\"{rollback_error}\",\n"
+            "                )\n"
+            "            note_cleanup_failure(\n"
+        ),
+        test=(
+            "tests/test_owned_repository_workspace_cleanup.py::"
+            "test_hostile_rollback_formatting_cannot_mask_capture_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-allocator-proof-formatting-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "                \"RepositoryWorkspaceAllocator absence proof failed while \"\n"
+            "                \"preserving the capture exception: \"\n"
+            "                + _cleanup_exception_summary(proof_error),\n"
+        ),
+        after=(
+            "                \"RepositoryWorkspaceAllocator absence proof failed while \"\n"
+            "                \"preserving the capture exception: \"\n"
+            "                f\"{proof_error}\",\n"
+        ),
+        test=(
+            "tests/test_owned_repository_workspace_cleanup.py::"
+            "test_hostile_absence_proof_formatting_cannot_mask_capture_primary"
+        ),
+    ),
+    Mutation(
+        name="repository-allocator-unproven-rollback-formatting-bypass",
+        path="evoom_guard/workspace/repository.py",
+        before=(
+            "        else:\n"
+            "            if absent is not True:\n"
+            "                if rollback_error is not None:\n"
+            "                    note_cleanup_failure(\n"
+            "                        primary,\n"
+            "                        \"RepositoryWorkspaceAllocator rollback failed while \"\n"
+            "                        \"preserving the capture exception: \"\n"
+            "                        + _cleanup_exception_summary(rollback_error),\n"
+            "                    )\n"
+            "                note_cleanup_failure(\n"
+        ),
+        after=(
+            "        else:\n"
+            "            if absent is not True:\n"
+            "                if rollback_error is not None:\n"
+            "                    note_cleanup_failure(\n"
+            "                        primary,\n"
+            "                        \"RepositoryWorkspaceAllocator rollback failed while \"\n"
+            "                        \"preserving the capture exception: \"\n"
+            "                        f\"{rollback_error}\",\n"
+            "                    )\n"
+            "                note_cleanup_failure(\n"
+        ),
+        test=(
+            "tests/test_owned_repository_workspace_cleanup.py::"
+            "test_hostile_rollback_formatting_cannot_mask_capture_primary"
         ),
     ),
     Mutation(
