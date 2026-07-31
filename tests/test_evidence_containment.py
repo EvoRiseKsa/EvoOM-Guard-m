@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 import evoom_guard.evidence as evidence
+import evoom_guard.record_verifier as record_verifier
 from evoom_guard.verifiers.repo_verifier import _SubprocessOutputLimitExceeded
 
 
@@ -33,6 +34,23 @@ def _fixed_workspace_allocator(root: Path):
         return str(root)
 
     return allocate
+
+
+def test_coverage_cleanup_diagnostic_is_bounded_and_schema_valid() -> None:
+    note = evidence._coverage_cleanup_failure_note(
+        OSError("cleanup denied: " + "x" * 10_000)
+    )
+    coverage = {
+        "measured": False,
+        "note": note,
+        "unmeasured_files": [],
+        "caveat": evidence.EXECUTED_IS_NOT_ASSERTED,
+    }
+
+    assert len(note) == 2000
+    assert note.startswith("the coverage workspace cleanup could not be proven")
+    assert note.endswith("...")
+    assert record_verifier._diff_coverage_type_errors(coverage) == []
 
 
 def test_coverage_report_reader_rejects_oversized_file_before_decode(
