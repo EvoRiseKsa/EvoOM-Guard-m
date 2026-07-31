@@ -254,6 +254,11 @@ def verify_diff(
             deleted=[],
         )
 
+    # Resolve cleanup before allocation.  Once a workspace exists, every
+    # subsequent provider lookup belongs inside its cleanup boundary; a broken
+    # cleanup-provider lookup must therefore fail before the factory can create
+    # an owned root, and a later primary must use this already-bound callable.
+    cleanup_workspace = services.cleanup_workspace_provider()
     workdir = services.workspace_factory_provider()(prefix="evo_guard_diff_")
     try:
         # Allocation establishes the cleanup boundary. Every later operation,
@@ -365,7 +370,7 @@ def verify_diff(
         result.base_reconstruction = "ok"
         return DiffVerificationOutcome(result=result, deleted=deleted)
     finally:
-        services.cleanup_workspace_provider()(
+        cleanup_workspace(
             workdir,
             primary=sys.exc_info()[1],
         )

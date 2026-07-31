@@ -11008,7 +11008,7 @@ MUTATIONS = (
         name="diff-verification-workspace-cleanup-bypass",
         path="evoom_guard/application/diff_verification.py",
         before=(
-            "        services.cleanup_workspace_provider()(\n"
+            "        cleanup_workspace(\n"
             "            workdir,\n"
             "            primary=sys.exc_info()[1],\n"
             "        )\n"
@@ -11017,6 +11017,24 @@ MUTATIONS = (
         test=(
             "tests/test_diff_verification_characterization.py::"
             "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-cleanup-provider-preallocation-order-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before=(
+            "    cleanup_workspace = services.cleanup_workspace_provider()\n"
+            "    workdir = services.workspace_factory_provider()("
+            "prefix=\"evo_guard_diff_\")\n"
+        ),
+        after=(
+            "    workdir = services.workspace_factory_provider()("
+            "prefix=\"evo_guard_diff_\")\n"
+            "    cleanup_workspace = services.cleanup_workspace_provider()\n"
+        ),
+        test=(
+            "tests/test_diff_verification_application.py::"
+            "test_cleanup_provider_lookup_failure_precedes_workspace_factory"
         ),
     ),
     Mutation(
