@@ -7325,14 +7325,14 @@ MUTATIONS = (
         name="subprocess-reader-start-primary-exception-mask",
         path="evoom_guard/execution/process.py",
         before=(
-            "                except BaseException:\n"
-            "                    pass\n"
-            "            if not reader_cleanup_proven:\n"
+            "                    tree_cleanup_result = "
+            "_terminate_process_tree(process, limits)\n"
+            "                except BaseException as cleanup_error:\n"
         ),
         after=(
-            "                except Exception:\n"
-            "                    pass\n"
-            "            if not reader_cleanup_proven:\n"
+            "                    tree_cleanup_result = "
+            "_terminate_process_tree(process, limits)\n"
+            "                except Exception as cleanup_error:\n"
         ),
         test=(
             "tests/test_execution_process_reader_start.py::"
@@ -7343,18 +7343,120 @@ MUTATIONS = (
         name="subprocess-reader-join-primary-exception-mask",
         path="evoom_guard/execution/process.py",
         before=(
-            "                except BaseException:\n"
-            "                    pass\n"
-            "        raise\n"
+            "                    reader_cleanup_result = "
+            "_join_attempted_pipe_readers(\n"
+            "                        reader_start_attempts,\n"
+            "                        streams,\n"
+            "                        limits.reader_join_seconds,\n"
+            "                    )\n"
+            "                except BaseException as cleanup_error:\n"
         ),
         after=(
-            "                except Exception:\n"
-            "                    pass\n"
-            "        raise\n"
+            "                    reader_cleanup_result = "
+            "_join_attempted_pipe_readers(\n"
+            "                        reader_start_attempts,\n"
+            "                        streams,\n"
+            "                        limits.reader_join_seconds,\n"
+            "                    )\n"
+            "                except Exception as cleanup_error:\n"
         ),
         test=(
             "tests/test_execution_process_reader_start.py::"
             "test_post_start_baseexception_cleans_even_completed_tree_without_masking"
+        ),
+    ),
+    Mutation(
+        name="subprocess-abort-tree-exact-proof-bypass",
+        path="evoom_guard/execution/process.py",
+        before="                    if tree_cleanup_result is True:\n",
+        after="                    if tree_cleanup_result:\n",
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="subprocess-abort-tree-raised-observability-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    _note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            '                        "Managed subprocess-tree abort cleanup raised while "\n'
+            '                        "preserving the primary exception: "\n'
+            "                        + _abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after=(
+            "                except BaseException as cleanup_error:\n"
+            "                    pass\n"
+        ),
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="subprocess-abort-reader-exact-proof-bypass",
+        path="evoom_guard/execution/process.py",
+        before="                    if reader_cleanup_result is True:\n",
+        after="                    if reader_cleanup_result:\n",
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="subprocess-abort-reader-raised-observability-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    _note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            '                        "Managed subprocess output-reader abort cleanup raised "\n'
+            '                        "while preserving the primary exception: "\n'
+            "                        + _abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after=(
+            "                except BaseException as cleanup_error:\n"
+            "                    pass\n"
+        ),
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="subprocess-abort-second-cleanup-stage-bypass",
+        path="evoom_guard/execution/process.py",
+        before="            if not reader_cleanup_proven:\n",
+        after=(
+            "            if tree_cleanup_proven and not reader_cleanup_proven:\n"
+        ),
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_abort_cleanup_preserves_two_failures_and_runs_both_stages"
+        ),
+    ),
+    Mutation(
+        name="subprocess-abort-note-legacy-fallback-bypass",
+        path="evoom_guard/execution/process.py",
+        before=(
+            "    try:\n"
+            '        namespace = object.__getattribute__(primary, "__dict__")\n'
+            '        notes = namespace.get("__notes__")\n'
+            "        if type(notes) is list:\n"
+            "            notes.append(note)\n"
+            "        else:\n"
+            '            namespace["__notes__"] = [note]\n'
+            "    except BaseException:\n"
+            "        pass\n"
+        ),
+        after="    return\n",
+        test=(
+            "tests/test_execution_process_reader_start.py::"
+            "test_abort_cleanup_note_uses_safe_legacy_fallback"
         ),
     ),
     Mutation(

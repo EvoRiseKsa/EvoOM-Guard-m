@@ -52,6 +52,13 @@ retained evidence say so.
   set: zipapp, SPDX SBOM, and `SHA256SUMS`.
 - Preserved LF protocol newlines when materializing unified diffs on Windows so
   valid `--diff` inputs reverse-apply instead of failing during reconstruction.
+- Made generic bounded-process cancellation retain the exact active
+  `BaseException` while attaching bounded secondary diagnostics when managed
+  process-tree or output-reader abort cleanup raises or is not positively
+  proven. Normal process results and verdict schemas are unchanged. The
+  specialized judge, raw-Git finalizer, and GitHub Attestation process owners
+  remain separate follow-up scopes rather than being represented as covered by
+  this generic runner change.
 
 ## [4.4.2] — published 2026-07-29; signed protected-tree ledger
 

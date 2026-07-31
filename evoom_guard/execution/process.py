@@ -11,6 +11,8 @@ The public contract is fail-closed:
   exception is returned;
 * POSIX completion also proves that no member of the dedicated process group
   remains; and
+* cancellation preserves the exact active ``BaseException`` while attaching
+  bounded diagnostics for every unproved or raised abort-cleanup stage; and
 * POSIX resource limits are data, not a caller-supplied ``preexec_fn``. A clean
   exec-based launcher applies them without running Python callbacks in the
   unsafe child interval between ``fork`` and ``exec``.
@@ -273,6 +275,84 @@ class ProcessTargetStartError(ProcessContainmentError):
 
 class ProcessGroupCleanupUnavailable(ProcessTargetStartError):
     """The host cannot provide the requested process-group cleanup proof."""
+
+
+_MAX_ABORT_CLEANUP_NOTE_CHARS = 2_000
+_ABORT_CLEANUP_NOTE_ELLIPSIS = "..."
+
+
+def _abort_cleanup_exception_type_name(error: BaseException) -> str:
+    """Return one exact exception type name without consulting its instance."""
+
+    try:
+        name = type(error).__name__
+    except BaseException:
+        return "BaseException"
+    return name if type(name) is str else "BaseException"
+
+
+def _bounded_abort_cleanup_text(value: object) -> str:
+    """Render one bounded exact ``str`` without trusting subclass hooks."""
+
+    try:
+        if isinstance(value, str):
+            rendered = value if type(value) is str else str.__str__(value)
+        else:
+            rendered = str(value)
+            if type(rendered) is not str:
+                rendered = str.__str__(rendered)
+    except BaseException:
+        rendered = "<unprintable>"
+    if type(rendered) is not str:
+        rendered = "<unprintable>"
+    if len(rendered) <= _MAX_ABORT_CLEANUP_NOTE_CHARS:
+        return rendered
+    keep = _MAX_ABORT_CLEANUP_NOTE_CHARS - len(_ABORT_CLEANUP_NOTE_ELLIPSIS)
+    return rendered[:keep] + _ABORT_CLEANUP_NOTE_ELLIPSIS
+
+
+def _abort_cleanup_exception_summary(error: BaseException) -> str:
+    """Describe a cleanup exception even when its ``__str__`` is hostile."""
+
+    error_type = _abort_cleanup_exception_type_name(error)
+    try:
+        detail = _bounded_abort_cleanup_text(str(error))
+    except BaseException as stringify_error:
+        detail = (
+            "<unprintable; __str__ raised "
+            + _abort_cleanup_exception_type_name(stringify_error)
+            + ">"
+        )
+    return _bounded_abort_cleanup_text(error_type + ": " + detail)
+
+
+def _note_abort_cleanup_failure(primary: BaseException, message: object) -> None:
+    """Attach secondary cleanup evidence without ever replacing ``primary``.
+
+    Python 3.11+ renders ``BaseException.add_note`` values in tracebacks.  The
+    direct ``__notes__`` fallback retains the same machine-readable fact on
+    Python 3.10 and when an exception exposes a hostile ``add_note`` override.
+    """
+
+    note = _bounded_abort_cleanup_text(message)
+    try:
+        add_note = getattr(primary, "add_note", None)
+        if callable(add_note):
+            add_note(note)
+            return
+    except BaseException:
+        # Fall through to the BaseException instance dictionary.  Reporting is
+        # secondary and may never mask the active cancellation/error.
+        pass
+    try:
+        namespace = object.__getattribute__(primary, "__dict__")
+        notes = namespace.get("__notes__")
+        if type(notes) is list:
+            notes.append(note)
+        else:
+            namespace["__notes__"] = [note]
+    except BaseException:
+        pass
 
 
 class BoundedOutput:
@@ -852,18 +932,46 @@ def execute_bounded_process(request: BoundedProcessRequest) -> BoundedProcessRes
                     # A reaped leader is not proof that its process group has no
                     # surviving descendant, so abort cleanup is unconditional
                     # until one successful proof has already been recorded.
-                    _terminate_process_tree(process, limits)
-                except BaseException:
-                    pass
+                    tree_cleanup_result = _terminate_process_tree(process, limits)
+                except BaseException as cleanup_error:
+                    _note_abort_cleanup_failure(
+                        primary,
+                        "Managed subprocess-tree abort cleanup raised while "
+                        "preserving the primary exception: "
+                        + _abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if tree_cleanup_result is True:
+                        tree_cleanup_proven = True
+                    else:
+                        _note_abort_cleanup_failure(
+                            primary,
+                            "Managed subprocess-tree abort cleanup was not "
+                            "proven while preserving the primary exception",
+                        )
             if not reader_cleanup_proven:
                 try:
-                    _join_attempted_pipe_readers(
+                    reader_cleanup_result = _join_attempted_pipe_readers(
                         reader_start_attempts,
                         streams,
                         limits.reader_join_seconds,
                     )
-                except BaseException:
-                    pass
+                except BaseException as cleanup_error:
+                    _note_abort_cleanup_failure(
+                        primary,
+                        "Managed subprocess output-reader abort cleanup raised "
+                        "while preserving the primary exception: "
+                        + _abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if reader_cleanup_result is True:
+                        reader_cleanup_proven = True
+                    else:
+                        _note_abort_cleanup_failure(
+                            primary,
+                            "Managed subprocess output-reader abort cleanup was "
+                            "not proven while preserving the primary exception",
+                        )
         raise
 
 
