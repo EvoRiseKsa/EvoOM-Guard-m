@@ -74,7 +74,7 @@
         "recorder": {
           "close_calls": 1,
           "closed": true,
-          "drain_calls": 2,
+          "drain_calls": 1,
           "path": "<TEMP>/runtime-temp/evo_blackbox_1/invocation.sock",
           "token": "<TOKEN>"
         },

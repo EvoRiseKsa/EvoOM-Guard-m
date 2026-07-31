@@ -20,7 +20,7 @@ from blackbox_pack_characterization_harness import (  # noqa: E402
     capture_all,
 )
 
-FIXTURE = TESTS / "fixtures" / "refactor-safety" / "blackbox-pack-phase-v1.json"
+FIXTURE = TESTS / "fixtures" / "refactor-safety" / "blackbox-pack-phase-v2.json"
 
 
 def main() -> int:

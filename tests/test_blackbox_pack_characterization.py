@@ -17,7 +17,7 @@ from blackbox_pack_characterization_harness import (
     capture_live_lookup,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "refactor-safety" / "blackbox-pack-phase-v1.json"
+FIXTURE = Path(__file__).parent / "fixtures" / "refactor-safety" / "blackbox-pack-phase-v2.json"
 
 
 def _frozen() -> dict:

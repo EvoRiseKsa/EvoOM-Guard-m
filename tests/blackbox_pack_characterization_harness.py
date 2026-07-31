@@ -19,7 +19,7 @@ from unittest.mock import patch
 import evoom_guard.blackbox as blackbox_module
 from evoom_guard.blackbox import BlackboxResult, run_blackbox
 
-SCHEMA_VERSION = "blackbox-pack-phase-v1"
+SCHEMA_VERSION = "blackbox-pack-phase-v2"
 NORMALIZED_FIELDS = (
     "temporary_paths",
     "current_python_executable",
@@ -312,10 +312,19 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
             "strict": kwargs.get("strict"),
         }
 
+    real_remove_tree = blackbox_module.shutil.rmtree
+
     def remove_tree(path: str, **kwargs: object) -> None:
         label = "pack-workdir" if "evo_blackbox_pack_" in path else "workdir"
         events.append(f"cleanup:rmtree:{label}")
-        state.setdefault("rmtree_ignore_errors", []).append(kwargs.get("ignore_errors"))
+        state.setdefault("workspace_cleanup", []).append(
+            {
+                "label": label,
+                "path_type": type(path).__name__,
+                "kwargs": sorted(kwargs),
+            }
+        )
+        real_remove_tree(path)
 
     with ExitStack() as stack:
         stack.enter_context(
@@ -435,6 +444,7 @@ def capture_live_lookup(workspace: Path) -> dict[str, Any]:
     real_parse = blackbox_module.parse_junit_xml
     real_distill = blackbox_module.distill_diagnostics
     real_attach = blackbox_module._attach_candidate_execution_evidence
+    real_remove_tree = blackbox_module.shutil.rmtree
 
     def late_attach(
         result: BlackboxResult,
@@ -589,7 +599,7 @@ def capture_live_lookup(workspace: Path) -> dict[str, Any]:
             patch.object(
                 blackbox_module.shutil,
                 "rmtree",
-                side_effect=lambda *_args, **_kwargs: None,
+                side_effect=real_remove_tree,
             )
         )
         result = run_blackbox(str(repo), _CANDIDATE, str(pack), timeout=7)

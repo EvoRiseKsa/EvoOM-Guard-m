@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +21,7 @@ from blackbox_characterization_harness import (
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "refactor-safety"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _frozen(group_name: str) -> dict:
@@ -42,6 +46,36 @@ def _assert_exact(expected: dict, actual: dict, label: str) -> None:
 
 def test_blackbox_public_contract_and_field_order_are_frozen() -> None:
     _assert_exact(_frozen("contract"), capture_contract(), "contract")
+
+
+def test_capture_script_loads_the_repository_source_tree(tmp_path: Path) -> None:
+    shadow_root = tmp_path / "shadow"
+    shadow_package = shadow_root / "evoom_guard"
+    shadow_package.mkdir(parents=True)
+    (shadow_package / "__init__.py").write_text(
+        "raise RuntimeError('shadow evoom_guard imported')\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(shadow_root)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "tools" / "ci" / "capture_blackbox_characterization.py"),
+            "--group",
+            "contract",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "matches all reviewed vectors" in completed.stdout
 
 
 @pytest.mark.parametrize(

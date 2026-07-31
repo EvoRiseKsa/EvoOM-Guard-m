@@ -433,6 +433,7 @@ def finalize_blackbox_verification(
         elif result.error in (
             "candidate container cleanup failed",
             "judge process cleanup failed",
+            "black-box workspace cleanup failed",
         ):
             verdict, reason_code = (
                 decision_symbol("ERROR"),
