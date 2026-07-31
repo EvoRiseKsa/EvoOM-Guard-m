@@ -1102,6 +1102,7 @@ class RepoVerifier:
         copy = workspace_lifetime.candidate_copy
         pack_snapshot: str | None = None
         pack_continuity: RepoPackContinuity | None = None
+        cleanup_primary: BaseException | None = None
         try:
             materialization = materialize_repo_candidate(
                 RepoCandidateMaterializationRequest(
@@ -1771,8 +1772,14 @@ class RepoVerifier:
                     )
                 ),
             )
+        except BaseException as error:
+            # ``sys.exc_info()`` can expose an exception still handled by the
+            # caller even when this verification completed normally. Only a
+            # failure raised inside this operation may outrank cleanup.
+            cleanup_primary = error
+            raise
         finally:
             _cleanup_repo_workspaces(
                 workspace_lifetime.cleanup_targets(),
-                primary=sys.exc_info()[1],
+                primary=cleanup_primary,
             )

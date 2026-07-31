@@ -4157,11 +4157,21 @@ MUTATIONS = (
     Mutation(
         name="repo-workspace-cleanup-primary-mask",
         path="evoom_guard/verifiers/repo_verifier.py",
-        before="                primary=sys.exc_info()[1],\n",
+        before="                primary=cleanup_primary,\n",
         after="                primary=None,\n",
         test=(
             "tests/test_repo_verifier_cleanup_priority.py::"
             "test_workspace_cleanup_baseexception_cannot_mask_primary"
+        ),
+    ),
+    Mutation(
+        name="repo-workspace-caller-ambient-primary-bypass",
+        path="evoom_guard/verifiers/repo_verifier.py",
+        before="                primary=cleanup_primary,\n",
+        after="                primary=sys.exc_info()[1],\n",
+        test=(
+            "tests/test_repo_verifier_cleanup_priority.py::"
+            "test_workspace_cleanup_ignores_callers_ambient_exception"
         ),
     ),
     Mutation(
@@ -7087,11 +7097,23 @@ MUTATIONS = (
     Mutation(
         name="repo-baseline-active-primary-cleanup-bypass",
         path="evoom_guard/verifiers/repo_baseline.py",
-        before="            primary=sys.exc_info()[1],\n",
+        before="            primary=cleanup_primary,\n",
         after="            primary=None,\n",
         test=(
             "tests/test_repo_baseline_cross_commit_characterization.py::"
             "test_baseline_cleanup_failure_preserves_an_active_primary"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-caller-ambient-primary-bypass",
+        path="evoom_guard/verifiers/repo_baseline.py",
+        before="            primary=cleanup_primary,\n",
+        after=(
+            "            primary=__import__(\"sys\").exc_info()[1],\n"
+        ),
+        test=(
+            "tests/test_repo_baseline_cross_commit_characterization.py::"
+            "test_baseline_cleanup_ignores_callers_ambient_exception"
         ),
     ),
     Mutation(

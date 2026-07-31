@@ -191,6 +191,42 @@ def test_baseline_cleanup_failure_preserves_an_active_primary(
     )
 
 
+def test_baseline_cleanup_ignores_callers_ambient_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    workspace = tmp_path / "owned-baseline"
+    cleanup_failure = OSError("cleanup denied")
+    ambient = RuntimeError("caller is handling this")
+
+    _install_success_path(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        guard_module.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(cleanup_failure),
+    )
+
+    try:
+        raise ambient
+    except RuntimeError:
+        with pytest.raises(OSError) as caught:
+            guard_module._run_baseline_suite(
+                str(source),
+                test_command=["suite"],
+                setup_command=None,
+                setup_output_globs=(),
+                timeout=17,
+                mem_limit_mb=23,
+                strict_harness=True,
+            )
+
+    assert caught.value is cleanup_failure
+    assert getattr(ambient, "__notes__", []) == []
+    assert workspace.is_dir()
+
+
 def test_baseline_commands_keep_caller_lists_live_until_historical_use(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

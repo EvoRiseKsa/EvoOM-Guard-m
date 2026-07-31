@@ -19,7 +19,6 @@ compatibility seams at the same operation sites.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -266,6 +265,7 @@ def run_repo_baseline(
         prefix="evo_baseline_",
         create_workspace=services.workspace_factory_provider(),
     )
+    cleanup_primary: BaseException | None = None
     try:
         candidate_copy = services.path_join_provider()(workdir, "repo")
         try:
@@ -465,10 +465,16 @@ def run_repo_baseline(
             "tests_passed": tests_passed,
             "tests_total": tests_total,
         }
+    except BaseException as error:
+        # A caller may invoke the baseline while handling an unrelated
+        # exception. Track only a failure raised by this operation so ambient
+        # exception state cannot demote a normal-path cleanup failure.
+        cleanup_primary = error
+        raise
     finally:
         _repository_workspace.cleanup_repo_workspaces(
             (("baseline workspace", workdir),),
-            primary=sys.exc_info()[1],
+            primary=cleanup_primary,
             # Resolve the historical facade provider inside the owned cleanup
             # attempt. Provider lookup failures are therefore secondary to an
             # active baseline exception instead of replacing it from finally.

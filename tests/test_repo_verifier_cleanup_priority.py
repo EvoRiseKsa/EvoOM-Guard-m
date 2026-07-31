@@ -94,6 +94,46 @@ def test_workspace_cleanup_failure_is_visible_after_pending_result(
     )
 
 
+def test_workspace_cleanup_ignores_callers_ambient_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    problem = _problem(repo)
+    workdir = tmp_path / "judge-workdir"
+    workdir.mkdir()
+    cleanup_error = OSError("cleanup must remain visible")
+    ambient = RuntimeError("caller is handling this")
+
+    monkeypatch.setattr(
+        repo_verifier.tempfile,
+        "mkdtemp",
+        lambda *, prefix: str(workdir),
+    )
+    monkeypatch.setattr(repo_verifier, "copy_repo_tree", lambda *_args: None)
+    monkeypatch.setattr(
+        repo_verifier,
+        "apply_blocks_to_copy",
+        lambda *_args: "candidate application failed",
+    )
+    monkeypatch.setattr(
+        repo_verifier.shutil,
+        "rmtree",
+        lambda _path: (_ for _ in ()).throw(cleanup_error),
+    )
+
+    try:
+        raise ambient
+    except RuntimeError:
+        with pytest.raises(OSError) as caught:
+            RepoVerifier(mem_limit_mb=0).verify(_candidate(), problem)
+
+    assert caught.value is cleanup_error
+    assert getattr(ambient, "__notes__", []) == []
+    assert workdir.is_dir()
+
+
 def test_every_workspace_cleanup_is_attempted_and_reported_on_primary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
