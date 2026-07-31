@@ -99,7 +99,7 @@
   },
   "engine_version": "4.5.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-07-31T19:59:49.243960Z",
+    "captured_at_utc": "2026-07-31T21:42:26.357004Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "c47e195b3412c0af974a5f19a0bcc78877a0756c",
+    "head": "e8e8bcd6f8143961f922d724664cb38b21154b70",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "ef4cffd861d1e0dda2fe44f433166b97684165eb",
+      "commit": "7313219e5eb48f9752313d096339724ec911847b",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "c47e195b3412c0af974a5f19a0bcc78877a0756c",
+      "commit": "e8e8bcd6f8143961f922d724664cb38b21154b70",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14815,
+    "bytes": 14819,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "ba95a477c89120422952a88cd5e6122bb0c019ae18f56cd0281176bca01a7861"
+    "sha256": "60fcf20d6b1b0c3c66bcc71e65faa49e6684c446abb98c5b3d5982bf6e901f6d"
   },
-  "run_id": "33d79091-9b80-4a03-b177-2afc97f4575c",
+  "run_id": "ead111dd-8b89-4229-9b6d-1ae818d3a2f9",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -805,9 +805,9 @@
         "sha256": "d390d2007e9f577bf80905060255742b9c60443ae2b46e1f28933e2ceb2a9b8d"
       },
       {
-        "bytes": 33165,
+        "bytes": 37571,
         "path": "evoom_guard/execution/process.py",
-        "sha256": "14bb423d008fd1210aebc1494bcb03aba93a643b2fa343e03a833d4075d56508"
+        "sha256": "41c4f025315d2c96c4687c4ab0e4d109dad380a34516952d7517016428d399d1"
       },
       {
         "bytes": 74157,
@@ -820,9 +820,9 @@
         "sha256": "45e9f3af280ef138a7ac2273ce483f415ff9c3422246a161e0ce67309071caf1"
       },
       {
-        "bytes": 97060,
+        "bytes": 98031,
         "path": "evoom_guard/guard.py",
-        "sha256": "958cabb33786b95ae5272175a8ca2b699e310d4451c2f1410315b3f58d57bea8"
+        "sha256": "a388d7fea1092954266358542987b038a5cc9ff2e7a159529f828930e414bd4b"
       },
       {
         "bytes": 390,
@@ -865,9 +865,9 @@
         "sha256": "545fbfdaa5ed0961cd30e0ec5159bcd895d39dbe13f8ea07344612259f07a049"
       },
       {
-        "bytes": 11501,
+        "bytes": 12948,
         "path": "evoom_guard/patchmin.py",
-        "sha256": "7ddea5cb6e0873d2d575fde20fda092a07118096698c1f6628495ee16d9395bf"
+        "sha256": "f2423bd3f7cfb5225656ebac60bbdade8fc6c6d881e12cae8e3f1a24b79e6418"
       },
       {
         "bytes": 1433,
@@ -1269,13 +1269,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "883045a6c48948f38367e8fa010ecc87fc7b218b2d65fc51dbcd7093d954aad0",
-    "total_bytes": 2625963
+    "sha256": "077fcd6ed86738cd27b28fd1ef6d98d160b3e0c3494de86a0e07cda7321d731e",
+    "total_bytes": 2632787
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.174,
-    "guard_full_run_median_s": 0.29,
-    "guard_full_run_p95_s": 0.321,
+    "controlled_direct_pytest_median_s": 0.194,
+    "guard_full_run_median_s": 0.279,
+    "guard_full_run_p95_s": 0.298,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
