@@ -15,6 +15,7 @@ are resolved through live providers at their historical operation boundaries.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypedDict, TypeVar
@@ -72,6 +73,17 @@ class WorkspaceFactory(Protocol):
     """Create the throwaway diff reconstruction workspace."""
 
     def __call__(self, *, prefix: str) -> str: ...
+
+
+class CleanupWorkspace(Protocol):
+    """Remove one owned diff workspace with explicit failure precedence."""
+
+    def __call__(
+        self,
+        path: str,
+        *,
+        primary: BaseException | None,
+    ) -> None: ...
 
 
 class _OperatingProfileOptions(TypedDict, total=False):
@@ -169,9 +181,7 @@ class DiffVerificationServices(Generic[ResultT]):
     guard_provider: Callable[[], Callable[..., ResultT]]
     diff_base_sha_provider: Callable[[], Callable[[str], str | None]]
     diff_head_sha_provider: Callable[[], Callable[[str], str | None]]
-    cleanup_workspace_provider: Callable[
-        [], Callable[..., None]
-    ]
+    cleanup_workspace_provider: Callable[[], CleanupWorkspace]
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,8 +255,11 @@ def verify_diff(
         )
 
     workdir = services.workspace_factory_provider()(prefix="evo_guard_diff_")
-    base = services.path_join_provider()(workdir, "base")
     try:
+        # Allocation establishes the cleanup boundary. Every later operation,
+        # including the first path-provider lookup/join, must therefore remain
+        # inside it so a failure cannot leak the owned root.
+        base = services.path_join_provider()(workdir, "base")
         services.copy_repo_tree_provider()(request.head_dir, base)
         diff_file = services.path_join_provider()(workdir, "patch.diff")
         services.diff_writer_provider()(diff_file, diff_text)
@@ -352,4 +365,7 @@ def verify_diff(
         result.base_reconstruction = "ok"
         return DiffVerificationOutcome(result=result, deleted=deleted)
     finally:
-        services.cleanup_workspace_provider()(workdir, ignore_errors=True)
+        services.cleanup_workspace_provider()(
+            workdir,
+            primary=sys.exc_info()[1],
+        )

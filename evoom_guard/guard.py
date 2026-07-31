@@ -50,6 +50,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict, cast
 
 import evoom_guard.workspace.candidate_tree as _candidate_tree
+import evoom_guard.workspace.repository as _repository_workspace
 from evoom_guard import __version__
 from evoom_guard.application.assurance import (
     ISOLATION_RANK_POLICY,
@@ -1999,6 +2000,32 @@ def _write_diff_file(diff_file: str, diff_text: str) -> None:
         f.write(diff_text if diff_text.endswith("\n") else diff_text + "\n")
 
 
+def _allocate_diff_workspace(*, prefix: str) -> str:
+    """Allocate one identity-bound workspace for base reconstruction."""
+
+    return _repository_workspace.allocate_owned_workspace(
+        prefix=prefix,
+        create_workspace=tempfile.mkdtemp,
+    )
+
+
+def _cleanup_diff_workspace(
+    path: str,
+    *,
+    primary: BaseException | None,
+) -> None:
+    """Remove the owned reconstruction root without masking ``primary``."""
+
+    _repository_workspace.cleanup_repo_workspaces(
+        (("reconstruction workspace", path),),
+        primary=primary,
+        # Keep lookup within the cleanup owner so it is secondary to an
+        # exception already unwinding from diff reconstruction.
+        remove_tree=lambda target: shutil.rmtree(target),
+        owner_name="DiffVerification",
+    )
+
+
 def guard_from_diff(
     head_dir: str,
     diff_text: str,
@@ -2198,7 +2225,7 @@ def guard_from_diff(
             verifier_pack_trust_check_provider=(
                 lambda: verifier_pack_trust_error
             ),
-            workspace_factory_provider=lambda: tempfile.mkdtemp,
+            workspace_factory_provider=lambda: _allocate_diff_workspace,
             path_join_provider=lambda: os.path.join,
             copy_repo_tree_provider=lambda: copy_repo_tree,
             diff_writer_provider=lambda: _write_diff_file,
@@ -2210,7 +2237,7 @@ def guard_from_diff(
             guard_provider=lambda: guard,
             diff_base_sha_provider=lambda: _diff_base_sha,
             diff_head_sha_provider=lambda: _diff_head_sha,
-            cleanup_workspace_provider=lambda: shutil.rmtree,
+            cleanup_workspace_provider=lambda: _cleanup_diff_workspace,
         ),
     )
     if (

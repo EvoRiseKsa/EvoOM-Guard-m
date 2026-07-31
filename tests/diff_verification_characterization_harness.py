@@ -49,6 +49,7 @@ CASE_NAMES = (
     "copy_exception_cleans_up",
     "empty_preflight",
     "explicit_sha_short_circuit",
+    "guard_and_cleanup_exception",
     "guard_exception_cleans_up",
     "live_binary_reason_rebinding",
     "live_provider_rebinding",
@@ -59,7 +60,7 @@ CASE_NAMES = (
     "success_forwards_every_option",
     "unsafe_path_preflight",
     "unverifiable_paths",
-    "workspace_join_exception_precedes_cleanup",
+    "workspace_join_exception_cleans_up",
     "write_exception_cleans_up",
 )
 
@@ -112,6 +113,7 @@ def _spec(case_name: str) -> dict[str, Any]:
         "reverse_ok": True,
         "blocks": ({"app.py": "VALUE = 2\n"}, ["old.py"]),
         "raise_at": None,
+        "cleanup_raises": False,
         "explicit_sha": False,
         "live": False,
         "late_reason": None,
@@ -140,8 +142,12 @@ def _spec(case_name: str) -> dict[str, Any]:
         "copy_exception_cleans_up": {"raise_at": "copy"},
         "write_exception_cleans_up": {"raise_at": "write"},
         "guard_exception_cleans_up": {"raise_at": "guard"},
-        "cleanup_exception_masks_success": {"raise_at": "cleanup"},
-        "workspace_join_exception_precedes_cleanup": {"raise_at": "join"},
+        "cleanup_exception_masks_success": {"cleanup_raises": True},
+        "guard_and_cleanup_exception": {
+            "raise_at": "guard",
+            "cleanup_raises": True,
+        },
+        "workspace_join_exception_cleans_up": {"raise_at": "join"},
     }
     if case_name not in cases:
         raise ValueError(f"unknown diff-verification case: {case_name}")
@@ -159,9 +165,11 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
     result: Any = None
     deleted: list[str] | None = None
     exception: dict[str, str] | None = None
+    exception_notes: list[str] = []
     workspace_path = str(workspace / "diff-workspace")
     original_join = guard_module.os.path.join
     original_binary_check = guard_module._is_binary_diff
+    original_cleanup = guard_module.shutil.rmtree
 
     def fake_binary_check(value: str) -> bool:
         if spec["late_reason"] == "binary":
@@ -179,6 +187,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
 
     def fake_mkdtemp(*, prefix: str) -> str:
         timeline.append(f"workspace:create:{prefix}")
+        Path(workspace_path).mkdir(parents=True)
         return workspace_path
 
     def fake_join(parent: str, child: str) -> str:
@@ -291,12 +300,14 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
     ) -> ProbeResult:
         return _record_guard("late", base_dir, candidate, kwargs)
 
-    def fake_cleanup(path: str, *, ignore_errors: bool) -> None:
+    def fake_cleanup(path: str) -> None:
         timeline.append(
-            f"workspace:cleanup:{path == workspace_path}:{ignore_errors}"
+            "workspace:cleanup:"
+            f"{path == workspace_path}:{type(path) is not str}"
         )
-        if spec["raise_at"] == "cleanup":
+        if spec["cleanup_raises"]:
             raise ProbeError("synthetic cleanup failure")
+        original_cleanup(path)
 
     call_kwargs: dict[str, Any] = {
         "test_command": ["python", "-m", "pytest"],
@@ -376,6 +387,7 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
                 "type": type(error).__name__,
                 "message": str(error),
             }
+            exception_notes = list(getattr(error, "__notes__", ()))
 
     normalized_guard: dict[str, Any] | None = None
     if guard_call is not None:
@@ -410,5 +422,6 @@ def capture_case(case_name: str, workspace: Path) -> dict[str, Any]:
         "decision": decision,
         "deleted": deleted,
         "exception": exception,
+        "exception_notes": exception_notes,
         "guard_call": normalized_guard,
     }

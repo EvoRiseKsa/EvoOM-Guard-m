@@ -11008,10 +11008,35 @@ MUTATIONS = (
         name="diff-verification-workspace-cleanup-bypass",
         path="evoom_guard/application/diff_verification.py",
         before=(
-            "        services.cleanup_workspace_provider()"
-            "(workdir, ignore_errors=True)\n"
+            "        services.cleanup_workspace_provider()(\n"
+            "            workdir,\n"
+            "            primary=sys.exc_info()[1],\n"
+            "        )\n"
         ),
         after="        None\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_success_serializes_and_forwards_every_historical_input"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-active-primary-cleanup-bypass",
+        path="evoom_guard/application/diff_verification.py",
+        before="            primary=sys.exc_info()[1],\n",
+        after="            primary=None,\n",
+        test=(
+            "tests/test_diff_verification_characterization.py::"
+            "test_active_primary_survives_cleanup_failure_with_diagnostic_note"
+        ),
+    ),
+    Mutation(
+        name="diff-verification-owned-allocation-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "            workspace_factory_provider="
+            "lambda: _allocate_diff_workspace,\n"
+        ),
+        after="            workspace_factory_provider=lambda: tempfile.mkdtemp,\n",
         test=(
             "tests/test_diff_verification_characterization.py::"
             "test_success_serializes_and_forwards_every_historical_input"
