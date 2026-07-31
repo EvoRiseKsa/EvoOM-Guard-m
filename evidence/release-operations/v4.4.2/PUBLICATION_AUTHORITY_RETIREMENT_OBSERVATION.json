@@ -1,0 +1,51 @@
+{
+  "actor": {
+    "id": 231647061,
+    "login": "EvoRiseKsa"
+  },
+  "claim_boundary": {
+    "external_key_copy_destruction_proved": false,
+    "independent_observation": false,
+    "key_retirement_receipt": false,
+    "ledger_private_key_available_to_this_observation": false,
+    "same_owner_point_in_time_observation": true,
+    "signed": false
+  },
+  "format": "EVOGUARD_PUBLICATION_AUTHORITY_RETIREMENT_OBSERVATION_V1",
+  "ledger_binding": {
+    "ledger_path": "evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json",
+    "publication_authority_status_in_immutable_ledger": "pending-post-ledger",
+    "release_commit_sha": "699c60c22445a6af54c58f31fca34edc225b98a9",
+    "release_tag": "v4.4.2"
+  },
+  "observations": {
+    "deploy_key": {
+      "complete_repository_listing_after_removal": {
+        "count": 0,
+        "ids": [],
+        "per_page": 100
+      },
+      "direct_lookup_after_removal_http_status": 404,
+      "expected_id": 158279356,
+      "expected_read_only": false,
+      "expected_title": "EvoGuard release tag authority"
+    },
+    "environment_secret": {
+      "complete_environment_listing_after_removal": {
+        "names": [],
+        "per_page": 100,
+        "total_count": 0
+      },
+      "environment": "evoguard-release-publication",
+      "expected_name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY"
+    }
+  },
+  "observed_utc": "2026-07-31T21:17:07Z",
+  "repository": {
+    "full_name": "EvoRiseKsa/EvoOM-Guard-m",
+    "owner_id": 231647061,
+    "repository_id": 1293651176
+  },
+  "result": "github-publication-authority-observed-absent",
+  "statement": "The exact v4.4.2 publication deploy key and Environment secret named by the signed ledger were removed, and their absence was observed through authenticated GitHub API listings. This unsigned same-owner record is not KEY_RETIREMENT.json and does not satisfy the signed retirement-receipt contract."
+}
