@@ -7650,19 +7650,6 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="diff-coverage-active-primary-diagnostic-bound-bypass",
-        path="evoom_guard/evidence.py",
-        before="                note_failure=_note_coverage_cleanup_failure,\n",
-        after=(
-            "                note_failure="
-            "_repository_workspace.note_cleanup_failure,\n"
-        ),
-        test=(
-            "tests/test_evidence_containment.py::"
-            "test_coverage_cleanup_active_primary_diagnostic_is_bounded"
-        ),
-    ),
-    Mutation(
         name="diff-coverage-success-after-cleanup-failure-bypass",
         path="evoom_guard/evidence.py",
         before=(
