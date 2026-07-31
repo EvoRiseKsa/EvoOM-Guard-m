@@ -6858,28 +6858,32 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="repo-baseline-historical-cleanup-masking-bypass",
+        name="repo-baseline-owned-allocation-bypass",
         path="evoom_guard/verifiers/repo_baseline.py",
         before=(
-            "    finally:\n"
-            "        services.cleanup_workspace_provider()(\n"
-            "            workdir,\n"
-            "            ignore_errors=True,\n"
-            "        )\n"
+            "    workdir = _repository_workspace.allocate_owned_workspace(\n"
+            "        prefix=\"evo_baseline_\",\n"
+            "        create_workspace=services.workspace_factory_provider(),\n"
+            "    )\n"
         ),
         after=(
-            "    finally:\n"
-            "        try:\n"
-            "            services.cleanup_workspace_provider()(\n"
-            "                workdir,\n"
-            "                ignore_errors=True,\n"
-            "            )\n"
-            "        except BaseException:\n"
-            "            pass\n"
+            "    workdir = services.workspace_factory_provider()(\n"
+            "        prefix=\"evo_baseline_\"\n"
+            "    )\n"
         ),
         test=(
+            "tests/test_repo_baseline_characterization.py::"
+            "test_baseline_effect_order_trust_boundary_and_cleanup_are_frozen"
+        ),
+    ),
+    Mutation(
+        name="repo-baseline-active-primary-cleanup-bypass",
+        path="evoom_guard/verifiers/repo_baseline.py",
+        before="            primary=sys.exc_info()[1],\n",
+        after="            primary=None,\n",
+        test=(
             "tests/test_repo_baseline_cross_commit_characterization.py::"
-            "test_baseline_cleanup_failure_historically_masks_an_active_primary"
+            "test_baseline_cleanup_failure_preserves_an_active_primary"
         ),
     ),
     Mutation(
