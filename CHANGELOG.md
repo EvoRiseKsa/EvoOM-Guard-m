@@ -40,8 +40,10 @@ is the latest stable and supported consumer release. Its signed
 binds candidate commit `6bb4c328e56661b661e50532886802c6ba36a997`, the protected
 A-through-H operation, and the exact three-asset immutable publication. This
 same-owner retained evidence does not establish independent review,
-reproducibility, production readiness, deployment authorization, or completion
-of the separate publication-authority retirement operation.
+reproducibility, production readiness, or deployment authorization. The later
+publication-authority operation is retained separately in the signed
+[`KEY_RETIREMENT.json`](evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
+receipt and is not a claim made by the immutable ledger.
 
 ### Added
 
@@ -78,10 +80,14 @@ of the separate publication-authority retirement operation.
   observation is explicitly unsigned and is not represented as the signed
   `KEY_RETIREMENT.json` receipt that could not be produced without the offline
   ledger private key.
-- Recorded `v4.5.0` publication-authority retirement as
-  `pending-post-ledger`. It must remain pending until the signed ledger is
-  committed to protected main, those committed bytes are revalidated, and a
-  separate signed `KEY_RETIREMENT.json` receipt is created and verified.
+- Kept the immutable `v4.5.0` ledger's publication-authority state as
+  `pending-post-ledger`, which is the state known when that ledger was signed.
+  After the committed bytes were revalidated, removed the exact temporary
+  publication deploy key and Environment secret and retained a separately
+  signed, validated
+  [`KEY_RETIREMENT.json`](evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
+  receipt. The receipt is a same-owner point-in-time API observation, not proof
+  of secure erasure or absence of external copies.
 - Made generic bounded-process cancellation retain the exact active
   `BaseException` while attaching bounded secondary diagnostics when managed
   process-tree or output-reader abort cleanup raises or is not positively
