@@ -1,0 +1,7 @@
+# Hash-locked Linux x86_64 / Python 3.12 Ed25519 dependencies for protected admission jobs.
+cryptography==46.0.7 \
+    --hash=sha256:420b1e4109cc95f0e5700eed79908cef9268265c773d3a66f7af1eef53d409ef
+cffi==2.1.0 \
+    --hash=sha256:1e9f50d192a3e525b15a75ab5114e442d83d657b7ec29182a991bc9a88fd3a66
+pycparser==3.0 \
+    --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
