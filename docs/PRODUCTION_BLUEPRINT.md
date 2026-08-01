@@ -222,14 +222,19 @@ Until all gates close, release notes must use **release candidate**, **beta**, o
    does not establish reproducibility, independent efficacy, hostile-code
    production readiness, or external adoption.
 2. **[Current field-pilot gate #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
-   — open:** pre-register 50–100 held-out cases from
-   multiple projects and ecosystems before execution. Freeze the sampling
-   unit, duplicate rule, label balance, exclusions, policy, profile, baseline,
-   authority identities, key separation, and ownership/control disclosure.
-   Measure onboarding, ERROR abstentions,
-   false-reject/false-accept counts, p50/p95 latency, configuration effort, and
-   delivered isolation. This is a protocol and onboarding pilot, not a
-   production-accuracy claim.
+   — open:** pre-register 64–96 total cases, including at least 48 held-out and
+   16 tuning cases, before execution. Each subset must span at least four
+   repositories and four ecosystems; each repository contributes 4–12 cases
+   to exactly one subset. Freeze the sampling unit, duplicate rule, label
+   balance, exclusions, per-track policy/profile, verifier pack, runtime,
+   baseline, authority identities, key separation, and ownership/control
+   disclosure. Bind the exact release commit, asset digest, and signed-ledger
+   digest. Measure onboarding, ERROR/unsupported/incomplete/infrastructure
+   abstentions outside the confusion matrix, false-reject/false-accept counts,
+   p50/p95 latency, configuration effort, delivered isolation, per-repository
+   outcomes, and leave-one-repository-out sensitivity. This is a bounded
+   protocol and onboarding pilot, not a production or population-accuracy
+   claim.
 3. **5.0 profile enforcement:** require an explicit profile for protected
    deployments, remove the unprofiled compatibility path from admission, and
    complete the runner/isolation conformance matrix and migration guide.
