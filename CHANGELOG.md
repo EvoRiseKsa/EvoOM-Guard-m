@@ -19,8 +19,8 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) is the latest stable and supported consumer release.
-- Source `4.5.0`: release candidate; not a consumer release.
+- [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest stable and supported consumer release.
+- Source `4.5.0`: source on the latest ledger-recorded release line.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.

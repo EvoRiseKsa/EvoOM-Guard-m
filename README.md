@@ -34,15 +34,16 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.5.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
-[`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) at commit
-`699c60c22445a6af54c58f31fca34edc225b98a9`. Its `evoguard-release-ledger-v2` ledger
+Source version `4.5.0` is on the **ledger-recorded release line**; this protected source
+tree may be a post-tag descendant and is not a new consumer release. The latest
+immutable consumer release recorded by the protected source tree is
+[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
+`6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
 its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
 release asset and its provenance. Canonical ledger:
-`evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json`.
+`evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`.
 
 The protected A-H release pipeline is implemented in source and **disabled by default**.
 The legacy release workflow is hard-disabled. The externally anchored signed v2 ledger
@@ -69,7 +70,7 @@ directly from GitHub:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.4.2"   # ledger-recorded release; pin a SHA for strictest CI
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.5.0"   # ledger-recorded release; pin a SHA for strictest CI
 
 # From the branch you want checked (the diff is reverse-applied to a
 # throwaway copy; your working tree is never modified):
@@ -116,7 +117,7 @@ Generate a workflow and a base-owned `.evoguard.json` policy:
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 ```bash
-evo-guard init --ref v4.4.2 --test-command "python -m pytest -q"
+evo-guard init --ref v4.5.0 --test-command "python -m pytest -q"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:README_INIT_PIN -->
 
@@ -136,7 +137,7 @@ steps:
     with:
       fetch-depth: 0
       persist-credentials: false
-  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.4.2   # ledger-recorded release; pin a SHA for strictest CI
+  - uses: EvoRiseKsa/EvoOM-Guard-m@v4.5.0   # ledger-recorded release; pin a SHA for strictest CI
     with:
       comment: "false"   # explicit for older releases; candidate jobs never comment
       fail-on: "any-non-pass"
@@ -237,7 +238,7 @@ without crowding this landing page.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_ATTESTATION_SCOPE -->
 Historical `v3.7.0` has a GitHub release attestation but no GitHub Actions
-build-artifact attestation. The validated `v4.4.2` ledger records build provenance whose
+build-artifact attestation. The validated `v4.5.0` ledger records build provenance whose
 subject is `evo-guard.pyz` under
 `.github/workflows/evoguard-build-release-artifact.yml`. Its release attestation
 separately binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS` and records SPDX

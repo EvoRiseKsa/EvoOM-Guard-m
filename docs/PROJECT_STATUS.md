@@ -27,15 +27,16 @@ validated security service.
 ## Public repository map
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
-Source version `4.5.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
-[`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) at commit
-`699c60c22445a6af54c58f31fca34edc225b98a9`. Its `evoguard-release-ledger-v2` ledger
+Source version `4.5.0` is on the **ledger-recorded release line**; this protected source
+tree may be a post-tag descendant and is not a new consumer release. The latest
+immutable consumer release recorded by the protected source tree is
+[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
+`6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
 its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
 release asset and its provenance. Canonical ledger:
-`evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json`.
+`evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
 
 Verified live facts and separate frozen-validator defects for `v4.4.0` and
@@ -88,8 +89,8 @@ assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_PIPELINE -->
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_EVIDENCE_ROWS -->
-Release evidence: validated ledger `evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json`
-records `v4.4.2` assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
+Release evidence: validated ledger `evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`
+records `v4.5.0` assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; its
 build-provenance attestation binds `evo-guard.pyz` under
 `.github/workflows/evoguard-build-release-artifact.yml`. It also records the SPDX SBOM
