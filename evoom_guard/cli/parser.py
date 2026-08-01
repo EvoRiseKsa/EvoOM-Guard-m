@@ -1516,6 +1516,44 @@ def build_parser(
         help="also act as a gate: exit 0 only for an authenticated semantic PASS",
     )
 
+    # ----- finalizer-init / finalizer-doctor ----------------------------- #
+    fi_p = sub.add_parser(
+        "finalizer-init",
+        help="install the canonical v4.5.0 Trusted Finalizer workflow pair",
+    )
+    fi_p.add_argument(
+        "--root",
+        default=".",
+        help="consumer repository root (default: current directory)",
+    )
+    fi_p.add_argument(
+        "--public-key",
+        required=True,
+        help="Ed25519 PUBLIC KEY PEM to commit; private keys are refused",
+    )
+    fi_p.add_argument(
+        "--json",
+        dest="finalizer_init_json",
+        action="store_true",
+        help="emit the installation result as JSON",
+    )
+
+    fd_p = sub.add_parser(
+        "finalizer-doctor",
+        help="inspect committed Trusted Finalizer files and policy (static only)",
+    )
+    fd_p.add_argument(
+        "--root",
+        default=".",
+        help="consumer repository root (default: current directory)",
+    )
+    fd_p.add_argument(
+        "--json",
+        dest="finalizer_doctor_json",
+        action="store_true",
+        help="emit the static deployment report as JSON",
+    )
+
     # ----- doctor -------------------------------------------------------- #
     d_p = sub.add_parser(
         "doctor",

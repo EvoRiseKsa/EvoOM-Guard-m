@@ -79,6 +79,9 @@ from evoom_guard.cli import (
 )
 from evoom_guard.cli import diagnostic_commands as _diagnostic_command_owner
 from evoom_guard.cli import (
+    finalizer_deployment_commands as _finalizer_deployment_command_owner,
+)
+from evoom_guard.cli import (
     github_attestation_admission_commands as _github_attestation_admission_command_owner,
 )
 from evoom_guard.cli import (
@@ -580,6 +583,40 @@ def cmd_doctor(args: argparse.Namespace, *, out: Callable[[str], None] = print) 
     return _diagnostic_command_owner.execute_doctor(
         args,
         report_provider=lambda: doctor_report(),
+        json_dumps=lambda value, **kwargs: json.dumps(value, **kwargs),
+        out=out,
+    )
+
+
+def cmd_finalizer_init(
+    args: argparse.Namespace, *, out: Callable[[str], None] = print
+) -> int:
+    """Install the deterministic, no-clobber Trusted Finalizer deployment kit."""
+
+    from evoom_guard.finalizer.deployment import (
+        FinalizerDeploymentError,
+        install_finalizer_deployment,
+    )
+
+    return _finalizer_deployment_command_owner.execute_finalizer_init(
+        args,
+        installer=install_finalizer_deployment,
+        error_type=FinalizerDeploymentError,
+        json_dumps=lambda value, **kwargs: json.dumps(value, **kwargs),
+        out=out,
+    )
+
+
+def cmd_finalizer_doctor(
+    args: argparse.Namespace, *, out: Callable[[str], None] = print
+) -> int:
+    """Inspect static finalizer inputs without claiming live GitHub readiness."""
+
+    from evoom_guard.finalizer.deployment import inspect_finalizer_deployment
+
+    return _finalizer_deployment_command_owner.execute_finalizer_doctor(
+        args,
+        inspector=inspect_finalizer_deployment,
         json_dumps=lambda value, **kwargs: json.dumps(value, **kwargs),
         out=out,
     )
@@ -2335,6 +2372,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_guard(args)
     if args.command == "doctor":
         return cmd_doctor(args)
+    if args.command == "finalizer-init":
+        return cmd_finalizer_init(args)
+    if args.command == "finalizer-doctor":
+        return cmd_finalizer_doctor(args)
     if args.command == "init":
         return cmd_init(args)
     if args.command == "keygen":

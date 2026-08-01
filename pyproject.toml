@@ -57,7 +57,7 @@ dev = [
 license-files = ["LICENSE"]
 
 [tool.setuptools.package-data]
-evoom_guard = ["schemas/*.json"]
+evoom_guard = ["schemas/*.json", "templates/**/*.json", "templates/**/*.yml"]
 
 [tool.setuptools.packages.find]
 include = ["evoom_guard*"]

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:finalizer-deployment:1",
+  "title": "EvoGuard Trusted Finalizer deployment manifest V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "files",
+    "format",
+    "github",
+    "kit",
+    "policy_path",
+    "public_key",
+    "runtime"
+  ],
+  "properties": {
+    "format": {"const": "EVOGUARD_FINALIZER_DEPLOYMENT_V1"},
+    "kit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "version"],
+      "properties": {
+        "format": {"const": "EVOGUARD_FINALIZER_KIT_V1"},
+        "version": {"const": 1}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "download_url",
+        "release",
+        "release_ledger_sha256",
+        "sha256",
+        "source_commit"
+      ],
+      "properties": {
+        "download_url": {"type": "string", "format": "uri"},
+        "release": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "release_ledger_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "files": {
+      "type": "object",
+      "minProperties": 2,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sha256"],
+        "properties": {
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "public_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key_id", "path", "sha256"],
+      "properties": {
+        "key_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "policy_path": {"type": "string", "minLength": 1},
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment",
+        "guard_digest_variable",
+        "private_key_secret",
+        "reverify_workflow_id_variable"
+      ],
+      "properties": {
+        "environment": {"type": "string", "minLength": 1},
+        "guard_digest_variable": {"type": "string", "minLength": 1},
+        "private_key_secret": {"type": "string", "minLength": 1},
+        "reverify_workflow_id_variable": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

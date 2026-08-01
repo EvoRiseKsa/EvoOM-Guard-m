@@ -143,6 +143,8 @@ unannounced vulnerabilities, or private operational logs.
   contract, fail-closed conditions, and evidence retention.
 - [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md) — split re-verification and
   sealing boundary for admission.
+- [`FINALIZER_DEPLOYMENT_KIT.md`](FINALIZER_DEPLOYMENT_KIT.md) — deterministic
+  no-clobber installation and static inspection of the v4.5.0 workflow pair.
 - [`OPERATIONAL_TELEMETRY.md`](OPERATIONAL_TELEMETRY.md) — privacy-allowlisted
   local summaries; not complete run inventory or an SLO system.
 - [`PROJECT_STATUS.md`](PROJECT_STATUS.md) — implementation state, public/private

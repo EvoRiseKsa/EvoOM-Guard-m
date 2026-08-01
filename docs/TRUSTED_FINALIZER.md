@@ -28,9 +28,11 @@ discarded as a failed job.
 
 The paired workflows are available both as:
 
-- templates in `examples/trusted-finalizer/`
+- a frozen historical reference in `examples/trusted-finalizer/`
 - implementation-ready copies in `.github/workflows/evoguard-reverify.yml` and
-  `.github/workflows/evoguard-seal.yml`.
+  `.github/workflows/evoguard-seal.yml`; and
+- byte-bound packaged v4.5.0 templates used by the no-clobber
+  [`Finalizer deployment kit`](FINALIZER_DEPLOYMENT_KIT.md).
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->
 They are not enforced as required merge gates by default in this repository.
@@ -49,6 +51,9 @@ must not be silently rewritten. New exercises should use `v4.5.0` (version
 `4.5.0`) or its exact commit pin and complete the audit before
 enforcement.
 <!-- END EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->
+The `finalizer-init`/`finalizer-doctor` commands are post-v4.5.0 repository
+source behavior: they target the v4.5.0 runtime but must not be described as
+commands already present in the immutable v4.5.0 tag.
 The raw-Git derivation contract is specified in
 [`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md). A consumer
 must deploy a release that contains this command set and update the protected

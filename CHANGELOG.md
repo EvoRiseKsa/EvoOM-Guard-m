@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest stable and supported consumer release.
-- Source `4.5.0`: source on the latest ledger-recorded release line.
+- Source `4.6.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -30,7 +30,14 @@ retained evidence say so.
 
 ## [Unreleased]
 
-No unreleased product changes are recorded.
+### Added
+
+- Added deterministic, no-clobber `finalizer-init` installation and static-only
+  `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
+  The kit commits a public-key-bound deployment manifest, validates the
+  trusted-base policy and verifier-pack digest, ships JSON Schemas in wheel and
+  zipapp artifacts, and explicitly does not claim to configure or inspect live
+  GitHub controls.
 
 ## [4.5.0] — published 2026-08-01; signed protected-tree ledger
 
