@@ -258,15 +258,21 @@ needs — not feature accumulation. The order matters:
    remains a frozen historical target whose exact release artifacts remain
    immutable; it must not be rewritten as a current-release review. The separate
    [current field-pilot #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
-   must
-   pre-register 50–100 held-out cases from multiple projects and ecosystems,
-   including its sampling unit, duplicate rule, label balance, exclusions,
-   policy/profile, baselines, declared label/execution/finalizer authorities,
-   distinct key identities, and ownership/control relationships before
-   execution. That round measures protocol/onboarding behavior; it is not by
-   itself a production or accuracy proof. Same-owner cross-account review
-   remains operational separation, not independence; only externally
-   independent organizational control closes the independent-evidence gate.
+   must pre-register **64–96 total cases**, including at least **48 held-out**
+   and **16 tuning** cases. Each subset must span at least four repositories
+   and four ecosystems, every repository must contribute 4–12 cases, and no
+   repository may cross the tuning/held-out boundary. Freeze the sampling
+   unit, duplicate rule, label balance, exclusions, per-track policy/profile,
+   verifier pack, runtime and baseline, declared label/execution/finalizer
+   authorities, distinct key identities, and ownership/control relationships
+   before execution. Bind the exact `v4.5.0` release commit, asset, and signed
+   ledger bytes. Report Guard errors, unsupported/incomplete cases, timeouts,
+   and infrastructure failures outside the confusion matrix rather than
+   converting abstentions into decision errors. That round measures protocol,
+   compatibility, and onboarding behavior; it is not by itself a production
+   or population-accuracy proof. Same-owner cross-account review remains
+   operational separation, not independence; only externally independent
+   organizational control closes the independent-evidence gate.
 3. **Only after adoption evidence.** Stronger fork/VM boundaries, organization
    policy enforcement, and an adapter/pack SDK require evidence from real
    adopters and onboarding failures. They are not assumed product needs.
