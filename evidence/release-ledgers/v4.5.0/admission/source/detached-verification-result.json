@@ -1,0 +1,11 @@
+{
+  "admission": true,
+  "decision": "ALLOW",
+  "format": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2",
+  "key_id": "sha256:803da4daac87e779da41d78a13017e00eedacba8365b1db4a67707fb92546b53",
+  "ok": true,
+  "producer_receipt_sha256": "7f9be4a80dbc0072cdd460b2cbc0e5a9cc34f59593ccd96d82a98e8935582759",
+  "record_sha256": "b69ae7d032606830b16ffc15b824eb3aed5cb8d382b3392b828109faec2a155e",
+  "status": "VERIFIED",
+  "verified": true
+}

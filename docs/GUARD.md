@@ -68,9 +68,9 @@ code.
 ## Install
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:GUARD_CURRENT_RELEASE -->
-> **Release availability.** [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) is the latest immutable
+> **Release availability.** [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest immutable
 > consumer release recorded by the protected source tree. For strict CI,
-> pin commit `699c60c22445a6af54c58f31fca34edc225b98a9` rather than a tag.
+> pin commit `6bb4c328e56661b661e50532886802c6ba36a997` rather than a tag.
 
 EvoOM Guard is not published to PyPI. Obtain it from this repository.
 
@@ -81,14 +81,14 @@ EvoOM Guard is not published to PyPI. Obtain it from this repository.
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.4.2
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.5.0
 ```
 
 **CLI:**
 
 ```bash
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.4.2"
-pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@699c60c22445a6af54c58f31fca34edc225b98a9"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.5.0"
+pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@6bb4c328e56661b661e50532886802c6ba36a997"
 evo-guard guard --diff - --no-config --test-command "python -m pytest -q" < pr.diff
 ```
 
@@ -271,7 +271,7 @@ A composite action ships at the repository root
   with:
     fetch-depth: 0
     persist-credentials: false
-- uses: EvoRiseKsa/EvoOM-Guard-m@v4.4.2
+- uses: EvoRiseKsa/EvoOM-Guard-m@v4.5.0
   with:
     comment: "false"
     fail-on: "any-non-pass"
@@ -434,7 +434,7 @@ If you prefer no composite action, the `--diff` mode is a two-line gate:
   with:
     fetch-depth: 0
     persist-credentials: false
-- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.4.2"
+- run: pip install "git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.5.0"
 - run: |
     BASE="${{ github.event.pull_request.base.sha }}"
     git fetch --no-tags origin "$BASE"
@@ -455,14 +455,14 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
-**`v4.4.2` release contract:** for a named, fail-closed combination of these
+**`v4.5.0` release contract:** for a named, fail-closed combination of these
 controls, use
 `--operating-profile local|protected|hostile`. The profile is included in the
 effective policy and its digest only when explicitly selected. `protected`
 requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
 network; `hostile` requires gVisor and an active memory limit. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
-custody rules. Confirm the exact ledger-recorded `v4.4.2` artifact before
+custody rules. Confirm the exact ledger-recorded `v4.5.0` artifact before
 consumer use. Its release ledger binds the artifact and protected publication
 chain, not the delivered isolation facts of a particular run; see
 [`RELEASE_STATUS.md`](RELEASE_STATUS.md).

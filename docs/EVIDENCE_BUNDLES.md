@@ -14,21 +14,21 @@ reference workflow, which binds the PR control plane before candidate execution.
 ## Create in a trusted finalizer
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:EVIDENCE_BUNDLES_RELEASE_PIN -->
-Install the signing extra from ledger-recorded release `v4.4.2` and generate
+Install the signing extra from ledger-recorded release `v4.5.0` and generate
 an Ed25519 key once:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.4.2"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m.git@v4.5.0"
 evo-guard keygen --key judge.pem --pub judge.pub
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:EVIDENCE_BUNDLES_RELEASE_PIN -->
 
-The pinned `v4.4.2` release supports both the frozen schema-1.11 bundle
+The pinned `v4.5.0` release supports both the frozen schema-1.11 bundle
 contract and schema 1.12, including the key-generation failure hardening
 described below. Consumers must follow the documentation shipped at the exact
 version they run.
 
-In `v4.4.2`, key generation uses the same fail-closed
+In `v4.5.0`, key generation uses the same fail-closed
 [two-file failure contract](SIGNED_VERDICTS.md#usage): a failed run can leave
 zero-length reservations that must be inspected and explicitly removed before
 retrying.
@@ -77,7 +77,7 @@ evo-guard bundle-evidence verdict.json \
   --material log=judge.log
 ```
 
-In `v4.4.2`, the command strict-parses and
+In `v4.5.0`, the command strict-parses and
 semantically verifies supported schema 1.11 or 1.12 again inside the bundle
 writer before signing the exact bytes. It refuses an inconsistent record.
 Output publication is atomic and no-clobber by default; `--force` is explicit.

@@ -6,7 +6,7 @@
 
 Use this checklist for the published `v4.0.1` behavioral baseline, the minimal
 `v4.0.2`, `v4.1.0`, `v4.2.0`, and `v4.3.0` release ledgers, the signed
-`v4.4.2` protected A–H ledger, and as the minimum gate for later releases
+`v4.4.2` and `v4.5.0` protected A–H ledgers, and as the minimum gate for later releases
 before enforcing EvoOM Guard as a required CI merge gate.
 
 ## Required repository controls
@@ -49,7 +49,7 @@ before enforcing EvoOM Guard as a required CI merge gate.
 7. **Immutable release artifact controls**
    - Tag and release created only from tested commit.
    - Historical releases retain their recorded immutable asset sets.
-   - For each SBOM-enabled release, including `v4.4.2`, require exactly the
+   - For each SBOM-enabled release, including `v4.4.2` and `v4.5.0`, require exactly the
      three manually uploaded assets `evo-guard.pyz`, `evo-guard.spdx.json`, and
      `SHA256SUMS` (apart from GitHub-generated source archives), with two
      filename-ordered checksum lines and byte equality in tag CI.
@@ -113,11 +113,11 @@ before enforcing EvoOM Guard as a required CI merge gate.
 
 ## Protected A-H release-ledger v2 verification
 
-The signed
-[`v4.4.2` ledger](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
-records a completed operation under this contract. The checks remain normative
+The signed [`v4.4.2` ledger](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
+and latest [`v4.5.0` ledger](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
+record completed operations under this contract. The checks remain normative
 for later releases; their future-tense instructions must not be read as denying
-the retained `v4.4.2` evidence.
+either retained evidence set.
 
 - Before creating the stable source candidate, verify the development snapshot
   exactly. The current live corpus has 17 labelled cases; this is separate from
@@ -145,7 +145,7 @@ the retained `v4.4.2` evidence.
   Success must report `relation=exact-release-version-transition`; exact-mode
   success or an unrelated source change is not a substitute.
 - `tests/baseline/schema/release-ledger-v2.schema.json` is the contract used by
-  the signed `v4.4.2` post-publication protected A-H ledger and later v2
+  the signed `v4.4.2` and `v4.5.0` post-publication protected A-H ledgers and later v2
   ledgers. It does not apply retroactively to v1 ledgers and must not be used
   to rewrite a frozen baseline.
 - In that contract, `release.created_utc` records GitHub Release
@@ -180,8 +180,8 @@ the retained `v4.4.2` evidence.
   RSAE/RAAE signatures and subjects, all public-key identities, closed file
   inventory, and the detached signature over canonical ledger bytes under that
   external EvoRise trust anchor.
-  For `v4.4.2`, repeat this validation against the bytes committed to protected
-  main before retiring its publication authority.
+  For every v2 ledger, including `v4.5.0`, repeat this validation against the
+  bytes committed to protected main before retiring its publication authority.
 - The v2 schema is not caller-selectable. The signed ledger binds the exact
   repository schema digest and the exact validator digest/Git blob; both
   descriptors bind the admitted trusted-parent commit/tree. Execute the
@@ -217,7 +217,7 @@ the retained `v4.4.2` evidence.
   exists to query for this repository. The complete record is an unsigned
   owner-collected bounded, non-atomic window, not proof of simultaneous state,
   absence of external copies, or absence from another repository. The signed
-  `v4.4.2` ledger records publication deploy-key retirement as
+  `v4.4.2` and `v4.5.0` ledgers record publication deploy-key retirement as
   `pending-post-ledger`; retirement remains an explicit post-ledger action and
   is never claimed complete inside the ledger.
 - E must have produced three independently verified receipts: pyz SLSA

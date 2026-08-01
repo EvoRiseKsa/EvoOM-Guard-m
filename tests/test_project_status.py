@@ -324,20 +324,17 @@ class ProjectStatusTests(unittest.TestCase):
 
     def test_source_release_and_pipeline_semantics_are_consistent(self) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertIn(
+        self.assertEqual(
             (context.status.lifecycle, context.source_version),
-            {
-                ("unreleased-development", "4.5.0.dev0"),
-                ("release-candidate", "4.5.0"),
-            },
+            ("release-line", "4.5.0"),
         )
         self.assertEqual(context.status.relation, "descendant")
         self.assertEqual(
             context.status.ledger_path,
-            "evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json",
+            "evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json",
         )
-        self.assertEqual(context.ledger.version, "4.4.2")
-        self.assertEqual(context.ledger.tag, "v4.4.2")
+        self.assertEqual(context.ledger.version, "4.5.0")
+        self.assertEqual(context.ledger.tag, "v4.5.0")
         self.assertEqual(
             context.ledger.artifacts,
             ("evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"),
@@ -394,7 +391,7 @@ class ProjectStatusTests(unittest.TestCase):
         context = render_project_status.load_context(ROOT, verify_git=False)
         development = replace(
             context,
-            source_version="4.4.3.dev0",
+            source_version="4.5.1.dev0",
             status=replace(
                 context.status,
                 lifecycle="unreleased-development",
@@ -413,7 +410,7 @@ class ProjectStatusTests(unittest.TestCase):
 
         candidate = replace(
             context,
-            source_version="4.4.3",
+            source_version="4.5.1",
             status=replace(context.status, lifecycle="release-candidate"),
         )
         render_project_status._verify_source_relation(
@@ -426,7 +423,7 @@ class ProjectStatusTests(unittest.TestCase):
         self.assertNotIn("unreleased development", candidate_summary)
         published_unledgered = replace(
             context,
-            source_version="4.4.3",
+            source_version="4.5.1",
             status=replace(
                 context.status,
                 lifecycle="published-unledgered",
@@ -552,18 +549,15 @@ class ProjectStatusTests(unittest.TestCase):
                 )
             )
 
-    def test_completed_recovery_remains_the_pin_during_next_release_line(
+    def test_release_line_uses_latest_ledger_and_preserves_recovery_history(
         self,
     ) -> None:
         context = render_project_status.load_context(ROOT, verify_git=False)
-        self.assertIn(
+        self.assertEqual(
             (context.status.lifecycle, context.source_version),
-            {
-                ("unreleased-development", "4.5.0.dev0"),
-                ("release-candidate", "4.5.0"),
-            },
+            ("release-line", "4.5.0"),
         )
-        self.assertEqual(context.ledger.version, "4.4.2")
+        self.assertEqual(context.ledger.version, "4.5.0")
         self.assertEqual(
             tuple(
                 release.version
@@ -598,9 +592,9 @@ class ProjectStatusTests(unittest.TestCase):
         for block in pin_blocks:
             with self.subTest(block=block):
                 rendered = blocks[block]
-                self.assertIn("v4.4.2", rendered)
+                self.assertIn("v4.5.0", rendered)
                 self.assertNotIn("v4.3.0", rendered)
-                self.assertNotRegex(rendered, r"(?:@|--ref\s+)v4\.4\.[01]\b")
+                self.assertNotRegex(rendered, r"(?:@|--ref\s+)v4\.4\.[012]\b")
 
         pipeline = " ".join(
             blocks["PROJECT_STATUS_RELEASE_PIPELINE"].split()
@@ -618,7 +612,7 @@ class ProjectStatusTests(unittest.TestCase):
             "Latest stable release; supported",
             support,
         )
-        self.assertIn("[`v4.4.2`]", support)
+        self.assertIn("[`v4.5.0`]", support)
         self.assertNotIn("temporarily supported", support)
         self.assertNotIn("recovery successor", support)
 

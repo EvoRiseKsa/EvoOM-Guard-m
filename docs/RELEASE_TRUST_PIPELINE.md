@@ -6,7 +6,7 @@
 > [`START_HERE.md`](START_HERE.md).
 
 This document describes an inert-by-default A–H release pipeline. Except for
-the exact retained `v4.4.2` evidence named under **Current state**, its
+the exact retained `v4.4.2` and `v4.5.0` evidence named under **Current state**, its
 procedural sections do not claim that another release has traversed the
 pipeline, that mutable repository settings remain configured, or that any
 corresponding private signing key currently exists or remains controlled.
@@ -22,26 +22,25 @@ resulting publication. An admitted release is contracted to exactly `evo-guard.p
 assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 
-`v4.4.2` completed the recovery operation designated by its reviewed parent
-contract. Its canonical signed
-[`release-ledger-v2`](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
-is present and selected by `PROJECT_STATUS.json`; it records the protected
-A-through-H operation and resulting publication. Both `v4.4.0` and `v4.4.1`
-remain published-unledgered under their separate errata, including the
+`v4.5.0` is the latest ledger-recorded release selected by
+`PROJECT_STATUS.json`. Its canonical signed
+[`release-ledger-v2`](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
+records the exact protected A-through-H operation and resulting publication.
+The earlier signed [`v4.4.2` recovery ledger](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
+remains historical evidence. Both `v4.4.0` and `v4.4.1` remain
+published-unledgered under their separate errata, including the
 [`v4.4.1` release-ledger erratum](errata/V4.4.1-LEDGER.md).
 
-The parent-pinned `v4.4.2` public root was only a prerequisite; it did not
-itself prove a release, signature, or pipeline execution. The canonical signed
-directory and offline validator now establish only the retained byte and
-binding claims. They do not turn mutable GitHub state into an independent
-attestation. Publication-authority retirement remains a separate
-post-ledger operation and is not claimed complete by the ledger.
-
-The prospective `v4.5.0` ledger-signing public root is pinned at
+The reviewed `v4.5.0` ledger-signing public root is pinned at
 [`v4.5.0.pub.pem`](../security/release-ledger-roots/v4.5.0.pub.pem) with key ID
 `sha256:0d5dd1a57b8f2b4ec80a197f99bdf73908e7edba82be42ad4666a9fe485b7478`.
-This pins only the reviewed public identity; it does not prove private-key
-custody, offline storage, a signature, pipeline execution, or publication.
+That previously authenticated root and the admitted parent are trust inputs;
+the root alone did not prove private-key custody, a signature, pipeline
+execution, or publication. The canonical signed directory plus offline
+validation now establish only the retained byte and binding claims implemented
+by the validator. They do not turn mutable GitHub state into an independent
+attestation. Publication-authority retirement remains a separate post-ledger
+operation and is not claimed complete by the `v4.5.0` ledger.
 
 ## Phase contracts
 

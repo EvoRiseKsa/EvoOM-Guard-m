@@ -19,8 +19,8 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) is the latest stable and supported consumer release.
-- Source `4.5.0`: release candidate; not a consumer release.
+- [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest stable and supported consumer release.
+- Source `4.5.0`: source on the latest ledger-recorded release line.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -30,8 +30,25 @@ retained evidence say so.
 
 ## [Unreleased]
 
+No unreleased product changes are recorded.
+
+## [4.5.0] — published 2026-08-01; signed protected-tree ledger
+
+[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)
+is the latest stable and supported consumer release. Its signed
+[`release-ledger-v2`](evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
+binds candidate commit `6bb4c328e56661b661e50532886802c6ba36a997`, the protected
+A-through-H operation, and the exact three-asset immutable publication. This
+same-owner retained evidence does not establish independent review,
+reproducibility, production readiness, deployment authorization, or completion
+of the separate publication-authority retirement operation.
+
 ### Added
 
+- Added the signed 59-file `v4.5.0` release-ledger directory with the canonical
+  detached signature, exact A–H run identities and attempts, source/artifact
+  admission evidence, build/SBOM/release attestations, tag CI, repository
+  controls, release assets, and seven public trust roots.
 - Added the deterministic, advisory-only Change Attempt Observation V1
   projection for authenticated Trusted Finalizer `ALLOW` and `DENY` bundles.
   Its closed schema preserves five Guard outcomes and five bounded channels
@@ -48,7 +65,7 @@ retained evidence say so.
 
 ### Changed
 
-- Updated the no-install instructions to use the complete `v4.4.2` checksum
+- Updated the no-install instructions to use the complete `v4.5.0` checksum
   set: zipapp, SPDX SBOM, and `SHA256SUMS`.
 - Preserved LF protocol newlines when materializing unified diffs on Windows so
   valid `--diff` inputs reverse-apply instead of failing during reconstruction.
@@ -61,6 +78,10 @@ retained evidence say so.
   observation is explicitly unsigned and is not represented as the signed
   `KEY_RETIREMENT.json` receipt that could not be produced without the offline
   ledger private key.
+- Recorded `v4.5.0` publication-authority retirement as
+  `pending-post-ledger`. It must remain pending until the signed ledger is
+  committed to protected main, those committed bytes are revalidated, and a
+  separate signed `KEY_RETIREMENT.json` receipt is created and verified.
 - Made generic bounded-process cancellation retain the exact active
   `BaseException` while attaching bounded secondary diagnostics when managed
   process-tree or output-reader abort cleanup raises or is not positively

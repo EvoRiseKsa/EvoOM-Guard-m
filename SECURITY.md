@@ -19,8 +19,7 @@ consumer release only:
 
 | Version | Status |
 | --- | --- |
-| [`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2) | Latest stable release; supported |
-| `4.5.0` | Release candidate; not a consumer release |
+| [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) | Latest stable release; supported |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |
 | Unpublished draft candidates | Unsupported; never consumer releases |
 

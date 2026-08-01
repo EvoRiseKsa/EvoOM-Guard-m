@@ -69,7 +69,7 @@ mutable `python:3.12-slim` tag. Both the workflow and
 
 ## Deliberate boundary for Action consumers
 
-In the ledger-recorded `v4.4.2` release, `action.yml` builds the reviewed
+In the ledger-recorded `v4.5.0` release, `action.yml` builds the reviewed
 standard-library-only sources from `github.action_path` into a temporary
 `evo-guard.pyz`, then runs that archive with Python isolated mode. The Action
 bootstrap does not invoke a package resolver, build backend, or PyPI.

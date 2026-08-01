@@ -1,7 +1,7 @@
 # Local operational telemetry
 
 > **Availability:** this utility was introduced on the `4.4.0` source line and
-> is included in the ledger-recorded `v4.4.2` release. The ledger binds the
+> is included in the ledger-recorded `v4.5.0` release. The ledger binds the
 > exact released artifact and publication chain; it does not validate the
 > telemetry input population or make the utility a monitoring service. Verify
 > the [release status](RELEASE_STATUS.md) and exact installed artifact.

@@ -2,7 +2,7 @@
 
 > **Availability:** this protocol depends on the explicit operating-profile and
 > schema `1.12` contracts introduced on the `4.4.0` source line and is included
-> in the ledger-recorded `v4.4.2` release. The release ledger authenticates the
+> in the ledger-recorded `v4.5.0` release. The release ledger authenticates the
 > released artifact and its protected publication chain; it is not evidence
 > that an independent party ran this protocol or that the resulting evaluation
 > would be independent.

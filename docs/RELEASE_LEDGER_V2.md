@@ -19,11 +19,22 @@ correction cannot repair it retroactively.
 
 `v4.4.2` completed the recovery release operation. Its canonical signed
 [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
-is present and selected by [`PROJECT_STATUS.json`](../PROJECT_STATUS.json). It
+is retained as historical evidence. It
 records the exact release commit and tree, protected A–H runs, three release
 assets, admission and attestation evidence, tag CI, and repository-control
 observations. Its canonical bytes validate against the admitted parent and an
 externally supplied copy of the parent-pinned ledger public root.
+
+`v4.5.0` is the latest ledger-recorded release selected by
+[`PROJECT_STATUS.json`](../PROJECT_STATUS.json). Its canonical signed
+[`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
+binds release commit `6bb4c328e56661b661e50532886802c6ba36a997`, its sole admitted parent,
+the protected A–H run chain, the exact three-asset publication, attestations,
+tag CI, and the bounded repository-control observation. Its canonical bytes
+validate against the admitted parent and the independently pinned `v4.5.0`
+ledger public root. The ledger records publication-authority retirement as
+`pending-post-ledger`; it does not claim that the later retirement operation
+has completed.
 
 On Python 3.10, the immutable `v4.4.2` parent validator needs the
 hash-locked `importlib-resources` compatibility backport because that frozen
@@ -36,8 +47,8 @@ already inventoried PyO3 cryptography extension across its nested first-party
 boundary. These prospective compatibility repairs do not rewrite the release,
 ledger, signature, or parent validator.
 
-The pre-pinned public root alone did not establish those facts; it was only a
-trust input. The signed directory plus offline validation now establishes the
+The pre-pinned public roots alone did not establish those facts; each was only a
+trust input. A signed directory plus offline validation establishes the
 retained byte and binding claims implemented by the validator, not independent
 review or mutable GitHub state beyond the recorded observation window. Both
 earlier published-unledgered exceptions remain governed by their separate
@@ -208,8 +219,8 @@ and must fail validation. Placeholders are never accepted as release evidence.
 
 ## Post-publication procedure
 
-The signed `v4.4.2` ledger is the output of steps 1–7 below. Completion of
-step 8 means committing it to protected main and revalidating those committed
+Each signed v2 ledger is the output of steps 1–7 below. Completion of step 8
+means committing it to protected main and revalidating those committed
 bytes, not merely validating a working branch. Publication authority
 retirement remains intentionally pending until that ordering has completed.
 
@@ -313,7 +324,7 @@ retirement remains intentionally pending until that ordering has completed.
    external copy exists, do not prove simultaneous repository state, and do not
    prevent a later re-addition. The release
    ledger must record publication authority retirement as pending, never as
-   already completed. The signed `v4.4.2` ledger records
+   already completed. The signed `v4.4.2` and `v4.5.0` ledgers record
    `pending-post-ledger`. As an operator procedure, commit and revalidate the
    signed ledger before removing the publication deploy-key secret and exact
    write deploy key. Then create and validate the separately signed
