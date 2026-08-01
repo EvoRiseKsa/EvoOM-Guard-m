@@ -20,6 +20,15 @@ resulting publication. An admitted release is contracted to exactly `evo-guard.p
 assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_STATUS_SUMMARY -->
 
+After the signed ledger bytes were committed and independently revalidated,
+the exact temporary publication deploy key and publication Environment secret
+were removed. Their later successful HTTP 200 absence observations are bound by
+the separately signed
+[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
+receipt. This same-owner point-in-time record is not proof of secure erasure,
+absence of external copies, or prevention of later re-addition; the immutable
+ledger correctly remains unchanged at `pending-post-ledger`.
+
 For re-queried live publication facts and the separate frozen-validator failure
 boundaries, see the
 [`v4.4.0`](errata/V4.4.0-LEDGER.md) and

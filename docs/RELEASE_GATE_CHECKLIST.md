@@ -219,7 +219,11 @@ either retained evidence set.
   absence of external copies, or absence from another repository. The signed
   `v4.4.2` and `v4.5.0` ledgers record publication deploy-key retirement as
   `pending-post-ledger`; retirement remains an explicit post-ledger action and
-  is never claimed complete inside the ledger.
+  is never claimed complete inside the ledger. `v4.4.2` retains only an unsigned
+  observation because its offline ledger private key was unavailable. `v4.5.0`
+  retains the later separately signed and validated
+  [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
+  receipt.
 - E must have produced three independently verified receipts: pyz SLSA
   provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
   A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.

@@ -40,7 +40,9 @@ execution, or publication. The canonical signed directory plus offline
 validation now establish only the retained byte and binding claims implemented
 by the validator. They do not turn mutable GitHub state into an independent
 attestation. Publication-authority retirement remains a separate post-ledger
-operation and is not claimed complete by the `v4.5.0` ledger.
+operation and is not claimed complete by the `v4.5.0` ledger. Its later signed,
+same-owner point-in-time observation is retained separately as
+[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
 ## Phase contracts
 
