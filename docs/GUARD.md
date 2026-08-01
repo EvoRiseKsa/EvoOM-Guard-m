@@ -455,14 +455,14 @@ workflow itself cannot be removed or replaced to bypass the check.
 
 ## External black-box judge & assurance policy
 
-**`v4.4.2` release contract:** for a named, fail-closed combination of these
+**`v4.5.0` release contract:** for a named, fail-closed combination of these
 controls, use
 `--operating-profile local|protected|hostile`. The profile is included in the
 effective policy and its digest only when explicitly selected. `protected`
 requires a pinned black-box-only verifier inside Docker/gVisor with no candidate
 network; `hostile` requires gVisor and an active memory limit. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for the exact contract and key
-custody rules. Confirm the exact ledger-recorded `v4.4.2` artifact before
+custody rules. Confirm the exact ledger-recorded `v4.5.0` artifact before
 consumer use. Its release ledger binds the artifact and protected publication
 chain, not the delivered isolation facts of a particular run; see
 [`RELEASE_STATUS.md`](RELEASE_STATUS.md).

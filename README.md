@@ -79,10 +79,10 @@ git diff main...HEAD | evo-guard guard --diff - --no-config --test-command "pyth
 <!-- END EVOGUARD_PROJECT_STATUS:README_QUICKSTART_PIN -->
 
 For a no-install path, download
-[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.2/evo-guard.pyz),
-[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.2/evo-guard.spdx.json),
-and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.4.2/SHA256SUMS)
-from the [`v4.4.2` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2).
+[`evo-guard.pyz`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.5.0/evo-guard.pyz),
+[`evo-guard.spdx.json`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.5.0/evo-guard.spdx.json),
+and [`SHA256SUMS`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/v4.5.0/SHA256SUMS)
+from the [`v4.5.0` release](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0).
 Run `sha256sum -c SHA256SUMS`, then `python -I evo-guard.pyz ...`.
 
 The command never edits the checked working tree: it applies the diff to a
@@ -157,10 +157,10 @@ never checks out or executes candidate code.
 | Add organization-owned checks outside the candidate tree | Verifier pack | [`VERIFIER_PACKS.md`](docs/VERIFIER_PACKS.md) |
 | Judge a CLI through an external report channel | Black-box, preferably `--blackbox-only` | [`BLACKBOX.md`](docs/BLACKBOX.md) |
 | Add a delivered container or gVisor boundary | Isolated execution | [`BLACKBOX.md`](docs/BLACKBOX.md#boundary-evidence-is-observed-never-inferred-from-policy) |
-| Evaluate named assurance profiles in ledger-recorded `v4.4.2` | `v4.4.2` profiles (verify runtime evidence) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
+| Evaluate named assurance profiles in ledger-recorded `v4.5.0` | `v4.5.0` profiles (verify runtime evidence) | [`OPERATING_PROFILES.md`](docs/OPERATING_PROFILES.md) |
 | Produce portable, authenticated evidence | Signed verdict or evidence bundle | [`SIGNED_VERDICTS.md`](docs/SIGNED_VERDICTS.md) |
 | Separate re-verification, signing, and final admission | Trusted Finalizer | [`TRUSTED_FINALIZER.md`](docs/TRUSTED_FINALIZER.md) |
-| Project signed `ALLOW` and `DENY` attempts for advisory analysis | Change Attempt Observation V1 *(source after v4.4.2)* | [`CHANGE_ATTEMPT_OBSERVATION.md`](docs/CHANGE_ATTEMPT_OBSERVATION.md) |
+| Project signed `ALLOW` and `DENY` attempts for advisory analysis | Change Attempt Observation V1 *(included in v4.5.0)* | [`CHANGE_ATTEMPT_OBSERVATION.md`](docs/CHANGE_ATTEMPT_OBSERVATION.md) |
 
 The bounded, same-owner development-snapshot corpus for Change Attempt
 Observation V1 is recorded with exact hashes and explicit non-claims in

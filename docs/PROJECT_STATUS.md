@@ -132,7 +132,7 @@ depending on them. The following boundary is intentional.
 The public source is not a trade secret. Historical releases through v3.8.0
 remain governed by the licenses shipped with those exact releases. The current
 published immutable
-[`v4.4.2`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.4.2)
+[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)
 release ships the EvoRise Source-Available License 1.0 and is the latest
 protected-tree ledger-recorded consumer release. The immutable `v4.4.0` and
 `v4.4.1` publications remain the historical unledgered exceptions documented
@@ -165,7 +165,7 @@ does **not** yet have evidence for any of the following:
   plane;
 - the Release Artifact Admission negative-matrix rows that were not executed in
   the bounded public round; or
-- an OCI/registry admission or production-deployment record. The `v4.4.2`
+- an OCI/registry admission or production-deployment record. The `v4.5.0`
   ledger records a bounded protected A-H source, zipapp/SBOM artifact, and
   publication operation; it is not evidence of deployment authorization,
   reproducibility, software correctness, production readiness, or independent

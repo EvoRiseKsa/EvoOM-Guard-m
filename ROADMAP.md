@@ -36,7 +36,7 @@ release asset and its provenance. Canonical ledger:
 
 - Verdict schema `1.11` remains the frozen contract used by `v4.3.0`.
   Schema `1.12` adds the explicit `operating_profile` field and is supported by
-  the ledger-recorded `v4.4.2` consumer release. The immutable `v4.4.0` and
+  the ledger-recorded `v4.5.0` consumer release. The immutable `v4.4.0` and
   `v4.4.1` publications remain historical published-unledgered exceptions; see
   their [release-ledger errata](docs/errata/V4.4.0-LEDGER.md) and
   [v4.4.1 erratum](docs/errata/V4.4.1-LEDGER.md).
@@ -46,7 +46,7 @@ release asset and its provenance. Canonical ledger:
   from a JUnit report + exit code, never from stdout); a `TAMPERED` verdict when
   they disagree or when the judged candidate/pack snapshot drifts during a
   multi-phase run.
-- **Independent record verification** — the bounded, strict `v4.4.2` verifier
+- **Independent record verification** — the bounded, strict `v4.5.0` verifier
   checks schema-1.11/1.12 lifecycle, policy, receipt, isolation, pack, and
   verdict-source invariants without executing candidate code.
 - **Authenticated evidence envelopes** — deterministic bundles bind the exact
@@ -244,7 +244,7 @@ assets were published.
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Next artifact boundary.** The `v4.4.2` signed ledger records a bounded,
+1. **Current artifact boundary.** The `v4.5.0` signed ledger records a bounded,
    completed protected A-H operation over the actual zipapp, SPDX SBOM,
    checksum manifest, and resulting publication. This advances the recorded
    release boundary beyond the earlier descriptor-only pilot, but it does not

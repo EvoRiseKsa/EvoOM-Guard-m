@@ -5,8 +5,8 @@ privacy-bounded projection of one authenticated Trusted Finalizer bundle. It
 lets an advisory consumer study both accepted and denied attempts without
 turning a `DENY` into an Agent Change admission.
 
-This contract is implemented on the repository source line after `v4.4.2`. It
-is not present in the immutable `v4.4.2` release.
+This contract is included in the immutable, ledger-recorded `v4.5.0` release.
+It is not present in the earlier immutable `v4.4.2` release.
 
 ## What it accepts
 
@@ -46,7 +46,7 @@ input bundle or trusted public-key path, even with `force=True`.
 
 ## CLI projector
 
-The unreleased `4.5.0.dev0` source also exposes the same authenticated
+The `v4.5.0` release also exposes the same authenticated
 projection through the zipapp/CLI:
 
 ```bash

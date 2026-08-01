@@ -25,7 +25,7 @@ pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 
-The pinned `v4.4.2` release includes the
+The pinned `v4.5.0` release includes the
 `--acknowledge-local-key-exposure` flag and the descriptor/reservation
 hardening documented below. Consult the documentation at the exact version
 you run; the release ledger authenticates bytes and provenance, not key

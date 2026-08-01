@@ -8,9 +8,9 @@
 # Operating profiles
 
 > **Availability:** operating profiles were introduced on the `4.4.0` source
-> line and are available in the ledger-recorded `v4.4.2` release.
+> line and are available in the ledger-recorded `v4.5.0` release.
 > `v4.3.0` does not recognize `--operating-profile` or emit schema `1.12`.
-> The `v4.4.2` ledger proves the exact released bytes and publication chain;
+> The `v4.5.0` ledger proves the exact released bytes and publication chain;
 > it does not prove that a particular run delivered the requested profile.
 > Confirm the [release status](RELEASE_STATUS.md), exact artifact, and runtime
 > evidence you use.

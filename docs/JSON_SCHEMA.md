@@ -60,7 +60,7 @@ bundle. See [RELEASE_SOURCE_ADMISSION_V2.md](RELEASE_SOURCE_ADMISSION_V2.md).
 
 ## Change Attempt Observation contract
 
-The repository source after `v4.4.2` adds the separate closed-world
+The ledger-recorded `v4.5.0` release adds the separate closed-world
 [`change-attempt-observation-1.schema.json`](../evoom_guard/schemas/change-attempt-observation-1.schema.json)
 for `EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_V1`. It is a deterministic,
 advisory-only projection of an authenticated generic Trusted Finalizer bundle,
