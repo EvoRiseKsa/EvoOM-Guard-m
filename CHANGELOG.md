@@ -30,7 +30,14 @@ retained evidence say so.
 
 ## [Unreleased]
 
-No unreleased product changes are recorded.
+### Added
+
+- Added deterministic, no-clobber `finalizer-init` installation and static-only
+  `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
+  The kit commits a public-key-bound deployment manifest, validates the
+  trusted-base policy and verifier-pack digest, ships JSON Schemas in wheel and
+  zipapp artifacts, and explicitly does not claim to configure or inspect live
+  GitHub controls.
 
 ## [4.5.0] — published 2026-08-01; signed protected-tree ledger
 

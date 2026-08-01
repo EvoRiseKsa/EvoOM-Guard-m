@@ -516,6 +516,60 @@ def test_pyz_contains_the_offline_record_verifier(tmp_path):
     assert report["input_sha256"] == hashlib.sha256(record.read_bytes()).hexdigest()
 
 
+def test_pyz_contains_and_runs_the_finalizer_deployment_kit(tmp_path):
+    out = _build(tmp_path / "build")
+    with zipfile.ZipFile(out) as archive:
+        names = set(archive.namelist())
+    assert {
+        "evoom_guard/finalizer/deployment.py",
+        "evoom_guard/cli/finalizer_deployment_commands.py",
+        "evoom_guard/schemas/finalizer-deployment-1.schema.json",
+        "evoom_guard/schemas/finalizer-deployment-report-1.schema.json",
+        "evoom_guard/templates/trusted-finalizer/v4.5.0/manifest.json",
+        "evoom_guard/templates/trusted-finalizer/v4.5.0/reverify.yml",
+        "evoom_guard/templates/trusted-finalizer/v4.5.0/seal.yml",
+    } <= names
+
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    public_key = tmp_path / "public.pem"
+    public_key.write_text(
+        "-----BEGIN PUBLIC KEY-----\n"
+        "MCowBQYDK2VwAyEA11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=\n"
+        "-----END PUBLIC KEY-----\n",
+        encoding="ascii",
+    )
+    installed = subprocess.run(
+        [
+            sys.executable,
+            out,
+            "finalizer-init",
+            "--root",
+            str(consumer),
+            "--public-key",
+            str(public_key),
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert installed.returncode == 0, installed.stdout + installed.stderr
+    assert json.loads(installed.stdout)["runtime_release"] == "v4.5.0"
+
+    inspected = subprocess.run(
+        [sys.executable, out, "finalizer-doctor", "--root", str(consumer), "--json"],
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert inspected.returncode == 1, inspected.stdout + inspected.stderr
+    report = json.loads(inspected.stdout)
+    assert report["static_ready"] is False
+    assert report["github_controls_checked"] is False
+    assert report["enforcement_ready"] is False
+
+
 def test_pyz_build_is_byte_reproducible(tmp_path):
     first = _build(tmp_path / "first")
     second = _build(tmp_path / "second")

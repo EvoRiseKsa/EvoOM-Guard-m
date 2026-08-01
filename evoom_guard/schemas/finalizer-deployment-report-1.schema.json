@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:finalizer-deployment-report:1",
+  "title": "EvoGuard Trusted Finalizer static deployment report V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checks",
+    "enforcement_ready",
+    "format",
+    "github_controls_checked",
+    "required_live_controls",
+    "root",
+    "scope",
+    "static_ready"
+  ],
+  "properties": {
+    "format": {"const": "EVOGUARD_FINALIZER_DEPLOYMENT_REPORT_V1"},
+    "scope": {"const": "static"},
+    "root": {"type": "string", "minLength": 1},
+    "static_ready": {"type": "boolean"},
+    "github_controls_checked": {"const": false},
+    "enforcement_ready": {"const": false},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "message", "status"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "message": {"type": "string"},
+          "status": {"enum": ["PASS", "FAIL"]}
+        }
+      }
+    },
+    "required_live_controls": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

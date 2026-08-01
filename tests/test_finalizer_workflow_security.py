@@ -8,10 +8,17 @@ EXAMPLES_REVERIFY = ROOT / "examples" / "trusted-finalizer" / "reverify.yml"
 EXAMPLES_SEAL = ROOT / "examples" / "trusted-finalizer" / "seal.yml"
 WORKFLOW_REVERIFY = ROOT / ".github" / "workflows" / "evoguard-reverify.yml"
 WORKFLOW_SEAL = ROOT / ".github" / "workflows" / "evoguard-seal.yml"
+PACKAGED_REVERIFY = (
+    ROOT / "evoom_guard" / "templates" / "trusted-finalizer" / "v4.5.0" / "reverify.yml"
+)
+PACKAGED_SEAL = (
+    ROOT / "evoom_guard" / "templates" / "trusted-finalizer" / "v4.5.0" / "seal.yml"
+)
 
 REFERENCE_PAIRS = (
     ("examples", EXAMPLES_REVERIFY, EXAMPLES_SEAL),
     ("repo-workflows", WORKFLOW_REVERIFY, WORKFLOW_SEAL),
+    ("packaged-v4.5.0", PACKAGED_REVERIFY, PACKAGED_SEAL),
 )
 
 FROZEN_EXAMPLE_RELEASE = "v3.7.0"
@@ -176,6 +183,8 @@ def test_reference_finalizer_release_downloads_are_explicit_and_versioned() -> N
         EXAMPLES_SEAL: FROZEN_EXAMPLE_RELEASE,
         WORKFLOW_REVERIFY: CURRENT_REFERENCE_RELEASE,
         WORKFLOW_SEAL: CURRENT_REFERENCE_RELEASE,
+        PACKAGED_REVERIFY: CURRENT_REFERENCE_RELEASE,
+        PACKAGED_SEAL: CURRENT_REFERENCE_RELEASE,
     }
     pattern = re.compile(
         r"https://github\.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/"

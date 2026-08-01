@@ -69,6 +69,12 @@ a record.
 > deployment in [`TRUSTED_FINALIZER.md`](TRUSTED_FINALIZER.md), after configuring
 > branch rules and a protected Environment. It is deliberately stronger and more
 > operationally involved than Paths 1–3.
+>
+> For a new consumer, use the deterministic, no-clobber setup and static
+> inspection procedure in
+> [`FINALIZER_DEPLOYMENT_KIT.md`](FINALIZER_DEPLOYMENT_KIT.md). Those commands
+> are repository-source behavior added after the immutable v4.5.0 tag; their
+> generated workflows target the v4.5.0 runtime.
 
 ---
 
