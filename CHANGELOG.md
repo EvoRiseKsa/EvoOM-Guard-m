@@ -39,6 +39,15 @@ retained evidence say so.
   zipapp artifacts, and explicitly does not claim to configure or inspect live
   GitHub controls.
 
+### Fixed
+
+- Hardened the specialized black-box judge process owner so cancellation keeps
+  the exact active `BaseException` through a bare re-raise, always attempts the
+  process-group and output-reader abort-cleanup stages independently, and
+  attaches ordered, bounded diagnostics for every raised or non-proven cleanup
+  outcome. Verdict and evidence schemas are unchanged; this does not claim
+  equivalent coverage for the raw-Git finalizer or GitHub Attestation owners.
+
 ## [4.5.0] — published 2026-08-01; signed protected-tree ledger
 
 [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)
