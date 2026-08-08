@@ -48,6 +48,16 @@ retained evidence say so.
   outcome. Verdict and evidence schemas are unchanged; this does not claim
   equivalent coverage for the raw-Git finalizer or GitHub Attestation owners.
 
+- Made GitHub Attestation command abort cleanup preserve the exact active
+  `BaseException` while always attempting subprocess-tree cleanup before
+  output-reader cleanup. Each stage now requires the exact result `True` as
+  positive proof and attaches ordered, bounded diagnostics for false or raised
+  cleanup outcomes, including hostile exception stringification, hostile
+  `add_note`, and Python 3.10 fallback handling. Normal command results,
+  verdicts, receipt schemas, and the existing Windows departed-root limitation
+  are unchanged; generic execution, specialized judge execution, and raw-Git
+  finalizer lifecycles remain separate contracts.
+
 ## [4.5.0] — published 2026-08-01; signed protected-tree ledger
 
 [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)
