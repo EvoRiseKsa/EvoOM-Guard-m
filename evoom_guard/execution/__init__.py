@@ -6,6 +6,8 @@ typed contracts instead of importing process helpers from a concrete verifier.
 
 # isort: off
 from evoom_guard.execution.process import (
+    _abort_cleanup_exception_summary as abort_cleanup_exception_summary,
+    _note_abort_cleanup_failure as note_abort_cleanup_failure,
     DEFAULT_KILL_GRACE_SECONDS,
     DEFAULT_MAX_OUTPUT_BYTES,
     DEFAULT_READ_CHUNK_BYTES,
@@ -51,6 +53,7 @@ __all__ = [
     "BoundedOutput",
     "BoundedProcessRequest",
     "BoundedProcessResult",
+    "abort_cleanup_exception_summary",
     "ProcessContainmentError",
     "ProcessGroupCleanupUnavailable",
     "ProcessLimits",
@@ -60,6 +63,7 @@ __all__ = [
     "execute_bounded_process",
     "execute_judge_process",
     "join_pipe_readers",
+    "note_abort_cleanup_failure",
     "process_group_popen_kwargs",
     "run_bounded_subprocess",
     "resolve_host_command",
