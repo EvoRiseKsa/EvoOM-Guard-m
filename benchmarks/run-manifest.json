@@ -99,7 +99,7 @@
   },
   "engine_version": "4.6.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-01T21:14:22.356426Z",
+    "captured_at_utc": "2026-08-08T22:10:14.878843Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -125,7 +125,7 @@
     },
     "execution_environment": {
       "all_non_allowlisted_parent_keys_removed": true,
-      "effective_environment_sha256": "6001528033d181f92f0c39715e0a3c596960ba394b2b4e0bfdf6918b4fd93dcb",
+      "effective_environment_sha256": "7b31d0484e4f63706bb0f0b7af6e15bb245a07c4b3ef081e39389344fee2a2e3",
       "effective_key_names": [
         "COMSPEC",
         "NO_COLOR",
@@ -159,11 +159,11 @@
       ],
       "inherited_value_sha256": {
         "COMSPEC": "56a79d121b8a0f187e172d87f06c86f8ae9bc3d047ba8505bf03e77030687ad4",
-        "PATH": "3b21894629c3ebbebc261482ae4017aea62dbc3d49d90cc954f3edadf55ce5fa",
+        "PATH": "7e1ef8dffe860c12fa7e6aa9550c8baa20a19f4a9f83d00171d0ff5bebd5750b",
         "PATHEXT": "a6e17897274808450499132f0802335799834f33795cbeca1c073278b006b650",
         "SYSTEMROOT": "c2bb903d586d19ec0d6eb6a2a659a882fd51244d6a137cee3595a385fda042f1",
-        "TEMP": "c5064c1bae2b3a6b5888d275a10ba8ff5c0e9b6d4ef24a4cfafbe9bdfcc74024",
-        "TMP": "c5064c1bae2b3a6b5888d275a10ba8ff5c0e9b6d4ef24a4cfafbe9bdfcc74024",
+        "TEMP": "e10a77903f3100bb2c9cb3b2caf90057f765fa87180b11d002033b39089fb116",
+        "TMP": "e10a77903f3100bb2c9cb3b2caf90057f765fa87180b11d002033b39089fb116",
         "WINDIR": "c2bb903d586d19ec0d6eb6a2a659a882fd51244d6a137cee3595a385fda042f1"
       },
       "removed_influential_keys_present": [],
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "eb1f7bb2eb974ce024b6f0c0b295af137e667126",
+    "head": "4bb0d4ea28f7f8ed2dab1d82730b9cc1b45c4997",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "da1843ad24d2d1d85418b8619808c82fc1c195e1",
+      "commit": "b5eaf7432cc77298c1d4233b1741625486616534",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "eb1f7bb2eb974ce024b6f0c0b295af137e667126",
+      "commit": "4bb0d4ea28f7f8ed2dab1d82730b9cc1b45c4997",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14813,
+    "bytes": 14811,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "e6db4e0051053506b5b60443985400796f06d306e6b7ed77e8acc4bead26f653"
+    "sha256": "8b5c6fcbc91cee140698838ac82cbd3d9baff7d10a59115768360c5dc435ae74"
   },
-  "run_id": "f617d0ca-f3f7-4a11-a3ac-d9018f867152",
+  "run_id": "11a0ed49-6400-4a9b-bfaf-ef35236c35a8",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -805,9 +805,9 @@
         "sha256": "8841d8374d5fa93a00e701c7c3efd60a7dee0fa54efcfecd61346b3c9eb89da1"
       },
       {
-        "bytes": 18181,
+        "bytes": 19898,
         "path": "evoom_guard/execution/judge.py",
-        "sha256": "d390d2007e9f577bf80905060255742b9c60443ae2b46e1f28933e2ceb2a9b8d"
+        "sha256": "0c35e9261b7b0396d067769a39f9730ed3520ae2ed79c086adbb1af84378b55b"
       },
       {
         "bytes": 37571,
@@ -1299,13 +1299,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "07169157f9e67e88d8fc9c616af908b77762e33d288496d265d8e15ff9e7fbc3",
-    "total_bytes": 2667234
+    "sha256": "02d6f7c375b0814da08254f283cfc1ad38919a9ae1b2e0bf1dc3de1f893603c3",
+    "total_bytes": 2668951
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.19,
-    "guard_full_run_median_s": 0.3,
-    "guard_full_run_p95_s": 0.342,
+    "controlled_direct_pytest_median_s": 0.159,
+    "guard_full_run_median_s": 0.309,
+    "guard_full_run_p95_s": 0.34,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
