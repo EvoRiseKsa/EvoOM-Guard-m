@@ -58,6 +58,14 @@ retained evidence say so.
   are unchanged; generic execution, specialized judge execution, and raw-Git
   finalizer lifecycles remain separate contracts.
 
+- Made raw-Git finalizer cancellation preserve the exact active
+  `BaseException` while always attempting process-tree cleanup before
+  output-reader cleanup. Only an exact `True` is accepted as positive proof;
+  false, raised, hostile-rendering, and legacy/no-`add_note` outcomes remain
+  ordered, bounded secondary diagnostics. Normal Git results and verdict
+  schemas are unchanged. Its lifecycle remains separate from the GitHub
+  Attestation process owner and does not expand that owner's Windows boundary.
+
 ## [4.5.0] — published 2026-08-01; signed protected-tree ledger
 
 [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)
