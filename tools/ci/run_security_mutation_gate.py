@@ -3763,18 +3763,15 @@ MUTATIONS = (
         name="judge-reader-start-cleanup-bypass",
         path="evoom_guard/execution/judge.py",
         before=(
-            "                process_group_terminator(process)\n"
-            "            except BaseException:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = "
+            "process_group_terminator(process)\n"
         ),
         after=(
-            "                pass\n"
-            "            except BaseException:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = None\n"
         ),
         test=(
-            "tests/test_blackbox_judge_reader_start.py::"
-            "test_reader_start_failure_cleans_group_handles_pipes_and_preserves_primary"
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_characterization_preserves_primary_and_attempt_order"
         ),
     ),
     Mutation(
@@ -3845,14 +3842,18 @@ MUTATIONS = (
         name="judge-reader-start-primary-exception-mask",
         path="evoom_guard/execution/judge.py",
         before=(
-            "                pipe_join(reader_start_attempts, streams)\n"
-            "            except BaseException:\n"
-            "                pass\n"
+            "            except BaseException as cleanup_error:\n"
+            "                _note_abort_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    (\n"
+            '                        "Judge output-reader abort cleanup raised while preserving "\n'
+            '                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)\n'
+            "                    ),\n"
+            "                )\n"
         ),
         after=(
-            "                pipe_join(reader_start_attempts, streams)\n"
-            "            except BaseException:\n"
-            "                raise\n"
+            "            except BaseException as cleanup_error:\n"
+            "                raise cleanup_error\n"
         ),
         test=(
             "tests/test_blackbox_judge_reader_start.py::"
@@ -3863,18 +3864,108 @@ MUTATIONS = (
         name="judge-reader-start-terminator-baseexception-mask",
         path="evoom_guard/execution/judge.py",
         before=(
-            "                process_group_terminator(process)\n"
-            "            except BaseException:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = "
+            "process_group_terminator(process)\n"
+            "            except BaseException as cleanup_error:\n"
         ),
         after=(
-            "                process_group_terminator(process)\n"
-            "            except Exception:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = "
+            "process_group_terminator(process)\n"
+            "            except Exception as cleanup_error:\n"
         ),
         test=(
             "tests/test_blackbox_judge_reader_start.py::"
             "test_reader_start_primary_survives_every_cleanup_baseexception"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-reader-cleanup-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "                reader_cleanup_result = "
+            "pipe_join(reader_start_attempts, streams)\n"
+        ),
+        after="                reader_cleanup_result = True\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_characterization_preserves_primary_and_attempt_order"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-terminator-exact-proof-bypass",
+        path="evoom_guard/execution/judge.py",
+        before="                if termination_result is not None:\n",
+        after="                if termination_result:\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_requires_owner_specific_positive_proof"
+            "[terminator-false]"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-reader-exact-proof-bypass",
+        path="evoom_guard/execution/judge.py",
+        before="                if reader_cleanup_result is not True:\n",
+        after="                if not reader_cleanup_result:\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_requires_owner_specific_positive_proof"
+            "[reader-truthy-non-bool]"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-terminator-raised-observability-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "            except BaseException as cleanup_error:\n"
+            "                _note_abort_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    (\n"
+            '                        "Judge process-group abort cleanup raised while preserving "\n'
+            '                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)\n'
+            "                    ),\n"
+            "                )\n"
+        ),
+        after=(
+            "            except BaseException as cleanup_error:\n"
+            "                pass\n"
+        ),
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_preserves_ordered_raised_and_false_diagnostics"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-reader-raised-observability-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "            except BaseException as cleanup_error:\n"
+            "                _note_abort_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    (\n"
+            '                        "Judge output-reader abort cleanup raised while preserving "\n'
+            '                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)\n'
+            "                    ),\n"
+            "                )\n"
+        ),
+        after=(
+            "            except BaseException as cleanup_error:\n"
+            "                pass\n"
+        ),
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_requires_owner_specific_positive_proof"
+            "[reader-raised]"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-bare-reraise-bypass",
+        path="evoom_guard/execution/judge.py",
+        before="        raise\n\n\n__all__ = [\n",
+        after="        raise primary\n\n\n__all__ = [\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_characterization_preserves_primary_and_attempt_order"
         ),
     ),
     Mutation(
@@ -3997,17 +4088,8 @@ MUTATIONS = (
     Mutation(
         name="judge-runtime-baseexception-precedence-bypass",
         path="evoom_guard/execution/judge.py",
-        before=(
-            "            except BaseException:\n"
-            "                pass\n"
-            "        raise\n"
-            "\n"
-            "\n"
-            "__all__ = [\n"
-        ),
+        before="        raise\n\n\n__all__ = [\n",
         after=(
-            "            except BaseException:\n"
-            "                pass\n"
             "        raise JudgeProcessCleanupError(\"mutant masked primary\")\n"
             "\n"
             "\n"
