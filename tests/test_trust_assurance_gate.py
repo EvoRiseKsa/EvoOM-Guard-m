@@ -16,6 +16,7 @@ EXPECTED_MODULES = {
     "evoom_guard/runtime_identity.py",
     "evoom_guard/verifiers/fidelity.py",
     "evoom_guard/admission/release_artifact.py",
+    "evoom_guard/admission/artifact_provider_v3.py",
     "evoom_guard/admission/agent_change.py",
     "evoom_guard/finalizer/deployment.py",
     "evoom_guard/artifact_admission.py",
@@ -61,7 +62,9 @@ def test_manifest_reports_direct_mutation_truth_without_inference() -> None:
     }
 
     assert declarations["evoom_guard/github_attestation.py"] == "reviewed"
-    assert counts["evoom_guard/github_attestation.py"] >= 31
+    assert counts["evoom_guard/github_attestation.py"] >= 34
+    assert declarations["evoom_guard/admission/artifact_provider_v3.py"] == "reviewed"
+    assert counts["evoom_guard/admission/artifact_provider_v3.py"] >= 11
     assert set(declarations.values()) == {"reviewed"}
     for entry in manifest["modules"]:  # type: ignore[index]
         path = entry["path"]
@@ -104,11 +107,11 @@ def test_reviewed_mutant_count_is_a_downward_ratchet() -> None:
     manifest = _manifest()
     counts = Counter(gate.reviewed_mutation_counts())
     path = "evoom_guard/github_attestation.py"
-    counts[path] = 30
+    counts[path] = 33
 
     errors = gate.validate_manifest(manifest, mutation_counts=counts)
 
-    assert f"{path}: reviewed mutation count 30 is below 31" in errors
+    assert f"{path}: reviewed mutation count 33 is below 34" in errors
 
 
 def test_one_branch_ratio_regression_fails() -> None:
@@ -148,4 +151,5 @@ def test_direct_script_execution_uses_the_reviewed_inventory(tmp_path: Path) -> 
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "direct reviewed mutants=31 status=reviewed" in completed.stdout
+    assert "direct reviewed mutants=34 status=reviewed" in completed.stdout
+    assert "direct reviewed mutants=11 status=reviewed" in completed.stdout

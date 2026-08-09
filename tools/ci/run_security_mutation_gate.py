@@ -368,6 +368,216 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="artifact-provider-v3-ghcr-registry-restriction-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before="    match = _GHCR_REPOSITORY.fullmatch(registry_repository)\n",
+        after='    match = re.fullmatch(r".+", registry_repository)\n',
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_subject_accepts_only_canonical_immutable_ghcr"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-digest-algorithm-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            "    if not isinstance(digest, str) or "
+            "_SHA256_DIGEST.fullmatch(digest) is None:\n"
+        ),
+        after=(
+            "    if not isinstance(digest, str) or "
+            "False:\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_subject_accepts_only_canonical_immutable_ghcr"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-receipt-count-type-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before="    if type(count) is not int or count != 1:\n",
+        after="    if count != 1:\n",
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_receipt_validation_is_closed_world_and_type_exact"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-policy-limit-type-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            '    if type(policy.get("attestation_limit")) is not int or policy.get(\n'
+            '        "attestation_limit"\n'
+            "    ) != 1:\n"
+        ),
+        after='    if policy.get("attestation_limit") != 1:\n',
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_receipt_validation_is_closed_world_and_type_exact"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-direct-revision-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before="    if policy.signer_digest != policy.source_digest:\n",
+        after="    if False and policy.signer_digest != policy.source_digest:\n",
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_external_relation_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-finalizer-repository-binding-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            '    if expected_finalizer_context.get("repository") '
+            "!= policy.repository:\n"
+        ),
+        after=(
+            '    if False and expected_finalizer_context.get("repository") '
+            "!= policy.repository:\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_repository_mismatch_stops_before_provider_execution"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-finalizer-source-binding-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            '    if expected_finalizer_context.get("head_sha") '
+            "!= policy.source_digest:\n"
+        ),
+        after=(
+            '    if False and expected_finalizer_context.get("head_sha") '
+            "!= policy.source_digest:\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_external_relation_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-ghcr-owner-binding-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            '    if namespace.group("namespace") != '
+            'policy.repository.split("/", 1)[0].lower():\n'
+        ),
+        after=(
+            '    if False and namespace.group("namespace") != '
+            'policy.repository.split("/", 1)[0].lower():\n'
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_external_relation_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-build-finalizer-run-separation-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            "    if (\n"
+            '        expected_finalizer_context.get("run_id") == checked_run_id\n'
+            '        and expected_finalizer_context.get("run_attempt") == checked_attempt\n'
+            "    ):\n"
+        ),
+        after=(
+            "    if False and (\n"
+            '        expected_finalizer_context.get("run_id") == checked_run_id\n'
+            '        and expected_finalizer_context.get("run_attempt") == checked_attempt\n'
+            "    ):\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_external_relation_fails_closed"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-live-isolation-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            "    if type(provider_isolation) is not "
+            "GitHubAttestationProviderIsolation:\n"
+            "        raise ArtifactProviderV3Error(\n"
+            '            "provider V3 live verification requires '
+            'GitHubAttestationProviderIsolation"\n'
+            "        )\n"
+            "    if os.path.abspath(receipt_path) == os.path.abspath(raw_output_path):\n"
+        ),
+        after=(
+            "    if os.path.abspath(receipt_path) == os.path.abspath(raw_output_path):\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_live_paths_require_isolation_and_no_alias"
+        ),
+    ),
+    Mutation(
+        name="artifact-provider-v3-signing-key-isolation-bypass",
+        path="evoom_guard/admission/artifact_provider_v3.py",
+        before=(
+            "        validate_provider_isolated_signing_key_path(\n"
+            "            private_key_path, provider_isolation\n"
+            "        )\n"
+        ),
+        after="        pass\n",
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_v3_seal_requires_key_isolation_before_provider_execution"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-oci-subject-name-binding-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "    if subject_name is not None:\n"
+            "        _require_semantic_match(\n"
+        ),
+        after=(
+            "    if False and subject_name is not None:\n"
+            "        _require_semantic_match(\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_provider_semantics_bind_subject_name_digest_and_build_invocation"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-oci-run-binding-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "    if expected_run is not None and "
+            "(workflow_run_id, workflow_run_attempt) != expected_run:\n"
+        ),
+        after=(
+            "    if False and expected_run is not None and "
+            "(workflow_run_id, workflow_run_attempt) != expected_run:\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_provider_semantics_bind_subject_name_digest_and_build_invocation"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-oci-registry-bundle-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "            isolation_input_path=None,\n"
+            "            bundle_from_oci=True,\n"
+        ),
+        after=(
+            "            isolation_input_path=None,\n"
+            "            bundle_from_oci=False,\n"
+        ),
+        test=(
+            "tests/test_artifact_provider_v3.py::"
+            "test_oci_provider_runner_uses_only_digest_qualified_ghcr_and_registry_bundle"
+        ),
+    ),
+    Mutation(
         name="release-source-key-domain-separation-bypass",
         path="evoom_guard/admission/release_source.py",
         before="    if len(set(checked.values())) != len(checked):\n",
@@ -5510,13 +5720,13 @@ MUTATIONS = (
             "        raise\n"
             "\n"
             "\n"
-            "def _run_gh_attestation_verify(\n"
+            "def _run_gh_attestation_verify_target(\n"
         ),
         after=(
             "        raise GitHubAttestationError(\"mutant masked primary\")\n"
             "\n"
             "\n"
-            "def _run_gh_attestation_verify(\n"
+            "def _run_gh_attestation_verify_target(\n"
         ),
         test=(
             "tests/test_github_attestation_lifecycle.py::"

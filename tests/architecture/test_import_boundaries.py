@@ -920,6 +920,34 @@ def test_flat_evidence_admission_and_finalizer_owners_follow_declared_layers() -
         )
 
 
+def test_artifact_provider_v3_is_a_closed_admission_layer() -> None:
+    """Keep provider-specific V3 above existing evidence and V2 primitives."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    module = "evoom_guard.admission.artifact_provider_v3"
+
+    assert module in analysis.modules
+    assert module not in analysis.violations["unclassified_modules"]
+    assert {
+        target
+        for source, target in analysis.internal_edges
+        if source == module and target != module
+    } == {
+        "evoom_guard.artifact_digest_admission",
+        "evoom_guard.evidence_bundle",
+        "evoom_guard.github_attestation",
+        "evoom_guard.strict_json",
+    }
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["layer_violations"]
+    )
+    assert not any(
+        violation.startswith(f"{module} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contracts() -> None:
     """Keep generic semantics separate from versioned wire ownership."""
 

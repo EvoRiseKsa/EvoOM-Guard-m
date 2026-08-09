@@ -239,11 +239,6 @@
     },
     {
       "path": "evoom_guard/github_attestation.py",
-      "symbol": "validate_github_attestation_verifier_output",
-      "max_complexity": 11
-    },
-    {
-      "path": "evoom_guard/github_attestation.py",
       "symbol": "validate_provider_isolated_signing_key_path",
       "max_complexity": 14
     },

@@ -129,8 +129,10 @@ non-regular provenance inputs, a finalizer DENY, finalizer replay, a different
 admission key, a reused finalizer/admission key, payload mutation, and
 non-canonical archive bytes.
 
-It does not close Issue 78 by itself. The remaining work is a narrowly defined
-provenance verifier and protected build or merge-candidate integration.
+It does not close Issue 78 by itself. Current unreleased source now contains
+one narrowly defined public-GHCR provider adapter, but no protected reference
+workflow, CLI, or live OCI pilot exists, and the separate release-asset and
+production acceptance criteria remain open.
 
 ## GitHub Artifact Attestation adapter
 
@@ -141,3 +143,20 @@ reference verified: only its own function invokes `gh attestation verify` with
 a constrained policy before it creates a V2 binding. The record must retain
 both its canonical receipt and the exact raw GitHub CLI output. Its recheck is
 byte continuity, not a new online signature verification.
+
+## Unreleased OCI provider follow-on
+
+[`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md) specifies a separate
+unreleased library path for one digest-qualified public GHCR subject. It fixes
+the provider bundle source to the OCI registry, validates an exact statement
+subject and direct same-revision branch build with an exact run/attempt,
+relates repository/source pins to externally supplied Trusted Finalizer
+context, and uses the exact canonical V3 receipt as V2 provenance-reference
+bytes. It does not change V2 semantics or turn opaque V2 provenance into a
+generic verified-provenance format. Only that V3 path applies the added
+provider semantics.
+
+Retained V3 verification remains byte continuity and does not contact the
+provider; explicit fresh reverification does. The V3 path has no CLI,
+protected workflow, or live OCI evidence yet, so
+[#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78) remains open.

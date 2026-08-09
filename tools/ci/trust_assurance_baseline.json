@@ -136,8 +136,19 @@
       "branch_floor": {"covered": 178, "total": 266},
       "mutation": {
         "status": "reviewed",
-        "minimum_reviewed_mutants": 31,
+        "minimum_reviewed_mutants": 34,
         "scope_note": "This is a count of explicit reviewed source mutations in the deterministic gate, not a whole-module mutation score."
+      }
+    },
+    {
+      "path": "evoom_guard/admission/artifact_provider_v3.py",
+      "trust_boundary": "provider-specific immutable OCI admission relation",
+      "baseline_report": {"statements": 300, "missing_statements": 41, "branches": 78, "combined_percent": 87},
+      "branch_floor": {"covered": 68, "total": 78},
+      "mutation": {
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 11,
+        "scope_note": "Eleven explicit reviewed source mutations bind the V3 registry, digest, provider-policy, external-finalizer, run-separation, and provider/key-isolation constraints; this is not a whole-module mutation score."
       }
     }
   ]

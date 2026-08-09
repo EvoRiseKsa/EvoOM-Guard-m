@@ -12,6 +12,20 @@ follow-on to the generic V2 artifact-digest binding. It is not part of the
 immutable v3.7.0 release and does not close the wider artifact-provenance issue
 by itself.
 
+This page primarily documents the released regular-file adapter. Current
+unreleased source also contains a separate, library-only OCI subset described
+in [`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md). That path accepts only
+a digest-qualified public GHCR subject, fixes `--bundle-from-oci`, requires an
+exact direct same-revision branch build and builder run/attempt, relates the
+provider result to external Trusted Finalizer context, and binds its canonical
+receipt through unchanged V2. It has no CLI, protected reference workflow, or
+live OCI pilot. GitHub CLI requires prior OCI-registry authentication; isolated
+mode does not inherit ambient Docker configuration, and this path has not shown
+that its preserved `GH_TOKEN`/`GITHUB_TOKEN` is sufficient. Therefore “public
+GHCR” is not an anonymous-access claim, and registry authentication remains an
+unresolved protected-integration gate. The wider [artifact-bound admission issue
+#78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78) remains open.
+
 ## What it actually verifies
 
 `evoom_guard.github_attestation.create_github_attestation_receipt()` makes a
