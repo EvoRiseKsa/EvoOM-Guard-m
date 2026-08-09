@@ -118,6 +118,9 @@ contract does not authorize another stage such as publication or deployment.
   implementation boundary.
 - [`ISOLATION_CONFORMANCE.md`](ISOLATION_CONFORMANCE.md) — isolation adapter
   requirements and conformance evidence.
+- [`../evidence/runtime-observations/v4.5.0-gvisor-31298956172/`](../evidence/runtime-observations/v4.5.0-gvisor-31298956172/)
+  — closed, byte-bound public subset from one same-owner GitHub-hosted gVisor
+  run; not independent, production, field, or hostile-host evidence.
 - [`RUNNER_CONFORMANCE.md`](RUNNER_CONFORMANCE.md) — runner adapter behavior and
   fail-closed checks.
 - [`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md) — raw-Git
