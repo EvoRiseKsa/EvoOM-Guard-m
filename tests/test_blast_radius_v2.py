@@ -259,6 +259,27 @@ def test_threshold_and_pattern_mutations_fail_closed(
         blast_radius_score_v2(_valid_add(), **kwargs)  # type: ignore[arg-type]
 
 
+def test_protected_matching_work_is_bounded_before_the_quadratic_scan() -> None:
+    value = {
+        "format": BLAST_RADIUS_V2_FORMAT,
+        "changes": [
+            {
+                "operation": "add",
+                "old_path": None,
+                "new_path": f"src/generated-{index}.py",
+                "lines_added": 1,
+                "lines_removed": 0,
+                "binary": False,
+            }
+            for index in range(2_001)
+        ],
+    }
+    patterns = [f"protected-{index}/**" for index in range(1_000)]
+
+    with pytest.raises(BlastRadiusV2ContractError, match="matching-work limit"):
+        blast_radius_score_v2(value, protected=patterns)
+
+
 def test_direct_v2_matches_guard_materialization_for_same_change(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _write(repo, "pkg/__init__.py", "")

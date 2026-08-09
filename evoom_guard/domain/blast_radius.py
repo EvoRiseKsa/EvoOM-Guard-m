@@ -30,6 +30,7 @@ MAX_MATERIALIZED_CHANGES_V2: Final = 10_000
 MAX_MATERIALIZED_PATH_BYTES_V2: Final = 4_096
 MAX_MATERIALIZED_COUNTER_V2: Final = (1 << 63) - 1
 MAX_PROTECTED_PATTERNS_V2: Final = 10_000
+MAX_PROTECTED_MATCH_EVALUATIONS_V2: Final = 2_000_000
 
 MaterializedOperationV2: TypeAlias = Literal[
     "add", "modify", "delete", "rename", "copy", "mode"
@@ -455,6 +456,10 @@ def blast_radius_score_v2(
         raise _contract_error("medium_lines cannot exceed high_lines")
 
     touched = change_set.affected_paths
+    if len(touched) * len(patterns) > MAX_PROTECTED_MATCH_EVALUATIONS_V2:
+        raise _contract_error(
+            "affected-path/protected-pattern product exceeds the matching-work limit"
+        )
     lines_added = sum(change.lines_added for change in change_set.changes)
     lines_removed = sum(change.lines_removed for change in change_set.changes)
     total_lines = lines_added + lines_removed

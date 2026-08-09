@@ -108,8 +108,10 @@ partial mapping is an error. `canonical_materialized_change_v2_bytes` emits the
 canonical UTF-8 JSON representation. The packaged JSON Schema is
 `evoom_guard/schemas/blast-radius-materialized-change-2.schema.json`; runtime
 validation is authoritative for NFC, UTF-8 byte bounds, path equality,
-cross-platform case collisions, and aggregate limits that JSON Schema cannot
-express completely.
+cross-platform case collisions, aggregate limits that JSON Schema cannot
+express completely, and a two-million path/glob comparison ceiling. The last
+bound rejects an otherwise valid but quadratic protected-path scan before the
+scan begins.
 
 ### Operation semantics
 
