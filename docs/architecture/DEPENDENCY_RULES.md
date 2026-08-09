@@ -2,6 +2,8 @@
 
 ## Hard constraints
 
+- `foundation` modules must remain stdlib-only and may not import another
+  EvoOM Guard module.
 - Core runtime dependencies between execution and domain/evidence modules must remain stdlib-only.
 - No private imports from `repo_verifier.py` or other monolith modules into extracted modules.
 - No circular imports.
@@ -30,12 +32,14 @@ modules. It permits no unresolved dynamic imports, wildcard imports, extracted-l
 direction violations, or additional unclassified modules.
 
 The enforced layer order is explicit and matches `MODULE_BOUNDARIES.md`:
-`domain -> policy/candidate/workspace -> execution/isolation ->
+`foundation -> domain -> policy/candidate/workspace -> execution/isolation ->
 verifiers/runners -> application -> evidence -> finalizer/admission ->
 api/cli/integrations`. A module is assigned to a layer only when its first-level
-name is a real Python package; same-named compatibility files such as
-`evidence.py` remain declared legacy debt until their atomic file-to-package
-migrations.
+name is a real Python package. A stable flat path may instead have an explicit
+semantic owner only when its complete dependency closure and responsibilities
+fit one documented layer and the architecture test freezes that closure;
+mixed compatibility facades remain unclassified until real responsibility
+separation justifies a migration.
 
 The former miscellaneous `record_verification` package has been removed.
 Its report-envelope and isolation-parity responsibilities now have explicit
@@ -263,8 +267,9 @@ Release Source Admission V2 enters the real `admission.release_source`
 package. The extracted module imports only explicit public contracts from the
 legacy evidence, finalizer-derivation pin, provider, release-source, receipt,
 and signing components.
-Those flat providers remain unclassified architectural debt until their atomic
-Stage 10 migrations; their shared public facades prevent that debt from
+The cohesive evidence, signing, and release-source-finalizer providers are now
+explicitly classified by semantic ownership. Mixed provider facades remain
+unclassified architectural debt; public contracts keep that debt from
 spreading into the new admission layer.
 
 Import-boundary ratchet revision 7 performs the atomic `cli.py` to
@@ -288,10 +293,78 @@ Import-boundary ratchet revision 9 classifies the stable flat
 domain-owned wire vocabularies. The unclassified-module ceiling drops from 22
 to 21 while both published import paths remain unchanged.
 
+Import-boundary ratchet revision 10 promotes the already shared canonical
+evidence/archive, bounded-file, signing-snapshot, and signing-operation
+contracts to documented public provider names. Historical private names remain
+identity aliases or compatibility wrappers where required. Existing consumers
+move to the public names without changing wire bytes, exception mapping, or
+lookup timing, lowering the cross-package private-import ceiling from 54 to 10.
+
+Import-boundary ratchet revision 11 promotes the Trusted Finalizer's exact
+source-shape and source/context digest-binding validators to
+`validate_finalizer_source` and `validate_finalizer_source_context`.
+Artifact Admission V1 and Artifact Digest Admission V2 consume those public
+owner contracts through their existing module-global late-binding seams. The
+legacy private finalizer names remain identity aliases, and characterization
+vectors freeze positive/negative behavior, exception causes, and monkeypatch
+timing. No schema or wire semantics change; the cross-package private-import
+ceiling drops from 10 to 6.
+
+Import-boundary ratchet revision 12 makes selected multi-path regular-blob
+projection a narrow public Finalizer Derivation contract. The producer-receipt
+owner now consumes `resolve_raw_git_regular_blobs` instead of importing `_GitReader` and
+observing `_GitEntry` values. Reader construction remains a live module-global
+lookup, one tree is read per verification, cleanup completes before workflow
+comparisons, and the historical producer/trigger/admitter error order remains
+unchanged. No schema or wire contract changes; the cross-package private-import
+ceiling drops from 6 to 5.
+
+Import-boundary ratchet revision 13 replaces the producer-receipt owner's two
+direct imports of Finalizer-private publishing and context-validation functions
+with one immutable public primitive snapshot captured at module entry. The
+snapshot freezes the historical import-time binding behavior as one coherent
+unit and leaves exact output bytes and exception identity unchanged. The
+cross-package private-import ceiling drops from 5 to 3.
+
+Import-boundary ratchet revision 14 unifies the release-source finalizer
+snapshot as one immutable five-operation owner contract. Producer receipt code
+captures it once at module import; the CLI captures it at command entry before
+reading untrusted arguments. Characterization tests freeze both lookup times,
+all five function identities, and immutability. The cross-package
+private-import ceiling drops from 3 to 1.
+
 The verifier-owned `record_policy` module is a new classified verifier-layer
 owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy
 tests, so no ratchet count is changed merely to record the new module.
+
+Import-boundary ratchet revision 15 replaces the CLI's direct import of
+Guard's historical private changed-path exception with one public immutable
+candidate-tree compatibility snapshot. The Guard facade still resolves the
+legacy error type, structured derivation callable, and canonical serializer at
+snapshot time, so existing monkeypatch timing and exception identity remain
+unchanged. The measured cross-package private-import ceiling drops from 1 to
+0; cycles, wildcard imports, unresolved dynamic imports, layer violations, and
+unclassified modules remain unchanged.
+
+Import-boundary ratchet revision 16 classifies four cohesive stable flat
+contracts without moving implementation or changing public identities.
+`contracts.py` and `strict_json.py` are dependency-free foundation owners;
+`runtime_identity.py` is workspace-owned; and `pack_manifest.py` is
+verifier-owned. An executable closure test requires all four to retain zero
+internal dependencies. The unclassified-module ceiling therefore drops from
+21 to 17 while cycles, private imports, wildcard imports, unresolved dynamic
+imports, and layer violations remain unchanged.
+
+Import-boundary ratchet revision 17 classifies six more cohesive stable flat
+owners without moving implementation or changing public identities.
+`evidence.py`, `evidence_bundle.py`, and `signing.py` belong to evidence;
+`artifact_admission.py` and `artifact_digest_admission.py` belong to admission;
+and `release_source_finalizer.py` belongs to finalizer. An executable closure
+test freezes their complete internal dependency sets and layer direction. The
+unclassified-module ceiling drops from 17 to 11 while cycles, private imports,
+wildcard imports, unresolved dynamic imports, and layer violations remain
+zero. Remaining mixed facades are not relabeled by this revision.
 
 Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and

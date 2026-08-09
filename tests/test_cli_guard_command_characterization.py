@@ -139,6 +139,55 @@ def test_facade_preserves_entry_snapshot_and_later_global_lookups(
     ]
 
 
+def test_candidate_tree_dependencies_snapshot_at_service_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Candidate-tree facades and the legacy error type freeze together."""
+
+    early_error = guard_module._UnverifiableChangedPathsError
+
+    def early_blocks(
+        _base: str,
+        _head: str,
+    ) -> tuple[dict[str, str], list[str]]:
+        return {"early.py": "VALUE = 1\n"}, ["old.py"]
+
+    def early_serialize(_blocks: object) -> str:
+        return "EARLY"
+
+    monkeypatch.setattr(guard_module, "blocks_from_dirs", early_blocks)
+    monkeypatch.setattr(
+        guard_module,
+        "serialize_candidate_blocks",
+        early_serialize,
+    )
+
+    services = cli._guard_command_services()
+
+    class LateError(early_error):
+        pass
+
+    monkeypatch.setattr(
+        guard_module,
+        "_UnverifiableChangedPathsError",
+        LateError,
+    )
+    monkeypatch.setattr(
+        guard_module,
+        "blocks_from_dirs",
+        lambda _base, _head: ({"late.py": "VALUE = 2\n"}, []),
+    )
+    monkeypatch.setattr(
+        guard_module,
+        "serialize_candidate_blocks",
+        lambda _blocks: "LATE",
+    )
+
+    assert services.unverifiable_changed_paths_error is early_error
+    assert services.blocks_from_dirs is early_blocks
+    assert services.serialize_candidate_blocks is early_serialize
+
+
 def test_signing_provider_is_resolved_after_json_publication(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

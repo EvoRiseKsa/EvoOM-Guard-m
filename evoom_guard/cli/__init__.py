@@ -491,18 +491,18 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
     from evoom_guard.guard import (
         REASON_NO_VERIFIABLE_CHANGES,
         REASON_VERIFIER_PACK_INVALID,
-        _UnverifiableChangedPathsError,
-        blocks_from_dirs,
         build_effective_policy_payload,
         guard,
         guard_from_diff,
         input_error_result,
         render_report,
-        serialize_candidate_blocks,
+        snapshot_candidate_tree_compatibility,
         verifier_pack_trust_error,
         write_json,
         write_sarif,
     )
+
+    candidate_tree = snapshot_candidate_tree_compatibility()
     from evoom_guard.integrations.guard_output import write_markdown
 
     def write_report(path: str, report: str) -> None:
@@ -530,13 +530,15 @@ def _guard_command_services() -> _guard_command_owner.GuardCommandServices[Guard
         is_finite=lambda value: math.isfinite(value),
         no_verifiable_changes_reason=REASON_NO_VERIFIABLE_CHANGES,
         invalid_verifier_pack_reason=REASON_VERIFIER_PACK_INVALID,
-        unverifiable_changed_paths_error=_UnverifiableChangedPathsError,
-        blocks_from_dirs=blocks_from_dirs,
+        unverifiable_changed_paths_error=(
+            candidate_tree.unverifiable_changed_paths_error
+        ),
+        blocks_from_dirs=candidate_tree.blocks_from_dirs,
         guard=guard,
         guard_from_diff=guard_from_diff,
         input_error_result=input_error_result,
         render_report=render_report,
-        serialize_candidate_blocks=serialize_candidate_blocks,
+        serialize_candidate_blocks=candidate_tree.serialize_candidate_blocks,
         verifier_pack_trust_error=verifier_pack_trust_error,
         write_json=write_json,
         write_sarif=write_sarif,
@@ -1454,12 +1456,10 @@ def cmd_derive_release_source_controls(
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_CONTEXT_FORMAT,
         ReleaseSourceFinalizerError,
-        _publish_bytes,
-        _record_snapshot,
-        context_from_release_source_bindings,
-        derive_release_source_bindings,
+        snapshot_release_source_finalizer_primitives,
     )
 
+    finalizer_primitives = snapshot_release_source_finalizer_primitives()
     evidence_primitives = snapshot_evidence_primitives()
 
     def canonical_json(value: dict[str, Any]) -> bytes:
@@ -1472,12 +1472,14 @@ def cmd_derive_release_source_controls(
                 context_format=RELEASE_SOURCE_CONTEXT_FORMAT,
                 finalizer_error=ReleaseSourceFinalizerError,
                 canonical_json=canonical_json,
-                publish_bytes=_publish_bytes,
-                record_snapshot=_record_snapshot,
+                publish_bytes=finalizer_primitives.publish_bytes,
+                record_snapshot=finalizer_primitives.record_snapshot,
                 context_from_release_source_bindings=(
-                    context_from_release_source_bindings
+                    finalizer_primitives.context_from_release_source_bindings
                 ),
-                derive_release_source_bindings=derive_release_source_bindings,
+                derive_release_source_bindings=(
+                    finalizer_primitives.derive_release_source_bindings
+                ),
                 read_external_object_provider=lambda: (
                     _read_external_finalizer_object
                 ),

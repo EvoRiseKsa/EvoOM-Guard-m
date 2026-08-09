@@ -53,8 +53,8 @@ The corpus was first measured on the v3.2.2 engine. CI re-runs all 17 live cases
 with the current engine and fails if the published aggregate metrics drift.
 `results.jsonl` is a deliberately regenerated measurement snapshot, not an
 output that CI rewrites: each row records the `engine_version` that produced
-that snapshot. Regenerate and commit it whenever the measured engine version
-changes.
+that snapshot. Regenerate and commit it whenever the measured engine version,
+selected source inventory, corpus, settings, or baseline definition changes.
 
 | Case | Truth | Observed verdict | Decided pre-execution? |
 |---|---|---|---|

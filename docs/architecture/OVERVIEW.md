@@ -30,6 +30,7 @@ strict behavior-preserving PR slices.
 
 ## Core architecture idea
 
+- `foundation` owns dependency-free cross-cutting protocols and strict decoding.
 - `domain` owns request, lifecycle, verdict and assurance models.
 - `execution` owns scheduling/observability primitives.
 - `isolation` owns containment and transport of runtime evidence.
@@ -37,6 +38,13 @@ strict behavior-preserving PR slices.
 - `verifiers` owns executor orchestration and report interpretation.
 - `application` owns pipeline and policy/assurance composition.
 - `api` / `cli` / `integrations` own compatibility boundaries.
+
+Four stable flat modules have cohesive semantic owners without changing their
+published import paths: `contracts.py` and `strict_json.py` belong to the
+foundation layer, `runtime_identity.py` belongs to workspace, and
+`pack_manifest.py` belongs to verification. Each currently has zero internal
+EvoOM Guard dependencies. This is an ownership classification, not a runtime
+move or a claim that the remaining mixed flat facades are decomposed.
 
 ## Current implementation position and next step
 

@@ -66,15 +66,18 @@ from evoom_guard.release_source_finalizer import (
     DerivedReleaseSourceBindings,
     ReleaseSourceFinalizerError,
     VerifiedReleaseSourceHandoff,
-    _publish_bytes,
-    _validate_source_context,
     context_from_release_source_bindings,
     derive_release_source_bindings,
     inspect_release_source_handoff,
+    snapshot_release_source_finalizer_primitives,
     validate_release_source,
     validate_release_source_context,
     verify_release_source_handoff,
 )
+
+_release_source_finalizer_primitives = snapshot_release_source_finalizer_primitives()
+_publish_bytes = _release_source_finalizer_primitives.publish_bytes
+_validate_source_context = _release_source_finalizer_primitives.validate_source_context
 
 RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT = "EVOGUARD_RELEASE_SOURCE_PRODUCER_RECEIPT_V1"
 RELEASE_SOURCE_PRODUCER_RUNTIME_FORMAT = "EVOGUARD_GUARD_ZIPAPP_SHA256_V1"
@@ -775,14 +778,21 @@ def _verify_producer_workflow_blobs(
     """
 
     try:
-        from evoom_guard.finalizer_derivation import FinalizerDerivationError, _GitReader
+        from evoom_guard.finalizer_derivation import (
+            FinalizerDerivationError,
+            resolve_raw_git_regular_blobs,
+        )
 
-        with _GitReader(
-            git_repository,
+        blobs = resolve_raw_git_regular_blobs(
+            repository=git_repository,
+            treeish=str(source["target_tree_sha"]),
+            paths=(
+                str(producer["workflow_path"]),
+                str(producer["trigger_workflow_path"]),
+            ),
             bare=git_repository_is_bare,
             git_executable=git_executable,
-        ) as reader:
-            tree = reader.tree(str(source["target_tree_sha"]))
+        )
     except FinalizerDerivationError as exc:
         raise ReleaseSourceProducerReceiptError(
             f"could not resolve producer workflow from raw Git: {exc}"
@@ -791,12 +801,12 @@ def _verify_producer_workflow_blobs(
         ("producer", "workflow_path", "workflow_blob_sha"),
         ("trigger", "trigger_workflow_path", "trigger_workflow_blob_sha"),
     ):
-        entry = tree.get(str(producer[path_key]))
-        if entry is None or not entry.regular:
+        object_id = blobs.get(str(producer[path_key]))
+        if object_id is None:
             raise ReleaseSourceProducerReceiptError(
                 f"{role} workflow path is not a regular blob in the protected-main tree"
             )
-        if entry.object_id != producer[blob_key]:
+        if object_id != producer[blob_key]:
             raise ReleaseSourceProducerReceiptError(
                 f"{role} workflow blob does not match the protected-main raw Git tree"
             )
@@ -826,24 +836,28 @@ def verify_release_source_admitter_workflow_blob(
         checked_admitter,
     )
     try:
-        from evoom_guard.finalizer_derivation import FinalizerDerivationError, _GitReader
+        from evoom_guard.finalizer_derivation import (
+            FinalizerDerivationError,
+            resolve_raw_git_regular_blobs,
+        )
 
-        with _GitReader(
-            git_repository,
+        blobs = resolve_raw_git_regular_blobs(
+            repository=git_repository,
+            treeish=str(checked_source["target_tree_sha"]),
+            paths=(str(checked_admitter["workflow_path"]),),
             bare=git_repository_is_bare,
             git_executable=git_executable,
-        ) as reader:
-            tree = reader.tree(str(checked_source["target_tree_sha"]))
+        )
     except FinalizerDerivationError as exc:
         raise ReleaseSourceProducerReceiptError(
             f"could not resolve admitter workflow from raw Git: {exc}"
         ) from exc
-    entry = tree.get(str(checked_admitter["workflow_path"]))
-    if entry is None or not entry.regular:
+    object_id = blobs.get(str(checked_admitter["workflow_path"]))
+    if object_id is None:
         raise ReleaseSourceProducerReceiptError(
             "admitter workflow path is not a regular blob in the protected-main tree"
         )
-    if entry.object_id != checked_admitter["workflow_blob_sha"]:
+    if object_id != checked_admitter["workflow_blob_sha"]:
         raise ReleaseSourceProducerReceiptError(
             "admitter workflow blob does not match the protected-main raw Git tree"
         )

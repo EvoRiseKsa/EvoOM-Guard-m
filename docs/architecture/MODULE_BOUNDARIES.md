@@ -2,6 +2,8 @@
 
 ## Package boundaries (current target)
 
+- `foundation` (stable flat compatibility owners): dependency-free generic
+  verifier contracts and strict, bounded JSON decoding shared across layers.
 - `domain/`: policy, lifecycle, verdict, assurance, request/result types.
 - `policy/`: policy parsing, normalization, validation, profile identity.
 - `candidate/`: candidate parsing, patch/diff, directory/file snapshot helpers.
@@ -35,6 +37,34 @@
   `evoom_guard/record_verifier.py`, and `evoom_guard/trusted_finalizer.py`.
 
 ## Current extraction boundaries
+
+The lowest-level foundation owners retain their established public flat paths.
+`contracts.py` owns only the generic `Problem`, `VerdictResult`, and `Verifier`
+protocol vocabulary; `strict_json.py` owns only bounded, unambiguous JSON
+decoding. Neither imports another EvoOM Guard module. They are therefore below
+domain rather than being mislabeled as domain models or evidence decisions.
+
+Two other cohesive flat modules have explicit existing owners.
+`runtime_identity.py` belongs to workspace because it performs bounded,
+race-aware filesystem identity capture and comparison; `pack_manifest.py`
+belongs to verifiers because it validates, snapshots, and re-verifies the
+canonical verifier-pack contract. Both import only the standard library. Their
+stable paths are classified directly; no implementation or wire contract moves.
+Mixed facades such as `guard.py`, `blackbox.py`, and `record_verifier.py` remain
+unclassified until real responsibility separation justifies a migration.
+
+Six cohesive stable flat modules now have explicit existing owners without a
+file move or public-identity change. `evidence.py` owns the bounded
+changed-line-coverage observation; `evidence_bundle.py` owns deterministic
+evidence envelopes; and `signing.py` owns exact-byte Ed25519 operations. They
+belong to the evidence layer. `artifact_admission.py` and
+`artifact_digest_admission.py` are admission-layer contracts that bind an
+already verified finalizer decision to one immutable subject. The separate
+`release_source_finalizer.py` contract belongs to finalizer and never upgrades
+its producer evidence into admission. Their exact internal dependency sets are
+executable architecture contracts. No implementation, schema, wire bytes, or
+runtime lookup moved in this classification slice. Mixed facades such as
+`guard.py`, `blackbox.py`, and `record_verifier.py` remain unclassified.
 
 Runner instrumentation is owned by `evoom_guard/runners/`: `protocol.py` defines
 the dependency-free structural contract, `_command.py` owns shared executable
@@ -121,7 +151,10 @@ write/delete sharing, non-blocking no-follow POSIX opens, bounded
 reads/comparisons, changed-path classification, and canonical FILE-block
 serialization. Guard retains its historical names as thin compatibility
 types/facades and injects every established helper at call time, so private
-type metadata and monkeypatch seams remain stable. The transaction proves only
+type metadata and monkeypatch seams remain stable. CLI integration captures
+the changed-path error type, structured derivation, and canonical serializer
+through one public immutable compatibility snapshot; it no longer imports the
+facade-private error independently. The transaction proves only
 the bounded per-file read/compare interval; it does not close the
 classification/open gap or claim an atomic whole-tree snapshot. Revision
 identity still requires a quiescent checkout or raw-Git finalization.

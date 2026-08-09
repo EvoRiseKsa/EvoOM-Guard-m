@@ -8,10 +8,10 @@ and domain logic are coupled.
 
 ## Decision
 Adopt a layered architecture with explicit seams:
-`domain -> policy/candidate/workspace -> execution/isolation -> verifiers ->
-application -> api/cli/integrations`.
+`foundation -> domain -> policy/candidate/workspace -> execution/isolation ->
+verifiers/runners -> application -> evidence -> finalizer/admission ->
+api/cli/integrations`.
 
 ## Consequences
 - Lower coupling, clearer ownership, safer future security hardening.
 - Initial refactor cost in many files with no behavior changes.
-

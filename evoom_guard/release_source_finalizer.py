@@ -43,10 +43,10 @@ import os
 import re
 import tempfile
 import zipfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from evoom_guard.finalizer_derivation import GitExecutablePin
@@ -250,6 +250,62 @@ class VerifiedReleaseSourceEvidence:
     handoff: VerifiedReleaseSourceHandoff
     record_report: dict[str, Any]
     decision: str
+
+
+class _PublishBytes(Protocol):
+    def __call__(
+        self,
+        path: str,
+        data: bytes,
+        *,
+        force: bool,
+        prefix: str,
+        label: str,
+    ) -> str: ...
+
+
+class _RecordSnapshot(Protocol):
+    def __call__(
+        self,
+        path: str,
+    ) -> tuple[bytes, dict[str, Any], dict[str, Any]]: ...
+
+
+class _DeriveReleaseSourceBindings(Protocol):
+    def __call__(
+        self,
+        *,
+        git_repository: str,
+        source: Mapping[str, Any],
+        git_repository_is_bare: bool = False,
+        git_executable: GitExecutablePin | None = None,
+    ) -> DerivedReleaseSourceBindings: ...
+
+
+class _ContextFromReleaseSourceBindings(Protocol):
+    def __call__(
+        self,
+        bindings: DerivedReleaseSourceBindings,
+        record: Mapping[str, Any],
+    ) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseSourceFinalizerPrimitiveSnapshot:
+    """Immutable release-source operations for trusted orchestration.
+
+    The finalizer's historical private spellings remain live compatibility
+    seams.  Each call resolves one coherent set: a long-lived consumer may
+    capture it at module entry, while a command may capture it immediately
+    before observing untrusted arguments.  Neither consumer imports the
+    owner-private spellings across the package boundary.
+    """
+
+    publish_bytes: _PublishBytes
+    record_snapshot: _RecordSnapshot
+    validate_source_context: Callable[[Mapping[str, Any], Mapping[str, Any]], None]
+    derive_release_source_bindings: _DeriveReleaseSourceBindings
+    context_from_release_source_bindings: _ContextFromReleaseSourceBindings
 
 
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str], label: str) -> None:
@@ -655,6 +711,18 @@ def _publish_bytes(path: str, data: bytes, *, force: bool, prefix: str, label: s
             pass
         raise
     return absolute
+
+
+def snapshot_release_source_finalizer_primitives() -> ReleaseSourceFinalizerPrimitiveSnapshot:
+    """Resolve one immutable set of current finalizer operations at call time."""
+
+    return ReleaseSourceFinalizerPrimitiveSnapshot(
+        publish_bytes=_publish_bytes,
+        record_snapshot=_record_snapshot,
+        validate_source_context=_validate_source_context,
+        derive_release_source_bindings=derive_release_source_bindings,
+        context_from_release_source_bindings=context_from_release_source_bindings,
+    )
 
 
 def publish_release_source_output_bytes(

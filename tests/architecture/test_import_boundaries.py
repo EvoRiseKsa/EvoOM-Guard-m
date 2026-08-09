@@ -45,6 +45,7 @@ VIOLATION_KINDS = (
 # name is considered extracted only when it is a real package (has __init__.py),
 # so same-named compatibility monoliths such as evidence.py are not mislabeled.
 LAYER_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("foundation",),
     ("domain",),
     ("policy", "candidate", "workspace"),
     ("execution", "isolation"),
@@ -59,12 +60,22 @@ LAYER_RANK = {
     for rank, package_names in enumerate(LAYER_GROUPS)
     for package_name in package_names
 }
-# Published versioned wire vocabularies intentionally retain their historical
-# flat import paths. Classify those exact compatibility modules by semantic
-# ownership so a new schema version does not become architectural debt merely
-# to preserve its stable public path.
+# Stable public modules may retain historical flat import paths when the whole
+# module has one documented semantic owner.  Classify only those exact modules;
+# mixed compatibility facades remain explicit architectural debt until their
+# responsibilities are separated.
 FLAT_MODULE_LAYERS = {
+    "evoom_guard.contracts": "foundation",
+    "evoom_guard.strict_json": "foundation",
+    "evoom_guard.runtime_identity": "workspace",
+    "evoom_guard.pack_manifest": "verifiers",
+    "evoom_guard.artifact_admission": "admission",
+    "evoom_guard.artifact_digest_admission": "admission",
     "evoom_guard.change_attempt_observation": "evidence",
+    "evoom_guard.evidence": "evidence",
+    "evoom_guard.evidence_bundle": "evidence",
+    "evoom_guard.release_source_finalizer": "finalizer",
+    "evoom_guard.signing": "evidence",
     "evoom_guard.verdict_contract_v1_11": "domain",
     "evoom_guard.verdict_contract_v1_12": "domain",
 }
@@ -818,6 +829,97 @@ def test_domain_verification_contracts_are_classified_and_dependency_free() -> N
         } == set()
 
 
+def test_flat_foundation_and_verification_owners_are_classified_and_closed() -> None:
+    """Classify only cohesive flat contracts whose dependency direction is closed."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    expected_layers = {
+        "evoom_guard.contracts": "foundation",
+        "evoom_guard.strict_json": "foundation",
+        "evoom_guard.runtime_identity": "workspace",
+        "evoom_guard.pack_manifest": "verifiers",
+    }
+
+    assert {
+        module: FLAT_MODULE_LAYERS.get(module) for module in expected_layers
+    } == expected_layers
+    for module in expected_layers:
+        assert module in analysis.modules
+        assert module not in analysis.violations["unclassified_modules"]
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        } == set()
+        assert not any(
+            violation.startswith(f"{module} |")
+            for violation in analysis.violations["cross_package_private_imports"]
+        )
+
+
+def test_flat_evidence_admission_and_finalizer_owners_follow_declared_layers() -> None:
+    """Classify cohesive stable paths without hiding their dependency closure."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    expected_layers = {
+        "evoom_guard.artifact_admission": "admission",
+        "evoom_guard.artifact_digest_admission": "admission",
+        "evoom_guard.evidence": "evidence",
+        "evoom_guard.evidence_bundle": "evidence",
+        "evoom_guard.release_source_finalizer": "finalizer",
+        "evoom_guard.signing": "evidence",
+    }
+    expected_dependencies = {
+        "evoom_guard.artifact_admission": {
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.signing",
+            "evoom_guard.trusted_finalizer",
+        },
+        "evoom_guard.artifact_digest_admission": {
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.signing",
+            "evoom_guard.trusted_finalizer",
+        },
+        "evoom_guard.evidence": {
+            "evoom_guard.candidate",
+            "evoom_guard.execution",
+            "evoom_guard.policy.harness",
+            "evoom_guard.verifiers.harness_policy",
+            "evoom_guard.verifiers.repo_verifier",
+            "evoom_guard.workspace",
+            "evoom_guard.workspace.repository",
+        },
+        "evoom_guard.evidence_bundle": {
+            "evoom_guard.record_verifier",
+            "evoom_guard.signing",
+            "evoom_guard.strict_json",
+        },
+        "evoom_guard.release_source_finalizer": {
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.finalizer_derivation",
+            "evoom_guard.record_verifier",
+            "evoom_guard.signing",
+        },
+        "evoom_guard.signing": set(),
+    }
+
+    assert {
+        module: FLAT_MODULE_LAYERS.get(module) for module in expected_layers
+    } == expected_layers
+    for module, expected in expected_dependencies.items():
+        assert module in analysis.modules
+        assert module not in analysis.violations["unclassified_modules"]
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        } == expected
+        assert not any(
+            violation.startswith(f"{module} |")
+            for violation in analysis.violations["layer_violations"]
+        )
+
+
 def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contracts() -> None:
     """Keep generic semantics separate from versioned wire ownership."""
 
@@ -871,6 +973,33 @@ def test_candidate_tree_has_one_dependency_free_workspace_owner() -> None:
     assert ("evoom_guard.guard", owner) in analysis.internal_edges
     assert not any(
         violation.startswith(f"{owner} |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
+def test_cli_captures_candidate_tree_compatibility_through_public_snapshot() -> None:
+    """The CLI must not import Guard's historical private error class."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    guard_facts = tuple(
+        fact
+        for fact in analysis.facts
+        if fact.source == "evoom_guard.cli"
+        and fact.target == "evoom_guard.guard"
+        and fact.symbol
+        in {
+            "_UnverifiableChangedPathsError",
+            "blocks_from_dirs",
+            "serialize_candidate_blocks",
+            "snapshot_candidate_tree_compatibility",
+        }
+    )
+
+    assert tuple(fact.symbol for fact in guard_facts) == (
+        "snapshot_candidate_tree_compatibility",
+    )
+    assert not any(
+        violation.startswith("evoom_guard.cli | evoom_guard.guard |")
         for violation in analysis.violations["cross_package_private_imports"]
     )
 

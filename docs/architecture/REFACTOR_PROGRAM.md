@@ -522,6 +522,31 @@ remain in their established facades.
    output-mutation capability.
 - All 41 CLI handlers now delegate through typed owners; this behavior-preserving
   command-family extraction phase is complete.
+- The first Stage-10 ownership-classification slice assigns four cohesive,
+  stdlib-only flat modules without moving their established import paths:
+  `contracts.py` and `strict_json.py` to foundation, `runtime_identity.py` to
+  workspace, and `pack_manifest.py` to verifiers. An executable dependency-
+  closure test keeps all four free of internal imports. The unclassified-module
+  ratchet drops from 21 to 17 while private imports remain 10 and every other
+  violation class remains zero. Mixed flat facades are still debt.
+- The consolidated Stage-10 owner-contract slices replace the remaining ten
+  cross-package private imports with four narrow public boundaries: Trusted
+  Finalizer source validation, selected raw-Git regular-blob projection, one
+  immutable five-operation release-source snapshot, and one immutable
+  candidate-tree compatibility snapshot. Producer and CLI consumers retain
+  their distinct module-import and command-entry lookup timing. Private imports
+  fall from 10 to zero without moving a public module or changing a schema,
+  verdict, canonical byte sequence, or authority boundary.
+- Six additional cohesive stable modules are classified by their existing
+  evidence, finalizer, or admission owner. Their complete dependency closures
+  are executable contracts; mixed facades remain explicit debt. The
+  unclassified-module ceiling falls from 17 to 11 while cycles, wildcard
+  imports, unresolved dynamic imports, and layer violations remain zero.
+- The first Stage-11 pure-phase extraction moves trusted path and harness
+  policy validation behind one characterized helper. `load_config` C901
+  complexity falls from 49 to 42 while exact accepted payloads, error identity,
+  message, cause, and validation order remain frozen. This is a measured
+  maintainability change, not a new product or assurance claim.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
