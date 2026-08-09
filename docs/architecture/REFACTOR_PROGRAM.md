@@ -555,6 +555,17 @@ remain in their established facades.
   JUnit digest pairs, nested pack shape, non-negative invocations, and skip
   semantics. Measured `_nested_type_checks` complexity falls from 52 to 3;
   the largest extracted helper is 9 and total C901 findings fall from 97 to 96.
+- The third Stage-11 pure-phase extraction moves ordered effective-policy
+  type/shape projection into a verifier owner while leaving schema-contract
+  selection, harness predicates, and independent operating-profile semantics
+  in the public facade. Exact error order, input immutability, schema-1.11/1.12
+  public-report digests, and 20,000 deterministic generated traces are frozen.
+  Eight focused mutants bind required/extra keys, canonical harness paths and
+  setup conflicts, timeout positivity, lowercase pack identity, required-pack
+  coupling, and profile semantic re-verification. Measured
+  `_policy_type_errors` complexity falls from 33 to 2; the largest extracted
+  helper is 7 and total C901 findings fall from 96 to 95. The owner has no I/O,
+  cleanup, process, hashing, report-mutation, or verdict authority.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction

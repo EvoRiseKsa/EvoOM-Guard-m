@@ -34,6 +34,9 @@ from evoom_guard.verifiers.record_nested import (
 from evoom_guard.verifiers.record_policy import (
     check_operating_profile as _check_operating_profile,
 )
+from evoom_guard.verifiers.record_policy_types import (
+    project_policy_type_validation as _project_policy_type_validation,
+)
 from evoom_guard.verifiers.record_report import (
     RECORD_VERIFIER_VERSION as RECORD_VERIFIER_VERSION,
 )
@@ -286,145 +289,24 @@ def _policy_type_errors(
     policy: dict[str, Any],
     schema_version: object,
 ) -> list[str]:
-    errors: list[str] = []
     policy_contract = (
         _POLICY_CONTRACTS.get(schema_version, _contract)
         if isinstance(schema_version, str)
         else _contract
     )
-    policy_keys = policy_contract.POLICY_KEYS
-    allowed_policy_keys = policy_contract.ALLOWED_POLICY_KEYS
-    missing = sorted(policy_keys - policy.keys())
-    extra = sorted(
-        key
-        for key in policy
-        if isinstance(key, str) and key not in allowed_policy_keys
+    projection = _project_policy_type_validation(
+        policy,
+        schema_version,
+        policy_keys=policy_contract.POLICY_KEYS,
+        allowed_policy_keys=policy_contract.ALLOWED_POLICY_KEYS,
+        harness_input_validator=_is_canonical_harness_input_list,
+        setup_conflict_predicate=_setup_output_hides_harness_input,
     )
-    if missing:
-        errors.append(f"missing keys: {', '.join(missing)}")
-    if extra:
-        errors.append(
-            f"unexpected schema-{schema_version} keys: {', '.join(extra)}"
-        )
-    if any(not isinstance(key, str) for key in policy):
-        errors.append("all policy keys must be strings")
-
-    if not _known_string(policy.get("mode"), frozenset({"repo", "blackbox"})):
-        errors.append("mode must be repo or blackbox")
-    if not _known_string(policy.get("isolation"), _REQUESTED_ISOLATIONS):
-        errors.append("isolation must be subprocess, docker, or gvisor")
-    docker_image = policy.get("docker_image")
-    if docker_image is not None and not isinstance(docker_image, str):
-        errors.append("docker_image must be a string or null")
-    if not isinstance(policy.get("docker_network"), str):
-        errors.append("docker_network must be a string")
-
-    test_command = policy.get("test_command")
-    if not (
-        test_command == "default:python -m pytest"
-        or _is_string_list(test_command)
-        and bool(test_command)
-    ):
-        errors.append("test_command must be the default marker or a non-empty string array")
-    setup_command = policy.get("setup_command")
-    if setup_command is not None and not (
-        _is_string_list(setup_command) and bool(setup_command)
-    ):
-        errors.append("setup_command must be a non-empty string array or null")
-    for field in ("setup_output_globs", "protected", "allow"):
-        if not _is_string_list(policy.get(field)):
-            errors.append(f"{field} must be an array of strings")
-    for field in (
-        "trust_setup_on_host",
-        "allow_new_tests",
-        "verifier_pack_required",
-        "blackbox",
-        "blackbox_only",
-        "baseline_evidence",
-        "require_demonstrated_fix",
-    ):
-        if not isinstance(policy.get(field), bool):
-            errors.append(f"{field} must be a boolean")
-    if "strict_harness" in policy and not isinstance(policy["strict_harness"], bool):
-        errors.append("strict_harness must be a boolean when present")
-    if "harness_inputs" in policy and not _is_canonical_harness_input_list(
-        policy["harness_inputs"]
-    ):
-        errors.append(
-            "harness_inputs must be a non-empty sorted unique array of exact "
-            "canonical repository-relative paths when present"
-        )
-    elif "harness_inputs" in policy:
-        harness_inputs = cast(list[str], policy["harness_inputs"])
-        setup_globs = policy.get("setup_output_globs")
-        if _is_string_list(setup_globs):
-            conflicts = [
-                path
-                for path in harness_inputs
-                if _setup_output_hides_harness_input(path, setup_globs)
-            ]
-            if conflicts:
-                errors.append(
-                    "setup_output_globs cannot exclude harness_inputs: "
-                    + ", ".join(conflicts)
-                )
-    operating_profile_supported = "operating_profile" in allowed_policy_keys
-    operating_profile = policy.get("operating_profile")
-    if operating_profile_supported and "operating_profile" in policy and (
-        not isinstance(operating_profile, str)
-        or operating_profile not in {"local", "protected", "hostile"}
-    ):
-        errors.append(
-            "operating_profile must be local, protected, or hostile when present"
-        )
-    timeout = policy.get("timeout")
-    if not _is_int(timeout) or timeout <= 0:
-        errors.append("timeout must be a positive integer")
-    memory = policy.get("mem_limit_mb")
-    if not _is_int(memory) or memory < 0:
-        errors.append("mem_limit_mb must be a non-negative integer")
-    expected_pack = policy.get("expect_verifier_pack_sha256")
-    if expected_pack is not None and not (
-        isinstance(expected_pack, str) and bool(_HEX_64.fullmatch(expected_pack))
-    ):
-        errors.append("expect_verifier_pack_sha256 must be a lowercase SHA-256 or null")
-    report_floor = policy.get("require_report_integrity")
-    if report_floor is not None and not _known_string(
-        report_floor,
-        frozenset({"same_process_candidate_writable", "external_process_isolated"}),
-    ):
-        errors.append("require_report_integrity is invalid")
-    isolation_floor = policy.get("require_candidate_isolation")
-    if isolation_floor is not None and not _known_string(
-        isolation_floor, _REQUESTED_ISOLATIONS
-    ):
-        errors.append("require_candidate_isolation is invalid")
-    coverage = policy.get("min_diff_coverage")
-    if coverage is not None and not (_is_number(coverage) and 0 <= coverage <= 100):
-        errors.append("min_diff_coverage must be a finite number in 0..100 or null")
-    for field in ("policy_id", "policy_version"):
-        if not _is_nullable_string(policy.get(field)):
-            errors.append(f"{field} must be a string or null")
-
-    mode = policy.get("mode")
-    blackbox = policy.get("blackbox")
-    if isinstance(blackbox, bool) and isinstance(mode, str):
-        if blackbox != (mode == "blackbox"):
-            errors.append("mode must agree with blackbox")
-    if policy.get("blackbox_only") is True and blackbox is not True:
-        errors.append("blackbox_only requires blackbox")
-    if expected_pack is not None and policy.get("verifier_pack_required") is not True:
-        errors.append("an expected pack digest requires verifier_pack_required")
-    if operating_profile_supported and isinstance(
-        operating_profile, str
-    ) and operating_profile in {
-        "local",
-        "protected",
-        "hostile",
-    }:
+    errors = list(projection.errors)
+    if projection.operating_profile is not None:
         profile_violations = _check_operating_profile(policy)
         errors.extend(
-            f"operating_profile {operating_profile!r} {violation}"
+            f"operating_profile {projection.operating_profile!r} {violation}"
             for violation in profile_violations
         )
     return errors

@@ -42,6 +42,92 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="record-policy-required-fields-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before="    missing = sorted(policy_keys - policy.keys())\n",
+        after="    missing = []\n",
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_required_policy_fields_and_error_order_cannot_be_bypassed"
+        ),
+    ),
+    Mutation(
+        name="record-policy-extra-fields-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before=(
+            "        if isinstance(key, str) and key not in allowed_policy_keys\n"
+        ),
+        after="        if False and isinstance(key, str) and key not in allowed_policy_keys\n",
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_schema_specific_extra_keys_cannot_be_bypassed"
+        ),
+    ),
+    Mutation(
+        name="record-policy-harness-canonicality-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before='    if not harness_input_validator(policy["harness_inputs"]):\n',
+        after='    if False and not harness_input_validator(policy["harness_inputs"]):\n',
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_harness_inputs_remain_canonical_and_visible_to_setup_conflicts"
+        ),
+    ),
+    Mutation(
+        name="record-policy-harness-conflict-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before="    if conflicts:\n",
+        after="    if False and conflicts:\n",
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_harness_inputs_remain_canonical_and_visible_to_setup_conflicts"
+        ),
+    ),
+    Mutation(
+        name="record-policy-timeout-positivity-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before="    if not _is_int(timeout) or timeout <= 0:\n",
+        after="    if not _is_int(timeout):\n",
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_timeout_rejects_bool_zero_and_negative_values"
+        ),
+    ),
+    Mutation(
+        name="record-policy-uppercase-pack-digest-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before='_HEX_64 = re.compile(r"^[0-9a-f]{64}$")\n',
+        after='_HEX_64 = re.compile(r"^[0-9A-Fa-f]{64}$")\n',
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_pack_digest_remains_lowercase_and_requires_the_pack"
+        ),
+    ),
+    Mutation(
+        name="record-policy-pack-required-bypass",
+        path="evoom_guard/verifiers/record_policy_types.py",
+        before=(
+            '    if expected_pack is not None and policy.get("verifier_pack_required") is not True:\n'
+        ),
+        after=(
+            '    if False and expected_pack is not None and policy.get("verifier_pack_required") is not True:\n'
+        ),
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_pack_digest_remains_lowercase_and_requires_the_pack"
+        ),
+    ),
+    Mutation(
+        name="record-policy-profile-semantic-reverification-bypass",
+        path="evoom_guard/record_verifier.py",
+        before="    if projection.operating_profile is not None:\n",
+        after="    if False and projection.operating_profile is not None:\n",
+        test=(
+            "tests/test_record_policy_types.py::"
+            "test_valid_hostile_profile_cannot_skip_semantic_reverification"
+        ),
+    ),
+    Mutation(
         name="record-nested-assurance-required-fields-bypass",
         path="evoom_guard/verifiers/record_nested.py",
         before=(
