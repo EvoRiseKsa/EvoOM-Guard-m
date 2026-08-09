@@ -52,6 +52,16 @@ The Docker black-box test image has a smaller independent input:
 `requirements/docker-pytest.lock`. It is installed by the Dockerfile with
 `--only-binary=:all:` and `--require-hashes`.
 
+Python 3.10's immutable-parent validation also uses the narrow
+`requirements/python310-compat.in` input and its independently hash-locked
+`requirements/python310-compat.lock`. Dependabot is intentionally configured
+not to update `importlib-resources`: it can edit the source declaration but
+cannot regenerate and review the corresponding multi-wheel hashes. A maintainer
+must update the declaration and lock together, run the Python 3.10 parent
+validator tests, and review every resolved artifact before accepting a new
+version. This is a manual integrity boundary, not a claim that the frozen
+version should never change.
+
 ## Node tooling and Docker image
 
 Vitest is a CI-only runner, not a product dependency. Its exact direct version

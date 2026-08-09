@@ -28,6 +28,7 @@ NODE_LOCK = ROOT / "tools" / "ci-vitest" / "package-lock.json"
 DOCKERFILE = ROOT / "ops" / "ci" / "docker" / "evoguard-e2e-pytest.Dockerfile"
 POLICY = ROOT / "docs" / "DEPENDENCY_POLICY.md"
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
+DEPENDABOT = ROOT / ".github" / "dependabot.yml"
 
 
 def _input_requirements(path: Path) -> list[str]:
@@ -72,6 +73,14 @@ def test_python_locks_are_complete_hash_locks() -> None:
     ]
     assert _input_requirements(DOCKER_INPUT) == ["pytest==9.1.1"]
     assert "pytest==9.1.1" in DOCKER_LOCK.read_text(encoding="utf-8")
+
+
+def test_compatibility_backport_is_not_partially_updated_by_dependabot() -> None:
+    text = DEPENDABOT.read_text(encoding="utf-8")
+    pip_update = text.split("- package-ecosystem: pip", 1)[1]
+
+    assert "dependency-name: importlib-resources" in pip_update
+    assert "ignore:" in pip_update
 
 
 def test_node_ci_lock_is_exact_and_integrity_bound() -> None:

@@ -29,7 +29,7 @@ import stat
 import struct
 import tempfile
 import zipfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
@@ -461,8 +461,10 @@ def create_evidence_bundle(
     """
 
     from evoom_guard.signing import (
-        _load_private_key_snapshot,
-        _sign_bytes_with_key_id,
+        load_signing_key_snapshot as _load_private_key_snapshot,
+    )
+    from evoom_guard.signing import (
+        sign_bytes_with_snapshot as _sign_bytes_with_key_id,
     )
 
     verdict_bytes = _read_regular_file(
@@ -763,6 +765,32 @@ def read_regular_file_bytes(path: str, *, limit: int, label: str) -> bytes:
     """Read a stable, bounded, regular non-symlink file snapshot."""
 
     return _read_regular_file(path, limit=limit, label=label)
+
+
+@dataclass(frozen=True, slots=True)
+class EvidencePrimitiveSnapshot:
+    """Entry-stable evidence primitives for fail-closed orchestration code.
+
+    The public convenience functions above intentionally remain live facades.
+    Security-sensitive command owners sometimes need the stronger historical
+    contract that all primitive providers are resolved together before any
+    untrusted argument or file is observed.  This snapshot exposes that contract
+    without requiring consumers to import private implementation names.
+    """
+
+    canonical_json: Callable[[dict[str, Any]], bytes]
+    load_json_object: Callable[[bytes, str], dict[str, Any]]
+    read_regular_file: Callable[..., bytes]
+
+
+def snapshot_evidence_primitives() -> EvidencePrimitiveSnapshot:
+    """Return one immutable snapshot of the current evidence primitives."""
+
+    return EvidencePrimitiveSnapshot(
+        canonical_json=_canonical_json,
+        load_json_object=_load_json_object,
+        read_regular_file=_read_regular_file,
+    )
 
 
 def canonical_archive_bytes(members: Iterable[tuple[str, bytes]]) -> bytes:
