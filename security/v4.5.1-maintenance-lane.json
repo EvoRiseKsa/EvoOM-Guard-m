@@ -1,6 +1,23 @@
 {
-  "format": "EVOGUARD_MAINTENANCE_LANE_V1",
-  "activation": "INERT_UNTIL_ALL_BLOCKERS_ARE_REVIEWED_AND_REMOVED",
+  "format": "EVOGUARD_MAINTENANCE_LANE_PHASE0_V2",
+  "assurance_state": "INERT_PRE_ACTIVATION_MODEL_NOT_LIVE_PROOF",
+  "activation": {
+    "enabled": false,
+    "one_shot_version": "4.5.1",
+    "current_release_flags": {
+      "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": "false",
+      "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED": "false",
+      "EVOGUARD_RELEASE_PUBLICATION_ENABLED": "false"
+    },
+    "owner_authorized_post_merge_pins": {
+      "trusted_workflow_sha_variable": "EVOGUARD_V451_TRUSTED_WORKFLOW_SHA",
+      "trusted_workflow_sha": "POST_MERGE_REQUIRED",
+      "trusted_workflow_tree_variable": "EVOGUARD_V451_TRUSTED_WORKFLOW_TREE_SHA",
+      "trusted_workflow_tree": "POST_MERGE_REQUIRED",
+      "one_shot_enable_variable": "EVOGUARD_V451_MAINTENANCE_ENABLED",
+      "one_shot_enable_value": "POST_MERGE_REQUIRED"
+    }
+  },
   "repository": {
     "full_name": "EvoRiseKsa/EvoOM-Guard-m",
     "id": 1293651176,
@@ -8,21 +25,26 @@
     "owner_id": 231647061,
     "default_branch": "main"
   },
-  "trusted_workflow_source": {
-    "branch": "main",
-    "ref": "refs/heads/main"
+  "control_plane_authority": {
+    "source": "OWNER_AUTHENTICATED_GITHUB_API",
+    "candidate_supplied": false,
+    "fully_paginated": true,
+    "raw_responses_bounded_before_parsing": true
+  },
+  "refs": {
+    "trusted_workflow_branch": "main",
+    "trusted_workflow_ref": "refs/heads/main",
+    "maintenance_base_branch": "maintenance/v4.5",
+    "maintenance_base_ref": "refs/heads/maintenance/v4.5",
+    "candidate_branch": "release/v4.5.1",
+    "candidate_ref": "refs/heads/release/v4.5.1",
+    "tag": "v4.5.1"
   },
   "maintenance_base": {
-    "branch": "maintenance/v4.5",
-    "ref": "refs/heads/maintenance/v4.5",
     "post_v4_5_0_commit": "2a8f012a8b6a5b62b9b0990207db8e0aed589795",
     "post_v4_5_0_tree": "d1ae967f286dd8c70d6e0ba19748773c9e1ecc7b"
   },
-  "candidate": {
-    "branch": "release/v4.5.1",
-    "ref": "refs/heads/release/v4.5.1",
-    "version": "4.5.1",
-    "tag": "v4.5.1",
+  "candidate_scope": {
     "required_changed_paths": [
       "CHANGELOG.md",
       "PROJECT_STATUS.json",
@@ -48,34 +70,168 @@
       "evoom_guard/cli/__init__.py",
       "evoom_guard/cli/guard_command.py",
       "tests/test_cli.py"
-    ]
+    ],
+    "verification_source": "TRUSTED_RAW_GIT_DIFF_WITH_MODES_BLOBS_AND_PATCH_BYTES"
   },
   "review": {
     "required_exact_head_approver": "MANA-awam",
-    "allowed_commit_signers": [
-      "EvoRiseKsa",
-      "MANA-awam"
-    ],
-    "allowed_signing_key_fingerprints": [
-      "POST_MERGE_REQUIRED"
-    ]
+    "required_exact_head_approver_id": 304223352,
+    "same_owner_procedural_only": true
   },
-  "workflows": {
-    "A": ".github/workflows/evoguard-release-source-reverify.yml",
-    "B": ".github/workflows/evoguard-produce-release-source-receipt.yml",
-    "C": ".github/workflows/evoguard-admit-release-source.yml",
-    "D": ".github/workflows/evoguard-admit-release-source.yml",
-    "E": ".github/workflows/evoguard-build-release-artifact.yml",
-    "F": ".github/workflows/evoguard-admit-release-artifact.yml",
-    "G": ".github/workflows/evoguard-verify-release-artifact.yml",
-    "H": ".github/workflows/evoguard-publish-admitted-release.yml"
+  "required_branch_protection": {
+    "strict_status_checks": true,
+    "required_checks": [
+      {"context": "test (3.10)", "app_id": 15368},
+      {"context": "test (3.11)", "app_id": 15368},
+      {"context": "test (3.12)", "app_id": 15368},
+      {"context": "e2e-runners", "app_id": 15368},
+      {"context": "blackbox-docker-e2e", "app_id": 15368},
+      {"context": "smoke", "app_id": 15368},
+      {"context": "analyze", "app_id": 15368},
+      {"context": "CodeQL", "app_id": 57789},
+      {"context": "project-status", "app_id": 15368},
+      {"context": "fuzz (address)", "app_id": 15368},
+      {"context": "fuzz (undefined)", "app_id": 15368}
+    ],
+    "dismiss_stale_reviews": true,
+    "require_code_owner_reviews": true,
+    "require_last_push_approval": true,
+    "required_approving_review_count": 1,
+    "required_signatures": false,
+    "enforce_admins": true,
+    "required_linear_history": false,
+    "allow_force_pushes": false,
+    "allow_deletions": false,
+    "block_creations": false,
+    "required_conversation_resolution": true,
+    "lock_branch": false,
+    "allow_fork_syncing": false
+  },
+  "required_repository_rulesets": [
+    {
+      "id": 19713401,
+      "name": "EvoGuard release tag authority",
+      "target": "tag",
+      "source_type": "Repository",
+      "source": "EvoRiseKsa/EvoOM-Guard-m",
+      "enforcement": "active",
+      "include": ["refs/tags/v*"],
+      "exclude": [],
+      "rules": ["creation", "update", "deletion", "non_fast_forward"],
+      "bypass_actors": [
+        {"actor_id": null, "actor_type": "DeployKey", "bypass_mode": "always"}
+      ],
+      "current_user_can_bypass": "never"
+    }
+  ],
+  "required_environments": {
+    "evoguard-release-source-v2": {
+      "id": 18718844374,
+      "can_admins_bypass": false,
+      "prevent_self_review": true,
+      "reviewer_login": "MANA-awam",
+      "reviewer_id": 304223352,
+      "protected_branches": false,
+      "custom_branch_policies": true,
+      "deployment_branch": "main",
+      "deployment_branch_policy_id": 55562429
+    },
+    "evoguard-release-artifact-v1": {
+      "id": 18718845035,
+      "can_admins_bypass": false,
+      "prevent_self_review": true,
+      "reviewer_login": "MANA-awam",
+      "reviewer_id": 304223352,
+      "protected_branches": false,
+      "custom_branch_policies": true,
+      "deployment_branch": "main",
+      "deployment_branch_policy_id": 55562431
+    },
+    "evoguard-release-draft": {
+      "id": 18718845676,
+      "can_admins_bypass": false,
+      "prevent_self_review": true,
+      "reviewer_login": "MANA-awam",
+      "reviewer_id": 304223352,
+      "protected_branches": false,
+      "custom_branch_policies": true,
+      "deployment_branch": "main",
+      "deployment_branch_policy_id": 55562435
+    },
+    "evoguard-release-publication": {
+      "id": 18718846349,
+      "can_admins_bypass": false,
+      "prevent_self_review": true,
+      "reviewer_login": "MANA-awam",
+      "reviewer_id": 304223352,
+      "protected_branches": false,
+      "custom_branch_policies": true,
+      "deployment_branch": "main",
+      "deployment_branch_policy_id": 55562438
+    }
+  },
+  "trusted_raw_git": {
+    "trusted_workflow_sha": "POST_MERGE_REQUIRED",
+    "trusted_workflow_tree": "POST_MERGE_REQUIRED",
+    "required_entries": {
+      ".github/workflows/evoguard-release-source-reverify.yml": {"role": "workflow-A", "mode": "100644", "blob_sha": "ce8aa1eeccb7e2ed06b93bfdcee34be62a1cb04e"},
+      ".github/workflows/evoguard-produce-release-source-receipt.yml": {"role": "workflow-B", "mode": "100644", "blob_sha": "ae6c2ecda3e7b29223db69b33b9135949e0ad567"},
+      ".github/workflows/evoguard-admit-release-source.yml": {"role": "workflow-CD", "mode": "100644", "blob_sha": "e92f8ae8cd4281520b346a021d6f9d78d43b6e2d"},
+      ".github/workflows/evoguard-build-release-artifact.yml": {"role": "workflow-E", "mode": "100644", "blob_sha": "ffdbc343f7331551a6f69361c8091a517d7dff7e"},
+      ".github/workflows/evoguard-admit-release-artifact.yml": {"role": "workflow-F", "mode": "100644", "blob_sha": "2845d56f3e0f184246d15b27af1d63937e39dc2a"},
+      ".github/workflows/evoguard-verify-release-artifact.yml": {"role": "workflow-G", "mode": "100644", "blob_sha": "3fd1aa0f274900c5aa877d473f6fdb6f87e8bc4c"},
+      ".github/workflows/evoguard-publish-admitted-release.yml": {"role": "workflow-H", "mode": "100644", "blob_sha": "8d0e695cfda1023b0d3729e3a2e558152bb4564e"},
+      ".github/CODEOWNERS": {"role": "control", "mode": "100644", "blob_sha": "db526d147dc07ce36518af4a20aabdf2a16dfe56"},
+      ".evoguard.json": {"role": "policy", "mode": "100644", "blob_sha": "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"},
+      "security/release-pipeline-bootstrap.json": {"role": "control", "mode": "100644", "blob_sha": "97d5283661874dc68b9535b37b7a74e47bb9421b"},
+      "security/release-source-pack/pack.json": {"role": "pack", "mode": "100644", "blob_sha": "a05bb0d113cfc9675e06c9480590496dbf841b82"},
+      "security/release-source-pack/test_release_protocol.py": {"role": "pack", "mode": "100644", "blob_sha": "f8f6d9369d295171ad78c87dff424840a800de3e"},
+      "security/judge-requirements.lock": {"role": "control", "mode": "100644", "blob_sha": "8d173d39ba87c7a075fcac42c8fabe692263cbf6"},
+      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "dbcf6bcfa6dccd8f3546dad6ba1984d35c96d312"}
+    }
+  },
+  "local_signature_verification": {
+    "source": "TRUSTED_RAW_GIT_OBJECTS_ONLY",
+    "public_key_repository_path": "POST_MERGE_REQUIRED",
+    "public_key_blob_sha": "POST_MERGE_REQUIRED",
+    "public_key_fingerprint": "POST_MERGE_REQUIRED",
+    "source_object_type": "commit",
+    "tag_object_type": "tag",
+    "rest_author_login_is_signer_proof": false,
+    "rest_verification_fields_are_fingerprint_proof": false
+  },
+  "runs": [
+    {"phase": "A", "workflow_role": "workflow-A", "event": "workflow_dispatch", "jobs": ["metadata", "reverify"]},
+    {"phase": "B", "workflow_role": "workflow-B", "event": "workflow_run", "jobs": ["preflight", "receipt"]},
+    {"phase": "CD", "workflow_role": "workflow-CD", "event": "workflow_run", "jobs": ["preflight", "seal", "detached-verify"]},
+    {"phase": "E", "workflow_role": "workflow-E", "event": "workflow_dispatch", "jobs": ["preflight", "build", "attest"]},
+    {"phase": "F", "workflow_role": "workflow-F", "event": "workflow_run", "jobs": ["preflight", "verify-attestations", "seal"]},
+    {"phase": "G", "workflow_role": "workflow-G", "event": "workflow_run", "jobs": ["detached-verify"]},
+    {"phase": "H", "workflow_role": "workflow-H", "event": "workflow_run", "jobs": ["preflight", "draft", "publish"]}
+  ],
+  "tag_contract": {
+    "input_authority": "OWNER_AUTHORIZED_PUBLIC_RAW_TAG_OBJECT",
+    "private_signing_key_in_actions": false,
+    "raw_object_variable": "EVOGUARD_V451_SIGNED_TAG_OBJECT_B64",
+    "maximum_decoded_bytes": 131072,
+    "required_object_type": "tag",
+    "required_name": "v4.5.1",
+    "required_target_type": "commit",
+    "push_object_sha_not_target_commit": true
+  },
+  "release_contract": {
+    "immutable": true,
+    "required_assets": ["evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"],
+    "digest_authority": "EXACT_RETAINED_F_G_ADMISSION_BYTES"
   },
   "blockers": [
-    "maintenance/v4.5 does not yet exist with protection equivalent to main",
-    "release/v4.5.1 does not yet exist as the sole exact open pull-request head",
-    "a reviewed maintainer signing public key fingerprint is not yet pinned",
-    "the existing A-H workflows still couple workflow SHA to target source SHA",
-    "the existing H contract creates a lightweight tag and rejects a pre-existing signed annotated tag",
-    "the protected Environment deployment-branch rules have not been reviewed for this lane"
+    "post-merge trusted workflow commit and tree owner-authorized variables are absent",
+    "maintenance/v4.5 does not exist with the literal protection baseline",
+    "release/v4.5.1 does not exist as the sole exact open pull-request head",
+    "a reviewed maintainer signing public key, raw-Git blob ID, and fingerprint are not pinned",
+    "an owner-authenticated bounded GitHub control-plane collector is not wired",
+    "the existing A-H schemas and implementations still couple workflow SHA to target source SHA",
+    "the existing H implementation still pushes a lightweight tag target",
+    "no repository variable contains a locally signed bounded raw annotated tag object"
   ]
 }

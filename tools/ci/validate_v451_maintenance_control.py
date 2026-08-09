@@ -5,13 +5,13 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
-"""Validate the closed, inert v4.5.1 maintenance-release control plane.
+"""Validate the inert Phase-0 model for the one-time v4.5.1 lane.
 
-This module deliberately does not publish a release.  It validates a snapshot
-collected without candidate execution and keeps the trusted default-branch
-workflow identity separate from the maintenance candidate identity.  The
-checked-in contract remains inert until every literal blocker is resolved in a
-reviewed default-branch commit.
+The checked-in contract is intentionally not an operational publication gate.
+Live validation requires three independently obtained inputs: owner-authenticated
+GitHub control-plane observations, raw-Git derivation, and local signature
+verification with a pinned public key.  Candidate JSON cannot supply any of
+those authorities.  The CLI checks only that the source contract remains inert.
 """
 
 from __future__ import annotations
@@ -28,13 +28,92 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = ROOT / "security" / "v4.5.1-maintenance-lane.json"
 MAX_CONTROL_BYTES = 2 * 1024 * 1024
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
-PHASES = tuple("ABCDEFGH")
-_PLACEHOLDER = "POST_MERGE_REQUIRED"
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 FINGERPRINT_PATTERN = re.compile(r"^(?:[0-9A-F]{40}|[0-9A-F]{64}|SHA256:[A-Za-z0-9+/]{43}=?)$")
+PLACEHOLDER = "POST_MERGE_REQUIRED"
+RUN_PHASES = ("A", "B", "CD", "E", "F", "G", "H")
+WORKFLOW_ROLES = tuple(f"workflow-{phase}" for phase in RUN_PHASES)
+REQUIRED_CHECKS = (
+    ("test (3.10)", 15368),
+    ("test (3.11)", 15368),
+    ("test (3.12)", 15368),
+    ("e2e-runners", 15368),
+    ("blackbox-docker-e2e", 15368),
+    ("smoke", 15368),
+    ("analyze", 15368),
+    ("CodeQL", 57789),
+    ("project-status", 15368),
+    ("fuzz (address)", 15368),
+    ("fuzz (undefined)", 15368),
+)
+RUN_JOBS = {
+    "A": ("metadata", "reverify"),
+    "B": ("preflight", "receipt"),
+    "CD": ("preflight", "seal", "detached-verify"),
+    "E": ("preflight", "build", "attest"),
+    "F": ("preflight", "verify-attestations", "seal"),
+    "G": ("detached-verify",),
+    "H": ("preflight", "draft", "publish"),
+}
+RAW_ENTRY_PINS = {
+    ".github/workflows/evoguard-release-source-reverify.yml": (
+        "workflow-A",
+        "ce8aa1eeccb7e2ed06b93bfdcee34be62a1cb04e",
+    ),
+    ".github/workflows/evoguard-produce-release-source-receipt.yml": (
+        "workflow-B",
+        "ae6c2ecda3e7b29223db69b33b9135949e0ad567",
+    ),
+    ".github/workflows/evoguard-admit-release-source.yml": (
+        "workflow-CD",
+        "e92f8ae8cd4281520b346a021d6f9d78d43b6e2d",
+    ),
+    ".github/workflows/evoguard-build-release-artifact.yml": (
+        "workflow-E",
+        "ffdbc343f7331551a6f69361c8091a517d7dff7e",
+    ),
+    ".github/workflows/evoguard-admit-release-artifact.yml": (
+        "workflow-F",
+        "2845d56f3e0f184246d15b27af1d63937e39dc2a",
+    ),
+    ".github/workflows/evoguard-verify-release-artifact.yml": (
+        "workflow-G",
+        "3fd1aa0f274900c5aa877d473f6fdb6f87e8bc4c",
+    ),
+    ".github/workflows/evoguard-publish-admitted-release.yml": (
+        "workflow-H",
+        "8d0e695cfda1023b0d3729e3a2e558152bb4564e",
+    ),
+    ".github/CODEOWNERS": ("control", "db526d147dc07ce36518af4a20aabdf2a16dfe56"),
+    ".evoguard.json": ("policy", "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"),
+    "security/release-pipeline-bootstrap.json": (
+        "control",
+        "97d5283661874dc68b9535b37b7a74e47bb9421b",
+    ),
+    "security/release-source-pack/pack.json": (
+        "pack",
+        "a05bb0d113cfc9675e06c9480590496dbf841b82",
+    ),
+    "security/release-source-pack/test_release_protocol.py": (
+        "pack",
+        "f8f6d9369d295171ad78c87dff424840a800de3e",
+    ),
+    "security/judge-requirements.lock": (
+        "control",
+        "8d173d39ba87c7a075fcac42c8fabe692263cbf6",
+    ),
+}
+VALIDATOR_PATH = "tools/ci/validate_v451_maintenance_control.py"
+ENVIRONMENT_PINS = {
+    "evoguard-release-source-v2": (18718844374, 55562429),
+    "evoguard-release-artifact-v1": (18718845035, 55562431),
+    "evoguard-release-draft": (18718845676, 55562435),
+    "evoguard-release-publication": (18718846349, 55562438),
+}
 
 
 class MaintenanceControlError(ValueError):
-    """The observed release lane is outside the reviewed closed contract."""
+    """The model or trusted observation is outside the reviewed contract."""
 
 
 def _fail(message: str) -> NoReturn:
@@ -71,10 +150,19 @@ def _boolean(value: Any, label: str) -> bool:
     return value
 
 
-def _sha(value: Any, label: str) -> str:
+def _sha(value: Any, label: str, *, allow_placeholder: bool = False) -> str:
     value = _string(value, label)
+    if allow_placeholder and value == PLACEHOLDER:
+        return value
     if SHA_PATTERN.fullmatch(value) is None:
         _fail(f"{label} must be one lowercase 40-hex Git object ID")
+    return value
+
+
+def _sha256(value: Any, label: str) -> str:
+    value = _string(value, label)
+    if SHA256_PATTERN.fullmatch(value) is None:
+        _fail(f"{label} must be one lowercase SHA-256 digest")
     return value
 
 
@@ -107,7 +195,7 @@ def _reject_constant(value: str) -> NoReturn:
     raise MaintenanceControlError(f"non-finite JSON number is forbidden: {value}")
 
 
-def _metadata_identity(metadata: os.stat_result) -> tuple[int, ...]:
+def _identity(metadata: os.stat_result) -> tuple[int, ...]:
     return (
         int(metadata.st_dev),
         int(metadata.st_ino),
@@ -124,7 +212,7 @@ def _is_reparse_point(metadata: os.stat_result) -> bool:
 
 
 def load_json(path: Path) -> dict[str, Any]:
-    """Read one bounded, duplicate-free JSON object."""
+    """Read one stable, bounded, duplicate-free regular JSON file."""
 
     try:
         before = os.lstat(path)
@@ -157,7 +245,7 @@ def load_json(path: Path) -> dict[str, Any]:
             not stat.S_ISREG(opened.st_mode)
             or _is_reparse_point(opened)
             or int(opened.st_nlink) != 1
-            or _metadata_identity(opened) != _metadata_identity(before)
+            or _identity(opened) != _identity(before)
         ):
             _fail("JSON input changed while it was opened")
         total = 0
@@ -169,24 +257,22 @@ def load_json(path: Path) -> dict[str, Any]:
             if total > MAX_CONTROL_BYTES:
                 _fail("JSON input exceeded its byte bound while being read")
             chunks.append(chunk)
-        after_read = os.fstat(descriptor)
-        if _metadata_identity(after_read) != _metadata_identity(opened):
+        if _identity(os.fstat(descriptor)) != _identity(opened):
             _fail("JSON input changed while it was read")
     finally:
         os.close(descriptor)
     try:
-        after_close = os.lstat(path)
+        after = os.lstat(path)
     except OSError as exc:
         raise MaintenanceControlError("cannot re-inspect JSON input") from exc
-    if _metadata_identity(after_close) != _metadata_identity(before):
+    if _identity(after) != _identity(before):
         _fail("JSON input path changed during validation")
     raw = b"".join(chunks)
     if len(raw) != before.st_size:
         _fail("JSON input size changed while it was read")
     try:
-        decoded = raw.decode("utf-8")
         value = json.loads(
-            decoded,
+            raw.decode("utf-8"),
             object_pairs_hook=_strict_object,
             parse_constant=_reject_constant,
         )
@@ -195,367 +281,580 @@ def load_json(path: Path) -> dict[str, Any]:
     return _object(value, "JSON input")
 
 
-def validate_contract(
-    contract: dict[str, Any], *, require_activated: bool = True
-) -> dict[str, Any]:
-    """Validate the literal checked-in lane contract."""
-
-    _exact_keys(
-        contract,
-        {
-            "format",
-            "activation",
-            "repository",
-            "trusted_workflow_source",
-            "maintenance_base",
-            "candidate",
-            "review",
-            "workflows",
-            "blockers",
-        },
-        "maintenance contract",
-    )
-    if contract["format"] != "EVOGUARD_MAINTENANCE_LANE_V1":
-        _fail("maintenance contract format is not exact")
-    activation = _string(contract["activation"], "contract activation")
-    blockers = _unique_strings(contract["blockers"], "contract blockers")
-    if require_activated and (activation != "ACTIVE_FOR_ONE_V4_5_1_OPERATION" or blockers):
-        _fail("maintenance lane is intentionally inert while blockers remain")
-
-    repository = _object(contract["repository"], "contract repository")
-    _exact_keys(
-        repository,
-        {"full_name", "id", "owner_login", "owner_id", "default_branch"},
-        "contract repository",
-    )
-    if _string(repository["full_name"], "repository full name") != ("EvoRiseKsa/EvoOM-Guard-m"):
-        _fail("contract repository is not literal EvoRiseKsa/EvoOM-Guard-m")
-    _integer(repository["id"], "repository id")
-    _integer(repository["owner_id"], "repository owner id")
-    if repository["owner_login"] != "EvoRiseKsa":
-        _fail("contract repository owner is not literal EvoRiseKsa")
-    if repository["default_branch"] != "main":
-        _fail("contract default branch is not literal main")
-
-    workflow_source = _object(contract["trusted_workflow_source"], "trusted workflow source")
-    _exact_keys(workflow_source, {"branch", "ref"}, "trusted workflow source")
-    if workflow_source != {"branch": "main", "ref": "refs/heads/main"}:
-        _fail("trusted workflow source must be literal protected main")
-
-    base = _object(contract["maintenance_base"], "maintenance base")
-    _exact_keys(
-        base,
-        {"branch", "ref", "post_v4_5_0_commit", "post_v4_5_0_tree"},
-        "maintenance base",
-    )
-    if base["branch"] != "maintenance/v4.5" or base["ref"] != ("refs/heads/maintenance/v4.5"):
-        _fail("maintenance base branch is not literal maintenance/v4.5")
-    _sha(base["post_v4_5_0_commit"], "post-v4.5.0 commit")
-    _sha(base["post_v4_5_0_tree"], "post-v4.5.0 tree")
-
-    candidate = _object(contract["candidate"], "candidate contract")
-    _exact_keys(
-        candidate,
-        {
-            "branch",
-            "ref",
-            "version",
-            "tag",
-            "required_changed_paths",
-            "allowed_changed_paths",
-        },
-        "candidate contract",
-    )
-    if candidate["branch"] != "release/v4.5.1" or candidate["ref"] != ("refs/heads/release/v4.5.1"):
-        _fail("candidate branch is not literal release/v4.5.1")
-    if candidate["version"] != "4.5.1" or candidate["tag"] != "v4.5.1":
-        _fail("candidate version/tag is not literal v4.5.1")
-    required_paths = set(
-        _unique_strings(candidate["required_changed_paths"], "required changed paths")
-    )
-    allowed_paths = set(
-        _unique_strings(candidate["allowed_changed_paths"], "allowed changed paths")
-    )
-    if not required_paths or not required_paths <= allowed_paths:
-        _fail("required candidate paths must be a non-empty allowed subset")
-    for path in allowed_paths:
-        if path.startswith("/") or "\\" in path or ".." in path.split("/"):
-            _fail(f"candidate path is not one literal repository path: {path!r}")
-
-    review = _object(contract["review"], "review contract")
-    _exact_keys(
-        review,
-        {
-            "required_exact_head_approver",
-            "allowed_commit_signers",
-            "allowed_signing_key_fingerprints",
-        },
-        "review contract",
-    )
-    if review["required_exact_head_approver"] != "MANA-awam":
-        _fail("exact-head approver is not literal MANA-awam")
-    signers = _unique_strings(review["allowed_commit_signers"], "commit signers")
-    if not signers or not set(signers) <= {"EvoRiseKsa", "MANA-awam"}:
-        _fail("commit signers are outside the two reviewed owner accounts")
-    fingerprints = _unique_strings(
-        review["allowed_signing_key_fingerprints"], "signing fingerprints"
-    )
-    for fingerprint in fingerprints:
-        if fingerprint != _PLACEHOLDER and FINGERPRINT_PATTERN.fullmatch(fingerprint) is None:
-            _fail("maintainer signing fingerprint is not canonical")
-    if require_activated and (not fingerprints or _PLACEHOLDER in fingerprints):
-        _fail("a literal reviewed maintainer signing fingerprint is required")
-
-    workflows = _object(contract["workflows"], "workflow map")
-    _exact_keys(workflows, set(PHASES), "workflow map")
-    for phase in PHASES:
-        path = _string(workflows[phase], f"phase {phase} workflow")
-        if not path.startswith(".github/workflows/") or not path.endswith(".yml"):
-            _fail(f"phase {phase} workflow path is not literal")
-    return contract
-
-
 def _validate_protection(value: Any, label: str) -> dict[str, Any]:
     protection = _object(value, label)
-    _exact_keys(
-        protection,
-        {
-            "strict_status_checks",
-            "required_checks",
-            "dismiss_stale_reviews",
-            "require_code_owner_reviews",
-            "require_last_push_approval",
-            "required_approving_review_count",
-            "enforce_admins",
-            "allow_force_pushes",
-            "allow_deletions",
-            "required_conversation_resolution",
-        },
-        label,
-    )
-    for field in (
+    expected = {
+        "strict_status_checks",
+        "required_checks",
+        "dismiss_stale_reviews",
+        "require_code_owner_reviews",
+        "require_last_push_approval",
+        "required_approving_review_count",
+        "required_signatures",
+        "enforce_admins",
+        "required_linear_history",
+        "allow_force_pushes",
+        "allow_deletions",
+        "block_creations",
+        "required_conversation_resolution",
+        "lock_branch",
+        "allow_fork_syncing",
+    }
+    _exact_keys(protection, expected, label)
+    true_fields = {
         "strict_status_checks",
         "dismiss_stale_reviews",
         "require_code_owner_reviews",
         "require_last_push_approval",
         "enforce_admins",
         "required_conversation_resolution",
-    ):
+    }
+    false_fields = (
+        expected
+        - true_fields
+        - {
+            "required_checks",
+            "required_approving_review_count",
+        }
+    )
+    for field in true_fields:
         if _boolean(protection[field], f"{label} {field}") is not True:
             _fail(f"{label} {field} must be true")
-    for field in ("allow_force_pushes", "allow_deletions"):
+    for field in false_fields:
         if _boolean(protection[field], f"{label} {field}") is not False:
             _fail(f"{label} {field} must be false")
-    if (
-        _integer(
-            protection["required_approving_review_count"],
-            f"{label} required approving review count",
-        )
-        < 1
-    ):
-        _fail(f"{label} must require an approval")
-    checks = _array(protection["required_checks"], f"{label} required checks")
-    normalized: list[tuple[str, int]] = []
-    for index, raw in enumerate(checks):
-        check = _object(raw, f"{label} required check {index}")
-        _exact_keys(check, {"context", "app_id"}, f"{label} required check {index}")
-        normalized.append(
+    if protection["required_approving_review_count"] != 1:
+        _fail(f"{label} approving-review count must be literal 1")
+    checks: list[tuple[str, int]] = []
+    for index, raw in enumerate(_array(protection["required_checks"], "required checks")):
+        check = _object(raw, f"required check {index}")
+        _exact_keys(check, {"context", "app_id"}, f"required check {index}")
+        checks.append(
             (
-                _string(check["context"], f"{label} check context"),
-                _integer(check["app_id"], f"{label} check app id"),
+                _string(check["context"], "required check context"),
+                _integer(check["app_id"], "required check App ID"),
             )
         )
-    if not normalized or len(normalized) != len(set(normalized)):
-        _fail(f"{label} required checks must be non-empty and unique")
+    if tuple(checks) != REQUIRED_CHECKS:
+        _fail("branch protection must pin the literal ordered 11 check/App-ID pairs")
     return protection
 
 
-def _validate_branch(
-    value: Any,
-    *,
-    label: str,
-    expected_name: str,
-    expected_ref: str,
-) -> dict[str, Any]:
-    branch = _object(value, label)
+def _validate_raw_entries(value: Any, *, activated: bool) -> dict[str, Any]:
+    raw_git = _object(value, "trusted raw-Git contract")
     _exact_keys(
-        branch,
-        {"name", "ref", "sha", "tree_sha", "protected", "protection"},
-        label,
+        raw_git,
+        {"trusted_workflow_sha", "trusted_workflow_tree", "required_entries"},
+        "trusted raw-Git contract",
     )
-    if branch["name"] != expected_name or branch["ref"] != expected_ref:
-        _fail(f"{label} identity is not literal {expected_name}")
-    _sha(branch["sha"], f"{label} commit")
-    _sha(branch["tree_sha"], f"{label} tree")
-    if _boolean(branch["protected"], f"{label} protected") is not True:
-        _fail(f"{label} is unprotected")
-    _validate_protection(branch["protection"], f"{label} protection")
-    return branch
+    _sha(
+        raw_git["trusted_workflow_sha"],
+        "trusted workflow SHA",
+        allow_placeholder=not activated,
+    )
+    _sha(
+        raw_git["trusted_workflow_tree"],
+        "trusted workflow tree",
+        allow_placeholder=not activated,
+    )
+    entries = _object(raw_git["required_entries"], "required raw-Git entries")
+    if set(entries) != {*RAW_ENTRY_PINS, VALIDATOR_PATH}:
+        _fail("trusted raw-Git entry inventory is not literal")
+    roles: list[str] = []
+    for path, raw in entries.items():
+        if path.startswith("/") or "\\" in path or ".." in path.split("/"):
+            _fail(f"raw-Git path is not a safe literal repository path: {path!r}")
+        entry = _object(raw, f"raw-Git entry {path}")
+        _exact_keys(entry, {"role", "mode", "blob_sha"}, f"raw-Git entry {path}")
+        role = _string(entry["role"], f"raw-Git role {path}")
+        roles.append(role)
+        if entry["mode"] != "100644":
+            _fail(f"raw-Git entry {path} must be a literal 100644 blob")
+        _sha(entry["blob_sha"], f"raw-Git blob {path}", allow_placeholder=not activated)
+        if (
+            path in RAW_ENTRY_PINS
+            and (
+                role,
+                entry["blob_sha"],
+            )
+            != RAW_ENTRY_PINS[path]
+        ):
+            _fail(f"raw-Git role/blob pin differs from the reviewed baseline: {path}")
+        if path == VALIDATOR_PATH and role != "control-validator":
+            _fail("raw-Git validator entry role is not literal")
+    if set(WORKFLOW_ROLES) - set(roles):
+        _fail("trusted raw-Git entries do not contain the seven workflow roles")
+    if len([role for role in roles if role in WORKFLOW_ROLES]) != 7:
+        _fail("trusted raw-Git workflow roles must each occur exactly once")
+    return raw_git
 
 
-def _validate_checks(
-    checks_value: Any,
-    protection: dict[str, Any],
-    *,
-    target_sha: str,
-) -> None:
+def validate_contract(
+    contract: dict[str, Any], *, require_activated: bool = False
+) -> dict[str, Any]:
+    """Validate the source-owned Phase-0 model and its inert/active state."""
+
+    _exact_keys(
+        contract,
+        {
+            "format",
+            "assurance_state",
+            "activation",
+            "repository",
+            "control_plane_authority",
+            "refs",
+            "maintenance_base",
+            "candidate_scope",
+            "review",
+            "required_branch_protection",
+            "required_repository_rulesets",
+            "required_environments",
+            "trusted_raw_git",
+            "local_signature_verification",
+            "runs",
+            "tag_contract",
+            "release_contract",
+            "blockers",
+        },
+        "maintenance contract",
+    )
+    if contract["format"] != "EVOGUARD_MAINTENANCE_LANE_PHASE0_V2":
+        _fail("maintenance contract format is not exact")
+    blockers = _unique_strings(contract["blockers"], "contract blockers")
+    activation = _object(contract["activation"], "activation contract")
+    _exact_keys(
+        activation,
+        {
+            "enabled",
+            "one_shot_version",
+            "current_release_flags",
+            "owner_authorized_post_merge_pins",
+        },
+        "activation contract",
+    )
+    enabled = _boolean(activation["enabled"], "activation enabled")
+    if activation["one_shot_version"] != "4.5.1":
+        _fail("maintenance contract is not literal one-shot v4.5.1")
+    expected_state = (
+        "ACTIVE_ONE_SHOT_V4_5_1" if enabled else "INERT_PRE_ACTIVATION_MODEL_NOT_LIVE_PROOF"
+    )
+    if contract["assurance_state"] != expected_state:
+        _fail("assurance state does not match activation")
+    if require_activated and (not enabled or blockers):
+        _fail("maintenance lane is intentionally inert while blockers remain")
+    flags = _object(activation["current_release_flags"], "current release flags")
+    if flags != {
+        "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": "false",
+        "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED": "false",
+        "EVOGUARD_RELEASE_PUBLICATION_ENABLED": "false",
+    }:
+        _fail("legacy/default release flags must remain exactly false")
+    pins = _object(activation["owner_authorized_post_merge_pins"], "post-merge pins")
+    _exact_keys(
+        pins,
+        {
+            "trusted_workflow_sha_variable",
+            "trusted_workflow_sha",
+            "trusted_workflow_tree_variable",
+            "trusted_workflow_tree",
+            "one_shot_enable_variable",
+            "one_shot_enable_value",
+        },
+        "post-merge pins",
+    )
+    if (
+        pins["trusted_workflow_sha_variable"] != "EVOGUARD_V451_TRUSTED_WORKFLOW_SHA"
+        or (pins["trusted_workflow_tree_variable"] != "EVOGUARD_V451_TRUSTED_WORKFLOW_TREE_SHA")
+        or pins["one_shot_enable_variable"] != "EVOGUARD_V451_MAINTENANCE_ENABLED"
+    ):
+        _fail("post-merge owner authorization variable names are not literal")
+    for field in ("trusted_workflow_sha", "trusted_workflow_tree"):
+        _sha(pins[field], field, allow_placeholder=not enabled)
+    if enabled and pins["one_shot_enable_value"] != pins["trusted_workflow_sha"]:
+        _fail("one-shot enable value must bind the exact trusted workflow SHA")
+    if not enabled and pins["one_shot_enable_value"] != PLACEHOLDER:
+        _fail("inert one-shot enable value must remain an invalid placeholder")
+
+    repository = _object(contract["repository"], "repository contract")
+    if repository != {
+        "full_name": "EvoRiseKsa/EvoOM-Guard-m",
+        "id": 1293651176,
+        "owner_login": "EvoRiseKsa",
+        "owner_id": 231647061,
+        "default_branch": "main",
+    }:
+        _fail("repository identity is not the literal reviewed repository")
+    authority = _object(contract["control_plane_authority"], "control-plane authority")
+    if authority != {
+        "source": "OWNER_AUTHENTICATED_GITHUB_API",
+        "candidate_supplied": False,
+        "fully_paginated": True,
+        "raw_responses_bounded_before_parsing": True,
+    }:
+        _fail("control-plane authority is not owner-authenticated and bounded")
+    refs = _object(contract["refs"], "literal refs")
+    if refs != {
+        "trusted_workflow_branch": "main",
+        "trusted_workflow_ref": "refs/heads/main",
+        "maintenance_base_branch": "maintenance/v4.5",
+        "maintenance_base_ref": "refs/heads/maintenance/v4.5",
+        "candidate_branch": "release/v4.5.1",
+        "candidate_ref": "refs/heads/release/v4.5.1",
+        "tag": "v4.5.1",
+    }:
+        _fail("maintenance refs are not the literal one-shot identities")
+    base = _object(contract["maintenance_base"], "maintenance base")
+    _exact_keys(base, {"post_v4_5_0_commit", "post_v4_5_0_tree"}, "maintenance base")
+    _sha(base["post_v4_5_0_commit"], "post-v4.5.0 commit")
+    _sha(base["post_v4_5_0_tree"], "post-v4.5.0 tree")
+
+    scope = _object(contract["candidate_scope"], "candidate scope")
+    _exact_keys(
+        scope,
+        {"required_changed_paths", "allowed_changed_paths", "verification_source"},
+        "candidate scope",
+    )
+    required = set(_unique_strings(scope["required_changed_paths"], "required paths"))
+    allowed = set(_unique_strings(scope["allowed_changed_paths"], "allowed paths"))
+    if (
+        not required
+        or not required <= allowed
+        or scope["verification_source"] != ("TRUSTED_RAW_GIT_DIFF_WITH_MODES_BLOBS_AND_PATCH_BYTES")
+    ):
+        _fail("candidate scope is not a non-empty trusted raw-Git contract")
+    review = _object(contract["review"], "review contract")
+    if review != {
+        "required_exact_head_approver": "MANA-awam",
+        "required_exact_head_approver_id": 304223352,
+        "same_owner_procedural_only": True,
+    }:
+        _fail("review identity/non-independence statement is not exact")
+
+    protection = _validate_protection(
+        contract["required_branch_protection"], "required branch protection"
+    )
+    rulesets = _array(contract["required_repository_rulesets"], "repository rulesets")
+    if len(rulesets) != 1:
+        _fail("exactly one repository ruleset is required")
+    ruleset = _object(rulesets[0], "release tag ruleset")
+    if ruleset != {
+        "id": 19713401,
+        "name": "EvoGuard release tag authority",
+        "target": "tag",
+        "source_type": "Repository",
+        "source": "EvoRiseKsa/EvoOM-Guard-m",
+        "enforcement": "active",
+        "include": ["refs/tags/v*"],
+        "exclude": [],
+        "rules": ["creation", "update", "deletion", "non_fast_forward"],
+        "bypass_actors": [{"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}],
+        "current_user_can_bypass": "never",
+    }:
+        _fail("release tag ruleset differs from the literal reviewed baseline")
+    environments = _object(contract["required_environments"], "required environments")
+    if set(environments) != set(ENVIRONMENT_PINS):
+        _fail("environment inventory is not the exact four-environment set")
+    for name, raw in environments.items():
+        environment = _object(raw, f"environment {name}")
+        _exact_keys(
+            environment,
+            {
+                "id",
+                "can_admins_bypass",
+                "prevent_self_review",
+                "reviewer_login",
+                "reviewer_id",
+                "protected_branches",
+                "custom_branch_policies",
+                "deployment_branch",
+                "deployment_branch_policy_id",
+            },
+            f"environment {name}",
+        )
+        if (
+            _boolean(environment["can_admins_bypass"], "environment admin bypass")
+            or not _boolean(environment["prevent_self_review"], "prevent self review")
+            or environment["reviewer_login"] != "MANA-awam"
+            or environment["reviewer_id"] != 304223352
+            or _boolean(environment["protected_branches"], "protected branches")
+            or not _boolean(environment["custom_branch_policies"], "custom policy")
+            or environment["deployment_branch"] != "main"
+            or (
+                environment["id"],
+                environment["deployment_branch_policy_id"],
+            )
+            != ENVIRONMENT_PINS[name]
+        ):
+            _fail(f"environment {name} is not restricted to trusted main")
+        _integer(environment["id"], f"environment {name} id")
+        _integer(
+            environment["deployment_branch_policy_id"],
+            f"environment {name} branch-policy id",
+        )
+    raw_git = _validate_raw_entries(contract["trusted_raw_git"], activated=enabled)
+    if enabled and (
+        raw_git["trusted_workflow_sha"] != pins["trusted_workflow_sha"]
+        or raw_git["trusted_workflow_tree"] != pins["trusted_workflow_tree"]
+    ):
+        _fail("raw-Git root does not equal owner-authorized post-merge pins")
+
+    signatures = _object(contract["local_signature_verification"], "local signature contract")
+    _exact_keys(
+        signatures,
+        {
+            "source",
+            "public_key_repository_path",
+            "public_key_blob_sha",
+            "public_key_fingerprint",
+            "source_object_type",
+            "tag_object_type",
+            "rest_author_login_is_signer_proof",
+            "rest_verification_fields_are_fingerprint_proof",
+        },
+        "local signature contract",
+    )
+    if (
+        signatures["source"] != "TRUSTED_RAW_GIT_OBJECTS_ONLY"
+        or signatures["source_object_type"] != "commit"
+        or signatures["tag_object_type"] != "tag"
+        or _boolean(signatures["rest_author_login_is_signer_proof"], "REST author proof")
+        or _boolean(
+            signatures["rest_verification_fields_are_fingerprint_proof"],
+            "REST fingerprint proof",
+        )
+    ):
+        _fail("signature authority must be local raw Git, never REST identity fields")
+    for field in ("public_key_repository_path", "public_key_blob_sha", "public_key_fingerprint"):
+        value = _string(signatures[field], f"signature {field}")
+        if enabled and value == PLACEHOLDER:
+            _fail(f"active signature {field} cannot be a placeholder")
+    if enabled:
+        _sha(signatures["public_key_blob_sha"], "signing public-key blob")
+        if FINGERPRINT_PATTERN.fullmatch(signatures["public_key_fingerprint"]) is None:
+            _fail("signing public-key fingerprint is not canonical")
+
+    runs = _array(contract["runs"], "run topology")
+    if [run.get("phase") for run in runs if isinstance(run, dict)] != list(RUN_PHASES):
+        _fail("run topology must be A -> B -> CD -> E -> F -> G -> H")
+    for phase, raw in zip(RUN_PHASES, runs, strict=True):
+        run = _object(raw, f"phase {phase} contract")
+        _exact_keys(run, {"phase", "workflow_role", "event", "jobs"}, f"phase {phase}")
+        if run["workflow_role"] != f"workflow-{phase}":
+            _fail(f"phase {phase} workflow role is not exact")
+        expected_event = "workflow_dispatch" if phase in {"A", "E"} else "workflow_run"
+        if run["event"] != expected_event:
+            _fail(f"phase {phase} event is not exact")
+        jobs = _unique_strings(run["jobs"], f"phase {phase} jobs")
+        if jobs != RUN_JOBS[phase]:
+            _fail(f"phase {phase} job inventory is not literal")
+    tag = _object(contract["tag_contract"], "tag contract")
+    _exact_keys(
+        tag,
+        {
+            "input_authority",
+            "private_signing_key_in_actions",
+            "raw_object_variable",
+            "maximum_decoded_bytes",
+            "required_object_type",
+            "required_name",
+            "required_target_type",
+            "push_object_sha_not_target_commit",
+        },
+        "tag contract",
+    )
+    if (
+        tag["input_authority"] != "OWNER_AUTHORIZED_PUBLIC_RAW_TAG_OBJECT"
+        or _boolean(tag["private_signing_key_in_actions"], "private key in Actions")
+        or tag["raw_object_variable"] != "EVOGUARD_V451_SIGNED_TAG_OBJECT_B64"
+        or tag["maximum_decoded_bytes"] != 131072
+        or tag["required_object_type"] != "tag"
+        or tag["required_name"] != "v4.5.1"
+        or tag["required_target_type"] != "commit"
+        or not _boolean(tag["push_object_sha_not_target_commit"], "tag object push")
+    ):
+        _fail("annotated signed tag contract is not exact")
+    release_contract = _object(contract["release_contract"], "release contract")
+    if release_contract != {
+        "immutable": True,
+        "required_assets": ["evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"],
+        "digest_authority": "EXACT_RETAINED_F_G_ADMISSION_BYTES",
+    }:
+        _fail("immutable release asset/digest contract is not exact")
+    _ = protection
+    return contract
+
+
+def _validate_checks(checks_value: Any, contract: dict[str, Any], target_sha: str) -> None:
+    required = {
+        (item["context"], item["app_id"])
+        for item in contract["required_branch_protection"]["required_checks"]
+    }
     observed: dict[tuple[str, int], dict[str, Any]] = {}
-    for index, raw in enumerate(_array(checks_value, "pull request checks")):
-        check = _object(raw, f"pull request check {index}")
+    for index, raw in enumerate(_array(checks_value, "PR checks")):
+        check = _object(raw, f"PR check {index}")
         _exact_keys(
             check,
             {"context", "app_id", "head_sha", "status", "conclusion"},
-            f"pull request check {index}",
+            f"PR check {index}",
         )
         key = (
             _string(check["context"], "check context"),
-            _integer(check["app_id"], "check app id"),
+            _integer(check["app_id"], "check App ID"),
         )
         if key in observed:
-            _fail(f"duplicate required-check observation: {key!r}")
-        if _sha(check["head_sha"], "check head SHA") != target_sha:
+            _fail("duplicate check/App-ID observation")
+        if _sha(check["head_sha"], "check head") != target_sha:
             _fail("required check is bound to a moved head")
-        observed[key] = check
-    required = {
-        (_string(item["context"], "required check context"), item["app_id"])
-        for item in protection["required_checks"]
-    }
-    if set(observed) != required:
-        _fail("observed required checks do not exactly equal branch protection")
-    for check in observed.values():
         if check["status"] != "completed" or check["conclusion"] != "success":
-            _fail("every exact required check must have completed successfully")
+            _fail("required check is not a completed success")
+        observed[key] = check
+    if set(observed) != required:
+        _fail("observed checks do not equal the literal 11-check/App-ID baseline")
 
 
-def _validate_attempt_chain(
+def _validate_runs(
     value: Any,
     *,
     contract: dict[str, Any],
-    workflow_sha: str,
-    target_sha: str,
-    workflow_blobs: dict[str, str],
+    trusted_workflow_sha: str,
+    target_source_sha: str,
     complete: bool,
 ) -> None:
-    chain = _array(value, "attempt chain")
-    if not chain and not complete:
+    runs = _array(value, "run observations")
+    if not runs and not complete:
         return
-    expected_phases = PHASES if complete else PHASES[: len(chain)]
-    if len(chain) != len(expected_phases):
-        _fail("attempt chain is not an exact A-through-H prefix")
+    expected = RUN_PHASES if complete else RUN_PHASES[: len(runs)]
+    if len(runs) != len(expected):
+        _fail("observed runs are not an exact seven-run prefix")
     prior: dict[str, Any] | None = None
-    for phase, raw in zip(expected_phases, chain, strict=True):
-        run = _object(raw, f"phase {phase} attempt")
+    for phase, raw in zip(expected, runs, strict=True):
+        run = _object(raw, f"phase {phase} run")
         _exact_keys(
             run,
             {
                 "phase",
-                "workflow_path",
-                "workflow_blob_sha",
+                "workflow_role",
                 "workflow_sha",
-                "target_sha",
+                "target_source_sha",
                 "run_id",
                 "run_attempt",
                 "event",
                 "conclusion",
+                "completed_jobs",
                 "upstream_run_id",
                 "upstream_run_attempt",
             },
-            f"phase {phase} attempt",
+            f"phase {phase} run",
         )
-        if run["phase"] != phase:
-            _fail("attempt chain phase order changed")
-        workflow_path = contract["workflows"][phase]
-        if run["workflow_path"] != workflow_path:
-            _fail(f"phase {phase} workflow path substitution")
-        if (
-            _sha(run["workflow_blob_sha"], f"phase {phase} workflow blob")
-            != (workflow_blobs[workflow_path])
-        ):
-            _fail(f"phase {phase} workflow blob substitution")
-        if _sha(run["workflow_sha"], f"phase {phase} workflow SHA") != workflow_sha:
-            _fail(f"phase {phase} did not execute the frozen default-branch workflow")
-        if _sha(run["target_sha"], f"phase {phase} target SHA") != target_sha:
-            _fail(f"phase {phase} target substitution")
-        _integer(run["run_id"], f"phase {phase} run id")
-        _integer(run["run_attempt"], f"phase {phase} run attempt")
+        if run["phase"] != phase or run["workflow_role"] != f"workflow-{phase}":
+            _fail("run phase/workflow substitution")
+        if _sha(run["workflow_sha"], "run workflow SHA") != trusted_workflow_sha:
+            _fail("run did not execute the owner-pinned trusted workflow SHA")
+        if _sha(run["target_source_sha"], "run target SHA") != target_source_sha:
+            _fail("run target source substitution")
+        _integer(run["run_id"], "run ID")
+        _integer(run["run_attempt"], "run attempt")
         expected_event = "workflow_dispatch" if phase in {"A", "E"} else "workflow_run"
         if run["event"] != expected_event or run["conclusion"] != "success":
-            _fail(f"phase {phase} event/conclusion is not exact")
+            _fail("run event/conclusion is not exact")
+        jobs = _unique_strings(run["completed_jobs"], "completed jobs")
+        expected_jobs = tuple(contract["runs"][RUN_PHASES.index(phase)]["jobs"])
+        if jobs != expected_jobs:
+            _fail(f"phase {phase} completed-job inventory is not exact")
         if prior is None:
             if run["upstream_run_id"] is not None or run["upstream_run_attempt"] is not None:
                 _fail("phase A must not claim an upstream attempt")
-        else:
-            if run["upstream_run_id"] != prior["run_id"] or (
-                run["upstream_run_attempt"] != prior["run_attempt"]
-            ):
-                _fail(f"phase {phase} is bound to a stale upstream attempt")
+        elif run["upstream_run_id"] != prior["run_id"] or (
+            run["upstream_run_attempt"] != prior["run_attempt"]
+        ):
+            _fail("run is bound to a stale upstream attempt")
         prior = run
 
 
-def validate_snapshot(
-    snapshot: dict[str, Any],
+def validate_trusted_observations(
+    control_plane: dict[str, Any],
+    raw_git: dict[str, Any],
+    local_signatures: dict[str, Any],
     contract: dict[str, Any],
     *,
     stage: str = "pre-admission",
-) -> dict[str, Any]:
-    """Validate one API-derived control snapshot against the closed contract."""
+) -> None:
+    """Validate three trusted inputs; none may originate in candidate JSON.
+
+    ``control_plane`` must come from an owner-authenticated, fully paginated,
+    bounded GitHub API collector. ``raw_git`` must be derived from literal Git
+    objects under the owner-pinned workflow root. ``local_signatures`` must be
+    produced by local commit/tag verification using the pinned public key.
+    """
 
     validate_contract(contract, require_activated=True)
     if stage not in {"pre-admission", "post-publication"}:
-        _fail("validation stage must be pre-admission or post-publication")
+        _fail("stage must be pre-admission or post-publication")
     _exact_keys(
-        snapshot,
+        control_plane,
         {
             "format",
             "repository",
-            "trusted_workflow_branch",
-            "maintenance_base_branch",
+            "activation_variables",
+            "branches",
+            "branch_protections",
             "pull_requests",
-            "source_commit",
-            "workflow_blobs",
-            "attempt_chain",
+            "rulesets",
+            "environments",
+            "runs",
             "tag",
             "release",
         },
-        "maintenance snapshot",
+        "trusted control-plane observation",
     )
-    if snapshot["format"] != "EVOGUARD_MAINTENANCE_CONTROL_V1":
-        _fail("maintenance snapshot format is not exact")
+    if control_plane["format"] != "EVOGUARD_OWNER_CONTROL_PLANE_V1":
+        _fail("control-plane observation format is not exact")
+    if control_plane["repository"] != contract["repository"]:
+        _fail("alternate repository/owner identity")
+    pins = contract["activation"]["owner_authorized_post_merge_pins"]
+    variables = _object(control_plane["activation_variables"], "activation variables")
+    if variables != {
+        pins["trusted_workflow_sha_variable"]: pins["trusted_workflow_sha"],
+        pins["trusted_workflow_tree_variable"]: pins["trusted_workflow_tree"],
+        pins["one_shot_enable_variable"]: pins["one_shot_enable_value"],
+        **contract["activation"]["current_release_flags"],
+    }:
+        _fail("owner-authorized activation variables are not exact")
+    branches = _object(control_plane["branches"], "branch observations")
+    _exact_keys(branches, {"main", "maintenance/v4.5", "release/v4.5.1"}, "branches")
+    workflow_branch = _object(branches["main"], "main branch")
+    base_branch = _object(branches["maintenance/v4.5"], "maintenance branch")
+    candidate_branch = _object(branches["release/v4.5.1"], "candidate branch")
+    for branch in (workflow_branch, base_branch, candidate_branch):
+        _exact_keys(branch, {"sha", "tree_sha"}, "branch identity")
+        _sha(branch["sha"], "branch SHA")
+        _sha(branch["tree_sha"], "branch tree")
+    if workflow_branch != {
+        "sha": pins["trusted_workflow_sha"],
+        "tree_sha": pins["trusted_workflow_tree"],
+    }:
+        _fail("trusted main moved from the owner-authorized post-merge pin")
+    if base_branch != {
+        "sha": contract["maintenance_base"]["post_v4_5_0_commit"],
+        "tree_sha": contract["maintenance_base"]["post_v4_5_0_tree"],
+    }:
+        _fail("maintenance base moved from post-v4.5.0 state")
+    protections = _object(control_plane["branch_protections"], "branch protections")
+    if set(protections) != {"main", "maintenance/v4.5"}:
+        _fail("branch-protection observation inventory is not exact")
+    for name in protections:
+        _validate_protection(protections[name], f"observed {name} protection")
+        if protections[name] != contract["required_branch_protection"]:
+            _fail(f"observed {name} protection differs from the literal baseline")
+    if control_plane["rulesets"] != contract["required_repository_rulesets"]:
+        _fail("repository/tag ruleset observation differs from the literal baseline")
+    if control_plane["environments"] != contract["required_environments"]:
+        _fail("Environment observation differs from the literal trusted-main baseline")
 
-    repository = _object(snapshot["repository"], "observed repository")
-    _exact_keys(
-        repository,
-        {"full_name", "id", "owner_login", "owner_id", "default_branch"},
-        "observed repository",
-    )
-    if repository != contract["repository"]:
-        _fail("observed repository identity differs from the literal contract")
-
-    workflow_contract = contract["trusted_workflow_source"]
-    workflow_branch = _validate_branch(
-        snapshot["trusted_workflow_branch"],
-        label="trusted workflow branch",
-        expected_name=workflow_contract["branch"],
-        expected_ref=workflow_contract["ref"],
-    )
-    base_contract = contract["maintenance_base"]
-    base_branch = _validate_branch(
-        snapshot["maintenance_base_branch"],
-        label="maintenance base branch",
-        expected_name=base_contract["branch"],
-        expected_ref=base_contract["ref"],
-    )
-    if base_branch["sha"] != base_contract["post_v4_5_0_commit"] or (
-        base_branch["tree_sha"] != base_contract["post_v4_5_0_tree"]
-    ):
-        _fail("maintenance base moved away from the frozen post-v4.5.0 state")
-    if base_branch["protection"] != workflow_branch["protection"]:
-        _fail("maintenance protection is not exactly equivalent to main")
-
-    pull_requests = _array(snapshot["pull_requests"], "matching pull requests")
-    if len(pull_requests) != 1:
-        _fail("exactly one open pull request must use the literal release head")
-    pull = _object(pull_requests[0], "release pull request")
+    pulls = _array(control_plane["pull_requests"], "release pull requests")
+    if len(pulls) != 1:
+        _fail("exactly one literal open maintenance pull request is required")
+    pull = _object(pulls[0], "release pull request")
     _exact_keys(
         pull,
         {
@@ -567,180 +866,226 @@ def validate_snapshot(
             "head_repo_full_name",
             "head_repo_id",
             "head_sha",
-            "changed_paths",
             "reviews",
             "checks",
         },
         "release pull request",
     )
     _integer(pull["number"], "pull request number")
-    candidate_contract = contract["candidate"]
+    refs = contract["refs"]
     if (
         pull["state"] != "open"
-        or pull["base_ref"] != base_contract["branch"]
-        or (pull["head_ref"] != candidate_contract["branch"])
+        or pull["base_ref"] != refs["maintenance_base_branch"]
+        or pull["base_sha"] != base_branch["sha"]
+        or pull["head_ref"] != refs["candidate_branch"]
+        or pull["head_repo_full_name"] != contract["repository"]["full_name"]
+        or pull["head_repo_id"] != contract["repository"]["id"]
+        or pull["head_sha"] != candidate_branch["sha"]
     ):
-        _fail("pull request base/head/state is not the one-time literal contract")
-    if pull["head_repo_full_name"] != contract["repository"]["full_name"] or (
-        pull["head_repo_id"] != contract["repository"]["id"]
-    ):
-        _fail("alternate-repository candidate is forbidden")
-    if _sha(pull["base_sha"], "pull request base SHA") != base_branch["sha"]:
-        _fail("pull request base moved after maintenance control collection")
-    target_sha = _sha(pull["head_sha"], "pull request head SHA")
-
-    changed_paths = set(_unique_strings(pull["changed_paths"], "changed paths"))
-    required_paths = set(candidate_contract["required_changed_paths"])
-    allowed_paths = set(candidate_contract["allowed_changed_paths"])
-    if not required_paths <= changed_paths or not changed_paths <= allowed_paths:
-        _fail("release candidate expanded or omitted the literal maintenance scope")
-
-    source = _object(snapshot["source_commit"], "source commit")
-    _exact_keys(
-        source,
-        {"sha", "tree_sha", "parents", "author_login", "verification"},
-        "source commit",
-    )
-    if _sha(source["sha"], "source commit SHA") != target_sha:
-        _fail("source commit does not equal the exact pull request head")
-    _sha(source["tree_sha"], "source commit tree")
-    parents = tuple(
-        _sha(parent, "source parent") for parent in _array(source["parents"], "parents")
-    )
-    if parents != (base_branch["sha"],):
-        _fail("source commit must have one exact post-v4.5.0 maintenance parent")
-    if source["author_login"] not in contract["review"]["allowed_commit_signers"]:
-        _fail("source commit author is not an allowed maintainer signer")
-    verification = _object(source["verification"], "source verification")
-    _exact_keys(
-        verification,
-        {"verified", "reason", "signing_key_fingerprint"},
-        "source verification",
-    )
-    if _boolean(verification["verified"], "source verified") is not True or (
-        verification["reason"] != "valid"
-    ):
-        _fail("source release commit is not GitHub-verifiably signed")
-    if (
-        verification["signing_key_fingerprint"]
-        not in contract["review"]["allowed_signing_key_fingerprints"]
-    ):
-        _fail("source release commit is not signed by the pinned maintainer key")
-
-    latest_review_by_actor: dict[str, dict[str, Any]] = {}
-    for index, raw in enumerate(_array(pull["reviews"], "pull request reviews")):
+        _fail("pull request base/head/repository is not the literal current identity")
+    latest_review: dict[str, Any] | None = None
+    for index, raw in enumerate(_array(pull["reviews"], "reviews")):
         review = _object(raw, f"review {index}")
-        _exact_keys(review, {"id", "actor", "state", "commit_sha"}, f"review {index}")
-        _integer(review["id"], "review id")
-        actor = _string(review["actor"], "review actor")
-        prior = latest_review_by_actor.get(actor)
-        if prior is None or review["id"] > prior["id"]:
-            latest_review_by_actor[actor] = review
-    approver = contract["review"]["required_exact_head_approver"]
-    exact_review = latest_review_by_actor.get(approver)
+        _exact_keys(review, {"id", "actor", "actor_id", "state", "commit_sha"}, f"review {index}")
+        _integer(review["id"], "review ID")
+        if (
+            review["actor"] == "MANA-awam"
+            and review["actor_id"] == 304223352
+            and (latest_review is None or review["id"] > latest_review["id"])
+        ):
+            latest_review = review
     if (
-        exact_review is None
-        or exact_review["state"] != "APPROVED"
-        or exact_review["commit_sha"] != target_sha
+        latest_review is None
+        or latest_review["state"] != "APPROVED"
+        or (latest_review["commit_sha"] != candidate_branch["sha"])
     ):
         _fail("required same-owner review is not an exact-head approval")
-    _validate_checks(pull["checks"], base_branch["protection"], target_sha=target_sha)
+    _validate_checks(pull["checks"], contract, candidate_branch["sha"])
 
-    raw_blobs = _object(snapshot["workflow_blobs"], "workflow blobs")
-    expected_paths = set(contract["workflows"].values())
-    if set(raw_blobs) != expected_paths:
-        _fail("workflow blob inventory is not the exact A-through-H set")
-    workflow_blobs = {
-        path: _sha(value, f"workflow blob {path}") for path, value in raw_blobs.items()
-    }
-    _validate_attempt_chain(
-        snapshot["attempt_chain"],
+    _exact_keys(
+        raw_git,
+        {
+            "format",
+            "trusted_workflow_sha",
+            "trusted_workflow_tree",
+            "entries",
+            "maintenance_base_sha",
+            "maintenance_base_tree",
+            "target_source_sha",
+            "target_source_tree",
+            "target_parents",
+            "changes",
+            "tag_object",
+        },
+        "trusted raw-Git observation",
+    )
+    if raw_git["format"] != "EVOGUARD_TRUSTED_RAW_GIT_V1":
+        _fail("trusted raw-Git observation format is not exact")
+    if raw_git["trusted_workflow_sha"] != workflow_branch["sha"] or (
+        raw_git["trusted_workflow_tree"] != workflow_branch["tree_sha"]
+    ):
+        _fail("raw-Git trusted root differs from owner-authorized main")
+    if raw_git["entries"] != contract["trusted_raw_git"]["required_entries"]:
+        _fail("raw-Git-derived workflow/control/policy/pack entries differ from pins")
+    if raw_git["maintenance_base_sha"] != base_branch["sha"] or (
+        raw_git["maintenance_base_tree"] != base_branch["tree_sha"]
+    ):
+        _fail("raw-Git maintenance base differs from control-plane base")
+    if raw_git["target_source_sha"] != candidate_branch["sha"] or (
+        raw_git["target_source_tree"] != candidate_branch["tree_sha"]
+    ):
+        _fail("raw-Git target differs from the exact PR head")
+    parents = tuple(
+        _sha(item, "target parent") for item in _array(raw_git["target_parents"], "parents")
+    )
+    if parents != (base_branch["sha"],):
+        _fail("target must have one exact post-v4.5.0 parent")
+    changes: set[str] = set()
+    for index, raw in enumerate(_array(raw_git["changes"], "raw-Git changes")):
+        change = _object(raw, f"raw-Git change {index}")
+        _exact_keys(
+            change,
+            {"path", "old_mode", "new_mode", "old_blob", "new_blob", "patch_sha256"},
+            f"raw-Git change {index}",
+        )
+        path = _string(change["path"], "changed path")
+        if path in changes:
+            _fail("raw-Git changed paths are duplicated")
+        changes.add(path)
+        if change["old_mode"] != "100644" or change["new_mode"] != "100644":
+            _fail("maintenance change mode is not literal 100644")
+        _sha(change["old_blob"], "old blob")
+        _sha(change["new_blob"], "new blob")
+        _sha256(change["patch_sha256"], "patch digest")
+    required = set(contract["candidate_scope"]["required_changed_paths"])
+    allowed = set(contract["candidate_scope"]["allowed_changed_paths"])
+    if not required <= changes or not changes <= allowed:
+        _fail("raw-Git candidate scope expanded or omitted required paths")
+
+    _exact_keys(
+        local_signatures,
+        {"format", "public_key", "source_commit", "tag"},
+        "local signature proof",
+    )
+    if local_signatures["format"] != "EVOGUARD_LOCAL_GIT_SIGNATURE_PROOF_V1":
+        _fail("local signature proof format is not exact")
+    key = _object(local_signatures["public_key"], "verified public key")
+    _exact_keys(key, {"path", "blob_sha", "fingerprint"}, "verified public key")
+    signature_contract = contract["local_signature_verification"]
+    if key != {
+        "path": signature_contract["public_key_repository_path"],
+        "blob_sha": signature_contract["public_key_blob_sha"],
+        "fingerprint": signature_contract["public_key_fingerprint"],
+    }:
+        _fail("local verifier did not use the pinned public key")
+    source_proof = _object(local_signatures["source_commit"], "source signature proof")
+    if source_proof != {
+        "object_type": "commit",
+        "object_sha": candidate_branch["sha"],
+        "verified": True,
+        "fingerprint": key["fingerprint"],
+    }:
+        _fail("source commit lacks a local raw-Git signature by the pinned key")
+
+    _validate_runs(
+        control_plane["runs"],
         contract=contract,
-        workflow_sha=workflow_branch["sha"],
-        target_sha=target_sha,
-        workflow_blobs=workflow_blobs,
+        trusted_workflow_sha=workflow_branch["sha"],
+        target_source_sha=candidate_branch["sha"],
         complete=stage == "post-publication",
     )
-
-    tag = _object(snapshot["tag"], "tag observation")
-    release = _object(snapshot["release"], "release observation")
     if stage == "pre-admission":
-        if tag != {"state": "absent"} or release != {"state": "absent"}:
-            _fail("pre-admission requires both tag and release to be absent")
-    else:
-        _exact_keys(
-            tag,
-            {
-                "state",
-                "name",
-                "object_type",
-                "tag_object_sha",
-                "target_commit_sha",
-                "verification",
-            },
-            "tag observation",
-        )
         if (
-            tag["state"] != "present"
-            or tag["name"] != candidate_contract["tag"]
-            or tag["object_type"] != "tag"
-            or _sha(tag["target_commit_sha"], "tag target") != target_sha
+            control_plane["tag"] != {"state": "absent"}
+            or (control_plane["release"] != {"state": "absent"})
+            or raw_git["tag_object"] != {"state": "absent"}
+            or (local_signatures["tag"] != {"state": "absent"})
         ):
-            _fail("release tag is not one exact annotated tag for the source commit")
-        _sha(tag["tag_object_sha"], "annotated tag object")
-        tag_verification = _object(tag["verification"], "tag verification")
-        _exact_keys(
-            tag_verification,
-            {"verified", "reason", "signer_login", "signing_key_fingerprint"},
-            "tag verification",
-        )
-        if (
-            _boolean(tag_verification["verified"], "tag verified") is not True
-            or tag_verification["reason"] != "valid"
-            or tag_verification["signer_login"] not in contract["review"]["allowed_commit_signers"]
-            or tag_verification["signing_key_fingerprint"]
-            not in contract["review"]["allowed_signing_key_fingerprints"]
-        ):
-            _fail("annotated tag lacks the pinned maintainer-controlled signature")
-        _exact_keys(
-            release,
-            {"state", "tag", "target_sha", "immutable", "assets"},
-            "release observation",
-        )
-        if (
-            release["state"] != "published"
-            or release["tag"] != candidate_contract["tag"]
-            or _sha(release["target_sha"], "release target") != target_sha
-            or _boolean(release["immutable"], "immutable release") is not True
-            or release["assets"] != ["evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"]
-        ):
-            _fail("published release is outside the exact immutable asset contract")
-    return snapshot
+            _fail("pre-admission requires absent tag/release observations")
+        return
+    tag_object = _object(raw_git["tag_object"], "raw tag object")
+    _exact_keys(
+        tag_object,
+        {"state", "object_type", "object_sha", "name", "target_type", "target_sha", "size_bytes"},
+        "raw tag object",
+    )
+    if (
+        tag_object["state"] != "present"
+        or tag_object["object_type"] != "tag"
+        or tag_object["name"] != "v4.5.1"
+        or tag_object["target_type"] != "commit"
+        or tag_object["target_sha"] != candidate_branch["sha"]
+        or _integer(tag_object["size_bytes"], "tag object size") > 131072
+    ):
+        _fail("raw annotated tag object is noncanonical, oversized, or retargeted")
+    _sha(tag_object["object_sha"], "annotated tag object SHA")
+    tag_proof = _object(local_signatures["tag"], "tag signature proof")
+    if tag_proof != {
+        "object_type": "tag",
+        "object_sha": tag_object["object_sha"],
+        "verified": True,
+        "fingerprint": key["fingerprint"],
+    }:
+        _fail("annotated tag lacks a local signature by the pinned key")
+    if control_plane["tag"] != {
+        "state": "present",
+        "name": "v4.5.1",
+        "ref_object_type": "tag",
+        "ref_object_sha": tag_object["object_sha"],
+        "target_sha": candidate_branch["sha"],
+    }:
+        _fail("GitHub tag ref does not point to the verified annotated tag object")
+    release = _object(control_plane["release"], "release observation")
+    _exact_keys(
+        release,
+        {"state", "tag", "target_sha", "immutable", "assets"},
+        "release observation",
+    )
+    if (
+        release["state"] != "published"
+        or release["tag"] != "v4.5.1"
+        or release["target_sha"] != candidate_branch["sha"]
+        or _boolean(release["immutable"], "immutable release") is not True
+    ):
+        _fail("published release identity is not exact and immutable")
+    assets = _array(release["assets"], "release assets")
+    expected_names = tuple(contract["release_contract"]["required_assets"])
+    if tuple(asset.get("name") for asset in assets if isinstance(asset, dict)) != expected_names:
+        _fail("release asset inventory is not the exact ordered three-asset set")
+    for index, raw in enumerate(assets):
+        asset = _object(raw, f"release asset {index}")
+        _exact_keys(asset, {"name", "sha256", "admitted_sha256"}, f"release asset {index}")
+        digest = _sha256(asset["sha256"], "release asset digest")
+        if _sha256(asset["admitted_sha256"], "admitted asset digest") != digest:
+            _fail("release asset digest differs from retained admission")
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Validate the inert, one-time v4.5.1 maintenance control snapshot."
+        description="Check that the v4.5.1 Phase-0 contract remains inert."
     )
-    parser.add_argument("snapshot", type=Path)
     parser.add_argument(
-        "--stage",
-        choices=("pre-admission", "post-publication"),
-        default="pre-admission",
+        "--check-inert",
+        action="store_true",
+        help="validate only the checked-in, non-operational Phase-0 model",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if not args.check_inert:
+        print("maintenance lane rejected: only --check-inert is implemented")
+        return 1
     try:
         contract = load_json(CONTRACT_PATH)
-        snapshot = load_json(args.snapshot)
-        validate_snapshot(snapshot, contract, stage=args.stage)
+        validate_contract(contract, require_activated=False)
+        if contract["activation"]["enabled"] is not False or not contract["blockers"]:
+            _fail("checked-in Phase-0 contract is not inert")
     except MaintenanceControlError as exc:
         print(f"maintenance lane rejected: {exc}")
         return 1
-    print(f"maintenance lane valid: stage={args.stage}, version=v4.5.1")
+    print("maintenance Phase-0 model valid and inert; no publication authority")
     return 0
 
 

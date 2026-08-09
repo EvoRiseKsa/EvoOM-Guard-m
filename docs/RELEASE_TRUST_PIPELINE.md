@@ -48,9 +48,10 @@ The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
 case. The present A–H implementation authenticates a target only when it is also
 the protected `main` workflow revision and H creates a lightweight tag. Those
 properties cannot establish the distinct trusted-workflow/source identities
-and maintainer-signed annotated tag required for `v4.5.1`. The closed contract,
-negative tests, verified control-plane blockers, and required redesign are
-recorded in [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md). This is
+and locally verified, maintainer-signed annotated tag required for `v4.5.1`.
+The Phase-0 model, negative tests, explicit blockers, and required redesign are
+recorded in [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md). The model
+does not treat a self-reported snapshot as live or closed-world proof, and it is
 not evidence that a maintenance branch, candidate, tag, or release exists.
 
 ## Phase contracts
