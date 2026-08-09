@@ -38,7 +38,13 @@ retained evidence say so.
   bytes, distinct result identity, golden vectors, and fail-closed malformed,
   raw-diff, binary, and Git-quoted-path behavior. The frozen V1 API,
   `risk_score` projection, and signed verdict schemas 1.11/1.12 are unchanged.
-
+- Added an inert, one-time `v4.5.1` maintenance-release control contract and a
+  closed-world validator for literal repository, branch-protection, exact PR
+  head/review/check, one-parent source, signing-key, workflow-blob, A–H attempt,
+  tag, immutable-release, and asset bindings. Negative tests cover substitution,
+  moved or unprotected state, stale attempts, unsigned identities, and scope
+  expansion. The contract remains fail-closed; it does not create a branch,
+  tag, release, signing authority, or GitHub setting.
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the

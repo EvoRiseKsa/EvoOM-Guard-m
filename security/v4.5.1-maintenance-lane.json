@@ -1,0 +1,81 @@
+{
+  "format": "EVOGUARD_MAINTENANCE_LANE_V1",
+  "activation": "INERT_UNTIL_ALL_BLOCKERS_ARE_REVIEWED_AND_REMOVED",
+  "repository": {
+    "full_name": "EvoRiseKsa/EvoOM-Guard-m",
+    "id": 1293651176,
+    "owner_login": "EvoRiseKsa",
+    "owner_id": 231647061,
+    "default_branch": "main"
+  },
+  "trusted_workflow_source": {
+    "branch": "main",
+    "ref": "refs/heads/main"
+  },
+  "maintenance_base": {
+    "branch": "maintenance/v4.5",
+    "ref": "refs/heads/maintenance/v4.5",
+    "post_v4_5_0_commit": "2a8f012a8b6a5b62b9b0990207db8e0aed589795",
+    "post_v4_5_0_tree": "d1ae967f286dd8c70d6e0ba19748773c9e1ecc7b"
+  },
+  "candidate": {
+    "branch": "release/v4.5.1",
+    "ref": "refs/heads/release/v4.5.1",
+    "version": "4.5.1",
+    "tag": "v4.5.1",
+    "required_changed_paths": [
+      "CHANGELOG.md",
+      "PROJECT_STATUS.json",
+      "docs/PROJECT_STATUS.md",
+      "docs/RELEASE_STATUS.md",
+      "evoom_guard/__init__.py",
+      "evoom_guard/cli/__init__.py",
+      "evoom_guard/cli/guard_command.py",
+      "tests/test_cli.py"
+    ],
+    "allowed_changed_paths": [
+      "CHANGELOG.md",
+      "PROJECT_STATUS.json",
+      "README.md",
+      "ROADMAP.md",
+      "SECURITY.md",
+      "docs/GITHUB_ARTIFACT_ATTESTATIONS.md",
+      "docs/PROJECT_STATUS.md",
+      "docs/RELEASE_STATUS.md",
+      "docs/SBOM.md",
+      "docs/architecture/REFACTOR_PROGRAM.md",
+      "evoom_guard/__init__.py",
+      "evoom_guard/cli/__init__.py",
+      "evoom_guard/cli/guard_command.py",
+      "tests/test_cli.py"
+    ]
+  },
+  "review": {
+    "required_exact_head_approver": "MANA-awam",
+    "allowed_commit_signers": [
+      "EvoRiseKsa",
+      "MANA-awam"
+    ],
+    "allowed_signing_key_fingerprints": [
+      "POST_MERGE_REQUIRED"
+    ]
+  },
+  "workflows": {
+    "A": ".github/workflows/evoguard-release-source-reverify.yml",
+    "B": ".github/workflows/evoguard-produce-release-source-receipt.yml",
+    "C": ".github/workflows/evoguard-admit-release-source.yml",
+    "D": ".github/workflows/evoguard-admit-release-source.yml",
+    "E": ".github/workflows/evoguard-build-release-artifact.yml",
+    "F": ".github/workflows/evoguard-admit-release-artifact.yml",
+    "G": ".github/workflows/evoguard-verify-release-artifact.yml",
+    "H": ".github/workflows/evoguard-publish-admitted-release.yml"
+  },
+  "blockers": [
+    "maintenance/v4.5 does not yet exist with protection equivalent to main",
+    "release/v4.5.1 does not yet exist as the sole exact open pull-request head",
+    "a reviewed maintainer signing public key fingerprint is not yet pinned",
+    "the existing A-H workflows still couple workflow SHA to target source SHA",
+    "the existing H contract creates a lightweight tag and rejects a pre-existing signed annotated tag",
+    "the protected Environment deployment-branch rules have not been reviewed for this lane"
+  ]
+}

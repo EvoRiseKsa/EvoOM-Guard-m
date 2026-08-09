@@ -44,6 +44,15 @@ operation and is not claimed complete by the `v4.5.0` ledger. Its later signed,
 same-owner point-in-time observation is retained separately as
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
+The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
+case. The present A–H implementation authenticates a target only when it is also
+the protected `main` workflow revision and H creates a lightweight tag. Those
+properties cannot establish the distinct trusted-workflow/source identities
+and maintainer-signed annotated tag required for `v4.5.1`. The closed contract,
+negative tests, verified control-plane blockers, and required redesign are
+recorded in [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md). This is
+not evidence that a maintenance branch, candidate, tag, or release exists.
+
 ## Phase contracts
 
 | Phase | Workflow | Authority and prohibited operations |
