@@ -22,11 +22,13 @@ import signal
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+MAX_WORKERS = 8
 
 
 @dataclass(frozen=True)
@@ -12366,6 +12368,16 @@ def _run_overlay_test(
 
     module_name = _module_name(mutation.path)
     expected_path = str((overlay / mutation.path).resolve())
+    process_temp = (overlay / ".process-tmp").resolve()
+    process_temp.mkdir(exist_ok=True)
+    pytest_args = [
+        "-p",
+        "no:cacheprovider",
+        "--basetemp",
+        str((overlay / ".pytest-tmp").resolve()),
+        mutation.test,
+        "-q",
+    ]
     bootstrap = (
         "import importlib, pathlib, sys; "
         f"sys.path.insert(0, {str(overlay)!r}); "
@@ -12374,11 +12386,17 @@ def _run_overlay_test(
         f"expected = pathlib.Path({expected_path!r}).resolve(); "
         "assert loaded == expected, (loaded, expected); "
         "import pytest; "
-        f"raise SystemExit(pytest.main([{mutation.test!r}, '-q']))"
+        f"raise SystemExit(pytest.main({pytest_args!r}))"
     )
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
-    env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
+    env.update(
+        PYTHONDONTWRITEBYTECODE="1",
+        PYTHONHASHSEED="0",
+        TMPDIR=str(process_temp),
+        TEMP=str(process_temp),
+        TMP=str(process_temp),
+    )
     process = subprocess.Popen(
         [sys.executable, "-c", bootstrap],
         cwd=ROOT,
@@ -12435,6 +12453,34 @@ def _run_mutant(mutation: Mutation, timeout: float) -> tuple[str, str]:
     return "infrastructure-error", f"pytest exit {completed.returncode}\n{output}"
 
 
+def _classify_mutant(mutation: Mutation, timeout: float) -> tuple[str, str]:
+    """Run one mutant and fail closed on any ordinary worker exception."""
+
+    try:
+        return _run_mutant(mutation, timeout)
+    except Exception as exc:
+        return "infrastructure-error", f"{type(exc).__name__}: {exc}"
+
+
+def _run_selected(
+    selected: list[Mutation], timeout: float, workers: int
+) -> list[tuple[str, str]]:
+    """Run selected mutants with bounded workers and stable inventory order."""
+
+    if workers == 1:
+        return [_classify_mutant(mutation, timeout) for mutation in selected]
+
+    with ThreadPoolExecutor(
+        max_workers=workers,
+        thread_name_prefix="evoguard-mutant",
+    ) as executor:
+        futures = [
+            executor.submit(_classify_mutant, mutation, timeout)
+            for mutation in selected
+        ]
+        return [future.result() for future in futures]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -12449,9 +12495,17 @@ def main() -> int:
         default=[],
         help="run only this mutation name (repeatable)",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="bounded parallel workers (default: 1; maximum: 8)",
+    )
     args = parser.parse_args()
     if not 1 <= args.timeout <= 120:
         parser.error("--timeout must be between 1 and 120 seconds")
+    if not 1 <= args.workers <= MAX_WORKERS:
+        parser.error(f"--workers must be between 1 and {MAX_WORKERS}")
 
     requested = set(args.mutation)
     known = {mutation.name for mutation in MUTATIONS}
@@ -12460,12 +12514,9 @@ def main() -> int:
         parser.error("unknown mutation(s): " + ", ".join(sorted(unknown)))
     selected = [m for m in MUTATIONS if not requested or m.name in requested]
 
+    results = _run_selected(selected, args.timeout, args.workers)
     failures: list[str] = []
-    for mutation in selected:
-        try:
-            status, detail = _run_mutant(mutation, args.timeout)
-        except (OSError, RuntimeError) as exc:
-            status, detail = "infrastructure-error", str(exc)
+    for mutation, (status, detail) in zip(selected, results, strict=True):
         print(f"{status.upper():20} {mutation.name}")
         if status != "killed":
             failures.append(f"{mutation.name}: {status}\n{detail}")
