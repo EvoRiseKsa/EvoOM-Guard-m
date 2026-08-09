@@ -11,7 +11,10 @@ from evoom_guard import github_attestation
 from evoom_guard.admission import artifact_provider_v3
 from evoom_guard.guard import guard
 from evoom_guard.signing import generate_keypair
-from evoom_guard.trusted_finalizer import create_finalizer_handoff, seal_finalizer_bundle
+from evoom_guard.trusted_finalizer import (
+    create_finalizer_handoff,
+    seal_finalizer_bundle_without_derivation,
+)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -70,7 +73,7 @@ def _finalized_allow(tmp_path: Path):
     create_finalizer_handoff(str(verdict), str(handoff), source=source, context=context)
     finalizer_private, finalizer_public = _keys(tmp_path, "finalizer")
     bundle = tmp_path / "finalized.evb"
-    sealed = seal_finalizer_bundle(
+    sealed = seal_finalizer_bundle_without_derivation(
         str(handoff),
         str(verdict),
         str(bundle),

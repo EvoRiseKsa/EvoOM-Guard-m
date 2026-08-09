@@ -416,7 +416,7 @@ def _sealed_snapshots(
         yield paths[0], paths[1]
 
 
-def seal_finalizer_bundle(
+def _seal_finalizer_bundle(
     handoff_path: str,
     verdict_path: str,
     output_path: str,
@@ -424,17 +424,11 @@ def seal_finalizer_bundle(
     expected_source: Mapping[str, Any],
     expected_context: Mapping[str, Any],
     private_key_path: str,
-    expected_derivation: Mapping[str, Any] | None = None,
+    expected_derivation: Mapping[str, Any] | None,
     materials: Iterable[EvidenceMaterial] = (),
     force: bool = False,
 ) -> FinalizedTrustedEvidence:
-    """Validate the handoff first, then seal its exact record and descriptor.
-
-    The Ed25519 key is reached only inside :func:`finalize_evidence_bundle`,
-    after both the external control-plane data and the record bytes passed every
-    binding check.  Call this from a job that never checks out or executes the
-    candidate; this library cannot enforce that workflow boundary itself.
-    """
+    """Implement the derivation-bound and explicitly weaker sealing APIs."""
 
     inspected = inspect_finalizer_handoff(handoff_path)
     handoff = verify_finalizer_handoff(
@@ -503,6 +497,79 @@ def seal_finalizer_bundle(
     if finalized.decision != finalizer_decision(handoff.verdict):
         raise FinalizerHandoffError("sealed bundle admission decision is inconsistent with its verdict")
     return FinalizedTrustedEvidence(finalized=finalized, handoff=handoff)
+
+
+def seal_finalizer_bundle(
+    handoff_path: str,
+    verdict_path: str,
+    output_path: str,
+    *,
+    expected_source: Mapping[str, Any],
+    expected_context: Mapping[str, Any],
+    private_key_path: str,
+    expected_derivation: Mapping[str, Any],
+    materials: Iterable[EvidenceMaterial] = (),
+    force: bool = False,
+) -> FinalizedTrustedEvidence:
+    """Seal only after raw-Git derivation independently binds the verdict.
+
+    The Ed25519 key is reached only inside :func:`finalize_evidence_bundle`,
+    after both the external control-plane data and the record bytes passed every
+    binding check.  Call this from a job that never checks out or executes the
+    candidate; this library cannot enforce that workflow boundary itself.
+
+    ``expected_derivation`` is deliberately required. Passing ``None`` fails
+    before the handoff or signing key is read, so the high-assurance API cannot
+    silently fall back to trusting caller-declared source/context metadata.
+    """
+
+    if expected_derivation is None:
+        raise FinalizerHandoffError(
+            "seal_finalizer_bundle requires independent raw-Git expected_derivation"
+        )
+    return _seal_finalizer_bundle(
+        handoff_path,
+        verdict_path,
+        output_path,
+        expected_source=expected_source,
+        expected_context=expected_context,
+        private_key_path=private_key_path,
+        expected_derivation=expected_derivation,
+        materials=materials,
+        force=force,
+    )
+
+
+def seal_finalizer_bundle_without_derivation(
+    handoff_path: str,
+    verdict_path: str,
+    output_path: str,
+    *,
+    expected_source: Mapping[str, Any],
+    expected_context: Mapping[str, Any],
+    private_key_path: str,
+    materials: Iterable[EvidenceMaterial] = (),
+    force: bool = False,
+) -> FinalizedTrustedEvidence:
+    """Seal using declared source/context without independent raw-Git binding.
+
+    This explicitly lower-assurance compatibility primitive exists for legacy
+    integrations and construction of downstream verifier fixtures. It must not
+    be used as a PR, release, or artifact-admission trust boundary. New trusted
+    finalizer deployments must use :func:`seal_finalizer_bundle` instead.
+    """
+
+    return _seal_finalizer_bundle(
+        handoff_path,
+        verdict_path,
+        output_path,
+        expected_source=expected_source,
+        expected_context=expected_context,
+        private_key_path=private_key_path,
+        expected_derivation=None,
+        materials=materials,
+        force=force,
+    )
 
 
 def verify_finalized_bundle(

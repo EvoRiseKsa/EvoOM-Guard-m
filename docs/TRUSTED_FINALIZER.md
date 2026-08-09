@@ -300,6 +300,37 @@ reserves the bundle material role `trusted-finalizer-handoff`; the template also
 includes the `trusted-finalizer-git-bindings` material so an external reviewer
 can inspect the exact comparison input.
 
+### Python API migration for 4.6 development source
+
+The high-assurance Python API now makes that raw-Git comparison impossible to
+omit accidentally:
+
+```python
+seal_finalizer_bundle(
+    handoff_path,
+    verdict_path,
+    output_path,
+    expected_source=source,
+    expected_context=context,
+    expected_derivation=raw_git_bindings,
+    private_key_path=private_key_path,
+)
+```
+
+`expected_derivation` is a required keyword for `seal_finalizer_bundle` and for
+`seal_agent_change_finalizer_bundle`. The `seal-finalizer` CLI likewise requires
+`--expected-derivation`. Omitting the Python keyword is a normal signature
+error; explicitly passing `None` is rejected before the handoff, verdict, or
+private key is read.
+
+Legacy Python integrations that intentionally seal only against externally
+declared source/context metadata must migrate to the conspicuously named
+`seal_finalizer_bundle_without_derivation`. That function preserves the old
+capability for compatibility and downstream-verifier fixture construction, but
+it does **not** establish the raw-Git invariant and must not be used as a PR,
+release, or artifact-admission trust boundary. There is deliberately no weaker
+CLI counterpart. For a generic provenance primitive, prefer `finalize-record`.
+
 For lower-level uses, `finalize-record` seals a semantically valid record
 against a context and returns `ALLOW` or `DENY`. It is a provenance primitive,
 not a replacement for the split workflow; use `finalizer-handoff` plus

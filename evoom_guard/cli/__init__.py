@@ -14,7 +14,8 @@ Subcommands:
   * ``evo-guard verify-bundle`` — authenticate a portable verdict envelope.
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
   * ``evo-guard finalizer-handoff`` — bind a re-verification record to source metadata.
-  * ``evo-guard seal-finalizer`` — sign only a handoff matched to external metadata.
+  * ``evo-guard seal-finalizer`` — sign only a handoff matched to raw-Git derivation
+    and external metadata.
   * ``evo-guard project-change-attempt-observation`` — authenticate a finalizer
     bundle and publish its deterministic advisory-only projection.
   * ``evo-guard release-source-handoff`` — bind a protected-main re-verification

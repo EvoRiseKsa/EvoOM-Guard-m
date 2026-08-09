@@ -11371,11 +11371,7 @@ MUTATIONS = (
         name="cli-trusted-finalizer-seal-derivation-bypass",
         path="evoom_guard/cli/trusted_finalizer_commands.py",
         before=(
-            "        expected_derivation = (\n"
-            "            services.read_bindings(args.expected_derivation).payload\n"
-            "            if args.expected_derivation is not None\n"
-            "            else None\n"
-            "        )\n"
+            "        expected_derivation = services.read_bindings(args.expected_derivation).payload\n"
             "        materials = services.parse_materials(args.material)\n"
         ),
         after=(

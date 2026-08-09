@@ -466,8 +466,8 @@ def build_parser(
     )
     sf_p.add_argument(
         "--expected-derivation",
-        default=None,
-        help="optional canonical raw-Git binding record; rechecked before the signing key is read",
+        required=True,
+        help="canonical raw-Git binding record; required and rechecked before the signing key is read",
     )
     sf_p.add_argument(
         "--sign-key",

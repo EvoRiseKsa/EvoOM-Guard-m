@@ -31,6 +31,7 @@ from evoom_guard.guard import (
     serialize_candidate_blocks,
 )
 from evoom_guard.pack_manifest import pack_digest
+from evoom_guard.signing import generate_keypair
 
 
 def _git(directory: Path, *arguments: str) -> str:
@@ -533,6 +534,37 @@ def test_raw_git_derivation_matches_guard_candidate_and_policy(tmp_path: Path) -
     assert source == _source(base, head)
     assert context["candidate_sha256"] == bindings.candidate_sha256
     assert context["verifier_pack_sha256"] is None
+
+
+def test_high_assurance_sealing_accepts_matching_raw_git_derivation(tmp_path: Path) -> None:
+    repo, base, head = _create_repository(tmp_path)
+    bindings = _derived(repo, base, head)
+    record = _record_for_pair(tmp_path, repo, base, head)
+    source, context = context_from_verified_bindings(bindings, record)
+    verdict_path = tmp_path / "verdict.json"
+    verdict_path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    handoff_path = tmp_path / "handoff.json"
+    trusted_finalizer.create_finalizer_handoff(
+        str(verdict_path),
+        str(handoff_path),
+        source=source,
+        context=context,
+    )
+    private_key = tmp_path / "finalizer.private.pem"
+    public_key = tmp_path / "finalizer.public.pem"
+    generate_keypair(str(private_key), str(public_key))
+
+    sealed = trusted_finalizer.seal_finalizer_bundle(
+        str(handoff_path),
+        str(verdict_path),
+        str(tmp_path / "finalized.evb"),
+        expected_source=source,
+        expected_context=context,
+        private_key_path=str(private_key),
+        expected_derivation=bindings.payload,
+    )
+
+    assert sealed.decision == "ALLOW"
 
 
 def test_raw_git_derivation_matches_guard_with_declared_harness_input(

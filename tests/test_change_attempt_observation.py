@@ -166,7 +166,7 @@ def _signed_attempt_fixture(
         public_fixture_label=public_fixture_key_label,
     )
     bundle = directory / "attempt.evb"
-    sealed = trusted_finalizer.seal_finalizer_bundle(
+    sealed = trusted_finalizer.seal_finalizer_bundle_without_derivation(
         str(handoff_path),
         str(record_path),
         str(bundle),

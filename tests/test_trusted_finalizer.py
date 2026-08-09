@@ -6,12 +6,18 @@ from pathlib import Path
 import pytest
 
 from evoom_guard import trusted_finalizer
+from evoom_guard.cli import build_parser
 from evoom_guard.cli import main as cli_main
 from evoom_guard.evidence_bundle import (
     EvidenceBundleError,
     EvidenceMaterial,
     finalize_evidence_bundle,
     verify_evidence_bundle,
+)
+from evoom_guard.finalizer_derivation import (
+    FINALIZER_DERIVATION_FORMAT,
+    validate_finalizer_bindings,
+    write_finalizer_bindings,
 )
 from evoom_guard.guard import guard
 from evoom_guard.signing import SigningUnavailableError, generate_keypair
@@ -47,11 +53,18 @@ def _record_context_source(tmp_path, *, denied: bool = False):
         head_tree_sha="d" * 40,
     ).to_dict()
     attestation = record["attestation"]
+    source = {
+        "pull_request_number": 42,
+        "workflow_run_id": "reverify-123",
+        "workflow_run_attempt": 1,
+        "base_sha": attestation["base_sha"],
+        "head_sha": attestation["head_sha"],
+    }
     context = {
         "repository": "owner/project",
         "repository_id": "12345",
-        "run_id": "seal-987",
-        "run_attempt": 1,
+        "run_id": source["workflow_run_id"],
+        "run_attempt": source["workflow_run_attempt"],
         "base_sha": attestation["base_sha"],
         "head_sha": attestation["head_sha"],
         "base_tree_sha": attestation["base_tree_sha"],
@@ -60,13 +73,6 @@ def _record_context_source(tmp_path, *, denied: bool = False):
         "policy_sha256": attestation["policy_sha256"],
         "verifier_pack_sha256": attestation["verifier_pack_sha256"],
         "guard_artifact_sha256": "e" * 64,
-    }
-    source = {
-        "pull_request_number": 42,
-        "workflow_run_id": "reverify-123",
-        "workflow_run_attempt": 1,
-        "base_sha": attestation["base_sha"],
-        "head_sha": attestation["head_sha"],
     }
     verdict = tmp_path / "verdict.json"
     _write_json(verdict, record)
@@ -78,6 +84,28 @@ def _keys(tmp_path):
     public = tmp_path / "judge.public.pem"
     generate_keypair(str(private), str(public))
     return private, public
+
+
+def _write_derivation(path, record, context, source) -> None:
+    attestation = record["attestation"]
+    bindings = validate_finalizer_bindings(
+        {
+            "format": FINALIZER_DERIVATION_FORMAT,
+            "source": source,
+            "repository": context["repository"],
+            "repository_id": context["repository_id"],
+            "guard_artifact_sha256": context["guard_artifact_sha256"],
+            "base_tree_sha": context["base_tree_sha"],
+            "head_tree_sha": context["head_tree_sha"],
+            "candidate_sha256": attestation["candidate_sha256"],
+            "deleted_paths": attestation["deleted_paths"],
+            "policy_sha256": attestation["policy_sha256"],
+            "verifier_pack_sha256": attestation["verifier_pack_sha256"],
+            "verifier_pack_manifest": attestation["verifier_pack_manifest"],
+            "effective_policy": attestation["effective_policy"],
+        }
+    )
+    write_finalizer_bindings(bindings, bindings_path=str(path))
 
 
 def test_handoff_binds_exact_record_context_and_source_then_seals(tmp_path) -> None:
@@ -101,7 +129,7 @@ def test_handoff_binds_exact_record_context_and_source_then_seals(tmp_path) -> N
     assert verified.source == source
     assert verified.context == context
 
-    sealed = trusted_finalizer.seal_finalizer_bundle(
+    sealed = trusted_finalizer.seal_finalizer_bundle_without_derivation(
         str(handoff_path),
         str(verdict),
         str(archive),
@@ -121,6 +149,53 @@ def test_handoff_binds_exact_record_context_and_source_then_seals(tmp_path) -> N
     assert verified_bundle.decision == "ALLOW"
     assert verified_bundle.bundle.record_report["ok"] is True
     assert verified_bundle.handoff.verdict == record
+
+
+def test_high_assurance_seal_rejects_missing_derivation_before_reading_inputs(
+    tmp_path, monkeypatch
+) -> None:
+    reached_handoff_reader = False
+
+    def unexpected_handoff_read(_path: str) -> object:
+        nonlocal reached_handoff_reader
+        reached_handoff_reader = True
+        raise AssertionError("handoff input must not be read")
+
+    monkeypatch.setattr(trusted_finalizer, "inspect_finalizer_handoff", unexpected_handoff_read)
+    with pytest.raises(
+        trusted_finalizer.FinalizerHandoffError,
+        match="requires independent raw-Git expected_derivation",
+    ):
+        trusted_finalizer.seal_finalizer_bundle(
+            "missing-handoff.json",
+            "missing-verdict.json",
+            str(tmp_path / "never.evb"),
+            expected_source={},
+            expected_context={},
+            private_key_path="missing-key.pem",
+            expected_derivation=None,  # type: ignore[arg-type]
+        )
+    assert reached_handoff_reader is False
+    assert not (tmp_path / "never.evb").exists()
+
+
+def test_seal_finalizer_cli_requires_expected_derivation() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "seal-finalizer",
+                "handoff.json",
+                "verdict.json",
+                "--out",
+                "bundle.evb",
+                "--expected-source",
+                "source.json",
+                "--expected-context",
+                "context.json",
+                "--sign-key",
+                "private.pem",
+            ]
+        )
 
 
 def test_handoff_no_clobber_force_and_format_validation(tmp_path) -> None:
@@ -187,7 +262,7 @@ def test_seal_wraps_bundle_writer_failure(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(trusted_finalizer, "finalize_evidence_bundle", bundle_failure)
     with pytest.raises(trusted_finalizer.FinalizerHandoffError, match="could not seal"):
-        trusted_finalizer.seal_finalizer_bundle(
+        trusted_finalizer.seal_finalizer_bundle_without_derivation(
             str(handoff_path),
             str(verdict),
             str(tmp_path / "never.evb"),
@@ -206,7 +281,7 @@ def test_finalizer_preserves_signed_denial_evidence(tmp_path) -> None:
         str(verdict), str(handoff_path), source=source, context=context
     )
 
-    sealed = trusted_finalizer.seal_finalizer_bundle(
+    sealed = trusted_finalizer.seal_finalizer_bundle_without_derivation(
         str(handoff_path),
         str(verdict),
         str(archive),
@@ -326,7 +401,7 @@ def test_seal_revalidates_before_invoking_bundle_writer(tmp_path, monkeypatch) -
     monkeypatch.setattr(trusted_finalizer, "finalize_evidence_bundle", should_not_sign)
     wrong_context = dict(context, policy_sha256="f" * 64)
     with pytest.raises(trusted_finalizer.FinalizerHandoffError):
-        trusted_finalizer.seal_finalizer_bundle(
+        trusted_finalizer.seal_finalizer_bundle_without_derivation(
             str(handoff_path),
             str(verdict),
             str(archive),
@@ -347,7 +422,7 @@ def test_seal_reserves_handoff_material_role(tmp_path) -> None:
         str(verdict), str(handoff_path), source=source, context=context
     )
     with pytest.raises(trusted_finalizer.FinalizerHandoffError, match="reserved"):
-        trusted_finalizer.seal_finalizer_bundle(
+        trusted_finalizer.seal_finalizer_bundle_without_derivation(
             str(handoff_path),
             str(verdict),
             str(archive),
@@ -394,7 +469,7 @@ def test_verify_finalized_never_writes_beside_the_bundle(tmp_path, monkeypatch) 
     trusted_finalizer.create_finalizer_handoff(
         str(verdict), str(handoff_path), source=source, context=context
     )
-    trusted_finalizer.seal_finalizer_bundle(
+    trusted_finalizer.seal_finalizer_bundle_without_derivation(
         str(handoff_path),
         str(verdict),
         str(archive),
@@ -433,14 +508,16 @@ def test_handoff_refuses_source_revision_disagreement(tmp_path) -> None:
 
 
 def test_finalizer_cli_round_trip_and_gate_denial(tmp_path, capsys) -> None:
-    verdict, _record, context, source = _record_context_source(tmp_path)
+    verdict, record, context, source = _record_context_source(tmp_path)
     context_path = tmp_path / "context.json"
     source_path = tmp_path / "source.json"
+    derivation_path = tmp_path / "bindings.json"
     handoff_path = tmp_path / "handoff.json"
     archive = tmp_path / "sealed.evb"
     private, public = _keys(tmp_path)
     _write_json(context_path, context)
     _write_json(source_path, source)
+    _write_derivation(derivation_path, record, context, source)
 
     code = cli_main(
         [
@@ -469,6 +546,8 @@ def test_finalizer_cli_round_trip_and_gate_denial(tmp_path, capsys) -> None:
             str(source_path),
             "--expected-context",
             str(context_path),
+            "--expected-derivation",
+            str(derivation_path),
             "--sign-key",
             str(private),
             "--require-pass",
@@ -496,15 +575,17 @@ def test_finalizer_cli_round_trip_and_gate_denial(tmp_path, capsys) -> None:
     assert verification["status"] == "VERIFIED"
     assert verification["decision"] == "ALLOW"
 
-    denied_verdict, _denied_record, denied_context, denied_source = _record_context_source(
+    denied_verdict, denied_record, denied_context, denied_source = _record_context_source(
         tmp_path / "denied", denied=True
     )
     denied_context_path = tmp_path / "denied-context.json"
     denied_source_path = tmp_path / "denied-source.json"
+    denied_derivation_path = tmp_path / "denied-bindings.json"
     denied_handoff = tmp_path / "denied-handoff.json"
     denied_archive = tmp_path / "denied.evb"
     _write_json(denied_context_path, denied_context)
     _write_json(denied_source_path, denied_source)
+    _write_derivation(denied_derivation_path, denied_record, denied_context, denied_source)
     assert cli_main(
         [
             "finalizer-handoff",
@@ -529,6 +610,8 @@ def test_finalizer_cli_round_trip_and_gate_denial(tmp_path, capsys) -> None:
             str(denied_source_path),
             "--expected-context",
             str(denied_context_path),
+            "--expected-derivation",
+            str(denied_derivation_path),
             "--sign-key",
             str(private),
             "--require-pass",
@@ -572,7 +655,7 @@ def test_verify_finalized_cli_reports_missing_signing_runtime(tmp_path, capsys, 
     trusted_finalizer.create_finalizer_handoff(
         str(verdict), str(handoff_path), source=source, context=context
     )
-    trusted_finalizer.seal_finalizer_bundle(
+    trusted_finalizer.seal_finalizer_bundle_without_derivation(
         str(handoff_path),
         str(verdict),
         str(archive),
@@ -644,6 +727,8 @@ def test_verify_finalized_cli_reports_missing_signing_runtime(tmp_path, capsys, 
                 "unused-source.json",
                 "--expected-context",
                 "unused-context.json",
+                "--expected-derivation",
+                "unused-bindings.json",
                 "--sign-key",
                 "unused-key.pem",
             ],
@@ -661,11 +746,13 @@ def test_finalizer_cli_refuses_standard_input_for_records(arguments, report_form
 
 
 def test_finalizer_cli_reports_unusable_external_inputs(tmp_path, capsys) -> None:
-    verdict, _record, context, source = _record_context_source(tmp_path)
+    verdict, record, context, source = _record_context_source(tmp_path)
     context_path = tmp_path / "context.json"
     source_path = tmp_path / "source.json"
+    derivation_path = tmp_path / "bindings.json"
     _write_json(context_path, context)
     _write_json(source_path, source)
+    _write_derivation(derivation_path, record, context, source)
     source_path.write_text("[]\n", encoding="utf-8")
 
     code = cli_main(
@@ -697,6 +784,8 @@ def test_finalizer_cli_reports_unusable_external_inputs(tmp_path, capsys) -> Non
             str(source_path),
             "--expected-context",
             str(context_path),
+            "--expected-derivation",
+            str(derivation_path),
             "--sign-key",
             "unused-key.pem",
             "--material",
