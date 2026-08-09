@@ -1,0 +1,127 @@
+{
+  "case_errors": {
+    "assurance_floors_invalid": [
+      "require_report_integrity is invalid",
+      "require_candidate_isolation is invalid"
+    ],
+    "blackbox_only_requires_blackbox": [
+      "blackbox_only requires blackbox"
+    ],
+    "booleans_invalid": [
+      "trust_setup_on_host must be a boolean",
+      "allow_new_tests must be a boolean",
+      "verifier_pack_required must be a boolean",
+      "blackbox must be a boolean",
+      "blackbox_only must be a boolean",
+      "baseline_evidence must be a boolean",
+      "require_demonstrated_fix must be a boolean"
+    ],
+    "commands_invalid": [
+      "test_command must be the default marker or a non-empty string array",
+      "setup_command must be a non-empty string array or null"
+    ],
+    "docker_fields_invalid": [
+      "docker_image must be a string or null",
+      "docker_network must be a string"
+    ],
+    "extra_sorted": [
+      "unexpected schema-1.11 keys: alpha, zeta"
+    ],
+    "harness_input_conflict": [
+      "unexpected schema-1.11 keys: harness_inputs",
+      "setup_output_globs cannot exclude harness_inputs: ci/judge.py"
+    ],
+    "harness_inputs_invalid": [
+      "unexpected schema-1.11 keys: harness_inputs",
+      "harness_inputs must be a non-empty sorted unique array of exact canonical repository-relative paths when present"
+    ],
+    "identity_invalid": [
+      "policy_id must be a string or null",
+      "policy_version must be a string or null"
+    ],
+    "isolation_invalid": [
+      "isolation must be subprocess, docker, or gvisor"
+    ],
+    "missing_sorted": [
+      "missing keys: allow, mode, timeout",
+      "mode must be repo or blackbox",
+      "allow must be an array of strings",
+      "timeout must be a positive integer"
+    ],
+    "mode_blackbox_disagreement": [
+      "mode must agree with blackbox"
+    ],
+    "mode_invalid": [
+      "mode must be repo or blackbox"
+    ],
+    "non_string_key": [
+      "all policy keys must be strings"
+    ],
+    "numeric_fields_invalid": [
+      "timeout must be a positive integer",
+      "mem_limit_mb must be a non-negative integer",
+      "min_diff_coverage must be a finite number in 0..100 or null"
+    ],
+    "operating_profile_hostile_violations": [
+      "operating_profile 'hostile' requires blackbox_only=true",
+      "operating_profile 'hostile' requires expect_verifier_pack_sha256",
+      "operating_profile 'hostile' requires require_report_integrity='external_process_isolated'",
+      "operating_profile 'hostile' requires docker_image",
+      "operating_profile 'hostile' requires isolation='gvisor'",
+      "operating_profile 'hostile' requires require_candidate_isolation='gvisor'"
+    ],
+    "operating_profile_invalid": [
+      "operating_profile must be local, protected, or hostile when present"
+    ],
+    "pack_digest_invalid": [
+      "expect_verifier_pack_sha256 must be a lowercase SHA-256 or null"
+    ],
+    "pack_digest_requires_pack": [
+      "an expected pack digest requires verifier_pack_required"
+    ],
+    "path_arrays_invalid": [
+      "setup_output_globs must be an array of strings",
+      "protected must be an array of strings",
+      "allow must be an array of strings"
+    ],
+    "simultaneous_faults": [
+      "missing keys: allow, timeout",
+      "unexpected schema-1.12 keys: zeta",
+      "all policy keys must be strings",
+      "mode must be repo or blackbox",
+      "isolation must be subprocess, docker, or gvisor",
+      "docker_image must be a string or null",
+      "docker_network must be a string",
+      "test_command must be the default marker or a non-empty string array",
+      "setup_command must be a non-empty string array or null",
+      "setup_output_globs must be an array of strings",
+      "protected must be an array of strings",
+      "allow must be an array of strings",
+      "trust_setup_on_host must be a boolean",
+      "strict_harness must be a boolean when present",
+      "harness_inputs must be a non-empty sorted unique array of exact canonical repository-relative paths when present",
+      "operating_profile must be local, protected, or hostile when present",
+      "timeout must be a positive integer",
+      "mem_limit_mb must be a non-negative integer",
+      "expect_verifier_pack_sha256 must be a lowercase SHA-256 or null",
+      "require_report_integrity is invalid",
+      "require_candidate_isolation is invalid",
+      "min_diff_coverage must be a finite number in 0..100 or null",
+      "policy_id must be a string or null",
+      "policy_version must be a string or null",
+      "an expected pack digest requires verifier_pack_required"
+    ],
+    "strict_harness_invalid": [
+      "strict_harness must be a boolean when present"
+    ],
+    "unsupported_schema_falls_back": [],
+    "valid_schema_1_11": [],
+    "valid_schema_1_12": []
+  },
+  "format": "record-policy-types-characterization-v1",
+  "generated_trace_sha256": "9ebac81aa3ddef76e1fd12c29b81de805887d303ac95e887f4e84ad867bdae51",
+  "public_report_sha256": {
+    "invalid_schema_1_11_policy": "00fe8df8909589ec19aa3285a0fbe66153277e48bdf123ec700d2baa87220ebb",
+    "invalid_schema_1_12_profile": "414bb7a1bf349df9cc2589ae99cc7286c09095d6d4fee4fa6afba016caf3cfc2"
+  }
+}
