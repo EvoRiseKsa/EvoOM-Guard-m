@@ -25,10 +25,14 @@ merged `main` is covered by the repository's protected-branch controls.
 The executable import-boundary ratchet in
 `tests/architecture/test_import_boundaries.py` enforces the permitted
 directions and prevents architectural debt from silently increasing.
-Stable flat paths are classified only when the complete module has one owner:
-`contracts.py` and `strict_json.py` are foundation-owned,
-`runtime_identity.py` is workspace-owned, and `pack_manifest.py` is
-verifier-owned. Mixed flat facades remain unclassified debt.
+Stable flat paths are classified only when the complete module has one owner.
+In addition to the foundation, workspace, verifier, evidence, finalizer, and
+admission owners already recorded by the ratchet, four complete compatibility
+surfaces now have executable ownership closures: `adapters.py` belongs to
+runners, `patch_applier.py` and the pure `patchmin.py` belong to candidate, and
+`candidate_runner.py` belongs to isolation. This is classification of existing
+responsibility, not a file move or a runtime change. Mixed flat facades remain
+unclassified debt.
 
 ## Refactor status
 
@@ -36,7 +40,7 @@ verifier-owned. Mixed flat facades remain unclassified debt.
 - All 44 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
 - The import ratchet currently permits zero dependency cycles and zero
-  cross-package private-symbol imports, with 11 mixed or not-yet-classified
+  cross-package private-symbol imports, with 7 mixed or not-yet-classified
   flat modules remaining. Trusted Finalizer source validation is
   now an explicit public owner contract shared by Artifact Admission V1/V2;
   selected-path Raw-Git regular-blob projection is an explicit public Finalizer

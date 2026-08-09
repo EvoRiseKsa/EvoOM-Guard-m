@@ -65,8 +65,12 @@ LAYER_RANK = {
 # mixed compatibility facades remain explicit architectural debt until their
 # responsibilities are separated.
 FLAT_MODULE_LAYERS = {
+    "evoom_guard.adapters": "runners",
     "evoom_guard.contracts": "foundation",
     "evoom_guard.strict_json": "foundation",
+    "evoom_guard.patch_applier": "candidate",
+    "evoom_guard.patchmin": "candidate",
+    "evoom_guard.candidate_runner": "isolation",
     "evoom_guard.runtime_identity": "workspace",
     "evoom_guard.pack_manifest": "verifiers",
     "evoom_guard.artifact_admission": "admission",
@@ -3564,6 +3568,8 @@ def test_runner_instrumentation_has_classified_owners_and_a_thin_facade() -> Non
         assert actual == expected
 
     facade = "evoom_guard.adapters"
+    assert FLAT_MODULE_LAYERS[facade] == "runners"
+    assert facade not in analysis.violations["unclassified_modules"]
     facade_dependencies = {
         target
         for source, target in analysis.internal_edges
@@ -3574,6 +3580,10 @@ def test_runner_instrumentation_has_classified_owners_and_a_thin_facade() -> Non
         "evoom_guard.runners.protocol",
         "evoom_guard.runners.registry",
     }
+    assert not any(
+        violation.startswith(f"{facade} | ")
+        for violation in analysis.violations["layer_violations"]
+    )
     assert not any(
         violation.startswith(f"{module} | ")
         for module in owner_dependencies
@@ -3602,6 +3612,101 @@ def test_runner_instrumentation_has_classified_owners_and_a_thin_facade() -> Non
         for node in facade_tree.body
         if isinstance(node, ast.FunctionDef)
     } == {"instrument_command"}
+
+
+def test_flat_candidate_and_isolation_facades_have_single_semantic_owners() -> None:
+    """Classify only the complete facades whose dependency closures prove ownership."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    expected_layers = {
+        "evoom_guard.patch_applier": "candidate",
+        "evoom_guard.patchmin": "candidate",
+        "evoom_guard.candidate_runner": "isolation",
+    }
+    expected_dependencies = {
+        "evoom_guard.patch_applier": {"evoom_guard.candidate.patch"},
+        "evoom_guard.patchmin": set(),
+        "evoom_guard.candidate_runner": {
+            "evoom_guard.execution",
+            "evoom_guard.isolation.candidate",
+            "evoom_guard.isolation.docker",
+        },
+    }
+
+    assert {
+        module: FLAT_MODULE_LAYERS.get(module) for module in expected_layers
+    } == expected_layers
+    for module, expected in expected_dependencies.items():
+        assert module in analysis.modules
+        assert module not in analysis.violations["unclassified_modules"]
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        } == expected
+        assert not any(
+            violation.startswith(f"{module} | ")
+            for violation in analysis.violations["layer_violations"]
+        )
+        assert not any(
+            violation.startswith(f"{module} | ")
+            for violation in analysis.violations["cross_package_private_imports"]
+        )
+
+    patch_facade_tree = ast.parse(
+        (PACKAGE_ROOT / "patch_applier.py").read_text(encoding="utf-8")
+    )
+    assert not any(
+        isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        for node in patch_facade_tree.body
+    )
+    patch_imports = {
+        (node.module, alias.name, alias.asname)
+        for node in patch_facade_tree.body
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    assert patch_imports == {
+        ("evoom_guard.candidate.patch", "AmbiguousMatchError", "AmbiguousMatchError"),
+        ("evoom_guard.candidate.patch", "NoMatchError", "NoMatchError"),
+        ("evoom_guard.candidate.patch", "PatchError", "PatchError"),
+        ("evoom_guard.candidate.patch", "apply_patch", "apply_patch"),
+    }
+
+    patchmin_tree = ast.parse(
+        (PACKAGE_ROOT / "patchmin.py").read_text(encoding="utf-8")
+    )
+    patchmin_import_roots = {
+        alias.name.partition(".")[0]
+        for node in ast.walk(patchmin_tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").partition(".")[0]
+        for node in ast.walk(patchmin_tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    assert patchmin_import_roots <= {
+        "__future__",
+        "collections",
+        "dataclasses",
+        "fnmatch",
+        "typing",
+    }
+
+    candidate_runner_tree = ast.parse(
+        (PACKAGE_ROOT / "candidate_runner.py").read_text(encoding="utf-8")
+    )
+    assert {
+        node.name
+        for node in candidate_runner_tree.body
+        if isinstance(node, ast.ClassDef)
+    } == {"CandidateRunner"}
+    assert {
+        node.name
+        for node in candidate_runner_tree.body
+        if isinstance(node, ast.FunctionDef)
+    } == {"_run_docker_control"}
 
 
 def _write_package(tmp_path: Path, files: Mapping[str, str]) -> Path:
