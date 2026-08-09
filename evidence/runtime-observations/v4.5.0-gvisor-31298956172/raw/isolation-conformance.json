@@ -1,0 +1,740 @@
+{
+  "$schema": "tools/conformance/isolation-result.schema.json",
+  "environment": {
+    "docker": {
+      "available": true,
+      "available_runtimes": [
+        "io.containerd.runc.v2",
+        "runc",
+        "runsc"
+      ],
+      "client": {
+        "ApiVersion": "1.48",
+        "Arch": "amd64",
+        "BuildTime": "Tue Mar 25 15:07:16 2025",
+        "Context": "default",
+        "DefaultAPIVersion": "1.48",
+        "GitCommit": "b8034c0",
+        "GoVersion": "go1.23.7",
+        "Os": "linux",
+        "Platform": {
+          "Name": "Docker Engine - Community"
+        },
+        "Version": "28.0.4"
+      },
+      "error": null,
+      "executable": "docker",
+      "info": {
+        "architecture": "x86_64",
+        "cgroup_driver": "systemd",
+        "cgroup_version": "2",
+        "default_runtime": "runc",
+        "kernel_version": "6.17.0-1020-azure",
+        "operating_system": "Ubuntu 24.04.4 LTS",
+        "os_type": "linux",
+        "security_options": [
+          "name=apparmor",
+          "name=seccomp,profile=builtin",
+          "name=cgroupns"
+        ],
+        "server_version": "28.0.4"
+      },
+      "server": {
+        "ApiVersion": "1.48",
+        "Arch": "amd64",
+        "BuildTime": "2025-03-25T15:07:16.000000000+00:00",
+        "Components": [
+          {
+            "Details": {
+              "ApiVersion": "1.48",
+              "Arch": "amd64",
+              "BuildTime": "Tue Mar 25 15:07:16 2025",
+              "Experimental": "false",
+              "GitCommit": "6430e49",
+              "GoVersion": "go1.23.7",
+              "KernelVersion": "6.17.0-1020-azure",
+              "MinAPIVersion": "1.24",
+              "Os": "linux"
+            },
+            "Name": "Engine",
+            "Version": "28.0.4"
+          },
+          {
+            "Details": {
+              "GitCommit": "11ce9d5f3c68c941867e82890e93e815c1304f1b"
+            },
+            "Name": "containerd",
+            "Version": "v2.2.6"
+          },
+          {
+            "Details": {
+              "GitCommit": "v1.3.6-0-g491b69ba"
+            },
+            "Name": "runc",
+            "Version": "1.3.6"
+          },
+          {
+            "Details": {
+              "GitCommit": "de40ad0"
+            },
+            "Name": "docker-init",
+            "Version": "0.19.0"
+          }
+        ],
+        "GitCommit": "6430e49",
+        "GoVersion": "go1.23.7",
+        "KernelVersion": "6.17.0-1020-azure",
+        "MinAPIVersion": "1.24",
+        "Os": "linux",
+        "Platform": {
+          "Name": "Docker Engine - Community"
+        },
+        "Version": "28.0.4"
+      }
+    },
+    "host": {
+      "gid": 1001,
+      "machine": "x86_64",
+      "os_name": "posix",
+      "platform": "Linux-6.17.0-1020-azure-x86_64-with-glibc2.39",
+      "python": "3.12.13",
+      "release": "6.17.0-1020-azure",
+      "system": "Linux",
+      "uid": 1001
+    },
+    "image": {
+      "error": null,
+      "image_id": "sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8",
+      "pull_attempted": true,
+      "repo_digests": [
+        "python@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+      ],
+      "requested": "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+    }
+  },
+  "finished_at_utc": "2026-08-09T06:29:27.824602Z",
+  "manifest": {
+    "bytes": 1611,
+    "path": "tools/conformance/isolation-manifest.json",
+    "sha256": "a9a9e58e28964301432251af7f483cfd03b351cc1073614222452f6dbc7d2d59"
+  },
+  "probe_source": {
+    "bytes": 3817,
+    "path": "tools/conformance/probe/isolation_probe.py",
+    "sha256": "c212b27337c10e69cb7abd035aa8ed2aafaf019926d30f84582c103fe34ecd80"
+  },
+  "profiles": [
+    {
+      "container": {
+        "command_template": [
+          "docker",
+          "run",
+          "--name",
+          "${CONTAINER_NAME}",
+          "--network",
+          "none",
+          "--read-only",
+          "--pids-limit",
+          "256",
+          "--cpus",
+          "1",
+          "--tmpfs",
+          "/tmp:rw,exec",
+          "--cap-drop",
+          "ALL",
+          "--security-opt",
+          "no-new-privileges",
+          "--ulimit",
+          "nofile=1024:1024",
+          "-e",
+          "HOME=/tmp",
+          "-e",
+          "PYTHONDONTWRITEBYTECODE=1",
+          "-e",
+          "LANG=C.UTF-8",
+          "-e",
+          "EVOGUARD_CONFORMANCE_FORBIDDEN_PATHS=[\"/verifier-pack/conformance-secret.txt\",\"/out/conformance-secret.txt\",\"/judge/conformance-secret.txt\"]",
+          "-e",
+          "EVOGUARD_CONFORMANCE_NETWORK_HOST=1.1.1.1",
+          "-e",
+          "EVOGUARD_CONFORMANCE_NETWORK_PORT=53",
+          "-e",
+          "EVOGUARD_CONFORMANCE_NETWORK_TIMEOUT=1",
+          "-v",
+          "${CANDIDATE_DIR}:/candidate:ro",
+          "-w",
+          "/candidate",
+          "--user",
+          "1001:1001",
+          "--runtime",
+          "runsc",
+          "sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8",
+          "python",
+          "/candidate/isolation_probe.py"
+        ],
+        "inspect": {
+          "cap_drop": [
+            "ALL"
+          ],
+          "id": "9f8a9c36433b2932e875ede87a21de72b3b019026d8284ab97d0251287438627",
+          "image": "sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8",
+          "mounts": [
+            {
+              "destination": "/candidate",
+              "rw": false,
+              "type": "bind"
+            }
+          ],
+          "nano_cpus": 1000000000,
+          "network_mode": "none",
+          "pids_limit": 256,
+          "read_only_rootfs": true,
+          "runtime": "runsc",
+          "security_opt": [
+            "no-new-privileges"
+          ],
+          "tmpfs": {
+            "/tmp": "rw,exec"
+          },
+          "ulimits": [
+            {
+              "Hard": 1024,
+              "Name": "nofile",
+              "Soft": 1024
+            }
+          ],
+          "user": "1001:1001"
+        },
+        "probe_payload": {
+          "attempts": {
+            "candidate_mount_write": {
+              "blocked": true,
+              "errno": 30,
+              "error": "OSError"
+            },
+            "forbidden_path_read": {
+              "/judge/conformance-secret.txt": {
+                "blocked": true,
+                "bytes_read": 0,
+                "errno": 2,
+                "error": "FileNotFoundError"
+              },
+              "/out/conformance-secret.txt": {
+                "blocked": true,
+                "bytes_read": 0,
+                "errno": 2,
+                "error": "FileNotFoundError"
+              },
+              "/verifier-pack/conformance-secret.txt": {
+                "blocked": true,
+                "bytes_read": 0,
+                "errno": 2,
+                "error": "FileNotFoundError"
+              }
+            },
+            "network_connect": {
+              "blocked": true,
+              "errno": 101,
+              "error": "OSError",
+              "host": "1.1.1.1",
+              "port": 53
+            },
+            "root_filesystem_write": {
+              "blocked": true,
+              "errno": 13,
+              "error": "PermissionError"
+            }
+          },
+          "identity": {
+            "gid": 1001,
+            "groups": [
+              1001
+            ],
+            "uid": 1001
+          },
+          "kernel": {
+            "machine": "x86_64",
+            "node": "9f8a9c36433b",
+            "release": "4.19.0-gvisor",
+            "system": "Linux",
+            "version": "#1 SMP Sun Jan 10 15:06:54 PST 2016"
+          },
+          "schema_version": "evoom-isolation-probe-1"
+        },
+        "returncode": 0,
+        "stderr": ""
+      },
+      "id": "gvisor",
+      "probes": [
+        {
+          "detail": null,
+          "expected": {
+            "attempt_blocked": true,
+            "network_mode": "none"
+          },
+          "id": "network_none",
+          "observed": {
+            "attempt_blocked": true,
+            "network_mode": "none"
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "attempt_blocked": true,
+            "destination": "/candidate",
+            "rw": false
+          },
+          "id": "candidate_mount_read_only",
+          "observed": {
+            "attempt_blocked": true,
+            "mount": {
+              "destination": "/candidate",
+              "rw": false,
+              "type": "bind"
+            }
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "attempt_blocked": true,
+            "read_only_rootfs": true
+          },
+          "id": "root_filesystem_read_only",
+          "observed": {
+            "attempt_blocked": true,
+            "read_only_rootfs": true
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "/judge/conformance-secret.txt": {
+              "attempt_blocked": true,
+              "covering_mounts": []
+            },
+            "/out/conformance-secret.txt": {
+              "attempt_blocked": true,
+              "covering_mounts": []
+            },
+            "/verifier-pack/conformance-secret.txt": {
+              "attempt_blocked": true,
+              "covering_mounts": []
+            }
+          },
+          "id": "forbidden_path_read",
+          "observed": {
+            "/judge/conformance-secret.txt": {
+              "attempt_blocked": true,
+              "covering_mounts": []
+            },
+            "/out/conformance-secret.txt": {
+              "attempt_blocked": true,
+              "covering_mounts": []
+            },
+            "/verifier-pack/conformance-secret.txt": {
+              "attempt_blocked": true,
+              "covering_mounts": []
+            }
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "cap_drop": [
+              "all"
+            ],
+            "nano_cpus": 1000000000,
+            "pids_limit": 256,
+            "security_opt": [
+              "no-new-privileges"
+            ],
+            "tmpfs": {
+              "/tmp": [
+                "exec",
+                "rw"
+              ]
+            },
+            "ulimits": [
+              {
+                "hard": 1024,
+                "name": "nofile",
+                "soft": 1024
+              }
+            ]
+          },
+          "id": "security_profile",
+          "observed": {
+            "cap_drop": [
+              "all"
+            ],
+            "nano_cpus": 1000000000,
+            "pids_limit": 256,
+            "security_opt": [
+              "no-new-privileges"
+            ],
+            "tmpfs": {
+              "/tmp": [
+                "exec",
+                "rw"
+              ]
+            },
+            "ulimits": [
+              {
+                "hard": 1024,
+                "name": "nofile",
+                "soft": 1024
+              }
+            ]
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": "runsc",
+          "id": "runtime_selection",
+          "observed": "runsc",
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "gid": 1001,
+            "non_root": true,
+            "uid": 1001
+          },
+          "id": "user_identity",
+          "observed": {
+            "configured_user": "1001:1001",
+            "gid": 1001,
+            "uid": 1001
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "proven_absent": true
+          },
+          "id": "normal_cleanup",
+          "observed": {
+            "absence_observations": [
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              },
+              {
+                "absent": true,
+                "error": null,
+                "query_returncode": 0
+              }
+            ],
+            "error": null,
+            "proven_absent": true,
+            "removal_returncodes": [
+              0
+            ]
+          },
+          "required": true,
+          "status": "pass"
+        },
+        {
+          "detail": null,
+          "expected": {
+            "cleanup_proven_absent": true,
+            "container_started": true,
+            "timeout_raised": true
+          },
+          "id": "timeout_cleanup",
+          "observed": {
+            "cleanup": {
+              "absence_observations": [
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                },
+                {
+                  "absent": true,
+                  "error": null,
+                  "query_returncode": 0
+                }
+              ],
+              "error": null,
+              "proven_absent": true,
+              "removal_returncodes": [
+                0
+              ]
+            },
+            "command_template": [
+              "docker",
+              "run",
+              "--name",
+              "${CONTAINER_NAME}",
+              "--network",
+              "none",
+              "--read-only",
+              "--pids-limit",
+              "256",
+              "--cpus",
+              "1",
+              "--tmpfs",
+              "/tmp:rw,exec",
+              "--cap-drop",
+              "ALL",
+              "--security-opt",
+              "no-new-privileges",
+              "--ulimit",
+              "nofile=1024:1024",
+              "-e",
+              "HOME=/tmp",
+              "-e",
+              "PYTHONDONTWRITEBYTECODE=1",
+              "-e",
+              "LANG=C.UTF-8",
+              "-v",
+              "${CANDIDATE_DIR}:/candidate:ro",
+              "-w",
+              "/candidate",
+              "--user",
+              "1001:1001",
+              "--runtime",
+              "runsc",
+              "sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8",
+              "python",
+              "-c",
+              "import time; print('ready', flush=True); time.sleep(600)"
+            ],
+            "container_started": true,
+            "returned_code": null,
+            "timeout_raised": true
+          },
+          "required": true,
+          "status": "pass"
+        }
+      ],
+      "reason": null,
+      "requested_runtime": "runsc",
+      "required": true,
+      "runtime": {
+        "available": true,
+        "available_runtimes": [
+          "io.containerd.runc.v2",
+          "runc",
+          "runsc"
+        ],
+        "observed": "runsc",
+        "requested": "runsc"
+      },
+      "status": "pass"
+    }
+  ],
+  "reproduce": {
+    "argv": [
+      "python",
+      "-m",
+      "tools.conformance.run_isolation_conformance",
+      "--manifest",
+      "tools/conformance/isolation-manifest.json",
+      "--image",
+      "sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8",
+      "--profile",
+      "gvisor",
+      "--require-gvisor",
+      "--output",
+      "<result.json>"
+    ],
+    "shell": "python -m tools.conformance.run_isolation_conformance --manifest tools/conformance/isolation-manifest.json --image sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8 --profile gvisor --require-gvisor --output '<result.json>'"
+  },
+  "run_id": "5f18341458ba4633aabe1ce3d239aa7d",
+  "schema_version": "evoom-isolation-conformance-result-1",
+  "source": {
+    "aggregate_sha256": "a2404188660c0de852cb6901c168a80e43142b278c04da62fa3ca861e370ee15",
+    "files": [
+      {
+        "bytes": 85302,
+        "path": "tools/conformance/isolation_kit.py",
+        "sha256": "765e11c07d5a022e5acf3229200cab1952896e63dae1aa9db44ebbc70a09cc58"
+      },
+      {
+        "bytes": 3091,
+        "path": "tools/conformance/run_isolation_conformance.py",
+        "sha256": "d39259935a830b73c7b89284e454078e1f7e0a2afca102ba3f2e2b32d8a2308f"
+      },
+      {
+        "bytes": 5482,
+        "path": "tools/conformance/isolation-manifest.schema.json",
+        "sha256": "4c770b5fa6aca9d1774c6a9b575c2ebb78deab36a6ad35082289d81d6d0c4a18"
+      },
+      {
+        "bytes": 14895,
+        "path": "tools/conformance/isolation-result.schema.json",
+        "sha256": "d42e14069a20792231c033f57e56ee235d1779ded148c3d419acc0bf7460a7d9"
+      },
+      {
+        "bytes": 4325,
+        "path": "tools/conformance/secure_io.py",
+        "sha256": "4a89066b5a0ac5d492aefb5e2c3f428575c2bfad8ad10e9584ccc2c37c12ff80"
+      },
+      {
+        "bytes": 3817,
+        "path": "tools/conformance/probe/isolation_probe.py",
+        "sha256": "c212b27337c10e69cb7abd035aa8ed2aafaf019926d30f84582c103fe34ecd80"
+      },
+      {
+        "bytes": 1886,
+        "path": "evoom_guard/execution/__init__.py",
+        "sha256": "2842c6941a0010ba9d24316484589aaca7a75ae2d5c5d12e4ecfa78ce76dfb42"
+      },
+      {
+        "bytes": 37571,
+        "path": "evoom_guard/execution/process.py",
+        "sha256": "41c4f025315d2c96c4687c4ab0e4d109dad380a34516952d7517016428d399d1"
+      },
+      {
+        "bytes": 18181,
+        "path": "evoom_guard/execution/judge.py",
+        "sha256": "d390d2007e9f577bf80905060255742b9c60443ae2b46e1f28933e2ceb2a9b8d"
+      },
+      {
+        "bytes": 3057,
+        "path": "evoom_guard/execution/command.py",
+        "sha256": "8841d8374d5fa93a00e701c7c3efd60a7dee0fa54efcfecd61346b3c9eb89da1"
+      },
+      {
+        "bytes": 2589,
+        "path": "evoom_guard/isolation/__init__.py",
+        "sha256": "9a51b9907b1b1c7732bae36fd6d4e42f341209fecd13db32ebfcdaa793e91433"
+      },
+      {
+        "bytes": 30195,
+        "path": "evoom_guard/isolation/docker.py",
+        "sha256": "2240e6cbf6b93ef8e4329e3ff640fdc4971c8e3ceadf6b5235958f5c419df290"
+      },
+      {
+        "bytes": 19582,
+        "path": "evoom_guard/isolation/candidate.py",
+        "sha256": "e341ed4f767fb1eebc19f8e61e3efa5583e98ba30540611a250411fd7d835c15"
+      },
+      {
+        "bytes": 5223,
+        "path": "evoom_guard/isolation/invocation.py",
+        "sha256": "d56461007ad98ace38b6851297b604824f7d9cab9f9e9d49a3b2de67653422e9"
+      }
+    ],
+    "git_commit": "6bb4c328e56661b661e50532886802c6ba36a997",
+    "git_dirty": false
+  },
+  "started_at_utc": "2026-08-09T06:29:19.171810Z",
+  "status": "pass",
+  "suite_id": "evoom-guard-isolation-v1",
+  "summary": {
+    "probes": {
+      "error": 0,
+      "fail": 0,
+      "pass": 9,
+      "skip": 0,
+      "unsupported": 0
+    },
+    "profiles": {
+      "error": 0,
+      "fail": 0,
+      "pass": 1,
+      "skip": 0,
+      "unsupported": 0
+    }
+  }
+}
