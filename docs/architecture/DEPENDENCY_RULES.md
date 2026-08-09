@@ -288,6 +288,23 @@ Import-boundary ratchet revision 9 classifies the stable flat
 domain-owned wire vocabularies. The unclassified-module ceiling drops from 22
 to 21 while both published import paths remain unchanged.
 
+Import-boundary ratchet revision 10 promotes the already shared canonical
+evidence/archive, bounded-file, signing-snapshot, and signing-operation
+contracts to documented public provider names. Historical private names remain
+identity aliases or compatibility wrappers where required. Existing consumers
+move to the public names without changing wire bytes, exception mapping, or
+lookup timing, lowering the cross-package private-import ceiling from 54 to 10.
+
+Import-boundary ratchet revision 11 promotes the Trusted Finalizer's exact
+source-shape and source/context digest-binding validators to
+`validate_finalizer_source` and `validate_finalizer_source_context`.
+Artifact Admission V1 and Artifact Digest Admission V2 consume those public
+owner contracts through their existing module-global late-binding seams. The
+legacy private finalizer names remain identity aliases, and characterization
+vectors freeze positive/negative behavior, exception causes, and monkeypatch
+timing. No schema or wire semantics change; the cross-package private-import
+ceiling drops from 10 to 6.
+
 The verifier-owned `record_policy` module is a new classified verifier-layer
 owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy

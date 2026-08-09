@@ -28,6 +28,9 @@ directions and prevents architectural debt from silently increasing.
 - The behavior-preserving R2 extraction is complete.
 - All 41 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
+- The import ratchet currently permits zero dependency cycles and six
+  cross-package private-symbol imports; Trusted Finalizer source validation is
+  now an explicit public owner contract shared by Artifact Admission V1/V2.
 - The broader program is still in progress: evidence/finalizer domains,
   release engineering, repository-wide strict typing, independent external
   red-team evidence, and the end-to-end protected build-to-admission chain are

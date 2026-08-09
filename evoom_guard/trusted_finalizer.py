@@ -157,7 +157,15 @@ def _bounded_string(value: object, *, label: str, maximum: int) -> str:
     return value
 
 
-def _validate_source(value: Mapping[str, Any]) -> dict[str, Any]:
+def validate_finalizer_source(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate and detach one canonical Trusted Finalizer source object.
+
+    This is the public source-shape contract shared by finalizer handoffs and
+    artifact-admission consumers.  It validates identifiers and exact base/head
+    Git digests only; it does not authenticate the source or widen the finalizer
+    trust boundary.
+    """
+
     source = dict(value)
     _require_exact_keys(source, _SOURCE_KEYS, "finalizer source")
     pr_number = source.get("pull_request_number")
@@ -196,12 +204,29 @@ def _validate_record_descriptor(value: Mapping[str, Any]) -> dict[str, Any]:
     return record
 
 
-def _validate_source_context(source: Mapping[str, Any], context: Mapping[str, Any]) -> None:
+def validate_finalizer_source_context(
+    source: Mapping[str, Any], context: Mapping[str, Any]
+) -> None:
+    """Require a validated finalizer source to match context base/head digests.
+
+    Authentication and the remaining evidence-context relationships are owned
+    by the caller.  This narrow public contract preserves the historical
+    :class:`FinalizerHandoffError` type and exact error messages.
+    """
+
     for field in ("base_sha", "head_sha"):
         if context.get(field) != source.get(field):
             raise FinalizerHandoffError(
                 f"source.{field} must exactly match context.{field}"
             )
+
+
+# Historical compatibility seams. New cross-package callers must use the
+# public names above. Identity aliases (rather than wrappers) preserve imported
+# callable identity, signatures, error behavior, and the legacy module-global
+# monkeypatch lookup used by the Trusted Finalizer implementation below.
+_validate_source = validate_finalizer_source
+_validate_source_context = validate_finalizer_source_context
 
 
 def _record_snapshot(path: str) -> tuple[bytes, dict[str, Any], dict[str, Any]]:

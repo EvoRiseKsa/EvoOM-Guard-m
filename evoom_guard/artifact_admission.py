@@ -61,8 +61,8 @@ from evoom_guard.evidence_bundle import (
 from evoom_guard.trusted_finalizer import (
     FinalizerHandoffError,
     VerifiedFinalizedBundle,
-    _validate_source,
-    _validate_source_context,
+    validate_finalizer_source,
+    validate_finalizer_source_context,
     verify_finalized_bundle,
 )
 
@@ -267,9 +267,9 @@ def _validate_finalizer(value: Mapping[str, Any]) -> dict[str, Any]:
             "artifact binding finalizer.source and context must be objects"
         )
     try:
-        verified_source = _validate_source(source)
+        verified_source = validate_finalizer_source(source)
         verified_context = validate_evidence_context(context, verdict=None)
-        _validate_source_context(verified_source, verified_context)
+        validate_finalizer_source_context(verified_source, verified_context)
     except (EvidenceBundleError, FinalizerHandoffError) as exc:
         raise ArtifactAdmissionError(f"invalid artifact binding finalizer: {exc}") from exc
     return {
