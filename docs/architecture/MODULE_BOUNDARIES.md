@@ -53,6 +53,13 @@ stable paths are classified directly; no implementation or wire contract moves.
 Mixed facades such as `guard.py`, `blackbox.py`, and `record_verifier.py` remain
 unclassified until real responsibility separation justifies a migration.
 
+Within the mixed `record_verifier.py` compatibility facade, nested assurance
+and attestation validation now has one pure owner in
+`verifiers/record_nested.py`. That owner returns immutable missing/type/shape
+error tuples and performs no I/O or report mutation. The facade alone retains
+the established check IDs, messages, ordering, skip semantics, and public
+report envelope.
+
 Six cohesive stable flat modules now have explicit existing owners without a
 file move or public-identity change. `evidence.py` owns the bounded
 changed-line-coverage observation; `evidence_bundle.py` owns deterministic

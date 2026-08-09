@@ -547,6 +547,14 @@ remain in their established facades.
   complexity falls from 49 to 42 while exact accepted payloads, error identity,
   message, cause, and validation order remain frozen. This is a measured
   maintainability change, not a new product or assurance claim.
+- The second Stage-11 pure-phase extraction moves nested assurance and
+  attestation missing/type/shape validation into an immutable verifier-owned
+  projection. The public adapter keeps exact check IDs, messages, order, null
+  handling, and schema-1.11/1.12 reports. Characterization and eleven focused
+  mutants bind required fields, preflight null isolation, lowercase SHA-256,
+  JUnit digest pairs, nested pack shape, non-negative invocations, and skip
+  semantics. Measured `_nested_type_checks` complexity falls from 52 to 3;
+  the largest extracted helper is 9 and total C901 findings fall from 97 to 96.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction

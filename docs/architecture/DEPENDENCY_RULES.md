@@ -46,7 +46,10 @@ Its report-envelope and isolation-parity responsibilities now have explicit
 owners in `verifiers.record_report` and `verifiers.record_isolation`. The
 schema-1.12 profile slice adds `verifiers.record_policy`, which independently
 re-derives profile constraints without importing the producer's policy
-predicate. All three are classified in the verifier layer and the public
+predicate. `verifiers.record_nested` owns the pure immutable projection of
+nested assurance and attestation missing/type/shape errors; its only internal
+dependencies are the frozen schema-1.11 vocabulary and the public JUnit digest
+vocabulary. All four are classified in the verifier layer and the public
 `record_verifier` API is unchanged.
 
 The baseline is architectural debt, not permission to add equivalent debt:

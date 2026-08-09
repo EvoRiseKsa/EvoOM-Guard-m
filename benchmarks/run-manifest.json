@@ -99,7 +99,7 @@
   },
   "engine_version": "4.6.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-09T09:36:56.557063Z",
+    "captured_at_utc": "2026-08-09T10:41:59.210668Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -107,10 +107,10 @@
       ],
       "cache_tag": "cpython-312",
       "compiler": "MSC v.1943 64 bit (AMD64)",
-      "executable_bytes": 274424,
-      "executable_sha256": "0b471133e110cfb53a061cad528ce8e517d7b9ac41a0a396c39ad795a487fc14",
+      "executable_bytes": 104952,
+      "executable_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
       "hexversion": 51120880,
-      "identity_sha256": "d438111a3401067d3fae41ebadbd7caf67c99e4b78d935e87aee0ffa6da56a8b",
+      "identity_sha256": "fd1da05b72ab772792e3627a003b7bfd51b2783f2d09506634a192da3b2f6ca3",
       "implementation": "CPython",
       "version": "3.12.10"
     },
@@ -199,74 +199,74 @@
         "available": true,
         "distribution": "pytest",
         "installed_environment_match_claim": false,
-        "runtime_bytes": 13567174,
+        "runtime_bytes": 13788436,
         "runtime_distributions": [
           {
-            "bytes": 169374,
-            "files": 32,
-            "files_sha256": "2e1904977d69a204973e731ba39d84738e662f6c9374ee749e981e263e652480",
+            "bytes": 169233,
+            "files": 31,
+            "files_sha256": "960e9705660187009bd566190193d60596467ebe1f327eb8af4ad1d70512fc3f",
             "name": "colorama",
             "version": "0.4.6"
           },
           {
-            "bytes": 97569,
+            "bytes": 97545,
             "files": 19,
-            "files_sha256": "3d39ac5b9379384bd1f242cc8c249670832d34d50b42481c02f4af589cc88dfc",
+            "files_sha256": "a756433c8b00cae916764a1dbcf283e7fe0b781f2610fcf23252d8b15a86d1f3",
             "name": "exceptiongroup",
             "version": "1.3.1"
           },
           {
-            "bytes": 37158,
-            "files": 16,
-            "files_sha256": "abd051b1d01377442c2e3c28ee37fdf5e73c0275e9dd604292414cfdcb5197d8",
+            "bytes": 37052,
+            "files": 15,
+            "files_sha256": "e7c30cfb45f3bc51d10356cf27db3440418659830f6cb8bff6ba7a503dbb2894",
             "name": "iniconfig",
             "version": "2.3.0"
           },
           {
-            "bytes": 772161,
-            "files": 49,
-            "files_sha256": "12dcd2c3c6b43dd9884a7bf5d1c5ef0b8b512793213bf1ca7e42f6a0f00920b0",
+            "bytes": 995639,
+            "files": 53,
+            "files_sha256": "ad6f1e1f905efb25c11a3c613f436754bff0795cf441f163697b5628b06bd6ae",
             "name": "packaging",
-            "version": "26.2"
+            "version": "26.3"
           },
           {
-            "bytes": 137417,
-            "files": 24,
-            "files_sha256": "99ae0196834fe0242f0533d364c996a15c29c9d26f82d4ccf1e3c36a85db1267",
+            "bytes": 137298,
+            "files": 23,
+            "files_sha256": "ed161a0f8caef2b8d78e19dd5aafddb2c25af382f0244eeab9ac5df2a79282ae",
             "name": "pluggy",
             "version": "1.6.0"
           },
           {
-            "bytes": 8492407,
-            "files": 687,
-            "files_sha256": "8990318c558394419ce40a271da8b36e9042fd44c42d3c42787f53df6253de6f",
+            "bytes": 8490949,
+            "files": 686,
+            "files_sha256": "d789f42ba6c51b215051f8b1ba7c71ef3b833c48d1340a3208ed3bfb9897c411",
             "name": "pygments",
             "version": "2.20.0"
           },
           {
-            "bytes": 3219329,
+            "bytes": 3218981,
             "files": 174,
-            "files_sha256": "da0358be3ced5234bbcd3464be6afdb2a528e2249a6da15e0abc7875e832e3b7",
+            "files_sha256": "fc2c1cc5dbf5b81fa3747f9f8c5b25cc22f4bb65f9cda931e2391450bc7166f0",
             "name": "pytest",
             "version": "9.1.1"
           },
           {
-            "bytes": 292188,
+            "bytes": 292172,
             "files": 21,
-            "files_sha256": "0e5aeccfe52b46565ebf2645d2608773dba0657bae0266431179513313ab4930",
+            "files_sha256": "8e1c87f5e1a4e77e623c185bc98a1df288348e4d84454176e703cbb6ca14e447",
             "name": "tomli",
             "version": "2.4.1"
           },
           {
-            "bytes": 349571,
+            "bytes": 349567,
             "files": 8,
-            "files_sha256": "0718a38d1a7e6aeeaf876dbea29e53f8b8e2d8a54032049eff91f1fbda80c3c7",
+            "files_sha256": "39773c458aa6c34503c30006885d8752fa7761dddeced0e2e32323e5dd902e2b",
             "name": "typing-extensions",
             "version": "4.16.0"
           }
         ],
         "runtime_files": 1030,
-        "runtime_sha256": "56d4602226dcab1f08ffda06a530e1de58e0f1c907220b99264637cebd16d7c9",
+        "runtime_sha256": "2005b56c1db2382b5b1b39a1a32a8bf24e0edc0e91ed909a5625c74b7e5c806f",
         "schema_version": "evoguard-benchmark-tool-identity-v2",
         "version": "9.1.1"
       }
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "4c4256c00e4c454abd92c12f912690368712b935",
+    "head": "4a55ceabd33ea0ed492e975b0055db0e4c88a8ff",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "e7662d4c81c318ff5018226203a87020eeed24c4",
+      "commit": "2650eb7f89c44a61f2e424f4690a906678a4974a",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "4c4256c00e4c454abd92c12f912690368712b935",
+      "commit": "4a55ceabd33ea0ed492e975b0055db0e4c88a8ff",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14816,
+    "bytes": 14817,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "c2e216741cd8a7284ed4383a320f97547231544fcd1babeffc91375b656877b0"
+    "sha256": "c19d52025394d70d1741a1129fec65cda800b59d7e7d7f9bedb8c8fedfeb01f3"
   },
-  "run_id": "7f0aa897-3dfc-4bc2-9772-0fa609f4888e",
+  "run_id": "00a8dee8-4f14-47fe-b6af-c87f80836d3f",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -482,7 +482,7 @@
   "source": {
     "algorithm": "sha256",
     "domain": "EVOGUARD_BENCHMARK_SOURCE_V1",
-    "file_count": 160,
+    "file_count": 161,
     "files": [
       {
         "bytes": 14817,
@@ -905,9 +905,9 @@
         "sha256": "805821d027e87957ca13011dfc57b061d67fdd7bebcecc2278a1bc38bd33b650"
       },
       {
-        "bytes": 104971,
+        "bytes": 92464,
         "path": "evoom_guard/record_verifier.py",
-        "sha256": "2f5832f6ef9741ddb5d76e3babf2b3ed020180d9fd85b4205673231dd5b881fe"
+        "sha256": "e22b615165a0519cdf00a393e967e584a33fe6631aad3a8a610a15ff2a583a6e"
       },
       {
         "bytes": 53826,
@@ -1170,6 +1170,11 @@
         "sha256": "4871a3777c2cc701f60977e855bfac2cdd5511a527495f1f7a4d68e45a8e7ad5"
       },
       {
+        "bytes": 17123,
+        "path": "evoom_guard/verifiers/record_nested.py",
+        "sha256": "419275b1f9ff0919d8593a6e78a7f33c65980ec3ec9b9cf5c77392deb53e70ad"
+      },
+      {
         "bytes": 3178,
         "path": "evoom_guard/verifiers/record_policy.py",
         "sha256": "c5afe6a168066a4d78464ac8265d8c1d3ee6411f2b5e0debfd412df5be9ddbd7"
@@ -1299,13 +1304,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "7470d9ab1aeb33f5f6e225a69b60a443f5800d19fff55ff9afc0d6af5efca8ba",
-    "total_bytes": 2684908
+    "sha256": "1869de376e57b770f8a81b52b2791f3b9a9e094d5d101d6c4db5875f9f58025a",
+    "total_bytes": 2689524
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.182,
-    "guard_full_run_median_s": 0.196,
-    "guard_full_run_p95_s": 0.237,
+    "controlled_direct_pytest_median_s": 0.158,
+    "guard_full_run_median_s": 0.258,
+    "guard_full_run_p95_s": 0.298,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }

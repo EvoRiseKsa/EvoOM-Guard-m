@@ -53,6 +53,12 @@ retained evidence say so.
   pure phase, reducing its measured C901 complexity from 49 to 42. Exact error
   type, message, cause, validation order, and normalized payload behavior are
   frozen by characterization and focused mutation tests.
+- Extracted assurance and attestation nested-object validation into an
+  immutable, verifier-owned pure projection. The public report adapter retains
+  exact check IDs, order, messages, null behavior, and schema-1.11/1.12 report
+  bytes while `_nested_type_checks` falls from measured C901 complexity 52 to
+  3. No extracted helper exceeds complexity 9, and the reviewed repository
+  C901 inventory falls from 97 to 96.
 - Made both newly extracted callable snapshots structurally immutable with
   slotted frozen dataclasses, and replaced the release-source snapshot's
   ellipsis-based callable annotations with exact Protocol signatures. Focused
