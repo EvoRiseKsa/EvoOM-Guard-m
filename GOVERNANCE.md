@@ -37,6 +37,39 @@ facts are maintained separately in
 [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md); governance does not copy a
 moving version status.
 
+## Release governance
+
+The latest published product release is the stable consumer line. The default
+branch is development source and must not be represented as a released or
+production-supported version merely because its CI is green.
+
+- A patch release contains only a bounded security or functional-correctness
+  fix and the tests, changelog, and release records needed to verify it. It is
+  prepared from the affected stable tag or maintenance branch; unrelated
+  default-branch development is not swept into the patch.
+- Documentation, benchmark-data, or evidence-index corrections alone do not
+  create a product release. They are published through the protected default
+  branch and, when necessary, an explicit erratum.
+- A minor release may add compatible behavior only after its intended scope is
+  frozen, all required CI and release-trust gates pass, migration/compatibility
+  effects are documented, and the candidate has remained unchanged except for
+  release-record corrections during a minimum 14-day stabilization window.
+- A major release is required for an intentional break in public CLI, schema,
+  canonical-byte, signature-domain, policy, or verifier contract. It requires
+  a migration guide and retained verification for the preceding stable line.
+- Published tags, assets, checksums, attestations, and release ledgers are
+  immutable. A defect creates a new version or erratum; it never retargets or
+  replaces a published object.
+- Starting with the next product release, the source release commit and
+  annotated release tag must carry a GitHub-verifiable maintainer signature in
+  addition to the existing protected workflow, artifact attestation, checksum,
+  and release-ledger controls. If signing authority is unavailable, the product
+  release is blocked rather than silently downgraded.
+
+This repository makes no general support-duration or service-level promise.
+Any commercial maintenance window or SLA is established by a separate written
+agreement with EvoRise Tech.
+
 ## Security-policy changes
 
 The following are security-policy changes, not ordinary feature edits:
