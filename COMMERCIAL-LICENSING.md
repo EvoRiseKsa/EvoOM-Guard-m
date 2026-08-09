@@ -27,8 +27,8 @@ The following uses require a separate commercial agreement:
 Commercial licenses are issued by **EvoRise Tech**, the Licensor identified in
 the [LICENSE](LICENSE).
 
-- Website: <https://evoriseksa.com>
 - Email: <evoriseksa@icloud.com>
+- GitHub product record: <https://github.com/EvoRiseKsa/EvoOM-Guard-m>
 
 Commercial scope, pricing, support, and any rights beyond the public license
 are set out in a separate written agreement.
