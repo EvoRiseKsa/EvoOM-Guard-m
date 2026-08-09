@@ -1,0 +1,491 @@
+{
+  "format": "evoom-guard-complexity-baseline-1",
+  "rule": "C901",
+  "entries": [
+    {
+      "path": "evoom_guard/admission/agent_change.py",
+      "symbol": "seal_agent_change_finalizer_bundle",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/admission/agent_change.py",
+      "symbol": "validate_agent_change_proposal",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/admission/agent_change.py",
+      "symbol": "verify_agent_change_contract",
+      "max_complexity": 18
+    },
+    {
+      "path": "evoom_guard/admission/release_artifact.py",
+      "symbol": "seal_release_artifact_admission",
+      "max_complexity": 20
+    },
+    {
+      "path": "evoom_guard/admission/release_source.py",
+      "symbol": "_attested_snapshot",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/admission/release_source.py",
+      "symbol": "seal_release_source_admission",
+      "max_complexity": 16
+    },
+    {
+      "path": "evoom_guard/application/assurance.py",
+      "symbol": "_pack_assurance_parts",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/application/blackbox_finalization.py",
+      "symbol": "finalize_blackbox_verification",
+      "max_complexity": 34
+    },
+    {
+      "path": "evoom_guard/application/repo_decision.py",
+      "symbol": "compose_repo_decision",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/application/repo_finalization.py",
+      "symbol": "finalize_repo_verification",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/artifact_admission.py",
+      "symbol": "_write_binding",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/artifact_admission.py",
+      "symbol": "hash_regular_artifact",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/artifact_admission.py",
+      "symbol": "inspect_artifact_binding",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/artifact_digest_admission.py",
+      "symbol": "_write_binding",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/artifact_digest_admission.py",
+      "symbol": "inspect_artifact_digest_binding",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/blackbox.py",
+      "symbol": "_run_blackbox_impl",
+      "max_complexity": 51
+    },
+    {
+      "path": "evoom_guard/candidate/patch.py",
+      "symbol": "apply_patch",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/cli/__init__.py",
+      "symbol": "_config_path_for_guard",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/cli/__init__.py",
+      "symbol": "main",
+      "max_complexity": 45
+    },
+    {
+      "path": "evoom_guard/cli/guard_command.py",
+      "symbol": "execute_guard_command",
+      "max_complexity": 38
+    },
+    {
+      "path": "evoom_guard/domain/policy.py",
+      "symbol": "operating_profile_violations",
+      "max_complexity": 19
+    },
+    {
+      "path": "evoom_guard/evidence.py",
+      "symbol": "_source_code_lines",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/evidence.py",
+      "symbol": "collect_diff_coverage",
+      "max_complexity": 35
+    },
+    {
+      "path": "evoom_guard/evidence_bundle.py",
+      "symbol": "_read_regular_file",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/evidence_bundle.py",
+      "symbol": "create_evidence_bundle",
+      "max_complexity": 20
+    },
+    {
+      "path": "evoom_guard/evidence_bundle.py",
+      "symbol": "inspect_evidence_bundle",
+      "max_complexity": 37
+    },
+    {
+      "path": "evoom_guard/evidence_bundle.py",
+      "symbol": "validate_evidence_context",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/execution/judge.py",
+      "symbol": "execute_judge_process",
+      "max_complexity": 31
+    },
+    {
+      "path": "evoom_guard/execution/judge.py",
+      "symbol": "join_judge_pipe_readers",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/execution/judge.py",
+      "symbol": "terminate_judge_process_group",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/execution/process.py",
+      "symbol": "_read_posix_exec_status",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/execution/process.py",
+      "symbol": "_terminate_process_tree",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/execution/process.py",
+      "symbol": "execute_bounded_process",
+      "max_complexity": 46
+    },
+    {
+      "path": "evoom_guard/finalizer/deployment.py",
+      "symbol": "_inspect_finalizer_policy",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/finalizer/deployment.py",
+      "symbol": "inspect_finalizer_deployment",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/finalizer/deployment.py",
+      "symbol": "load_finalizer_kit",
+      "max_complexity": 16
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_candidate_blocks",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_derive_raw_evaluation_from_readers",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_effective_policy_from_raw_config",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_open_pinned_git_executable",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_raw_pack_identity",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_run_git_command",
+      "max_complexity": 37
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_snapshot_git_executable",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/finalizer_derivation.py",
+      "symbol": "_validate_derived_bindings",
+      "max_complexity": 14
+    },
+    {
+      "path": "evoom_guard/github_attestation.py",
+      "symbol": "_execute_gh_attestation_command",
+      "max_complexity": 44
+    },
+    {
+      "path": "evoom_guard/github_attestation.py",
+      "symbol": "_snapshot_pinned_provider_executable",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/github_attestation.py",
+      "symbol": "_snapshot_regular_artifact",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/github_attestation.py",
+      "symbol": "validate_github_attestation_verifier_output",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/github_attestation.py",
+      "symbol": "validate_provider_isolated_signing_key_path",
+      "max_complexity": 14
+    },
+    {
+      "path": "evoom_guard/guard.py",
+      "symbol": "guard",
+      "max_complexity": 21
+    },
+    {
+      "path": "evoom_guard/integrations/guard_output.py",
+      "symbol": "render_report",
+      "max_complexity": 24
+    },
+    {
+      "path": "evoom_guard/isolation/docker.py",
+      "symbol": "cleanup_candidate_containers",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/isolation/docker.py",
+      "symbol": "cleanup_named_container",
+      "max_complexity": 21
+    },
+    {
+      "path": "evoom_guard/isolation/docker.py",
+      "symbol": "run_named_docker_client",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/policy/config.py",
+      "symbol": "load_config",
+      "max_complexity": 49
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_baseline_type_errors",
+      "max_complexity": 24
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_check_assurance_semantics",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_check_composite",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_check_evidence_contracts",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_check_pack",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_check_policy_runtime_bindings",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_check_source_contract",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_diff_coverage_type_errors",
+      "max_complexity": 26
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_nested_type_checks",
+      "max_complexity": 52
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_policy_type_errors",
+      "max_complexity": 33
+    },
+    {
+      "path": "evoom_guard/record_verifier.py",
+      "symbol": "_top_level_type_errors",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/release_source_finalizer.py",
+      "symbol": "inspect_release_source_bundle",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/release_source_producer_receipt.py",
+      "symbol": "_validate_allow_record",
+      "max_complexity": 13
+    },
+    {
+      "path": "evoom_guard/release_source_producer_receipt.py",
+      "symbol": "reverify_attested_release_source_producer_receipt",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/release_source_producer_receipt.py",
+      "symbol": "validate_release_source_admitter_binding",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/runners/_command.py",
+      "symbol": "_wrapped_command_index",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/runners/shell.py",
+      "symbol": "_split_last_cmd",
+      "max_complexity": 21
+    },
+    {
+      "path": "evoom_guard/runtime_identity.py",
+      "symbol": "_read_regular",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/runtime_identity.py",
+      "symbol": "capture_runtime_identity",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/runtime_identity.py",
+      "symbol": "runtime_identity_changes",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/signing.py",
+      "symbol": "_read_key_snapshot",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/verifiers/fidelity.py",
+      "symbol": "_fidelity_entry_state",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/verifiers/fidelity.py",
+      "symbol": "_scan_fidelity_with_descriptors",
+      "max_complexity": 18
+    },
+    {
+      "path": "evoom_guard/verifiers/fidelity.py",
+      "symbol": "scan_directory",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/verifiers/harness_policy.py",
+      "symbol": "_descriptor_harness_input_state",
+      "max_complexity": 16
+    },
+    {
+      "path": "evoom_guard/verifiers/harness_policy.py",
+      "symbol": "discover_local_action_dirs",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/verifiers/harness_policy.py",
+      "symbol": "restore_judge_package_json",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/verifiers/harness_policy.py",
+      "symbol": "validate_harness_input_files",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/verifiers/junit_oracle.py",
+      "symbol": "parse_junit_dir_with_digest",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/verifiers/record_policy.py",
+      "symbol": "check_operating_profile",
+      "max_complexity": 18
+    },
+    {
+      "path": "evoom_guard/verifiers/repo_baseline.py",
+      "symbol": "run_repo_baseline",
+      "max_complexity": 17
+    },
+    {
+      "path": "evoom_guard/verifiers/repo_materialization.py",
+      "symbol": "materialize_candidate_edits",
+      "max_complexity": 20
+    },
+    {
+      "path": "evoom_guard/verifiers/repo_pack.py",
+      "symbol": "execute_repo_pack",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/verifiers/repo_setup.py",
+      "symbol": "execute_repo_setup",
+      "max_complexity": 22
+    },
+    {
+      "path": "evoom_guard/verifiers/repo_suite.py",
+      "symbol": "execute_repo_suite",
+      "max_complexity": 16
+    },
+    {
+      "path": "evoom_guard/verifiers/repo_verifier.py",
+      "symbol": "_verify",
+      "max_complexity": 40
+    },
+    {
+      "path": "evoom_guard/workspace/__init__.py",
+      "symbol": "_open_parent_dir_fd",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/workspace/__init__.py",
+      "symbol": "delete_path_within_root",
+      "max_complexity": 12
+    },
+    {
+      "path": "evoom_guard/workspace/candidate_tree.py",
+      "symbol": "blocks_from_dirs",
+      "max_complexity": 15
+    },
+    {
+      "path": "evoom_guard/workspace/repository.py",
+      "symbol": "_remove_owned_workspace_tree",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/workspace/repository.py",
+      "symbol": "allocate_owned_workspace",
+      "max_complexity": 11
+    },
+    {
+      "path": "evoom_guard/workspace/repository.py",
+      "symbol": "cleanup_repo_workspaces",
+      "max_complexity": 15
+    }
+  ]
+}
