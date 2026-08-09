@@ -24,6 +24,11 @@ class _CleanupAbort(BaseException):
     pass
 
 
+class _TruthyNonProof:
+    def __bool__(self) -> bool:
+        return True
+
+
 class _TrackingStream(io.BytesIO):
     def __init__(self, initial: bytes = b"") -> None:
         super().__init__(initial)
@@ -548,6 +553,115 @@ def test_post_poll_wait_baseexception_remains_authoritative(
     assert captured.value is primary
 
 
+def test_post_poll_truthy_cleanup_result_is_not_positive_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = _PrimaryAbort("post-poll cancellation")
+    process = _FakeProcess(wait_actions=[primary])
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    outcomes = iter([_TruthyNonProof(), True])
+    cleanup_calls: list[object] = []
+
+    def terminate(candidate: object) -> object:
+        cleanup_calls.append(candidate)
+        return next(outcomes)
+
+    monkeypatch.setattr(github_attestation, "_terminate_gh_process_tree", terminate)
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: True,
+    )
+
+    with pytest.raises(_PrimaryAbort) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    assert cleanup_calls == [process, process]
+    assert object.__getattribute__(primary, "__dict__")["__notes__"] == [
+        "GitHub attestation subprocess-tree abort cleanup was not proven "
+        "before retry while preserving the primary exception"
+    ]
+
+
+def test_post_poll_false_then_success_retains_first_failure_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = _PrimaryAbort("post-poll cancellation")
+    process = _FakeProcess(wait_actions=[primary])
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    outcomes = iter([False, True])
+    cleanup_calls: list[object] = []
+
+    def terminate(candidate: object) -> bool:
+        cleanup_calls.append(candidate)
+        return next(outcomes)
+
+    monkeypatch.setattr(github_attestation, "_terminate_gh_process_tree", terminate)
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: True,
+    )
+
+    with pytest.raises(_PrimaryAbort) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    assert cleanup_calls == [process, process]
+    assert object.__getattribute__(primary, "__dict__")["__notes__"] == [
+        "GitHub attestation subprocess-tree abort cleanup was not proven "
+        "before retry while preserving the primary exception"
+    ]
+
+
+def test_post_poll_raised_then_success_retains_first_failure_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = _PrimaryAbort("post-poll cancellation")
+    process = _FakeProcess(wait_actions=[primary])
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    cleanup_calls: list[object] = []
+
+    def terminate(candidate: object) -> bool:
+        cleanup_calls.append(candidate)
+        if len(cleanup_calls) == 1:
+            raise _CleanupAbort("first cleanup failed")
+        return True
+
+    monkeypatch.setattr(github_attestation, "_terminate_gh_process_tree", terminate)
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: True,
+    )
+
+    with pytest.raises(_PrimaryAbort) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    assert cleanup_calls == [process, process]
+    assert object.__getattribute__(primary, "__dict__")["__notes__"] == [
+        "GitHub attestation subprocess-tree abort cleanup raised before retry while "
+        "preserving the primary exception: _CleanupAbort: first cleanup failed"
+    ]
+
+
 def test_poll_baseexception_cleans_child_and_remains_authoritative(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -791,6 +905,237 @@ def test_cleanup_baseexceptions_do_not_replace_reader_start_primary(
 
     with pytest.raises(_PrimaryAbort, match="authoritative primary"):
         _execute(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("tree_outcome", "reader_outcome", "expected_fragments"),
+    [
+        pytest.param(
+            False,
+            False,
+            (
+                "subprocess-tree abort cleanup was not proven",
+                "output-reader abort cleanup was not proven",
+            ),
+            id="false-results",
+        ),
+        pytest.param(
+            _TruthyNonProof(),
+            _TruthyNonProof(),
+            (
+                "subprocess-tree abort cleanup was not proven",
+                "output-reader abort cleanup was not proven",
+            ),
+            id="truthy-non-proofs",
+        ),
+        pytest.param(
+            _CleanupAbort("tree cleanup failed"),
+            _CleanupAbort("reader cleanup failed"),
+            (
+                "subprocess-tree abort cleanup raised",
+                "output-reader abort cleanup raised",
+            ),
+            id="raised-results",
+        ),
+    ],
+)
+def test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tree_outcome: object,
+    reader_outcome: object,
+    expected_fragments: tuple[str, str],
+) -> None:
+    process = _FakeProcess()
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    events: list[str] = []
+
+    def resolve(stage: str, outcome: object) -> object:
+        events.append(stage)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda _process: resolve("tree", tree_outcome),
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: resolve("readers", reader_outcome),
+    )
+    primary = _PrimaryAbort("authoritative primary")
+
+    class FailingThread:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            raise primary
+
+    monkeypatch.setattr(github_attestation.threading, "Thread", FailingThread)
+
+    with pytest.raises(_PrimaryAbort) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    assert events == ["tree", "readers"]
+    notes = object.__getattribute__(primary, "__dict__")["__notes__"]
+    assert len(notes) == 2
+    assert expected_fragments[0] in notes[0]
+    assert expected_fragments[1] in notes[1]
+
+
+def test_abort_cleanup_diagnostics_survive_hostile_stringification_and_add_note(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class HostileCleanup(BaseException):
+        def __str__(self) -> str:
+            raise _CleanupAbort("hostile stringify")
+
+    class HostilePrimary(_PrimaryAbort):
+        def add_note(self, _note: str) -> None:
+            raise _CleanupAbort("hostile add_note")
+
+    process = _FakeProcess()
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda _process: (_ for _ in ()).throw(HostileCleanup()),
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: False,
+    )
+    primary = HostilePrimary("authoritative primary")
+
+    class FailingThread:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            raise primary
+
+    monkeypatch.setattr(github_attestation.threading, "Thread", FailingThread)
+
+    with pytest.raises(HostilePrimary) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    notes = object.__getattribute__(primary, "__dict__")["__notes__"]
+    assert len(notes) == 2
+    assert "HostileCleanup: <unprintable; __str__ raised _CleanupAbort>" in notes[0]
+    assert "output-reader abort cleanup was not proven" in notes[1]
+    assert all(type(note) is str and len(note) <= 2_000 for note in notes)
+
+
+def test_abort_cleanup_diagnostic_is_bounded_for_oversized_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class OversizedCleanupFailure(BaseException):
+        def __str__(self) -> str:
+            return "x" * 10_000
+
+    process = _FakeProcess()
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda _process: (_ for _ in ()).throw(OversizedCleanupFailure()),
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: True,
+    )
+    primary = _PrimaryAbort("authoritative primary")
+
+    class FailingThread:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            raise primary
+
+    monkeypatch.setattr(github_attestation.threading, "Thread", FailingThread)
+
+    with pytest.raises(_PrimaryAbort) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    notes = object.__getattribute__(primary, "__dict__")["__notes__"]
+    assert len(notes) == 1
+    assert len(notes[0]) == 2_000
+    assert notes[0].startswith(
+        "GitHub attestation subprocess-tree abort cleanup raised while preserving "
+        "the primary exception: OversizedCleanupFailure: "
+    )
+    assert notes[0].endswith("...")
+
+
+def test_abort_cleanup_diagnostic_has_python310_style_notes_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Python310StylePrimary(_PrimaryAbort):
+        def __getattribute__(self, name: str) -> object:
+            if name == "add_note":
+                raise AttributeError(name)
+            return super().__getattribute__(name)
+
+    process = _FakeProcess()
+    monkeypatch.setattr(
+        github_attestation.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: process,
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_terminate_gh_process_tree",
+        lambda _process: False,
+    )
+    monkeypatch.setattr(
+        github_attestation,
+        "_join_and_close_gh_readers",
+        lambda _readers, _streams: True,
+    )
+    primary = Python310StylePrimary("authoritative primary")
+
+    class FailingThread:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            raise primary
+
+    monkeypatch.setattr(github_attestation.threading, "Thread", FailingThread)
+
+    with pytest.raises(Python310StylePrimary) as captured:
+        _execute(tmp_path)
+
+    assert captured.value is primary
+    assert object.__getattribute__(primary, "__dict__")["__notes__"] == [
+        "GitHub attestation subprocess-tree abort cleanup was not proven while "
+        "preserving the primary exception"
+    ]
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX process groups")
