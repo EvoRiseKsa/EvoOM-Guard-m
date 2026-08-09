@@ -47,7 +47,9 @@ verifier-owned. Mixed flat facades remain unclassified debt.
   immutable five-operation snapshot at command entry before reading untrusted
   arguments. Candidate-tree compatibility is likewise captured through one
   public immutable Guard snapshot, removing the final private cross-package
-  import.
+  import. The mixed public `record_verifier` facade now delegates nested
+  assurance/attestation validation to a pure verifier-owned projection while
+  retaining report sequencing and rendering itself.
 - The broader program is still in progress: evidence/finalizer domains,
   release engineering, repository-wide strict typing, independent external
   red-team evidence, and the end-to-end protected build-to-admission chain are

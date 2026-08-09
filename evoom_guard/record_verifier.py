@@ -13,7 +13,6 @@ import hashlib
 import json
 import math
 import re
-from datetime import datetime
 from fnmatch import fnmatch
 from typing import Any, TypeGuard, cast
 
@@ -28,6 +27,9 @@ from evoom_guard.verifiers.junit_oracle import (
 )
 from evoom_guard.verifiers.record_isolation import (
     check_isolation as _check_isolation,
+)
+from evoom_guard.verifiers.record_nested import (
+    project_nested_validation as _project_nested_validation,
 )
 from evoom_guard.verifiers.record_policy import (
     check_operating_profile as _check_operating_profile,
@@ -77,81 +79,12 @@ _JUNIT_TOP_FORMATS = frozenset(
 )
 _ISOLATIONS = frozenset({"not_run", "subprocess", "docker", "gvisor"})
 _REQUESTED_ISOLATIONS = frozenset({"subprocess", "docker", "gvisor"})
-_SETUP_ISOLATIONS = frozenset(
-    {"subprocess", "docker", "gvisor", "subprocess_host_opt_in", "unavailable"}
-)
 _RISK_LEVELS = frozenset({"low", "medium", "high"})
 _REPORT_INTEGRITY_RANK = {
     "same_process_candidate_writable": 0,
     "external_process_isolated": 1,
 }
 _ISOLATION_RANK = {"not_run": -1, "subprocess": 0, "docker": 1, "gvisor": 2}
-_REPORT_INTEGRITIES = frozenset(
-    {
-        "same_process_candidate_writable",
-        "external_process_isolated",
-        "not_applicable_static_gate",
-        "not_applicable_not_run",
-    }
-)
-_OVERALL_PROFILES = frozenset(
-    {
-        "static_gate",
-        "preflight",
-        "execution_incomplete_before_tests",
-        "execution_incomplete",
-        "repo_native_same_process",
-        "isolated_repo_native",
-        "mixed_host_setup_repo_native",
-        "black_box_external_judge",
-        "composite_blackbox_repo_native",
-        "blackbox_composite_short_circuit",
-    }
-)
-_REPO_SUITE_STATES = frozenset(
-    {
-        "not_required_blackbox_only",
-        "required_not_run_short_circuit",
-        "required_not_started",
-        "required_started_incomplete",
-        "composed_completed",
-    }
-)
-_PACK_INTEGRITIES = frozenset(
-    {
-        "not_evaluated_static_gate",
-        "not_evaluated_missing",
-        "invalid",
-        "snapshot_identity_mismatch",
-        "verified_snapshot_pre_execution",
-        "verified_snapshot_pre_post",
-        "verified_snapshot_read_only",
-        "snapshot_changed",
-        "not_evaluated",
-    }
-)
-_PACK_SECRECY = frozenset(
-    {
-        "not_evaluated_static_gate",
-        "not_evaluated_no_execution",
-        "readable_in_judge_process",
-        "not_evaluated_no_candidate_execution",
-        "reachable_same_host",
-        "unmounted_from_candidate",
-    }
-)
-_PACK_ASSURANCE_KEYS = frozenset(
-    {
-        "configured",
-        "present",
-        "integrity",
-        "identity_verified",
-        "execution_state",
-        "secrecy",
-        "snapshot_sha256",
-    }
-)
-
 _MEASURED_COVERAGE_KEYS = frozenset(
     {
         "measured",
@@ -180,7 +113,6 @@ _BASELINE_KEYS = frozenset(
 _BASELINE_SETUP_KEYS = frozenset({"setup_fidelity", "setup_fidelity_changes"})
 
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
-_UTC_SECONDS = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 _WINDOWS_SHORT_ALIAS = re.compile(r".*~[0-9]+(?:\..*)?\Z", re.IGNORECASE)
 _WINDOWS_INVALID_CHARACTERS = frozenset('<>:"|?*')
 _WINDOWS_RESERVED_STEMS = frozenset(
@@ -338,10 +270,6 @@ def _is_nullable_int(value: object) -> bool:
     return value is None or _is_int(value)
 
 
-def _is_nullable_bool(value: object) -> bool:
-    return value is None or isinstance(value, bool)
-
-
 def _is_nullable_string(value: object) -> bool:
     return value is None or isinstance(value, str)
 
@@ -352,16 +280,6 @@ def _valid_count_pair(passed: object, total: object) -> bool:
     if not _is_int(passed) or not _is_int(total):
         return False
     return 0 <= passed <= total
-
-
-def _valid_utc_timestamp(value: object) -> bool:
-    if not isinstance(value, str) or _UTC_SECONDS.fullmatch(value) is None:
-        return False
-    try:
-        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
-    except ValueError:
-        return False
-    return True
 
 
 def _policy_type_errors(
@@ -509,31 +427,6 @@ def _policy_type_errors(
             f"operating_profile {operating_profile!r} {violation}"
             for violation in profile_violations
         )
-    return errors
-
-
-def _pack_type_errors(pack: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    missing = sorted(_PACK_ASSURANCE_KEYS - pack.keys())
-    if missing:
-        errors.append(f"missing pack assurance keys: {', '.join(missing)}")
-    if pack.get("configured") is not True:
-        errors.append("configured must be true")
-    if not _is_nullable_bool(pack.get("present")):
-        errors.append("present must be a boolean or null")
-    if not _known_string(pack.get("integrity"), _PACK_INTEGRITIES):
-        errors.append("integrity is invalid")
-    if not _is_nullable_bool(pack.get("identity_verified")):
-        errors.append("identity_verified must be a boolean or null")
-    if not _known_string(pack.get("execution_state"), _EXECUTION_STATES):
-        errors.append("execution_state is invalid")
-    if not _known_string(pack.get("secrecy"), _PACK_SECRECY):
-        errors.append("secrecy is invalid")
-    snapshot = pack.get("snapshot_sha256")
-    if snapshot is not None and not (
-        isinstance(snapshot, str) and bool(_HEX_64.fullmatch(snapshot))
-    ):
-        errors.append("snapshot_sha256 must be a lowercase SHA-256 or null")
     return errors
 
 
@@ -773,80 +666,35 @@ def _nested_type_checks(
     assurance: dict[str, Any] | None,
     attestation: dict[str, Any] | None,
 ) -> None:
-    if assurance is None:
+    projection = _project_nested_validation(assurance, attestation)
+    assurance_result = projection.assurance
+    if assurance_result is None:
         checks.skip("assurance.required_fields", "assurance is not an object")
         checks.skip("assurance.types", "assurance is not an object")
         checks.skip("assurance.shape", "assurance is not an object")
     else:
-        missing = sorted(_REQUIRED_ASSURANCE - assurance.keys())
         checks.expect(
             "assurance.required_fields",
-            not missing,
+            not assurance_result.missing_fields,
             "all contract assurance fields are present",
-            f"missing assurance fields: {', '.join(missing)}",
+            "missing assurance fields: "
+            + ", ".join(assurance_result.missing_fields),
         )
-        errors: list[str] = []
-        for field in (
-            "execution_state",
-            "execution_phase",
-            "harness_integrity",
-            "report_integrity",
-            "candidate_isolation",
-            "suite_isolation",
-            "runtime_continuity",
-            "overall_profile",
-        ):
-            if field in assurance and not isinstance(assurance[field], str):
-                errors.append(f"{field} must be a string")
-        if "setup_isolation" in assurance and not _is_nullable_string(
-            assurance["setup_isolation"]
-        ):
-            errors.append("setup_isolation must be a string or null")
-        pack = assurance.get("verifier_pack")
-        if pack is not None and not isinstance(pack, dict):
-            errors.append("verifier_pack must be an object or null")
         checks.expect(
             "assurance.types",
-            not errors,
+            not assurance_result.type_errors,
             "assurance field types are valid",
-            "; ".join(errors),
+            "; ".join(assurance_result.type_errors),
         )
-        shape_errors: list[str] = []
-        if not _known_string(assurance.get("execution_state"), _EXECUTION_STATES):
-            shape_errors.append("execution_state is invalid")
-        if not (
-            isinstance(assurance.get("execution_phase"), str)
-            and bool(assurance.get("execution_phase"))
-        ):
-            shape_errors.append("execution_phase must be non-empty")
-        if assurance.get("harness_integrity") != "pre_gate_enforced":
-            shape_errors.append("harness_integrity must be pre_gate_enforced")
-        if not _known_string(assurance.get("report_integrity"), _REPORT_INTEGRITIES):
-            shape_errors.append("report_integrity is invalid")
-        for field in ("candidate_isolation", "suite_isolation"):
-            if not _known_string(assurance.get(field), _ISOLATIONS):
-                shape_errors.append(f"{field} is invalid")
-        setup_isolation = assurance.get("setup_isolation")
-        if setup_isolation is not None and not _known_string(
-            setup_isolation, _SETUP_ISOLATIONS
-        ):
-            shape_errors.append("setup_isolation is invalid")
-        if not _known_string(assurance.get("overall_profile"), _OVERALL_PROFILES):
-            shape_errors.append("overall_profile is invalid")
-        pack = assurance.get("verifier_pack")
-        if isinstance(pack, dict):
-            shape_errors.extend(_pack_type_errors(pack))
-        repo_suite = assurance.get("repo_native_suite")
-        if repo_suite is not None and not _known_string(repo_suite, _REPO_SUITE_STATES):
-            shape_errors.append("repo_native_suite is invalid")
         checks.expect(
             "assurance.shape",
-            not shape_errors,
+            not assurance_result.shape_errors,
             "assurance enums and nested pack shape are valid",
-            "; ".join(shape_errors),
+            "; ".join(assurance_result.shape_errors),
         )
 
-    if attestation is None:
+    attestation_result = projection.attestation
+    if attestation_result is None:
         checks.skip(
             "attestation.required_fields",
             "the contract permits a null attestation; attestation claims are unverified",
@@ -855,176 +703,25 @@ def _nested_type_checks(
         checks.skip("attestation.shape", "attestation is null")
         return
 
-    missing = sorted(_REQUIRED_ATTESTATION - attestation.keys())
     checks.expect(
         "attestation.required_fields",
-        not missing,
+        not attestation_result.missing_fields,
         "all contract semantic attestation fields are present",
-        f"missing attestation fields: {', '.join(missing)}",
+        "missing attestation fields: "
+        + ", ".join(attestation_result.missing_fields),
     )
-    errors = []
-    for field in (
-        "created_utc",
-        "guard_version",
-        "mode",
-        "candidate_sha256",
-        "policy_sha256",
-        "execution_state",
-        "execution_phase",
-        "delivered_isolation",
-        "effective_candidate_isolation",
-    ):
-        if field not in attestation:
-            continue
-        value = attestation[field]
-        preflight_null_isolation = (
-            field == "effective_candidate_isolation"
-            and value is None
-            and attestation.get("execution_state") == "not_started"
-            and attestation.get("test_command_started") is False
-            and attestation.get("delivered_isolation") == "not_run"
-        )
-        if not isinstance(value, str) and not preflight_null_isolation:
-            errors.append(f"{field} must be a string")
-    if "effective_policy" in attestation and not isinstance(
-        attestation["effective_policy"], dict
-    ):
-        errors.append("effective_policy must be an object")
-    if "test_command_started" in attestation and not isinstance(
-        attestation["test_command_started"], bool
-    ):
-        errors.append("test_command_started must be a boolean")
-    if "candidate_invocations" in attestation and not _is_nullable_int(
-        attestation["candidate_invocations"]
-    ):
-        errors.append("candidate_invocations must be an integer or null")
-    if "candidate_launcher_invocation_observed" in attestation and not _is_nullable_bool(
-        attestation["candidate_launcher_invocation_observed"]
-    ):
-        errors.append("candidate_launcher_invocation_observed must be a boolean or null")
-    for field in ("verifier_pack_present", "verifier_pack_started", "verifier_pack_completed"):
-        if field in attestation and not _is_nullable_bool(attestation[field]):
-            errors.append(f"{field} must be a boolean or null")
-    for field in ("verifier_pack_tests_passed", "verifier_pack_tests_total"):
-        if field in attestation and not _is_nullable_int(attestation[field]):
-            errors.append(f"{field} must be an integer or null")
-    for field in (
-        "repo_suite_tests_passed",
-        "repo_suite_tests_total",
-        "repo_suite_returncode",
-    ):
-        if field in attestation and not _is_nullable_int(attestation[field]):
-            errors.append(f"{field} must be an integer or null")
-    for field in ("repo_suite_started", "repo_suite_completed", "repo_suite_passed"):
-        if field in attestation and not _is_nullable_bool(attestation[field]):
-            errors.append(f"{field} must be a boolean or null")
-    for field in (
-        "junit_sha256",
-        "junit_digest_format",
-        "verifier_pack_junit_sha256",
-        "verifier_pack_junit_digest_format",
-        "repo_suite_state",
-        "repo_suite_junit_sha256",
-        "repo_suite_junit_digest_format",
-        "repo_suite_verdict_source",
-    ):
-        if field in attestation and not _is_nullable_string(attestation[field]):
-            errors.append(f"{field} must be a string or null")
-    for field in ("verifier_pack_sha256", "verifier_pack_digest_format"):
-        if field in attestation and not _is_nullable_string(attestation[field]):
-            errors.append(f"{field} must be a string or null")
     checks.expect(
         "attestation.types",
-        not errors,
+        not attestation_result.type_errors,
         "attestation field types are valid",
-        "; ".join(errors),
+        "; ".join(attestation_result.type_errors),
     )
-    shape_errors = []
-    if not _valid_utc_timestamp(attestation.get("created_utc")):
-        shape_errors.append("created_utc must be a valid YYYY-MM-DDTHH:MM:SSZ timestamp")
-    if not (
-        isinstance(attestation.get("guard_version"), str)
-        and bool(attestation.get("guard_version"))
-    ):
-        shape_errors.append("guard_version must be non-empty")
-    if not _known_string(attestation.get("mode"), frozenset({"repo", "blackbox"})):
-        shape_errors.append("mode is invalid")
-    candidate_sha = attestation.get("candidate_sha256")
-    if not (isinstance(candidate_sha, str) and bool(_HEX_64.fullmatch(candidate_sha))):
-        shape_errors.append("candidate_sha256 must be a lowercase SHA-256")
-    policy_sha = attestation.get("policy_sha256")
-    if not (isinstance(policy_sha, str) and bool(_HEX_64.fullmatch(policy_sha))):
-        shape_errors.append("policy_sha256 must be a lowercase SHA-256")
-    junit_digest = attestation.get("junit_sha256")
-    junit_format = attestation.get("junit_digest_format")
-    if not (
-        (junit_digest is None and junit_format is None)
-        or (
-            isinstance(junit_digest, str)
-            and bool(_HEX_64.fullmatch(junit_digest))
-            and _known_string(junit_format, _JUNIT_TOP_FORMATS)
-        )
-    ):
-        shape_errors.append("junit digest and format must form a recognized SHA-256 pair")
-    if "repo_suite_junit_digest_format" in attestation:
-        repo_digest = attestation.get("repo_suite_junit_sha256")
-        repo_format = attestation.get("repo_suite_junit_digest_format")
-        if not (
-            (repo_digest is None and repo_format is None)
-            or (
-                isinstance(repo_digest, str)
-                and bool(_HEX_64.fullmatch(repo_digest))
-                and _known_string(repo_format, _JUNIT_PHASE_FORMATS)
-            )
-        ):
-            shape_errors.append(
-                "repo-suite JUnit digest and format must form a recognized SHA-256 pair"
-            )
-    if "verifier_pack_junit_digest_format" in attestation:
-        pack_junit_digest = attestation.get("verifier_pack_junit_sha256")
-        pack_junit_format = attestation.get("verifier_pack_junit_digest_format")
-        if not (
-            (pack_junit_digest is None and pack_junit_format is None)
-            or (
-                isinstance(pack_junit_digest, str)
-                and bool(_HEX_64.fullmatch(pack_junit_digest))
-                and pack_junit_format == JUNIT_XML_DIGEST_FORMAT
-            )
-        ):
-            shape_errors.append(
-                "verifier-pack JUnit digest and format must form a recognized SHA-256 pair"
-            )
-    if not _known_string(attestation.get("execution_state"), _EXECUTION_STATES):
-        shape_errors.append("execution_state is invalid")
-    if not (
-        isinstance(attestation.get("execution_phase"), str)
-        and bool(attestation.get("execution_phase"))
-    ):
-        shape_errors.append("execution_phase must be non-empty")
-    if not _known_string(attestation.get("delivered_isolation"), _ISOLATIONS):
-        shape_errors.append("delivered_isolation is invalid")
-    effective = attestation.get("effective_candidate_isolation")
-    effective_valid = _known_string(effective, _ISOLATIONS)
-    if (
-        effective is None
-        and attestation.get("execution_state") == "not_started"
-        and attestation.get("test_command_started") is False
-        and attestation.get("delivered_isolation") == "not_run"
-    ):
-        effective_valid = True
-    if not effective_valid:
-        shape_errors.append("effective_candidate_isolation is invalid")
-    invocations = attestation.get("candidate_invocations")
-    if _is_int(invocations) and invocations < 0:
-        shape_errors.append("candidate_invocations must be non-negative")
     checks.expect(
         "attestation.shape",
-        not shape_errors,
+        not attestation_result.shape_errors,
         "attestation identities, timestamp, and enums are valid",
-        "; ".join(shape_errors),
+        "; ".join(attestation_result.shape_errors),
     )
-
-
 def _check_lifecycle(
     checks: _Checks,
     record: dict[str, Any],

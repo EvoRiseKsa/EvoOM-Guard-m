@@ -42,6 +42,131 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="record-nested-assurance-required-fields-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before=(
+            "            missing_fields=tuple(sorted(REQUIRED_ASSURANCE - assurance.keys())),\n"
+        ),
+        after="            missing_fields=(),\n",
+        test=(
+            "tests/test_record_nested.py::"
+            "test_required_nested_fields_cannot_be_bypassed"
+        ),
+    ),
+    Mutation(
+        name="record-nested-attestation-required-fields-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before=(
+            "            missing_fields=tuple("
+            "sorted(REQUIRED_ATTESTATION - attestation.keys())),\n"
+        ),
+        after="            missing_fields=(),\n",
+        test=(
+            "tests/test_record_nested.py::"
+            "test_required_nested_fields_cannot_be_bypassed"
+        ),
+    ),
+    Mutation(
+        name="record-nested-preflight-null-command-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before=(
+            '        and attestation.get("test_command_started") is False\n'
+        ),
+        after="        and True\n",
+        test=(
+            "tests/test_record_nested.py::"
+            "test_preflight_null_isolation_requires_the_complete_truth_table"
+        ),
+    ),
+    Mutation(
+        name="record-nested-preflight-null-state-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before=(
+            '        and attestation.get("execution_state") == "not_started"\n'
+        ),
+        after="        and True\n",
+        test=(
+            "tests/test_record_nested.py::"
+            "test_preflight_null_isolation_requires_the_complete_truth_table"
+        ),
+    ),
+    Mutation(
+        name="record-nested-preflight-null-delivery-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before=(
+            '        and attestation.get("delivered_isolation") == "not_run"\n'
+        ),
+        after="        and True\n",
+        test=(
+            "tests/test_record_nested.py::"
+            "test_preflight_null_isolation_requires_the_complete_truth_table"
+        ),
+    ),
+    Mutation(
+        name="record-nested-uppercase-sha256-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before='_HEX_64 = re.compile(r"^[0-9a-f]{64}$")\n',
+        after='_HEX_64 = re.compile(r"^[0-9A-Fa-f]{64}$")\n',
+        test=(
+            "tests/test_record_nested.py::"
+            "test_sha256_shape_requires_exact_lowercase_hex"
+        ),
+    ),
+    Mutation(
+        name="record-nested-sha256-length-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before='_HEX_64 = re.compile(r"^[0-9a-f]{64}$")\n',
+        after='_HEX_64 = re.compile(r"^[0-9a-f]{63,64}$")\n',
+        test=(
+            "tests/test_record_nested.py::"
+            "test_sha256_shape_requires_exact_lowercase_hex"
+        ),
+    ),
+    Mutation(
+        name="record-nested-junit-pair-coupling-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before=(
+            "    return (digest is None and digest_format is None) or (\n"
+            "        _valid_sha256(digest) and "
+            "_known_string(digest_format, allowed_formats)\n"
+            "    )\n"
+        ),
+        after=(
+            "    return (digest is None and digest_format is None) or (\n"
+            "        _valid_sha256(digest) or "
+            "_known_string(digest_format, allowed_formats)\n"
+            "    )\n"
+        ),
+        test=(
+            "tests/test_record_nested.py::"
+            "test_junit_digest_and_format_remain_coupled"
+        ),
+    ),
+    Mutation(
+        name="record-nested-pack-configured-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before='    if pack.get("configured") is not True:\n',
+        after='    if False and pack.get("configured") is not True:\n',
+        test="tests/test_record_nested.py::test_nested_pack_shape_cannot_be_bypassed",
+    ),
+    Mutation(
+        name="record-nested-negative-invocations-bypass",
+        path="evoom_guard/verifiers/record_nested.py",
+        before="    if _is_int(invocations) and invocations < 0:\n",
+        after="    if False and _is_int(invocations) and invocations < 0:\n",
+        test=(
+            "tests/test_record_nested.py::"
+            "test_candidate_invocations_cannot_be_negative"
+        ),
+    ),
+    Mutation(
+        name="record-nested-null-attestation-skip-bypass",
+        path="evoom_guard/record_verifier.py",
+        before='        checks.skip("attestation.types", "attestation is null")\n',
+        after='        checks.pass_("attestation.types", "attestation is null")\n',
+        test="tests/test_record_nested.py::test_null_skip_order_and_early_return_are_exact",
+    ),
+    Mutation(
         name="policy-path-validation-order-bypass",
         path="evoom_guard/policy/config.py",
         before=(
