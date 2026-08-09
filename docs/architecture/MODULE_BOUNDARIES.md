@@ -53,6 +53,19 @@ stable paths are classified directly; no implementation or wire contract moves.
 Mixed facades such as `guard.py`, `blackbox.py`, and `record_verifier.py` remain
 unclassified until real responsibility separation justifies a migration.
 
+Six cohesive stable flat modules now have explicit existing owners without a
+file move or public-identity change. `evidence.py` owns the bounded
+changed-line-coverage observation; `evidence_bundle.py` owns deterministic
+evidence envelopes; and `signing.py` owns exact-byte Ed25519 operations. They
+belong to the evidence layer. `artifact_admission.py` and
+`artifact_digest_admission.py` are admission-layer contracts that bind an
+already verified finalizer decision to one immutable subject. The separate
+`release_source_finalizer.py` contract belongs to finalizer and never upgrades
+its producer evidence into admission. Their exact internal dependency sets are
+executable architecture contracts. No implementation, schema, wire bytes, or
+runtime lookup moved in this classification slice. Mixed facades such as
+`guard.py`, `blackbox.py`, and `record_verifier.py` remain unclassified.
+
 Runner instrumentation is owned by `evoom_guard/runners/`: `protocol.py` defines
 the dependency-free structural contract, `_command.py` owns shared executable
 recognition grammar, the nine runner owner modules contain concrete reporter

@@ -35,11 +35,11 @@ The enforced layer order is explicit and matches `MODULE_BOUNDARIES.md`:
 `foundation -> domain -> policy/candidate/workspace -> execution/isolation ->
 verifiers/runners -> application -> evidence -> finalizer/admission ->
 api/cli/integrations`. A module is assigned to a layer only when its first-level
-name is a real Python package; same-named compatibility files such as
-`evidence.py` remain declared legacy debt until their atomic file-to-package
-migrations. A stable flat path may instead have an explicit semantic owner only
-when the complete module is cohesive and the architecture test freezes its
-dependency closure; mixed facades are not eligible for this exception.
+name is a real Python package. A stable flat path may instead have an explicit
+semantic owner only when its complete dependency closure and responsibilities
+fit one documented layer and the architecture test freezes that closure;
+mixed compatibility facades remain unclassified until real responsibility
+separation justifies a migration.
 
 The former miscellaneous `record_verification` package has been removed.
 Its report-envelope and isolation-parity responsibilities now have explicit
@@ -267,8 +267,9 @@ Release Source Admission V2 enters the real `admission.release_source`
 package. The extracted module imports only explicit public contracts from the
 legacy evidence, finalizer-derivation pin, provider, release-source, receipt,
 and signing components.
-Those flat providers remain unclassified architectural debt until their atomic
-Stage 10 migrations; their shared public facades prevent that debt from
+The cohesive evidence, signing, and release-source-finalizer providers are now
+explicitly classified by semantic ownership. Mixed provider facades remain
+unclassified architectural debt; public contracts keep that debt from
 spreading into the new admission layer.
 
 Import-boundary ratchet revision 7 performs the atomic `cli.py` to
@@ -354,6 +355,16 @@ verifier-owned. An executable closure test requires all four to retain zero
 internal dependencies. The unclassified-module ceiling therefore drops from
 21 to 17 while cycles, private imports, wildcard imports, unresolved dynamic
 imports, and layer violations remain unchanged.
+
+Import-boundary ratchet revision 17 classifies six more cohesive stable flat
+owners without moving implementation or changing public identities.
+`evidence.py`, `evidence_bundle.py`, and `signing.py` belong to evidence;
+`artifact_admission.py` and `artifact_digest_admission.py` belong to admission;
+and `release_source_finalizer.py` belongs to finalizer. An executable closure
+test freezes their complete internal dependency sets and layer direction. The
+unclassified-module ceiling drops from 17 to 11 while cycles, private imports,
+wildcard imports, unresolved dynamic imports, and layer violations remain
+zero. Remaining mixed facades are not relabeled by this revision.
 
 Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and

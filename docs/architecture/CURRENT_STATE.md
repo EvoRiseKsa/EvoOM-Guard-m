@@ -36,7 +36,7 @@ verifier-owned. Mixed flat facades remain unclassified debt.
 - All 41 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
 - The import ratchet currently permits zero dependency cycles and zero
-  cross-package private-symbol imports, with 17 mixed or not-yet-classified
+  cross-package private-symbol imports, with 11 mixed or not-yet-classified
   flat modules remaining. Trusted Finalizer source validation is
   now an explicit public owner contract shared by Artifact Admission V1/V2;
   selected-path Raw-Git regular-blob projection is an explicit public Finalizer

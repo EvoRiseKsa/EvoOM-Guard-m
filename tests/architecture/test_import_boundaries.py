@@ -60,19 +60,22 @@ LAYER_RANK = {
     for rank, package_names in enumerate(LAYER_GROUPS)
     for package_name in package_names
 }
-# Published versioned wire vocabularies intentionally retain their historical
-# flat import paths. Classify those exact compatibility modules by semantic
-# ownership so a new schema version does not become architectural debt merely
-# to preserve its stable public path.
-# Stable flat public paths may be classified only when their whole module has a
-# single documented owner.  Mixed compatibility facades must remain explicit
-# unclassified debt until their responsibilities are separated.
+# Stable public modules may retain historical flat import paths when the whole
+# module has one documented semantic owner.  Classify only those exact modules;
+# mixed compatibility facades remain explicit architectural debt until their
+# responsibilities are separated.
 FLAT_MODULE_LAYERS = {
     "evoom_guard.contracts": "foundation",
     "evoom_guard.strict_json": "foundation",
     "evoom_guard.runtime_identity": "workspace",
     "evoom_guard.pack_manifest": "verifiers",
+    "evoom_guard.artifact_admission": "admission",
+    "evoom_guard.artifact_digest_admission": "admission",
     "evoom_guard.change_attempt_observation": "evidence",
+    "evoom_guard.evidence": "evidence",
+    "evoom_guard.evidence_bundle": "evidence",
+    "evoom_guard.release_source_finalizer": "finalizer",
+    "evoom_guard.signing": "evidence",
     "evoom_guard.verdict_contract_v1_11": "domain",
     "evoom_guard.verdict_contract_v1_12": "domain",
 }
@@ -851,6 +854,69 @@ def test_flat_foundation_and_verification_owners_are_classified_and_closed() -> 
         assert not any(
             violation.startswith(f"{module} |")
             for violation in analysis.violations["cross_package_private_imports"]
+        )
+
+
+def test_flat_evidence_admission_and_finalizer_owners_follow_declared_layers() -> None:
+    """Classify cohesive stable paths without hiding their dependency closure."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    expected_layers = {
+        "evoom_guard.artifact_admission": "admission",
+        "evoom_guard.artifact_digest_admission": "admission",
+        "evoom_guard.evidence": "evidence",
+        "evoom_guard.evidence_bundle": "evidence",
+        "evoom_guard.release_source_finalizer": "finalizer",
+        "evoom_guard.signing": "evidence",
+    }
+    expected_dependencies = {
+        "evoom_guard.artifact_admission": {
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.signing",
+            "evoom_guard.trusted_finalizer",
+        },
+        "evoom_guard.artifact_digest_admission": {
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.signing",
+            "evoom_guard.trusted_finalizer",
+        },
+        "evoom_guard.evidence": {
+            "evoom_guard.candidate",
+            "evoom_guard.execution",
+            "evoom_guard.policy.harness",
+            "evoom_guard.verifiers.harness_policy",
+            "evoom_guard.verifiers.repo_verifier",
+            "evoom_guard.workspace",
+            "evoom_guard.workspace.repository",
+        },
+        "evoom_guard.evidence_bundle": {
+            "evoom_guard.record_verifier",
+            "evoom_guard.signing",
+            "evoom_guard.strict_json",
+        },
+        "evoom_guard.release_source_finalizer": {
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.finalizer_derivation",
+            "evoom_guard.record_verifier",
+            "evoom_guard.signing",
+        },
+        "evoom_guard.signing": set(),
+    }
+
+    assert {
+        module: FLAT_MODULE_LAYERS.get(module) for module in expected_layers
+    } == expected_layers
+    for module, expected in expected_dependencies.items():
+        assert module in analysis.modules
+        assert module not in analysis.violations["unclassified_modules"]
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        } == expected
+        assert not any(
+            violation.startswith(f"{module} |")
+            for violation in analysis.violations["layer_violations"]
         )
 
 
