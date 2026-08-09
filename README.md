@@ -62,6 +62,13 @@ The repository documentation follows the repository source and may describe
 features not present in the latest ledger-recorded consumer release. Confirm
 each page's version and evidence boundary before copying a command.
 
+For external review of the frozen `v4.5.0` target, use the immutable
+[`review-v4.5.0-r1` reviewer companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.5.0-r1)
+and the open [independent-review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
+The companion contains review metadata and instructions, not an audit result
+or a product update. `EvoRiseKsa` and `MANA-awam` are controlled by the same
+owner; their cross-account evidence is not independent validation.
+
 ## Install and run
 
 EvoOM Guard is not distributed through PyPI. Install the recorded release
