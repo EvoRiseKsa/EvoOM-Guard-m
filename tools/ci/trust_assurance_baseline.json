@@ -14,8 +14,9 @@
       "baseline_report": {"statements": 279, "missing_statements": 99, "branches": 110, "combined_percent": 59},
       "branch_floor": {"covered": 48, "total": 110},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this module at the baseline commit; mutations in extracted workspace modules do not count as direct coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed traversal-containment mutation targets this file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -24,8 +25,9 @@
       "baseline_report": {"statements": 451, "missing_statements": 141, "branches": 162, "combined_percent": 65},
       "branch_floor": {"covered": 86, "total": 162},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this module at the baseline commit."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed fallback tree-digest mutation targets this file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -34,8 +36,9 @@
       "baseline_report": {"statements": 179, "missing_statements": 46, "branches": 74, "combined_percent": 70},
       "branch_floor": {"covered": 43, "total": 74},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this module at the baseline commit."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed pre-existing setup-output mutation targets this file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -44,8 +47,9 @@
       "baseline_report": {"statements": 653, "missing_statements": 160, "branches": 242, "combined_percent": 71},
       "branch_floor": {"covered": 138, "total": 242},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed builder/admitter run-separation mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -54,8 +58,9 @@
       "baseline_report": {"statements": 559, "missing_statements": 121, "branches": 198, "combined_percent": 73},
       "branch_floor": {"covered": 111, "total": 198},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed judge-owned test-path mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -64,8 +69,9 @@
       "baseline_report": {"statements": 332, "missing_statements": 81, "branches": 92, "combined_percent": 74},
       "branch_floor": {"covered": 61, "total": 92},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this module at the baseline commit."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed deployment path-containment mutation targets this file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -74,8 +80,9 @@
       "baseline_report": {"statements": 336, "missing_statements": 70, "branches": 96, "combined_percent": 75},
       "branch_floor": {"covered": 56, "total": 96},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed regular-file subject-kind mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -84,8 +91,9 @@
       "baseline_report": {"statements": 411, "missing_statements": 80, "branches": 174, "combined_percent": 76},
       "branch_floor": {"covered": 111, "total": 174},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed candidate-isolation mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -94,8 +102,9 @@
       "baseline_report": {"statements": 347, "missing_statements": 66, "branches": 92, "combined_percent": 77},
       "branch_floor": {"covered": 55, "total": 92},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed digest-algorithm mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -104,8 +113,9 @@
       "baseline_report": {"statements": 523, "missing_statements": 93, "branches": 178, "combined_percent": 77},
       "branch_floor": {"covered": 107, "total": 178},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed trust-domain key-separation mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
@@ -114,8 +124,9 @@
       "baseline_report": {"statements": 525, "missing_statements": 97, "branches": 158, "combined_percent": 77},
       "branch_floor": {"covered": 95, "total": 158},
       "mutation": {
-        "status": "gap",
-        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 1,
+        "scope_note": "One explicit reviewed V1 deny-only decision mutation targets this domain file in the deterministic gate; this is not a whole-module mutation score."
       }
     },
     {
