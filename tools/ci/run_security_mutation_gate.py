@@ -4413,11 +4413,12 @@ MUTATIONS = (
         path="evoom_guard/finalizer_derivation.py",
         before=(
             "        if interrupted:\n"
-            "            if not _terminate_git_process_tree(process):\n"
+            "            if _terminate_git_process_tree(process) is not True:\n"
         ),
         after=(
             "        if interrupted:\n"
-            "            if False and not _terminate_git_process_tree(process):\n"
+            "            if False and "
+            "_terminate_git_process_tree(process) is not True:\n"
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
@@ -4425,15 +4426,31 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="finalizer-git-interrupt-exact-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "        if interrupted:\n"
+            "            if _terminate_git_process_tree(process) is not True:\n"
+        ),
+        after=(
+            "        if interrupted:\n"
+            "            if not _terminate_git_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_interrupted_query_rejects_truthy_non_bool_cleanup_proof"
+        ),
+    ),
+    Mutation(
         name="finalizer-git-posix-post-completion-proof-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
             '            if os.name == "posix":\n'
-            "                if not _terminate_git_process_tree(process):\n"
+            "                if _terminate_git_process_tree(process) is not True:\n"
         ),
         after=(
             '            if False and os.name == "posix":\n'
-            "                if not _terminate_git_process_tree(process):\n"
+            "                if _terminate_git_process_tree(process) is not True:\n"
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
@@ -4441,19 +4458,62 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="finalizer-git-post-poll-primary-suppression",
+        name="finalizer-git-posix-exact-proof-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
-            "                raise\n"
+            '            if os.name == "posix":\n'
+            "                if _terminate_git_process_tree(process) is not True:\n"
+        ),
+        after=(
+            '            if os.name == "posix":\n'
+            "                if not _terminate_git_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_posix_completion_rejects_truthy_non_bool_cleanup_proof"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-post-poll-silent-cleanup-restore",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "            process.wait(timeout=_GIT_KILL_REAP_SECONDS)\n"
             '            if os.name == "posix":\n'
         ),
         after=(
-            "                pass\n"
+            "            try:\n"
+            "                process.wait(timeout=_GIT_KILL_REAP_SECONDS)\n"
+            "            except BaseException:\n"
+            "                try:\n"
+            "                    _terminate_git_process_tree(process)\n"
+            "                except BaseException:\n"
+            "                    pass\n"
+            "                raise\n"
             '            if os.name == "posix":\n'
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
-            "test_post_poll_wait_baseexception_remains_authoritative"
+            "test_post_poll_abort_does_not_hide_the_first_tree_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-primary-reraise",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                        )\n"
+            "        raise\n"
+            "\n\n"
+            "def _git_command(\n"
+        ),
+        after=(
+            "                        )\n"
+            "        raise primary\n"
+            "\n\n"
+            "def _git_command(\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_preserves_primary_and_runs_both_stages"
         ),
     ),
     Mutation(
@@ -4476,16 +4536,130 @@ MUTATIONS = (
         name="finalizer-git-abort-cleanup-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
-            "    except BaseException:\n"
-            "        # Preserve the active exception while attempting bounded cleanup.\n"
+            "    except BaseException as primary:\n"
+            "        # Preserve the exact active exception while independently attempting\n"
         ),
         after=(
-            "    except Exception:\n"
-            "        # Preserve the active exception while attempting bounded cleanup.\n"
+            "    except Exception as primary:\n"
+            "        # Preserve the exact active exception while independently attempting\n"
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
             "test_reader_start_failure_kills_and_reaps_git_without_masking_primary"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-tree-exact-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="                    if tree_cleanup_result is True:\n",
+        after="                    if tree_cleanup_result:\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-tree-raised-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            '                        "Raw-Git finalizer process-tree abort cleanup raised while "\n'
+            '                        "preserving the primary exception: "\n'
+            "                        + abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after=(
+            "                except BaseException as cleanup_error:\n"
+            "                    pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-tree-false-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                    else:\n"
+            "                        note_abort_cleanup_failure(\n"
+            "                            primary,\n"
+            '                            "Raw-Git finalizer process-tree abort cleanup was not "\n'
+            '                            "proven while preserving the primary exception",\n'
+            "                        )\n"
+        ),
+        after=(
+            "                    else:\n"
+            "                        pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-reader-exact-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="                    if reader_cleanup_result is True:\n",
+        after="                    if reader_cleanup_result:\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-reader-raised-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            '                        "Raw-Git finalizer output-reader abort cleanup raised while "\n'
+            '                        "preserving the primary exception: "\n'
+            "                        + abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after=(
+            "                except BaseException as cleanup_error:\n"
+            "                    pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-reader-false-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                    else:\n"
+            "                        note_abort_cleanup_failure(\n"
+            "                            primary,\n"
+            '                            "Raw-Git finalizer output-reader abort cleanup was not "\n'
+            '                            "proven while preserving the primary exception",\n'
+            "                        )\n"
+        ),
+        after=(
+            "                    else:\n"
+            "                        pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-second-cleanup-stage-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="            if readers_closed is not True:\n",
+        after=(
+            "            if cleanup_proven is True and readers_closed is not True:\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_retains_two_ordered_bounded_failures"
         ),
     ),
     Mutation(

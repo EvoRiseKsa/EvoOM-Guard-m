@@ -30,6 +30,8 @@ from evoom_guard.evidence_bundle import (
 )
 from evoom_guard.execution import (
     ProcessLimits,
+    abort_cleanup_exception_summary,
+    note_abort_cleanup_failure,
     process_group_popen_kwargs,
     terminate_process_tree,
 )
@@ -800,30 +802,26 @@ def _run_git_command(
 
         interrupted = timed_out or bool(read_errors) or bool(overflow)
         if interrupted:
-            if not _terminate_git_process_tree(process):
+            if _terminate_git_process_tree(process) is not True:
                 raise FinalizerDerivationError(
                     "could not read immutable Git object: Git query process "
                     "cleanup could not be proven"
                 )
             cleanup_proven = True
         else:
-            try:
-                process.wait(timeout=_GIT_KILL_REAP_SECONDS)
-            except BaseException:
-                try:
-                    cleanup_proven = _terminate_git_process_tree(process)
-                except BaseException:
-                    pass
-                raise
+            process.wait(timeout=_GIT_KILL_REAP_SECONDS)
             if os.name == "posix":
-                if not _terminate_git_process_tree(process):
+                if _terminate_git_process_tree(process) is not True:
                     raise FinalizerDerivationError(
                         "could not read immutable Git object: Git query process "
                         "cleanup could not be proven"
                     )
                 cleanup_proven = True
 
-        if not _join_and_close_git_readers(reader_start_attempts, streams):
+        if (
+            _join_and_close_git_readers(reader_start_attempts, streams)
+            is not True
+        ):
             raise FinalizerDerivationError(
                 "could not read immutable Git object: Git query output readers "
                 "did not stop after cleanup"
@@ -848,22 +846,52 @@ def _run_git_command(
                 f"Git object lookup failed: {detail or process.returncode}"
             )
         return bytes(stdout)
-    except BaseException:
-        # Preserve the active exception while attempting bounded cleanup.
+    except BaseException as primary:
+        # Preserve the exact active exception while independently attempting
+        # every bounded cleanup stage. Secondary cleanup failures are evidence,
+        # never replacements for the authoritative primary.
         if process is not None:
-            if not cleanup_proven:
+            if cleanup_proven is not True:
                 try:
-                    cleanup_proven = _terminate_git_process_tree(process)
-                except BaseException:
-                    pass
-            if not readers_closed:
+                    tree_cleanup_result = _terminate_git_process_tree(process)
+                except BaseException as cleanup_error:
+                    note_abort_cleanup_failure(
+                        primary,
+                        "Raw-Git finalizer process-tree abort cleanup raised while "
+                        "preserving the primary exception: "
+                        + abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if tree_cleanup_result is True:
+                        cleanup_proven = True
+                    else:
+                        note_abort_cleanup_failure(
+                            primary,
+                            "Raw-Git finalizer process-tree abort cleanup was not "
+                            "proven while preserving the primary exception",
+                        )
+            if readers_closed is not True:
                 try:
-                    readers_closed = _join_and_close_git_readers(
+                    reader_cleanup_result = _join_and_close_git_readers(
                         reader_start_attempts,
                         streams,
                     )
-                except BaseException:
-                    pass
+                except BaseException as cleanup_error:
+                    note_abort_cleanup_failure(
+                        primary,
+                        "Raw-Git finalizer output-reader abort cleanup raised while "
+                        "preserving the primary exception: "
+                        + abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if reader_cleanup_result is True:
+                        readers_closed = True
+                    else:
+                        note_abort_cleanup_failure(
+                            primary,
+                            "Raw-Git finalizer output-reader abort cleanup was not "
+                            "proven while preserving the primary exception",
+                        )
         raise
 
 
