@@ -156,7 +156,7 @@ ReadFileDescriptor = Callable[[int, int], bytes]
 WindowsOpenRegularSnapshot = Callable[[str, int], int]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CandidateTreeCompatibilitySnapshot:
     """One immutable view of Guard's candidate-tree compatibility seams.
 

@@ -53,6 +53,13 @@ retained evidence say so.
   pure phase, reducing its measured C901 complexity from 49 to 42. Exact error
   type, message, cause, validation order, and normalized payload behavior are
   frozen by characterization and focused mutation tests.
+- Made both newly extracted callable snapshots structurally immutable with
+  slotted frozen dataclasses, and replaced the release-source snapshot's
+  ellipsis-based callable annotations with exact Protocol signatures. Focused
+  tests and reviewed mutations now reject loss of either frozen assignment or
+  slot-backed storage. This is a typing and compatibility-contract hardening;
+  it does not change runtime lookup timing, verdicts, schemas, or canonical
+  bytes.
 
 ### Fixed
 

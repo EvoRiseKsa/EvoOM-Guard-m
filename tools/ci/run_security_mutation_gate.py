@@ -3200,13 +3200,32 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="candidate-tree-compatibility-snapshot-mutable",
+        name="candidate-tree-compatibility-snapshot-frozen-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before=(
+            "@dataclass(frozen=True, slots=True)\n"
+            "class CandidateTreeCompatibilitySnapshot:\n"
+        ),
+        after=(
+            "@dataclass(slots=True)\n"
+            "class CandidateTreeCompatibilitySnapshot:\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_tree_compatibility_snapshot_is_public_and_immutable"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-compatibility-snapshot-slots-bypass",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "@dataclass(frozen=True, slots=True)\n"
+            "class CandidateTreeCompatibilitySnapshot:\n"
+        ),
+        after=(
             "@dataclass(frozen=True)\n"
             "class CandidateTreeCompatibilitySnapshot:\n"
         ),
-        after="@dataclass\nclass CandidateTreeCompatibilitySnapshot:\n",
         test=(
             "tests/test_candidate_tree_characterization.py::"
             "test_candidate_tree_compatibility_snapshot_is_public_and_immutable"

@@ -135,6 +135,7 @@ def test_candidate_tree_compatibility_snapshot_is_public_and_immutable(
     assert snapshot.unverifiable_changed_paths_error is early_error
     assert snapshot.blocks_from_dirs is early_blocks
     assert snapshot.serialize_candidate_blocks is early_serialize
+    assert not hasattr(snapshot, "__dict__")
 
     with pytest.raises(FrozenInstanceError):
         snapshot.blocks_from_dirs = lambda _base, _head: ({}, [])

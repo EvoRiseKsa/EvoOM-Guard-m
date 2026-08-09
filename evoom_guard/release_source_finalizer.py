@@ -46,7 +46,7 @@ import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from evoom_guard.finalizer_derivation import GitExecutablePin
@@ -252,6 +252,44 @@ class VerifiedReleaseSourceEvidence:
     decision: str
 
 
+class _PublishBytes(Protocol):
+    def __call__(
+        self,
+        path: str,
+        data: bytes,
+        *,
+        force: bool,
+        prefix: str,
+        label: str,
+    ) -> str: ...
+
+
+class _RecordSnapshot(Protocol):
+    def __call__(
+        self,
+        path: str,
+    ) -> tuple[bytes, dict[str, Any], dict[str, Any]]: ...
+
+
+class _DeriveReleaseSourceBindings(Protocol):
+    def __call__(
+        self,
+        *,
+        git_repository: str,
+        source: Mapping[str, Any],
+        git_repository_is_bare: bool = False,
+        git_executable: GitExecutablePin | None = None,
+    ) -> DerivedReleaseSourceBindings: ...
+
+
+class _ContextFromReleaseSourceBindings(Protocol):
+    def __call__(
+        self,
+        bindings: DerivedReleaseSourceBindings,
+        record: Mapping[str, Any],
+    ) -> dict[str, Any]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ReleaseSourceFinalizerPrimitiveSnapshot:
     """Immutable release-source operations for trusted orchestration.
@@ -263,11 +301,11 @@ class ReleaseSourceFinalizerPrimitiveSnapshot:
     owner-private spellings across the package boundary.
     """
 
-    publish_bytes: Callable[..., str]
-    record_snapshot: Callable[..., tuple[bytes, dict[str, Any], dict[str, Any]]]
+    publish_bytes: _PublishBytes
+    record_snapshot: _RecordSnapshot
     validate_source_context: Callable[[Mapping[str, Any], Mapping[str, Any]], None]
-    derive_release_source_bindings: Callable[..., DerivedReleaseSourceBindings]
-    context_from_release_source_bindings: Callable[..., dict[str, Any]]
+    derive_release_source_bindings: _DeriveReleaseSourceBindings
+    context_from_release_source_bindings: _ContextFromReleaseSourceBindings
 
 
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str], label: str) -> None:
