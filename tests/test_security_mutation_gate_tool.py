@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+import time
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -79,3 +82,140 @@ def test_mutant_timeout_is_infrastructure_error(
 
     assert status == "infrastructure-error"
     assert detail == "mutant exceeded 1s"
+
+
+def test_parallel_results_match_sequential_inventory_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Completion order cannot reorder or otherwise change gate results."""
+
+    selected = list(mutation_gate.MUTATIONS[:4])
+    positions = {mutation.name: index for index, mutation in enumerate(selected)}
+
+    def fake_run(
+        mutation: mutation_gate.Mutation, timeout: float
+    ) -> tuple[str, str]:
+        del timeout
+        time.sleep((len(selected) - positions[mutation.name]) * 0.005)
+        return "killed", mutation.name
+
+    monkeypatch.setattr(mutation_gate, "_run_mutant", fake_run)
+
+    sequential = mutation_gate._run_selected(selected, 1, 1)
+    parallel = mutation_gate._run_selected(selected, 1, 4)
+
+    assert parallel == sequential
+    assert [detail for _status, detail in parallel] == [
+        mutation.name for mutation in selected
+    ]
+
+
+def test_parallel_worker_exception_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A worker exception is infrastructure failure, never a killed mutant."""
+
+    selected = list(mutation_gate.MUTATIONS[:2])
+
+    def fake_run(
+        mutation: mutation_gate.Mutation, timeout: float
+    ) -> tuple[str, str]:
+        del timeout
+        if mutation == selected[0]:
+            raise ValueError("worker exploded")
+        return "killed", mutation.name
+
+    monkeypatch.setattr(mutation_gate, "_run_mutant", fake_run)
+
+    results = mutation_gate._run_selected(selected, 1, 2)
+
+    assert results == [
+        ("infrastructure-error", "ValueError: worker exploded"),
+        ("killed", selected[1].name),
+    ]
+
+
+def test_overlay_process_receives_only_its_private_temp_roots(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Each pytest child binds generic and pytest-specific temp state to its overlay."""
+
+    captured: dict[str, Any] = {}
+
+    class _ImmediateProcess:
+        def __init__(self, args: list[str]) -> None:
+            self.args = args
+            self.returncode = 1
+
+        def communicate(self, timeout: float) -> tuple[str, str]:
+            del timeout
+            return "", ""
+
+    def fake_popen(args: list[str], **kwargs: Any) -> _ImmediateProcess:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return _ImmediateProcess(args)
+
+    overlay = tmp_path / "overlay"
+    overlay.mkdir()
+    monkeypatch.setenv("PYTHONPATH", "must-be-removed")
+    monkeypatch.setattr(mutation_gate, "_watchdog_popen_kwargs", lambda: {})
+    monkeypatch.setattr(mutation_gate.subprocess, "Popen", fake_popen)
+
+    completed = mutation_gate._run_overlay_test(
+        overlay,
+        mutation_gate.MUTATIONS[0],
+        1,
+    )
+
+    assert completed.returncode == 1
+    kwargs = captured["kwargs"]
+    environment = kwargs["env"]
+    process_temp = str((overlay / ".process-tmp").resolve())
+    assert environment["TMPDIR"] == process_temp
+    assert environment["TEMP"] == process_temp
+    assert environment["TMP"] == process_temp
+    assert "PYTHONPATH" not in environment
+    bootstrap = captured["args"][2]
+    assert "no:cacheprovider" in bootstrap
+    assert repr(str((overlay / ".pytest-tmp").resolve())) in bootstrap
+
+
+def test_parallel_mutants_use_distinct_isolated_roots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concurrent mutants cannot share package, pytest, or process temp roots."""
+
+    selected = list(mutation_gate.MUTATIONS[:4])
+    barrier = threading.Barrier(len(selected))
+    lock = threading.Lock()
+    calls: dict[str, list[Path]] = {mutation.name: [] for mutation in selected}
+
+    def fake_overlay_run(
+        overlay: Path,
+        mutation: mutation_gate.Mutation,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[str]:
+        del timeout
+        with lock:
+            calls[mutation.name].append(overlay.resolve())
+            call_number = len(calls[mutation.name])
+        if call_number == 1:
+            barrier.wait(timeout=5)
+            return subprocess.CompletedProcess(["pytest"], 0, "", "")
+        return subprocess.CompletedProcess(["pytest"], 1, "", "")
+
+    monkeypatch.setattr(mutation_gate, "_run_overlay_test", fake_overlay_run)
+    monkeypatch.setattr(mutation_gate, "_apply_mutation", lambda *_args: None)
+
+    results = mutation_gate._run_selected(selected, 1, 4)
+
+    assert results == [("killed", "")] * len(selected)
+    overlays = [paths[0] for paths in calls.values()]
+    assert len(set(overlays)) == len(selected)
+    for paths in calls.values():
+        assert len(paths) == 2
+        assert paths[0] == paths[1]
+    assert len({path / ".process-tmp" for path in overlays}) == len(selected)
+    assert len({path / ".pytest-tmp" for path in overlays}) == len(selected)

@@ -121,7 +121,9 @@ jobs:
 
       - name: Security mutation gate (Python 3.12)
         if: matrix.python-version == '3.12'
-        run: python tools/ci/run_security_mutation_gate.py
+        # Keep the worker count explicit so CI cost and ordering do not depend
+        # on the hosted runner's reported CPU count.
+        run: python tools/ci/run_security_mutation_gate.py --workers 4
 
       - name: Import smoke (stdlib-only core, no extras)
         run: |

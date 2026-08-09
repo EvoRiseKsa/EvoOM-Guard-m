@@ -63,6 +63,9 @@ captured behavioral baseline.
 - A bounded deterministic mutation gate for assurance-sensitive logic:
   `python tools/ci/run_security_mutation_gate.py`. Every reviewed mutant must be
   killed by an assertion; timeouts and test infrastructure errors fail closed.
+  Local runs default to one worker. CI requests four workers explicitly; every
+  concurrent mutant receives its own package overlay, process-temp root, pytest
+  base temp, and watchdog process group, while reports remain in inventory order.
 
 For `R2` slices, compatibility covers published behavior and module/effect
 seams explicitly characterized before extraction. Arbitrary runtime rebinding
