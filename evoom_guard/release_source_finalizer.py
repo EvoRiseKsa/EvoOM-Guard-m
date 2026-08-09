@@ -55,14 +55,30 @@ from evoom_guard.evidence_bundle import (
     MAX_ARCHIVE_BYTES,
     MAX_VERDICT_BYTES,
     EvidenceBundleError,
-    _archive_bytes,
-    _canonical_json,
-    _load_json_object,
-    _preflight_zip,
-    _read_archive_member,
-    _read_regular_file,
-    _sha256,
-    _validate_member_metadata,
+)
+from evoom_guard.evidence_bundle import (
+    canonical_archive_bytes as _archive_bytes,
+)
+from evoom_guard.evidence_bundle import (
+    canonical_json_bytes as _canonical_json,
+)
+from evoom_guard.evidence_bundle import (
+    load_json_object_bytes as _load_json_object,
+)
+from evoom_guard.evidence_bundle import (
+    preflight_canonical_zip as _preflight_zip,
+)
+from evoom_guard.evidence_bundle import (
+    read_archive_member_bytes as _read_archive_member,
+)
+from evoom_guard.evidence_bundle import (
+    read_regular_file_bytes as _read_regular_file,
+)
+from evoom_guard.evidence_bundle import (
+    sha256_bytes as _sha256,
+)
+from evoom_guard.evidence_bundle import (
+    validate_canonical_archive_member as _validate_member_metadata,
 )
 from evoom_guard.record_verifier import verify_record
 
@@ -956,7 +972,12 @@ def seal_release_source_bundle(
         raise ReleaseSourceFinalizerError(
             "trusted raw-Git derivation does not exactly match the expected release context"
         )
-    from evoom_guard.signing import _load_private_key_snapshot, _sign_bytes_with_key_id
+    from evoom_guard.signing import (
+        load_signing_key_snapshot as _load_private_key_snapshot,
+    )
+    from evoom_guard.signing import (
+        sign_bytes_with_snapshot as _sign_bytes_with_key_id,
+    )
 
     signing_key = _load_private_key_snapshot(private_key_path)
     if signing_key.key_id in prohibited:

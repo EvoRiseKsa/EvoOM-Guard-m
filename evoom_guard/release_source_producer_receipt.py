@@ -38,12 +38,18 @@ if TYPE_CHECKING:
 from evoom_guard.evidence_bundle import (
     MAX_VERDICT_BYTES,
     EvidenceBundleError,
-    _canonical_json,
-    _load_json_object,
-    _read_regular_file,
 )
 from evoom_guard.evidence_bundle import (
-    _sha256 as _sha256_bytes,
+    canonical_json_bytes as _canonical_json,
+)
+from evoom_guard.evidence_bundle import (
+    load_json_object_bytes as _load_json_object,
+)
+from evoom_guard.evidence_bundle import (
+    read_regular_file_bytes as _read_regular_file,
+)
+from evoom_guard.evidence_bundle import (
+    sha256_bytes as _sha256_bytes,
 )
 from evoom_guard.github_attestation import (
     GITHUB_ATTESTATION_CERT_OIDC_ISSUER,
