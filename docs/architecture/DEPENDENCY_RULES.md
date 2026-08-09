@@ -314,6 +314,13 @@ comparisons, and the historical producer/trigger/admitter error order remains
 unchanged. No schema or wire contract changes; the cross-package private-import
 ceiling drops from 6 to 5.
 
+Import-boundary ratchet revision 13 replaces the producer-receipt owner's two
+direct imports of Finalizer-private publishing and context-validation functions
+with one immutable public primitive snapshot captured at module entry. The
+snapshot freezes the historical import-time binding behavior as one coherent
+unit and leaves exact output bytes and exception identity unchanged. The
+cross-package private-import ceiling drops from 5 to 3.
+
 The verifier-owned `record_policy` module is a new classified verifier-layer
 owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy

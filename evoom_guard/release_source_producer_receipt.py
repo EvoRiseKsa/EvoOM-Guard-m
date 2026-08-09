@@ -66,15 +66,18 @@ from evoom_guard.release_source_finalizer import (
     DerivedReleaseSourceBindings,
     ReleaseSourceFinalizerError,
     VerifiedReleaseSourceHandoff,
-    _publish_bytes,
-    _validate_source_context,
     context_from_release_source_bindings,
     derive_release_source_bindings,
     inspect_release_source_handoff,
+    snapshot_release_source_finalizer_primitives,
     validate_release_source,
     validate_release_source_context,
     verify_release_source_handoff,
 )
+
+_release_source_finalizer_primitives = snapshot_release_source_finalizer_primitives()
+_publish_bytes = _release_source_finalizer_primitives.publish_bytes
+_validate_source_context = _release_source_finalizer_primitives.validate_source_context
 
 RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT = "EVOGUARD_RELEASE_SOURCE_PRODUCER_RECEIPT_V1"
 RELEASE_SOURCE_PRODUCER_RUNTIME_FORMAT = "EVOGUARD_GUARD_ZIPAPP_SHA256_V1"

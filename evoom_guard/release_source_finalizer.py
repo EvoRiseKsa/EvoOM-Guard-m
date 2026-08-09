@@ -43,7 +43,7 @@ import os
 import re
 import tempfile
 import zipfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -655,6 +655,31 @@ def _publish_bytes(path: str, data: bytes, *, force: bool, prefix: str, label: s
             pass
         raise
     return absolute
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseSourceFinalizerPrimitiveSnapshot:
+    """Entry-stable finalizer primitives for fail-closed orchestration code.
+
+    The public convenience functions intentionally remain live facades.  A
+    consumer that historically imported the private implementations at module
+    entry needs one coherent snapshot instead, so later owner monkeypatches do
+    not change only part of its already-imported behavior.
+    """
+
+    publish_bytes: Callable[..., str]
+    record_snapshot: Callable[[str], tuple[bytes, dict[str, Any], dict[str, Any]]]
+    validate_source_context: Callable[[Mapping[str, Any], Mapping[str, Any]], None]
+
+
+def snapshot_release_source_finalizer_primitives() -> ReleaseSourceFinalizerPrimitiveSnapshot:
+    """Return one immutable snapshot of the current finalizer primitives."""
+
+    return ReleaseSourceFinalizerPrimitiveSnapshot(
+        publish_bytes=_publish_bytes,
+        record_snapshot=_record_snapshot,
+        validate_source_context=_validate_source_context,
+    )
 
 
 def publish_release_source_output_bytes(

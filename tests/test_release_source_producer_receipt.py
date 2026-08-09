@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import copy
+import importlib
 import json
+from collections.abc import Mapping
+from dataclasses import FrozenInstanceError, fields
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +17,7 @@ from jsonschema import Draft202012Validator
 from test_release_source_finalizer import _commit, _git, _make_raw_git_repository, _strong_record
 
 from evoom_guard import (
+    evidence_bundle,
     github_attestation,
     release_source_finalizer,
     release_source_producer_receipt,
@@ -120,6 +124,180 @@ def _receipt_inputs(tmp_path: Path, *, include_admitter: bool = False):
         "runner_class": "github-hosted",
     }
     return repo, verdict, handoff, source, context, producer, target
+
+
+def test_release_source_finalizer_primitive_snapshot_is_exact_and_immutable() -> None:
+    snapshot = release_source_finalizer.snapshot_release_source_finalizer_primitives()
+
+    assert isinstance(
+        snapshot,
+        release_source_finalizer.ReleaseSourceFinalizerPrimitiveSnapshot,
+    )
+    assert tuple(field.name for field in fields(snapshot)) == (
+        "publish_bytes",
+        "record_snapshot",
+        "validate_source_context",
+    )
+    assert snapshot.publish_bytes is release_source_finalizer._publish_bytes
+    assert snapshot.record_snapshot is release_source_finalizer._record_snapshot
+    assert snapshot.validate_source_context is release_source_finalizer._validate_source_context
+    assert not hasattr(snapshot, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        snapshot.publish_bytes = release_source_finalizer._publish_bytes
+
+
+def test_producer_finalizer_primitives_are_snapshotted_at_module_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo, verdict, handoff, source, context, producer, _target = _receipt_inputs(tmp_path)
+    owner = release_source_finalizer
+    consumer = release_source_producer_receipt
+    original_publish = owner._publish_bytes
+    original_record_snapshot = owner._record_snapshot
+    original_validate_source_context = owner._validate_source_context
+    original_snapshot_provider = owner.snapshot_release_source_finalizer_primitives
+    snapshot_calls: list[str] = []
+    published: list[tuple[str, bytes, bool, str, str]] = []
+    record_paths: list[str] = []
+    validated_pairs: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    publish_failure: list[BaseException | None] = [None]
+    validation_failure: list[BaseException | None] = [None]
+
+    class ImportBoundFailure(BaseException):
+        pass
+
+    def import_publish(
+        path: str,
+        data: bytes,
+        *,
+        force: bool,
+        prefix: str,
+        label: str,
+    ) -> str:
+        published.append((path, data, force, prefix, label))
+        if publish_failure[0] is not None:
+            raise publish_failure[0]
+        return str(Path(path).resolve())
+
+    def import_record_snapshot(path: str) -> tuple[bytes, dict[str, Any], dict[str, Any]]:
+        record_paths.append(path)
+        return original_record_snapshot(path)
+
+    def import_validate_source_context(
+        source_value: Mapping[str, Any],
+        context_value: Mapping[str, Any],
+    ) -> None:
+        validated_pairs.append((source_value, context_value))
+        if validation_failure[0] is not None:
+            raise validation_failure[0]
+        original_validate_source_context(source_value, context_value)
+
+    def import_snapshot_provider() -> (
+        release_source_finalizer.ReleaseSourceFinalizerPrimitiveSnapshot
+    ):
+        snapshot_calls.append("module-import")
+        return original_snapshot_provider()
+
+    monkeypatch.setattr(owner, "_publish_bytes", import_publish)
+    monkeypatch.setattr(owner, "_record_snapshot", import_record_snapshot)
+    monkeypatch.setattr(owner, "_validate_source_context", import_validate_source_context)
+    monkeypatch.setattr(
+        owner,
+        "snapshot_release_source_finalizer_primitives",
+        import_snapshot_provider,
+    )
+
+    try:
+        consumer = importlib.reload(consumer)
+        imported_snapshot = consumer._release_source_finalizer_primitives
+        assert snapshot_calls == ["module-import"]
+        assert imported_snapshot.publish_bytes is import_publish
+        assert imported_snapshot.record_snapshot is import_record_snapshot
+        assert imported_snapshot.validate_source_context is import_validate_source_context
+        assert consumer._publish_bytes is import_publish
+        assert consumer._validate_source_context is import_validate_source_context
+
+        output = tmp_path / "producer-receipt.json"
+        created = consumer.create_release_source_producer_receipt(
+            str(verdict),
+            str(handoff),
+            str(output),
+            source=source,
+            context=context,
+            bootstrap_guard_sha256="a" * 64,
+            producer=producer,
+            git_repository=str(repo),
+        )
+        assert snapshot_calls == ["module-import"]
+        assert published == [
+            (
+                str(output),
+                evidence_bundle.canonical_json_bytes(created),
+                False,
+                ".evoguard-release-source-producer-receipt-",
+                "release-source producer receipt",
+            )
+        ]
+        assert record_paths
+        assert validated_pairs
+
+        def late_publish(*args: object, **kwargs: object) -> str:
+            raise AssertionError("late owner publish primitive must not be observed")
+
+        def late_record_snapshot(
+            path: str,
+        ) -> tuple[bytes, dict[str, Any], dict[str, Any]]:
+            return original_record_snapshot(path)
+
+        def late_validate_source_context(
+            source_value: Mapping[str, Any], context_value: Mapping[str, Any]
+        ) -> None:
+            original_validate_source_context(source_value, context_value)
+
+        monkeypatch.setattr(owner, "_publish_bytes", late_publish)
+        monkeypatch.setattr(owner, "_record_snapshot", late_record_snapshot)
+        monkeypatch.setattr(owner, "_validate_source_context", late_validate_source_context)
+        assert consumer._release_source_finalizer_primitives is imported_snapshot
+        assert consumer._publish_bytes is import_publish
+        assert consumer._validate_source_context is import_validate_source_context
+
+        expected_publish_failure = ImportBoundFailure("publish")
+        publish_failure[0] = expected_publish_failure
+        with pytest.raises(ImportBoundFailure) as caught_publish:
+            consumer.create_release_source_producer_receipt(
+                str(verdict),
+                str(handoff),
+                str(output),
+                source=source,
+                context=context,
+                bootstrap_guard_sha256="a" * 64,
+                producer=producer,
+                git_repository=str(repo),
+            )
+        assert caught_publish.value is expected_publish_failure
+        assert published[-1][1] == published[0][1]
+
+        expected_validation_failure = ImportBoundFailure("validate")
+        validation_failure[0] = expected_validation_failure
+        with pytest.raises(ImportBoundFailure) as caught_validation:
+            consumer.validate_release_source_context_producer_binding(source, context, producer)
+        assert caught_validation.value is expected_validation_failure
+        assert snapshot_calls == ["module-import"]
+    finally:
+        monkeypatch.setattr(owner, "_publish_bytes", original_publish)
+        monkeypatch.setattr(owner, "_record_snapshot", original_record_snapshot)
+        monkeypatch.setattr(
+            owner,
+            "_validate_source_context",
+            original_validate_source_context,
+        )
+        monkeypatch.setattr(
+            owner,
+            "snapshot_release_source_finalizer_primitives",
+            original_snapshot_provider,
+        )
+        importlib.reload(consumer)
 
 
 def test_canonical_producer_receipt_rechecks_raw_git_and_exact_bytes(tmp_path: Path) -> None:
