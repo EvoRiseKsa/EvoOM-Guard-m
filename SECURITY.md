@@ -44,11 +44,13 @@ best-effort: there is no bug bounty or guaranteed response time. Genuine
 reports will be reviewed and, with the reporter's permission, credited when
 fixed.
 
-For a non-sensitive independent-review starting point, see the frozen
-[v3.7.0 review companion](audit/v3.7.0/). It names the exact release target
-and a safe evidence/report template. Do not put a working bypass, secret, or
-credential-bearing artifact in its public tracking issue; use the private route
-above for a potential vulnerability.
+For a non-sensitive independent-review starting point, see the historical,
+frozen [v4.1.0 review companion](audit/v4.1.0/). It names one exact historical
+release target and provides a safe evidence/report template. It does not cover
+the latest stable `v4.5.0`, which has not received an independent security
+review. Do not put a working bypass, secret, or credential-bearing artifact in
+the public [review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141);
+use the private route above for a potential vulnerability.
 
 ## In scope
 
