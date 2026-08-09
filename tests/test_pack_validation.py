@@ -24,6 +24,7 @@ import unittest
 from unittest import mock
 
 from evoom_guard import cli
+from evoom_guard import pack_manifest as pack_contract
 from evoom_guard.blackbox import (
     PackManifestError,
     _pack_digest_and_manifest,
@@ -95,6 +96,12 @@ class ManifestValidationTests(unittest.TestCase):
         with self.assertRaises(PackManifestError):
             _pack_digest_and_manifest(self.pack)
 
+    def test_non_utf8_manifest_is_fail_closed(self) -> None:
+        with open(os.path.join(self.pack, "pack.json"), "wb") as stream:
+            stream.write(b"\xff")
+        with self.assertRaisesRegex(PackManifestError, "not readable JSON"):
+            _pack_digest_and_manifest(self.pack)
+
     def test_duplicate_manifest_keys_are_fail_closed(self) -> None:
         self._manifest('{"id":"first","id":"second","version":"1"}')
         with self.assertRaisesRegex(PackManifestError, "duplicate JSON key"):
@@ -105,6 +112,77 @@ class ManifestValidationTests(unittest.TestCase):
             self._manifest(json.dumps(payload))
             with self.assertRaises(PackManifestError):
                 _pack_digest_and_manifest(self.pack)
+
+    def test_manifest_accepts_exact_byte_limit_and_rejects_one_over(self) -> None:
+        prefix = '{"id":"bounded","version":"1"}'
+        limit = len(prefix.encode("utf-8")) + 8
+        with mock.patch.object(pack_contract, "MAX_PACK_MANIFEST_BYTES", limit):
+            self._manifest(prefix + " " * 8)
+            _digest, manifest = _pack_digest_and_manifest(self.pack)
+            assert manifest is not None
+            self.assertEqual(manifest["id"], "bounded")
+
+            self._manifest(prefix + " " * 9)
+            with self.assertRaisesRegex(
+                PackManifestError,
+                rf"pack\.json exceeds the {limit}-byte limit",
+            ):
+                _pack_digest_and_manifest(self.pack)
+
+    def test_pack_file_limit_is_checked_before_hashing_content(self) -> None:
+        fixture = os.path.join(self.pack, "fixture.bin")
+        with mock.patch.object(pack_contract, "MAX_PACK_FILE_BYTES", 64):
+            with open(fixture, "wb") as stream:
+                stream.write(b"x" * 64)
+            pack_digest(self.pack)
+
+            with open(fixture, "ab") as stream:
+                stream.write(b"x")
+            with self.assertRaisesRegex(
+                PackManifestError,
+                r"verifier pack file exceeds the 64-byte limit: 'fixture\.bin'",
+            ):
+                pack_digest(self.pack)
+
+    def test_pack_total_limit_accepts_exact_total_and_rejects_one_over(self) -> None:
+        existing = os.path.getsize(os.path.join(self.pack, "test_protocol.py"))
+        fixture = os.path.join(self.pack, "fixture.bin")
+        with open(fixture, "wb") as stream:
+            stream.write(b"1234")
+        with mock.patch.object(pack_contract, "MAX_PACK_BYTES", existing + 4):
+            pack_digest(self.pack)
+
+            with open(fixture, "ab") as stream:
+                stream.write(b"5")
+            with self.assertRaisesRegex(
+                PackManifestError,
+                rf"verifier pack exceeds the {existing + 4}-byte total limit",
+            ):
+                pack_digest(self.pack)
+
+    def test_pack_entry_limit_is_fail_closed(self) -> None:
+        with mock.patch.object(pack_contract, "MAX_PACK_ENTRIES", 1):
+            pack_digest(self.pack)
+            with open(os.path.join(self.pack, "fixture.bin"), "wb"):
+                pass
+            with self.assertRaisesRegex(
+                PackManifestError,
+                r"verifier pack exceeds the 1-entry limit",
+            ):
+                pack_digest(self.pack)
+
+    def test_snapshot_refuses_oversized_pack_before_copy(self) -> None:
+        destination = self.pack + "_oversized_snapshot"
+        fixture = os.path.join(self.pack, "fixture.bin")
+        with open(fixture, "wb") as stream:
+            stream.write(b"x" * 65)
+        try:
+            with mock.patch.object(pack_contract, "MAX_PACK_FILE_BYTES", 64):
+                with self.assertRaisesRegex(PackManifestError, "64-byte limit"):
+                    snapshot_pack(self.pack, destination)
+            self.assertFalse(os.path.exists(destination))
+        finally:
+            shutil.rmtree(destination, ignore_errors=True)
 
     def test_digest_records_are_unambiguous(self) -> None:
         left = tempfile.mkdtemp(prefix="evo_pack_left_")

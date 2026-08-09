@@ -228,6 +228,23 @@ class _OperatingProfileViolations(Protocol):
     ) -> tuple[str, ...]: ...
 
 
+class ChangeInputError(ValueError):
+    """A candidate change could not be read within the CLI trust boundary."""
+
+    @classmethod
+    def read(
+        cls,
+        reader: Callable[[str], str],
+        path: str,
+        *,
+        kind: str,
+    ) -> str:
+        try:
+            return reader(path)
+        except (OSError, TypeError, UnicodeError, ValueError) as exc:
+            raise cls(f"change input error (fail-closed): {kind}: {exc}") from exc
+
+
 class _OperatingProfileOptions(TypedDict, total=False):
     operating_profile: str
 
@@ -646,7 +663,7 @@ def execute_guard_command(
         head = args.repo or services.current_directory()
         result, deleted = services.guard_from_diff(
             head,
-            services.read_text(args.diff),
+            ChangeInputError.read(services.read_text, args.diff, kind="unified diff"),
             test_command=test_command,
             setup_command=setup_command,
             trust_setup_on_host=trust_setup_on_host,
@@ -748,7 +765,11 @@ def execute_guard_command(
     elif args.repo and args.patch:
         result = services.guard(
             args.repo,
-            services.read_text(args.patch),
+            ChangeInputError.read(
+                services.read_text,
+                args.patch,
+                kind="edit-block patch",
+            ),
             test_command=test_command,
             setup_command=setup_command,
             trust_setup_on_host=trust_setup_on_host,

@@ -42,7 +42,15 @@ from evoom_guard.execution import (
     terminate_process_tree,
 )
 from evoom_guard.guard import serialize_candidate_blocks
-from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT, extract_manifest, manifest_problems
+from evoom_guard.pack_manifest import (
+    MAX_PACK_BYTES,
+    MAX_PACK_ENTRIES,
+    MAX_PACK_FILE_BYTES,
+    MAX_PACK_MANIFEST_BYTES,
+    PACK_DIGEST_FORMAT,
+    extract_manifest,
+    manifest_problems,
+)
 from evoom_guard.policy import (
     ConfigError,
     build_effective_policy,
@@ -62,8 +70,6 @@ MAX_GIT_TREE_BYTES = 16 * 1024 * 1024
 MAX_GIT_TREE_ENTRIES = 100_000
 MAX_POLICY_BYTES = 1 * 1024 * 1024
 MAX_CANDIDATE_FILE_BYTES = 1 * 1024 * 1024
-MAX_PACK_FILE_BYTES = 8 * 1024 * 1024
-MAX_PACK_BYTES = 32 * 1024 * 1024
 MAX_BINDINGS_BYTES = 512 * 1024
 MAX_AGENT_CHANGE_CANDIDATE_BYTES = 64 * 1024 * 1024
 MAX_AGENT_CHANGE_PATHS = 10_000
@@ -1560,6 +1566,10 @@ def _deleted_paths(
 
 
 def _parse_pack_manifest(data: bytes) -> dict[str, Any] | None:
+    if len(data) > MAX_PACK_MANIFEST_BYTES:
+        raise FinalizerDerivationError(
+            f"raw Git pack.json exceeds the {MAX_PACK_MANIFEST_BYTES}-byte limit"
+        )
     try:
         decoded = strict_json_loads(data.decode("utf-8", "strict"))
     except (UnicodeDecodeError, ValueError) as exc:
@@ -1576,6 +1586,13 @@ def _framed_path(digest: Any, kind: bytes, path: str) -> None:
     digest.update(kind)
     digest.update(len(encoded).to_bytes(8, "big"))
     digest.update(encoded)
+
+
+def _require_raw_pack_entry_count(file_count: int, directory_count: int) -> None:
+    if file_count + directory_count > MAX_PACK_ENTRIES:
+        raise FinalizerDerivationError(
+            f"verifier_pack exceeds the {MAX_PACK_ENTRIES}-entry limit"
+        )
 
 
 def _raw_pack_identity(
@@ -1602,6 +1619,7 @@ def _raw_pack_identity(
     for rel in members:
         parts = rel.split("/")
         directories.update("/".join(parts[:index]) for index in range(1, len(parts)))
+    _require_raw_pack_entry_count(len(members), len(directories))
     digest = hashlib.sha256()
     digest.update(PACK_DIGEST_FORMAT.encode("ascii") + b"\0")
     for directory in sorted(directories):

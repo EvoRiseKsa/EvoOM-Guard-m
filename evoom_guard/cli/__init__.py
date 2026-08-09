@@ -64,6 +64,7 @@ import os
 import platform
 import re
 import shutil
+import stat
 import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypedDict, cast
@@ -128,6 +129,11 @@ if TYPE_CHECKING:
 MAX_OFFLINE_RECORD_BYTES = 8 * 1024 * 1024
 MAX_CONTEXT_INPUT_BYTES = 1 * 1024 * 1024
 MAX_SIGNATURE_FILE_BYTES = 4096
+# Candidate patch/diff text is intentionally capped before it is decoded or
+# parsed.  Sixteen MiB leaves ample room for ordinary pull requests while
+# keeping the worst-case byte and decoded-text allocations bounded.  This is a
+# judge-owned safety ceiling, not candidate-controlled policy.
+MAX_CHANGE_INPUT_BYTES = 16 * 1024 * 1024
 
 
 class _GitHubAttestationPolicyKwargs(TypedDict):
@@ -155,25 +161,75 @@ def _configure_stdio() -> None:
             reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
-def _read_text(path: str) -> str:
-    """Read a file, or stdin when *path* is ``-``."""
-    if path == "-":
-        return sys.stdin.read()
-    with open(path, encoding="utf-8") as f:
-        return f.read()
+def _read_text(path: str, *, limit: int | None = None) -> str:
+    """Read bounded UTF-8 change text from a regular file or standard input."""
+
+    maximum = MAX_CHANGE_INPUT_BYTES if limit is None else limit
+    data = _read_bounded_bytes(path, limit=maximum, label="change input")
+    try:
+        return data.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("change input is not valid UTF-8") from exc
+
+
+def _read_binary_prefix(stream: Any, *, limit: int) -> bytes:
+    """Read at most ``limit + 1`` bytes, even when reads return short chunks."""
+
+    remaining = limit + 1
+    chunks: list[bytes] = []
+    while remaining:
+        chunk = stream.read(remaining)
+        if not chunk:
+            break
+        if not isinstance(chunk, bytes):
+            raise TypeError("binary input stream returned non-bytes data")
+        if len(chunk) > remaining:
+            chunk = chunk[:remaining]
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _read_text_prefix(stream: Any, *, limit: int) -> bytes:
+    """Bound a text-only stdin fallback by encoded UTF-8 bytes, not characters."""
+
+    remaining = limit + 1
+    chunks: list[bytes] = []
+    while remaining:
+        # A Unicode code point can occupy four UTF-8 bytes.  The fixed chunk
+        # ceiling also prevents a text wrapper from creating one large
+        # temporary allocation when only a few encoded bytes remain.
+        text = stream.read(min(64 * 1024, remaining))
+        if not text:
+            break
+        if not isinstance(text, str):
+            raise TypeError("text input stream returned non-text data")
+        encoded = text.encode("utf-8")
+        chunks.append(encoded[:remaining])
+        remaining -= min(len(encoded), remaining)
+    return b"".join(chunks)
 
 
 def _read_bounded_bytes(path: str, *, limit: int, label: str) -> bytes:
+    if limit < 0:
+        raise ValueError(f"{label} byte limit must be non-negative")
     if path == "-":
         binary = getattr(sys.stdin, "buffer", None)
         data = (
-            binary.read(limit + 1)
+            _read_binary_prefix(binary, limit=limit)
             if binary is not None
-            else sys.stdin.read(limit + 1).encode("utf-8")
+            else _read_text_prefix(sys.stdin, limit=limit)
         )
     else:
         with open(path, "rb") as handle:
-            data = handle.read(limit + 1)
+            metadata = os.fstat(handle.fileno())
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError(
+                    f"{label} must be a regular file or '-' for standard input"
+                )
+            if metadata.st_size > limit:
+                raise ValueError(f"{label} exceeds the {limit}-byte input limit")
+            data = _read_binary_prefix(handle, limit=limit)
     if len(data) > limit:
         raise ValueError(f"{label} exceeds the {limit}-byte input limit")
     return data
@@ -558,6 +614,9 @@ def cmd_guard(args: argparse.Namespace, *, out: Callable[[str], None] = print) -
             services=_guard_command_services(),
             out=out,
         )
+    except _guard_command_owner.ChangeInputError as exc:
+        out(str(exc))
+        return 2
     except HarnessInputPolicyError as exc:
         out(f"usage: invalid trusted harness_inputs policy: {exc}")
         return 2

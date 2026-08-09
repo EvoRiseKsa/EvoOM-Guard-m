@@ -106,6 +106,108 @@ def test_read_text_file(tmp_path):
     assert cli._read_text(str(p)) == "on-disk"
 
 
+def test_read_text_file_accepts_exact_byte_limit_and_rejects_one_over(tmp_path):
+    exact = tmp_path / "exact.diff"
+    exact.write_bytes(b"12345")
+    assert cli._read_text(str(exact), limit=5) == "12345"
+
+    oversized = tmp_path / "oversized.diff"
+    oversized.write_bytes(b"123456")
+    with pytest.raises(
+        ValueError,
+        match=r"^change input exceeds the 5-byte input limit$",
+    ):
+        cli._read_text(str(oversized), limit=5)
+
+
+def test_read_text_stdin_bounds_encoded_bytes_and_stops_after_limit(monkeypatch):
+    class Stdin:
+        def __init__(self, payload: bytes) -> None:
+            self.buffer = io.BytesIO(payload)
+
+    exact = Stdin("é".encode())
+    monkeypatch.setattr(sys, "stdin", exact)
+    assert cli._read_text("-", limit=2) == "é"
+
+    oversized = Stdin(b"123456" + b"x" * 1024 * 1024)
+    monkeypatch.setattr(sys, "stdin", oversized)
+    with pytest.raises(
+        ValueError,
+        match=r"^change input exceeds the 5-byte input limit$",
+    ):
+        cli._read_text("-", limit=5)
+    assert oversized.buffer.tell() == 6
+
+
+def test_read_text_stdin_text_fallback_counts_utf8_bytes(monkeypatch):
+    monkeypatch.setattr(sys, "stdin", io.StringIO("é"))
+    assert cli._read_text("-", limit=2) == "é"
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO("é"))
+    with pytest.raises(
+        ValueError,
+        match=r"^change input exceeds the 1-byte input limit$",
+    ):
+        cli._read_text("-", limit=1)
+
+
+def test_read_text_rejects_invalid_utf8_with_stable_error(tmp_path):
+    invalid = tmp_path / "invalid.diff"
+    invalid.write_bytes(b"\xff")
+    with pytest.raises(ValueError, match=r"^change input is not valid UTF-8$"):
+        cli._read_text(str(invalid), limit=1)
+
+
+def test_guard_patch_limit_fails_closed_before_guard(tmp_path, monkeypatch, capsys):
+    from evoom_guard import guard as guard_module
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    patch = tmp_path / "candidate.patch"
+    patch.write_bytes(b"x" * 33)
+    monkeypatch.setattr(cli, "MAX_CHANGE_INPUT_BYTES", 32)
+
+    def forbidden_guard(*_args, **_kwargs):
+        raise AssertionError("oversized input reached the Guard engine")
+
+    monkeypatch.setattr(guard_module, "guard", forbidden_guard)
+    assert cli.main(["guard", str(repo), "--patch", str(patch), "--no-config"]) == 2
+    assert capsys.readouterr().out.strip() == (
+        "change input error (fail-closed): edit-block patch: "
+        "change input exceeds the 32-byte input limit"
+    )
+
+
+def test_guard_diff_stdin_limit_fails_closed_before_reverse_apply(
+    tmp_path, monkeypatch, capsys
+):
+    from evoom_guard import guard as guard_module
+
+    class Stdin:
+        def __init__(self) -> None:
+            self.buffer = io.BytesIO(b"x" * 33 + b"y" * 1024 * 1024)
+
+    head = tmp_path / "head"
+    head.mkdir()
+    stdin = Stdin()
+    monkeypatch.setattr(sys, "stdin", stdin)
+    monkeypatch.setattr(cli, "MAX_CHANGE_INPUT_BYTES", 32)
+
+    def forbidden_guard_from_diff(*_args, **_kwargs):
+        raise AssertionError("oversized diff reached reverse application")
+
+    monkeypatch.setattr(guard_module, "guard_from_diff", forbidden_guard_from_diff)
+    assert (
+        cli.main(["guard", str(head), "--diff", "-", "--no-config"])
+        == 2
+    )
+    assert stdin.buffer.tell() == 33
+    assert capsys.readouterr().out.strip() == (
+        "change input error (fail-closed): unified diff: "
+        "change input exceeds the 32-byte input limit"
+    )
+
+
 def test_version_command(capsys):
     assert cli.main(["version"]) == 0
     assert __version__ in capsys.readouterr().out
