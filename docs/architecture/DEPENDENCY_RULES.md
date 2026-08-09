@@ -321,6 +321,13 @@ snapshot freezes the historical import-time binding behavior as one coherent
 unit and leaves exact output bytes and exception identity unchanged. The
 cross-package private-import ceiling drops from 5 to 3.
 
+Import-boundary ratchet revision 14 unifies the release-source finalizer
+snapshot as one immutable five-operation owner contract. Producer receipt code
+captures it once at module import; the CLI captures it at command entry before
+reading untrusted arguments. Characterization tests freeze both lookup times,
+all five function identities, and immutability. The cross-package
+private-import ceiling drops from 3 to 1.
+
 The verifier-owned `record_policy` module is a new classified verifier-layer
 owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy

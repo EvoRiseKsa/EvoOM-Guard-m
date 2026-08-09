@@ -1454,12 +1454,10 @@ def cmd_derive_release_source_controls(
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_CONTEXT_FORMAT,
         ReleaseSourceFinalizerError,
-        _publish_bytes,
-        _record_snapshot,
-        context_from_release_source_bindings,
-        derive_release_source_bindings,
+        snapshot_release_source_finalizer_primitives,
     )
 
+    finalizer_primitives = snapshot_release_source_finalizer_primitives()
     evidence_primitives = snapshot_evidence_primitives()
 
     def canonical_json(value: dict[str, Any]) -> bytes:
@@ -1472,12 +1470,14 @@ def cmd_derive_release_source_controls(
                 context_format=RELEASE_SOURCE_CONTEXT_FORMAT,
                 finalizer_error=ReleaseSourceFinalizerError,
                 canonical_json=canonical_json,
-                publish_bytes=_publish_bytes,
-                record_snapshot=_record_snapshot,
+                publish_bytes=finalizer_primitives.publish_bytes,
+                record_snapshot=finalizer_primitives.record_snapshot,
                 context_from_release_source_bindings=(
-                    context_from_release_source_bindings
+                    finalizer_primitives.context_from_release_source_bindings
                 ),
-                derive_release_source_bindings=derive_release_source_bindings,
+                derive_release_source_bindings=(
+                    finalizer_primitives.derive_release_source_bindings
+                ),
                 read_external_object_provider=lambda: (
                     _read_external_finalizer_object
                 ),

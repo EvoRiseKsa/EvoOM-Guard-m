@@ -252,6 +252,24 @@ class VerifiedReleaseSourceEvidence:
     decision: str
 
 
+@dataclass(frozen=True, slots=True)
+class ReleaseSourceFinalizerPrimitiveSnapshot:
+    """Immutable release-source operations for trusted orchestration.
+
+    The finalizer's historical private spellings remain live compatibility
+    seams.  Each call resolves one coherent set: a long-lived consumer may
+    capture it at module entry, while a command may capture it immediately
+    before observing untrusted arguments.  Neither consumer imports the
+    owner-private spellings across the package boundary.
+    """
+
+    publish_bytes: Callable[..., str]
+    record_snapshot: Callable[..., tuple[bytes, dict[str, Any], dict[str, Any]]]
+    validate_source_context: Callable[[Mapping[str, Any], Mapping[str, Any]], None]
+    derive_release_source_bindings: Callable[..., DerivedReleaseSourceBindings]
+    context_from_release_source_bindings: Callable[..., dict[str, Any]]
+
+
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str], label: str) -> None:
     actual = set(value)
     if actual != expected:
@@ -657,28 +675,15 @@ def _publish_bytes(path: str, data: bytes, *, force: bool, prefix: str, label: s
     return absolute
 
 
-@dataclass(frozen=True, slots=True)
-class ReleaseSourceFinalizerPrimitiveSnapshot:
-    """Entry-stable finalizer primitives for fail-closed orchestration code.
-
-    The public convenience functions intentionally remain live facades.  A
-    consumer that historically imported the private implementations at module
-    entry needs one coherent snapshot instead, so later owner monkeypatches do
-    not change only part of its already-imported behavior.
-    """
-
-    publish_bytes: Callable[..., str]
-    record_snapshot: Callable[[str], tuple[bytes, dict[str, Any], dict[str, Any]]]
-    validate_source_context: Callable[[Mapping[str, Any], Mapping[str, Any]], None]
-
-
 def snapshot_release_source_finalizer_primitives() -> ReleaseSourceFinalizerPrimitiveSnapshot:
-    """Return one immutable snapshot of the current finalizer primitives."""
+    """Resolve one immutable set of current finalizer operations at call time."""
 
     return ReleaseSourceFinalizerPrimitiveSnapshot(
         publish_bytes=_publish_bytes,
         record_snapshot=_record_snapshot,
         validate_source_context=_validate_source_context,
+        derive_release_source_bindings=derive_release_source_bindings,
+        context_from_release_source_bindings=context_from_release_source_bindings,
     )
 
 

@@ -137,10 +137,20 @@ def test_release_source_finalizer_primitive_snapshot_is_exact_and_immutable() ->
         "publish_bytes",
         "record_snapshot",
         "validate_source_context",
+        "derive_release_source_bindings",
+        "context_from_release_source_bindings",
     )
     assert snapshot.publish_bytes is release_source_finalizer._publish_bytes
     assert snapshot.record_snapshot is release_source_finalizer._record_snapshot
     assert snapshot.validate_source_context is release_source_finalizer._validate_source_context
+    assert (
+        snapshot.derive_release_source_bindings
+        is release_source_finalizer.derive_release_source_bindings
+    )
+    assert (
+        snapshot.context_from_release_source_bindings
+        is release_source_finalizer.context_from_release_source_bindings
+    )
     assert not hasattr(snapshot, "__dict__")
     with pytest.raises(FrozenInstanceError):
         snapshot.publish_bytes = release_source_finalizer._publish_bytes

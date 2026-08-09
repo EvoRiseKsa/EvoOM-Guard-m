@@ -16,6 +16,53 @@ from evoom_guard.record_verifier import verify_record
 from evoom_guard.signing import generate_keypair, public_key_id
 
 
+def test_finalizer_primitive_snapshot_is_call_time_owned_and_immutable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = release_source_finalizer.snapshot_release_source_finalizer_primitives()
+    assert first.publish_bytes is release_source_finalizer._publish_bytes
+    assert first.record_snapshot is release_source_finalizer._record_snapshot
+    assert first.validate_source_context is release_source_finalizer._validate_source_context
+    assert (
+        first.derive_release_source_bindings
+        is release_source_finalizer.derive_release_source_bindings
+    )
+    assert (
+        first.context_from_release_source_bindings
+        is release_source_finalizer.context_from_release_source_bindings
+    )
+    def replacement_record_snapshot(
+        path: str,
+    ) -> tuple[bytes, dict[str, object], dict[str, object]]:
+        del path
+        return b"replacement", {}, {}
+
+    def replacement_validate_source_context(
+        source: object,
+        context: object,
+    ) -> None:
+        del source, context
+
+    monkeypatch.setattr(
+        release_source_finalizer,
+        "_record_snapshot",
+        replacement_record_snapshot,
+    )
+    monkeypatch.setattr(
+        release_source_finalizer,
+        "_validate_source_context",
+        replacement_validate_source_context,
+    )
+    second = release_source_finalizer.snapshot_release_source_finalizer_primitives()
+
+    assert first.record_snapshot is not replacement_record_snapshot
+    assert first.validate_source_context is not replacement_validate_source_context
+    assert second.record_snapshot is replacement_record_snapshot
+    assert second.validate_source_context is replacement_validate_source_context
+    with pytest.raises(AttributeError):
+        second.record_snapshot = first.record_snapshot  # type: ignore[misc]
+
+
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
 
