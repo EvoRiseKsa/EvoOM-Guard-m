@@ -45,6 +45,7 @@ VIOLATION_KINDS = (
 # name is considered extracted only when it is a real package (has __init__.py),
 # so same-named compatibility monoliths such as evidence.py are not mislabeled.
 LAYER_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("foundation",),
     ("domain",),
     ("policy", "candidate", "workspace"),
     ("execution", "isolation"),
@@ -63,7 +64,14 @@ LAYER_RANK = {
 # flat import paths. Classify those exact compatibility modules by semantic
 # ownership so a new schema version does not become architectural debt merely
 # to preserve its stable public path.
+# Stable flat public paths may be classified only when their whole module has a
+# single documented owner.  Mixed compatibility facades must remain explicit
+# unclassified debt until their responsibilities are separated.
 FLAT_MODULE_LAYERS = {
+    "evoom_guard.contracts": "foundation",
+    "evoom_guard.strict_json": "foundation",
+    "evoom_guard.runtime_identity": "workspace",
+    "evoom_guard.pack_manifest": "verifiers",
     "evoom_guard.change_attempt_observation": "evidence",
     "evoom_guard.verdict_contract_v1_11": "domain",
     "evoom_guard.verdict_contract_v1_12": "domain",
@@ -816,6 +824,34 @@ def test_domain_verification_contracts_are_classified_and_dependency_free() -> N
             for source, target in analysis.internal_edges
             if source == module
         } == set()
+
+
+def test_flat_foundation_and_verification_owners_are_classified_and_closed() -> None:
+    """Classify only cohesive flat contracts whose dependency direction is closed."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    expected_layers = {
+        "evoom_guard.contracts": "foundation",
+        "evoom_guard.strict_json": "foundation",
+        "evoom_guard.runtime_identity": "workspace",
+        "evoom_guard.pack_manifest": "verifiers",
+    }
+
+    assert {
+        module: FLAT_MODULE_LAYERS.get(module) for module in expected_layers
+    } == expected_layers
+    for module in expected_layers:
+        assert module in analysis.modules
+        assert module not in analysis.violations["unclassified_modules"]
+        assert {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        } == set()
+        assert not any(
+            violation.startswith(f"{module} |")
+            for violation in analysis.violations["cross_package_private_imports"]
+        )
 
 
 def test_guard_reads_semantics_from_domain_and_schema_from_versioned_contracts() -> None:

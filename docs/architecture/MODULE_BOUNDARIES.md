@@ -2,6 +2,8 @@
 
 ## Package boundaries (current target)
 
+- `foundation` (stable flat compatibility owners): dependency-free generic
+  verifier contracts and strict, bounded JSON decoding shared across layers.
 - `domain/`: policy, lifecycle, verdict, assurance, request/result types.
 - `policy/`: policy parsing, normalization, validation, profile identity.
 - `candidate/`: candidate parsing, patch/diff, directory/file snapshot helpers.
@@ -35,6 +37,21 @@
   `evoom_guard/record_verifier.py`, and `evoom_guard/trusted_finalizer.py`.
 
 ## Current extraction boundaries
+
+The lowest-level foundation owners retain their established public flat paths.
+`contracts.py` owns only the generic `Problem`, `VerdictResult`, and `Verifier`
+protocol vocabulary; `strict_json.py` owns only bounded, unambiguous JSON
+decoding. Neither imports another EvoOM Guard module. They are therefore below
+domain rather than being mislabeled as domain models or evidence decisions.
+
+Two other cohesive flat modules have explicit existing owners.
+`runtime_identity.py` belongs to workspace because it performs bounded,
+race-aware filesystem identity capture and comparison; `pack_manifest.py`
+belongs to verifiers because it validates, snapshots, and re-verifies the
+canonical verifier-pack contract. Both import only the standard library. Their
+stable paths are classified directly; no implementation or wire contract moves.
+Mixed facades such as `guard.py`, `blackbox.py`, and `record_verifier.py` remain
+unclassified until real responsibility separation justifies a migration.
 
 Runner instrumentation is owned by `evoom_guard/runners/`: `protocol.py` defines
 the dependency-free structural contract, `_command.py` owns shared executable

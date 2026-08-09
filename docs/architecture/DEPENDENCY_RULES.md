@@ -2,6 +2,8 @@
 
 ## Hard constraints
 
+- `foundation` modules must remain stdlib-only and may not import another
+  EvoOM Guard module.
 - Core runtime dependencies between execution and domain/evidence modules must remain stdlib-only.
 - No private imports from `repo_verifier.py` or other monolith modules into extracted modules.
 - No circular imports.
@@ -30,12 +32,14 @@ modules. It permits no unresolved dynamic imports, wildcard imports, extracted-l
 direction violations, or additional unclassified modules.
 
 The enforced layer order is explicit and matches `MODULE_BOUNDARIES.md`:
-`domain -> policy/candidate/workspace -> execution/isolation ->
+`foundation -> domain -> policy/candidate/workspace -> execution/isolation ->
 verifiers/runners -> application -> evidence -> finalizer/admission ->
 api/cli/integrations`. A module is assigned to a layer only when its first-level
 name is a real Python package; same-named compatibility files such as
 `evidence.py` remain declared legacy debt until their atomic file-to-package
-migrations.
+migrations. A stable flat path may instead have an explicit semantic owner only
+when the complete module is cohesive and the architecture test freezes its
+dependency closure; mixed facades are not eligible for this exception.
 
 The former miscellaneous `record_verification` package has been removed.
 Its report-envelope and isolation-parity responsibilities now have explicit
@@ -341,6 +345,15 @@ snapshot time, so existing monkeypatch timing and exception identity remain
 unchanged. The measured cross-package private-import ceiling drops from 1 to
 0; cycles, wildcard imports, unresolved dynamic imports, layer violations, and
 unclassified modules remain unchanged.
+
+Import-boundary ratchet revision 16 classifies four cohesive stable flat
+contracts without moving implementation or changing public identities.
+`contracts.py` and `strict_json.py` are dependency-free foundation owners;
+`runtime_identity.py` is workspace-owned; and `pack_manifest.py` is
+verifier-owned. An executable closure test requires all four to retain zero
+internal dependencies. The unclassified-module ceiling therefore drops from
+21 to 17 while cycles, private imports, wildcard imports, unresolved dynamic
+imports, and layer violations remain unchanged.
 
 Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and

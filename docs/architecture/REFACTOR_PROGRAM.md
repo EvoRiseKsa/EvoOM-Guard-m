@@ -519,6 +519,13 @@ remain in their established facades.
    output-mutation capability.
 - All 41 CLI handlers now delegate through typed owners; this behavior-preserving
   command-family extraction phase is complete.
+- The first Stage-10 ownership-classification slice assigns four cohesive,
+  stdlib-only flat modules without moving their established import paths:
+  `contracts.py` and `strict_json.py` to foundation, `runtime_identity.py` to
+  workspace, and `pack_manifest.py` to verifiers. An executable dependency-
+  closure test keeps all four free of internal imports. The unclassified-module
+  ratchet drops from 21 to 17 while private imports remain 10 and every other
+  violation class remains zero. Mixed flat facades are still debt.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction

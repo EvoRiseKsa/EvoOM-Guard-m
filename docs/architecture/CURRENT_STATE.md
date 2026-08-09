@@ -7,21 +7,28 @@ merged `main` is covered by the repository's protected-branch controls.
 
 ## Layer ownership
 
+- `foundation` owns dependency-free, cross-cutting contracts and strict input
+  decoding that are used by more than one domain layer.
 - `domain` owns immutable request, policy, lifecycle, verdict, evidence,
   execution, assurance, and decision values.
 - `execution` owns process scheduling, command resolution, and judge-process
   primitives.
 - `isolation` owns containment and invocation evidence.
-- `candidate` and `workspace` own candidate intake and filesystem boundaries.
+- `candidate` and `workspace` own candidate intake, filesystem boundaries, and
+  canonical runtime-tree identity.
 - `runners` owns runner recognition and judge-owned report instrumentation.
-- `verifiers` owns repository and black-box execution orchestration and result
-  interpretation.
+- `verifiers` owns repository and black-box execution orchestration, result
+  interpretation, and the canonical verifier-pack manifest/snapshot contract.
 - `application` owns policy, decision-gate, and finalization composition.
 - `api`, `cli`, and `integrations` are compatibility boundaries.
 
 The executable import-boundary ratchet in
 `tests/architecture/test_import_boundaries.py` enforces the permitted
 directions and prevents architectural debt from silently increasing.
+Stable flat paths are classified only when the complete module has one owner:
+`contracts.py` and `strict_json.py` are foundation-owned,
+`runtime_identity.py` is workspace-owned, and `pack_manifest.py` is
+verifier-owned. Mixed flat facades remain unclassified debt.
 
 ## Refactor status
 
@@ -29,7 +36,8 @@ directions and prevents architectural debt from silently increasing.
 - All 41 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
 - The import ratchet currently permits zero dependency cycles and zero
-  cross-package private-symbol imports. Trusted Finalizer source validation is
+  cross-package private-symbol imports, with 17 mixed or not-yet-classified
+  flat modules remaining. Trusted Finalizer source validation is
   now an explicit public owner contract shared by Artifact Admission V1/V2;
   selected-path Raw-Git regular-blob projection is an explicit public Finalizer
   Derivation contract while its reader and entry types remain private.
