@@ -40,6 +40,143 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="workspace-parent-component-bypass",
+        path="evoom_guard/workspace/__init__.py",
+        before=(
+            '    return all(part not in ("", ".", "..") '
+            'for part in path.split("/"))\n'
+        ),
+        after=(
+            '    return any(part not in ("", ".", "..") '
+            'for part in path.split("/"))\n'
+        ),
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_workspace_rejects_parent_components"
+        ),
+    ),
+    Mutation(
+        name="runtime-identity-digest-fallback-bypass",
+        path="evoom_guard/runtime_identity.py",
+        before="    if not changes and expected.sha256 != observed.sha256:\n",
+        after="    if not changes and expected.sha256 == observed.sha256:\n",
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_runtime_identity_binds_the_fallback_tree_digest"
+        ),
+    ),
+    Mutation(
+        name="fidelity-preexisting-default-output-ignore-bypass",
+        path="evoom_guard/verifiers/fidelity.py",
+        before="        and rel not in baseline_keys\n",
+        after="        and rel in baseline_keys\n",
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_fidelity_keeps_preexisting_default_outputs_bound"
+        ),
+    ),
+    Mutation(
+        name="release-artifact-run-separation-bypass",
+        path="evoom_guard/admission/release_artifact.py",
+        before=(
+            "            raise ReleaseArtifactAdmissionError(\n"
+            '                f"{role} workflow ID, path, and run must be distinct '
+            'from every release-source role"\n'
+            "            )\n"
+            '    for field in ("workflow_id", "workflow_path", "workflow_run_id"):\n'
+            "        if builder[field] == admitter[field]:\n"
+        ),
+        after=(
+            "            raise ReleaseArtifactAdmissionError(\n"
+            '                f"{role} workflow ID, path, and run must be distinct '
+            'from every release-source role"\n'
+            "            )\n"
+            '    for field in ("workflow_id", "workflow_path", "workflow_run_id"):\n'
+            '        if field != "workflow_run_id" and '
+            "builder[field] == admitter[field]:\n"
+        ),
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_release_artifact_builder_and_admitter_runs_are_distinct"
+        ),
+    ),
+    Mutation(
+        name="agent-change-protected-test-path-bypass",
+        path="evoom_guard/admission/agent_change.py",
+        before="        is_protected(path)\n        or is_protected_config(path, strict_harness=True)\n",
+        after="        False\n        or is_protected_config(path, strict_harness=True)\n",
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_agent_change_cannot_authorize_judge_owned_tests"
+        ),
+    ),
+    Mutation(
+        name="finalizer-deployment-parent-path-bypass",
+        path="evoom_guard/finalizer/deployment.py",
+        before='        part in {"", ".", ".."}\n',
+        after='        part in {"", "."}\n',
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_finalizer_deployment_rejects_parent_paths"
+        ),
+    ),
+    Mutation(
+        name="artifact-v1-nonfile-subject-bypass",
+        path="evoom_guard/artifact_admission.py",
+        before='    if subject.get("kind") != "file":\n',
+        after='    if subject.get("kind") not in {"file", "oci"}:\n',
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_artifact_v1_rejects_nonfile_subjects"
+        ),
+    ),
+    Mutation(
+        name="release-source-receipt-host-isolation-bypass",
+        path="evoom_guard/release_source_producer_receipt.py",
+        before=(
+            '    isolation = execution.get("candidate_isolation")\n'
+            '    if isolation not in {"docker", "gvisor"}:\n'
+        ),
+        after=(
+            '    isolation = execution.get("candidate_isolation")\n'
+            '    if isolation not in {"docker", "gvisor", "host"}:\n'
+        ),
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_release_source_receipt_rejects_host_isolation"
+        ),
+    ),
+    Mutation(
+        name="artifact-v2-unsupported-digest-algorithm-bypass",
+        path="evoom_guard/artifact_digest_admission.py",
+        before="    if _SHA256_WITH_ALGORITHM.fullmatch(digest) is None:\n",
+        after="    if False and _SHA256_WITH_ALGORITHM.fullmatch(digest) is None:\n",
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_artifact_v2_rejects_unsupported_digest_algorithms"
+        ),
+    ),
+    Mutation(
+        name="release-source-key-domain-separation-bypass",
+        path="evoom_guard/admission/release_source.py",
+        before="    if len(set(checked.values())) != len(checked):\n",
+        after="    if False and len(set(checked.values())) != len(checked):\n",
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_release_source_admission_requires_distinct_domain_keys"
+        ),
+    ),
+    Mutation(
+        name="release-source-v1-deny-only-bypass",
+        path="evoom_guard/release_source_finalizer.py",
+        before='    del record\n    return "DENY"\n',
+        after='    del record\n    return "ALLOW"\n',
+        test=(
+            "tests/test_direct_reviewed_mutation_contract.py::"
+            "test_release_source_v1_remains_deny_only"
+        ),
+    ),
+    Mutation(
         name="cli-artifact-v1-seal-stdin-short-circuit-bypass",
         path="evoom_guard/cli/artifact_admission_commands.py",
         before='    if args.artifact == "-" or args.finalizer_bundle == "-":\n',
