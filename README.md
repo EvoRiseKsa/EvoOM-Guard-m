@@ -253,14 +253,13 @@ historical evidence. See [release status](docs/RELEASE_STATUS.md),
 
 ## Security, contribution, and feedback
 
+Use [SUPPORT.md](SUPPORT.md) to choose the correct support or reporting route.
 Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 The public/private operating boundary is documented in
 [governance](docs/GOVERNANCE.md). Never publish signing keys, credentials,
 customer policy, held-out evaluation data, or private operational logs.
 
-Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md). For ordinary product
-feedback, wrong verdicts, or installation trouble, use the
-[Guard report form](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/new?template=guard-report.md).
+Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

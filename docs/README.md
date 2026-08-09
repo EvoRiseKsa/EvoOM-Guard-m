@@ -54,6 +54,8 @@ production channel.
   consumer repository.
 - [`CASE-STUDY.md`](CASE-STUDY.md) — reconstruct a bounded historical upstream
   bug-fix demonstration.
+- [`../SUPPORT.md`](../SUPPORT.md) — route product questions, bug reports,
+  vulnerability reports, and commercial support requests.
 
 ## User guide
 
