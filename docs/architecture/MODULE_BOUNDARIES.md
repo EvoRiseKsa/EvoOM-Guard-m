@@ -60,6 +60,18 @@ error tuples and performs no I/O or report mutation. The facade alone retains
 the established check IDs, messages, ordering, skip semantics, and public
 report envelope.
 
+Effective-policy type/shape validation likewise has a pure owner in
+`verifiers/record_policy_types.py`. It returns immutable ordered errors and an
+already-validated operating-profile selector. The facade still selects the
+schema-specific contract, supplies the established harness path predicates,
+and invokes the independent `record_policy.check_operating_profile` decision
+at the same late point. The extracted owner has no I/O, cleanup, process,
+hashing, report-mutation, or verdict authority. A pre-extraction vector,
+20,000 deterministic generated traces, public-report digests, and focused
+reviewed mutations bind order, schema keys, canonical harness paths, timeout
+positivity, lowercase pack identity, pack-required coupling, and profile
+semantic re-verification.
+
 Six cohesive stable flat modules now have explicit existing owners without a
 file move or public-identity change. `evidence.py` owns the bounded
 changed-line-coverage observation; `evidence_bundle.py` owns deterministic

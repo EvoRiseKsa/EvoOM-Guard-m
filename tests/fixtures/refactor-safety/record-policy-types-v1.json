@@ -114,6 +114,12 @@
     "strict_harness_invalid": [
       "strict_harness must be a boolean when present"
     ],
+    "timeout_negative": [
+      "timeout must be a positive integer"
+    ],
+    "timeout_zero": [
+      "timeout must be a positive integer"
+    ],
     "unsupported_schema_falls_back": [],
     "valid_schema_1_11": [],
     "valid_schema_1_12": []

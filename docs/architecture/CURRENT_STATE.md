@@ -49,7 +49,11 @@ verifier-owned. Mixed flat facades remain unclassified debt.
   public immutable Guard snapshot, removing the final private cross-package
   import. The mixed public `record_verifier` facade now delegates nested
   assurance/attestation validation to a pure verifier-owned projection while
-  retaining report sequencing and rendering itself.
+  retaining report sequencing and rendering itself. Its effective-policy
+  type/shape phase also delegates to a pure immutable verifier projection;
+  schema-contract selection, harness predicates, and the independent
+  operating-profile decision remain in the facade at their original lookup
+  points.
 - The broader program is still in progress: evidence/finalizer domains,
   release engineering, repository-wide strict typing, independent external
   red-team evidence, and the end-to-end protected build-to-admission chain are

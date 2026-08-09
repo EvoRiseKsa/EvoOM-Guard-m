@@ -111,6 +111,8 @@ def cases() -> dict[str, PolicyCase]:
         "numeric_fields_invalid": _updated(
             updates={"timeout": True, "mem_limit_mb": -1, "min_diff_coverage": 101}
         ),
+        "timeout_zero": _updated(updates={"timeout": 0}),
+        "timeout_negative": _updated(updates={"timeout": -1}),
         "pack_digest_invalid": _updated(
             updates={"expect_verifier_pack_sha256": "A" * 64}
         ),
