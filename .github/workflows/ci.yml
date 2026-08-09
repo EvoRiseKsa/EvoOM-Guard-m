@@ -35,13 +35,13 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -73,10 +73,11 @@ jobs:
       - name: Type-check (mypy)
         run: python -m mypy evoom_guard/
 
-      - name: Type-check release tooling (mypy strict)
+      - name: Type-check release and trust-assurance tooling (mypy strict)
         run: >-
           python -m mypy --strict
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
+          tools/ci/check_trust_assurance.py
 
       - name: Type-check evidence tooling (mypy strict)
         run: >-
@@ -111,6 +112,13 @@ jobs:
           python -m coverage run -m pytest tests/ -q
           python -m coverage report
 
+      - name: Trust-boundary coverage and mutation declarations (Python 3.12)
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m coverage json -o "${RUNNER_TEMP}/evoguard-coverage.json"
+          python tools/ci/check_trust_assurance.py \
+            --coverage-json "${RUNNER_TEMP}/evoguard-coverage.json"
+
       - name: Security mutation gate (Python 3.12)
         if: matrix.python-version == '3.12'
         run: python tools/ci/run_security_mutation_gate.py
@@ -139,7 +147,7 @@ jobs:
     # gVisor needs the runsc runtime and is validated out-of-band (docs/PROOFS.md).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -149,7 +157,7 @@ jobs:
           # candidate CI cache-free so untrusted PR bytes cannot seed a later
           # trusted run.
           package-manager-cache: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Install locked Vitest CLI
@@ -189,10 +197,10 @@ jobs:
       # the platform manifest from this reviewed index, rather than a mutable tag.
       EVOGUARD_E2E_IMAGE: python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Install locked Python CI dependencies
@@ -240,10 +248,10 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Version matches tag
@@ -265,10 +273,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Build evo-guard.pyz

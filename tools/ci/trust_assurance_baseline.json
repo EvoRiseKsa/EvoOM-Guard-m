@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "commit": "52578249f2afb78e1e499e6d138f213b3da68b8b",
+    "github_actions_run": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/actions/runs/31286440633",
+    "job": "test (3.12)",
+    "runner": "ubuntu-latest",
+    "coverage_note": "Each branch floor is the conservative minimum branch ratio implied by the branch-inclusive, zero-decimal coverage.py row recorded by the Linux Python 3.12 baseline run. Platform-specific skips make these Linux ratchets unsuitable for a Windows coverage run. They are regression floors, not coverage targets."
+  },
+  "modules": [
+    {
+      "path": "evoom_guard/workspace/__init__.py",
+      "trust_boundary": "workspace containment and descriptor-relative operations",
+      "baseline_report": {"statements": 279, "missing_statements": 99, "branches": 110, "combined_percent": 59},
+      "branch_floor": {"covered": 48, "total": 110},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this module at the baseline commit; mutations in extracted workspace modules do not count as direct coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/runtime_identity.py",
+      "trust_boundary": "runtime executable and environment identity",
+      "baseline_report": {"statements": 451, "missing_statements": 141, "branches": 162, "combined_percent": 65},
+      "branch_floor": {"covered": 86, "total": 162},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this module at the baseline commit."
+      }
+    },
+    {
+      "path": "evoom_guard/verifiers/fidelity.py",
+      "trust_boundary": "verifier input and execution-fidelity checks",
+      "baseline_report": {"statements": 179, "missing_statements": 46, "branches": 74, "combined_percent": 70},
+      "branch_floor": {"covered": 43, "total": 74},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this module at the baseline commit."
+      }
+    },
+    {
+      "path": "evoom_guard/admission/release_artifact.py",
+      "trust_boundary": "release-artifact admission semantics",
+      "baseline_report": {"statements": 653, "missing_statements": 160, "branches": 242, "combined_percent": 71},
+      "branch_floor": {"covered": 138, "total": 242},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/admission/agent_change.py",
+      "trust_boundary": "agent-change admission semantics",
+      "baseline_report": {"statements": 559, "missing_statements": 121, "branches": 198, "combined_percent": 73},
+      "branch_floor": {"covered": 111, "total": 198},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/finalizer/deployment.py",
+      "trust_boundary": "trusted-finalizer deployment contract",
+      "baseline_report": {"statements": 332, "missing_statements": 81, "branches": 92, "combined_percent": 74},
+      "branch_floor": {"covered": 61, "total": 92},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this module at the baseline commit."
+      }
+    },
+    {
+      "path": "evoom_guard/artifact_admission.py",
+      "trust_boundary": "regular-file artifact admission V1",
+      "baseline_report": {"statements": 336, "missing_statements": 70, "branches": 96, "combined_percent": 75},
+      "branch_floor": {"covered": 56, "total": 96},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/release_source_producer_receipt.py",
+      "trust_boundary": "authenticated release-source producer receipt",
+      "baseline_report": {"statements": 411, "missing_statements": 80, "branches": 174, "combined_percent": 76},
+      "branch_floor": {"covered": 111, "total": 174},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/artifact_digest_admission.py",
+      "trust_boundary": "digest and opaque-provenance binding V2",
+      "baseline_report": {"statements": 347, "missing_statements": 66, "branches": 92, "combined_percent": 77},
+      "branch_floor": {"covered": 55, "total": 92},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/admission/release_source.py",
+      "trust_boundary": "release-source admission semantics",
+      "baseline_report": {"statements": 523, "missing_statements": 93, "branches": 178, "combined_percent": 77},
+      "branch_floor": {"covered": 107, "total": 178},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/release_source_finalizer.py",
+      "trust_boundary": "release-source finalizer sealing and verification",
+      "baseline_report": {"statements": 525, "missing_statements": 97, "branches": 158, "combined_percent": 77},
+      "branch_floor": {"covered": 95, "total": 158},
+      "mutation": {
+        "status": "gap",
+        "gap": "No reviewed mutant directly targets this domain module at the baseline commit; CLI mutations are not counted as domain mutation coverage."
+      }
+    },
+    {
+      "path": "evoom_guard/github_attestation.py",
+      "trust_boundary": "GitHub Artifact Attestation provider verification and lifecycle",
+      "baseline_report": {"statements": 863, "missing_statements": 166, "branches": 266, "combined_percent": 78},
+      "branch_floor": {"covered": 178, "total": 266},
+      "mutation": {
+        "status": "reviewed",
+        "minimum_reviewed_mutants": 31,
+        "scope_note": "This is a count of explicit reviewed source mutations in the deterministic gate, not a whole-module mutation score."
+      }
+    }
+  ]
+}
