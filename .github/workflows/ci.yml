@@ -73,10 +73,11 @@ jobs:
       - name: Type-check (mypy)
         run: python -m mypy evoom_guard/
 
-      - name: Type-check release tooling (mypy strict)
+      - name: Type-check release and trust-assurance tooling (mypy strict)
         run: >-
           python -m mypy --strict
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
+          tools/ci/check_trust_assurance.py
 
       - name: Type-check evidence tooling (mypy strict)
         run: >-
@@ -110,6 +111,13 @@ jobs:
         run: |
           python -m coverage run -m pytest tests/ -q
           python -m coverage report
+
+      - name: Trust-boundary coverage and mutation declarations (Python 3.12)
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m coverage json -o "${RUNNER_TEMP}/evoguard-coverage.json"
+          python tools/ci/check_trust_assurance.py \
+            --coverage-json "${RUNNER_TEMP}/evoguard-coverage.json"
 
       - name: Security mutation gate (Python 3.12)
         if: matrix.python-version == '3.12'

@@ -110,4 +110,6 @@ branch = true
 # for run-to-run variation. It is a regression guard, not a target: raise it
 # again only after real branch tests move the number, never by writing tests
 # whose only purpose is the percentage.
+# The separate trust-assurance gate also ratchets branch ratios for named weak
+# trust-boundary modules so this aggregate cannot hide a local regression.
 fail_under = 80
