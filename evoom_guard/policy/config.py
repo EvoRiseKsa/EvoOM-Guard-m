@@ -70,6 +70,48 @@ _REPORT_INTEGRITY_VALUES = (
 _ISOLATION_VALUES = ("subprocess", "docker", "gvisor")
 
 
+def _validated_path_policy(
+    data: dict[str, object],
+    *,
+    invalid: Callable[[str, str], ConfigError],
+) -> dict[str, object]:
+    """Validate and normalize the trusted path/harness policy as one phase."""
+
+    cfg: dict[str, object] = {}
+    for key in ("protected", "allow", "setup_output_globs", "harness_inputs"):
+        if key in data:
+            value = data[key]
+            if not isinstance(value, list) or not all(
+                isinstance(pattern, str) for pattern in value
+            ):
+                expected = (
+                    "expected a list of exact repository-relative file paths"
+                    if key == "harness_inputs"
+                    else "expected a list of glob strings"
+                )
+                raise invalid(key, expected)
+            if key == "harness_inputs":
+                try:
+                    cfg[key] = list(normalize_harness_inputs(value))
+                except ValueError as exc:
+                    raise invalid(key, str(exc)) from exc
+            else:
+                cfg[key] = value
+    harness_values = cfg.get("harness_inputs")
+    setup_glob_values = cfg.get("setup_output_globs")
+    if isinstance(harness_values, list) and isinstance(setup_glob_values, list):
+        conflicts = setup_output_harness_conflicts(
+            harness_values,
+            setup_glob_values,
+        )
+        if conflicts:
+            raise invalid(
+                "setup_output_globs",
+                "cannot exclude harness_inputs: " + ", ".join(conflicts),
+            )
+    return cfg
+
+
 def load_config(
     path: str,
     *,
@@ -126,37 +168,7 @@ def load_config(
                 "spaces is unsafe for paths)",
             )
         cfg["setup_command"] = command
-    for key in ("protected", "allow", "setup_output_globs", "harness_inputs"):
-        if key in data:
-            value = data[key]
-            if not isinstance(value, list) or not all(
-                isinstance(pattern, str) for pattern in value
-            ):
-                expected = (
-                    "expected a list of exact repository-relative file paths"
-                    if key == "harness_inputs"
-                    else "expected a list of glob strings"
-                )
-                raise invalid(key, expected)
-            if key == "harness_inputs":
-                try:
-                    cfg[key] = list(normalize_harness_inputs(value))
-                except ValueError as exc:
-                    raise invalid(key, str(exc)) from exc
-            else:
-                cfg[key] = value
-    harness_values = cfg.get("harness_inputs")
-    setup_glob_values = cfg.get("setup_output_globs")
-    if isinstance(harness_values, list) and isinstance(setup_glob_values, list):
-        conflicts = setup_output_harness_conflicts(
-            harness_values,
-            setup_glob_values,
-        )
-        if conflicts:
-            raise invalid(
-                "setup_output_globs",
-                "cannot exclude harness_inputs: " + ", ".join(conflicts),
-            )
+    cfg.update(_validated_path_policy(data, invalid=invalid))
     for key in ("timeout", "mem_limit"):
         if key in data:
             value = data[key]

@@ -40,6 +40,42 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="policy-path-validation-order-bypass",
+        path="evoom_guard/policy/config.py",
+        before=(
+            '    for key in ("protected", "allow", "setup_output_globs", '
+            '"harness_inputs"):\n'
+        ),
+        after=(
+            '    for key in ("harness_inputs", "protected", "allow", '
+            '"setup_output_globs"):\n'
+        ),
+        test=(
+            "tests/test_policy_config_characterization.py::"
+            "test_command_and_path_error_precedence_is_frozen"
+        ),
+    ),
+    Mutation(
+        name="policy-harness-normalization-bypass",
+        path="evoom_guard/policy/config.py",
+        before="                    cfg[key] = list(normalize_harness_inputs(value))\n",
+        after="                    cfg[key] = list(value)\n",
+        test=(
+            "tests/test_policy_config_characterization.py::"
+            "test_harness_normalization_failure_precedes_conflict_detection"
+        ),
+    ),
+    Mutation(
+        name="policy-harness-conflict-bypass",
+        path="evoom_guard/policy/config.py",
+        before="        if conflicts:\n",
+        after="        if False and conflicts:\n",
+        test=(
+            "tests/test_policy_config_characterization.py::"
+            "test_harness_conflict_remains_fail_closed"
+        ),
+    ),
+    Mutation(
         name="workspace-parent-component-bypass",
         path="evoom_guard/workspace/__init__.py",
         before=(
