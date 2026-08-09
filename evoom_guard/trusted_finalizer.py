@@ -31,15 +31,23 @@ from evoom_guard.evidence_bundle import (
     EvidenceMaterial,
     FinalizedEvidence,
     VerifiedBundle,
-    _canonical_json,
-    _load_json_object,
-    _read_regular_file,
-    _sha256,
     finalize_evidence_bundle,
     inspect_evidence_bundle,
     validate_evidence_context,
     verify_bundle_context,
     verify_bundle_signature,
+)
+from evoom_guard.evidence_bundle import (
+    canonical_json_bytes as _canonical_json,
+)
+from evoom_guard.evidence_bundle import (
+    load_json_object_bytes as _load_json_object,
+)
+from evoom_guard.evidence_bundle import (
+    read_regular_file_bytes as _read_regular_file,
+)
+from evoom_guard.evidence_bundle import (
+    sha256_bytes as _sha256,
 )
 from evoom_guard.record_verifier import verify_record
 

@@ -897,7 +897,12 @@ def cmd_finalize_record(
 def _read_external_finalizer_object(path: str, *, label: str) -> dict[str, object]:
     """Read a bounded JSON object supplied outside candidate-controlled artifacts."""
 
-    from evoom_guard.evidence_bundle import EvidenceBundleError, _read_regular_file
+    from evoom_guard.evidence_bundle import (
+        EvidenceBundleError,
+    )
+    from evoom_guard.evidence_bundle import (
+        read_regular_file_bytes as _read_regular_file,
+    )
     from evoom_guard.record_verifier import strict_json_loads
 
     if path == "-":
@@ -1149,15 +1154,20 @@ def cmd_verify_agent_change_finalized(
 def _read_semantic_finalizer_record(path: str) -> dict[str, Any]:
     """Read and validate one untrusted verdict before using its digest fields."""
 
-    from evoom_guard.evidence_bundle import MAX_VERDICT_BYTES, _load_json_object, _read_regular_file
+    from evoom_guard.evidence_bundle import (
+        MAX_VERDICT_BYTES,
+        snapshot_evidence_primitives,
+    )
     from evoom_guard.record_verifier import verify_record
+
+    evidence_primitives = snapshot_evidence_primitives()
 
     return _trusted_finalizer_command_owner.execute_read_semantic_finalizer_record(
         path,
         services=_trusted_finalizer_command_owner.SemanticRecordServices(
             max_verdict_bytes=MAX_VERDICT_BYTES,
-            read_regular_file=_read_regular_file,
-            load_json_object=_load_json_object,
+            read_regular_file=evidence_primitives.read_regular_file,
+            load_json_object=evidence_primitives.load_json_object,
             verify_record=verify_record,
         ),
     )
@@ -1440,7 +1450,7 @@ def cmd_derive_release_source_controls(
 ) -> int:
     """Re-derive source/context from raw Git without making an admission claim."""
 
-    from evoom_guard.evidence_bundle import _canonical_json
+    from evoom_guard.evidence_bundle import snapshot_evidence_primitives
     from evoom_guard.release_source_finalizer import (
         RELEASE_SOURCE_CONTEXT_FORMAT,
         ReleaseSourceFinalizerError,
@@ -1450,13 +1460,18 @@ def cmd_derive_release_source_controls(
         derive_release_source_bindings,
     )
 
+    evidence_primitives = snapshot_evidence_primitives()
+
+    def canonical_json(value: dict[str, Any]) -> bytes:
+        return evidence_primitives.canonical_json(value)
+
     return _release_source_finalizer_command_owner.execute_derive_release_source_controls(
         args,
         services=(
             _release_source_finalizer_command_owner.DeriveReleaseSourceControlsServices(
                 context_format=RELEASE_SOURCE_CONTEXT_FORMAT,
                 finalizer_error=ReleaseSourceFinalizerError,
-                canonical_json=_canonical_json,
+                canonical_json=canonical_json,
                 publish_bytes=_publish_bytes,
                 record_snapshot=_record_snapshot,
                 context_from_release_source_bindings=(

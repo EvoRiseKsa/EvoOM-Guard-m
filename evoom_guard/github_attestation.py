@@ -57,7 +57,15 @@ from evoom_guard.artifact_digest_admission import (
     seal_artifact_digest_admission,
     verify_artifact_digest_admission,
 )
-from evoom_guard.evidence_bundle import EvidenceBundleError, _canonical_json, _read_regular_file
+from evoom_guard.evidence_bundle import (
+    EvidenceBundleError,
+)
+from evoom_guard.evidence_bundle import (
+    canonical_json_bytes as _canonical_json,
+)
+from evoom_guard.evidence_bundle import (
+    read_regular_file_bytes as _read_regular_file,
+)
 from evoom_guard.execution import (
     ProcessLimits,
     abort_cleanup_exception_summary,
