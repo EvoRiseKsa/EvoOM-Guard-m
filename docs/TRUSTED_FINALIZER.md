@@ -263,7 +263,6 @@ evo-guard seal-finalizer handoff.json verdict.json \
   --out final.evb --expected-source expected-source.json \
   --expected-context expected-context.json \
   --expected-derivation bindings.json \
-  --material trusted-finalizer-git-bindings=bindings.json \
   --sign-key finalizer.pem --require-pass
 
 # An independent consumer uses external trust inputs again.
@@ -296,9 +295,10 @@ The source base/head values must equal the evidence context values exactly;
 branch names and movable refs are rejected. The raw binding is canonical JSON,
 not a trust root: the sealing code recomputes its relation to the semantic
 verdict and requires its output source/context to match exactly. `seal-finalizer`
-reserves the bundle material role `trusted-finalizer-handoff`; the template also
-includes the `trusted-finalizer-git-bindings` material so an external reviewer
-can inspect the exact comparison input.
+reserves both `trusted-finalizer-handoff` and
+`trusted-finalizer-git-bindings`, then automatically signs the exact canonical
+bytes it verified under those roles. Callers cannot supply either reserved
+material themselves.
 
 ### Python API migration for 4.6 development source
 
@@ -326,10 +326,13 @@ private key is read.
 Legacy Python integrations that intentionally seal only against externally
 declared source/context metadata must migrate to the conspicuously named
 `seal_finalizer_bundle_without_derivation`. That function preserves the old
-capability for compatibility and downstream-verifier fixture construction, but
-it does **not** establish the raw-Git invariant and must not be used as a PR,
-release, or artifact-admission trust boundary. There is deliberately no weaker
-CLI counterpart. For a generic provenance primitive, prefer `finalize-record`.
+capability for compatibility, but it cannot attach the reserved derivation role
+and its output is rejected by `verify_finalized_bundle`. Historical consumers
+that intentionally accept that lower assurance must call the equally explicit
+`verify_finalized_bundle_without_derivation`; neither compatibility function
+establishes the raw-Git invariant or may be used as a PR, release, or
+artifact-admission trust boundary. There is deliberately no weaker CLI
+counterpart. For a generic provenance primitive, prefer `finalize-record`.
 
 For lower-level uses, `finalize-record` seals a semantically valid record
 against a context and returns `ALLOW` or `DENY`. It is a provenance primitive,

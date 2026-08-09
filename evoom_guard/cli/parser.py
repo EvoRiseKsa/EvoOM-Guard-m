@@ -540,7 +540,7 @@ def build_parser(
     # ----- verify-finalized ------------------------------------------------ #
     vf_p = sub.add_parser(
         "verify-finalized",
-        help="verify a signed finalizer bundle, its exact handoff, and external bindings",
+        help="verify a derivation-bound finalizer bundle, exact handoff, and external bindings",
     )
     vf_p.add_argument("bundle", help="the signed finalizer .evb evidence bundle")
     vf_p.add_argument(

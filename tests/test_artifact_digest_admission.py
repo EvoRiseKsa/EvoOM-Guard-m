@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from finalizer_test_support import finalizer_bindings_for
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
@@ -17,7 +18,7 @@ from evoom_guard.guard import guard
 from evoom_guard.signing import generate_keypair, verify_bytes
 from evoom_guard.trusted_finalizer import (
     create_finalizer_handoff,
-    seal_finalizer_bundle_without_derivation,
+    seal_finalizer_bundle,
 )
 
 
@@ -82,13 +83,14 @@ def _finalized_allow(tmp_path: Path, *, denied: bool = False):
     create_finalizer_handoff(str(verdict), str(handoff), source=source, context=context)
     finalizer_private, finalizer_public = _keys(tmp_path, "finalizer")
     bundle = tmp_path / "finalized.evb"
-    sealed = seal_finalizer_bundle_without_derivation(
+    sealed = seal_finalizer_bundle(
         str(handoff),
         str(verdict),
         str(bundle),
         expected_source=source,
         expected_context=context,
         private_key_path=str(finalizer_private),
+        expected_derivation=finalizer_bindings_for(record, context, source).payload,
     )
     return bundle, finalizer_private, finalizer_public, source, context, sealed.decision
 

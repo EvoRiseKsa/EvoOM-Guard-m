@@ -86,7 +86,8 @@ def _assert_seal_holds_privileged_boundary(seal: str) -> None:
     assert "--expected-source" in seal
     assert "--expected-context" in seal
     assert "--expected-derivation" in seal
-    assert "trusted-finalizer-git-bindings" in seal
+    if FROZEN_EXAMPLE_RELEASE not in seal:
+        assert '--material "trusted-finalizer-git-bindings=' not in seal
     assert "git init --bare" in seal
     assert "derive-finalizer-bindings" in seal
     assert "verify-finalizer-bindings" in seal

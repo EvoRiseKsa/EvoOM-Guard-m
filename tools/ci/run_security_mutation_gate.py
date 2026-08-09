@@ -11384,6 +11384,25 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="trusted-finalizer-strict-derivation-absence-bypass",
+        path="evoom_guard/trusted_finalizer.py",
+        before=(
+            "    if len(derivation_materials) != 1:\n"
+            "        raise FinalizerHandoffError(\n"
+            "            \"derivation-bound finalized evidence bundle must contain exactly one \"\n"
+            "            f\"{FINALIZER_DERIVATION_ROLE!r} material\"\n"
+            "        )\n"
+        ),
+        after=(
+            "    if len(derivation_materials) != 1:\n"
+            "        return verified  # type: ignore[return-value]\n"
+        ),
+        test=(
+            "tests/test_trusted_finalizer.py::"
+            "test_weak_bundle_cannot_pass_strict_verification_but_explicit_legacy_can"
+        ),
+    ),
+    Mutation(
         name="cli-trusted-finalizer-seal-require-pass-bypass",
         path="evoom_guard/cli/trusted_finalizer_commands.py",
         before=(

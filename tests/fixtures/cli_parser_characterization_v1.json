@@ -99,9 +99,9 @@
     }
   },
   "program": "evo-guard",
-  "root_help_sha256": "118f634afa371a7e2b3c3e73becddf5ab29f09b3645ed282fcf5b588d1f7ae3f",
+  "root_help_sha256": "10d73e2c5fb367287080d6f7c1a61adb9e2ae6777e7602e2d27b70b46a648657",
   "schema": 1,
-  "structure_sha256": "df41af853812b28e1413a904e9b21cbb60ab667d0294c232bd2703246ddd7309",
+  "structure_sha256": "963e69740b8fa09528dc568ec265006307688205600af5f9b6b40ba85ac2cbc4",
   "subcommand_count": 44,
   "subcommand_help_sha256": {
     "bundle-evidence": "caa11579b59a4566c1a710c84d1b5344db0bf8a8fb88a3ccd96afb19b1329b6d",
@@ -127,7 +127,7 @@
     "seal-agent-change-finalized": "01f4767eda6e4155ed47b692f456a9d8a2d37a691fdf1c0fde6dd9e21cfd9906",
     "seal-artifact-admission": "3d2bba818065c39b2b2b8430964b8ee3692367683125f98d3916aa8b91ec8e33",
     "seal-artifact-digest-admission": "a9195c490c5a7040a7a68fe3b66ff4575b61b5e517a93d3c161e6aa9e36259b1",
-    "seal-finalizer": "540add6a14f0e9c0467c5bd9a279a1a32b4e0cf95d49d3c5cd51eb63889445f5",
+    "seal-finalizer": "98cebfccda881d73ba406d92b8f7074bb4a12872011b7ab0e4fc51fbc28039a5",
     "seal-github-attestation-admission": "194e4938808565ce57b46642db9bd6b638e8daba520804966dce166d6d080967",
     "seal-github-release-artifact-admission": "534e7dd6ead9fad2ad53177b97f6010956f957e34286e7fa477d366d6ce452e9",
     "seal-release-source-admission": "543a890c9e1c71e9dfedff3958270f882aedb9aee65b226e7cab18cf2b3e2d58",

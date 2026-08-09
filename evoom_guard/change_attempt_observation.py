@@ -6,10 +6,12 @@
 # -----------------------------------------------------------------------------
 """Bounded advisory observations from authenticated Trusted Finalizer bundles.
 
-The wire object is a deterministic projection of one verified ``.evb``.  It
-does not widen Agent Change admission, turn record fields into independent
-witnesses, or grant merge/deployment authority.  Local verification time and
-projector identity live only in :class:`VerifiedChangeAttemptObservation`.
+The wire object is a deterministic projection of one verified ``.evb``.  This
+historical advisory-only format deliberately retains handoff-only bundle
+compatibility; it does not claim raw-Git derivation assurance. It does not widen
+Agent Change admission, turn record fields into independent witnesses, or grant
+merge/deployment authority. Local verification time and projector identity live
+only in :class:`VerifiedChangeAttemptObservation`.
 """
 
 from __future__ import annotations
@@ -46,8 +48,8 @@ from evoom_guard.runtime_identity import (
 )
 from evoom_guard.signing import SigningUnavailableError
 from evoom_guard.trusted_finalizer import (
-    VerifiedFinalizedBundle,
-    verify_finalized_bundle,
+    VerifiedFinalizedBundleWithoutDerivation,
+    verify_finalized_bundle_without_derivation,
 )
 
 CHANGE_ATTEMPT_OBSERVATION_FORMAT = "EVOGUARD_CHANGE_ATTEMPT_OBSERVATION_V1"
@@ -289,7 +291,7 @@ class VerifiedChangeAttemptObservation:
     """
 
     inspection: InspectedChangeAttemptObservation
-    finalized: VerifiedFinalizedBundle = dataclass_field(repr=False)
+    finalized: VerifiedFinalizedBundleWithoutDerivation = dataclass_field(repr=False)
     verifier_id: str
     verified_at: str
     observation_sha256: str
@@ -1207,7 +1209,7 @@ def _project_runtime_channel(
 
 
 def _project_observation(
-    finalized: VerifiedFinalizedBundle,
+    finalized: VerifiedFinalizedBundleWithoutDerivation,
     *,
     bundle_sha256: str,
 ) -> dict[str, Any]:
@@ -1411,7 +1413,7 @@ def _verified_bundle_snapshot(
     trusted_finalizer_public_key_path: str,
     expected_source: Mapping[str, Any],
     expected_context: Mapping[str, Any],
-) -> tuple[VerifiedFinalizedBundle, str]:
+) -> tuple[VerifiedFinalizedBundleWithoutDerivation, str]:
     """Read the caller-controlled bundle path once, then verify those same bytes."""
 
     try:
@@ -1427,7 +1429,7 @@ def _verified_bundle_snapshot(
             except OSError:
                 pass
             snapshot_path = _materialize_private_snapshot(directory, snapshot)
-            finalized = verify_finalized_bundle(
+            finalized = verify_finalized_bundle_without_derivation(
                 snapshot_path,
                 trusted_public_key_path=trusted_finalizer_public_key_path,
                 expected_source=expected_source,
@@ -1504,7 +1506,7 @@ def _published_observation(
 
 def _verified_wrapper(
     inspection: InspectedChangeAttemptObservation,
-    finalized: VerifiedFinalizedBundle,
+    finalized: VerifiedFinalizedBundleWithoutDerivation,
 ) -> VerifiedChangeAttemptObservation:
     verified_at = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     return VerifiedChangeAttemptObservation(
