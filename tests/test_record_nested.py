@@ -117,4 +117,3 @@ def test_null_skip_order_and_early_return_are_exact() -> None:
         "attestation.shape",
     ]
     assert all(item["status"] == "skip" for item in trace)
-
