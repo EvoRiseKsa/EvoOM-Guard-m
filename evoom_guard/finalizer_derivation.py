@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -1025,6 +1025,51 @@ class _GitReader:
         if len(data) != size:
             raise FinalizerDerivationError(f"{label} changed or was truncated while reading")
         return data
+
+
+def resolve_raw_git_regular_blobs(
+    *,
+    repository: str,
+    treeish: str,
+    paths: Iterable[str],
+    bare: bool = False,
+    git_executable: GitExecutablePin | None = None,
+) -> dict[str, str]:
+    """Resolve selected regular-file paths to raw Git blob object IDs.
+
+    The tree is read once even when several paths are requested. Missing and
+    non-regular paths are omitted so callers can retain their role-specific
+    errors. The private reader and tree-entry representation remain owned here,
+    and projection happens only after normal context-manager cleanup.
+    """
+
+    if isinstance(paths, (str, bytes)):
+        raise FinalizerDerivationError(
+            "raw Git regular-blob paths must be an iterable of safe relative paths"
+        )
+    try:
+        requested_paths = tuple(paths)
+    except TypeError as exc:
+        raise FinalizerDerivationError(
+            "raw Git regular-blob paths must be an iterable of safe relative paths"
+        ) from exc
+    for path in requested_paths:
+        if not isinstance(path, str) or not is_safe_relpath(path):
+            raise FinalizerDerivationError(
+                "raw Git regular-blob path must be a safe relative path"
+            )
+    with _GitReader(
+        repository,
+        bare=bare,
+        git_executable=git_executable,
+    ) as reader:
+        entries = reader.tree(treeish)
+    blobs: dict[str, str] = {}
+    for path in requested_paths:
+        entry = entries.get(path)
+        if entry is not None and entry.regular:
+            blobs[path] = _valid_git_sha(entry.object_id, label="regular blob")
+    return blobs
 
 
 def resolve_raw_git_regular_blob(

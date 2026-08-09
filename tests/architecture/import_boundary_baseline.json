@@ -169,6 +169,17 @@
         "layer_violations": 0,
         "unclassified_modules": 21
       }
+    },
+    {
+      "revision": 12,
+      "ceilings": {
+        "cycle_edges": 0,
+        "cross_package_private_imports": 5,
+        "wildcard_imports": 0,
+        "unresolved_dynamic_imports": 0,
+        "layer_violations": 0,
+        "unclassified_modules": 21
+      }
     }
   ],
   "violations": {
@@ -177,7 +188,6 @@
       "evoom_guard.cli | evoom_guard.guard | _UnverifiableChangedPathsError | contexts=from:local:runtime",
       "evoom_guard.cli | evoom_guard.release_source_finalizer | _publish_bytes | contexts=from:local:runtime",
       "evoom_guard.cli | evoom_guard.release_source_finalizer | _record_snapshot | contexts=from:local:runtime",
-      "evoom_guard.release_source_producer_receipt | evoom_guard.finalizer_derivation | _GitReader | contexts=from:local:runtime",
       "evoom_guard.release_source_producer_receipt | evoom_guard.release_source_finalizer | _publish_bytes | contexts=from:module:runtime",
       "evoom_guard.release_source_producer_receipt | evoom_guard.release_source_finalizer | _validate_source_context | contexts=from:module:runtime"
     ],

@@ -305,6 +305,15 @@ vectors freeze positive/negative behavior, exception causes, and monkeypatch
 timing. No schema or wire semantics change; the cross-package private-import
 ceiling drops from 10 to 6.
 
+Import-boundary ratchet revision 12 makes selected multi-path regular-blob
+projection a narrow public Finalizer Derivation contract. The producer-receipt
+owner now consumes `resolve_raw_git_regular_blobs` instead of importing `_GitReader` and
+observing `_GitEntry` values. Reader construction remains a live module-global
+lookup, one tree is read per verification, cleanup completes before workflow
+comparisons, and the historical producer/trigger/admitter error order remains
+unchanged. No schema or wire contract changes; the cross-package private-import
+ceiling drops from 6 to 5.
+
 The verifier-owned `record_policy` module is a new classified verifier-layer
 owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy
