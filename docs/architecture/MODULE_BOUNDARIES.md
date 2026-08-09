@@ -248,7 +248,7 @@ The second CLI slice gives declarative parser construction a dependency-free
 owner in `evoom_guard/cli/parser.py`. The public `cli.build_parser` facade
 injects the current immutable-release validator and four argument-group helpers
 for each invocation, so no callable is snapshotted across monkeypatches. A
-re-runnable frozen characterization binds parser structure, 41 subcommands,
+re-runnable frozen characterization binds parser structure, 44 subcommands,
 all help output, representative defaults, and immutable-ref rejection.
 Handlers, dispatch, file/process effects, and command-family ownership remain
 in `cli/__init__.py`.
