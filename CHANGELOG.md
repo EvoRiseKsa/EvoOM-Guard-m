@@ -39,6 +39,21 @@ retained evidence say so.
   zipapp artifacts, and explicitly does not claim to configure or inspect live
   GitHub controls.
 
+### Changed
+
+- Replaced the final ten cross-package private-symbol imports with explicit
+  public owner contracts for finalizer source validation, selected raw-Git
+  blob projection, release-source primitive snapshots, and candidate-tree
+  compatibility. The architecture ratchet now permits zero private imports,
+  zero cycles, and zero layer violations; six cohesive stable modules are
+  classified by their existing semantic owners, reducing unclassified modules
+  from 21 to 11. Public import paths, schemas, canonical bytes, verdicts, and
+  runtime lookup timing remain unchanged.
+- Extracted trusted path and harness-policy validation from `load_config` as a
+  pure phase, reducing its measured C901 complexity from 49 to 42. Exact error
+  type, message, cause, validation order, and normalized payload behavior are
+  frozen by characterization and focused mutation tests.
+
 ### Fixed
 
 - Hardened the specialized black-box judge process owner so cancellation keeps

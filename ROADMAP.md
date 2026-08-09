@@ -257,10 +257,13 @@ needs — not feature accumulation. The order matters:
    or a deployment decision would require a separate versioned contract and
    evidence; neither the current `.raae` nor the release ledger grants that
    authority.
-2. **Independent evidence.** The frozen
-   [`v4.1.0` security-review request #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
+2. **Independent evidence.** The
+   [`review-v4.1.0-r1` companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.1.0-r1)
    remains a frozen historical target whose exact release artifacts remain
-   immutable; it must not be rewritten as a current-release review. The separate
+   immutable. The current
+   [security-review request #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
+   instead targets the immutable `v4.5.0` release; neither record is evidence
+   that an independent review occurred. The separate
    [current field-pilot #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
    must pre-register **64–96 total cases**, including at least **48 held-out**
    and **16 tuning** cases. Each subset must span at least four repositories
