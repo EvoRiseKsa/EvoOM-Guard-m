@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/main/evidence/runtime-observations/runtime-observation-v1.schema.json",
+  "title": "EvoOM Guard public runtime observation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_id",
+    "scope",
+    "source_run",
+    "release_binding",
+    "runtime_binding",
+    "conformance",
+    "verdict_cases",
+    "cleanup",
+    "raw_inventory",
+    "claims",
+    "nonclaims",
+    "transfer"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "../runtime-observation-v1.schema.json"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "evoom-public-runtime-observation-v1"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,127}$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ownership",
+        "source_repository_visibility",
+        "execution_environment",
+        "independent",
+        "production",
+        "field_evaluation",
+        "hostile_host"
+      ],
+      "properties": {
+        "ownership": {"type": "string", "const": "same-owner"},
+        "source_repository_visibility": {"type": "string", "const": "private"},
+        "execution_environment": {"type": "string", "const": "github-hosted"},
+        "independent": {"type": "boolean", "const": false},
+        "production": {"type": "boolean", "const": false},
+        "field_evaluation": {"type": "boolean", "const": false},
+        "hostile_host": {"type": "boolean", "const": false}
+      }
+    },
+    "source_run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "pull_request",
+        "run_id",
+        "run_attempt",
+        "event_name",
+        "base_sha",
+        "head_sha",
+        "event_merge_sha",
+        "workflow_path",
+        "workflow_blob_sha",
+        "merge_commit_sha"
+      ],
+      "properties": {
+        "repository": {"type": "string", "minLength": 3},
+        "pull_request": {"type": "integer", "minimum": 1},
+        "run_id": {"type": "integer", "minimum": 1},
+        "run_attempt": {"type": "integer", "minimum": 1},
+        "event_name": {"type": "string", "const": "pull_request"},
+        "base_sha": {"$ref": "#/$defs/git_sha"},
+        "head_sha": {"$ref": "#/$defs/git_sha"},
+        "event_merge_sha": {"$ref": "#/$defs/git_sha"},
+        "workflow_path": {
+          "type": "string",
+          "const": ".github/workflows/release-bound-gvisor-v45.yml"
+        },
+        "workflow_blob_sha": {"$ref": "#/$defs/git_sha"},
+        "merge_commit_sha": {"$ref": "#/$defs/git_sha"}
+      }
+    },
+    "release_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "commit", "tree", "artifact", "ledger"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 3},
+        "tag": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "commit": {"$ref": "#/$defs/git_sha"},
+        "tree": {"$ref": "#/$defs/git_sha"},
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "sha256", "size_bytes"],
+          "properties": {
+            "name": {"type": "string", "const": "evo-guard.pyz"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "size_bytes": {"type": "integer", "minimum": 1}
+          }
+        },
+        "ledger": {"$ref": "#/$defs/file_descriptor"}
+      }
+    },
+    "runtime_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "runtime",
+        "tag",
+        "tag_object",
+        "peeled_commit",
+        "version_lines",
+        "archive",
+        "requested_image",
+        "resolved_image_id",
+        "network",
+        "runner_os",
+        "runner_arch"
+      ],
+      "properties": {
+        "provider": {"type": "string", "const": "gvisor"},
+        "runtime": {"type": "string", "const": "runsc"},
+        "tag": {"type": "string", "minLength": 1},
+        "tag_object": {"$ref": "#/$defs/git_sha"},
+        "peeled_commit": {"$ref": "#/$defs/git_sha"},
+        "version_lines": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {"type": "string", "pattern": "^runsc version "},
+            {"type": "string", "pattern": "^spec: "}
+          ],
+          "items": false
+        },
+        "archive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "sha512", "size_bytes"],
+          "properties": {
+            "url": {"type": "string", "pattern": "^https://storage\\.googleapis\\.com/gvisor/releases/"},
+            "sha512": {"type": "string", "pattern": "^[0-9a-f]{128}$"},
+            "size_bytes": {"type": "integer", "minimum": 1}
+          }
+        },
+        "requested_image": {"type": "string", "minLength": 1},
+        "resolved_image_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "network": {"type": "string", "const": "none"},
+        "runner_os": {"type": "string", "const": "Linux"},
+        "runner_arch": {"type": "string", "const": "X64"}
+      }
+    },
+    "conformance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_path",
+        "suite_id",
+        "profile_id",
+        "status",
+        "profiles_total",
+        "profiles_passed",
+        "probes_total",
+        "probes_passed"
+      ],
+      "properties": {
+        "raw_path": {"$ref": "#/$defs/raw_path"},
+        "suite_id": {"type": "string", "minLength": 1},
+        "profile_id": {"type": "string", "const": "gvisor"},
+        "status": {"type": "string", "const": "pass"},
+        "profiles_total": {"type": "integer", "minimum": 1},
+        "profiles_passed": {"type": "integer", "minimum": 1},
+        "probes_total": {"type": "integer", "minimum": 1},
+        "probes_passed": {"type": "integer", "minimum": 1}
+      }
+    },
+    "verdict_cases": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/verdict_case"}
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["post_cases", "final"],
+      "properties": {
+        "post_cases": {"$ref": "#/$defs/empty_file"},
+        "final": {"$ref": "#/$defs/empty_file"}
+      }
+    },
+    "raw_inventory": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/raw_file_descriptor"}
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "nonclaims": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "transfer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "carrier",
+        "source_run_id",
+        "artifact_id",
+        "artifact_name",
+        "artifact_digest",
+        "expires_at",
+        "role",
+        "transient",
+        "durable_subset"
+      ],
+      "properties": {
+        "carrier": {"type": "string", "const": "github-actions-artifact"},
+        "source_run_id": {"type": "integer", "minimum": 1},
+        "artifact_id": {"type": "integer", "minimum": 1},
+        "artifact_name": {"type": "string", "minLength": 1},
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"
+        },
+        "role": {
+          "type": "string",
+          "const": "transient-locator-not-source-of-truth"
+        },
+        "transient": {"type": "boolean", "const": true},
+        "durable_subset": {"type": "string", "const": "this-directory"}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "raw_path": {"type": "string", "pattern": "^raw/[a-z0-9][a-z0-9.-]*$"},
+    "file_descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "raw_file_descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"$ref": "#/$defs/raw_path"},
+        "role": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "empty_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"$ref": "#/$defs/raw_path"},
+        "sha256": {"type": "string", "const": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+        "size_bytes": {"type": "integer", "const": 0}
+      }
+    },
+    "verdict_case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "raw_path",
+        "verdict",
+        "passed",
+        "exit_code",
+        "reason_code",
+        "tests_passed",
+        "tests_total",
+        "files_changed",
+        "protected_violations",
+        "execution_state",
+        "execution_phase",
+        "verdict_source",
+        "isolation",
+        "runtime",
+        "network",
+        "resolved_image_id",
+        "launcher_receipt_assertion"
+      ],
+      "properties": {
+        "id": {"type": "string", "enum": ["honest-pass", "broken-add-fail"]},
+        "raw_path": {"$ref": "#/$defs/raw_path"},
+        "verdict": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "passed": {"type": "boolean"},
+        "exit_code": {"type": "integer", "minimum": 0},
+        "reason_code": {"type": "string", "enum": ["tests_passed", "tests_failed"]},
+        "tests_passed": {"type": "integer", "minimum": 0},
+        "tests_total": {"type": "integer", "minimum": 1},
+        "files_changed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "protected_violations": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "execution_state": {"type": "string", "const": "completed"},
+        "execution_phase": {"type": "string", "const": "blackbox_pack"},
+        "verdict_source": {"type": "string", "const": "blackbox"},
+        "isolation": {"type": "string", "const": "gvisor"},
+        "runtime": {"type": "string", "const": "runsc"},
+        "network": {"type": "string", "const": "none"},
+        "resolved_image_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "launcher_receipt_assertion": {
+          "type": "string",
+          "const": "nonzero-not-an-audited-exact-call-count"
+        }
+      }
+    }
+  }
+}

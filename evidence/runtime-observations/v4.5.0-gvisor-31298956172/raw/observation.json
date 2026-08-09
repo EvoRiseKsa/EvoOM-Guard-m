@@ -1,0 +1,179 @@
+{
+  "bindings": {
+    "acceptance_manifest": {
+      "path": "gvisor-v45/acceptance-manifest.json",
+      "sha256": "d6586f8f7dc23b3864db9df1db12acc4232b6553098cc735b5166c45ca629cc4",
+      "size": 3703
+    },
+    "component_lock": {
+      "path": "gvisor-v45/components.lock.json",
+      "sha256": "cea7348b651c57029f16f851fe5c5c8bbec2ac8599425e4345a57381bba84067",
+      "size": 5436
+    },
+    "container_image": {
+      "requested": "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+      "resolved_image_id": "sha256:54a0b2beae90fe14c2131f1e880e1388c9df77390bc260d7317e589765e064e8"
+    },
+    "gvisor": {
+      "architecture": "x86_64",
+      "archive_sha512": "266ff0c74ba4faf137837c051e1d3c0a331bb1d3c152d791f349ef6680542d089b81f68e3c9f196a6fb82263909cfc583c39e98a0e058bb29c5ab752d9432805",
+      "archive_size": 143849577,
+      "archive_url": "https://storage.googleapis.com/gvisor/releases/release/20260803.0/x86_64/gvisor.tar.bz2",
+      "installer_download_sidecars": "NEVER",
+      "installer_require_sidecars": "ALWAYS",
+      "peeled_commit": "48de7274186ae2cbab2c8656c43a73d115227a61",
+      "runtime_name": "runsc",
+      "source_repository": "google/gvisor",
+      "tag": "release-20260803.0",
+      "tag_object": "dce6e31c2dd2055542cc1d71dfceaefdcaf0e05c"
+    },
+    "public_core": {
+      "commit": "6bb4c328e56661b661e50532886802c6ba36a997",
+      "pyz": {
+        "path": "evo-guard.pyz",
+        "sha256": "44bf036666bc7bb2903b647f33b63254771771887de4f170c91e8cdd8307c89d",
+        "size": 2356398
+      },
+      "release": "v4.5.0",
+      "repository": "EvoRiseKsa/EvoOM-Guard-m",
+      "tree": "bd81a595ca8608ad7da04390f31d5e489f5083ef"
+    }
+  },
+  "claims": [
+    "The exact v4.5.0 source commit reproducibly builds the exact published pyz bytes recorded in the component lock.",
+    "The official annotated gVisor tag object and its peeled source commit match the distinct identities recorded in the lock and manifest.",
+    "The checksum-pinned runsc point release is registered and selected by Docker on this observed GitHub-hosted ubuntu-24.04 runner.",
+    "The release-shipped isolation conformance kit passes its required gvisor profile with --require-gvisor.",
+    "The positive and negative candidate cases both start through Guard's gvisor launcher with runtime=runsc, network=none, and the exact resolved container image ID.",
+    "The external verifier pack accepts the honest behavior and rejects the deliberately broken add behavior."
+  ],
+  "environment": {
+    "docker_client": "28.0.4",
+    "docker_server": "28.0.4",
+    "github": {
+      "acceptance_base_sha": "51fcad5bc40628b0810099621cff9b189479647f",
+      "acceptance_head_sha": "c2583e988420e7f594bb48ae58f09b5ea7c64e99",
+      "event_name": "pull_request",
+      "ref": "refs/pull/10/merge",
+      "repository": "EvoRiseKsa/evoom-guard-system-acceptance-private",
+      "run_attempt": "1",
+      "run_id": "31298956172",
+      "runner_arch": "X64",
+      "runner_environment": "github-hosted",
+      "runner_os": "Linux",
+      "workflow_sha": "5e69ea9c8b79d6f74dd05a9d503564a52c643f3d"
+    },
+    "platform": "Linux-6.17.0-1020-azure-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "runsc_version": [
+      "runsc version release-20260803.0",
+      "spec: 1.2.1"
+    ],
+    "uname": [
+      "Linux",
+      "runnervmvrwv9",
+      "6.17.0-1020-azure",
+      "#20~24.04.1-Ubuntu SMP Fri Jun 19 20:09:14 UTC 2026",
+      "x86_64",
+      "x86_64"
+    ]
+  },
+  "evidence": {
+    "cleanup": {
+      "path": "residual-containers.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "conformance": {
+      "path": "isolation-conformance.json",
+      "sha256": "f9f403a6c7b39d150012bb498fbba56543b113fb4bd9612c6fb458f06e8ec2ac",
+      "size": 21042
+    },
+    "guard_cases": {
+      "broken-add-fail": {
+        "process": {
+          "path": "guard-broken-add-fail.process.json",
+          "sha256": "b1dfd58edb5894575525b0c243a63366537d9be47fe78ba7880de7c3e4c63f6f",
+          "size": 1549
+        },
+        "report": {
+          "path": "guard-broken-add-fail.md",
+          "sha256": "6be371e34b865a7bb32f96fcda69569306b3892d63e15cb13c7293c9e1be19c2",
+          "size": 1591
+        },
+        "verdict": {
+          "path": "guard-broken-add-fail.json",
+          "sha256": "cdd3ab80c2357820097422f848226fe30dc3066ba2b05ec158d6b19b21879bae",
+          "size": 8451
+        }
+      },
+      "honest-pass": {
+        "process": {
+          "path": "guard-honest-pass.process.json",
+          "sha256": "032c2ae529751b3469bd7ce292ea339223f34ab102aaccbad482923ad54c73cc",
+          "size": 1545
+        },
+        "report": {
+          "path": "guard-honest-pass.md",
+          "sha256": "3291d646c08f45445741316b629975f42c4cf3853732aae31d210aa2fa87df8e",
+          "size": 976
+        },
+        "verdict": {
+          "path": "guard-honest-pass.json",
+          "sha256": "74fb1b7bf02f1e34d945d2d0ece44cb87a51a2728c3da14a1d3eac678e6e8db5",
+          "size": 7967
+        }
+      }
+    },
+    "installation": {
+      "docker_runtimes": {
+        "path": "docker-runtimes.json",
+        "sha256": "7e2f241d3dde69ec998047ddac2bafffefb5fa9fd1ee8eb2fcfd9c29aa75c3b9",
+        "size": 17616
+      },
+      "evidence_boundary": {
+        "path": "evidence-boundary.txt",
+        "sha256": "07b4faf529a2d107e75bc11a0334df008f941324fd9fd1e11601d1a11c7c6cdd",
+        "size": 68
+      },
+      "gvisor_archive_sha512": {
+        "path": "gvisor-archive.sha512",
+        "sha256": "82fb04af6e803a24f48ae69a096a02539c796758b2d1b03a835dc7ed6e7186f2",
+        "size": 195
+      },
+      "gvisor_archive_size": {
+        "path": "gvisor-archive.size",
+        "sha256": "c617b4a5730cd0f600b16b7d43f4f0111c23581b88c7977d4986d49fbce46eda",
+        "size": 10
+      },
+      "gvisor_source_ref": {
+        "path": "gvisor-source-ref.txt",
+        "sha256": "8f2a686e358961081dfaf2995c768226d5f45a4230fcac0651dfd74a1f0daed0",
+        "size": 143
+      },
+      "runsc_version": {
+        "path": "runsc-version.txt",
+        "sha256": "dad3a3ea1ffeb6fec6bc65e9c3732b9586cf94b2fe9c0f594fab94c0cdf1565d",
+        "size": 45
+      }
+    },
+    "pack_doctor": {
+      "path": "pack-doctor.json",
+      "sha256": "6957aab6fe8a71b3974ee9d90d47811f2036fe5460a308ac7652a5ea3bb5b18d",
+      "size": 520
+    }
+  },
+  "nonclaims": [
+    "not an independent review or independently operated trust domain",
+    "not a production deployment or field-efficacy result",
+    "not a dedicated-host or hostile-host proof",
+    "not an HSM, KMS, production key-custody, or signer proof",
+    "not a multi-host, non-forking-ledger, rollback-resistance, or external-witness proof",
+    "not a Firecracker, microVM, or dedicated guest-kernel proof",
+    "not an independent proof that every installed sidecar reports or enforces the runsc release identity",
+    "not proof that gVisor, Docker, the hosted runner, or the workflow is invulnerable"
+  ],
+  "profile_id": "evoom-guard-v4.5.0-gvisor-observation-2",
+  "schema_version": "evoom-release-bound-gvisor-observation-2",
+  "status": "pass"
+}

@@ -193,14 +193,19 @@ release asset and its provenance. Canonical ledger:
 
 ## Current limits (stated plainly)
 
-- The `4.4.0` source line adds operating-profile and conformance/evaluation
-  tooling. Consumer availability is determined by an immutable GitHub Release,
-  not by presence in the repository. These mechanisms do not certify a hostile
-  production deployment.
-  The missing evidence remains a release-bound gVisor/VM run, a real multi-OS
-  runner matrix, a third-party held-out evaluation with an independently
-  controlled launcher when execution identity matters, and provider-backed
-  telemetry/retention exercises.
+- The stable `v4.5.0` release contains the operating-profile and isolation
+  conformance tooling; the repository source is now `4.6.0.dev0`. Consumer
+  availability is determined by an immutable GitHub Release, not by presence in
+  the repository. One exact, same-owner private run exercised the released
+  zipapp with `gvisor`/`runsc` on a GitHub-hosted runner; its bounded public
+  record is retained under
+  [`evidence/runtime-observations/v4.5.0-gvisor-31298956172`](evidence/runtime-observations/v4.5.0-gvisor-31298956172).
+  This does not certify a production, field, dedicated-host, hostile-host, or
+  independently operated deployment. Missing evidence still includes a
+  dedicated/hostile-host or VM boundary, a real multi-OS runner matrix, a
+  third-party held-out evaluation with an independently controlled launcher
+  when execution identity matters, and provider-backed telemetry/retention
+  exercises.
 - The default same-process judge can be forged by deliberate in-process source.
   `--blackbox` adds a stronger external channel, but the default composite still
   includes the weaker repo-native channel; use `--blackbox-only` to remove it
