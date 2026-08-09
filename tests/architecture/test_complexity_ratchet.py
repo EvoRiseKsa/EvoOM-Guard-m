@@ -113,9 +113,13 @@ def test_baseline_document_is_deterministic() -> None:
 
 
 def test_repository_complexity_matches_reviewed_baseline() -> None:
-    regressions, _improvements = check_complexity_ratchet()
+    regressions, improvements = check_complexity_ratchet()
 
     assert not regressions, "\n".join(regressions)
+    assert not improvements, (
+        "the complexity baseline must be lowered in the same change:\n"
+        + "\n".join(improvements)
+    )
 
 
 def test_committed_baseline_is_canonical_json() -> None:

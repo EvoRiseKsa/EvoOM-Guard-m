@@ -7,8 +7,8 @@
 The baseline is deliberately keyed by source path and function name rather than
 line number, so unrelated edits cannot hide or manufacture a finding. Existing
 findings are reviewed debt, not a target and not evidence of a defect. A lower
-or removed finding is reported as an improvement and should be followed by a
-baseline update so the old ceiling cannot be regained.
+or removed finding makes the baseline stale and fails the gate until the
+reviewed ceiling is lowered, so removed complexity cannot be regained later.
 """
 
 from __future__ import annotations
@@ -248,10 +248,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     for improvement in improvements:
-        print(f"IMPROVEMENT: {improvement}")
+        print(f"STALE BASELINE: {improvement}", file=sys.stderr)
     if regressions:
         for regression in regressions:
             print(f"REGRESSION: {regression}", file=sys.stderr)
+        return 1
+    if improvements:
+        print(
+            "complexity baseline must be updated to retain every measured improvement",
+            file=sys.stderr,
+        )
         return 1
     print(
         f"complexity ratchet passed: {len(findings)} C901 findings, "
