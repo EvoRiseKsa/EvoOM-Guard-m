@@ -68,4 +68,3 @@ def test_simultaneous_fault_order_is_frozen_verbatim() -> None:
     assert capture(cases()["simultaneous_faults"]) == _fixture()["case_errors"][
         "simultaneous_faults"
     ]
-
