@@ -24,6 +24,16 @@ class _CleanupAbort(BaseException):
     pass
 
 
+_RAW_GIT_TREE_FALSE_NOTE = (
+    "Raw-Git finalizer process-tree abort cleanup was not proven while preserving "
+    "the primary exception"
+)
+_RAW_GIT_READER_FALSE_NOTE = (
+    "Raw-Git finalizer output-reader abort cleanup was not proven while preserving "
+    "the primary exception"
+)
+
+
 class _TrackingStream(io.BytesIO):
     def __init__(self, initial: bytes = b"") -> None:
         super().__init__(initial)
@@ -398,6 +408,31 @@ def test_posix_success_proves_post_completion_group_cleanup(
     assert process.wait_timeouts == [finalizer_derivation._GIT_KILL_REAP_SECONDS] * 2
 
 
+def test_posix_completion_rejects_truthy_non_bool_cleanup_proof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = _FakeProcess(stdout=_TrackingStream(b"must-not-return\n"))
+    _install_process(monkeypatch, process)
+    monkeypatch.setattr(
+        finalizer_derivation,
+        "os",
+        SimpleNamespace(name="posix", environ=os.environ),
+    )
+    monkeypatch.setattr(
+        finalizer_derivation,
+        "_terminate_git_process_tree",
+        lambda _process: 1,
+    )
+
+    with pytest.raises(
+        FinalizerDerivationError,
+        match="process cleanup could not be proven",
+    ) as captured:
+        _git_command("repo", ["rev-parse", "HEAD"], bare=False)
+
+    assert getattr(captured.value, "__notes__", []) == [_RAW_GIT_TREE_FALSE_NOTE]
+
+
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX process groups")
 def test_real_posix_git_group_cleanup_stops_inherited_pipe_descendant(
     tmp_path: Path,
@@ -551,6 +586,27 @@ def test_timeout_reports_unproven_cleanup_without_unbounded_wait(
     ]
 
 
+def test_interrupted_query_rejects_truthy_non_bool_cleanup_proof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = _FakeProcess(poll_result=None)
+    _install_process(monkeypatch, process)
+    monkeypatch.setattr(finalizer_derivation, "_GIT_QUERY_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        finalizer_derivation,
+        "_terminate_git_process_tree",
+        lambda _process: 1,
+    )
+
+    with pytest.raises(
+        FinalizerDerivationError,
+        match="process cleanup could not be proven",
+    ) as captured:
+        _git_command("repo", ["rev-parse", "HEAD"], bare=False)
+
+    assert getattr(captured.value, "__notes__", []) == [_RAW_GIT_TREE_FALSE_NOTE]
+
+
 def test_live_reader_stream_is_never_closed_synchronously(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -623,3 +679,256 @@ def test_cleanup_baseexceptions_do_not_replace_reader_start_primary(
 
     assert process.kill_calls == 1
     assert len(join_calls) == 1
+
+
+def _exercise_raw_git_abort_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    primary: BaseException,
+    tree_effect: object,
+    reader_effect: object,
+) -> tuple[list[str], list[str]]:
+    """Reach the raw-Git owner's abort path before either reader can run."""
+
+    process = _FakeProcess()
+    _install_process(monkeypatch, process)
+    events: list[str] = []
+
+    class ReaderStartAbort:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            raise primary
+
+    def apply(effect: object) -> object:
+        if isinstance(effect, BaseException):
+            raise effect
+        return effect
+
+    def terminate(_process: object) -> object:
+        events.append("process-tree")
+        return apply(tree_effect)
+
+    def join(_readers: object, _streams: object) -> object:
+        events.append("output-readers")
+        return apply(reader_effect)
+
+    monkeypatch.setattr(finalizer_derivation.threading, "Thread", ReaderStartAbort)
+    monkeypatch.setattr(finalizer_derivation, "_terminate_git_process_tree", terminate)
+    monkeypatch.setattr(finalizer_derivation, "_join_and_close_git_readers", join)
+
+    with pytest.raises(type(primary)) as captured:
+        _git_command("repo", ["rev-parse", "HEAD"], bare=False)
+
+    assert captured.value is primary
+    traceback_names: list[str] = []
+    traceback = primary.__traceback__
+    while traceback is not None:
+        traceback_names.append(traceback.tb_frame.f_code.co_name)
+        traceback = traceback.tb_next
+    assert traceback_names.count("_run_git_command") == 1
+    return events, list(getattr(primary, "__notes__", []))
+
+
+def test_raw_git_abort_cleanup_preserves_primary_and_runs_both_stages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Characterize exact primary identity and independent cleanup ordering."""
+
+    primary = _PrimaryAbort("authoritative raw-Git cancellation")
+
+    events, _notes = _exercise_raw_git_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=_CleanupAbort("tree cleanup raised"),
+        reader_effect=_CleanupAbort("reader cleanup raised"),
+    )
+
+    assert events == ["process-tree", "output-readers"]
+
+
+def test_post_poll_abort_does_not_hide_the_first_tree_cleanup_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later successful retry cannot erase an earlier cleanup failure."""
+
+    primary = _PrimaryAbort("post-poll cancellation")
+    process = _FakeProcess(
+        stdout=_TrackingStream(),
+        stderr=_TrackingStream(),
+        wait_actions=[primary],
+    )
+    _install_process(monkeypatch, process)
+
+    class ImmediateThread:
+        def __init__(
+            self,
+            *,
+            target: Callable[..., None],
+            args: tuple[object, ...],
+            kwargs: dict[str, object],
+            daemon: bool,
+        ) -> None:
+            assert daemon is True
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs
+
+        def start(self) -> None:
+            self.target(*self.args, **self.kwargs)
+
+        def join(self, _timeout: float) -> None:
+            pass
+
+        def is_alive(self) -> bool:
+            return False
+
+    tree_effects: list[object] = [_CleanupAbort("first cleanup failed"), True]
+
+    def terminate(_process: object) -> object:
+        effect = tree_effects.pop(0)
+        if isinstance(effect, BaseException):
+            raise effect
+        return effect
+
+    monkeypatch.setattr(finalizer_derivation.threading, "Thread", ImmediateThread)
+    monkeypatch.setattr(finalizer_derivation, "_terminate_git_process_tree", terminate)
+
+    with pytest.raises(_PrimaryAbort) as captured:
+        _git_command("repo", ["rev-parse", "HEAD"], bare=False)
+
+    assert captured.value is primary
+    assert getattr(primary, "__notes__", []) == [
+        "Raw-Git finalizer process-tree abort cleanup raised while preserving "
+        "the primary exception: _CleanupAbort: first cleanup failed"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("tree_effect", "reader_effect", "expected_notes"),
+    [
+        pytest.param(False, True, [_RAW_GIT_TREE_FALSE_NOTE], id="tree-false"),
+        pytest.param(
+            _CleanupAbort("tree cleanup raised"),
+            True,
+            [
+                "Raw-Git finalizer process-tree abort cleanup raised while "
+                "preserving the primary exception: _CleanupAbort: tree cleanup "
+                "raised"
+            ],
+            id="tree-raised",
+        ),
+        pytest.param(True, False, [_RAW_GIT_READER_FALSE_NOTE], id="reader-false"),
+        pytest.param(
+            True,
+            _CleanupAbort("reader cleanup raised"),
+            [
+                "Raw-Git finalizer output-reader abort cleanup raised while "
+                "preserving the primary exception: _CleanupAbort: reader cleanup "
+                "raised"
+            ],
+            id="reader-raised",
+        ),
+        pytest.param(True, True, [], id="both-proven"),
+        pytest.param(1, True, [_RAW_GIT_TREE_FALSE_NOTE], id="tree-truthy-non-bool"),
+        pytest.param(
+            True,
+            1,
+            [_RAW_GIT_READER_FALSE_NOTE],
+            id="reader-truthy-non-bool",
+        ),
+    ],
+)
+def test_raw_git_abort_cleanup_single_outcomes_are_observable(
+    monkeypatch: pytest.MonkeyPatch,
+    tree_effect: object,
+    reader_effect: object,
+    expected_notes: list[str],
+) -> None:
+    primary = KeyboardInterrupt("operator cancellation")
+
+    events, notes = _exercise_raw_git_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=tree_effect,
+        reader_effect=reader_effect,
+    )
+
+    assert events == ["process-tree", "output-readers"]
+    assert notes == expected_notes
+
+
+def test_raw_git_abort_cleanup_retains_two_ordered_bounded_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary = KeyboardInterrupt("operator cancellation")
+
+    events, notes = _exercise_raw_git_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=_CleanupAbort("x" * 10_000),
+        reader_effect=False,
+    )
+
+    assert events == ["process-tree", "output-readers"]
+    assert len(notes) == 2
+    assert len(notes[0]) == 2_000
+    assert notes[0].startswith(
+        "Raw-Git finalizer process-tree abort cleanup raised while preserving "
+    )
+    assert notes[0].endswith("...")
+    assert notes[1] == _RAW_GIT_READER_FALSE_NOTE
+
+
+def test_raw_git_abort_cleanup_survives_hostile_exception_rendering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UnprintableCleanupFailure(_CleanupAbort):
+        def __str__(self) -> str:
+            raise RuntimeError("hostile cleanup __str__")
+
+    primary = KeyboardInterrupt("operator cancellation")
+
+    events, notes = _exercise_raw_git_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=UnprintableCleanupFailure(),
+        reader_effect=True,
+    )
+
+    assert events == ["process-tree", "output-readers"]
+    assert notes == [
+        "Raw-Git finalizer process-tree abort cleanup raised while preserving "
+        "the primary exception: UnprintableCleanupFailure: <unprintable; __str__ "
+        "raised RuntimeError>"
+    ]
+
+
+@pytest.mark.parametrize("primary_kind", ["python-310", "hostile-add-note"])
+def test_raw_git_abort_cleanup_uses_safe_legacy_note_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    primary_kind: str,
+) -> None:
+    class Python310Primary(KeyboardInterrupt):
+        add_note = None
+
+    class HostileAddNotePrimary(KeyboardInterrupt):
+        def add_note(self, _note: str) -> None:
+            raise RuntimeError("hostile add_note")
+
+    primary: BaseException
+    if primary_kind == "python-310":
+        primary = Python310Primary("operator cancellation")
+    else:
+        primary = HostileAddNotePrimary("operator cancellation")
+
+    events, notes = _exercise_raw_git_abort_cleanup(
+        monkeypatch,
+        primary=primary,
+        tree_effect=False,
+        reader_effect=True,
+    )
+
+    assert events == ["process-tree", "output-readers"]
+    assert notes == [_RAW_GIT_TREE_FALSE_NOTE]

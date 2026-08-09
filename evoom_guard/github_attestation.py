@@ -60,6 +60,8 @@ from evoom_guard.artifact_digest_admission import (
 from evoom_guard.evidence_bundle import EvidenceBundleError, _canonical_json, _read_regular_file
 from evoom_guard.execution import (
     ProcessLimits,
+    abort_cleanup_exception_summary,
+    note_abort_cleanup_failure,
     process_group_popen_kwargs,
     terminate_process_tree,
 )
@@ -1492,7 +1494,7 @@ def _execute_gh_attestation_command(
         if interrupted:
             root_exited_on_windows = os.name == "nt" and process.poll() is not None
             if not root_exited_on_windows:
-                if not _terminate_gh_process_tree(process):
+                if _terminate_gh_process_tree(process) is not True:
                     root_exited_on_windows = (
                         os.name == "nt" and process.poll() is not None
                     )
@@ -1506,20 +1508,34 @@ def _execute_gh_attestation_command(
         else:
             try:
                 returncode = process.wait(timeout=_GITHUB_ATTESTATION_KILL_REAP_SECONDS)
-            except BaseException:
+            except BaseException as primary:
                 try:
-                    cleanup_proven = _terminate_gh_process_tree(process)
-                except BaseException:
-                    pass
+                    initial_tree_cleanup_result = _terminate_gh_process_tree(process)
+                except BaseException as cleanup_error:
+                    note_abort_cleanup_failure(
+                        primary,
+                        "GitHub attestation subprocess-tree abort cleanup raised before "
+                        "retry while preserving the primary exception: "
+                        + abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if initial_tree_cleanup_result is True:
+                        cleanup_proven = True
+                    else:
+                        note_abort_cleanup_failure(
+                            primary,
+                            "GitHub attestation subprocess-tree abort cleanup was not "
+                            "proven before retry while preserving the primary exception",
+                        )
                 raise
             if os.name == "posix":
-                if not _terminate_gh_process_tree(process):
+                if _terminate_gh_process_tree(process) is not True:
                     raise GitHubAttestationError(
                         "GitHub attestation verifier process cleanup could not be proven"
                     )
                 cleanup_proven = True
 
-        if not _join_and_close_gh_readers(reader_start_attempts, streams):
+        if _join_and_close_gh_readers(reader_start_attempts, streams) is not True:
             raise GitHubAttestationError(
                 "GitHub attestation verifier left output pipes open past its bounded timeout"
             )
@@ -1539,9 +1555,7 @@ def _execute_gh_attestation_command(
                 f"GitHub attestation verifier output could not be read: {read_errors[0]}"
             ) from read_errors[0]
         if returncode is None:  # pragma: no cover - defensive process-state invariant
-            raise GitHubAttestationError(
-                "GitHub attestation verifier has no terminal exit status"
-            )
+            raise GitHubAttestationError("GitHub attestation verifier has no terminal exit status")
 
         stdout_bytes = bytes(stdout)
         stderr_bytes = bytes(stderr)
@@ -1555,22 +1569,53 @@ def _execute_gh_attestation_command(
             )
         _load_attestation_output(stdout_bytes)
         return stdout_bytes
-    except BaseException:
-        # Preserve the active exception while attempting bounded cleanup.
+    except BaseException as primary:
+        # Preserve the exact active exception while independently attempting
+        # both bounded cleanup owners. Cleanup evidence is secondary: failure
+        # to prove either stage is attached to ``primary`` and bare ``raise``
+        # keeps the original exception identity and traceback authoritative.
         if process is not None:
-            if not cleanup_proven:
+            if cleanup_proven is not True:
                 try:
-                    cleanup_proven = _terminate_gh_process_tree(process)
-                except BaseException:
-                    pass
-            if not readers_closed:
+                    tree_cleanup_result = _terminate_gh_process_tree(process)
+                except BaseException as cleanup_error:
+                    note_abort_cleanup_failure(
+                        primary,
+                        "GitHub attestation subprocess-tree abort cleanup raised while "
+                        "preserving the primary exception: "
+                        + abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if tree_cleanup_result is True:
+                        cleanup_proven = True
+                    else:
+                        note_abort_cleanup_failure(
+                            primary,
+                            "GitHub attestation subprocess-tree abort cleanup was not "
+                            "proven while preserving the primary exception",
+                        )
+            if readers_closed is not True:
                 try:
-                    readers_closed = _join_and_close_gh_readers(
+                    reader_cleanup_result = _join_and_close_gh_readers(
                         reader_start_attempts,
                         streams,
                     )
-                except BaseException:
-                    pass
+                except BaseException as cleanup_error:
+                    note_abort_cleanup_failure(
+                        primary,
+                        "GitHub attestation output-reader abort cleanup raised while "
+                        "preserving the primary exception: "
+                        + abort_cleanup_exception_summary(cleanup_error),
+                    )
+                else:
+                    if reader_cleanup_result is True:
+                        readers_closed = True
+                    else:
+                        note_abort_cleanup_failure(
+                            primary,
+                            "GitHub attestation output-reader abort cleanup was not "
+                            "proven while preserving the primary exception",
+                        )
         raise
 
 

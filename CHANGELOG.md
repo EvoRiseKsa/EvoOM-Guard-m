@@ -39,6 +39,33 @@ retained evidence say so.
   zipapp artifacts, and explicitly does not claim to configure or inspect live
   GitHub controls.
 
+### Fixed
+
+- Hardened the specialized black-box judge process owner so cancellation keeps
+  the exact active `BaseException` through a bare re-raise, always attempts the
+  process-group and output-reader abort-cleanup stages independently, and
+  attaches ordered, bounded diagnostics for every raised or non-proven cleanup
+  outcome. Verdict and evidence schemas are unchanged; this does not claim
+  equivalent coverage for the raw-Git finalizer or GitHub Attestation owners.
+
+- Made GitHub Attestation command abort cleanup preserve the exact active
+  `BaseException` while always attempting subprocess-tree cleanup before
+  output-reader cleanup. Each stage now requires the exact result `True` as
+  positive proof and attaches ordered, bounded diagnostics for false or raised
+  cleanup outcomes, including hostile exception stringification, hostile
+  `add_note`, and Python 3.10 fallback handling. Normal command results,
+  verdicts, receipt schemas, and the existing Windows departed-root limitation
+  are unchanged; generic execution, specialized judge execution, and raw-Git
+  finalizer lifecycles remain separate contracts.
+
+- Made raw-Git finalizer cancellation preserve the exact active
+  `BaseException` while always attempting process-tree cleanup before
+  output-reader cleanup. Only an exact `True` is accepted as positive proof;
+  false, raised, hostile-rendering, and legacy/no-`add_note` outcomes remain
+  ordered, bounded secondary diagnostics. Normal Git results and verdict
+  schemas are unchanged. Its lifecycle remains separate from the GitHub
+  Attestation process owner and does not expand that owner's Windows boundary.
+
 ## [4.5.0] — published 2026-08-01; signed protected-tree ledger
 
 [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)

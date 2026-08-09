@@ -22,6 +22,8 @@ from typing import Any
 from evoom_guard.execution.process import (
     DEFAULT_MAX_OUTPUT_BYTES,
     BoundedOutput,
+    _abort_cleanup_exception_summary,
+    _note_abort_cleanup_failure,
     drain_process_pipe,
     join_pipe_readers,
 )
@@ -464,19 +466,49 @@ def execute_judge_process(
             stdout=capture.text("stdout"),
             stderr=capture.text("stderr"),
         )
-    except BaseException:
+    except BaseException as primary:
         if process is not None:
             try:
                 # A reaped leader is not proof that its process group has no
                 # surviving descendant, so abort cleanup is unconditional.
-                process_group_terminator(process)
-            except BaseException:
-                # An active primary exception must not be replaced by cleanup.
-                pass
+                termination_result: object = process_group_terminator(process)
+            except BaseException as cleanup_error:
+                _note_abort_cleanup_failure(
+                    primary,
+                    (
+                        "Judge process-group abort cleanup raised while preserving "
+                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)
+                    ),
+                )
+            else:
+                # This owner's terminator contract proves cleanup by returning
+                # exactly None after bounded process-group inspection. Any
+                # other return is a contract violation, not containment proof.
+                if termination_result is not None:
+                    _note_abort_cleanup_failure(
+                        primary,
+                        "Judge process-group abort cleanup was not proven while "
+                        "preserving the primary exception",
+                    )
             try:
-                pipe_join(reader_start_attempts, streams)
-            except BaseException:
-                pass
+                reader_cleanup_result = pipe_join(reader_start_attempts, streams)
+            except BaseException as cleanup_error:
+                _note_abort_cleanup_failure(
+                    primary,
+                    (
+                        "Judge output-reader abort cleanup raised while preserving "
+                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)
+                    ),
+                )
+            else:
+                # Truthy objects are not proof: only the exact bool returned by
+                # the pipe-join owner can certify every reader/stream stopped.
+                if reader_cleanup_result is not True:
+                    _note_abort_cleanup_failure(
+                        primary,
+                        "Judge output-reader abort cleanup was not proven while "
+                        "preserving the primary exception",
+                    )
         raise
 
 

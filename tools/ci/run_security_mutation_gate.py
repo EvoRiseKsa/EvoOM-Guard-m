@@ -3763,18 +3763,15 @@ MUTATIONS = (
         name="judge-reader-start-cleanup-bypass",
         path="evoom_guard/execution/judge.py",
         before=(
-            "                process_group_terminator(process)\n"
-            "            except BaseException:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = "
+            "process_group_terminator(process)\n"
         ),
         after=(
-            "                pass\n"
-            "            except BaseException:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = None\n"
         ),
         test=(
-            "tests/test_blackbox_judge_reader_start.py::"
-            "test_reader_start_failure_cleans_group_handles_pipes_and_preserves_primary"
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_characterization_preserves_primary_and_attempt_order"
         ),
     ),
     Mutation(
@@ -3845,14 +3842,18 @@ MUTATIONS = (
         name="judge-reader-start-primary-exception-mask",
         path="evoom_guard/execution/judge.py",
         before=(
-            "                pipe_join(reader_start_attempts, streams)\n"
-            "            except BaseException:\n"
-            "                pass\n"
+            "            except BaseException as cleanup_error:\n"
+            "                _note_abort_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    (\n"
+            '                        "Judge output-reader abort cleanup raised while preserving "\n'
+            '                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)\n'
+            "                    ),\n"
+            "                )\n"
         ),
         after=(
-            "                pipe_join(reader_start_attempts, streams)\n"
-            "            except BaseException:\n"
-            "                raise\n"
+            "            except BaseException as cleanup_error:\n"
+            "                raise cleanup_error\n"
         ),
         test=(
             "tests/test_blackbox_judge_reader_start.py::"
@@ -3863,18 +3864,108 @@ MUTATIONS = (
         name="judge-reader-start-terminator-baseexception-mask",
         path="evoom_guard/execution/judge.py",
         before=(
-            "                process_group_terminator(process)\n"
-            "            except BaseException:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = "
+            "process_group_terminator(process)\n"
+            "            except BaseException as cleanup_error:\n"
         ),
         after=(
-            "                process_group_terminator(process)\n"
-            "            except Exception:\n"
-            "                # An active primary exception must not be replaced by cleanup.\n"
+            "                termination_result: object = "
+            "process_group_terminator(process)\n"
+            "            except Exception as cleanup_error:\n"
         ),
         test=(
             "tests/test_blackbox_judge_reader_start.py::"
             "test_reader_start_primary_survives_every_cleanup_baseexception"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-reader-cleanup-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "                reader_cleanup_result = "
+            "pipe_join(reader_start_attempts, streams)\n"
+        ),
+        after="                reader_cleanup_result = True\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_characterization_preserves_primary_and_attempt_order"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-terminator-exact-proof-bypass",
+        path="evoom_guard/execution/judge.py",
+        before="                if termination_result is not None:\n",
+        after="                if termination_result:\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_requires_owner_specific_positive_proof"
+            "[terminator-false]"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-reader-exact-proof-bypass",
+        path="evoom_guard/execution/judge.py",
+        before="                if reader_cleanup_result is not True:\n",
+        after="                if not reader_cleanup_result:\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_requires_owner_specific_positive_proof"
+            "[reader-truthy-non-bool]"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-terminator-raised-observability-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "            except BaseException as cleanup_error:\n"
+            "                _note_abort_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    (\n"
+            '                        "Judge process-group abort cleanup raised while preserving "\n'
+            '                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)\n'
+            "                    ),\n"
+            "                )\n"
+        ),
+        after=(
+            "            except BaseException as cleanup_error:\n"
+            "                pass\n"
+        ),
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_preserves_ordered_raised_and_false_diagnostics"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-reader-raised-observability-bypass",
+        path="evoom_guard/execution/judge.py",
+        before=(
+            "            except BaseException as cleanup_error:\n"
+            "                _note_abort_cleanup_failure(\n"
+            "                    primary,\n"
+            "                    (\n"
+            '                        "Judge output-reader abort cleanup raised while preserving "\n'
+            '                        "the primary exception: " + _abort_cleanup_exception_summary(cleanup_error)\n'
+            "                    ),\n"
+            "                )\n"
+        ),
+        after=(
+            "            except BaseException as cleanup_error:\n"
+            "                pass\n"
+        ),
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_requires_owner_specific_positive_proof"
+            "[reader-raised]"
+        ),
+    ),
+    Mutation(
+        name="judge-abort-bare-reraise-bypass",
+        path="evoom_guard/execution/judge.py",
+        before="        raise\n\n\n__all__ = [\n",
+        after="        raise primary\n\n\n__all__ = [\n",
+        test=(
+            "tests/test_judge_abort_cleanup_observability.py::"
+            "test_abort_cleanup_characterization_preserves_primary_and_attempt_order"
         ),
     ),
     Mutation(
@@ -3997,17 +4088,8 @@ MUTATIONS = (
     Mutation(
         name="judge-runtime-baseexception-precedence-bypass",
         path="evoom_guard/execution/judge.py",
-        before=(
-            "            except BaseException:\n"
-            "                pass\n"
-            "        raise\n"
-            "\n"
-            "\n"
-            "__all__ = [\n"
-        ),
+        before="        raise\n\n\n__all__ = [\n",
         after=(
-            "            except BaseException:\n"
-            "                pass\n"
             "        raise JudgeProcessCleanupError(\"mutant masked primary\")\n"
             "\n"
             "\n"
@@ -4331,11 +4413,12 @@ MUTATIONS = (
         path="evoom_guard/finalizer_derivation.py",
         before=(
             "        if interrupted:\n"
-            "            if not _terminate_git_process_tree(process):\n"
+            "            if _terminate_git_process_tree(process) is not True:\n"
         ),
         after=(
             "        if interrupted:\n"
-            "            if False and not _terminate_git_process_tree(process):\n"
+            "            if False and "
+            "_terminate_git_process_tree(process) is not True:\n"
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
@@ -4343,15 +4426,31 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="finalizer-git-interrupt-exact-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "        if interrupted:\n"
+            "            if _terminate_git_process_tree(process) is not True:\n"
+        ),
+        after=(
+            "        if interrupted:\n"
+            "            if not _terminate_git_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_interrupted_query_rejects_truthy_non_bool_cleanup_proof"
+        ),
+    ),
+    Mutation(
         name="finalizer-git-posix-post-completion-proof-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
             '            if os.name == "posix":\n'
-            "                if not _terminate_git_process_tree(process):\n"
+            "                if _terminate_git_process_tree(process) is not True:\n"
         ),
         after=(
             '            if False and os.name == "posix":\n'
-            "                if not _terminate_git_process_tree(process):\n"
+            "                if _terminate_git_process_tree(process) is not True:\n"
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
@@ -4359,19 +4458,62 @@ MUTATIONS = (
         ),
     ),
     Mutation(
-        name="finalizer-git-post-poll-primary-suppression",
+        name="finalizer-git-posix-exact-proof-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
-            "                raise\n"
+            '            if os.name == "posix":\n'
+            "                if _terminate_git_process_tree(process) is not True:\n"
+        ),
+        after=(
+            '            if os.name == "posix":\n'
+            "                if not _terminate_git_process_tree(process):\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_posix_completion_rejects_truthy_non_bool_cleanup_proof"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-post-poll-silent-cleanup-restore",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "            process.wait(timeout=_GIT_KILL_REAP_SECONDS)\n"
             '            if os.name == "posix":\n'
         ),
         after=(
-            "                pass\n"
+            "            try:\n"
+            "                process.wait(timeout=_GIT_KILL_REAP_SECONDS)\n"
+            "            except BaseException:\n"
+            "                try:\n"
+            "                    _terminate_git_process_tree(process)\n"
+            "                except BaseException:\n"
+            "                    pass\n"
+            "                raise\n"
             '            if os.name == "posix":\n'
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
-            "test_post_poll_wait_baseexception_remains_authoritative"
+            "test_post_poll_abort_does_not_hide_the_first_tree_cleanup_failure"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-primary-reraise",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                        )\n"
+            "        raise\n"
+            "\n\n"
+            "def _git_command(\n"
+        ),
+        after=(
+            "                        )\n"
+            "        raise primary\n"
+            "\n\n"
+            "def _git_command(\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_preserves_primary_and_runs_both_stages"
         ),
     ),
     Mutation(
@@ -4394,16 +4536,130 @@ MUTATIONS = (
         name="finalizer-git-abort-cleanup-bypass",
         path="evoom_guard/finalizer_derivation.py",
         before=(
-            "    except BaseException:\n"
-            "        # Preserve the active exception while attempting bounded cleanup.\n"
+            "    except BaseException as primary:\n"
+            "        # Preserve the exact active exception while independently attempting\n"
         ),
         after=(
-            "    except Exception:\n"
-            "        # Preserve the active exception while attempting bounded cleanup.\n"
+            "    except Exception as primary:\n"
+            "        # Preserve the exact active exception while independently attempting\n"
         ),
         test=(
             "tests/test_finalizer_git_lifecycle.py::"
             "test_reader_start_failure_kills_and_reaps_git_without_masking_primary"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-tree-exact-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="                    if tree_cleanup_result is True:\n",
+        after="                    if tree_cleanup_result:\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-tree-raised-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            '                        "Raw-Git finalizer process-tree abort cleanup raised while "\n'
+            '                        "preserving the primary exception: "\n'
+            "                        + abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after=(
+            "                except BaseException as cleanup_error:\n"
+            "                    pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-tree-false-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                    else:\n"
+            "                        note_abort_cleanup_failure(\n"
+            "                            primary,\n"
+            '                            "Raw-Git finalizer process-tree abort cleanup was not "\n'
+            '                            "proven while preserving the primary exception",\n'
+            "                        )\n"
+        ),
+        after=(
+            "                    else:\n"
+            "                        pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-reader-exact-proof-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="                    if reader_cleanup_result is True:\n",
+        after="                    if reader_cleanup_result:\n",
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-reader-raised-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            '                        "Raw-Git finalizer output-reader abort cleanup raised while "\n'
+            '                        "preserving the primary exception: "\n'
+            "                        + abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after=(
+            "                except BaseException as cleanup_error:\n"
+            "                    pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-reader-false-observability-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before=(
+            "                    else:\n"
+            "                        note_abort_cleanup_failure(\n"
+            "                            primary,\n"
+            '                            "Raw-Git finalizer output-reader abort cleanup was not "\n'
+            '                            "proven while preserving the primary exception",\n'
+            "                        )\n"
+        ),
+        after=(
+            "                    else:\n"
+            "                        pass\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_single_outcomes_are_observable"
+        ),
+    ),
+    Mutation(
+        name="finalizer-git-abort-second-cleanup-stage-bypass",
+        path="evoom_guard/finalizer_derivation.py",
+        before="            if readers_closed is not True:\n",
+        after=(
+            "            if cleanup_proven is True and readers_closed is not True:\n"
+        ),
+        test=(
+            "tests/test_finalizer_git_lifecycle.py::"
+            "test_raw_git_abort_cleanup_retains_two_ordered_bounded_failures"
         ),
     ),
     Mutation(
@@ -4605,11 +4861,11 @@ MUTATIONS = (
         path="evoom_guard/github_attestation.py",
         before=(
             "            if not root_exited_on_windows:\n"
-            "                if not _terminate_gh_process_tree(process):\n"
+            "                if _terminate_gh_process_tree(process) is not True:\n"
         ),
         after=(
             "            if not root_exited_on_windows:\n"
-            "                if False and not _terminate_gh_process_tree(process):\n"
+            "                if False and _terminate_gh_process_tree(process) is not True:\n"
         ),
         test=(
             "tests/test_github_attestation_lifecycle.py::"
@@ -4658,11 +4914,11 @@ MUTATIONS = (
         path="evoom_guard/github_attestation.py",
         before=(
             "            if os.name == \"posix\":\n"
-            "                if not _terminate_gh_process_tree(process):\n"
+            "                if _terminate_gh_process_tree(process) is not True:\n"
         ),
         after=(
             "            if False and os.name == \"posix\":\n"
-            "                if not _terminate_gh_process_tree(process):\n"
+            "                if _terminate_gh_process_tree(process) is not True:\n"
         ),
         test=(
             "tests/test_github_attestation_lifecycle.py::"
@@ -4705,16 +4961,152 @@ MUTATIONS = (
         name="github-attestation-abort-cleanup-bypass",
         path="evoom_guard/github_attestation.py",
         before=(
-            "    except BaseException:\n"
-            "        # Preserve the active exception while attempting bounded cleanup.\n"
+            "    except BaseException as primary:\n"
+            "        # Preserve the exact active exception while independently attempting\n"
         ),
         after=(
-            "    except Exception:\n"
-            "        # Preserve the active exception while attempting bounded cleanup.\n"
+            "    except Exception as primary:\n"
+            "        # Preserve the exact active exception while independently attempting\n"
         ),
         test=(
             "tests/test_github_attestation_lifecycle.py::"
             "test_reader_start_failure_cleans_child_without_masking_primary"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-reader-cleanup-independence-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="            if readers_closed is not True:\n",
+        after="            if False and readers_closed is not True:\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary"
+            "[raised-results]"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-initial-abort-tree-exact-proof-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="                    if initial_tree_cleanup_result is True:\n",
+        after="                    if initial_tree_cleanup_result:\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_post_poll_truthy_cleanup_result_is_not_positive_proof"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-initial-abort-tree-raised-diagnostic-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            "                        \"GitHub attestation subprocess-tree abort cleanup raised before \"\n"
+            "                        \"retry while preserving the primary exception: \"\n"
+            "                        + abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after="                except BaseException as cleanup_error:\n                    pass\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_post_poll_raised_then_success_retains_first_failure_evidence"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-initial-abort-tree-false-diagnostic-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                    else:\n"
+            "                        note_abort_cleanup_failure(\n"
+            "                            primary,\n"
+            "                            \"GitHub attestation subprocess-tree abort cleanup was not \"\n"
+            "                            \"proven before retry while preserving the primary exception\",\n"
+            "                        )\n"
+        ),
+        after="                    else:\n                        pass\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_post_poll_false_then_success_retains_first_failure_evidence"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-tree-exact-proof-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="                    if tree_cleanup_result is True:\n",
+        after="                    if tree_cleanup_result:\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary"
+            "[truthy-non-proofs]"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-reader-exact-proof-bypass",
+        path="evoom_guard/github_attestation.py",
+        before="                    if reader_cleanup_result is True:\n",
+        after="                    if reader_cleanup_result:\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary"
+            "[truthy-non-proofs]"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-tree-raised-diagnostic-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                except BaseException as cleanup_error:\n"
+            "                    note_abort_cleanup_failure(\n"
+            "                        primary,\n"
+            "                        \"GitHub attestation subprocess-tree abort cleanup raised while \"\n"
+            "                        \"preserving the primary exception: \"\n"
+            "                        + abort_cleanup_exception_summary(cleanup_error),\n"
+            "                    )\n"
+        ),
+        after="                except BaseException as cleanup_error:\n                    pass\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary"
+            "[raised-results]"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-reader-false-diagnostic-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "                    else:\n"
+            "                        note_abort_cleanup_failure(\n"
+            "                            primary,\n"
+            "                            \"GitHub attestation output-reader abort cleanup was not \"\n"
+            "                            \"proven while preserving the primary exception\",\n"
+            "                        )\n"
+        ),
+        after="                    else:\n                        pass\n",
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary"
+            "[false-results]"
+        ),
+    ),
+    Mutation(
+        name="github-attestation-abort-primary-precedence-bypass",
+        path="evoom_guard/github_attestation.py",
+        before=(
+            "        raise\n"
+            "\n"
+            "\n"
+            "def _run_gh_attestation_verify(\n"
+        ),
+        after=(
+            "        raise GitHubAttestationError(\"mutant masked primary\")\n"
+            "\n"
+            "\n"
+            "def _run_gh_attestation_verify(\n"
+        ),
+        test=(
+            "tests/test_github_attestation_lifecycle.py::"
+            "test_abort_cleanup_reports_both_stages_in_order_and_preserves_primary"
+            "[raised-results]"
         ),
     ),
     Mutation(
