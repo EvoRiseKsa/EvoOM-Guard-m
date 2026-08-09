@@ -76,6 +76,54 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="release-source-finalizer-snapshot-validation-bypass",
+        path="evoom_guard/release_source_finalizer.py",
+        before="        validate_source_context=_validate_source_context,\n",
+        after="        validate_source_context=lambda _source, _context: None,\n",
+        test=(
+            "tests/test_release_source_producer_receipt.py::"
+            "test_release_source_finalizer_primitive_snapshot_is_exact_and_immutable"
+        ),
+    ),
+    Mutation(
+        name="release-source-finalizer-snapshot-module-global-bypass",
+        path="evoom_guard/release_source_finalizer.py",
+        before=(
+            "def snapshot_release_source_finalizer_primitives() -> "
+            "ReleaseSourceFinalizerPrimitiveSnapshot:\n"
+            '    """Resolve one immutable set of current finalizer operations at call time."""\n'
+            "\n"
+            "    return ReleaseSourceFinalizerPrimitiveSnapshot(\n"
+            "        publish_bytes=_publish_bytes,\n"
+            "        record_snapshot=_record_snapshot,\n"
+            "        validate_source_context=_validate_source_context,\n"
+            "        derive_release_source_bindings=derive_release_source_bindings,\n"
+            "        context_from_release_source_bindings=context_from_release_source_bindings,\n"
+            "    )\n"
+        ),
+        after=(
+            "_MODULE_GLOBAL_RELEASE_SOURCE_FINALIZER_PRIMITIVES = "
+            "ReleaseSourceFinalizerPrimitiveSnapshot(\n"
+            "    publish_bytes=_publish_bytes,\n"
+            "    record_snapshot=_record_snapshot,\n"
+            "    validate_source_context=_validate_source_context,\n"
+            "    derive_release_source_bindings=derive_release_source_bindings,\n"
+            "    context_from_release_source_bindings=context_from_release_source_bindings,\n"
+            ")\n"
+            "\n"
+            "\n"
+            "def snapshot_release_source_finalizer_primitives() -> "
+            "ReleaseSourceFinalizerPrimitiveSnapshot:\n"
+            '    """Resolve one immutable set of current finalizer operations at call time."""\n'
+            "\n"
+            "    return _MODULE_GLOBAL_RELEASE_SOURCE_FINALIZER_PRIMITIVES\n"
+        ),
+        test=(
+            "tests/test_release_source_finalizer.py::"
+            "test_finalizer_primitive_snapshot_is_call_time_owned_and_immutable"
+        ),
+    ),
+    Mutation(
         name="workspace-parent-component-bypass",
         path="evoom_guard/workspace/__init__.py",
         before=(
@@ -1623,16 +1671,18 @@ MUTATIONS = (
         name="cli-release-source-derive-path-snapshot-bypass",
         path="evoom_guard/cli/__init__.py",
         before=(
-            "                derive_release_source_bindings="
-            "derive_release_source_bindings,\n"
+            "                derive_release_source_bindings=(\n"
+            "                    finalizer_primitives.derive_release_source_bindings\n"
+            "                ),\n"
             "                read_external_object_provider=lambda: (\n"
             "                    _read_external_finalizer_object\n"
             "                ),\n"
             "                absolute_path_provider=lambda: os.path.abspath,\n"
         ),
         after=(
-            "                derive_release_source_bindings="
-            "derive_release_source_bindings,\n"
+            "                derive_release_source_bindings=(\n"
+            "                    finalizer_primitives.derive_release_source_bindings\n"
+            "                ),\n"
             "                read_external_object_provider=lambda: (\n"
             "                    _read_external_finalizer_object\n"
             "                ),\n"
