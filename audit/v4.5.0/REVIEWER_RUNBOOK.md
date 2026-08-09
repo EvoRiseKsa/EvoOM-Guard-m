@@ -12,18 +12,21 @@ and does not change the frozen product target.
 
 ## 1. Record the companion revision
 
-Clone the repository and detach at the exact commit selected for the review.
-Do not silently follow a later `main`:
+Clone the repository and detach at the separately frozen companion tag. Do not
+silently follow a later `main`:
 
 ```bash
 git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git evoguard-review-v450
+git -C evoguard-review-v450 fetch --tags
+git -C evoguard-review-v450 checkout --detach review-v4.5.0-r1
 git -C evoguard-review-v450 rev-parse HEAD
-git -C evoguard-review-v450 checkout --detach <recorded-companion-commit>
 cd evoguard-review-v450
 bash audit/v4.5.0/reproduce.sh /tmp/evoguard-v4.5.0-review
 ```
 
-No `review-v4.5.0-*` tag or companion Release is claimed by this revision.
+Record the resolved companion commit. `review-v4.5.0-r1` freezes review
+instructions only; it is not the product target. It is not evidence that an
+independent review occurred.
 
 ## 2. Verify the immutable product identity
 

@@ -19,12 +19,13 @@ The release commit is **not signed**. GitHub reports
 has a separate release attestation; that attestation must not be described as
 a commit signature. Both facts are checked by the reproduction scripts.
 
-This companion revision is source-controlled at `audit/v4.5.0` but has no
-separate companion tag or Release. A reviewer must record the exact repository
-commit from which the companion was obtained. The frozen review target remains
-the immutable product Release, not a moving `main` checkout.
+This companion is source-controlled at `audit/v4.5.0` and separately frozen at
+[`review-v4.5.0-r1`][companion]. That tag freezes these reviewer instructions;
+it is not a product release and does not alter `v4.5.0`. The frozen product
+target remains the immutable product Release, not a moving `main` checkout.
 
 [release]: https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0
+[companion]: https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.5.0-r1
 
 ## Identity-only verification
 

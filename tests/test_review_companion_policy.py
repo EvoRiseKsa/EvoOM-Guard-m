@@ -24,6 +24,7 @@ PRODUCT_V450_ASSET_SHA256 = "44bf036666bc7bb2903b647f33b63254771771887de4f170c91
 PRODUCT_V450_SBOM_SHA256 = "d073198e6a3a7d565895b3cf885c95386768670a243e05e5b1471636a0f8da4b"
 PRODUCT_V450_SUMS_SHA256 = "0172d35b903661328f16366517fe5a8f666aaf282cf26c5ec4e263da4abedd0f"
 PRODUCT_V450_LEDGER_SHA256 = "9ee6c49e7a3c93d611c34e208f5e3936f147bf0ed0b8ff2c41b3e53b891da239"
+COMPANION_V450_TAG = "review-v4.5.0-r1"
 
 
 def test_review_companion_is_separately_pinned_and_names_the_frozen_target() -> None:
@@ -116,7 +117,7 @@ def test_v410_default_reproduction_is_identity_only_and_smoke_is_explicit() -> N
     assert "does not bind an artifact" in matrix
 
 
-def test_v450_companion_pins_the_immutable_target_without_inventing_a_tag() -> None:
+def test_v450_companion_separately_pins_the_immutable_target() -> None:
     manifest = json.loads((AUDIT_V450 / "manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["format"] == "EVOGUARD_EXTERNAL_REVIEW_TARGET_V1"
@@ -140,10 +141,13 @@ def test_v450_companion_pins_the_immutable_target_without_inventing_a_tag() -> N
         "is_part_of_frozen_target": False,
         "does_not_change_release_claims": True,
         "does_not_establish_independent_review": True,
-        "is_frozen_separately": False,
-        "revision": "audit-v4.5.0-r1",
+        "is_frozen_separately": True,
+        "revision": COMPANION_V450_TAG,
         "repository_path": "audit/v4.5.0",
-        "publication_status": "source-controlled-no-companion-tag-or-release",
+        "review_companion_tag": COMPANION_V450_TAG,
+        "review_companion_release_url": (
+            f"https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/{COMPANION_V450_TAG}"
+        ),
     }
     assert manifest["target_commit_verification"] == {
         "verified": False,
@@ -228,5 +232,8 @@ def test_v450_reproduction_requires_attestation_and_expected_unsigned_commit() -
     assert '"$PYTHON_BIN" -I' in bash[bash.index('if [[ "$run_smoke" == true ]]; then') :]
     assert "& $Python -I" in powershell[powershell.index("if ($Smoke)") :]
     assert "do **not** execute the released zipapp" in readme
-    assert "No `review-v4.5.0-*` tag or companion Release is claimed" in runbook
+    assert COMPANION_V450_TAG in readme
+    assert COMPANION_V450_TAG in runbook
+    normalized_runbook = " ".join(runbook.split())
+    assert "not evidence that an independent review occurred" in normalized_runbook
     assert "Firecracker" in matrix and "design-only" in matrix

@@ -6,10 +6,11 @@
     "is_part_of_frozen_target": false,
     "does_not_change_release_claims": true,
     "does_not_establish_independent_review": true,
-    "is_frozen_separately": false,
-    "revision": "audit-v4.5.0-r1",
+    "is_frozen_separately": true,
+    "revision": "review-v4.5.0-r1",
     "repository_path": "audit/v4.5.0",
-    "publication_status": "source-controlled-no-companion-tag-or-release"
+    "review_companion_tag": "review-v4.5.0-r1",
+    "review_companion_release_url": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.5.0-r1"
   },
   "target": {
     "repository": "EvoRiseKsa/EvoOM-Guard-m",
