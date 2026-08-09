@@ -1,4 +1,4 @@
-"""Contracts for per-module branch ratchets and explicit mutation gaps."""
+"""Contracts for per-module branch ratchets and reviewed mutation declarations."""
 
 from __future__ import annotations
 
@@ -62,17 +62,16 @@ def test_manifest_reports_direct_mutation_truth_without_inference() -> None:
 
     assert declarations["evoom_guard/github_attestation.py"] == "reviewed"
     assert counts["evoom_guard/github_attestation.py"] >= 31
-    for path, status in declarations.items():
-        if status == "gap":
-            assert counts[path] == 0
+    assert set(declarations.values()) == {"reviewed"}
+    for entry in manifest["modules"]:  # type: ignore[index]
+        path = entry["path"]
+        assert counts[path] >= entry["mutation"]["minimum_reviewed_mutants"]
 
 
 def test_coverage_at_every_declared_floor_passes() -> None:
     manifest = _manifest()
 
-    errors, observations = gate.validate_coverage(
-        manifest, _coverage_at_floor(manifest)
-    )
+    errors, observations = gate.validate_coverage(manifest, _coverage_at_floor(manifest))
 
     assert errors == []
     assert len(observations) == len(EXPECTED_MODULES)
@@ -82,6 +81,15 @@ def test_new_direct_mutant_for_a_gap_requires_a_manifest_update() -> None:
     manifest = _manifest()
     counts = Counter(gate.reviewed_mutation_counts())
     path = "evoom_guard/runtime_identity.py"
+    entry = next(
+        item
+        for item in manifest["modules"]
+        if item["path"] == path  # type: ignore[index]
+    )
+    entry["mutation"] = {
+        "status": "gap",
+        "gap": "Synthetic unreviewed state used to bind the gate contract.",
+    }
     counts[path] = 1
 
     errors = gate.validate_manifest(manifest, mutation_counts=counts)
@@ -124,9 +132,7 @@ def test_cli_fails_closed_when_coverage_file_is_missing(tmp_path: Path) -> None:
 def test_direct_script_execution_uses_the_reviewed_inventory(tmp_path: Path) -> None:
     manifest = _manifest()
     coverage_path = tmp_path / "coverage.json"
-    coverage_path.write_text(
-        json.dumps(_coverage_at_floor(manifest)), encoding="utf-8"
-    )
+    coverage_path.write_text(json.dumps(_coverage_at_floor(manifest)), encoding="utf-8")
 
     completed = subprocess.run(
         [
