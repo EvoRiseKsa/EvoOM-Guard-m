@@ -18,7 +18,9 @@ import importlib.util
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -505,7 +507,7 @@ def _fact_context(fact: ImportFact) -> str:
     return f"{fact.kind}:{fact.scope}:{'type-checking' if fact.type_checking else 'runtime'}"
 
 
-def analyze_package(package_root: Path) -> Analysis:
+def _analyze_package_uncached(package_root: Path) -> Analysis:
     modules_by_name, package_modules = _discover_modules(package_root)
     facts = _scan_imports(modules_by_name, package_modules)
     edges = tuple(
@@ -597,6 +599,33 @@ def analyze_package(package_root: Path) -> Analysis:
         violations=violations,
         locations={key: tuple(sorted(lines)) for key, lines in sorted(locations.items())},
     )
+
+
+def _freeze_analysis(analysis: Analysis) -> Analysis:
+    """Detach and freeze the two mapping-backed parts of an analysis result."""
+
+    return Analysis(
+        modules=analysis.modules,
+        internal_edges=analysis.internal_edges,
+        facts=analysis.facts,
+        violations=MappingProxyType(dict(analysis.violations)),
+        locations=MappingProxyType(dict(analysis.locations)),
+    )
+
+
+@lru_cache(maxsize=1)
+def _repository_analysis() -> Analysis:
+    """Return one immutable architecture snapshot for this test process."""
+
+    return _freeze_analysis(_analyze_package_uncached(PACKAGE_ROOT))
+
+
+def analyze_package(package_root: Path) -> Analysis:
+    """Analyze a package, caching only the immutable checked-out source tree."""
+
+    if package_root == PACKAGE_ROOT:
+        return _repository_analysis()
+    return _analyze_package_uncached(package_root)
 
 
 def _strict_object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -728,6 +757,17 @@ def compare_with_baseline(analysis: Analysis, baseline: Mapping[str, Any]) -> li
                 + "\n  - ".join(removed)
             )
     return problems
+
+
+def test_repository_analysis_snapshot_is_process_cached_and_immutable() -> None:
+    first = analyze_package(PACKAGE_ROOT)
+    second = analyze_package(PACKAGE_ROOT)
+
+    assert first is second
+    with pytest.raises(TypeError):
+        first.violations["cycle_edges"] = ()  # type: ignore[index]
+    with pytest.raises(TypeError):
+        first.locations[("source", "target")] = ()  # type: ignore[index]
 
 
 def test_repository_import_boundaries_match_ratcheted_baseline() -> None:

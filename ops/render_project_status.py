@@ -265,7 +265,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="fd660b7bb17e4462b831940f343d5afd4c908a2c3ef79246a4d6597db9d097f2",
+        reviewed_sha256="872f87892c92a69dcbde62799738b5935d9e0d3b604bfa4eb98442328d1da982",
     ),
     _WorkflowSpec(
         "B",
@@ -273,7 +273,7 @@ _WORKFLOW_SPECS = (
         (("preflight", ()), ("receipt", ("preflight",))),
         "preflight",
         _SOURCE_GATE,
-        reviewed_sha256="d1226b04faf3b540f606792c0e3274dbd04ffbac3109424c51a903a686aa355d",
+        reviewed_sha256="28b82ef90404a0773408b43d01646ff9b371aa84f8f6560b0277f96c6da9fb14",
     ),
     _WorkflowSpec(
         "C/D",
@@ -285,7 +285,7 @@ _WORKFLOW_SPECS = (
         ),
         "preflight",
         _SOURCE_GATE,
-        reviewed_sha256="50e17d794a20b38425756b6a3bfbcfb61ec3b4bf2b966f093225c1eec0c252cd",
+        reviewed_sha256="3267183f42a817b9e4ab1842f61c1bb94ea7b2974bd5e49e885e3a2324acee1b",
     ),
     _WorkflowSpec(
         "E",
@@ -298,7 +298,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _MAIN_ARTIFACT_GATE,
         ("build", "attest"),
-        "1ab24066adaeef7f259a71387bc74f176b4c2c7b78aecb0399374cba541c7c60",
+        "c9ab62d29442ee6ecbf768d5868d25463fe1373ea31aa9a99ab7bfe8ccec8339",
     ),
     _WorkflowSpec(
         "F",
@@ -311,7 +311,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _ARTIFACT_GATE,
         ("preflight", "verify-attestations", "seal"),
-        "35ce37a53495dd44a3c81419e50a5cbe2c9e32bd85585050a1ae9d686b62749f",
+        "619f9754c6825af99aefbf2f4c8950f08bdd8a843f8d9fdccee37e2eba642b05",
     ),
     _WorkflowSpec(
         "G",
@@ -320,7 +320,7 @@ _WORKFLOW_SPECS = (
         "detached-verify",
         _ARTIFACT_GATE,
         ("detached-verify",),
-        "d1e4e5296472074f60b4d19ae96be0e2540e52bf34ea7f0fa7044eed8ae5f360",
+        "b7100c92b1a770655b5124685d118db82d624e05eef59bf51903c122215e707f",
     ),
     _WorkflowSpec(
         "H",
@@ -333,7 +333,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "363e5e99fa786c39cbed90ef07672e06021c148399b1e104bd91d4eaa0f2e631",
+        "98c58f6205e4a63b8e163bf2d6c73ac164acdf4f935adcb28e275537559847e7",
     ),
 )
 _LEGACY_FALSE_GATE = (
@@ -353,7 +353,7 @@ _LEGACY_SPEC = _WorkflowSpec(
     ),
     "validate-test",
     _LEGACY_FALSE_GATE,
-    reviewed_sha256="397df848fe650023b3003cfdd5d2ae4b84a1aca0571c8d81c644e9af7466f46a",
+    reviewed_sha256="36f61696fdee3da0baf7a85d199f0ff11b0d344ff80870b7e43776e0362e570c",
 )
 _ASSET_SENTINELS = {
     ("E", "build"): (
