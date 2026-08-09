@@ -422,7 +422,7 @@ remain in their established facades.
   behavior.
 - Declarative parser construction is now owned by dependency-free
   `cli/parser.py` behind the unchanged public facade. A frozen snapshot binds
-  all 41 subcommands, help pages, representative defaults, immutable-ref
+  all 44 subcommands, help pages, representative defaults, immutable-ref
   validation, and live injected helper lookups.
 - The first command-family extraction moves only the public `guard` command's
   policy resolution, input routing, and output publication into the typed,
@@ -520,7 +520,7 @@ remain in their established facades.
    The detached verifier contract has no environment, Git/gh executable,
    repository, provider-isolation, private-key, signing-operation, or
    output-mutation capability.
-- All 41 CLI handlers now delegate through typed owners; this behavior-preserving
+- All 44 CLI handlers now delegate through typed owners; this behavior-preserving
   command-family extraction phase is complete.
 - The first Stage-10 ownership-classification slice assigns four cohesive,
   stdlib-only flat modules without moving their established import paths:

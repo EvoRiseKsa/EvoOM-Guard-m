@@ -373,8 +373,8 @@ Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and
 injects its immutable-ref validator and argument-group helpers on every call,
 preserving the established monkeypatch surface. A frozen parser snapshot
-covers all 41 subcommands, every help page, representative defaults,
-immutable-ref rejection, and live helper lookup. All 41 command handlers now
+covers all 44 subcommands, every help page, representative defaults,
+immutable-ref rejection, and live helper lookup. All 44 command handlers now
 delegate through typed command-family owners; their public `cmd_*` facades
 retain dependency lookup timing and inject effects. Parser dispatch and the
 public compatibility surface remain in `cli.__init__`. These same-package
