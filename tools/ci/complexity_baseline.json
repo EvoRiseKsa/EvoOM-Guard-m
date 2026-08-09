@@ -275,7 +275,7 @@
     {
       "path": "evoom_guard/policy/config.py",
       "symbol": "load_config",
-      "max_complexity": 49
+      "max_complexity": 42
     },
     {
       "path": "evoom_guard/record_verifier.py",
