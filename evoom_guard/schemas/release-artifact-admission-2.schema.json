@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-artifact-admission-2.schema.json",
+  "title": "EvoGuard separated maintenance release-artifact admission V2",
+  "type": "object",
+  "required": ["format", "decision", "release_source", "artifact", "builder", "admitter", "provider", "toolchain", "replay", "key_separation", "authentication"],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V2" },
+    "decision": { "const": "ALLOW" },
+    "release_source": { "$ref": "#/$defs/releaseSource" },
+    "artifact": {
+      "type": "object", "required": ["kind", "sha256", "size"],
+      "properties": { "kind": { "const": "file" }, "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 0, "maximum": 4294967296 } },
+      "additionalProperties": false
+    },
+    "builder": { "$ref": "#/$defs/actor" },
+    "admitter": { "$ref": "#/$defs/actor" },
+    "provider": { "$ref": "#/$defs/provider" },
+    "toolchain": { "$ref": "release-source-admission-3.schema.json#/$defs/toolchain" },
+    "replay": {
+      "type": "object", "required": ["source_admitter", "builder", "artifact_admitter"],
+      "properties": {
+        "source_admitter": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+        "builder": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+        "artifact_admitter": { "$ref": "release-source-context-2.schema.json#/$defs/run" }
+      },
+      "additionalProperties": false
+    },
+    "key_separation": {
+      "type": "object",
+      "required": ["trusted_finalizer", "artifact_admission_v1", "artifact_digest_admission_v2", "release_source_finalizer_v1", "release_source_admission_v2", "release_source_finalizer_v2", "release_source_admission_v3"],
+      "properties": {
+        "trusted_finalizer": { "$ref": "#/$defs/keyId" }, "artifact_admission_v1": { "$ref": "#/$defs/keyId" },
+        "artifact_digest_admission_v2": { "$ref": "#/$defs/keyId" }, "release_source_finalizer_v1": { "$ref": "#/$defs/keyId" },
+        "release_source_admission_v2": { "$ref": "#/$defs/keyId" }, "release_source_finalizer_v2": { "$ref": "#/$defs/keyId" },
+        "release_source_admission_v3": { "$ref": "#/$defs/keyId" }
+      },
+      "additionalProperties": false
+    },
+    "authentication": {
+      "type": "object", "required": ["algorithm", "key_id", "purpose", "key_domain", "signature_path"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" }, "key_id": { "$ref": "#/$defs/keyId" },
+        "purpose": { "const": "evoguard-release-artifact-admission-v2" },
+        "key_domain": { "const": "release-artifact-admission-v2" }, "signature_path": { "const": "admission.sig" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "keyId": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "numericId": { "type": "string", "pattern": "^[1-9][0-9]{0,255}$" },
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$" },
+    "workflowPath": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$", "maxLength": 256 },
+    "descriptor": {
+      "type": "object", "required": ["path", "sha256", "size"],
+      "properties": { "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 1 } },
+      "additionalProperties": false
+    },
+    "releaseSource": {
+      "type": "object",
+      "required": ["format", "decision", "bundle", "key_id", "repository", "repository_id", "trusted_workflow_sha", "trusted_workflow_tree", "maintenance_base_sha", "maintenance_base_tree", "target_source_sha", "target_source_tree", "trusted_inputs", "admission_run_id", "admission_run_attempt"],
+      "properties": {
+        "format": { "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V3" }, "decision": { "const": "ALLOW" },
+        "bundle": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "materials/release-source-admission-v3.rsae" }, "size": { "maximum": 73400320 } } }] },
+        "key_id": { "$ref": "#/$defs/keyId" }, "repository": { "$ref": "#/$defs/repository" }, "repository_id": { "$ref": "#/$defs/numericId" },
+        "trusted_workflow_sha": { "$ref": "#/$defs/gitDigest" }, "trusted_workflow_tree": { "$ref": "#/$defs/gitDigest" },
+        "maintenance_base_sha": { "$ref": "#/$defs/gitDigest" }, "maintenance_base_tree": { "$ref": "#/$defs/gitDigest" },
+        "target_source_sha": { "$ref": "#/$defs/gitDigest" }, "target_source_tree": { "$ref": "#/$defs/gitDigest" },
+        "trusted_inputs": { "$ref": "release-source-context-2.schema.json#/$defs/trustedInputs" },
+        "admission_run_id": { "$ref": "#/$defs/numericId" }, "admission_run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+      },
+      "additionalProperties": false
+    },
+    "actor": {
+      "type": "object",
+      "required": ["workflow_repository", "workflow_repository_id", "workflow_id", "workflow_path", "workflow_blob_sha", "workflow_run_id", "workflow_run_attempt", "workflow_event", "workflow_ref", "workflow_commit_sha", "workflow_tree_sha", "upstream_run_id", "upstream_run_attempt", "runner_class"],
+      "properties": {
+        "workflow_repository": { "$ref": "#/$defs/repository" }, "workflow_repository_id": { "$ref": "#/$defs/numericId" },
+        "workflow_id": { "$ref": "#/$defs/numericId" }, "workflow_path": { "$ref": "#/$defs/workflowPath" },
+        "workflow_blob_sha": { "$ref": "#/$defs/gitDigest" }, "workflow_run_id": { "$ref": "#/$defs/numericId" },
+        "workflow_run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 }, "workflow_event": { "enum": ["workflow_dispatch", "workflow_run"] },
+        "workflow_ref": { "const": "refs/heads/main" }, "workflow_commit_sha": { "$ref": "#/$defs/gitDigest" }, "workflow_tree_sha": { "$ref": "#/$defs/gitDigest" },
+        "upstream_run_id": { "$ref": "#/$defs/numericId" }, "upstream_run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "runner_class": { "const": "github-hosted" }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "required": ["repository", "signer_workflow", "signer_digest", "source_ref", "source_digest", "cert_oidc_issuer", "predicate_type", "deny_self_hosted_runners", "attestation_limit"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" }, "signer_workflow": { "type": "string", "minLength": 1, "maxLength": 768 },
+        "signer_digest": { "$ref": "#/$defs/gitDigest" }, "source_ref": { "const": "refs/heads/main" }, "source_digest": { "$ref": "#/$defs/gitDigest" },
+        "cert_oidc_issuer": { "const": "https://token.actions.githubusercontent.com" }, "predicate_type": { "const": "https://slsa.dev/provenance/v1" },
+        "deny_self_hosted_runners": { "const": true }, "attestation_limit": { "const": 1 }
+      },
+      "additionalProperties": false
+    },
+    "provider": {
+      "type": "object", "required": ["name", "artifact", "policy", "verified_attestation_count", "receipt", "raw_output"],
+      "properties": {
+        "name": { "const": "github-artifact-attestations" },
+        "artifact": { "type": "object", "required": ["sha256", "size"], "properties": { "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 0, "maximum": 4294967296 } }, "additionalProperties": false },
+        "policy": { "$ref": "#/$defs/policy" }, "verified_attestation_count": { "const": 1 },
+        "receipt": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "provider/github-attestation-receipt.json" }, "size": { "maximum": 65536 } } }] },
+        "raw_output": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "provider/github-attestation-output.json" }, "size": { "maximum": 4194304 } } }] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-context-2.schema.json",
+  "title": "EvoGuard separated maintenance release-source context V2",
+  "type": "object",
+  "required": ["format", "source", "evaluation", "trusted_inputs", "candidate_sha256"],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_CONTEXT_V2" },
+    "source": { "$ref": "release-source-2.schema.json" },
+    "evaluation": { "$ref": "#/$defs/run" },
+    "trusted_inputs": { "$ref": "#/$defs/trustedInputs" },
+    "candidate_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "numericId": { "type": "string", "pattern": "^[1-9][0-9]{0,255}$" },
+    "run": {
+      "type": "object",
+      "required": ["run_id", "run_attempt"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/numericId" },
+        "run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+      },
+      "additionalProperties": false
+    },
+    "fileMaterial": {
+      "type": "object",
+      "required": ["path", "blob_sha", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/\\\\][^\\\\]*$" },
+        "blob_sha": { "$ref": "#/$defs/gitDigest" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "packMaterial": {
+      "type": "object",
+      "required": ["root_path", "tree_sha", "sha256"],
+      "properties": {
+        "root_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/\\\\][^\\\\]*$" },
+        "tree_sha": { "$ref": "#/$defs/gitDigest" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "trustedInputs": {
+      "type": "object",
+      "required": ["source_sha", "source_tree", "policy", "verifier_pack", "control_tools"],
+      "properties": {
+        "source_sha": { "$ref": "#/$defs/gitDigest" },
+        "source_tree": { "$ref": "#/$defs/gitDigest" },
+        "policy": { "$ref": "#/$defs/fileMaterial" },
+        "verifier_pack": { "anyOf": [{ "$ref": "#/$defs/packMaterial" }, { "type": "null" }] },
+        "control_tools": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/fileMaterial" } }
+      },
+      "additionalProperties": false
+    }
+  }
+}

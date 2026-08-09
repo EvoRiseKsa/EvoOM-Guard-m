@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-admission-3.schema.json",
+  "title": "EvoGuard separated maintenance release-source admission V3",
+  "type": "object",
+  "required": [
+    "format", "decision", "source", "context", "upstream", "producer", "admitter",
+    "producer_receipt", "provider", "toolchain", "replay", "key_separation", "authentication"
+  ],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V3" },
+    "decision": { "const": "ALLOW" },
+    "source": { "$ref": "release-source-2.schema.json" },
+    "context": { "$ref": "release-source-context-2.schema.json" },
+    "upstream": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+    "producer": { "$ref": "release-source-producer-receipt-2.schema.json#/$defs/actor" },
+    "admitter": { "$ref": "release-source-producer-receipt-2.schema.json#/$defs/actor" },
+    "producer_receipt": { "$ref": "#/$defs/producerReceipt" },
+    "provider": { "$ref": "#/$defs/provider" },
+    "toolchain": { "$ref": "#/$defs/toolchain" },
+    "replay": {
+      "type": "object", "required": ["evaluation", "producer", "admitter"],
+      "properties": {
+        "evaluation": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+        "producer": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+        "admitter": { "$ref": "release-source-context-2.schema.json#/$defs/run" }
+      },
+      "additionalProperties": false
+    },
+    "key_separation": {
+      "type": "object",
+      "required": ["trusted_finalizer", "artifact_admission_v1", "artifact_digest_admission_v2", "release_source_finalizer_v1", "release_source_admission_v2", "release_source_finalizer_v2"],
+      "properties": {
+        "trusted_finalizer": { "$ref": "#/$defs/keyId" },
+        "artifact_admission_v1": { "$ref": "#/$defs/keyId" },
+        "artifact_digest_admission_v2": { "$ref": "#/$defs/keyId" },
+        "release_source_finalizer_v1": { "$ref": "#/$defs/keyId" },
+        "release_source_admission_v2": { "$ref": "#/$defs/keyId" },
+        "release_source_finalizer_v2": { "$ref": "#/$defs/keyId" }
+      },
+      "additionalProperties": false
+    },
+    "authentication": {
+      "type": "object", "required": ["algorithm", "key_id", "purpose", "key_domain", "signature_path"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" }, "key_id": { "$ref": "#/$defs/keyId" },
+        "purpose": { "const": "evoguard-release-source-admission-v3" },
+        "key_domain": { "const": "release-source-admission-v3" },
+        "signature_path": { "const": "admission.sig" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "keyId": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$" },
+    "descriptor": {
+      "type": "object", "required": ["path", "sha256", "size"],
+      "properties": { "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 1 } },
+      "additionalProperties": false
+    },
+    "producerReceipt": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "materials/producer-receipt-v2.json" }, "size": { "maximum": 524288 } } }] },
+    "policy": {
+      "type": "object",
+      "required": ["repository", "signer_workflow", "signer_digest", "source_ref", "source_digest", "cert_oidc_issuer", "predicate_type", "deny_self_hosted_runners", "attestation_limit"],
+      "properties": {
+        "repository": { "$ref": "#/$defs/repository" },
+        "signer_workflow": { "type": "string", "minLength": 1, "maxLength": 768 },
+        "signer_digest": { "$ref": "#/$defs/gitDigest" },
+        "source_ref": { "const": "refs/heads/main" },
+        "source_digest": { "$ref": "#/$defs/gitDigest" },
+        "cert_oidc_issuer": { "const": "https://token.actions.githubusercontent.com" },
+        "predicate_type": { "const": "https://slsa.dev/provenance/v1" },
+        "deny_self_hosted_runners": { "const": true }, "attestation_limit": { "const": 1 }
+      },
+      "additionalProperties": false
+    },
+    "provider": {
+      "type": "object",
+      "required": ["name", "artifact", "policy", "verified_attestation_count", "receipt", "raw_output"],
+      "properties": {
+        "name": { "const": "github-artifact-attestations" },
+        "artifact": {
+          "type": "object", "required": ["sha256", "size"],
+          "properties": { "sha256": { "$ref": "#/$defs/sha256" }, "size": { "type": "integer", "minimum": 1, "maximum": 524288 } },
+          "additionalProperties": false
+        },
+        "policy": { "$ref": "#/$defs/policy" }, "verified_attestation_count": { "const": 1 },
+        "receipt": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "provider/github-attestation-receipt.json" }, "size": { "maximum": 65536 } } }] },
+        "raw_output": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "provider/github-attestation-output.json" }, "size": { "minimum": 2, "maximum": 4194304 } } }] }
+      },
+      "additionalProperties": false
+    },
+    "toolchain": {
+      "type": "object", "required": ["git_sha256", "github_cli_sha256", "provider_isolation"],
+      "properties": {
+        "git_sha256": { "$ref": "#/$defs/sha256" }, "github_cli_sha256": { "$ref": "#/$defs/sha256" },
+        "provider_isolation": {
+          "type": "object", "required": ["platform", "uid", "gid"],
+          "properties": { "platform": { "const": "posix" }, "uid": { "type": "integer", "minimum": 1, "maximum": 2147483647 }, "gid": { "type": "integer", "minimum": 1, "maximum": 2147483647 } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

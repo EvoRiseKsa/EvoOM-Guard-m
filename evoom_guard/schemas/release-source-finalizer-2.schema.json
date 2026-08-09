@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-finalizer-2.schema.json",
+  "title": "EvoGuard separated maintenance release-source finalizer V2",
+  "type": "object",
+  "required": ["format", "decision", "source", "context", "upstream", "record", "handoff", "authentication"],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_EVIDENCE_V2" },
+    "decision": { "const": "DENY" },
+    "source": { "$ref": "release-source-2.schema.json" },
+    "context": { "$ref": "release-source-context-2.schema.json" },
+    "upstream": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+    "record": { "$ref": "#/$defs/record" },
+    "handoff": { "$ref": "#/$defs/handoff" },
+    "authentication": {
+      "type": "object",
+      "required": ["algorithm", "key_id", "purpose", "key_domain", "signature_path"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "$ref": "#/$defs/keyId" },
+        "purpose": { "const": "evoguard-release-source-finalizer-v2" },
+        "key_domain": { "const": "release-source-finalizer-v2" },
+        "signature_path": { "const": "bundle.sig" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "keyId": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "descriptor": {
+      "type": "object", "required": ["path", "sha256", "size"],
+      "properties": {
+        "path": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "record": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "record/verdict.json" }, "size": { "maximum": 8388608 } } }] },
+    "handoff": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "materials/release-source-finalizer-handoff-v2.json" }, "size": { "maximum": 524288 } } }] }
+  }
+}

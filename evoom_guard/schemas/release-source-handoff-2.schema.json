@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-handoff-2.schema.json",
+  "title": "EvoGuard separated maintenance release-source handoff V2",
+  "type": "object",
+  "required": ["format", "source", "context", "upstream", "record"],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_FINALIZER_HANDOFF_V2" },
+    "source": { "$ref": "release-source-2.schema.json" },
+    "context": { "$ref": "release-source-context-2.schema.json" },
+    "upstream": { "$ref": "release-source-context-2.schema.json#/$defs/run" },
+    "record": {
+      "type": "object",
+      "required": ["sha256", "size"],
+      "properties": {
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

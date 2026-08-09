@@ -32,6 +32,14 @@ retained evidence say so.
 
 ### Added
 
+- Added inert, side-by-side maintenance protocol contracts that keep trusted
+  workflow, frozen maintenance base, and target source Git identities separate:
+  Release Source Finalizer V2, producer receipt V2, Release Source Admission
+  V3, and Release Artifact Admission V2. Exact-key validators, canonical byte
+  digests, distinct signature domains, packaged schemas, cross-material byte
+  binding, replay-chain checks, and negative cross-version tests are included.
+  Published V1/V2 bytes and workflows are unchanged; no branch, tag, release,
+  provider execution, signing operation, or production authority is added.
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the
