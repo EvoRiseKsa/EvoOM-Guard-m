@@ -134,6 +134,11 @@ _RUN_INVOCATION_URI = re.compile(
     r"https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/"
     r"actions/runs/(?P<run_id>[1-9][0-9]*)/attempts/(?P<run_attempt>[1-9][0-9]*)\Z"
 )
+_IMMUTABLE_GHCR_URI = re.compile(
+    r"oci://ghcr\.io/[a-z0-9]+(?:[._-][a-z0-9]+)*"
+    r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+"
+    r"@sha256:[0-9a-f]{64}\Z"
+)
 _IN_TOTO_STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
 _GITHUB_HOSTED_RUNNER = "github-hosted"
 
@@ -811,10 +816,61 @@ def _validate_expected_workflow_run(
     return run_id, run_attempt
 
 
-def validate_github_attestation_verifier_output(
+def _validated_subject_expectation(
+    subject_sha256: object,
+    subject_name: object | None,
+) -> tuple[str, str | None]:
+    if not isinstance(subject_sha256, str) or _SHA256.fullmatch(subject_sha256) is None:
+        raise GitHubAttestationError(
+            "expected GitHub attestation subject SHA-256 must be 64 lowercase hex characters"
+        )
+    if subject_name is not None and (
+        not isinstance(subject_name, str)
+        or not subject_name
+        or len(subject_name) > 4096
+        or any(ord(character) < 0x21 or ord(character) > 0x7E for character in subject_name)
+    ):
+        raise GitHubAttestationError(
+            "expected GitHub attestation subject name must be bounded visible ASCII"
+        )
+    return subject_sha256, subject_name
+
+
+def _require_attestation_subject(
+    statement: Mapping[str, Any],
+    *,
+    subject_sha256: str,
+    subject_name: str | None,
+) -> None:
+    subjects = statement.get("subject")
+    if not isinstance(subjects, list) or len(subjects) != 1:
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output statement must contain exactly one subject"
+        )
+    subject = subjects[0]
+    if not isinstance(subject, dict):
+        raise GitHubAttestationError(
+            "GitHub attestation verifier output statement subject must be an object"
+        )
+    if subject_name is not None:
+        _require_semantic_match(
+            _required_string(subject, "name", label="statement subject"),
+            subject_name,
+            label="statement subject name",
+        )
+    subject_digest = _required_mapping(subject, "digest", label="statement subject")
+    _require_semantic_match(
+        _required_string(subject_digest, "sha256", label="statement subject digest"),
+        subject_sha256,
+        label="statement subject SHA-256",
+    )
+
+
+def _validate_github_attestation_verifier_output_subject(
     data: bytes,
     *,
-    artifact: GitHubAttestationArtifact,
+    subject_sha256: str,
+    subject_name: str | None,
     policy: GitHubAttestationPolicy,
     expected_workflow_run_id: str | None = None,
     expected_workflow_run_attempt: int | None = None,
@@ -827,17 +883,10 @@ def validate_github_attestation_verifier_output(
     level are retained in raw evidence but ignored for forward compatibility.
     """
 
-    if type(artifact) is not GitHubAttestationArtifact:
-        raise GitHubAttestationError(
-            "expected GitHub attestation artifact must be GitHubAttestationArtifact"
-        )
     if type(policy) is not GitHubAttestationPolicy:
         raise GitHubAttestationError(
             "expected GitHub attestation policy must be GitHubAttestationPolicy"
         )
-    checked_artifact = _validate_artifact(
-        artifact.as_dict(), label="expected GitHub attestation artifact"
-    )
     checked_policy = _validate_policy(
         policy.as_dict(), label="expected GitHub attestation policy"
     )
@@ -909,21 +958,10 @@ def validate_github_attestation_verifier_output(
         _IN_TOTO_STATEMENT_TYPE,
         label="statement._type",
     )
-    subjects = statement.get("subject")
-    if not isinstance(subjects, list) or len(subjects) != 1:
-        raise GitHubAttestationError(
-            "GitHub attestation verifier output statement must contain exactly one subject"
-        )
-    subject = subjects[0]
-    if not isinstance(subject, dict):
-        raise GitHubAttestationError(
-            "GitHub attestation verifier output statement subject must be an object"
-        )
-    subject_digest = _required_mapping(subject, "digest", label="statement subject")
-    _require_semantic_match(
-        _required_string(subject_digest, "sha256", label="statement subject digest"),
-        checked_artifact.sha256,
-        label="statement subject SHA-256",
+    _require_attestation_subject(
+        statement,
+        subject_sha256=subject_sha256,
+        subject_name=subject_name,
     )
     _require_semantic_match(
         statement.get("predicateType"),
@@ -997,6 +1035,68 @@ def validate_github_attestation_verifier_output(
     return VerifiedGitHubAttestationOutput(
         workflow_run_id=workflow_run_id,
         workflow_run_attempt=workflow_run_attempt,
+    )
+
+
+def validate_github_attestation_verifier_output(
+    data: bytes,
+    *,
+    artifact: GitHubAttestationArtifact,
+    policy: GitHubAttestationPolicy,
+    expected_workflow_run_id: str | None = None,
+    expected_workflow_run_attempt: int | None = None,
+) -> VerifiedGitHubAttestationOutput:
+    """Bind one successful regular-file ``gh`` result to exact expectations."""
+
+    if type(artifact) is not GitHubAttestationArtifact:
+        raise GitHubAttestationError(
+            "expected GitHub attestation artifact must be GitHubAttestationArtifact"
+        )
+    if type(policy) is not GitHubAttestationPolicy:
+        raise GitHubAttestationError(
+            "expected GitHub attestation policy must be GitHubAttestationPolicy"
+        )
+    checked_artifact = _validate_artifact(
+        artifact.as_dict(), label="expected GitHub attestation artifact"
+    )
+    subject_sha256, subject_name = _validated_subject_expectation(
+        checked_artifact.sha256, None
+    )
+    return _validate_github_attestation_verifier_output_subject(
+        data,
+        subject_sha256=subject_sha256,
+        subject_name=subject_name,
+        policy=policy,
+        expected_workflow_run_id=expected_workflow_run_id,
+        expected_workflow_run_attempt=expected_workflow_run_attempt,
+    )
+
+
+def validate_github_oci_attestation_verifier_output(
+    data: bytes,
+    *,
+    subject_name: str,
+    subject_digest: str,
+    policy: GitHubAttestationPolicy,
+    expected_workflow_run_id: str,
+    expected_workflow_run_attempt: int,
+) -> VerifiedGitHubAttestationOutput:
+    """Bind one OCI ``gh`` result to an exact subject and build invocation."""
+
+    if not isinstance(subject_digest, str) or not subject_digest.startswith("sha256:"):
+        raise GitHubAttestationError(
+            "expected GitHub OCI attestation subject digest must use sha256"
+        )
+    subject_sha256, checked_subject_name = _validated_subject_expectation(
+        subject_digest.removeprefix("sha256:"), subject_name
+    )
+    return _validate_github_attestation_verifier_output_subject(
+        data,
+        subject_sha256=subject_sha256,
+        subject_name=checked_subject_name,
+        policy=policy,
+        expected_workflow_run_id=expected_workflow_run_id,
+        expected_workflow_run_attempt=expected_workflow_run_attempt,
     )
 
 
@@ -1270,7 +1370,7 @@ def _prepare_provider_isolation(
     isolation: GitHubAttestationProviderIsolation,
     *,
     gh_executable: str,
-    snapshot_path: str,
+    snapshot_path: str | None,
     directory: str,
 ) -> tuple[str, dict[str, str], dict[str, object]]:
     """Prepare a pinned executable, accessible inputs, and a dropped identity."""
@@ -1284,13 +1384,14 @@ def _prepare_provider_isolation(
         owner_gid=effective_gid,
     )
     try:
-        _set_provider_path_access(
-            snapshot_path,
-            uid=checked.uid,
-            gid=checked.gid,
-            mode=0o400,
-            label="GitHub attestation artifact snapshot",
-        )
+        if snapshot_path is not None:
+            _set_provider_path_access(
+                snapshot_path,
+                uid=checked.uid,
+                gid=checked.gid,
+                mode=0o400,
+                label="GitHub attestation artifact snapshot",
+            )
         environment = _isolated_gh_environment(directory, checked)
         _set_provider_path_access(
             directory,
@@ -1627,14 +1728,16 @@ def _execute_gh_attestation_command(
         raise
 
 
-def _run_gh_attestation_verify(
-    snapshot_path: str,
+def _run_gh_attestation_verify_target(
+    target: str,
     policy: GitHubAttestationPolicy,
     *,
     gh_executable: str,
     timeout_seconds: int,
     directory: str,
     provider_isolation: GitHubAttestationProviderIsolation | None = None,
+    isolation_input_path: str | None = None,
+    bundle_from_oci: bool = False,
 ) -> bytes:
     if not isinstance(gh_executable, str) or not gh_executable or len(gh_executable) > 4096:
         raise GitHubAttestationError("gh executable must be a non-empty path or command")
@@ -1655,7 +1758,7 @@ def _run_gh_attestation_verify(
         ) = _prepare_provider_isolation(
             provider_isolation,
             gh_executable=gh_executable,
-            snapshot_path=snapshot_path,
+            snapshot_path=isolation_input_path,
             directory=directory,
         )
         effective_executable = pinned_executable
@@ -1663,7 +1766,7 @@ def _run_gh_attestation_verify(
         effective_executable,
         "attestation",
         "verify",
-        snapshot_path,
+        target,
         "--repo",
         policy.repository,
         "--signer-workflow",
@@ -1684,6 +1787,8 @@ def _run_gh_attestation_verify(
         "--format",
         "json",
     ]
+    if bundle_from_oci:
+        command.append("--bundle-from-oci")
     try:
         return _execute_gh_attestation_command(
             command,
@@ -1696,6 +1801,74 @@ def _run_gh_attestation_verify(
     finally:
         if pinned_executable:
             _remove_provider_snapshot(pinned_executable)
+
+
+def _run_gh_attestation_verify(
+    snapshot_path: str,
+    policy: GitHubAttestationPolicy,
+    *,
+    gh_executable: str,
+    timeout_seconds: int,
+    directory: str,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
+) -> bytes:
+    """Preserve the released regular-file provider execution path exactly."""
+
+    return _run_gh_attestation_verify_target(
+        snapshot_path,
+        policy,
+        gh_executable=gh_executable,
+        timeout_seconds=timeout_seconds,
+        directory=directory,
+        provider_isolation=provider_isolation,
+        isolation_input_path=snapshot_path,
+    )
+
+
+def run_github_oci_attestation_verify(
+    immutable_uri: str,
+    policy: GitHubAttestationPolicy,
+    *,
+    gh_executable: str = "gh",
+    timeout_seconds: int = DEFAULT_GITHUB_ATTESTATION_TIMEOUT_SECONDS,
+    provider_isolation: GitHubAttestationProviderIsolation | None = None,
+) -> bytes:
+    """Verify one digest-qualified public GHCR subject with registry evidence.
+
+    Only ``oci://ghcr.io/...@sha256:<digest>`` is accepted.  Mutable tags,
+    alternate registries, query/fragment suffixes, and caller-selected provider
+    flags are outside this provider contract. ``--bundle-from-oci`` is fixed so
+    the live operation must obtain the attestation bundle from the registry.
+    ``public GHCR`` is a subject-scope restriction, not an anonymous-access
+    claim: GitHub CLI requires registry authentication for OCI input, and
+    isolated mode does not inherit ambient Docker configuration.
+    """
+
+    if not isinstance(immutable_uri, str) or _IMMUTABLE_GHCR_URI.fullmatch(
+        immutable_uri
+    ) is None:
+        raise GitHubAttestationError(
+            "GitHub OCI subject must be a canonical public GHCR "
+            "oci://ghcr.io/<owner>/<image>@sha256:<64-lowercase-hex> URI"
+        )
+    if type(policy) is not GitHubAttestationPolicy:
+        raise GitHubAttestationError(
+            "GitHub OCI attestation policy must be GitHubAttestationPolicy"
+        )
+    checked_policy = _validate_policy(
+        policy.as_dict(), label="GitHub OCI attestation policy"
+    )
+    with tempfile.TemporaryDirectory(prefix=".evoguard-github-oci-attestation-") as directory:
+        return _run_gh_attestation_verify_target(
+            immutable_uri,
+            checked_policy,
+            gh_executable=gh_executable,
+            timeout_seconds=timeout_seconds,
+            directory=directory,
+            provider_isolation=provider_isolation,
+            isolation_input_path=None,
+            bundle_from_oci=True,
+        )
 
 def create_github_attestation_receipt(
     artifact_path: str,

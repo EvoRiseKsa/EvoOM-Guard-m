@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:evoguard:artifact-provider-receipt:3",
+  "title": "EvoGuard artifact provider receipt v3",
+  "description": "Canonical retained receipt for one freshly verified, digest-qualified public GHCR subject under an exact GitHub Artifact Attestation policy and build invocation. It is not a trust root by itself; its exact bytes are bound as the provenance reference of an EVOGUARD_ARTIFACT_BINDING_V2 record.",
+  "type": "object",
+  "required": [
+    "format",
+    "provider",
+    "subject",
+    "build",
+    "verification_policy",
+    "verification_output"
+  ],
+  "properties": {
+    "format": { "const": "EVOGUARD_ARTIFACT_PROVIDER_RECEIPT_V3" },
+    "provider": {
+      "type": "object",
+      "required": ["name", "bundle_source"],
+      "properties": {
+        "name": { "const": "github-artifact-attestation" },
+        "bundle_source": { "const": "oci-registry" }
+      },
+      "additionalProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "required": ["kind", "registry_repository", "digest"],
+      "properties": {
+        "kind": { "const": "oci-manifest-or-index" },
+        "registry_repository": {
+          "type": "string",
+          "pattern": "^ghcr\\.io/[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "build": {
+      "type": "object",
+      "required": ["workflow_run_id", "workflow_run_attempt"],
+      "properties": {
+        "workflow_run_id": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,255}$"
+        },
+        "workflow_run_attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "additionalProperties": false
+    },
+    "verification_policy": {
+      "type": "object",
+      "required": [
+        "repository",
+        "signer_workflow",
+        "signer_digest",
+        "source_ref",
+        "source_digest",
+        "cert_oidc_issuer",
+        "predicate_type",
+        "deny_self_hosted_runners",
+        "attestation_limit"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "signer_workflow": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$"
+        },
+        "signer_digest": { "$ref": "#/$defs/gitDigest" },
+        "source_ref": {
+          "type": "string",
+          "allOf": [
+            { "pattern": "^refs/heads/[A-Za-z0-9][A-Za-z0-9._/-]*$" },
+            { "not": { "pattern": "//" } },
+            { "not": { "pattern": "/(?:\\.|\\.\\.)(?:/|$)" } },
+            { "not": { "pattern": "/$" } }
+          ]
+        },
+        "source_digest": { "$ref": "#/$defs/gitDigest" },
+        "cert_oidc_issuer": { "const": "https://token.actions.githubusercontent.com" },
+        "predicate_type": { "const": "https://slsa.dev/provenance/v1" },
+        "deny_self_hosted_runners": { "const": true },
+        "attestation_limit": { "const": 1 }
+      },
+      "additionalProperties": false
+    },
+    "verification_output": {
+      "type": "object",
+      "required": ["sha256", "size", "verified_attestation_count"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 2, "maximum": 4194304 },
+        "verified_attestation_count": { "const": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitDigest": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    }
+  }
+}

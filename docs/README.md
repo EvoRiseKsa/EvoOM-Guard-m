@@ -88,6 +88,8 @@ contract does not authorize another stage such as publication or deployment.
   admission V1.
 - [`ARTIFACT_DIGEST_ADMISSION_V2.md`](ARTIFACT_DIGEST_ADMISSION_V2.md) —
   digest-bound artifact admission V2.
+- [`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md) — unreleased,
+  library-only public-GHCR OCI provider relation layered over V2.
 - [`GITHUB_ATTESTATION_ADMISSION.md`](GITHUB_ATTESTATION_ADMISSION.md) —
   protected-boundary adapter for GitHub Artifact Attestations.
 - [`AGENT_CHANGE_ADMISSION.md`](AGENT_CHANGE_ADMISSION.md) — bind an untrusted

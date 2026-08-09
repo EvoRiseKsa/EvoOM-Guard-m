@@ -165,6 +165,20 @@ The bounded, same-owner development-snapshot corpus for Change Attempt
 Observation V1 is recorded with exact hashes and explicit non-claims in
 [`change-attempt-corpus-v1.md`](docs/evidence/change-attempt-corpus-v1.md).
 
+Current unreleased source also contains a library-only
+[Artifact Provider V3](docs/ARTIFACT_PROVIDER_V3.md) path for one canonical,
+digest-qualified public GHCR subject (not an anonymous-registry-access claim).
+It relates one exact GitHub Artifact
+Attestation direct same-revision branch build and builder run/attempt to
+external Trusted Finalizer context, then uses unchanged V2 to bind the exact
+subject and receipt. It has no CLI, protected workflow, or live OCI pilot and
+must not be described as SLSA compliance, reproducibility, image safety,
+vulnerability status, registry retention, publication, deployment, or runtime
+identity.
+
+The isolated path does not inherit Docker registry configuration, and no live
+pilot has yet proved a compatible protected registry-auth mechanism.
+
 For an adoption decision, start with the
 [production blueprint](docs/PRODUCTION_BLUEPRINT.md). Advanced release-source,
 artifact-admission, and publication contracts are separate boundaries; none

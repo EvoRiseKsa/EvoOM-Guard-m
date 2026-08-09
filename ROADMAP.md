@@ -65,6 +65,17 @@ release asset and its provenance. Canonical ledger:
   verified pre-merge finalizer `ALLOW`. Its format and verification order are
   deliberately small; it is not a build, OCI, release, registry, or deployment
   provenance system.
+- **Unreleased provider-specific OCI relation** — current development source
+  adds a library-only `EVOGUARD_ARTIFACT_PROVIDER_RECEIPT_V3` path for one
+  canonical digest-qualified public GHCR subject. It requires an exact GitHub
+  Artifact Attestation direct same-revision branch build and builder
+  run/attempt, relates it to externally supplied finalizer repository/head
+  context, enforces provider isolation/key separation, and signs the exact
+  receipt/subject/finalizer relation through unchanged V2. It has no CLI,
+  protected reference workflow, or live OCI pilot and makes no SLSA,
+  reproducibility, safety, vulnerability, registry-retention, publication,
+  deployment, or runtime claim. See
+  [`docs/ARTIFACT_PROVIDER_V3.md`](docs/ARTIFACT_PROVIDER_V3.md).
 - **Assurance reporting** — every verdict states its `report_integrity` and
   `candidate_isolation` honestly.
 - **External black-box verification** (`--blackbox`) — adds a judge-owned
@@ -253,10 +264,13 @@ needs — not feature accumulation. The order matters:
    checksum manifest, and resulting publication. This advances the recorded
    release boundary beyond the earlier descriptor-only pilot, but it does not
    establish reproducibility, correctness, production readiness, deployment
-   authorization, or independent review. Native OCI manifest/index admission
-   or a deployment decision would require a separate versioned contract and
-   evidence; neither the current `.raae` nor the release ledger grants that
-   authority.
+   authorization, or independent review. Current unreleased source now
+   contains one separate versioned, library-only public-GHCR OCI provider
+   relation, but it has no CLI, protected workflow, or live manifest/index
+   pilot. Therefore neither that implementation, the current `.raae`, nor the
+   release ledger grants production OCI or deployment authority.
+   [Issue #78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78) remains
+   open pending the real OCI evidence and its other acceptance paths.
 2. **Independent evidence.** The
    [`review-v4.1.0-r1` companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.1.0-r1)
    remains a frozen historical target whose exact release artifacts remain

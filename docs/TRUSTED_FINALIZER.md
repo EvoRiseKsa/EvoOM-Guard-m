@@ -146,6 +146,24 @@ workflows do not create or publish artifact bindings. Those integrations require
 independent canonical finalizer derivation and a separately reviewed,
 provider-specific build-provenance boundary.
 
+### Unreleased public-GHCR provider relation
+
+Current development source includes the library-only
+[`Artifact Provider V3`](ARTIFACT_PROVIDER_V3.md) follow-on for one canonical,
+digest-qualified public GHCR subject. It requires the attested repository and
+source digest to equal the externally supplied finalizer repository and
+`head_sha`; it also requires a direct same-revision branch workflow, an exact
+builder run/attempt distinct from the finalizer invocation, provider isolation,
+and a provider-inaccessible artifact-admission key path. The canonical V3
+receipt is then bound through the unchanged V2 subject/finalizer signature.
+
+This does not make the Trusted Finalizer a build witness. Retained V3
+verification checks byte continuity and the signed external relation without a
+provider call; only explicit fresh reverification contacts GitHub/GHCR. There
+is no V3 CLI, protected reference workflow, or live OCI pilot yet, and the path
+makes no SLSA, reproducibility, image-safety, vulnerability, registry-retention,
+publication, deployment, or runtime-identity claim.
+
 The reference re-verifier requires an external black-box path with a
 network-less container before it will create a handoff. Docker is defense in
 depth, not a complete hostile-code boundary. For public/forked untrusted code,
