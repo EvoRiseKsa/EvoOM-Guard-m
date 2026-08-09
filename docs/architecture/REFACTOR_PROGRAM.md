@@ -562,8 +562,9 @@ is **complete**; the overall refactor program is **in-progress**. Source version
 `4.6.0.dev0` remains unreleased.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
-- Expand action scripts, offline mode, release ledger and SBOM assets. Release
-  ledgers exist; a general offline mode and SBOM asset are not complete.
+- Expand action scripts, offline mode, release ledger and SBOM assets. The
+  `v4.5.0` release ledger and SPDX SBOM asset exist; a general offline mode
+  remains incomplete.
 - Add strict type/architecture/mutation gates and external red-team stage.
   Architecture, bounded mutation, and strict `domain/` plus `application/`
   typing gates exist; strict typing of the entire package and an independent

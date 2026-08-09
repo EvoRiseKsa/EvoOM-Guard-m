@@ -171,7 +171,12 @@ identity, resource, and cleanup probes, and CI is configured to run the
 corresponding end-to-end test when its daemon supports the boundary
 (`tests/test_blackbox_docker_e2e.py`). A release claim requires retaining a
 result bound to the final commit and runtime. This is not proof that Docker
-cannot be escaped, and no release-bound gVisor result is currently claimed.
+cannot be escaped. The immutable `v4.5.0` release ledger contains no gVisor
+result; a later same-owner observation using the exact released zipapp is
+retained under
+[`evidence/runtime-observations/v4.5.0-gvisor-31298956172`](../evidence/runtime-observations/v4.5.0-gvisor-31298956172).
+That supplemental observation is not independent, production, hostile-host, or
+field-efficacy evidence.
 
 **Does NOT guarantee:** that the exact built artifact you deploy is the one judged
 (the verdict binds to the runtime image digest, not a separately built artifact —

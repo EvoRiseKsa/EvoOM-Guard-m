@@ -178,11 +178,15 @@ self-check.
   execution on Windows.
 - The conformance kit records and replay-checks the listed Docker/gVisor
   controls. When `runsc` is absent it reports gVisor as `UNSUPPORTED`, never as
-  delivered isolation. There is no current release-bound gVisor result, and a
-  release claim requires retaining a result bound to the final commit and
-  runtime. Native-Windows container delivery is runtime-dependent and must fail
-  closed when the requested image/mount boundary is unavailable; the Windows
-  CI suite does not label such an environment as delivered Docker.
+  delivered isolation. The immutable `v4.5.0` release ledger contains no gVisor
+  result; a later same-owner observation using the exact released zipapp is
+  retained under
+  [`evidence/runtime-observations/v4.5.0-gvisor-31298956172`](../evidence/runtime-observations/v4.5.0-gvisor-31298956172).
+  It is supplemental evidence, not an independent, production, hostile-host,
+  or field-efficacy result. Native-Windows container delivery is
+  runtime-dependent and must fail closed when the requested image/mount
+  boundary is unavailable; the Windows CI suite does not label such an
+  environment as delivered Docker.
 
 ## 8. Phasing
 
