@@ -5720,13 +5720,13 @@ MUTATIONS = (
             "        raise\n"
             "\n"
             "\n"
-            "def _run_gh_attestation_verify(\n"
+            "def _run_gh_attestation_verify_target(\n"
         ),
         after=(
             "        raise GitHubAttestationError(\"mutant masked primary\")\n"
             "\n"
             "\n"
-            "def _run_gh_attestation_verify(\n"
+            "def _run_gh_attestation_verify_target(\n"
         ),
         test=(
             "tests/test_github_attestation_lifecycle.py::"
