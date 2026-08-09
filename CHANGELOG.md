@@ -32,6 +32,13 @@ retained evidence say so.
 
 ### Added
 
+- Added the separate `EVOGUARD_BLAST_RADIUS_V2` materialized-change contract
+  and dependency-free scorer. Explicit add/modify/delete/rename/copy/mode
+  records have strict portable paths and non-negative counters, canonical JSON
+  bytes, distinct result identity, golden vectors, and fail-closed malformed,
+  raw-diff, binary, and Git-quoted-path behavior. The frozen V1 API,
+  `risk_score` projection, and signed verdict schemas 1.11/1.12 are unchanged.
+
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the
