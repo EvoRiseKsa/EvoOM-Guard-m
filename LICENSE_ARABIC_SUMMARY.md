@@ -28,6 +28,7 @@ EvoOM Guard **متاح المصدر وليس مفتوح المصدر**.
 لا تمنع الرخصة تطوير تقنية مستقلة لا تستخدم الكود أو مشتقاته. لا تمنح الرخصة حق استخدام علامات EvoRise أو EvoOM Guard أو شعاراتها.
 
 صاحب حقوق النشر والمرخِّص هو **EvoRise Tech**، والمؤلف والمنشئ الأصلي هو
-**Mana Alharbi**. للتراخيص التجارية: <https://evoriseksa.com> أو
-<evoriseksa@icloud.com>. راجع [LICENSE](LICENSE) و[COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md)
+**Mana Alharbi**. للتراخيص التجارية: <evoriseksa@icloud.com>. السجل العام
+المرجعي للمنتج هو <https://github.com/EvoRiseKsa/EvoOM-Guard-m>. راجع
+[LICENSE](LICENSE) و[COMMERCIAL-LICENSING.md](COMMERCIAL-LICENSING.md)
 و[LICENSE_HISTORY.md](LICENSE_HISTORY.md). هذا الملخص لا يغيّر النص الإنجليزي الحاكم.
