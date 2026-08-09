@@ -3150,6 +3150,52 @@ MUTATIONS = (
         ),
     ),
     Mutation(
+        name="candidate-tree-compatibility-snapshot-mutable",
+        path="evoom_guard/workspace/candidate_tree.py",
+        before=(
+            "@dataclass(frozen=True)\n"
+            "class CandidateTreeCompatibilitySnapshot:\n"
+        ),
+        after="@dataclass\nclass CandidateTreeCompatibilitySnapshot:\n",
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_tree_compatibility_snapshot_is_public_and_immutable"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-compatibility-error-owner-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "        unverifiable_changed_paths_error="
+            "_UnverifiableChangedPathsError,\n"
+        ),
+        after=(
+            "        unverifiable_changed_paths_error="
+            "_candidate_tree.UnverifiableChangedPathsError,\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_tree_compatibility_snapshot_is_public_and_immutable"
+        ),
+    ),
+    Mutation(
+        name="candidate-tree-compatibility-callable-owner-bypass",
+        path="evoom_guard/guard.py",
+        before=(
+            "        blocks_from_dirs=blocks_from_dirs,\n"
+            "        serialize_candidate_blocks=serialize_candidate_blocks,\n"
+        ),
+        after=(
+            "        blocks_from_dirs=_candidate_tree.blocks_from_dirs,\n"
+            "        serialize_candidate_blocks="
+            "_candidate_tree.serialize_candidate_blocks,\n"
+        ),
+        test=(
+            "tests/test_candidate_tree_characterization.py::"
+            "test_candidate_tree_compatibility_snapshot_is_public_and_immutable"
+        ),
+    ),
+    Mutation(
         name="candidate-tree-reparse-classification-bypass",
         path="evoom_guard/workspace/candidate_tree.py",
         before="    if is_windows_reparse(full_path, info):\n",

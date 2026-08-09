@@ -333,6 +333,15 @@ owner and adds no baseline violation, cycle, or unclassified debt. Its frozen
 accept/reject mutation vectors are intentionally separate from producer policy
 tests, so no ratchet count is changed merely to record the new module.
 
+Import-boundary ratchet revision 15 replaces the CLI's direct import of
+Guard's historical private changed-path exception with one public immutable
+candidate-tree compatibility snapshot. The Guard facade still resolves the
+legacy error type, structured derivation callable, and canonical serializer at
+snapshot time, so existing monkeypatch timing and exception identity remain
+unchanged. The measured cross-package private-import ceiling drops from 1 to
+0; cycles, wildcard imports, unresolved dynamic imports, layer violations, and
+unclassified modules remain unchanged.
+
 Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and
 injects its immutable-ref validator and argument-group helpers on every call,

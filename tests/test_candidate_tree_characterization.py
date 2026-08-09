@@ -122,6 +122,60 @@ def test_candidate_tree_facade_value_shapes_are_frozen() -> None:
     )
 
 
+def test_candidate_tree_compatibility_snapshot_is_public_and_immutable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    early_error = guard_module._UnverifiableChangedPathsError
+    early_blocks = guard_module.blocks_from_dirs
+    early_serialize = guard_module.serialize_candidate_blocks
+
+    snapshot = guard_module.snapshot_candidate_tree_compatibility()
+
+    assert isinstance(snapshot, candidate_tree.CandidateTreeCompatibilitySnapshot)
+    assert snapshot.unverifiable_changed_paths_error is early_error
+    assert snapshot.blocks_from_dirs is early_blocks
+    assert snapshot.serialize_candidate_blocks is early_serialize
+
+    with pytest.raises(FrozenInstanceError):
+        snapshot.blocks_from_dirs = lambda _base, _head: ({}, [])
+
+    class LateError(early_error):
+        pass
+
+    def late_blocks(
+        _base: str,
+        _head: str,
+        *,
+        max_bytes: int = 1_000_000,
+    ) -> tuple[dict[str, str], list[str]]:
+        del max_bytes
+        return {"late.py": "VALUE = 2\n"}, []
+
+    def late_serialize(_blocks: object) -> str:
+        return "LATE"
+
+    monkeypatch.setattr(
+        guard_module,
+        "_UnverifiableChangedPathsError",
+        LateError,
+    )
+    monkeypatch.setattr(guard_module, "blocks_from_dirs", late_blocks)
+    monkeypatch.setattr(
+        guard_module,
+        "serialize_candidate_blocks",
+        late_serialize,
+    )
+
+    assert snapshot.unverifiable_changed_paths_error is early_error
+    assert snapshot.blocks_from_dirs is early_blocks
+    assert snapshot.serialize_candidate_blocks is early_serialize
+
+    refreshed = guard_module.snapshot_candidate_tree_compatibility()
+    assert refreshed.unverifiable_changed_paths_error is LateError
+    assert refreshed.blocks_from_dirs is late_blocks
+    assert refreshed.serialize_candidate_blocks is late_serialize
+
+
 def test_candidate_tree_exact_serialization_and_order_are_frozen(
     tmp_path: Path,
 ) -> None:

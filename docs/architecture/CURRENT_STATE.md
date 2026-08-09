@@ -28,7 +28,7 @@ directions and prevents architectural debt from silently increasing.
 - The behavior-preserving R2 extraction is complete.
 - All 41 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
-- The import ratchet currently permits zero dependency cycles and one
+- The import ratchet currently permits zero dependency cycles and zero
   cross-package private-symbol imports. Trusted Finalizer source validation is
   now an explicit public owner contract shared by Artifact Admission V1/V2;
   selected-path Raw-Git regular-blob projection is an explicit public Finalizer
@@ -37,7 +37,9 @@ directions and prevents architectural debt from silently increasing.
   snapshot of its finalizer primitives at module entry instead of importing
   those owner-private functions directly. The CLI resolves the same unified
   immutable five-operation snapshot at command entry before reading untrusted
-  arguments.
+  arguments. Candidate-tree compatibility is likewise captured through one
+  public immutable Guard snapshot, removing the final private cross-package
+  import.
 - The broader program is still in progress: evidence/finalizer domains,
   release engineering, repository-wide strict typing, independent external
   red-team evidence, and the end-to-end protected build-to-admission chain are

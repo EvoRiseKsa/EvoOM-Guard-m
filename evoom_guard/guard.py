@@ -1528,6 +1528,23 @@ def serialize_candidate_blocks(blocks: Mapping[str, str]) -> str:
     return _candidate_tree.serialize_candidate_blocks(blocks)
 
 
+def snapshot_candidate_tree_compatibility(
+) -> _candidate_tree.CandidateTreeCompatibilitySnapshot:
+    """Capture the live candidate-tree facade contract as one value.
+
+    ``_UnverifiableChangedPathsError`` remains a historical monkeypatch seam.
+    Capturing it together with the two public operations preserves its exact
+    call-entry lookup timing without requiring another package to import the
+    private name.
+    """
+
+    return _candidate_tree.CandidateTreeCompatibilitySnapshot(
+        unverifiable_changed_paths_error=_UnverifiableChangedPathsError,
+        blocks_from_dirs=blocks_from_dirs,
+        serialize_candidate_blocks=serialize_candidate_blocks,
+    )
+
+
 def candidate_from_dirs(base_dir: str, head_dir: str, *, max_bytes: int = 1_000_000) -> tuple[str, list[str]]:
     """Diff a base and head checkout into an EvoOM ``<<<FILE>>>`` candidate.
 

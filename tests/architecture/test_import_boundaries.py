@@ -875,6 +875,33 @@ def test_candidate_tree_has_one_dependency_free_workspace_owner() -> None:
     )
 
 
+def test_cli_captures_candidate_tree_compatibility_through_public_snapshot() -> None:
+    """The CLI must not import Guard's historical private error class."""
+
+    analysis = analyze_package(PACKAGE_ROOT)
+    guard_facts = tuple(
+        fact
+        for fact in analysis.facts
+        if fact.source == "evoom_guard.cli"
+        and fact.target == "evoom_guard.guard"
+        and fact.symbol
+        in {
+            "_UnverifiableChangedPathsError",
+            "blocks_from_dirs",
+            "serialize_candidate_blocks",
+            "snapshot_candidate_tree_compatibility",
+        }
+    )
+
+    assert tuple(fact.symbol for fact in guard_facts) == (
+        "snapshot_candidate_tree_compatibility",
+    )
+    assert not any(
+        violation.startswith("evoom_guard.cli | evoom_guard.guard |")
+        for violation in analysis.violations["cross_package_private_imports"]
+    )
+
+
 def test_repository_workspace_has_one_dependency_free_owner() -> None:
     """Repository copying/cleanup must not depend on verifier orchestration."""
 

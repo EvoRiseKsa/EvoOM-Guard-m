@@ -121,7 +121,10 @@ write/delete sharing, non-blocking no-follow POSIX opens, bounded
 reads/comparisons, changed-path classification, and canonical FILE-block
 serialization. Guard retains its historical names as thin compatibility
 types/facades and injects every established helper at call time, so private
-type metadata and monkeypatch seams remain stable. The transaction proves only
+type metadata and monkeypatch seams remain stable. CLI integration captures
+the changed-path error type, structured derivation, and canonical serializer
+through one public immutable compatibility snapshot; it no longer imports the
+facade-private error independently. The transaction proves only
 the bounded per-file read/compare interval; it does not close the
 classification/open gap or claim an atomic whole-tree snapshot. Revision
 identity still requires a quiescent checkout or raw-Git finalization.

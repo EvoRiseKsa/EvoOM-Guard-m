@@ -156,6 +156,21 @@ ReadFileDescriptor = Callable[[int, int], bytes]
 WindowsOpenRegularSnapshot = Callable[[str, int], int]
 
 
+@dataclass(frozen=True)
+class CandidateTreeCompatibilitySnapshot:
+    """One immutable view of Guard's candidate-tree compatibility seams.
+
+    The workspace owner defines the contract, while the historical Guard
+    facade supplies its live error type and callables.  Consumers can capture
+    those three related names at one explicit boundary instead of importing a
+    facade-private exception independently from the operations that raise it.
+    """
+
+    unverifiable_changed_paths_error: type[Exception]
+    blocks_from_dirs: BlocksFromDirs
+    serialize_candidate_blocks: SerializeCandidateBlocks
+
+
 def blocks_from_dirs(
     base_dir: str,
     head_dir: str,
@@ -781,6 +796,7 @@ def read_fd_bounded(descriptor: int, maximum: int) -> bytes:
 
 
 __all__ = (
+    "CandidateTreeCompatibilitySnapshot",
     "TreeEntry",
     "UnverifiableChangedPathsError",
     "blocks_from_dirs",
