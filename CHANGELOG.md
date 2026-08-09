@@ -41,6 +41,13 @@ retained evidence say so.
 
 ### Changed
 
+- Made `seal_finalizer_bundle(expected_derivation=...)` and the
+  `seal-finalizer --expected-derivation` CLI contract fail closed instead of
+  silently accepting caller-declared metadata when raw-Git derivation is
+  omitted. Agent Change sealing now requires the same input. Legacy Python
+  callers can migrate explicitly to `seal_finalizer_bundle_without_derivation`;
+  that compatibility primitive has no CLI counterpart and is documented as
+  outside the PR/release/artifact-admission trust boundary.
 - Replaced the final ten cross-package private-symbol imports with explicit
   public owner contracts for finalizer source validation, selected raw-Git
   blob projection, release-source primitive snapshots, and candidate-tree

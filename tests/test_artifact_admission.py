@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from finalizer_test_support import finalizer_bindings_for
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
@@ -15,7 +16,10 @@ from evoom_guard.cli import main as cli_main
 from evoom_guard.evidence_bundle import _archive_bytes, _canonical_json
 from evoom_guard.guard import guard
 from evoom_guard.signing import generate_keypair
-from evoom_guard.trusted_finalizer import create_finalizer_handoff, seal_finalizer_bundle
+from evoom_guard.trusted_finalizer import (
+    create_finalizer_handoff,
+    seal_finalizer_bundle,
+)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -86,6 +90,7 @@ def _finalized_allow(tmp_path: Path, *, denied: bool = False):
         expected_source=source,
         expected_context=context,
         private_key_path=str(finalizer_private),
+        expected_derivation=finalizer_bindings_for(record, context, source).payload,
     )
     return bundle, finalizer_private, finalizer_public, source, context, sealed.decision
 

@@ -1880,17 +1880,48 @@ def validate_finalizer_bindings(value: Mapping[str, Any]) -> DerivedFinalizerBin
     return DerivedFinalizerBindings(payload=_validate_derived_bindings(value))
 
 
+def finalizer_bindings_bytes(bindings: DerivedFinalizerBindings) -> bytes:
+    """Return bounded canonical bytes for validated Trusted Finalizer bindings."""
+
+    if type(bindings) is not DerivedFinalizerBindings:
+        raise FinalizerDerivationError(
+            "finalizer bindings must be a DerivedFinalizerBindings value"
+        )
+    checked = validate_finalizer_bindings(bindings.payload)
+    try:
+        data = _canonical_json(checked.payload)
+    except EvidenceBundleError as exc:
+        raise FinalizerDerivationError(str(exc)) from exc
+    if len(data) > MAX_BINDINGS_BYTES:
+        raise FinalizerDerivationError("canonical finalizer bindings exceed the size limit")
+    return data
+
+
+def inspect_finalizer_bindings_bytes(data: bytes) -> DerivedFinalizerBindings:
+    """Inspect exact canonical binding bytes without treating them as a trust root."""
+
+    if type(data) is not bytes:
+        raise FinalizerDerivationError("finalizer bindings must be exact bytes")
+    if len(data) > MAX_BINDINGS_BYTES:
+        raise FinalizerDerivationError("finalizer bindings exceed the size limit")
+    try:
+        payload = _load_json_object(data, "finalizer bindings")
+        canonical = _canonical_json(payload)
+    except EvidenceBundleError as exc:
+        raise FinalizerDerivationError(str(exc)) from exc
+    if canonical != data:
+        raise FinalizerDerivationError("finalizer bindings are not canonical JSON")
+    return validate_finalizer_bindings(payload)
+
+
 def read_finalizer_bindings(path: str) -> DerivedFinalizerBindings:
     """Read a canonical bindings file without treating it as a trust root."""
 
     try:
         data = _read_regular_file(path, limit=MAX_BINDINGS_BYTES, label="finalizer bindings")
-        payload = _load_json_object(data, "finalizer bindings")
     except EvidenceBundleError as exc:
         raise FinalizerDerivationError(str(exc)) from exc
-    if _canonical_json(payload) != data:
-        raise FinalizerDerivationError("finalizer bindings are not canonical JSON")
-    return validate_finalizer_bindings(payload)
+    return inspect_finalizer_bindings_bytes(data)
 
 
 def _write_canonical(path: str, payload: dict[str, Any], *, force: bool) -> str:
@@ -1921,6 +1952,7 @@ def write_finalizer_bindings(
 ) -> str:
     """Write the canonical raw-Git derivation record."""
 
+    finalizer_bindings_bytes(bindings)
     return _write_canonical(bindings_path, bindings.payload, force=force)
 
 

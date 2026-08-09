@@ -30,6 +30,7 @@ from evoom_guard.evidence_bundle import (
     EvidenceBundleError,
     EvidenceMaterial,
     FinalizedEvidence,
+    InspectedBundle,
     VerifiedBundle,
     finalize_evidence_bundle,
     inspect_evidence_bundle,
@@ -48,6 +49,15 @@ from evoom_guard.evidence_bundle import (
 )
 from evoom_guard.evidence_bundle import (
     sha256_bytes as _sha256,
+)
+from evoom_guard.finalizer_derivation import (
+    FINALIZER_DERIVATION_ROLE,
+    DerivedFinalizerBindings,
+    FinalizerDerivationError,
+    context_from_verified_bindings,
+    finalizer_bindings_bytes,
+    inspect_finalizer_bindings_bytes,
+    validate_finalizer_bindings,
 )
 from evoom_guard.record_verifier import verify_record
 
@@ -127,7 +137,17 @@ class FinalizedTrustedEvidence:
 
 @dataclass(frozen=True)
 class VerifiedFinalizedBundle:
-    """A signed bundle whose mandatory finalizer handoff also matched externally."""
+    """A signed bundle mechanically bound to raw-Git derivation and its handoff."""
+
+    bundle: VerifiedBundle
+    handoff: VerifiedFinalizerHandoff
+    derivation: DerivedFinalizerBindings
+    decision: str
+
+
+@dataclass(frozen=True)
+class VerifiedFinalizedBundleWithoutDerivation:
+    """A lower-assurance signed bundle verified without a raw-Git derivation."""
 
     bundle: VerifiedBundle
     handoff: VerifiedFinalizerHandoff
@@ -394,7 +414,8 @@ def _sealed_snapshots(
     *,
     verdict_bytes: bytes,
     handoff_bytes: bytes,
-) -> Iterator[tuple[str, str]]:
+    derivation_bytes: bytes | None = None,
+) -> Iterator[dict[str, str]]:
     """Materialize already-verified bytes for the bundle writer without reuse.
 
     The files live in a private system temporary directory and are removed
@@ -404,16 +425,186 @@ def _sealed_snapshots(
     """
 
     with tempfile.TemporaryDirectory(prefix=".evoguard-finalizer-") as directory:
-        paths: list[str] = []
-        for label, data in (("record", verdict_bytes), ("handoff", handoff_bytes)):
+        snapshots = {
+            "record": verdict_bytes,
+            "handoff": handoff_bytes,
+        }
+        if derivation_bytes is not None:
+            snapshots["derivation"] = derivation_bytes
+        paths: dict[str, str] = {}
+        for label, data in snapshots.items():
             descriptor, path = tempfile.mkstemp(prefix=f"{label}-", dir=directory)
-            paths.append(path)
+            paths[label] = path
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(data)
                 handle.flush()
                 os.fsync(handle.fileno())
             os.chmod(path, 0o600)
-        yield paths[0], paths[1]
+        yield paths
+
+
+def _verified_derivation_bytes(
+    expected_derivation: Mapping[str, Any] | None,
+    *,
+    handoff: VerifiedFinalizerHandoff,
+    expected_source: Mapping[str, Any],
+    expected_context: Mapping[str, Any],
+) -> bytes | None:
+    """Canonicalize and verify an optional raw-Git derivation."""
+
+    if expected_derivation is None:
+        return None
+    try:
+        # Round-trip through exact canonical bytes before comparing or sealing.
+        # Caller-owned nested mappings can no longer change what the signing
+        # operation embeds after the raw-Git check succeeds.
+        derivation_bytes = finalizer_bindings_bytes(
+            validate_finalizer_bindings(expected_derivation)
+        )
+        derivation = inspect_finalizer_bindings_bytes(derivation_bytes)
+        derived_source, derived_context = context_from_verified_bindings(
+            derivation, handoff.verdict
+        )
+    except FinalizerDerivationError as exc:
+        raise FinalizerHandoffError(
+            f"independent finalizer derivation did not bind the record: {exc}"
+        ) from exc
+    if derived_source != dict(expected_source) or derived_context != dict(expected_context):
+        raise FinalizerHandoffError(
+            "independent finalizer derivation does not exactly match expected metadata"
+        )
+    return derivation_bytes
+
+
+def _trusted_finalizer_materials(
+    *,
+    snapshots: Mapping[str, str],
+    derivation_bytes: bytes | None,
+    materials: Iterable[EvidenceMaterial],
+) -> tuple[EvidenceMaterial, ...]:
+    """Return verified reserved materials followed by detached caller inputs."""
+
+    caller_materials = tuple(materials)
+    reserved_roles = {FINALIZER_HANDOFF_ROLE, FINALIZER_DERIVATION_ROLE}
+    supplied_reserved_roles = sorted(
+        {material.role for material in caller_materials} & reserved_roles
+    )
+    if supplied_reserved_roles:
+        raise FinalizerHandoffError(
+            "material roles are reserved for Trusted Finalizer verified inputs: "
+            + ", ".join(repr(role) for role in supplied_reserved_roles)
+        )
+    trusted_materials = [
+        EvidenceMaterial(
+            role=FINALIZER_HANDOFF_ROLE,
+            source_path=snapshots["handoff"],
+        )
+    ]
+    if derivation_bytes is not None:
+        trusted_materials.append(
+            EvidenceMaterial(
+                role=FINALIZER_DERIVATION_ROLE,
+                source_path=snapshots["derivation"],
+            )
+        )
+    return (*trusted_materials, *caller_materials)
+
+
+def _verify_sealed_finalizer_inputs(
+    sealed: InspectedBundle,
+    *,
+    handoff: VerifiedFinalizerHandoff,
+    inspected_handoff_bytes: bytes,
+    derivation_bytes: bytes | None,
+    expected_context: Mapping[str, Any],
+    decision: str,
+) -> None:
+    """Recheck that sealing preserved every verified input exactly."""
+
+    try:
+        verify_bundle_context(sealed, expected_context=expected_context)
+    except EvidenceBundleError as exc:
+        raise FinalizerHandoffError(f"sealed bundle context mismatch: {exc}") from exc
+    handoff_materials = sealed.materials_for(FINALIZER_HANDOFF_ROLE)
+    if len(handoff_materials) != 1 or handoff_materials[0].data != inspected_handoff_bytes:
+        raise FinalizerHandoffError("sealed bundle did not preserve the exact verified handoff")
+    derivation_materials = sealed.materials_for(FINALIZER_DERIVATION_ROLE)
+    if derivation_bytes is None and derivation_materials:
+        raise FinalizerHandoffError(
+            "lower-assurance bundle unexpectedly contains finalizer derivation material"
+        )
+    if derivation_bytes is not None and (
+        len(derivation_materials) != 1 or derivation_materials[0].data != derivation_bytes
+    ):
+        raise FinalizerHandoffError(
+            "sealed bundle did not preserve the exact verified finalizer derivation"
+        )
+    if sealed.verdict_bytes != handoff.verdict_bytes:
+        raise FinalizerHandoffError("sealed bundle verdict differs from the verified handoff record")
+    if decision != finalizer_decision(handoff.verdict):
+        raise FinalizerHandoffError("sealed bundle admission decision is inconsistent with its verdict")
+
+
+def _seal_finalizer_bundle(
+    handoff_path: str,
+    verdict_path: str,
+    output_path: str,
+    *,
+    expected_source: Mapping[str, Any],
+    expected_context: Mapping[str, Any],
+    private_key_path: str,
+    expected_derivation: Mapping[str, Any] | None,
+    materials: Iterable[EvidenceMaterial] = (),
+    force: bool = False,
+) -> FinalizedTrustedEvidence:
+    """Implement the derivation-bound and explicitly weaker sealing APIs."""
+
+    inspected = inspect_finalizer_handoff(handoff_path)
+    handoff = verify_finalizer_handoff(
+        inspected,
+        verdict_path=verdict_path,
+        expected_source=expected_source,
+        expected_context=expected_context,
+    )
+    derivation_bytes = _verified_derivation_bytes(
+        expected_derivation,
+        handoff=handoff,
+        expected_source=expected_source,
+        expected_context=expected_context,
+    )
+
+    with _sealed_snapshots(
+        verdict_bytes=handoff.verdict_bytes,
+        handoff_bytes=inspected.handoff_bytes,
+        derivation_bytes=derivation_bytes,
+    ) as snapshots:
+        trusted_materials = _trusted_finalizer_materials(
+            snapshots=snapshots,
+            derivation_bytes=derivation_bytes,
+            materials=materials,
+        )
+        try:
+            finalized = finalize_evidence_bundle(
+                snapshots["record"],
+                output_path,
+                expected_context=expected_context,
+                private_key_path=private_key_path,
+                materials=trusted_materials,
+                force=force,
+            )
+        except EvidenceBundleError as exc:
+            raise FinalizerHandoffError(f"could not seal finalizer evidence bundle: {exc}") from exc
+
+    sealed = inspect_evidence_bundle(finalized.bundle_path)
+    _verify_sealed_finalizer_inputs(
+        sealed,
+        handoff=handoff,
+        inspected_handoff_bytes=inspected.handoff_bytes,
+        derivation_bytes=derivation_bytes,
+        expected_context=expected_context,
+        decision=finalized.decision,
+    )
+    return FinalizedTrustedEvidence(finalized=finalized, handoff=handoff)
 
 
 def seal_finalizer_bundle(
@@ -424,85 +615,69 @@ def seal_finalizer_bundle(
     expected_source: Mapping[str, Any],
     expected_context: Mapping[str, Any],
     private_key_path: str,
-    expected_derivation: Mapping[str, Any] | None = None,
+    expected_derivation: Mapping[str, Any],
     materials: Iterable[EvidenceMaterial] = (),
     force: bool = False,
 ) -> FinalizedTrustedEvidence:
-    """Validate the handoff first, then seal its exact record and descriptor.
+    """Seal only after raw-Git derivation independently binds the verdict.
 
     The Ed25519 key is reached only inside :func:`finalize_evidence_bundle`,
     after both the external control-plane data and the record bytes passed every
     binding check.  Call this from a job that never checks out or executes the
     candidate; this library cannot enforce that workflow boundary itself.
+
+    ``expected_derivation`` is deliberately required. Passing ``None`` fails
+    before the handoff or signing key is read, so the high-assurance API cannot
+    silently fall back to trusting caller-declared source/context metadata.
     """
 
-    inspected = inspect_finalizer_handoff(handoff_path)
-    handoff = verify_finalizer_handoff(
-        inspected,
-        verdict_path=verdict_path,
+    if expected_derivation is None:
+        raise FinalizerHandoffError(
+            "seal_finalizer_bundle requires independent raw-Git expected_derivation"
+        )
+    return _seal_finalizer_bundle(
+        handoff_path,
+        verdict_path,
+        output_path,
         expected_source=expected_source,
         expected_context=expected_context,
+        private_key_path=private_key_path,
+        expected_derivation=expected_derivation,
+        materials=materials,
+        force=force,
     )
-    if expected_derivation is not None:
-        from evoom_guard.finalizer_derivation import (
-            FinalizerDerivationError,
-            context_from_verified_bindings,
-            validate_finalizer_bindings,
-        )
 
-        try:
-            derived_source, derived_context = context_from_verified_bindings(
-                validate_finalizer_bindings(expected_derivation), handoff.verdict
-            )
-        except FinalizerDerivationError as exc:
-            raise FinalizerHandoffError(
-                f"independent finalizer derivation did not bind the record: {exc}"
-            ) from exc
-        if derived_source != dict(expected_source) or derived_context != dict(expected_context):
-            raise FinalizerHandoffError(
-                "independent finalizer derivation does not exactly match expected metadata"
-            )
-    caller_materials = tuple(materials)
-    if any(material.role == FINALIZER_HANDOFF_ROLE for material in caller_materials):
-        raise FinalizerHandoffError(
-            f"material role {FINALIZER_HANDOFF_ROLE!r} is reserved for the verified handoff"
-        )
 
-    with _sealed_snapshots(
-        verdict_bytes=handoff.verdict_bytes,
-        handoff_bytes=inspected.handoff_bytes,
-    ) as (record_snapshot, handoff_snapshot):
-        try:
-            finalized = finalize_evidence_bundle(
-                record_snapshot,
-                output_path,
-                expected_context=expected_context,
-                private_key_path=private_key_path,
-                materials=(
-                    EvidenceMaterial(
-                        role=FINALIZER_HANDOFF_ROLE,
-                        source_path=handoff_snapshot,
-                    ),
-                    *caller_materials,
-                ),
-                force=force,
-            )
-        except EvidenceBundleError as exc:
-            raise FinalizerHandoffError(f"could not seal finalizer evidence bundle: {exc}") from exc
+def seal_finalizer_bundle_without_derivation(
+    handoff_path: str,
+    verdict_path: str,
+    output_path: str,
+    *,
+    expected_source: Mapping[str, Any],
+    expected_context: Mapping[str, Any],
+    private_key_path: str,
+    materials: Iterable[EvidenceMaterial] = (),
+    force: bool = False,
+) -> FinalizedTrustedEvidence:
+    """Seal using declared source/context without independent raw-Git binding.
 
-    sealed = inspect_evidence_bundle(finalized.bundle_path)
-    try:
-        verify_bundle_context(sealed, expected_context=expected_context)
-    except EvidenceBundleError as exc:
-        raise FinalizerHandoffError(f"sealed bundle context mismatch: {exc}") from exc
-    handoff_materials = sealed.materials_for(FINALIZER_HANDOFF_ROLE)
-    if len(handoff_materials) != 1 or handoff_materials[0].data != inspected.handoff_bytes:
-        raise FinalizerHandoffError("sealed bundle did not preserve the exact verified handoff")
-    if sealed.verdict_bytes != handoff.verdict_bytes:
-        raise FinalizerHandoffError("sealed bundle verdict differs from the verified handoff record")
-    if finalized.decision != finalizer_decision(handoff.verdict):
-        raise FinalizerHandoffError("sealed bundle admission decision is inconsistent with its verdict")
-    return FinalizedTrustedEvidence(finalized=finalized, handoff=handoff)
+    This explicitly lower-assurance compatibility primitive exists for legacy
+    integrations and construction of downstream verifier fixtures. It must not
+    be used as a PR, release, or artifact-admission trust boundary. New trusted
+    finalizer deployments must use :func:`seal_finalizer_bundle` instead.
+    """
+
+    return _seal_finalizer_bundle(
+        handoff_path,
+        verdict_path,
+        output_path,
+        expected_source=expected_source,
+        expected_context=expected_context,
+        private_key_path=private_key_path,
+        expected_derivation=None,
+        materials=materials,
+        force=force,
+    )
 
 
 def verify_finalized_bundle(
@@ -512,7 +687,65 @@ def verify_finalized_bundle(
     expected_source: Mapping[str, Any],
     expected_context: Mapping[str, Any],
 ) -> VerifiedFinalizedBundle:
-    """Verify signature, context, exact handoff, record, and admission decision."""
+    """Strictly verify a derivation-bound signed Trusted Finalizer bundle.
+
+    In addition to the signature, external context, semantic record, and exact
+    handoff, this high-assurance verifier requires exactly one reserved
+    canonical raw-Git derivation material. It rechecks that material against
+    the signed verdict and requires the resulting source/context to equal the
+    independently supplied expectations. Bundles produced by the explicitly
+    weaker sealing API therefore cannot pass this verifier.
+    """
+
+    verified = verify_finalized_bundle_without_derivation(
+        bundle_path,
+        trusted_public_key_path=trusted_public_key_path,
+        expected_source=expected_source,
+        expected_context=expected_context,
+    )
+    derivation_materials = verified.bundle.materials_for(FINALIZER_DERIVATION_ROLE)
+    if len(derivation_materials) != 1:
+        raise FinalizerHandoffError(
+            "derivation-bound finalized evidence bundle must contain exactly one "
+            f"{FINALIZER_DERIVATION_ROLE!r} material"
+        )
+    try:
+        derivation = inspect_finalizer_bindings_bytes(derivation_materials[0].data)
+        derived_source, derived_context = context_from_verified_bindings(
+            derivation, verified.handoff.verdict
+        )
+    except FinalizerDerivationError as exc:
+        raise FinalizerHandoffError(
+            f"signed finalizer derivation material did not bind the record: {exc}"
+        ) from exc
+    if (
+        derived_source != verified.handoff.source
+        or derived_context != verified.handoff.context
+    ):
+        raise FinalizerHandoffError(
+            "signed finalizer derivation material does not exactly match expected metadata"
+        )
+    return VerifiedFinalizedBundle(
+        bundle=verified.bundle,
+        handoff=verified.handoff,
+        derivation=derivation,
+        decision=verified.decision,
+    )
+
+
+def verify_finalized_bundle_without_derivation(
+    bundle_path: str,
+    *,
+    trusted_public_key_path: str,
+    expected_source: Mapping[str, Any],
+    expected_context: Mapping[str, Any],
+) -> VerifiedFinalizedBundleWithoutDerivation:
+    """Verify historical handoff bundles without claiming raw-Git assurance.
+
+    This compatibility API authenticates the historical signature, context,
+    handoff, and record contract only. It must not be used for PR, release, or
+    artifact admission; use :func:`verify_finalized_bundle` for that boundary.
+    """
 
     try:
         inspected_bundle = inspect_evidence_bundle(bundle_path)
@@ -532,14 +765,14 @@ def verify_finalized_bundle(
     with _sealed_snapshots(
         verdict_bytes=inspected_bundle.verdict_bytes,
         handoff_bytes=handoff_materials[0].data,
-    ) as (record_snapshot, handoff_snapshot):
+    ) as snapshots:
         handoff = verify_finalizer_handoff(
-            inspect_finalizer_handoff(handoff_snapshot),
-            verdict_path=record_snapshot,
+            inspect_finalizer_handoff(snapshots["handoff"]),
+            verdict_path=snapshots["record"],
             expected_source=expected_source,
             expected_context=expected_context,
         )
-    return VerifiedFinalizedBundle(
+    return VerifiedFinalizedBundleWithoutDerivation(
         bundle=VerifiedBundle(
             authenticated=AuthenticatedBundle(inspection=inspected_bundle),
             record_report=record_report,
