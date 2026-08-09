@@ -14,8 +14,10 @@ merged `main` is covered by the repository's protected-branch controls.
 - `execution` owns process scheduling, command resolution, and judge-process
   primitives.
 - `isolation` owns containment and invocation evidence.
-- `candidate` and `workspace` own candidate intake, filesystem boundaries, and
-  canonical runtime-tree identity.
+- `candidate` owns dependency-free candidate parsing, patch transforms and
+  minimization, and advisory change characterization.
+- `workspace` owns contained filesystem boundaries and canonical runtime-tree
+  identity.
 - `runners` owns runner recognition and judge-owned report instrumentation.
 - `verifiers` owns repository and black-box execution orchestration, result
   interpretation, and the canonical verifier-pack manifest/snapshot contract.
@@ -27,12 +29,14 @@ The executable import-boundary ratchet in
 directions and prevents architectural debt from silently increasing.
 Stable flat paths are classified only when the complete module has one owner.
 In addition to the foundation, workspace, verifier, evidence, finalizer, and
-admission owners already recorded by the ratchet, four complete compatibility
-surfaces now have executable ownership closures: `adapters.py` belongs to
-runners, `patch_applier.py` and the pure `patchmin.py` belong to candidate, and
-`candidate_runner.py` belongs to isolation. This is classification of existing
-responsibility, not a file move or a runtime change. Mixed flat facades remain
-unclassified debt.
+admission owners already recorded by the ratchet, three compatibility facades
+plus one pure flat owner now have executable dependency-closure ratchets:
+`adapters.py` belongs to runners, `patch_applier.py` belongs to candidate,
+`candidate_runner.py` belongs to isolation, and the pure `patchmin.py` owner
+belongs to candidate. These tests make dependency or selected-shape drift
+visible; semantic ownership still requires review. This is classification of
+existing responsibility, not a file move or a runtime change. Mixed flat
+facades remain unclassified debt.
 
 ## Refactor status
 

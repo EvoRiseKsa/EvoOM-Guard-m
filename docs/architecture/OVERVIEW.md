@@ -32,6 +32,10 @@ strict behavior-preserving PR slices.
 
 - `foundation` owns dependency-free cross-cutting protocols and strict decoding.
 - `domain` owns request, lifecycle, verdict and assurance models.
+- `candidate` owns dependency-free candidate parsing, patch transforms and
+  minimization, and advisory change characterization.
+- `workspace` owns contained filesystem boundaries and canonical runtime-tree
+  identity.
 - `execution` owns scheduling/observability primitives.
 - `isolation` owns containment and transport of runtime evidence.
 - `runners` owns runner recognition and judge-owned report instrumentation.
@@ -46,13 +50,15 @@ belong to the foundation layer, `runtime_identity.py` belongs to workspace, and
 EvoOM Guard dependencies. This is an ownership classification, not a runtime
 move.
 
-Four compatibility surfaces also have complete single-owner closures:
-`adapters.py` delegates only to runners; `patch_applier.py` is an exact
-candidate-patch alias facade; pure patch minimization/blast-radius analysis in
-`patchmin.py` is candidate-owned; and `candidate_runner.py` is the historical
-surface for isolation-owned candidate-boundary preparation. Exact dependency
-and facade-shape tests prevent these classifications from concealing new
-responsibilities. The remaining flat facades are still explicit debt.
+Three compatibility facades plus one pure flat owner also have complete
+single-owner closures: `adapters.py` delegates only to runners;
+`patch_applier.py` is an exact candidate-patch alias facade;
+`candidate_runner.py` is the historical facade for isolation-owned
+candidate-boundary preparation; and pure patch minimization/blast-radius
+analysis in `patchmin.py` is candidate-owned. Exact dependency closures,
+purity restrictions, and selected facade/public-shape tests ratchet those
+classifications. They do not replace semantic review. The remaining flat
+facades are still explicit debt.
 
 ## Current implementation position and next step
 

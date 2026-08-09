@@ -3614,8 +3614,8 @@ def test_runner_instrumentation_has_classified_owners_and_a_thin_facade() -> Non
     } == {"instrument_command"}
 
 
-def test_flat_candidate_and_isolation_facades_have_single_semantic_owners() -> None:
-    """Classify only the complete facades whose dependency closures prove ownership."""
+def test_flat_candidate_and_isolation_owners_have_ratcheted_shapes() -> None:
+    """Ratchet structural evidence while leaving semantic ownership to review."""
 
     analysis = analyze_package(PACKAGE_ROOT)
     expected_layers = {
@@ -3692,6 +3692,40 @@ def test_flat_candidate_and_isolation_facades_have_single_semantic_owners() -> N
         "dataclasses",
         "fnmatch",
         "typing",
+    }
+    patchmin_exports = [
+        ast.literal_eval(node.value)
+        for node in patchmin_tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "__all__"
+            for target in node.targets
+        )
+    ]
+    assert patchmin_exports == [
+        [
+            "BlastRadiusScore",
+            "blast_radius_score",
+            "minimize_patch",
+            "RiskScore",
+            "parse_unified_diff",
+            "risk_score",
+        ]
+    ]
+    assert {
+        node.name
+        for node in patchmin_tree.body
+        if isinstance(
+            node,
+            (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+        )
+    } == {
+        "RiskScore",
+        "minimize_patch",
+        "parse_unified_diff",
+        "_strip_diff_path",
+        "_validated_precomputed_counts",
+        "risk_score",
     }
 
     candidate_runner_tree = ast.parse(

@@ -369,13 +369,17 @@ unclassified-module ceiling drops from 17 to 11 while cycles, private imports,
 wildcard imports, unresolved dynamic imports, and layer violations remain
 zero. Remaining mixed facades are not relabeled by this revision.
 
-Import-boundary ratchet revision 18 classifies four complete compatibility
-surfaces only after freezing each module's dependency closure and facade shape.
-`adapters.py` belongs to runners; `patch_applier.py` and pure `patchmin.py`
-belong to candidate; and `candidate_runner.py` belongs to isolation. The
-unclassified-module ceiling drops from 11 to 7 while cycles, private imports,
-wildcard imports, unresolved dynamic imports, and layer violations remain
-zero. No package implementation or runtime byte changes in this revision.
+Import-boundary ratchet revision 18 classifies three complete compatibility
+facades plus one pure flat owner. `adapters.py` belongs to runners;
+`patch_applier.py` belongs to candidate; `candidate_runner.py` belongs to
+isolation; and pure `patchmin.py` belongs to candidate. Executable tests ratchet
+each internal dependency closure, selected facade shapes, and `patchmin.py`'s
+pure import and public-definition surface. Those checks expose structural
+drift; semantic ownership remains a review obligation rather than a metric the
+scanner can prove. The unclassified-module ceiling drops from 11 to 7 while
+cycles, private imports, wildcard imports, unresolved dynamic imports, and
+layer violations remain zero. No package implementation or runtime byte
+changes in this revision.
 
 Declarative `argparse` construction now lives in the dependency-free
 `cli.parser` owner. `cli.__init__` retains the public `build_parser` facade and

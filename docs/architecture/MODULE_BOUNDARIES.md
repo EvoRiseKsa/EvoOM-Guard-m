@@ -157,10 +157,12 @@ aliases. Candidate tree copying and edit materialization remain effectful
 repository-verifier responsibilities until their own characterized slice.
 The complete `patch_applier.py` facade is therefore candidate-owned: it defines
 no implementation and re-exports only the four exact `candidate.patch`
-objects. The separate pure `patchmin.py` module also belongs to candidate
+objects. The separate pure flat `patchmin.py` owner also belongs to candidate
 because both of its operations reduce or measure a candidate change; it has no
 EvoOM Guard dependency and its imports are restricted to pure standard-library
-helpers. Neither classification moves behavior into the candidate package.
+helpers. The executable ratchet freezes that structural evidence, while the
+semantic ownership judgment remains reviewable. Neither classification moves
+behavior into the candidate package.
 
 The first workspace slice is an atomic module-to-package migration:
 `evoom_guard/workspace/__init__.py` contains the exact implementation bytes
