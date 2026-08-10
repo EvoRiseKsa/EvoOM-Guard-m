@@ -50,15 +50,15 @@
   "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
   "claims": {
     "authenticated": false,
-    "content_identity": "source-and-results-git-commits-plus-content-digests",
-    "evidence_commit_bound": true,
+    "content_identity": "source-git-commit-plus-content-digests",
+    "evidence_commit_bound": false,
     "evidence_status": "self_consistent_unattributed",
     "execution_authenticity_claim": false,
     "execution_source_snapshot_bound": true,
     "final_manifest_in_evidence_commit": false,
     "general_performance_claim": false,
     "installed_environment_matches_lock": false,
-    "source_and_results_commit_bound": true,
+    "source_and_results_commit_bound": false,
     "source_commit_bound": true,
     "source_snapshot_matches_worktree_at_manifest_build": true
   },
@@ -99,7 +99,7 @@
   },
   "engine_version": "4.6.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-09T22:35:41.129102Z",
+    "captured_at_utc": "2026-08-10T00:38:46.390945Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "08612edbbe3425d6f45075075bc063ff59635623",
+    "head": "6d9e7cdbec07c0527ae15f1ece8da701b0b718ac",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -325,22 +325,12 @@
     "tp": 10
   },
   "provenance": {
-    "evidence_commit": {
-      "binding": "git-commit",
-      "bound": true,
-      "commit": "4226cc12555c6b97439bccbc4941c3fe4c5b9825",
-      "final_manifest_in_commit": false,
-      "observation_point": "after results commit and before final manifest publication",
-      "reason": "source_and_results_match_commit_final_manifest_excluded",
-      "results_match_commit": true,
-      "source_inventory_matches_commit": true,
-      "source_paths_match_commit": true
-    },
+    "evidence_commit": null,
     "final_manifest_in_evidence_commit": false,
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "08612edbbe3425d6f45075075bc063ff59635623",
+      "commit": "6d9e7cdbec07c0527ae15f1ece8da701b0b718ac",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +342,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14817,
+    "bytes": 14818,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "527006e0d27a896d0dfbd3b8b052fcadf6849e1b928b6fa57939123177f9464e"
+    "sha256": "ca6ad3f952ecad558f0b5b44ecaf48ed55ee9376e1a2b9e2fde165f2a29c55bd"
   },
-  "run_id": "3313d92c-6699-4423-a942-5ea51a69a996",
+  "run_id": "a381bf30-8101-4a72-a3c6-48a914db7302",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -482,7 +472,7 @@
   "source": {
     "algorithm": "sha256",
     "domain": "EVOGUARD_BENCHMARK_SOURCE_V1",
-    "file_count": 164,
+    "file_count": 177,
     "files": [
       {
         "bytes": 14817,
@@ -530,9 +520,19 @@
         "sha256": "f239b76da7b2a258ab22bea6ddfc5c57babf6eeadebbbf9d96bfdc76be54c7ba"
       },
       {
+        "bytes": 29228,
+        "path": "evoom_guard/admission/release_artifact_v2.py",
+        "sha256": "54c5842f9674836be5e84b68530315280fcd365032c67d96e70383927a7c9887"
+      },
+      {
         "bytes": 59691,
         "path": "evoom_guard/admission/release_source.py",
         "sha256": "1649b22eee671007919214be4148abfc895a129a21fa08ce035cb79b7d2502e3"
+      },
+      {
+        "bytes": 18302,
+        "path": "evoom_guard/admission/release_source_v3.py",
+        "sha256": "f397b7b725d6fc77ecab27f9b2749d2ce0cfa967078c8946d8745c16845a6997"
       },
       {
         "bytes": 2071,
@@ -875,6 +875,11 @@
         "sha256": "d56461007ad98ace38b6851297b604824f7d9cab9f9e9d49a3b2de67653422e9"
       },
       {
+        "bytes": 18491,
+        "path": "evoom_guard/maintenance_bindings.py",
+        "sha256": "29d05e462eadd83116c8110cf10b4e9983e3444098dc7ca15b8de4c9b01c9541"
+      },
+      {
         "bytes": 11786,
         "path": "evoom_guard/pack_manifest.py",
         "sha256": "289bde59e0c279a4d79b216b9c67071d22cbd167f3afee5f04d213b8ca4d0f74"
@@ -920,9 +925,19 @@
         "sha256": "607cf8fae0cb3aeaba40526375ce7a07bc17366e865a5eaaa751a51833a46924"
       },
       {
+        "bytes": 6816,
+        "path": "evoom_guard/release_source_finalizer_v2.py",
+        "sha256": "c62a67760420cf52291d037ab728c56757d5d804b42e2948c62d5f48ab6049d0"
+      },
+      {
         "bytes": 51764,
         "path": "evoom_guard/release_source_producer_receipt.py",
         "sha256": "8920b1e8221c3f0f259395daf4f847e85d34630eba7d8324a03797830cd22a36"
+      },
+      {
+        "bytes": 11472,
+        "path": "evoom_guard/release_source_producer_receipt_v2.py",
+        "sha256": "3e750a86373b3ec9f82a434ddf0127f13ec2dd1e03c6f94a0ce3cefff3198d4b"
       },
       {
         "bytes": 1579,
@@ -1065,9 +1080,24 @@
         "sha256": "e073ef2a309823059717b0510f5bc9a8989cc52611821835092769df6b2833a7"
       },
       {
+        "bytes": 8731,
+        "path": "evoom_guard/schemas/release-artifact-admission-2.schema.json",
+        "sha256": "2e33bd00aff1f1518e394cd8cae1729d3e8318f5945bf694d8b34382096aea10"
+      },
+      {
+        "bytes": 2230,
+        "path": "evoom_guard/schemas/release-source-2.schema.json",
+        "sha256": "3db9a221f6b1346f17bd9e1a50acc60a441ff2bb4b11b199da3e9cbdf4e96f1c"
+      },
+      {
         "bytes": 11981,
         "path": "evoom_guard/schemas/release-source-admission-2.schema.json",
         "sha256": "d0c5b9edeb6d1482c2b44caccb61fe25e6bf0fd918e697e863cf07be541147eb"
+      },
+      {
+        "bytes": 6123,
+        "path": "evoom_guard/schemas/release-source-admission-3.schema.json",
+        "sha256": "e7b8eb2dfb9df1ca56cb656d0734e8e35b3e4642acfebed310e7c2b317066e52"
       },
       {
         "bytes": 1772,
@@ -1075,14 +1105,39 @@
         "sha256": "1293f4a6876cc12d540ec2ce1c2968394ff741121432573e43f3c1769accc0bf"
       },
       {
+        "bytes": 2597,
+        "path": "evoom_guard/schemas/release-source-context-2.schema.json",
+        "sha256": "2ef3d3ebb79fcb173ac0e373ba06a73bb2837236eb342c60f493dac31336deb7"
+      },
+      {
+        "bytes": 2138,
+        "path": "evoom_guard/schemas/release-source-finalizer-2.schema.json",
+        "sha256": "12dc97058fad3e4d71e121af510ee8655273a06d951d8a3d60226ec3a7f22151"
+      },
+      {
+        "bytes": 714,
+        "path": "evoom_guard/schemas/release-source-git-bindings-2.schema.json",
+        "sha256": "e414b428dd4f5847d63c279df3aaeab4670c88483418770dd4e50f1b7e0f2b46"
+      },
+      {
         "bytes": 3326,
         "path": "evoom_guard/schemas/release-source-handoff-1.schema.json",
         "sha256": "c564e74721aee157dbae3f23b20416abb75c7dfaf81a629df38664cb9f07df86"
       },
       {
+        "bytes": 984,
+        "path": "evoom_guard/schemas/release-source-handoff-2.schema.json",
+        "sha256": "83ac0c58e3b023fd7ec042a1c1d2966fce7cfe2d32fb09a3a2f6e271728ff788"
+      },
+      {
         "bytes": 6366,
         "path": "evoom_guard/schemas/release-source-producer-receipt-1.schema.json",
         "sha256": "d272ac084e2e044ed4e5cc1d9842b0bce0d61145d767ad64173e196ec54b63b2"
+      },
+      {
+        "bytes": 4141,
+        "path": "evoom_guard/schemas/release-source-producer-receipt-2.schema.json",
+        "sha256": "983d8db9ec9ec11335e403c23a412b232521df9241bfbcb21c58f6a89d79301a"
       },
       {
         "bytes": 19905,
@@ -1319,13 +1374,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "9abc642b73d251101d5f8a0eea1ab18c14f38e546019e189ebfcdb7a6a7326e8",
-    "total_bytes": 2753631
+    "sha256": "3e0e38b39d53f24d3f9ec92ff1988ef745934bc7448aae008ea0a029e9b2890a",
+    "total_bytes": 2865598
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.184,
-    "guard_full_run_median_s": 0.288,
-    "guard_full_run_p95_s": 0.301,
+    "controlled_direct_pytest_median_s": 0.183,
+    "guard_full_run_median_s": 0.294,
+    "guard_full_run_p95_s": 0.385,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
