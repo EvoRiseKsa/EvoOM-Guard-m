@@ -42,6 +42,66 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="record-coverage-python-path-safety-bypass",
+        path="evoom_guard/verifiers/record_coverage_types.py",
+        before="    if not _coverage_path(path, python=True):\n",
+        after="    if False and not _coverage_path(path, python=True):\n",
+        test=(
+            "tests/test_record_coverage_types.py::"
+            "test_python_coverage_paths_remain_safe_and_repo_relative"
+        ),
+    ),
+    Mutation(
+        name="record-coverage-positive-line-bypass",
+        path="evoom_guard/verifiers/record_coverage_types.py",
+        before="        and all(_is_int(item) and item > 0 for item in value)\n",
+        after="        and all(_is_int(item) for item in value)\n",
+        test=(
+            "tests/test_record_coverage_types.py::"
+            "test_line_arrays_require_sorted_unique_positive_non_boolean_lines"
+        ),
+    ),
+    Mutation(
+        name="record-coverage-line-overlap-bypass",
+        path="evoom_guard/verifiers/record_coverage_types.py",
+        before="    if set(executed_lines) & set(missed_lines):\n",
+        after="    if False and set(executed_lines) & set(missed_lines):\n",
+        test=(
+            "tests/test_record_coverage_types.py::"
+            "test_executed_and_missed_lines_cannot_overlap"
+        ),
+    ),
+    Mutation(
+        name="record-coverage-file-count-binding-bypass",
+        path="evoom_guard/verifiers/record_coverage_types.py",
+        before="    if _is_int(executed) and executed != file_executed:\n",
+        after="    if False and _is_int(executed) and executed != file_executed:\n",
+        test=(
+            "tests/test_record_coverage_types.py::"
+            "test_top_level_counts_remain_bound_to_per_file_totals"
+        ),
+    ),
+    Mutation(
+        name="record-coverage-percentage-binding-bypass",
+        path="evoom_guard/verifiers/record_coverage_types.py",
+        before="        if percent != calculated:\n",
+        after="        if False and percent != calculated:\n",
+        test=(
+            "tests/test_record_coverage_types.py::"
+            "test_percentage_remains_bound_to_the_exact_producer_calculation"
+        ),
+    ),
+    Mutation(
+        name="record-coverage-unmeasured-python-bypass",
+        path="evoom_guard/verifiers/record_coverage_types.py",
+        before="        and all(_coverage_path(path, python=False) for path in unmeasured)\n",
+        after="        and True\n",
+        test=(
+            "tests/test_record_coverage_types.py::"
+            "test_unmeasured_paths_cannot_claim_python_files_as_out_of_scope"
+        ),
+    ),
+    Mutation(
         name="record-policy-required-fields-bypass",
         path="evoom_guard/verifiers/record_policy_types.py",
         before="    missing = sorted(policy_keys - policy.keys())\n",

@@ -72,6 +72,17 @@ reviewed mutations bind order, schema keys, canonical harness paths, timeout
 positivity, lowercase pack identity, pack-required coupling, and profile
 semantic re-verification.
 
+Diff-coverage producer-shape validation has a third pure owner in
+`verifiers/record_coverage_types.py`. It returns an immutable ordered error
+tuple and owns only the closed measured/unmeasured coverage shapes, safe
+repository-relative path grammar, positive line-set checks, and exact
+per-file/top-level arithmetic. The mixed facade retains its historical list
+projection, report check ID and ordering, threshold comparison, policy
+semantics, and all verdict authority. A pre-extraction vector, four public
+report digests, 20,000 deterministic traces, and focused mutations bind the
+boundary. The owner has no internal package dependencies and no I/O, hashing,
+cleanup, execution, serialization, report mutation, or policy authority.
+
 Six cohesive stable flat modules now have explicit existing owners without a
 file move or public-identity change. `evidence.py` owns the bounded
 changed-line-coverage observation; `evidence_bundle.py` owns deterministic

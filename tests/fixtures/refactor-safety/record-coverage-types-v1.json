@@ -1,0 +1,105 @@
+{
+  "format": "record-coverage-types-characterization-v1",
+  "case_errors": {
+    "counts_bool_and_negative": [
+      "executed/total must be non-negative ordered integers",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "coverage_caveat_empty": [
+      "caveat must be a non-empty string"
+    ],
+    "detail_invalid_shape": [
+      "files['src/a.py'] has an invalid producer shape",
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "detail_non_string_key": [
+      "files['src/a.py'] must be an object with string keys",
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "detail_not_object": [
+      "files['src/a.py'] must be an object with string keys",
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "detail_note_empty": [
+      "files['src/a.py'].note must be non-empty"
+    ],
+    "executed_total_mismatch": [
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total",
+      "percent must equal the producer calculation 25.0"
+    ],
+    "files_not_object": [
+      "files must be an object",
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "line_arrays_invalid": [
+      "files['src/a.py'] executed/missed must be sorted unique positive lines",
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "line_arrays_overlap": [
+      "files['src/a.py'] executed and missed lines overlap",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "measured_missing_and_extra": [
+      "measured coverage must contain exactly the seven producer keys",
+      "caveat must be a non-empty string"
+    ],
+    "measured_not_boolean": [
+      "measured must be a boolean"
+    ],
+    "non_string_top_key": [
+      "all diff_coverage keys must be strings"
+    ],
+    "percent_bool": [
+      "percent must be a finite number in 0..100"
+    ],
+    "percent_mismatch": [
+      "percent must equal the producer calculation 66.7"
+    ],
+    "percent_non_finite": [
+      "percent must be a finite number in 0..100"
+    ],
+    "percent_out_of_range": [
+      "percent must be a finite number in 0..100",
+      "percent must equal the producer calculation 66.7"
+    ],
+    "unmeasured_caveat_empty": [
+      "unmeasured coverage caveat must be non-empty"
+    ],
+    "unmeasured_files_unsorted": [
+      "unmeasured_files must be a sorted unique string array"
+    ],
+    "unmeasured_invalid_shape": [
+      "unmeasured coverage has an invalid producer shape"
+    ],
+    "unmeasured_note_empty": [
+      "unmeasured coverage note must be non-empty"
+    ],
+    "unsafe_python_paths": [
+      "files keys must be safe repo-relative .py paths",
+      "files keys must be safe repo-relative .py paths",
+      "files keys must be safe repo-relative .py paths",
+      "files keys must be safe repo-relative .py paths",
+      "executed does not equal the per-file executed-line total",
+      "total does not equal the per-file measurable-line total"
+    ],
+    "unsafe_unmeasured_paths": [
+      "unmeasured_files must be sorted unique safe non-Python paths"
+    ],
+    "valid_measured": [],
+    "valid_unmeasured": [],
+    "valid_unmeasured_detailed": []
+  },
+  "public_report_sha256": {
+    "executed_total_mismatch": "b4f547f68700a7342d0ac1807a413252b6b0c1d7163e12283453ab41e71fc057",
+    "line_arrays_overlap": "a5deeb4f2c4ec1e738e2cc5a8946ef3429475630b8084512aa4dc419390c4a1f",
+    "measured_not_boolean": "db5905f64d21a81c4e8b06b017824a0b2d0ab155b6f54af3bf3b15299094d441",
+    "valid_measured": "dd5b541a4fc03d56ab0baba4ff5700ecbc07b188b92af2fc2b103d29395a1e92"
+  },
+  "generated_trace_sha256": "e3ed43accf4065932ea2e477164b4e36f57193f95d5aa2beaf2365115188f593"
+}

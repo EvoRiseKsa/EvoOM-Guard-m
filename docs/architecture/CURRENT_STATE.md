@@ -61,7 +61,12 @@ facades remain unclassified debt.
   type/shape phase also delegates to a pure immutable verifier projection;
   schema-contract selection, harness predicates, and the independent
   operating-profile decision remain in the facade at their original lookup
-  points.
+  points. Diff-coverage producer-shape validation now delegates to a separate
+  stdlib-only verifier projection. The facade still owns report ordering,
+  threshold and policy semantics, and verdict authority; the extracted owner
+  only returns immutable ordered errors for path, line-set, and arithmetic
+  shape checks. The measured facade hotspot falls from C901 26 to 1 and the
+  current repository inventory falls from 94 to 93.
 - The broader program is still in progress: evidence/finalizer domains,
   release engineering, repository-wide strict typing, independent external
   red-team evidence, and the end-to-end protected build-to-admission chain are
