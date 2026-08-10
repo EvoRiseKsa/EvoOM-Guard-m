@@ -66,6 +66,15 @@ semantic record only after all raw values match and writes the existing trusted
 source/context files. Reproducing this algorithm ad hoc in YAML or JavaScript is
 not acceptable.
 
+The high-assurance `seal_finalizer_bundle` Python API and `seal-finalizer` CLI
+both require that canonical derivation input and automatically bind its exact
+bytes under the reserved `trusted-finalizer-git-bindings` material role. The
+strict `verify_finalized_bundle` path requires exactly one such material,
+validates its canonical form, and rechecks its record/source/context relation.
+The separately named `seal_finalizer_bundle_without_derivation` and
+`verify_finalized_bundle_without_derivation` compatibility primitives are
+outside this raw-Git trust boundary and are not admission APIs.
+
 ## Acceptance tests and current coverage
 
 - Stale base/head/tree, cross-PR, cross-run, and cross-attempt swaps fail before

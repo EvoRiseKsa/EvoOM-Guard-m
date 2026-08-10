@@ -5,13 +5,17 @@ import json
 from pathlib import Path
 
 import pytest
+from finalizer_test_support import finalizer_bindings_for
 from jsonschema import Draft202012Validator
 
 from evoom_guard import github_attestation
 from evoom_guard.admission import artifact_provider_v3
 from evoom_guard.guard import guard
 from evoom_guard.signing import generate_keypair
-from evoom_guard.trusted_finalizer import create_finalizer_handoff, seal_finalizer_bundle
+from evoom_guard.trusted_finalizer import (
+    create_finalizer_handoff,
+    seal_finalizer_bundle,
+)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -77,6 +81,7 @@ def _finalized_allow(tmp_path: Path):
         expected_source=source,
         expected_context=context,
         private_key_path=str(finalizer_private),
+        expected_derivation=finalizer_bindings_for(record, context, source).payload,
     )
     assert sealed.decision == "ALLOW"
     return bundle, finalizer_public, source, context

@@ -42,7 +42,15 @@ from evoom_guard.execution import (
     terminate_process_tree,
 )
 from evoom_guard.guard import serialize_candidate_blocks
-from evoom_guard.pack_manifest import PACK_DIGEST_FORMAT, extract_manifest, manifest_problems
+from evoom_guard.pack_manifest import (
+    MAX_PACK_BYTES,
+    MAX_PACK_ENTRIES,
+    MAX_PACK_FILE_BYTES,
+    MAX_PACK_MANIFEST_BYTES,
+    PACK_DIGEST_FORMAT,
+    extract_manifest,
+    manifest_problems,
+)
 from evoom_guard.policy import (
     ConfigError,
     build_effective_policy,
@@ -62,8 +70,6 @@ MAX_GIT_TREE_BYTES = 16 * 1024 * 1024
 MAX_GIT_TREE_ENTRIES = 100_000
 MAX_POLICY_BYTES = 1 * 1024 * 1024
 MAX_CANDIDATE_FILE_BYTES = 1 * 1024 * 1024
-MAX_PACK_FILE_BYTES = 8 * 1024 * 1024
-MAX_PACK_BYTES = 32 * 1024 * 1024
 MAX_BINDINGS_BYTES = 512 * 1024
 MAX_AGENT_CHANGE_CANDIDATE_BYTES = 64 * 1024 * 1024
 MAX_AGENT_CHANGE_PATHS = 10_000
@@ -1560,6 +1566,10 @@ def _deleted_paths(
 
 
 def _parse_pack_manifest(data: bytes) -> dict[str, Any] | None:
+    if len(data) > MAX_PACK_MANIFEST_BYTES:
+        raise FinalizerDerivationError(
+            f"raw Git pack.json exceeds the {MAX_PACK_MANIFEST_BYTES}-byte limit"
+        )
     try:
         decoded = strict_json_loads(data.decode("utf-8", "strict"))
     except (UnicodeDecodeError, ValueError) as exc:
@@ -1576,6 +1586,13 @@ def _framed_path(digest: Any, kind: bytes, path: str) -> None:
     digest.update(kind)
     digest.update(len(encoded).to_bytes(8, "big"))
     digest.update(encoded)
+
+
+def _require_raw_pack_entry_count(file_count: int, directory_count: int) -> None:
+    if file_count + directory_count > MAX_PACK_ENTRIES:
+        raise FinalizerDerivationError(
+            f"verifier_pack exceeds the {MAX_PACK_ENTRIES}-entry limit"
+        )
 
 
 def _raw_pack_identity(
@@ -1602,6 +1619,7 @@ def _raw_pack_identity(
     for rel in members:
         parts = rel.split("/")
         directories.update("/".join(parts[:index]) for index in range(1, len(parts)))
+    _require_raw_pack_entry_count(len(members), len(directories))
     digest = hashlib.sha256()
     digest.update(PACK_DIGEST_FORMAT.encode("ascii") + b"\0")
     for directory in sorted(directories):
@@ -1862,17 +1880,48 @@ def validate_finalizer_bindings(value: Mapping[str, Any]) -> DerivedFinalizerBin
     return DerivedFinalizerBindings(payload=_validate_derived_bindings(value))
 
 
+def finalizer_bindings_bytes(bindings: DerivedFinalizerBindings) -> bytes:
+    """Return bounded canonical bytes for validated Trusted Finalizer bindings."""
+
+    if type(bindings) is not DerivedFinalizerBindings:
+        raise FinalizerDerivationError(
+            "finalizer bindings must be a DerivedFinalizerBindings value"
+        )
+    checked = validate_finalizer_bindings(bindings.payload)
+    try:
+        data = _canonical_json(checked.payload)
+    except EvidenceBundleError as exc:
+        raise FinalizerDerivationError(str(exc)) from exc
+    if len(data) > MAX_BINDINGS_BYTES:
+        raise FinalizerDerivationError("canonical finalizer bindings exceed the size limit")
+    return data
+
+
+def inspect_finalizer_bindings_bytes(data: bytes) -> DerivedFinalizerBindings:
+    """Inspect exact canonical binding bytes without treating them as a trust root."""
+
+    if type(data) is not bytes:
+        raise FinalizerDerivationError("finalizer bindings must be exact bytes")
+    if len(data) > MAX_BINDINGS_BYTES:
+        raise FinalizerDerivationError("finalizer bindings exceed the size limit")
+    try:
+        payload = _load_json_object(data, "finalizer bindings")
+        canonical = _canonical_json(payload)
+    except EvidenceBundleError as exc:
+        raise FinalizerDerivationError(str(exc)) from exc
+    if canonical != data:
+        raise FinalizerDerivationError("finalizer bindings are not canonical JSON")
+    return validate_finalizer_bindings(payload)
+
+
 def read_finalizer_bindings(path: str) -> DerivedFinalizerBindings:
     """Read a canonical bindings file without treating it as a trust root."""
 
     try:
         data = _read_regular_file(path, limit=MAX_BINDINGS_BYTES, label="finalizer bindings")
-        payload = _load_json_object(data, "finalizer bindings")
     except EvidenceBundleError as exc:
         raise FinalizerDerivationError(str(exc)) from exc
-    if _canonical_json(payload) != data:
-        raise FinalizerDerivationError("finalizer bindings are not canonical JSON")
-    return validate_finalizer_bindings(payload)
+    return inspect_finalizer_bindings_bytes(data)
 
 
 def _write_canonical(path: str, payload: dict[str, Any], *, force: bool) -> str:
@@ -1903,6 +1952,7 @@ def write_finalizer_bindings(
 ) -> str:
     """Write the canonical raw-Git derivation record."""
 
+    finalizer_bindings_bytes(bindings)
     return _write_canonical(bindings_path, bindings.payload, force=force)
 
 

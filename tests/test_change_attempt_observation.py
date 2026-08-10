@@ -166,7 +166,7 @@ def _signed_attempt_fixture(
         public_fixture_label=public_fixture_key_label,
     )
     bundle = directory / "attempt.evb"
-    sealed = trusted_finalizer.seal_finalizer_bundle(
+    sealed = trusted_finalizer.seal_finalizer_bundle_without_derivation(
         str(handoff_path),
         str(record_path),
         str(bundle),
@@ -1060,7 +1060,7 @@ def test_caller_owned_trust_mappings_are_snapshotted_before_verification(
     expected_context = dict(fixture.context)
     original_source = dict(expected_source)
     original_context = dict(expected_context)
-    real_verifier = change_attempt.verify_finalized_bundle
+    real_verifier = change_attempt.verify_finalized_bundle_without_derivation
 
     def mutate_caller_mappings_before_upstream_verification(
         bundle_path: str,
@@ -1086,7 +1086,7 @@ def test_caller_owned_trust_mappings_are_snapshotted_before_verification(
     globals_context = expected_context
     monkeypatch.setattr(
         change_attempt,
-        "verify_finalized_bundle",
+        "verify_finalized_bundle_without_derivation",
         mutate_caller_mappings_before_upstream_verification,
     )
     produced = change_attempt.produce_change_attempt_observation(
@@ -1179,7 +1179,11 @@ def test_missing_optional_signing_runtime_remains_an_operational_error(
     def unavailable(*_args: Any, **_kwargs: Any) -> None:
         raise SigningUnavailableError("cryptography unavailable")
 
-    monkeypatch.setattr(change_attempt, "verify_finalized_bundle", unavailable)
+    monkeypatch.setattr(
+        change_attempt,
+        "verify_finalized_bundle_without_derivation",
+        unavailable,
+    )
     with pytest.raises(SigningUnavailableError, match="cryptography unavailable"):
         _produce(fixture, tmp_path / "must-not-exist.json")
 

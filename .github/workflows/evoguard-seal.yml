@@ -396,7 +396,6 @@ jobs:
             --expected-source "$RUNNER_TEMP/expected-source.json" \
             --expected-context "$RUNNER_TEMP/expected-context.json" \
             --expected-derivation "$RUNNER_TEMP/derived-bindings.json" \
-            --material "trusted-finalizer-git-bindings=$RUNNER_TEMP/derived-bindings.json" \
             --sign-key "$key" \
             --require-pass
           code=$?

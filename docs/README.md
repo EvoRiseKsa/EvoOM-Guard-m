@@ -82,8 +82,8 @@ contract does not authorize another stage such as publication or deployment.
 
 - [`JSON_SCHEMA.md`](JSON_SCHEMA.md) — stable verdict JSON fields,
   `schema_version`, reason codes, and execution-state semantics.
-- [`BLAST_RADIUS.md`](BLAST_RADIUS.md) — advisory Blast Radius V1 measurement,
-  accepted inputs, compatibility names, and raw-diff limitations.
+- [`BLAST_RADIUS.md`](BLAST_RADIUS.md) — frozen advisory V1 plus the unreleased,
+  explicit materialized-change V2 contract, migration, and non-claims.
 - [`ARTIFACT_ADMISSION.md`](ARTIFACT_ADMISSION.md) — narrow file-artifact
   admission V1.
 - [`ARTIFACT_DIGEST_ADMISSION_V2.md`](ARTIFACT_DIGEST_ADMISSION_V2.md) —

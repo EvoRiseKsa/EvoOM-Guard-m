@@ -139,7 +139,7 @@ class _SealFinalizer(Protocol):
         expected_source: Mapping[str, Any],
         expected_context: Mapping[str, Any],
         private_key_path: str,
-        expected_derivation: Mapping[str, Any] | None,
+        expected_derivation: Mapping[str, Any],
         materials: Sequence[Any],
         force: bool,
     ) -> _SealedFinalizer: ...
@@ -462,7 +462,7 @@ def execute_seal_finalizer(
     services: SealFinalizerServices,
     out: _Output = print,
 ) -> int:
-    """Seal only a handoff that matches externally re-derived metadata."""
+    """Seal only a handoff that matches raw-Git and external metadata."""
 
     if args.verdict == "-":
         services.machine_report(
@@ -486,11 +486,7 @@ def execute_seal_finalizer(
             args.expected_context,
             label="expected context",
         )
-        expected_derivation = (
-            services.read_bindings(args.expected_derivation).payload
-            if args.expected_derivation is not None
-            else None
-        )
+        expected_derivation = services.read_bindings(args.expected_derivation).payload
         materials = services.parse_materials(args.material)
     except trusted_input_errors as exc:
         services.machine_report(

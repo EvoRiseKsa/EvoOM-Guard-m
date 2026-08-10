@@ -25,7 +25,7 @@
     {
       "install_path": ".github/workflows/evoguard-seal.yml",
       "resource": "seal.yml",
-      "sha256": "650cf100036dc363be5101d8bc5d745ed054a267308009af2288815748b390f7"
+      "sha256": "375d2026ecd820131f1d9595b30330ed4251e6d27e76b90c103b57873b3aa55b"
     }
   ]
 }

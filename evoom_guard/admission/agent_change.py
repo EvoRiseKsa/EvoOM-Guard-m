@@ -1039,7 +1039,7 @@ def seal_agent_change_finalizer_bundle(
     expected_context: Mapping[str, Any],
     finalizer_private_key_path: str,
     finalizer_public_key_path: str,
-    expected_derivation: Mapping[str, Any] | None = None,
+    expected_derivation: Mapping[str, Any],
     force: bool = False,
 ) -> FinalizedAgentChangeAdmission:
     """Derive raw Git inside the sealer, then publish only a verified ALLOW.
@@ -1047,6 +1047,8 @@ def seal_agent_change_finalizer_bundle(
     ``base_repo`` and ``head_repo`` are trusted finalizer object stores.  A
     caller-supplied bindings file is deliberately not accepted here: validated
     JSON is still only data, not proof that it represents immutable Git truth.
+    The required generic ``expected_derivation`` independently binds the Guard
+    verdict before the finalizer key is opened as well.
     """
 
     source = dict(expected_finalizer_source)
