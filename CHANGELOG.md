@@ -86,7 +86,9 @@ retained evidence say so.
   mapping before hashing descriptors. Packaged Draft 2020-12 schemas are
   explicitly structural: the runtime canonical validators remain authoritative
   for exact scalar types because standard schemas accept integral floats such
-  as `1.0` as integers.
+  as `1.0` as integers. Artifact V2 also preserves the complete six-entry
+  source key registry, binds its seventh entry to the exact authenticated Source
+  Admission V3 key, and keeps the artifact key distinct from all seven.
 
 - Made `seal_finalizer_bundle(expected_derivation=...)` and the
   `seal-finalizer --expected-derivation` CLI contract fail closed instead of

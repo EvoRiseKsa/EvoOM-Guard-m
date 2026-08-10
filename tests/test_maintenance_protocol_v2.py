@@ -380,17 +380,10 @@ def _artifact_admission() -> tuple[dict[str, Any], bytes]:
         upstream_attempt=1,
     )
     artifact = {"kind": "file", "sha256": "7" * 64, "size": 12_345}
-    separation = _key_ids(
-        [
-            "trusted_finalizer",
-            "artifact_admission_v1",
-            "artifact_digest_admission_v2",
-            "release_source_finalizer_v1",
-            "release_source_admission_v2",
-            "release_source_finalizer_v2",
-            "release_source_admission_v3",
-        ]
-    )
+    separation = dict(source_admission["key_separation"])
+    separation["release_source_admission_v3"] = source_admission["authentication"][
+        "key_id"
+    ]
     manifest = {
         "format": RELEASE_ARTIFACT_ADMISSION_FORMAT_V2,
         "decision": "ALLOW",
@@ -477,7 +470,7 @@ def test_protocol_v2_golden_canonical_digests() -> None:
         "finalizer": "3ae53609f5ea3d0ddcb35edba417f875f6fa3d2ecf07ede66255761fa98ba25b",
         "receipt": "bacbde0847f86f34255657674608325dc28585da6769e4b20a6c2731336419b4",
         "source_admission": "7d9090ceded966cf7f012cf6f0cff0c7e0279980d5450c153a8499bdf1903f5e",
-        "artifact_admission": "bb7e0d07eff14f3d7d8b9c2db0602c0ed50dd65a14c63d00d4d9217af8063337",
+        "artifact_admission": "cabdbb5a7ddee8dc2bf2a1995569b4a2d2ca513b3310511468e5cd63b0378716",
     }
     actual = {
         name: hashlib.sha256(canonical_validated_bytes(value, validator=validator)).hexdigest()
@@ -725,6 +718,61 @@ def test_artifact_binding_rejects_mix_and_match_mapping_and_canonical_bytes() ->
         bind_release_artifact_v2_to_source_admission(
             artifact,
             _source_admission(),
+            source_admission_bytes=other_bytes,
+        )
+
+
+def test_artifact_standalone_requires_source_summary_key_registry_continuity() -> None:
+    artifact, _source_bytes = _artifact_admission()
+    artifact["key_separation"]["release_source_admission_v3"] = "sha256:" + "d" * 64
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="source summary"):
+        validate_release_artifact_admission_v2(artifact)
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "trusted_finalizer",
+        "artifact_admission_v1",
+        "artifact_digest_admission_v2",
+        "release_source_finalizer_v1",
+        "release_source_admission_v2",
+        "release_source_finalizer_v2",
+    ],
+)
+def test_artifact_binding_requires_each_inherited_source_registry_entry(domain: str) -> None:
+    artifact, source_bytes = _artifact_admission()
+    artifact["key_separation"][domain] = "sha256:" + "d" * 64
+    validate_release_artifact_admission_v2(artifact)
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="inherited key registry"):
+        bind_release_artifact_v2_to_source_admission(
+            artifact,
+            _source_admission(),
+            source_admission_bytes=source_bytes,
+        )
+
+
+def test_artifact_false_registry_cannot_reuse_the_source_authentication_key() -> None:
+    artifact, _source_bytes = _artifact_admission()
+    artifact["key_separation"]["release_source_admission_v3"] = "sha256:" + "d" * 64
+    artifact["authentication"]["key_id"] = artifact["release_source"]["key_id"]
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="source summary"):
+        validate_release_artifact_admission_v2(artifact)
+
+
+def test_artifact_binding_registry_tracks_the_exact_source_authentication_key() -> None:
+    artifact, _source_bytes = _artifact_admission()
+    other_source = copy.deepcopy(_source_admission())
+    other_source["authentication"]["key_id"] = "sha256:" + "d" * 64
+    other_bytes = canonical_release_source_admission_v3_bytes(other_source)
+    artifact["release_source"]["bundle"].update(
+        sha256=hashlib.sha256(other_bytes).hexdigest(), size=len(other_bytes)
+    )
+    validate_release_artifact_admission_v2(artifact)
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="exact source bytes"):
+        bind_release_artifact_v2_to_source_admission(
+            artifact,
+            other_source,
             source_admission_bytes=other_bytes,
         )
 

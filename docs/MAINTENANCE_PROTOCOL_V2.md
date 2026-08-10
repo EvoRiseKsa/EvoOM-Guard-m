@@ -60,6 +60,10 @@ misrepresented as the source of trusted workflow bytes.
   source-to-artifact binding boundary;
 - distinct trusted workflow paths, blob identities, and workflow IDs for each
   visible control-plane role;
+- source-to-artifact key-registry continuity: Artifact Admission V2 inherits
+  all six Source Admission V3 separation entries exactly, registers the exact
+  authenticated Source Admission V3 key as its seventh entry, and requires its
+  own authentication key to remain distinct from all seven;
 - exact runtime JSON scalar types for counters, limits, booleans, sizes,
   attempts, and isolation IDs;
 - collision-free trusted material paths, non-overlapping verifier-pack roots,

@@ -596,6 +596,10 @@ def validate_release_artifact_admission_v2(value: Mapping[str, Any]) -> dict[str
             "source-admitter, builder, and artifact-admitter run IDs must be pairwise distinct"
         )
     separation = _separation(manifest["key_separation"])
+    if separation["release_source_admission_v3"] != source["key_id"]:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 source-admission key registry does not match its source summary"
+        )
     return {
         "format": RELEASE_ARTIFACT_ADMISSION_FORMAT_V2,
         "decision": "ALLOW",
@@ -647,6 +651,19 @@ def bind_release_artifact_v2_to_source_admission(
     if source_admission != source_admission_from_value:
         raise ReleaseArtifactAdmissionV2Error(
             "release-source admission mapping does not match its exact canonical bytes"
+        )
+    artifact_separation = manifest["key_separation"]
+    source_admission_key = source_admission["authentication"]["key_id"]
+    if artifact_separation["release_source_admission_v3"] != source_admission_key:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 source-admission key registry does not match exact source bytes"
+        )
+    inherited_separation = {
+        key: artifact_separation[key] for key in source_admission["key_separation"]
+    }
+    if inherited_separation != source_admission["key_separation"]:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 inherited key registry does not match exact source bytes"
         )
     summary = manifest["release_source"]
     descriptor = {
