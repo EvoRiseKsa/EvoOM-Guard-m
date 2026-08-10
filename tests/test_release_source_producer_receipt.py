@@ -310,6 +310,58 @@ def test_producer_finalizer_primitives_are_snapshotted_at_module_import(
         importlib.reload(consumer)
 
 
+def test_reload_restores_public_producer_error_from_private_identity_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    consumer = release_source_producer_receipt
+    original_error = consumer.ReleaseSourceProducerReceiptError
+    monkeypatch.setattr(consumer, "ReleaseSourceProducerReceiptError", object())
+
+    reloaded = importlib.reload(consumer)
+
+    assert reloaded.ReleaseSourceProducerReceiptError is original_error
+
+
+@pytest.mark.parametrize(
+    "poison",
+    [
+        pytest.param(object(), id="not-a-type"),
+        pytest.param(RuntimeError, id="not-a-value-error"),
+        pytest.param(
+            type(
+                "ReleaseSourceProducerReceiptError",
+                (ValueError,),
+                {"__module__": "forged_release_source_module"},
+            ),
+            id="wrong-module",
+        ),
+        pytest.param(
+            type(
+                "ForgedReleaseSourceProducerReceiptError",
+                (ValueError,),
+                {"__module__": release_source_producer_receipt.__name__},
+            ),
+            id="wrong-name",
+        ),
+    ],
+)
+def test_reload_rejects_corrupted_private_producer_error_identity_anchor(
+    poison: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    consumer = release_source_producer_receipt
+    anchor_name = "_RELEASE_SOURCE_PRODUCER_RECEIPT_ERROR_IDENTITY"
+    original_anchor = getattr(consumer, anchor_name)
+    monkeypatch.setattr(consumer, anchor_name, poison)
+
+    try:
+        with pytest.raises(RuntimeError, match="error identity anchor"):
+            importlib.reload(consumer)
+    finally:
+        setattr(consumer, anchor_name, original_anchor)
+        importlib.reload(consumer)
+
+
 def test_canonical_producer_receipt_rechecks_raw_git_and_exact_bytes(tmp_path: Path) -> None:
     repo, verdict, handoff, source, context, producer, _target = _receipt_inputs(tmp_path)
     receipt = tmp_path / "producer-receipt.json"

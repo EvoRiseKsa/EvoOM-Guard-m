@@ -85,9 +85,10 @@ retained evidence say so.
 
 - Preserved `ReleaseSourceProducerReceiptError` class identity across
   `importlib.reload()` so already-imported admission consumers continue to
-  translate producer failures deterministically regardless of test order. This
-  is reload/test-order robustness and does not add or strengthen a production
-  trust guarantee.
+  translate producer failures deterministically regardless of test order. A
+  private validated identity anchor restores a poisoned public export and
+  rejects corruption of the anchor itself. This is reload/test-order robustness
+  and does not add or strengthen a production trust guarantee.
 
 - Hardened the specialized black-box judge process owner so cancellation keeps
   the exact active `BaseException` through a bare re-raise, always attempts the
