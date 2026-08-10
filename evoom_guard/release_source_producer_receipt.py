@@ -135,8 +135,16 @@ _PRODUCER_KEYS = {
 }
 
 
-class ReleaseSourceProducerReceiptError(ValueError):
-    """A producer receipt, its evidence, or its provider policy is unsafe."""
+# ``importlib.reload`` deliberately retains the module dictionary while it
+# re-executes this file.  The admission owner imports this public exception by
+# identity, so replacing the class during a producer-primitive characterization
+# reload would make the already-imported boundary unable to translate errors
+# raised by the reloaded helpers.  Preserve the public exception identity while
+# still allowing every implementation primitive below it to be refreshed.
+if "ReleaseSourceProducerReceiptError" not in globals():
+
+    class ReleaseSourceProducerReceiptError(ValueError):
+        """A producer receipt, its evidence, or its provider policy is unsafe."""
 
 
 @dataclass(frozen=True)
