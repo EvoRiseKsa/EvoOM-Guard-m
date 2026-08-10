@@ -26,6 +26,7 @@ import os
 import re
 import stat
 import struct
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -37,9 +38,12 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 FINGERPRINT_PATTERN = re.compile(r"^(?:[0-9A-F]{40}|[0-9A-F]{64}|SHA256:[A-Za-z0-9+/]{43}=?)$")
 UTC_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 PLACEHOLDER = "POST_MERGE_REQUIRED"
-RUN_PHASES = ("A", "B", "CD", "E", "F", "G", "H")
-WORKFLOW_ROLES = tuple(f"workflow-{phase}" for phase in RUN_PHASES)
-REQUIRED_CHECKS = (
+TAG_MAX_DECODED_BYTES = 32_768
+SIGNING_KEY_PATH = "security/v4.5.1-maintainer-signing.pub"
+SIGNING_KEY_MODE = "100644"
+RUN_PHASES: tuple[str, ...] = ("A", "B", "CD", "E", "F", "G", "H")
+WORKFLOW_ROLES: tuple[str, ...] = tuple(f"workflow-{phase}" for phase in RUN_PHASES)
+REQUIRED_CHECKS: tuple[tuple[str, int], ...] = (
     ("test (3.10)", 15368),
     ("test (3.11)", 15368),
     ("test (3.12)", 15368),
@@ -52,7 +56,7 @@ REQUIRED_CHECKS = (
     ("fuzz (address)", 15368),
     ("fuzz (undefined)", 15368),
 )
-RUN_JOBS = {
+RUN_JOBS: dict[str, tuple[str, ...]] = {
     "A": ("metadata", "reverify"),
     "B": ("preflight", "receipt"),
     "CD": ("preflight", "seal", "detached-verify"),
@@ -61,7 +65,7 @@ RUN_JOBS = {
     "G": ("detached-verify",),
     "H": ("preflight", "draft", "publish"),
 }
-RAW_ENTRY_PINS = {
+RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ".github/workflows/evoguard-release-source-reverify.yml": (
         "workflow-A",
         "ce8aa1eeccb7e2ed06b93bfdcee34be62a1cb04e",
@@ -110,7 +114,7 @@ RAW_ENTRY_PINS = {
     ),
 }
 VALIDATOR_PATH = "tools/ci/validate_v451_maintenance_control.py"
-ENVIRONMENT_PINS = {
+ENVIRONMENT_PINS: dict[str, tuple[int, int]] = {
     "evoguard-release-source-v2": (18718844374, 55562429),
     "evoguard-release-artifact-v1": (18718845035, 55562431),
     "evoguard-release-draft": (18718845676, 55562435),
@@ -120,6 +124,24 @@ PUBLICATION_ENVIRONMENT = "evoguard-release-publication"
 PUBLICATION_ENVIRONMENT_ID = 18718846349
 PUBLICATION_SECRET_NAME = "EVOGUARD_RELEASE_TAG_DEPLOY_KEY"
 PUBLICATION_KEY_TITLE = "EvoOM Guard v4.5.1 temporary release tag authority"
+REQUIRED_BLOCKER_IDS: frozenset[str] = frozenset(
+    {
+        "post_merge_workflow_pins_absent",
+        "maintenance_branch_protection_absent",
+        "release_candidate_pr_absent",
+        "maintainer_signing_root_unpinned",
+        "owner_control_plane_collector_unimplemented",
+        "publication_deploy_key_unpinned",
+        "publication_secret_binding_unimplemented",
+        "independent_release_byte_receipts_unimplemented",
+        "workflow_target_identity_split_unimplemented",
+        "annotated_tag_object_publication_unimplemented",
+        "raw_tag_object_variable_absent",
+        "canonical_tag_parser_unimplemented",
+        "per_run_temporal_binding_unimplemented",
+        "publication_authority_retirement_unimplemented",
+    }
+)
 
 
 class MaintenanceControlError(ValueError):
@@ -161,34 +183,58 @@ def _boolean(value: Any, label: str) -> bool:
 
 
 def _sha(value: Any, label: str, *, allow_placeholder: bool = False) -> str:
-    value = _string(value, label)
-    if allow_placeholder and value == PLACEHOLDER:
-        return value
-    if SHA_PATTERN.fullmatch(value) is None:
+    text = _string(value, label)
+    if allow_placeholder and text == PLACEHOLDER:
+        return PLACEHOLDER
+    if SHA_PATTERN.fullmatch(text) is None:
         _fail(f"{label} must be one lowercase 40-hex Git object ID")
-    return value
+    return text
 
 
 def _sha256(value: Any, label: str) -> str:
-    value = _string(value, label)
-    if SHA256_PATTERN.fullmatch(value) is None:
+    text = _string(value, label)
+    if SHA256_PATTERN.fullmatch(text) is None:
         _fail(f"{label} must be one lowercase SHA-256 digest")
-    return value
+    return text
 
 
 def _timestamp(value: Any, label: str, *, allow_placeholder: bool = False) -> str:
-    value = _string(value, label)
-    if allow_placeholder and value == PLACEHOLDER:
-        return value
-    if UTC_PATTERN.fullmatch(value) is None:
+    text = _string(value, label)
+    if allow_placeholder and text == PLACEHOLDER:
+        return PLACEHOLDER
+    if UTC_PATTERN.fullmatch(text) is None:
         _fail(f"{label} must be a whole-second UTC timestamp")
-    return value
+    try:
+        parsed = datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise MaintenanceControlError(
+            f"{label} must be a real whole-second UTC RFC3339 timestamp"
+        ) from exc
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != text or parsed.utcoffset() is None:
+        _fail(f"{label} must be a canonical whole-second UTC RFC3339 timestamp")
+    return text
 
 
 def _positive_id_or_placeholder(value: Any, label: str, *, activated: bool) -> int | str:
     if not activated and value == PLACEHOLDER:
-        return value
+        return PLACEHOLDER
     return _integer(value, label)
+
+
+def _safe_repo_path(value: Any, label: str) -> str:
+    """Return one normalized relative POSIX repository path or fail closed."""
+
+    path = _string(value, label)
+    segments = path.split("/")
+    if (
+        path.startswith("/")
+        or path.endswith("/")
+        or "\\" in path
+        or re.match(r"^[A-Za-z]:", path) is not None
+        or any(segment in {"", ".", ".."} for segment in segments)
+    ):
+        _fail(f"{label} must be a safe normalized relative POSIX repository path")
+    return path
 
 
 def _openssh_ed25519_fingerprint(value: Any, label: str) -> str:
@@ -415,8 +461,7 @@ def _validate_raw_entries(value: Any, *, activated: bool) -> dict[str, Any]:
         _fail("trusted raw-Git entry inventory is not literal")
     roles: list[str] = []
     for path, raw in entries.items():
-        if path.startswith("/") or "\\" in path or ".." in path.split("/"):
-            _fail(f"raw-Git path is not a safe literal repository path: {path!r}")
+        _safe_repo_path(path, "raw-Git path")
         entry = _object(raw, f"raw-Git entry {path}")
         _exact_keys(entry, {"role", "mode", "blob_sha"}, f"raw-Git entry {path}")
         role = _string(entry["role"], f"raw-Git role {path}")
@@ -440,6 +485,25 @@ def _validate_raw_entries(value: Any, *, activated: bool) -> dict[str, Any]:
     if len([role for role in roles if role in WORKFLOW_ROLES]) != 7:
         _fail("trusted raw-Git workflow roles must each occur exactly once")
     return raw_git
+
+
+def _expected_observed_raw_entries(contract: dict[str, Any]) -> dict[str, Any]:
+    """Bind the dynamic signing root to a literal blob in the trusted tree shape."""
+
+    raw_git = _object(contract["trusted_raw_git"], "trusted raw-Git contract")
+    expected = copy.deepcopy(_object(raw_git["required_entries"], "required raw-Git entries"))
+    signatures = _object(contract["local_signature_verification"], "local signature contract")
+    key_path = _safe_repo_path(
+        signatures["public_key_repository_path"], "signing public-key repository path"
+    )
+    if key_path in expected:
+        _fail("dynamic signing public-key path collides with a static trusted raw-Git entry")
+    expected[key_path] = {
+        "role": "maintainer-signing-root",
+        "mode": signatures["public_key_mode"],
+        "blob_sha": signatures["public_key_blob_sha"],
+    }
+    return expected
 
 
 def _validate_publication_authority_contract(value: Any, *, activated: bool) -> dict[str, Any]:
@@ -609,6 +673,8 @@ def _validate_contract_model(
     if contract["format"] != "EVOGUARD_MAINTENANCE_LANE_PHASE0_V2":
         _fail("maintenance contract format is not exact")
     blockers = _unique_strings(contract["blockers"], "contract blockers")
+    if frozenset(blockers) != REQUIRED_BLOCKER_IDS:
+        _fail("contract blocker IDs must equal the exact closed required blocker set")
     activation = _object(contract["activation"], "activation contract")
     _exact_keys(
         activation,
@@ -625,8 +691,6 @@ def _validate_contract_model(
         _fail("maintenance contract is not literal one-shot v4.5.1")
     if enabled or contract["assurance_state"] != "INERT_PRE_ACTIVATION_MODEL_NOT_LIVE_PROOF":
         _fail("checked-in Phase-0 model can only be inert and cannot activate itself")
-    if not blockers:
-        _fail("inert Phase-0 model must retain explicit activation blockers")
     flags = _object(activation["current_release_flags"], "current release flags")
     if flags != {
         "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": "false",
@@ -797,6 +861,7 @@ def _validate_contract_model(
         {
             "source",
             "public_key_repository_path",
+            "public_key_mode",
             "public_key_blob_sha",
             "public_key_fingerprint",
             "source_object_type",
@@ -817,7 +882,14 @@ def _validate_contract_model(
         )
     ):
         _fail("signature authority must be local raw Git, never REST identity fields")
-    for field in ("public_key_repository_path", "public_key_blob_sha", "public_key_fingerprint"):
+    key_path = _safe_repo_path(
+        signatures["public_key_repository_path"], "signing public-key repository path"
+    )
+    if key_path != SIGNING_KEY_PATH:
+        _fail("signing public-key repository path differs from the reviewed trusted path")
+    if signatures["public_key_mode"] != SIGNING_KEY_MODE:
+        _fail("signing public-key mode must be the literal regular-file mode 100644")
+    for field in ("public_key_blob_sha", "public_key_fingerprint"):
         value = _string(signatures[field], f"signature {field}")
         if resolved_external_shape and value == PLACEHOLDER:
             _fail(f"resolved signature {field} cannot be a placeholder")
@@ -864,7 +936,8 @@ def _validate_contract_model(
         tag["input_authority"] != "OWNER_AUTHORIZED_PUBLIC_RAW_TAG_OBJECT"
         or _boolean(tag["private_signing_key_in_actions"], "private key in Actions")
         or tag["raw_object_variable"] != "EVOGUARD_V451_SIGNED_TAG_OBJECT_B64"
-        or tag["maximum_decoded_bytes"] != 131072
+        or _integer(tag["maximum_decoded_bytes"], "maximum decoded tag bytes")
+        != TAG_MAX_DECODED_BYTES
         or tag["required_object_type"] != "tag"
         or tag["required_name"] != "v4.5.1"
         or tag["required_target_type"] != "commit"
@@ -942,7 +1015,6 @@ def _resolved_contract_shape(
             "trusted_workflow_sha",
             "trusted_workflow_tree",
             "one_shot_enable_value",
-            "maintainer_signing_public_key_repository_path",
             "maintainer_signing_public_key_blob_sha",
             "maintainer_signing_public_key_fingerprint",
             "publication_deploy_key_id",
@@ -965,9 +1037,6 @@ def _resolved_contract_shape(
     raw_git["trusted_workflow_sha"] = external_pins["trusted_workflow_sha"]
     raw_git["trusted_workflow_tree"] = external_pins["trusted_workflow_tree"]
     signatures = resolved["local_signature_verification"]
-    signatures["public_key_repository_path"] = external_pins[
-        "maintainer_signing_public_key_repository_path"
-    ]
     signatures["public_key_blob_sha"] = external_pins["maintainer_signing_public_key_blob_sha"]
     signatures["public_key_fingerprint"] = external_pins[
         "maintainer_signing_public_key_fingerprint"
@@ -1130,6 +1199,7 @@ def _validate_runs(
     checkpoint: str,
 ) -> None:
     runs = _array(value, "run observation shapes")
+    expected: tuple[str, ...]
     if checkpoint == "before-publication":
         expected = RUN_PHASES[:-1]
     elif checkpoint == "after-publication-before-retirement":
@@ -1346,8 +1416,8 @@ def validate_observation_shape(
         raw_git["trusted_workflow_tree"] != workflow_branch["tree_sha"]
     ):
         _fail("raw-Git trusted root differs from owner-authorized main")
-    if raw_git["entries"] != contract["trusted_raw_git"]["required_entries"]:
-        _fail("raw-Git-derived workflow/control/policy/pack entries differ from pins")
+    if raw_git["entries"] != _expected_observed_raw_entries(contract):
+        _fail("raw-Git-derived workflow/control/policy/pack/signing-key entries differ from pins")
     if raw_git["maintenance_base_sha"] != base_branch["sha"] or (
         raw_git["maintenance_base_tree"] != base_branch["tree_sha"]
     ):
@@ -1401,10 +1471,11 @@ def validate_observation_shape(
     ):
         _fail("local verifier observation is not explicitly shape-only")
     key = _object(local_verifier_observations["public_key"], "public-key shape")
-    _exact_keys(key, {"path", "blob_sha", "fingerprint"}, "public-key shape")
+    _exact_keys(key, {"path", "mode", "blob_sha", "fingerprint"}, "public-key shape")
     signature_contract = contract["local_signature_verification"]
     if key != {
         "path": signature_contract["public_key_repository_path"],
+        "mode": signature_contract["public_key_mode"],
         "blob_sha": signature_contract["public_key_blob_sha"],
         "fingerprint": signature_contract["public_key_fingerprint"],
     }:
@@ -1466,7 +1537,8 @@ def validate_observation_shape(
         or tag_object["name"] != "v4.5.1"
         or tag_object["target_type"] != "commit"
         or tag_object["target_sha"] != candidate_branch["sha"]
-        or _integer(tag_object["size_bytes"], "tag object size") > 131072
+        or _integer(tag_object["size_bytes"], "tag object size")
+        > contract["tag_contract"]["maximum_decoded_bytes"]
     ):
         _fail("raw tag observation shape is oversized, retargeted, or structurally wrong")
     _sha(tag_object["object_sha"], "annotated tag object SHA")

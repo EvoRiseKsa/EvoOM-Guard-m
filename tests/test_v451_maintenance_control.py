@@ -50,7 +50,6 @@ def _external_pins() -> dict[str, Any]:
         "trusted_workflow_sha": MAIN_SHA,
         "trusted_workflow_tree": MAIN_TREE,
         "one_shot_enable_value": MAIN_SHA,
-        "maintainer_signing_public_key_repository_path": ("security/v4.5.1-maintainer-signing.pub"),
         "maintainer_signing_public_key_blob_sha": MAINTAINER_KEY_BLOB,
         "maintainer_signing_public_key_fingerprint": MAINTAINER_FINGERPRINT,
         "publication_deploy_key_id": DEPLOY_KEY_ID,
@@ -226,11 +225,18 @@ def _raw_git(contract: dict[str, Any], checkpoint: str) -> dict[str, Any]:
         }
         for index, path in enumerate(contract["candidate_scope"]["required_changed_paths"])
     ]
+    entries = copy.deepcopy(contract["trusted_raw_git"]["required_entries"])
+    signature = contract["local_signature_verification"]
+    entries[signature["public_key_repository_path"]] = {
+        "role": "maintainer-signing-root",
+        "mode": signature["public_key_mode"],
+        "blob_sha": signature["public_key_blob_sha"],
+    }
     value = {
         "format": "EVOGUARD_RAW_GIT_OBSERVATION_SHAPE_V1",
         "trusted_workflow_sha": MAIN_SHA,
         "trusted_workflow_tree": MAIN_TREE,
-        "entries": copy.deepcopy(contract["trusted_raw_git"]["required_entries"]),
+        "entries": entries,
         "maintenance_base_sha": BASE_SHA,
         "maintenance_base_tree": BASE_TREE,
         "target_source_sha": TARGET_SHA,
@@ -259,6 +265,7 @@ def _local_observations(contract: dict[str, Any], checkpoint: str) -> dict[str, 
         "authority_status": "NON_AUTHORITATIVE_PHASE0_SHAPE_ONLY",
         "public_key": {
             "path": signature["public_key_repository_path"],
+            "mode": signature["public_key_mode"],
             "blob_sha": signature["public_key_blob_sha"],
             "fingerprint": signature["public_key_fingerprint"],
         },
@@ -393,6 +400,74 @@ def test_phase0_pins_literal_baselines_and_checked_in_git_blobs() -> None:
         ).hexdigest()
         assert entry["mode"] == "100644"
         assert entry["blob_sha"] == source_blob
+
+
+@pytest.mark.parametrize(
+    "unsafe_path",
+    [
+        "/tmp/signing.pub",
+        "../signing.pub",
+        "security/../signing.pub",
+        r"security\signing.pub",
+        "C:/signing.pub",
+        "C:signing.pub",
+        "security//signing.pub",
+        "./security/signing.pub",
+        "security/signing.pub/",
+    ],
+)
+def test_signing_public_key_rejects_unsafe_repository_paths(unsafe_path: str) -> None:
+    contract = _contract()
+    contract["local_signature_verification"]["public_key_repository_path"] = unsafe_path
+    with pytest.raises(validator.MaintenanceControlError, match="safe normalized relative POSIX"):
+        validator.validate_contract(contract)
+
+
+def test_signing_public_key_path_and_mode_are_literal_trusted_inputs() -> None:
+    contract = _contract()
+    signature = contract["local_signature_verification"]
+    assert signature["public_key_repository_path"] == validator.SIGNING_KEY_PATH
+    assert signature["public_key_mode"] == "100644"
+
+    changed_path = copy.deepcopy(contract)
+    changed_path["local_signature_verification"]["public_key_repository_path"] = (
+        "security/other-signing.pub"
+    )
+    with pytest.raises(validator.MaintenanceControlError, match="reviewed trusted path"):
+        validator.validate_contract(changed_path)
+
+    executable = copy.deepcopy(contract)
+    executable["local_signature_verification"]["public_key_mode"] = "100755"
+    with pytest.raises(validator.MaintenanceControlError, match="100644"):
+        validator.validate_contract(executable)
+
+
+def test_blockers_are_the_exact_closed_required_id_set() -> None:
+    contract = _contract()
+    assert frozenset(contract["blockers"]) == validator.REQUIRED_BLOCKER_IDS
+
+    missing = copy.deepcopy(contract)
+    missing["blockers"].pop()
+    with pytest.raises(validator.MaintenanceControlError, match="exact closed"):
+        validator.validate_contract(missing)
+
+    unknown = copy.deepcopy(contract)
+    unknown["blockers"].append("attacker_declared_blocker")
+    with pytest.raises(validator.MaintenanceControlError, match="exact closed"):
+        validator.validate_contract(unknown)
+
+    duplicate = copy.deepcopy(contract)
+    duplicate["blockers"].append(duplicate["blockers"][0])
+    with pytest.raises(validator.MaintenanceControlError, match="unique"):
+        validator.validate_contract(duplicate)
+
+
+@pytest.mark.parametrize("invalid_limit", [32_768.0, True])
+def test_decoded_tag_limit_rejects_non_integer_json_numbers(invalid_limit: Any) -> None:
+    contract = _contract()
+    contract["tag_contract"]["maximum_decoded_bytes"] = invalid_limit
+    with pytest.raises(validator.MaintenanceControlError, match="positive integer"):
+        validator.validate_contract(contract)
 
 
 def test_literal_contract_values_cannot_be_redefined() -> None:
@@ -666,6 +741,28 @@ def test_raw_git_observation_shape_substitutions_fail_closed(mutator: Any, messa
         )
 
 
+@pytest.mark.parametrize("mutation", ["blob", "mode", "missing", "path-alias"])
+def test_signing_key_raw_git_path_to_blob_binding_fails_closed(mutation: str) -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    raw_git = _raw_git(resolved, "before-publication")
+    key_path = resolved["local_signature_verification"]["public_key_repository_path"]
+    if mutation == "blob":
+        raw_git["entries"][key_path]["blob_sha"] = "9" * 40
+    elif mutation == "mode":
+        raw_git["entries"][key_path]["mode"] = "100755"
+    elif mutation == "missing":
+        del raw_git["entries"][key_path]
+    else:
+        entry = raw_git["entries"].pop(key_path)
+        raw_git["entries"]["security/./v4.5.1-maintainer-signing.pub"] = entry
+    with pytest.raises(validator.MaintenanceControlError, match="signing-key entries"):
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, raw_git=raw_git
+        )
+
+
 def test_local_verifier_input_is_explicitly_shape_only_not_crypto_proof() -> None:
     contract = _contract()
     pins = _external_pins()
@@ -724,7 +821,7 @@ def test_run_chain_rejects_stale_duplicate_and_separate_d_run_shapes() -> None:
         ("raw", "object_type", "commit", "raw tag observation shape"),
         ("raw", "name", "v4.5.2", "raw tag observation shape"),
         ("raw", "target_sha", "9" * 40, "raw tag observation shape"),
-        ("raw", "size_bytes", 131073, "raw tag observation shape"),
+        ("raw", "size_bytes", 32769, "raw tag observation shape"),
         ("local", "signer_fingerprint", "B" * 40, "tag verifier observation shape"),
     ],
 )
@@ -747,14 +844,56 @@ def test_tag_observation_shape_mutations_fail_without_crypto_claim(
         )
 
 
+def test_tag_object_accepts_exact_conservative_decoded_size_boundary() -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    raw_git = _raw_git(resolved, "after-publication-before-retirement")
+    raw_git["tag_object"]["size_bytes"] = 32_768
+    _validate_shape(
+        checkpoint="after-publication-before-retirement",
+        contract=contract,
+        pins=pins,
+        raw_git=raw_git,
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_timestamp",
+    [
+        "2030-02-30T00:00:00Z",
+        "2030-13-01T00:00:00Z",
+        "2030-01-01T24:00:00Z",
+        "2030-01-01T00:00:60Z",
+        "2030-01-01T00:00:00+00:00",
+        "2030-01-01T00:00:00.000Z",
+    ],
+)
+def test_external_pin_timestamps_require_real_canonical_utc_rfc3339(
+    invalid_timestamp: str,
+) -> None:
+    pins = _external_pins()
+    pins["publication_deploy_key_created_at"] = invalid_timestamp
+    with pytest.raises(validator.MaintenanceControlError, match="UTC|RFC3339"):
+        _resolved(_contract(), pins)
+
+
+def test_external_pin_timestamps_accept_real_utc_leap_day() -> None:
+    pins = _external_pins()
+    pins["publication_deploy_key_created_at"] = "2032-02-29T00:00:00Z"
+    pins["publication_secret_created_at"] = "2032-02-29T00:01:00Z"
+    pins["publication_secret_updated_at"] = "2032-02-29T00:02:00Z"
+    _resolved(_contract(), pins)
+
+
 def test_tag_and_release_byte_authority_remain_explicit_blockers() -> None:
     contract = _contract()
     assert contract["tag_contract"]["phase0_observation_shape_only"] is True
     assert contract["tag_contract"]["canonical_raw_tag_parser_implemented"] is False
     assert contract["release_contract"]["phase0_observation_shape_only"] is True
     assert contract["release_contract"]["digest_authority_implemented"] is False
-    assert any("retained F/G byte receipts" in item for item in contract["blockers"])
-    assert any("canonical raw annotated-tag parser" in item for item in contract["blockers"])
+    assert "independent_release_byte_receipts_unimplemented" in contract["blockers"]
+    assert "canonical_tag_parser_unimplemented" in contract["blockers"]
 
 
 def test_release_observation_shape_rejects_mutability_inventory_and_bad_digest() -> None:
@@ -804,8 +943,8 @@ def test_retirement_and_temporal_binding_are_requirements_not_claimed_results() 
         "DELETE_PUBLICATION_DEPLOY_KEY",
         "DELETE_PUBLICATION_ENVIRONMENT_SECRET",
     ]
-    assert any("time-bound" in item for item in contract["blockers"])
-    assert any("retirement" in item for item in contract["blockers"])
+    assert "per_run_temporal_binding_unimplemented" in contract["blockers"]
+    assert "publication_authority_retirement_unimplemented" in contract["blockers"]
 
 
 def test_exact_before_and_after_observation_shapes_pass_without_authority_claim() -> None:

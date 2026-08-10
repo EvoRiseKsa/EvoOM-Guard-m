@@ -78,6 +78,7 @@ jobs:
           python -m mypy --strict
           ops/build_pyz.py ops/generate_spdx_sbom.py ops/render_project_status.py
           tools/ci/check_trust_assurance.py
+          tools/ci/validate_v451_maintenance_control.py
 
       - name: Type-check evidence tooling (mypy strict)
         run: >-

@@ -225,12 +225,13 @@
       "security/release-source-pack/pack.json": {"role": "pack", "mode": "100644", "blob_sha": "a05bb0d113cfc9675e06c9480590496dbf841b82"},
       "security/release-source-pack/test_release_protocol.py": {"role": "pack", "mode": "100644", "blob_sha": "f8f6d9369d295171ad78c87dff424840a800de3e"},
       "security/judge-requirements.lock": {"role": "control", "mode": "100644", "blob_sha": "8d173d39ba87c7a075fcac42c8fabe692263cbf6"},
-      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "344c090f75e54c419c7d253f9863ca08e8a02c32"}
+      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "0d2197e24c23dd51e38dc574f1cbd1e606f7301f"}
     }
   },
   "local_signature_verification": {
     "source": "TRUSTED_RAW_GIT_OBJECTS_ONLY",
-    "public_key_repository_path": "POST_MERGE_REQUIRED",
+    "public_key_repository_path": "security/v4.5.1-maintainer-signing.pub",
+    "public_key_mode": "100644",
     "public_key_blob_sha": "POST_MERGE_REQUIRED",
     "public_key_fingerprint": "POST_MERGE_REQUIRED",
     "source_object_type": "commit",
@@ -251,7 +252,7 @@
     "input_authority": "OWNER_AUTHORIZED_PUBLIC_RAW_TAG_OBJECT",
     "private_signing_key_in_actions": false,
     "raw_object_variable": "EVOGUARD_V451_SIGNED_TAG_OBJECT_B64",
-    "maximum_decoded_bytes": 131072,
+    "maximum_decoded_bytes": 32768,
     "required_object_type": "tag",
     "required_name": "v4.5.1",
     "required_target_type": "commit",
@@ -294,19 +295,19 @@
     "future_evidence": "SEPARATE_OWNER_COLLECTED_SIGNED_RETIREMENT_RECEIPT_BOUND_TO_RELEASE_LEDGER"
   },
   "blockers": [
-    "post-merge trusted workflow commit and tree owner-authorized variables are absent",
-    "maintenance/v4.5 does not exist with the literal protection baseline",
-    "release/v4.5.1 does not exist as the sole exact open pull-request head",
-    "a reviewed maintainer signing public key, raw-Git blob ID, and fingerprint are not pinned",
-    "an owner-authenticated bounded GitHub control-plane collector is not wired",
-    "the sole write-enabled v4.5.1 deploy-key ID, title, public key, fingerprint, and metadata are not owner-pinned",
-    "the publication Environment secret metadata and trusted private-to-public deploy-key binding are absent",
-    "independent retained F/G byte receipts and downloaded release-asset byte verification are not wired",
-    "the existing A-H schemas and implementations still couple workflow SHA to target source SHA",
-    "the existing H implementation still pushes a lightweight tag target",
-    "no repository variable contains a locally signed bounded raw annotated tag object",
-    "no canonical raw annotated-tag parser binds object, type, tag, tagger, message, signature, and encoding",
-    "control-plane observations are not freshly time-bound to each run attempt and Environment approval",
-    "post-publication one-shot, raw-tag variable, deploy-key, and Environment-secret retirement is not implemented or evidenced"
+    "post_merge_workflow_pins_absent",
+    "maintenance_branch_protection_absent",
+    "release_candidate_pr_absent",
+    "maintainer_signing_root_unpinned",
+    "owner_control_plane_collector_unimplemented",
+    "publication_deploy_key_unpinned",
+    "publication_secret_binding_unimplemented",
+    "independent_release_byte_receipts_unimplemented",
+    "workflow_target_identity_split_unimplemented",
+    "annotated_tag_object_publication_unimplemented",
+    "raw_tag_object_variable_absent",
+    "canonical_tag_parser_unimplemented",
+    "per_run_temporal_binding_unimplemented",
+    "publication_authority_retirement_unimplemented"
   ]
 }

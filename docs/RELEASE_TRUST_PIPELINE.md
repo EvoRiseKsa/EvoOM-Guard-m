@@ -60,6 +60,14 @@ requires a future complete owner-collected listing proving one exact
 write-enabled deploy key, exact publication-secret metadata, private/public key
 binding inside trusted H, per-run temporal binding, and post-publication key,
 secret, variable, and one-shot retirement.
+The Phase-0 contract now freezes the maintainer public key at the normalized
+repository path `security/v4.5.1-maintainer-signing.pub`, mode `100644`, and
+requires its externally pinned blob to appear under that path in the pinned
+trusted-workflow tree observation. Raw annotated-tag input is limited to 32 KiB
+decoded so its Base64 form remains conservatively below GitHub's 48 KiB
+variable limit. Control-plane timestamps are real, canonical whole-second UTC
+RFC3339 values, and the activation blocker inventory is an exact closed set of
+stable IDs.
 
 ## Phase contracts
 

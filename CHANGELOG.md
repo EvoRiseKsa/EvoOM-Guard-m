@@ -50,6 +50,13 @@ retained evidence say so.
   settings to run time, or prove retirement. These remain named blockers for a
   separate external-pin implementation. The model accepts only inert state and
   creates no branch, tag, release, key, secret, variable, or GitHub setting.
+- Hardened that Phase-0 model against hostile-input ambiguity: the decoded raw
+  annotated-tag object is capped at 32 KiB for GitHub's Base64 variable bound;
+  the maintainer signing root uses one literal safe relative POSIX path and
+  `100644` mode with a dynamic trusted-tree path-to-blob binding; blocker IDs
+  must equal an exact closed set; and owner-control timestamps are parsed as
+  real canonical UTC RFC3339 values. The validator now participates in CI's
+  strict release-and-trust mypy gate.
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the
