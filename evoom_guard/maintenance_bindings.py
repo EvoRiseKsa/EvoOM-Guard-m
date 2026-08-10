@@ -29,6 +29,8 @@ RELEASE_SOURCE_HANDOFF_FORMAT_V2 = "EVOGUARD_RELEASE_SOURCE_FINALIZER_HANDOFF_V2
 MAX_RUN_ATTEMPT = 2_147_483_647
 MAX_VERDICT_BYTES = 8 * 1024 * 1024
 MAX_HANDOFF_BYTES = 512 * 1024
+MAX_WORKFLOW_PATH_LENGTH = 256
+MAX_MATERIAL_PATH_LENGTH = 512
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -115,7 +117,7 @@ def _numeric_id(value: object, label: str) -> str:
 
 
 def _run_attempt(value: object, label: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
+    if type(value) is not int:
         raise MaintenanceBindingError(f"{label} must be an integer")
     if value < 1 or value > MAX_RUN_ATTEMPT:
         raise MaintenanceBindingError(f"{label} is outside the supported range")
@@ -123,7 +125,7 @@ def _run_attempt(value: object, label: str) -> int:
 
 
 def _relative_path(value: object, label: str) -> str:
-    if not isinstance(value, str) or not value or len(value) > 512:
+    if not isinstance(value, str) or not value or len(value) > MAX_MATERIAL_PATH_LENGTH:
         raise MaintenanceBindingError(f"{label} is not a bounded relative path")
     if value.startswith("/") or "\\" in value or "\x00" in value:
         raise MaintenanceBindingError(f"{label} is not a canonical POSIX path")
@@ -140,7 +142,17 @@ def _branch_ref(value: object, label: str) -> str:
     suffix = ref.removeprefix("refs/heads/")
     if "//" in suffix or ".." in suffix or suffix.endswith((".", "/")) or "@{" in suffix:
         raise MaintenanceBindingError(f"{label} is not a canonical branch ref")
+    components = suffix.split("/")
+    if any(component.startswith(".") or component.endswith(".lock") for component in components):
+        raise MaintenanceBindingError(f"{label} violates Git reference component rules")
     return ref
+
+
+def _workflow_path(value: object, label: str) -> str:
+    path = _string(value, label=label, pattern=_WORKFLOW_PATH)
+    if len(path) > MAX_WORKFLOW_PATH_LENGTH:
+        raise MaintenanceBindingError(f"{label} exceeds the supported path length")
+    return path
 
 
 def validate_run(value: Mapping[str, Any], *, label: str = "run") -> dict[str, Any]:
@@ -170,10 +182,8 @@ def validate_release_source_v2(value: Mapping[str, Any]) -> dict[str, Any]:
         raise MaintenanceBindingError(
             "trusted workflow, maintenance base, and target source refs must be distinct"
         )
-    workflow_path = _string(
-        source["trusted_workflow_path"],
-        label="source.trusted_workflow_path",
-        pattern=_WORKFLOW_PATH,
+    workflow_path = _workflow_path(
+        source["trusted_workflow_path"], "source.trusted_workflow_path"
     )
     return {
         "format": RELEASE_SOURCE_FORMAT_V2,
@@ -256,16 +266,42 @@ def validate_trusted_inputs_v2(
         raise MaintenanceBindingError(
             "trusted_inputs.control_tools must be uniquely sorted by canonical path"
         )
-    occupied = {policy["path"], *paths}
-    if pack is not None and pack["root_path"] in occupied:
-        raise MaintenanceBindingError("verifier-pack root collides with a trusted file material")
-    return {
+    file_paths = [policy["path"], *paths]
+    for index, left in enumerate(file_paths):
+        for right in file_paths[index + 1 :]:
+            if left == right or left.startswith(f"{right}/") or right.startswith(f"{left}/"):
+                raise MaintenanceBindingError(
+                    "trusted file materials collide or overlap by canonical path"
+                )
+    if pack is not None:
+        root = pack["root_path"]
+        if any(
+            path == root or path.startswith(f"{root}/") or root.startswith(f"{path}/")
+            for path in file_paths
+        ):
+            raise MaintenanceBindingError(
+                "verifier-pack root collides or overlaps with a trusted file material"
+            )
+    trusted_inputs = {
         "source_sha": source_sha,
         "source_tree": source_tree,
         "policy": policy,
         "verifier_pack": pack,
         "control_tools": controls,
     }
+    workflow_path = _workflow_path(
+        source.get("trusted_workflow_path"), "source.trusted_workflow_path"
+    )
+    workflow_blob_sha = _git_sha(
+        source.get("trusted_workflow_blob_sha"), "source.trusted_workflow_blob_sha"
+    )
+    require_trusted_workflow_material_v2(
+        workflow_path=workflow_path,
+        workflow_blob_sha=workflow_blob_sha,
+        trusted_inputs=trusted_inputs,
+        label="trusted finalizer",
+    )
+    return trusted_inputs
 
 
 def require_trusted_workflow_material_v2(
@@ -346,7 +382,7 @@ def _descriptor(value: object, *, label: str, maximum_size: int) -> dict[str, An
     descriptor = _object(value, label)
     _exact_keys(descriptor, _DESCRIPTOR_KEYS, label)
     size = descriptor["size"]
-    if isinstance(size, bool) or not isinstance(size, int) or size < 1 or size > maximum_size:
+    if type(size) is not int or size < 1 or size > maximum_size:
         raise MaintenanceBindingError(f"{label}.size is outside the supported range")
     return {
         "sha256": _sha256(descriptor["sha256"], f"{label}.sha256"),

@@ -87,7 +87,7 @@ def _descriptor(value: object, *, label: str, path: str, maximum_size: int) -> d
     if not isinstance(sha256, str) or _SHA256.fullmatch(sha256) is None:
         raise ReleaseSourceFinalizerV2Error(f"{label}.sha256 is not canonical")
     size = descriptor["size"]
-    if isinstance(size, bool) or not isinstance(size, int) or not 1 <= size <= maximum_size:
+    if type(size) is not int or not 1 <= size <= maximum_size:
         raise ReleaseSourceFinalizerV2Error(f"{label}.size is outside the supported range")
     return {"path": path, "sha256": sha256, "size": size}
 

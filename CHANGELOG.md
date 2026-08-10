@@ -40,14 +40,22 @@ retained evidence say so.
   binding, replay-chain checks, and negative cross-version tests are included.
   Published V1/V2 bytes and workflows are unchanged; no branch, tag, release,
   provider execution, signing operation, or production authority is added.
+
+### Changed
+
+- Hardened the unreleased maintenance contracts before publication: artifact
+  binding now parses exact canonical source-admission JSON bytes and requires
+  them to equal the supplied mapping; run IDs are pairwise distinct through the
+  five-stage evaluation-to-artifact chain; workflow roles cannot collapse by
+  ID, path, or blob; provider scalar types are exact; trusted materials cannot
+  collide or overlap; the finalizer workflow must be an exact trusted-main
+  control material; and runtime path/ref bounds are mirrored by schema tests.
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the
   trusted-base policy and verifier-pack digest, ships JSON Schemas in wheel and
   zipapp artifacts, and explicitly does not claim to configure or inspect live
   GitHub controls.
-
-### Changed
 
 - Made `seal_finalizer_bundle(expected_derivation=...)` and the
   `seal-finalizer --expected-derivation` CLI contract fail closed instead of

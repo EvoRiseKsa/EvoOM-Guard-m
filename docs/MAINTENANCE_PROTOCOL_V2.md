@@ -49,9 +49,20 @@ misrepresented as the source of trusted workflow bytes.
   Git/SHA-256 identities;
 - canonical JSON byte generation and unique signature messages;
 - byte-descriptor binding from source admission to the exact producer receipt,
-  and from artifact admission to the exact source-admission bundle;
-- explicit replay chains for evaluation, producer, source admitter, builder,
-  and artifact admitter run IDs/attempts;
+  and from artifact admission to exact canonical
+  `materials/release-source-admission-v3.json` bytes. The latter must decode to
+  the same validated mapping supplied by the caller; a detached signature is a
+  separate capability and is not inferred from the JSON filename;
+- pairwise-distinct run IDs across evaluation, producer, source admitter,
+  builder, and artifact admitter, including cross-lane comparison at the
+  source-to-artifact binding boundary;
+- distinct trusted workflow paths, blob identities, and workflow IDs for each
+  visible control-plane role;
+- exact JSON scalar types for counters, limits, booleans, sizes, attempts, and
+  isolation IDs, with runtime/schema boundary tests;
+- collision-free trusted material paths, non-overlapping verifier-pack roots,
+  and mandatory membership of the trusted finalizer workflow path/blob in the
+  trusted-main control-material inventory;
 - packaged JSON Schema 2020-12 documents;
 - golden byte digests plus negative tests for role swaps, path/blob/tree
   mismatches, candidate-selected trusted inputs, wrong run attempts,

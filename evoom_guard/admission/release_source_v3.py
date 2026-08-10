@@ -134,7 +134,7 @@ def _matched(value: object, pattern: re.Pattern[str], label: str) -> str:
 
 
 def _size(value: object, *, label: str, minimum: int, maximum: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+    if type(value) is not int or not minimum <= value <= maximum:
         raise ReleaseSourceAdmissionV3Error(f"{label} is outside the supported range")
     return value
 
@@ -188,7 +188,9 @@ def _provider(
         raise ReleaseSourceAdmissionV3Error(
             "provider artifact does not bind the exact producer-receipt bytes"
         )
-    if provider["verified_attestation_count"] != 1:
+    if type(provider["verified_attestation_count"]) is not int or (
+        provider["verified_attestation_count"] != 1
+    ):
         raise ReleaseSourceAdmissionV3Error("provider must verify exactly one attestation")
     policy = _object(provider["policy"], "provider.policy")
     _exact(policy, _POLICY_KEYS, "provider.policy")
@@ -207,6 +209,14 @@ def _provider(
         "deny_self_hosted_runners": policy["deny_self_hosted_runners"],
         "attestation_limit": policy["attestation_limit"],
     }
+    if type(checked_policy["deny_self_hosted_runners"]) is not bool:
+        raise ReleaseSourceAdmissionV3Error(
+            "provider.policy.deny_self_hosted_runners must be a boolean"
+        )
+    if type(checked_policy["attestation_limit"]) is not int:
+        raise ReleaseSourceAdmissionV3Error(
+            "provider.policy.attestation_limit must be an integer"
+        )
     fixed = {
         "repository": source["repository"],
         "signer_workflow": f"{source['repository']}/{producer['workflow_path']}",
@@ -347,9 +357,23 @@ def validate_release_source_admission_v3(
             )
     except MaintenanceBindingError as exc:
         raise ReleaseSourceAdmissionV3Error(str(exc)) from exc
-    if admitter["workflow_path"] == producer["workflow_path"]:
+    workflow_ids = {
+        producer["workflow_id"],
+        admitter["workflow_id"],
+    }
+    workflow_paths = {
+        source["trusted_workflow_path"],
+        producer["workflow_path"],
+        admitter["workflow_path"],
+    }
+    workflow_blobs = {
+        source["trusted_workflow_blob_sha"],
+        producer["workflow_blob_sha"],
+        admitter["workflow_blob_sha"],
+    }
+    if len(workflow_ids) != 2 or len(workflow_paths) != 3 or len(workflow_blobs) != 3:
         raise ReleaseSourceAdmissionV3Error(
-            "producer and admitter workflow paths must be role-separated"
+            "trusted finalizer, producer, and admitter workflow roles must be distinct"
         )
     receipt = _descriptor(
         manifest["producer_receipt"],
@@ -374,6 +398,10 @@ def validate_release_source_admission_v3(
     if checked_replay != expected_replay:
         raise ReleaseSourceAdmissionV3Error(
             "release-source admission V3 replay chain is inconsistent"
+        )
+    if len({run["run_id"] for run in expected_replay.values()}) != len(expected_replay):
+        raise ReleaseSourceAdmissionV3Error(
+            "evaluation, producer, and admitter run IDs must be pairwise distinct"
         )
     separation = _key_separation(manifest["key_separation"])
     return {

@@ -62,16 +62,19 @@
     },
     "releaseSource": {
       "type": "object",
-      "required": ["format", "decision", "bundle", "key_id", "repository", "repository_id", "trusted_workflow_sha", "trusted_workflow_tree", "maintenance_base_sha", "maintenance_base_tree", "target_source_sha", "target_source_tree", "trusted_inputs", "admission_run_id", "admission_run_attempt"],
+      "required": ["format", "decision", "bundle", "key_id", "repository", "repository_id", "trusted_workflow_sha", "trusted_workflow_tree", "trusted_workflow_path", "trusted_workflow_blob_sha", "maintenance_base_sha", "maintenance_base_tree", "target_source_sha", "target_source_tree", "trusted_inputs", "admission_run_id", "admission_run_attempt", "admission_workflow_id", "admission_workflow_path", "admission_workflow_blob_sha"],
       "properties": {
         "format": { "const": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V3" }, "decision": { "const": "ALLOW" },
-        "bundle": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "materials/release-source-admission-v3.rsae" }, "size": { "maximum": 73400320 } } }] },
+        "bundle": { "allOf": [{ "$ref": "#/$defs/descriptor" }, { "properties": { "path": { "const": "materials/release-source-admission-v3.json" }, "size": { "maximum": 73400320 } } }] },
         "key_id": { "$ref": "#/$defs/keyId" }, "repository": { "$ref": "#/$defs/repository" }, "repository_id": { "$ref": "#/$defs/numericId" },
         "trusted_workflow_sha": { "$ref": "#/$defs/gitDigest" }, "trusted_workflow_tree": { "$ref": "#/$defs/gitDigest" },
+        "trusted_workflow_path": { "$ref": "#/$defs/workflowPath" }, "trusted_workflow_blob_sha": { "$ref": "#/$defs/gitDigest" },
         "maintenance_base_sha": { "$ref": "#/$defs/gitDigest" }, "maintenance_base_tree": { "$ref": "#/$defs/gitDigest" },
         "target_source_sha": { "$ref": "#/$defs/gitDigest" }, "target_source_tree": { "$ref": "#/$defs/gitDigest" },
         "trusted_inputs": { "$ref": "release-source-context-2.schema.json#/$defs/trustedInputs" },
-        "admission_run_id": { "$ref": "#/$defs/numericId" }, "admission_run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+        "admission_run_id": { "$ref": "#/$defs/numericId" }, "admission_run_attempt": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "admission_workflow_id": { "$ref": "#/$defs/numericId" }, "admission_workflow_path": { "$ref": "#/$defs/workflowPath" },
+        "admission_workflow_blob_sha": { "$ref": "#/$defs/gitDigest" }
       },
       "additionalProperties": false
     },

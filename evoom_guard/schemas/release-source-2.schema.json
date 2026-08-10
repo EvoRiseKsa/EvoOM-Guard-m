@@ -32,7 +32,11 @@
     "repository": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$", "maxLength": 140 },
     "numericId": { "type": "string", "pattern": "^[1-9][0-9]{0,255}$" },
     "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
-    "branchRef": { "type": "string", "pattern": "^refs/heads/[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$", "maxLength": 266 },
+    "branchRef": {
+      "type": "string",
+      "pattern": "^refs/heads/(?!.*//)(?!.*\\.\\.)(?!.*@\\{)(?!.*/\\.)(?!.*\/[^/]*\\.lock(?:/|$))[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,253}[A-Za-z0-9_-])?$",
+      "maxLength": 266
+    },
     "workflowPath": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$", "maxLength": 256 }
   }
 }

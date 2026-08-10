@@ -342,6 +342,8 @@ def _artifact_admission() -> tuple[dict[str, Any], bytes]:
         "repository_id": source["repository_id"],
         "trusted_workflow_sha": source["trusted_workflow_sha"],
         "trusted_workflow_tree": source["trusted_workflow_tree"],
+        "trusted_workflow_path": source["trusted_workflow_path"],
+        "trusted_workflow_blob_sha": source["trusted_workflow_blob_sha"],
         "maintenance_base_sha": source["maintenance_base_sha"],
         "maintenance_base_tree": source["maintenance_base_tree"],
         "target_source_sha": source["target_source_sha"],
@@ -349,6 +351,9 @@ def _artifact_admission() -> tuple[dict[str, Any], bytes]:
         "trusted_inputs": _trusted_inputs(source),
         "admission_run_id": "300",
         "admission_run_attempt": 1,
+        "admission_workflow_id": source_admission["admitter"]["workflow_id"],
+        "admission_workflow_path": source_admission["admitter"]["workflow_path"],
+        "admission_workflow_blob_sha": source_admission["admitter"]["workflow_blob_sha"],
     }
     builder = _actor(
         workflow_id="4000",
@@ -467,7 +472,7 @@ def test_protocol_v2_golden_canonical_digests() -> None:
         "finalizer": "3ae53609f5ea3d0ddcb35edba417f875f6fa3d2ecf07ede66255761fa98ba25b",
         "receipt": "bacbde0847f86f34255657674608325dc28585da6769e4b20a6c2731336419b4",
         "source_admission": "7d9090ceded966cf7f012cf6f0cff0c7e0279980d5450c153a8499bdf1903f5e",
-        "artifact_admission": "ba4b5af3ab5a1e4466f9e680eda8faed2984966048efb6b09c5d82de4aa782da",
+        "artifact_admission": "bb7e0d07eff14f3d7d8b9c2db0602c0ed50dd65a14c63d00d4d9217af8063337",
     }
     actual = {
         name: hashlib.sha256(canonical_validated_bytes(value, validator=validator)).hexdigest()
@@ -530,7 +535,7 @@ def test_source_admission_binds_exact_receipt_and_keeps_target_out_of_provider_s
 def test_artifact_admission_binds_exact_source_admission_bytes() -> None:
     artifact, source_bytes = _artifact_admission()
     bound = bind_release_artifact_v2_to_source_admission(
-        artifact, _source_admission(), source_bundle_bytes=source_bytes
+        artifact, _source_admission(), source_admission_bytes=source_bytes
     )
     assert bound["release_source"]["target_source_sha"] == _source()["target_source_sha"]
     assert bound["provider"]["policy"]["source_digest"] == _source()["trusted_workflow_sha"]
@@ -617,14 +622,260 @@ def test_artifact_target_swap_and_source_bundle_replay_fail_closed() -> None:
     artifact["release_source"]["target_source_sha"] = "f" * 40
     with pytest.raises(ReleaseArtifactAdmissionV2Error, match="does not match"):
         bind_release_artifact_v2_to_source_admission(
-            artifact, _source_admission(), source_bundle_bytes=source_bytes
+            artifact, _source_admission(), source_admission_bytes=source_bytes
         )
 
     artifact, source_bytes = _artifact_admission()
-    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="exact bundle bytes"):
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="canonical JSON"):
         bind_release_artifact_v2_to_source_admission(
-            artifact, _source_admission(), source_bundle_bytes=source_bytes + b"\n"
+            artifact, _source_admission(), source_admission_bytes=source_bytes + b"\n"
         )
+
+
+def test_artifact_binding_rejects_mix_and_match_mapping_and_canonical_bytes() -> None:
+    artifact, _source_bytes = _artifact_admission()
+    other_admission = copy.deepcopy(_source_admission())
+    other_admission["toolchain"]["git_sha256"] = "0" * 64
+    other_bytes = canonical_release_source_admission_v3_bytes(other_admission)
+    artifact["release_source"]["bundle"].update(
+        sha256=hashlib.sha256(other_bytes).hexdigest(), size=len(other_bytes)
+    )
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="mapping does not match"):
+        bind_release_artifact_v2_to_source_admission(
+            artifact,
+            _source_admission(),
+            source_admission_bytes=other_bytes,
+        )
+
+
+def test_local_replay_and_workflow_role_collapse_fail_closed() -> None:
+    source_admission = copy.deepcopy(_source_admission())
+    source_admission["producer"]["workflow_run_id"] = "100"
+    source_admission["admitter"]["upstream_run_id"] = "100"
+    source_admission["replay"]["producer"]["run_id"] = "100"
+    with pytest.raises(ReleaseSourceAdmissionV3Error, match="pairwise distinct"):
+        validate_release_source_admission_v3(source_admission)
+
+    source_admission = copy.deepcopy(_source_admission())
+    source_admission["admitter"]["workflow_id"] = source_admission["producer"]["workflow_id"]
+    with pytest.raises(ReleaseSourceAdmissionV3Error, match="roles must be distinct"):
+        validate_release_source_admission_v3(source_admission)
+
+    artifact, _source_bytes = _artifact_admission()
+    artifact["builder"]["workflow_run_id"] = "300"
+    artifact["admitter"]["upstream_run_id"] = "300"
+    artifact["replay"]["builder"]["run_id"] = "300"
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="pairwise distinct"):
+        validate_release_artifact_admission_v2(artifact)
+
+    artifact, _source_bytes = _artifact_admission()
+    artifact["builder"]["workflow_id"] = artifact["release_source"][
+        "admission_workflow_id"
+    ]
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="roles must be distinct"):
+        validate_release_artifact_admission_v2(artifact)
+
+
+def test_full_five_stage_cross_chain_replay_and_role_collapse_fail_closed() -> None:
+    artifact, source_bytes = _artifact_admission()
+    artifact["builder"]["workflow_run_id"] = "200"
+    artifact["admitter"]["upstream_run_id"] = "200"
+    artifact["replay"]["builder"]["run_id"] = "200"
+    validate_release_artifact_admission_v2(artifact)
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="five-stage"):
+        bind_release_artifact_v2_to_source_admission(
+            artifact, _source_admission(), source_admission_bytes=source_bytes
+        )
+
+    artifact, source_bytes = _artifact_admission()
+    artifact["builder"]["workflow_id"] = _source_admission()["producer"]["workflow_id"]
+    validate_release_artifact_admission_v2(artifact)
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="workflow ID"):
+        bind_release_artifact_v2_to_source_admission(
+            artifact, _source_admission(), source_admission_bytes=source_bytes
+        )
+
+    artifact, source_bytes = _artifact_admission()
+    producer = _source_admission()["producer"]
+    artifact["builder"]["workflow_path"] = producer["workflow_path"]
+    artifact["builder"]["workflow_blob_sha"] = producer["workflow_blob_sha"]
+    artifact["provider"]["policy"]["signer_workflow"] = (
+        f"{_source()['repository']}/{producer['workflow_path']}"
+    )
+    validate_release_artifact_admission_v2(artifact)
+    with pytest.raises(ReleaseArtifactAdmissionV2Error, match="path/blob"):
+        bind_release_artifact_v2_to_source_admission(
+            artifact, _source_admission(), source_admission_bytes=source_bytes
+        )
+
+
+@pytest.mark.parametrize(
+    ("factory", "validator", "mutator"),
+    [
+        (
+            _source_admission,
+            validate_release_source_admission_v3,
+            lambda value: value["provider"].__setitem__("verified_attestation_count", True),
+        ),
+        (
+            _source_admission,
+            validate_release_source_admission_v3,
+            lambda value: value["provider"]["policy"].__setitem__("attestation_limit", True),
+        ),
+        (
+            _source_admission,
+            validate_release_source_admission_v3,
+            lambda value: value["provider"]["policy"].__setitem__(
+                "deny_self_hosted_runners", 1
+            ),
+        ),
+        (
+            lambda: _artifact_admission()[0],
+            validate_release_artifact_admission_v2,
+            lambda value: value["provider"].__setitem__("verified_attestation_count", True),
+        ),
+        (
+            lambda: _artifact_admission()[0],
+            validate_release_artifact_admission_v2,
+            lambda value: value["provider"]["policy"].__setitem__("attestation_limit", True),
+        ),
+        (
+            lambda: _artifact_admission()[0],
+            validate_release_artifact_admission_v2,
+            lambda value: value["provider"]["policy"].__setitem__(
+                "deny_self_hosted_runners", 1
+            ),
+        ),
+        (
+            lambda: _artifact_admission()[0],
+            validate_release_artifact_admission_v2,
+            lambda value: (
+                value["artifact"].__setitem__("size", 1),
+                value["provider"]["artifact"].__setitem__("size", True),
+            ),
+        ),
+        (
+            lambda: _artifact_admission()[0],
+            validate_release_artifact_admission_v2,
+            lambda value: (
+                value["artifact"].__setitem__("size", True),
+                value["provider"]["artifact"].__setitem__("size", True),
+            ),
+        ),
+    ],
+)
+def test_boolean_integer_type_confusion_is_rejected(
+    factory: Any, validator: Any, mutator: Any
+) -> None:
+    value = factory()
+    mutator(value)
+    with pytest.raises(MaintenanceBindingError):
+        validator(value)
+
+
+def test_trusted_material_collisions_overlap_and_finalizer_omission_fail_closed() -> None:
+    context = _context()
+    context["trusted_inputs"]["policy"]["path"] = context["trusted_inputs"][
+        "control_tools"
+    ][0]["path"]
+    with pytest.raises(MaintenanceBindingError, match="collide or overlap"):
+        validate_release_source_context_v2(context)
+
+    context = _context()
+    context["trusted_inputs"]["verifier_pack"]["root_path"] = ".github"
+    with pytest.raises(MaintenanceBindingError, match="collides or overlaps"):
+        validate_release_source_context_v2(context)
+
+    context = _context()
+    finalizer = next(
+        item
+        for item in context["trusted_inputs"]["control_tools"]
+        if item["path"] == context["source"]["trusted_workflow_path"]
+    )
+    finalizer["blob_sha"] = "f" * 40
+    with pytest.raises(MaintenanceBindingError, match="trusted-main material"):
+        validate_release_source_context_v2(context)
+
+
+def _maintenance_schema_validator(name: str) -> Draft202012Validator:
+    schema_dir = Path(__file__).parents[1] / "evoom_guard" / "schemas"
+    names = [
+        "release-source-2.schema.json",
+        "release-source-context-2.schema.json",
+        "release-source-git-bindings-2.schema.json",
+        "release-source-handoff-2.schema.json",
+        "release-source-producer-receipt-2.schema.json",
+        "release-source-finalizer-2.schema.json",
+        "release-source-admission-3.schema.json",
+        "release-artifact-admission-2.schema.json",
+    ]
+    schemas = {
+        schema_name: json.loads((schema_dir / schema_name).read_text(encoding="utf-8"))
+        for schema_name in names
+    }
+    registry = Registry().with_resources(
+        (schema["$id"], Resource.from_contents(schema, default_specification=DRAFT202012))
+        for schema in schemas.values()
+    )
+    return Draft202012Validator(schemas[name], registry=registry)
+
+
+def test_runtime_and_schema_reject_the_same_scalar_types_and_bounds() -> None:
+    long_workflow = ".github/workflows/" + "a" * 235 + ".yml"
+    assert len(long_workflow) == 257
+
+    source_long_workflow = _source()
+    source_long_workflow["trusted_workflow_path"] = long_workflow
+    source_dot_ref = _source()
+    source_dot_ref["maintenance_base_ref"] = "refs/heads/maintenance/.hidden"
+    source_lock_ref = _source()
+    source_lock_ref["maintenance_base_ref"] = "refs/heads/maintenance/release.lock"
+    context_bool_run = _context()
+    context_bool_run["evaluation"]["run_attempt"] = True
+    context_long_material = _context()
+    context_long_material["trusted_inputs"]["policy"]["path"] = "a" * 513
+    receipt_bool_size = _receipt()
+    receipt_bool_size["record"]["size"] = True
+    admission_bool_count = _source_admission()
+    admission_bool_count["provider"]["verified_attestation_count"] = True
+    artifact_bool_size, _source_bytes = _artifact_admission()
+    artifact_bool_size["artifact"]["size"] = True
+    artifact_bool_size["provider"]["artifact"]["size"] = True
+
+    cases = [
+        ("release-source-2.schema.json", source_long_workflow, validate_release_source_v2),
+        ("release-source-2.schema.json", source_dot_ref, validate_release_source_v2),
+        ("release-source-2.schema.json", source_lock_ref, validate_release_source_v2),
+        (
+            "release-source-context-2.schema.json",
+            context_bool_run,
+            validate_release_source_context_v2,
+        ),
+        (
+            "release-source-context-2.schema.json",
+            context_long_material,
+            validate_release_source_context_v2,
+        ),
+        (
+            "release-source-producer-receipt-2.schema.json",
+            receipt_bool_size,
+            validate_release_source_producer_receipt_v2,
+        ),
+        (
+            "release-source-admission-3.schema.json",
+            admission_bool_count,
+            validate_release_source_admission_v3,
+        ),
+        (
+            "release-artifact-admission-2.schema.json",
+            artifact_bool_size,
+            validate_release_artifact_admission_v2,
+        ),
+    ]
+    for schema_name, value, runtime_validator in cases:
+        assert not _maintenance_schema_validator(schema_name).is_valid(value)
+        with pytest.raises(MaintenanceBindingError):
+            runtime_validator(value)
 
 
 def test_cross_version_and_cross_domain_replay_is_rejected() -> None:

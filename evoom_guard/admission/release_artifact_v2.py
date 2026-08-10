@@ -22,12 +22,13 @@ from typing import Any
 
 from evoom_guard.admission.release_source_v3 import (
     RELEASE_SOURCE_ADMISSION_FORMAT_V3,
-    ReleaseSourceAdmissionV3Error,
     validate_release_source_admission_v3,
 )
 from evoom_guard.maintenance_bindings import (
+    MAX_WORKFLOW_PATH_LENGTH,
     MaintenanceBindingError,
     canonical_validated_bytes,
+    require_canonical_bytes,
     require_trusted_workflow_material_v2,
     validate_run,
     validate_trusted_inputs_v2,
@@ -41,7 +42,7 @@ RELEASE_ARTIFACT_ADMISSION_SIGNATURE_DOMAIN_V2 = (
 )
 
 RELEASE_ARTIFACT_ADMISSION_SIGNATURE_PATH_V2 = "admission.sig"
-RELEASE_ARTIFACT_SOURCE_ADMISSION_PATH_V2 = "materials/release-source-admission-v3.rsae"
+RELEASE_ARTIFACT_SOURCE_ADMISSION_PATH_V2 = "materials/release-source-admission-v3.json"
 RELEASE_ARTIFACT_GITHUB_RECEIPT_PATH_V2 = "provider/github-attestation-receipt.json"
 RELEASE_ARTIFACT_GITHUB_OUTPUT_PATH_V2 = "provider/github-attestation-output.json"
 
@@ -79,6 +80,8 @@ _SOURCE_KEYS = {
     "repository_id",
     "trusted_workflow_sha",
     "trusted_workflow_tree",
+    "trusted_workflow_path",
+    "trusted_workflow_blob_sha",
     "maintenance_base_sha",
     "maintenance_base_tree",
     "target_source_sha",
@@ -86,6 +89,9 @@ _SOURCE_KEYS = {
     "trusted_inputs",
     "admission_run_id",
     "admission_run_attempt",
+    "admission_workflow_id",
+    "admission_workflow_path",
+    "admission_workflow_blob_sha",
 }
 _DESCRIPTOR_KEYS = {"path", "sha256", "size"}
 _ARTIFACT_KEYS = {"kind", "sha256", "size"}
@@ -166,8 +172,15 @@ def _matched(value: object, pattern: re.Pattern[str], label: str) -> str:
     return value
 
 
+def _workflow_path(value: object, label: str) -> str:
+    path = _matched(value, _WORKFLOW_PATH, label)
+    if len(path) > MAX_WORKFLOW_PATH_LENGTH:
+        raise ReleaseArtifactAdmissionV2Error(f"{label} exceeds the supported path length")
+    return path
+
+
 def _size(value: object, *, label: str, minimum: int, maximum: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+    if type(value) is not int or not minimum <= value <= maximum:
         raise ReleaseArtifactAdmissionV2Error(f"{label} is outside the supported range")
     return value
 
@@ -213,6 +226,14 @@ def _release_source(value: object) -> dict[str, Any]:
         "trusted_workflow_tree": _matched(
             source["trusted_workflow_tree"], _GIT_SHA, "release_source.trusted_workflow_tree"
         ),
+        "trusted_workflow_path": _workflow_path(
+            source["trusted_workflow_path"], "release_source.trusted_workflow_path"
+        ),
+        "trusted_workflow_blob_sha": _matched(
+            source["trusted_workflow_blob_sha"],
+            _GIT_SHA,
+            "release_source.trusted_workflow_blob_sha",
+        ),
         "maintenance_base_sha": _matched(
             source["maintenance_base_sha"], _GIT_SHA, "release_source.maintenance_base_sha"
         ),
@@ -229,14 +250,38 @@ def _release_source(value: object) -> dict[str, Any]:
             source["admission_run_id"], _NUMERIC_ID, "release_source.admission_run_id"
         ),
         "admission_run_attempt": attempt,
+        "admission_workflow_id": _matched(
+            source["admission_workflow_id"], _NUMERIC_ID, "release_source.admission_workflow_id"
+        ),
+        "admission_workflow_path": _workflow_path(
+            source["admission_workflow_path"], "release_source.admission_workflow_path"
+        ),
+        "admission_workflow_blob_sha": _matched(
+            source["admission_workflow_blob_sha"],
+            _GIT_SHA,
+            "release_source.admission_workflow_blob_sha",
+        ),
     }
     try:
         checked["trusted_inputs"] = validate_trusted_inputs_v2(
             _object(source["trusted_inputs"], "release_source.trusted_inputs"),
             source=checked,
         )
+        require_trusted_workflow_material_v2(
+            workflow_path=checked["admission_workflow_path"],
+            workflow_blob_sha=checked["admission_workflow_blob_sha"],
+            trusted_inputs=checked["trusted_inputs"],
+            label="source_admitter",
+        )
     except MaintenanceBindingError as exc:
         raise ReleaseArtifactAdmissionV2Error(str(exc)) from exc
+    if (
+        checked["trusted_workflow_path"] == checked["admission_workflow_path"]
+        or checked["trusted_workflow_blob_sha"] == checked["admission_workflow_blob_sha"]
+    ):
+        raise ReleaseArtifactAdmissionV2Error(
+            "trusted finalizer and source-admitter workflow roles must be distinct"
+        )
     return checked
 
 
@@ -272,7 +317,7 @@ def _actor(
             actor["workflow_repository_id"], _NUMERIC_ID, f"{label}.repository_id"
         ),
         "workflow_id": _matched(actor["workflow_id"], _NUMERIC_ID, f"{label}.workflow_id"),
-        "workflow_path": _matched(actor["workflow_path"], _WORKFLOW_PATH, f"{label}.workflow_path"),
+        "workflow_path": _workflow_path(actor["workflow_path"], f"{label}.workflow_path"),
         "workflow_blob_sha": _matched(
             actor["workflow_blob_sha"], _GIT_SHA, f"{label}.workflow_blob_sha"
         ),
@@ -329,11 +374,22 @@ def _provider(
     _exact(provider, _PROVIDER_KEYS, "release artifact V2 provider")
     if (
         provider["name"] != "github-artifact-attestations"
+        or type(provider["verified_attestation_count"]) is not int
         or provider["verified_attestation_count"] != 1
     ):
         raise ReleaseArtifactAdmissionV2Error("artifact provider identity/count is not exact")
     provider_artifact = _object(provider["artifact"], "provider.artifact")
-    if set(provider_artifact) != {"sha256", "size"} or provider_artifact != {
+    _exact(provider_artifact, {"sha256", "size"}, "provider.artifact")
+    checked_provider_artifact = {
+        "sha256": _matched(provider_artifact["sha256"], _SHA256, "provider.artifact.sha256"),
+        "size": _size(
+            provider_artifact["size"],
+            label="provider.artifact.size",
+            minimum=0,
+            maximum=MAX_ARTIFACT_BYTES,
+        ),
+    }
+    if checked_provider_artifact != {
         "sha256": artifact["sha256"],
         "size": artifact["size"],
     }:
@@ -342,6 +398,29 @@ def _provider(
         )
     policy = _object(provider["policy"], "provider.policy")
     _exact(policy, _POLICY_KEYS, "provider.policy")
+    checked_policy = {
+        "repository": _matched(policy["repository"], _REPOSITORY, "provider.policy.repository"),
+        "signer_workflow": policy["signer_workflow"],
+        "signer_digest": _matched(
+            policy["signer_digest"], _GIT_SHA, "provider.policy.signer_digest"
+        ),
+        "source_ref": policy["source_ref"],
+        "source_digest": _matched(
+            policy["source_digest"], _GIT_SHA, "provider.policy.source_digest"
+        ),
+        "cert_oidc_issuer": policy["cert_oidc_issuer"],
+        "predicate_type": policy["predicate_type"],
+        "deny_self_hosted_runners": policy["deny_self_hosted_runners"],
+        "attestation_limit": policy["attestation_limit"],
+    }
+    if type(checked_policy["deny_self_hosted_runners"]) is not bool:
+        raise ReleaseArtifactAdmissionV2Error(
+            "provider.policy.deny_self_hosted_runners must be a boolean"
+        )
+    if type(checked_policy["attestation_limit"]) is not int:
+        raise ReleaseArtifactAdmissionV2Error(
+            "provider.policy.attestation_limit must be an integer"
+        )
     expected_policy = {
         "repository": source["repository"],
         "signer_workflow": f"{source['repository']}/{builder['workflow_path']}",
@@ -353,14 +432,14 @@ def _provider(
         "deny_self_hosted_runners": True,
         "attestation_limit": 1,
     }
-    if policy != expected_policy:
+    if checked_policy != expected_policy:
         raise ReleaseArtifactAdmissionV2Error(
             "artifact provider policy is not bound to the trusted builder workflow commit"
         )
     return {
         "name": "github-artifact-attestations",
-        "artifact": dict(provider_artifact),
-        "policy": dict(policy),
+        "artifact": checked_provider_artifact,
+        "policy": checked_policy,
         "verified_attestation_count": 1,
         "receipt": _descriptor(
             provider["receipt"],
@@ -474,9 +553,26 @@ def validate_release_artifact_admission_v2(value: Mapping[str, Any]) -> dict[str
             )
     except MaintenanceBindingError as exc:
         raise ReleaseArtifactAdmissionV2Error(str(exc)) from exc
-    if admitter["workflow_path"] == builder["workflow_path"]:
+    workflow_ids = {
+        source["admission_workflow_id"],
+        builder["workflow_id"],
+        admitter["workflow_id"],
+    }
+    workflow_paths = {
+        source["trusted_workflow_path"],
+        source["admission_workflow_path"],
+        builder["workflow_path"],
+        admitter["workflow_path"],
+    }
+    workflow_blobs = {
+        source["trusted_workflow_blob_sha"],
+        source["admission_workflow_blob_sha"],
+        builder["workflow_blob_sha"],
+        admitter["workflow_blob_sha"],
+    }
+    if len(workflow_ids) != 3 or len(workflow_paths) != 4 or len(workflow_blobs) != 4:
         raise ReleaseArtifactAdmissionV2Error(
-            "builder and admitter workflows must be role-separated"
+            "finalizer, source-admitter, builder, and artifact-admitter roles must be distinct"
         )
     artifact = _artifact(manifest["artifact"])
     replay = _object(manifest["replay"], "release artifact V2 replay")
@@ -495,6 +591,10 @@ def validate_release_artifact_admission_v2(value: Mapping[str, Any]) -> dict[str
     }
     if checked_replay != expected_replay:
         raise ReleaseArtifactAdmissionV2Error("release artifact V2 replay chain is inconsistent")
+    if len({run["run_id"] for run in expected_replay.values()}) != len(expected_replay):
+        raise ReleaseArtifactAdmissionV2Error(
+            "source-admitter, builder, and artifact-admitter run IDs must be pairwise distinct"
+        )
     separation = _separation(manifest["key_separation"])
     return {
         "format": RELEASE_ARTIFACT_ADMISSION_FORMAT_V2,
@@ -519,20 +619,35 @@ def bind_release_artifact_v2_to_source_admission(
     value: Mapping[str, Any],
     source_admission_value: Mapping[str, Any],
     *,
-    source_bundle_bytes: bytes,
+    source_admission_bytes: bytes,
 ) -> dict[str, Any]:
     """Require the artifact manifest to bind exact V3 source-admission bytes."""
 
     manifest = validate_release_artifact_admission_v2(value)
+    if type(source_admission_bytes) is not bytes:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 source bytes must be immutable bytes"
+        )
     try:
-        source_admission = validate_release_source_admission_v3(source_admission_value)
-    except ReleaseSourceAdmissionV3Error as exc:
+        source_admission_from_value = validate_release_source_admission_v3(
+            source_admission_value
+        )
+        source_admission = require_canonical_bytes(
+            source_admission_bytes,
+            validator=validate_release_source_admission_v3,
+            label="release-source admission V3 manifest",
+        )
+    except MaintenanceBindingError as exc:
         raise ReleaseArtifactAdmissionV2Error(str(exc)) from exc
+    if source_admission != source_admission_from_value:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release-source admission mapping does not match its exact canonical bytes"
+        )
     summary = manifest["release_source"]
     descriptor = {
         "path": RELEASE_ARTIFACT_SOURCE_ADMISSION_PATH_V2,
-        "sha256": hashlib.sha256(source_bundle_bytes).hexdigest(),
-        "size": len(source_bundle_bytes),
+        "sha256": hashlib.sha256(source_admission_bytes).hexdigest(),
+        "size": len(source_admission_bytes),
     }
     if summary["bundle"] != descriptor:
         raise ReleaseArtifactAdmissionV2Error(
@@ -548,6 +663,8 @@ def bind_release_artifact_v2_to_source_admission(
         "repository_id": source["repository_id"],
         "trusted_workflow_sha": source["trusted_workflow_sha"],
         "trusted_workflow_tree": source["trusted_workflow_tree"],
+        "trusted_workflow_path": source["trusted_workflow_path"],
+        "trusted_workflow_blob_sha": source["trusted_workflow_blob_sha"],
         "maintenance_base_sha": source["maintenance_base_sha"],
         "maintenance_base_tree": source["maintenance_base_tree"],
         "target_source_sha": source["target_source_sha"],
@@ -555,10 +672,57 @@ def bind_release_artifact_v2_to_source_admission(
         "trusted_inputs": source_admission["context"]["trusted_inputs"],
         "admission_run_id": source_admission["admitter"]["workflow_run_id"],
         "admission_run_attempt": source_admission["admitter"]["workflow_run_attempt"],
+        "admission_workflow_id": source_admission["admitter"]["workflow_id"],
+        "admission_workflow_path": source_admission["admitter"]["workflow_path"],
+        "admission_workflow_blob_sha": source_admission["admitter"]["workflow_blob_sha"],
     }
     if summary != expected:
         raise ReleaseArtifactAdmissionV2Error(
             "release artifact V2 source summary does not match Release Source Admission V3"
+        )
+    source_runs = (
+        source_admission["upstream"],
+        {
+            "run_id": source_admission["producer"]["workflow_run_id"],
+            "run_attempt": source_admission["producer"]["workflow_run_attempt"],
+        },
+        {
+            "run_id": source_admission["admitter"]["workflow_run_id"],
+            "run_attempt": source_admission["admitter"]["workflow_run_attempt"],
+        },
+        {
+            "run_id": manifest["builder"]["workflow_run_id"],
+            "run_attempt": manifest["builder"]["workflow_run_attempt"],
+        },
+        {
+            "run_id": manifest["admitter"]["workflow_run_id"],
+            "run_attempt": manifest["admitter"]["workflow_run_attempt"],
+        },
+    )
+    if len({run["run_id"] for run in source_runs}) != len(source_runs):
+        raise ReleaseArtifactAdmissionV2Error(
+            "the five-stage maintenance chain reuses a workflow run ID"
+        )
+    actors = (
+        source_admission["producer"],
+        source_admission["admitter"],
+        manifest["builder"],
+        manifest["admitter"],
+    )
+    if len({actor["workflow_id"] for actor in actors}) != len(actors):
+        raise ReleaseArtifactAdmissionV2Error(
+            "the maintenance chain collapses distinct workflow roles onto one workflow ID"
+        )
+    workflow_paths = [source["trusted_workflow_path"], *[a["workflow_path"] for a in actors]]
+    workflow_blobs = [
+        source["trusted_workflow_blob_sha"],
+        *[a["workflow_blob_sha"] for a in actors],
+    ]
+    if len(set(workflow_paths)) != len(workflow_paths) or len(set(workflow_blobs)) != len(
+        workflow_blobs
+    ):
+        raise ReleaseArtifactAdmissionV2Error(
+            "the maintenance chain collapses distinct workflow path/blob roles"
         )
     return manifest
 

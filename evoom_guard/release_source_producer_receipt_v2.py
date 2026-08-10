@@ -20,6 +20,7 @@ from typing import Any
 from evoom_guard.maintenance_bindings import (
     MAX_HANDOFF_BYTES,
     MAX_VERDICT_BYTES,
+    MAX_WORKFLOW_PATH_LENGTH,
     MaintenanceBindingError,
     canonical_validated_bytes,
     require_trusted_workflow_material_v2,
@@ -97,11 +98,20 @@ def _matched(value: object, pattern: re.Pattern[str], label: str) -> str:
     return value
 
 
+def _workflow_path(value: object, label: str) -> str:
+    path = _matched(value, _WORKFLOW_PATH, label)
+    if len(path) > MAX_WORKFLOW_PATH_LENGTH:
+        raise ReleaseSourceProducerReceiptV2Error(
+            f"{label} exceeds the supported path length"
+        )
+    return path
+
+
 def _descriptor(value: object, *, label: str, maximum_size: int) -> dict[str, Any]:
     descriptor = _object(value, label)
     _exact(descriptor, _DESCRIPTOR_KEYS, label)
     size = descriptor["size"]
-    if isinstance(size, bool) or not isinstance(size, int) or not 1 <= size <= maximum_size:
+    if type(size) is not int or not 1 <= size <= maximum_size:
         raise ReleaseSourceProducerReceiptV2Error(f"{label}.size is outside the supported range")
     return {
         "sha256": _matched(descriptor["sha256"], _SHA256, f"{label}.sha256"),
@@ -139,7 +149,7 @@ def _execution(value: object) -> dict[str, Any]:
     for key, wanted in expected.items():
         if (
             execution[key] != wanted
-            or isinstance(execution[key], bool)
+            or type(execution[key]) is not int
             and key == "guard_exit_code"
         ):
             raise ReleaseSourceProducerReceiptV2Error(
@@ -164,7 +174,7 @@ def validate_release_source_producer_v2(
         (attempt, "producer.workflow_run_attempt"),
         (upstream_attempt, "producer.upstream_run_attempt"),
     ):
-        if isinstance(raw, bool) or not isinstance(raw, int) or not 1 <= raw <= 2_147_483_647:
+        if type(raw) is not int or not 1 <= raw <= 2_147_483_647:
             raise ReleaseSourceProducerReceiptV2Error(f"{label} is outside the supported range")
     checked = {
         "workflow_repository": _matched(
@@ -174,9 +184,7 @@ def validate_release_source_producer_v2(
             producer["workflow_repository_id"], _NUMERIC_ID, "producer.workflow_repository_id"
         ),
         "workflow_id": _matched(producer["workflow_id"], _NUMERIC_ID, "producer.workflow_id"),
-        "workflow_path": _matched(
-            producer["workflow_path"], _WORKFLOW_PATH, "producer.workflow_path"
-        ),
+        "workflow_path": _workflow_path(producer["workflow_path"], "producer.workflow_path"),
         "workflow_blob_sha": _matched(
             producer["workflow_blob_sha"], _GIT_SHA, "producer.workflow_blob_sha"
         ),
@@ -256,6 +264,17 @@ def validate_release_source_producer_receipt_v2(
         )
     except MaintenanceBindingError as exc:
         raise ReleaseSourceProducerReceiptV2Error(str(exc)) from exc
+    if upstream["run_id"] == producer["workflow_run_id"]:
+        raise ReleaseSourceProducerReceiptV2Error(
+            "evaluation and producer run IDs must be distinct"
+        )
+    if (
+        source["trusted_workflow_path"] == producer["workflow_path"]
+        or source["trusted_workflow_blob_sha"] == producer["workflow_blob_sha"]
+    ):
+        raise ReleaseSourceProducerReceiptV2Error(
+            "trusted finalizer and producer workflow roles must be distinct"
+        )
     return {
         "format": RELEASE_SOURCE_PRODUCER_RECEIPT_FORMAT_V2,
         "subject": source,
