@@ -511,6 +511,24 @@ def _authentication(value: object, *, prohibited: set[str]) -> dict[str, str]:
     return checked
 
 
+def _require_exact_source_key_registry(
+    artifact_separation: Mapping[str, str],
+    source_admission: Mapping[str, Any],
+) -> None:
+    source_admission_key = source_admission["authentication"]["key_id"]
+    if artifact_separation["release_source_admission_v3"] != source_admission_key:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 source-admission key registry does not match exact source bytes"
+        )
+    inherited_separation = {
+        key: artifact_separation[key] for key in source_admission["key_separation"]
+    }
+    if inherited_separation != source_admission["key_separation"]:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 inherited key registry does not match exact source bytes"
+        )
+
+
 def validate_release_artifact_admission_v2(value: Mapping[str, Any]) -> dict[str, Any]:
     manifest = _object(value, "release artifact admission V2")
     _exact(manifest, _MANIFEST_KEYS, "release artifact admission V2")
@@ -652,19 +670,7 @@ def bind_release_artifact_v2_to_source_admission(
         raise ReleaseArtifactAdmissionV2Error(
             "release-source admission mapping does not match its exact canonical bytes"
         )
-    artifact_separation = manifest["key_separation"]
-    source_admission_key = source_admission["authentication"]["key_id"]
-    if artifact_separation["release_source_admission_v3"] != source_admission_key:
-        raise ReleaseArtifactAdmissionV2Error(
-            "release artifact V2 source-admission key registry does not match exact source bytes"
-        )
-    inherited_separation = {
-        key: artifact_separation[key] for key in source_admission["key_separation"]
-    }
-    if inherited_separation != source_admission["key_separation"]:
-        raise ReleaseArtifactAdmissionV2Error(
-            "release artifact V2 inherited key registry does not match exact source bytes"
-        )
+    _require_exact_source_key_registry(manifest["key_separation"], source_admission)
     summary = manifest["release_source"]
     descriptor = {
         "path": RELEASE_ARTIFACT_SOURCE_ADMISSION_PATH_V2,
