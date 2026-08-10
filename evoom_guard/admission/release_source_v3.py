@@ -23,14 +23,13 @@ from typing import Any
 from evoom_guard.maintenance_bindings import (
     MaintenanceBindingError,
     canonical_validated_bytes,
+    require_canonical_bytes,
     require_trusted_workflow_material_v2,
     validate_release_source_context_v2,
     validate_release_source_v2,
     validate_run,
 )
 from evoom_guard.release_source_producer_receipt_v2 import (
-    ReleaseSourceProducerReceiptV2Error,
-    canonical_release_source_producer_receipt_v2_bytes,
     validate_release_source_producer_receipt_v2,
     validate_release_source_producer_v2,
 )
@@ -426,20 +425,40 @@ def validate_release_source_admission_v3(
 
 
 def bind_release_source_admission_v3_to_receipt(
-    value: Mapping[str, Any], receipt_value: Mapping[str, Any]
+    value: Mapping[str, Any],
+    receipt_value: Mapping[str, Any],
+    *,
+    receipt_bytes: bytes,
 ) -> dict[str, Any]:
-    """Require a manifest to bind the exact canonical V2 receipt and identities."""
+    """Require a manifest to bind exact canonical V2 receipt bytes and identities."""
 
     manifest = validate_release_source_admission_v3(value)
+    if type(receipt_bytes) is not bytes:
+        raise ReleaseSourceAdmissionV3Error(
+            "release-source admission V3 receipt bytes must be immutable bytes"
+        )
+    receipt_size = len(receipt_bytes)
+    if receipt_size < 1 or receipt_size > MAX_PRODUCER_RECEIPT_BYTES_V2:
+        raise ReleaseSourceAdmissionV3Error(
+            "release-source admission V3 receipt bytes size is outside bounds"
+        )
     try:
-        receipt = validate_release_source_producer_receipt_v2(receipt_value)
-        receipt_bytes = canonical_release_source_producer_receipt_v2_bytes(receipt)
-    except ReleaseSourceProducerReceiptV2Error as exc:
+        receipt_from_value = validate_release_source_producer_receipt_v2(receipt_value)
+        receipt = require_canonical_bytes(
+            receipt_bytes,
+            validator=validate_release_source_producer_receipt_v2,
+            label="release-source producer receipt V2",
+        )
+    except MaintenanceBindingError as exc:
         raise ReleaseSourceAdmissionV3Error(str(exc)) from exc
+    if receipt != receipt_from_value:
+        raise ReleaseSourceAdmissionV3Error(
+            "producer receipt mapping does not match its exact canonical bytes"
+        )
     expected_descriptor = {
         "path": RELEASE_SOURCE_ADMISSION_PRODUCER_RECEIPT_PATH_V3,
         "sha256": hashlib.sha256(receipt_bytes).hexdigest(),
-        "size": len(receipt_bytes),
+        "size": receipt_size,
     }
     if manifest["producer_receipt"] != expected_descriptor:
         raise ReleaseSourceAdmissionV3Error(

@@ -50,6 +50,12 @@ retained evidence say so.
   ID, path, or blob; provider scalar types are exact; trusted materials cannot
   collide or overlap; the finalizer workflow must be an exact trusted-main
   control material; and runtime path/ref bounds are mirrored by schema tests.
+  Producer-receipt and source-admission binders now accept only bounded exact
+  canonical bytes and require those bytes to decode to the separately supplied
+  mapping before hashing descriptors. Packaged Draft 2020-12 schemas are
+  explicitly structural: the runtime canonical validators remain authoritative
+  for exact scalar types because standard schemas accept integral floats such
+  as `1.0` as integers.
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the

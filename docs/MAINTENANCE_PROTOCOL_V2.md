@@ -49,7 +49,9 @@ misrepresented as the source of trusted workflow bytes.
   Git/SHA-256 identities;
 - canonical JSON byte generation and unique signature messages;
 - byte-descriptor binding from source admission to the exact producer receipt,
-  and from artifact admission to exact canonical
+  where the caller must provide the bounded canonical receipt bytes and the
+  separately supplied mapping must decode from those exact bytes, and from
+  artifact admission to exact bounded canonical
   `materials/release-source-admission-v3.json` bytes. The latter must decode to
   the same validated mapping supplied by the caller; a detached signature is a
   separate capability and is not inferred from the JSON filename;
@@ -58,8 +60,8 @@ misrepresented as the source of trusted workflow bytes.
   source-to-artifact binding boundary;
 - distinct trusted workflow paths, blob identities, and workflow IDs for each
   visible control-plane role;
-- exact JSON scalar types for counters, limits, booleans, sizes, attempts, and
-  isolation IDs, with runtime/schema boundary tests;
+- exact runtime JSON scalar types for counters, limits, booleans, sizes,
+  attempts, and isolation IDs;
 - collision-free trusted material paths, non-overlapping verifier-pack roots,
   and mandatory membership of the trusted finalizer workflow path/blob in the
   trusted-main control-material inventory;
@@ -67,6 +69,17 @@ misrepresented as the source of trusted workflow bytes.
 - golden byte digests plus negative tests for role swaps, path/blob/tree
   mismatches, candidate-selected trusted inputs, wrong run attempts,
   cross-version/domain replay, and legacy V1 byte preservation.
+
+## Validation authority
+
+The runtime canonical-byte parser and closed-world validators are the security
+authority. The packaged Draft 2020-12 schemas are structural interoperability
+aids, not lexical or exact-Python-type proofs. In particular, standard JSON
+Schema considers a mathematically integral number such as `1.0` valid for the
+`integer` type after parsing, while the runtime rejects that float representation
+where an exact integer is required. Tests characterize this deliberate boundary
+across all 49 integer leaves in the golden contracts; they do not install a
+custom validator that would misrepresent standard external JSON Schema behavior.
 
 ## What remains deliberately absent
 

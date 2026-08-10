@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-producer-receipt-2.schema.json",
   "title": "EvoGuard separated maintenance producer receipt V2",
+  "$comment": "Standard Draft 2020-12 validation is structural and treats mathematically integral numbers such as 1.0 as integers; EvoGuard runtime canonical-byte validation is the security authority for exact scalar categories and encodings.",
   "type": "object",
   "required": ["format", "subject", "context", "upstream", "record", "handoff", "bootstrap", "execution", "producer"],
   "properties": {

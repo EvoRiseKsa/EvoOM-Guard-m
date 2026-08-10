@@ -628,6 +628,11 @@ def bind_release_artifact_v2_to_source_admission(
         raise ReleaseArtifactAdmissionV2Error(
             "release artifact V2 source bytes must be immutable bytes"
         )
+    source_admission_size = len(source_admission_bytes)
+    if source_admission_size < 1 or source_admission_size > MAX_SOURCE_ADMISSION_BYTES:
+        raise ReleaseArtifactAdmissionV2Error(
+            "release artifact V2 source bytes size is outside bounds"
+        )
     try:
         source_admission_from_value = validate_release_source_admission_v3(
             source_admission_value
@@ -647,7 +652,7 @@ def bind_release_artifact_v2_to_source_admission(
     descriptor = {
         "path": RELEASE_ARTIFACT_SOURCE_ADMISSION_PATH_V2,
         "sha256": hashlib.sha256(source_admission_bytes).hexdigest(),
-        "size": len(source_admission_bytes),
+        "size": source_admission_size,
     }
     if summary["bundle"] != descriptor:
         raise ReleaseArtifactAdmissionV2Error(

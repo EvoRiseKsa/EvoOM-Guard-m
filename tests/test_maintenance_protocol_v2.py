@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -14,8 +15,11 @@ from referencing.jsonschema import DRAFT202012
 from evoom_guard import release_source_finalizer as legacy_finalizer
 from evoom_guard import release_source_producer_receipt as legacy_receipt
 from evoom_guard.admission import release_artifact as legacy_artifact_admission
+from evoom_guard.admission import release_artifact_v2 as release_artifact_v2_module
 from evoom_guard.admission import release_source as legacy_source_admission
+from evoom_guard.admission import release_source_v3 as release_source_v3_module
 from evoom_guard.admission.release_artifact_v2 import (
+    MAX_SOURCE_ADMISSION_BYTES,
     RELEASE_ARTIFACT_ADMISSION_FORMAT_V2,
     RELEASE_ARTIFACT_ADMISSION_SIGNATURE_DOMAIN_V2,
     RELEASE_ARTIFACT_ADMISSION_SIGNATURE_PURPOSE_V2,
@@ -26,6 +30,7 @@ from evoom_guard.admission.release_artifact_v2 import (
     validate_release_artifact_admission_v2,
 )
 from evoom_guard.admission.release_source_v3 import (
+    MAX_PRODUCER_RECEIPT_BYTES_V2,
     RELEASE_SOURCE_ADMISSION_FORMAT_V3,
     RELEASE_SOURCE_ADMISSION_PRODUCER_RECEIPT_PATH_V3,
     RELEASE_SOURCE_ADMISSION_SIGNATURE_DOMAIN_V3,
@@ -522,7 +527,11 @@ def test_v2_schemas_accept_every_golden_contract() -> None:
 
 
 def test_source_admission_binds_exact_receipt_and_keeps_target_out_of_provider_source() -> None:
-    admission = bind_release_source_admission_v3_to_receipt(_source_admission(), _receipt())
+    receipt = _receipt()
+    receipt_bytes = canonical_release_source_producer_receipt_v2_bytes(receipt)
+    admission = bind_release_source_admission_v3_to_receipt(
+        _source_admission(), receipt, receipt_bytes=receipt_bytes
+    )
     policy = admission["provider"]["policy"]
     assert policy["source_digest"] == admission["source"]["trusted_workflow_sha"]
     assert policy["source_digest"] != admission["source"]["target_source_sha"]
@@ -597,7 +606,79 @@ def test_receipt_subject_target_and_receipt_bytes_cannot_be_substituted() -> Non
     changed_admission["producer_receipt"]["sha256"] = "0" * 64
     changed_admission["provider"]["artifact"]["sha256"] = "0" * 64
     with pytest.raises(ReleaseSourceAdmissionV3Error, match="canonical receipt bytes"):
-        bind_release_source_admission_v3_to_receipt(changed_admission, _receipt())
+        receipt = _receipt()
+        bind_release_source_admission_v3_to_receipt(
+            changed_admission,
+            receipt,
+            receipt_bytes=canonical_release_source_producer_receipt_v2_bytes(receipt),
+        )
+
+
+def test_source_admission_binding_rejects_noncanonical_and_mixed_receipt_bytes() -> None:
+    receipt = _receipt()
+    canonical = canonical_release_source_producer_receipt_v2_bytes(receipt)
+    noncanonical = json.dumps(receipt, indent=2).encode("utf-8")
+    assert (len(canonical), len(noncanonical)) == (4701, 5645)
+
+    with pytest.raises(ReleaseSourceAdmissionV3Error, match="not canonical JSON"):
+        bind_release_source_admission_v3_to_receipt(
+            _source_admission(), receipt, receipt_bytes=noncanonical
+        )
+
+    other_receipt = copy.deepcopy(receipt)
+    other_receipt["record"]["sha256"] = "0" * 64
+    other_bytes = canonical_release_source_producer_receipt_v2_bytes(other_receipt)
+    with pytest.raises(ReleaseSourceAdmissionV3Error, match="mapping does not match"):
+        bind_release_source_admission_v3_to_receipt(
+            _source_admission(), receipt, receipt_bytes=other_bytes
+        )
+
+    with pytest.raises(ReleaseSourceAdmissionV3Error, match="immutable bytes"):
+        bind_release_source_admission_v3_to_receipt(
+            _source_admission(), receipt, receipt_bytes=bytearray(canonical)  # type: ignore[arg-type]
+        )
+
+
+def test_source_receipt_size_bound_precedes_parser_and_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admission = _source_admission()
+    receipt = _receipt()
+
+    def unexpected_work(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("receipt parsing or hashing ran before its byte-size bound")
+
+    monkeypatch.setattr(release_source_v3_module, "require_canonical_bytes", unexpected_work)
+    monkeypatch.setattr(release_source_v3_module.hashlib, "sha256", unexpected_work)
+
+    for invalid in (b"", bytes(MAX_PRODUCER_RECEIPT_BYTES_V2 + 1)):
+        with pytest.raises(ReleaseSourceAdmissionV3Error, match="size is outside bounds"):
+            bind_release_source_admission_v3_to_receipt(
+                admission, receipt, receipt_bytes=invalid
+            )
+
+
+def test_artifact_source_size_bound_precedes_parser_and_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact, _source_bytes = _artifact_admission()
+    source_admission = _source_admission()
+
+    def unexpected_work(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("source parsing or hashing ran before its byte-size bound")
+
+    monkeypatch.setattr(release_artifact_v2_module, "require_canonical_bytes", unexpected_work)
+    monkeypatch.setattr(release_artifact_v2_module.hashlib, "sha256", unexpected_work)
+
+    oversized = bytes(MAX_SOURCE_ADMISSION_BYTES + 1)
+    assert len(oversized) == 73_400_321
+    for invalid in (b"", oversized):
+        with pytest.raises(ReleaseArtifactAdmissionV2Error, match="size is outside bounds"):
+            bind_release_artifact_v2_to_source_admission(
+                artifact,
+                source_admission,
+                source_admission_bytes=invalid,
+            )
 
 
 def test_every_stage_workflow_path_and_blob_must_be_a_trusted_main_material() -> None:
@@ -820,7 +901,7 @@ def _maintenance_schema_validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(schemas[name], registry=registry)
 
 
-def test_runtime_and_schema_reject_the_same_scalar_types_and_bounds() -> None:
+def test_runtime_and_schema_share_representative_non_numeric_boundaries() -> None:
     long_workflow = ".github/workflows/" + "a" * 235 + ".yml"
     assert len(long_workflow) == 257
 
@@ -876,6 +957,110 @@ def test_runtime_and_schema_reject_the_same_scalar_types_and_bounds() -> None:
         assert not _maintenance_schema_validator(schema_name).is_valid(value)
         with pytest.raises(MaintenanceBindingError):
             runtime_validator(value)
+
+
+def _integer_leaf_paths(
+    value: Any, prefix: tuple[str | int, ...] = ()
+) -> list[tuple[tuple[str | int, ...], int]]:
+    if type(value) is int:
+        return [(prefix, value)]
+    if isinstance(value, dict):
+        return [
+            item
+            for key, child in value.items()
+            for item in _integer_leaf_paths(child, (*prefix, key))
+        ]
+    if isinstance(value, list):
+        return [
+            item
+            for index, child in enumerate(value)
+            for item in _integer_leaf_paths(child, (*prefix, index))
+        ]
+    return []
+
+
+def _replace_path(value: Any, path: tuple[str | int, ...], replacement: Any) -> None:
+    cursor = value
+    for component in path[:-1]:
+        cursor = cursor[component]
+    cursor[path[-1]] = replacement
+
+
+def test_draft_2020_12_integral_float_gap_is_explicit_for_all_49_integer_leaves() -> None:
+    artifact, _source_bytes = _artifact_admission()
+    contracts: list[
+        tuple[
+            str,
+            dict[str, Any],
+            Callable[[Mapping[str, Any]], dict[str, Any]],
+        ]
+    ] = [
+        ("release-source-2.schema.json", _source(), validate_release_source_v2),
+        (
+            "release-source-context-2.schema.json",
+            _context(),
+            validate_release_source_context_v2,
+        ),
+        (
+            "release-source-git-bindings-2.schema.json",
+            _bindings(),
+            validate_release_source_bindings_v2,
+        ),
+        (
+            "release-source-handoff-2.schema.json",
+            _handoff(),
+            validate_release_source_handoff_v2,
+        ),
+        (
+            "release-source-producer-receipt-2.schema.json",
+            _receipt(),
+            validate_release_source_producer_receipt_v2,
+        ),
+        (
+            "release-source-finalizer-2.schema.json",
+            _finalizer(),
+            validate_release_source_finalizer_v2,
+        ),
+        (
+            "release-source-admission-3.schema.json",
+            _source_admission(),
+            validate_release_source_admission_v3,
+        ),
+        (
+            "release-artifact-admission-2.schema.json",
+            artifact,
+            validate_release_artifact_admission_v2,
+        ),
+    ]
+
+    characterized = 0
+    for schema_name, value, runtime_validator in contracts:
+        schema_validator = _maintenance_schema_validator(schema_name)
+        for path, integer_value in _integer_leaf_paths(value):
+            mutated = copy.deepcopy(value)
+            _replace_path(mutated, path, float(integer_value))
+            assert schema_validator.is_valid(mutated), (schema_name, path)
+            with pytest.raises(MaintenanceBindingError):
+                runtime_validator(mutated)
+            characterized += 1
+
+    assert characterized == 49
+
+
+def test_runtime_canonical_parser_rejects_integral_float_lexeme() -> None:
+    context = _context()
+    context["evaluation"]["run_attempt"] = 1.0
+    assert _maintenance_schema_validator("release-source-context-2.schema.json").is_valid(
+        context
+    )
+    encoded = canonical_json_bytes(context)
+    assert b'"run_attempt":1.0' in encoded
+    with pytest.raises(MaintenanceBindingError):
+        require_canonical_bytes(
+            encoded,
+            validator=validate_release_source_context_v2,
+            label="release-source context V2",
+        )
 
 
 def test_cross_version_and_cross_domain_replay_is_rejected() -> None:
