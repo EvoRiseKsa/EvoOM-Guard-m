@@ -274,11 +274,6 @@
     },
     {
       "path": "evoom_guard/record_verifier.py",
-      "symbol": "_baseline_type_errors",
-      "max_complexity": 24
-    },
-    {
-      "path": "evoom_guard/record_verifier.py",
       "symbol": "_check_assurance_semantics",
       "max_complexity": 12
     },

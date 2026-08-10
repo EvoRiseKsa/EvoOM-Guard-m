@@ -125,6 +125,17 @@ retained evidence say so.
   percentage calculation. The current source C901 inventory falls from 94 to
   93; schemas, canonical bytes, verdict authority, and I/O behavior are
   unchanged.
+- Extracted baseline producer-shape validation into a separate stdlib-only,
+  verifier-owned projection. The public facade keeps its historical list
+  return, `baseline.shape` check identity and ordering, downstream policy and
+  repair-effect semantics, and all verdict authority. Pre-extraction ordered
+  traces, mapping lookup and exception precedence, four public-report digests,
+  20,000 deterministic generated cases, and eight focused mutants bind exact
+  producer keys, unsupported-mode null evidence, count/verdict truth tables,
+  repair-effect states, setup-fidelity coupling, and canonical changed paths.
+  Measured `_baseline_type_errors` complexity falls from 24 to 1, no extracted
+  helper exceeds 7, and the current source C901 inventory falls from 93 to 92.
+  Schemas, canonical bytes, runtime effects, and efficacy claims are unchanged.
 - Made both newly extracted callable snapshots structurally immutable with
   slotted frozen dataclasses, and replaced the release-source snapshot's
   ellipsis-based callable annotations with exact Protocol signatures. Focused

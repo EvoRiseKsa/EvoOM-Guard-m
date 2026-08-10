@@ -42,6 +42,128 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="record-baseline-non-string-key-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            "    if any(not isinstance(key, str) for key in baseline):\n"
+            '        return ("all baseline keys must be strings",)\n'
+        ),
+        after=(
+            "    if False and any(not isinstance(key, str) for key in baseline):\n"
+            '        return ("all baseline keys must be strings",)\n'
+        ),
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_non_string_keys_fail_closed_before_value_validation"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-producer-key-set-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            "    if not _BASELINE_KEYS <= keys or not keys <= "
+            "_BASELINE_KEYS | _BASELINE_SETUP_KEYS:\n"
+        ),
+        after="    if False:\n",
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_required_and_unknown_producer_keys_cannot_be_bypassed"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-unsupported-shape-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            "        errors.extend(\n"
+            "            _unsupported_errors(\n"
+            "                keys,\n"
+            "                verdict=verdict,\n"
+            "                passed=passed,\n"
+            "                total=total,\n"
+            "                effect=effect,\n"
+            "            )\n"
+            "        )\n"
+        ),
+        after="        errors.extend(())\n",
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_unsupported_mode_requires_exact_keys_and_null_evidence"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-count-truth-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            "    errors.extend(_count_errors(verdict=verdict, "
+            "passed=passed, total=total))\n"
+        ),
+        after="    errors.extend(())\n",
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_counts_reject_boolean_negative_and_out_of_order_values"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-repair-effect-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            "    errors.extend(_repair_effect_errors(verdict=verdict, "
+            "effect=effect))\n"
+        ),
+        after="    errors.extend(())\n",
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_repair_effect_remains_bound_to_cleanliness"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-setup-enum-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            '        if setup not in ("unverified", "setup_failed", '
+            '"changed_judged_tree"):\n'
+        ),
+        after="        if False:\n",
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_setup_fidelity_requires_an_unclean_unmeasured_baseline"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-setup-cleanliness-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            '        if verdict != "NO_CLEAN_VERDICT" or effect != "unmeasured":\n'
+        ),
+        after="        if False:\n",
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_setup_fidelity_requires_an_unclean_unmeasured_baseline"
+        ),
+    ),
+    Mutation(
+        name="record-baseline-changed-path-canonicality-bypass",
+        path="evoom_guard/verifiers/record_baseline_types.py",
+        before=(
+            "        if not (\n"
+            "            _is_string_list(changes)\n"
+            "            and bool(changes)\n"
+            "            and changes == sorted(set(changes))\n"
+            "        ):\n"
+        ),
+        after=(
+            "        if False and not (\n"
+            "            _is_string_list(changes)\n"
+            "            and bool(changes)\n"
+            "            and changes == sorted(set(changes))\n"
+            "        ):\n"
+        ),
+        test=(
+            "tests/test_record_baseline_types.py::"
+            "test_changed_tree_paths_are_nonempty_sorted_unique_strings"
+        ),
+    ),
+    Mutation(
         name="record-coverage-python-path-safety-bypass",
         path="evoom_guard/verifiers/record_coverage_types.py",
         before="    if not _coverage_path(path, python=True):\n",
