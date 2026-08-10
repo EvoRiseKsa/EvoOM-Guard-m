@@ -572,8 +572,20 @@ remain in their established facades.
   setup conflicts, timeout positivity, lowercase pack identity, required-pack
   coupling, and profile semantic re-verification. Measured
   `_policy_type_errors` complexity falls from 33 to 2; the largest extracted
-  helper is 7 and total C901 findings fall from 96 to 95. The owner has no I/O,
+  helper is 7 and total C901 findings fall from 95 to 94. The owner has no I/O,
   cleanup, process, hashing, report-mutation, or verdict authority.
+- The fourth Stage-11 pure-phase extraction moves diff-coverage producer-shape
+  validation into a stdlib-only verifier owner. The public facade preserves
+  its historical list projection, check ordering and messages, threshold and
+  policy semantics, and verdict authority. A pre-extraction case vector, four
+  public-report digests, 20,000 deterministic generated traces, input
+  immutability checks, and six focused mutants bind safe paths, positive
+  sorted-unique line arrays, executed/missed disjointness, per-file arithmetic,
+  exact percentage calculation, and the non-Python unmeasured-file boundary.
+  Measured `_diff_coverage_type_errors` complexity falls from 26 to 1; no
+  extracted helper exceeds 7 and the current C901 inventory falls from 94 to
+  93. This changes neither schema nor canonical bytes and adds no efficacy or
+  independent-validation claim.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction

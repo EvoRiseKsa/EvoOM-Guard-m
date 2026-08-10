@@ -115,6 +115,16 @@ retained evidence say so.
   bytes while `_nested_type_checks` falls from measured C901 complexity 52 to
   3. No extracted helper exceeds complexity 9, and the reviewed repository
   C901 inventory falls from 97 to 96.
+- Extracted diff-coverage producer-shape validation into a stdlib-only,
+  verifier-owned pure projection. The public record-verifier facade retains
+  report sequencing, policy semantics, messages, and its historical list
+  return while `_diff_coverage_type_errors` falls from measured C901
+  complexity 26 to 1. Pre-extraction ordered traces, four public-report
+  digests, 20,000 deterministic generated cases, and focused mutations bind
+  path safety, positive line sets, non-overlap, per-file totals, and exact
+  percentage calculation. The current source C901 inventory falls from 94 to
+  93; schemas, canonical bytes, verdict authority, and I/O behavior are
+  unchanged.
 - Made both newly extracted callable snapshots structurally immutable with
   slotted frozen dataclasses, and replaced the release-source snapshot's
   ellipsis-based callable annotations with exact Protocol signatures. Focused

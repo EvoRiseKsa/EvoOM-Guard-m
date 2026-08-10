@@ -25,6 +25,9 @@ from evoom_guard.verifiers.junit_oracle import (
     JUNIT_REPORT_SET_DIGEST_FORMAT,
     JUNIT_XML_DIGEST_FORMAT,
 )
+from evoom_guard.verifiers.record_coverage_types import (
+    project_diff_coverage_type_errors as _project_diff_coverage_type_errors,
+)
 from evoom_guard.verifiers.record_isolation import (
     check_isolation as _check_isolation,
 )
@@ -88,21 +91,6 @@ _REPORT_INTEGRITY_RANK = {
     "external_process_isolated": 1,
 }
 _ISOLATION_RANK = {"not_run": -1, "subprocess": 0, "docker": 1, "gvisor": 2}
-_MEASURED_COVERAGE_KEYS = frozenset(
-    {
-        "measured",
-        "percent",
-        "executed",
-        "total",
-        "files",
-        "unmeasured_files",
-        "caveat",
-    }
-)
-_UNMEASURED_COVERAGE_KEYS = frozenset({"measured", "note"})
-_UNMEASURED_COVERAGE_DETAIL_KEYS = frozenset(
-    {"measured", "note", "unmeasured_files", "caveat"}
-)
 _BASELINE_KEYS = frozenset(
     {
         "verdict",
@@ -312,117 +300,8 @@ def _policy_type_errors(
     return errors
 
 
-def _positive_line_array(value: object) -> TypeGuard[list[int]]:
-    return (
-        isinstance(value, list)
-        and all(_is_int(item) and item > 0 for item in value)
-        and value == sorted(set(value))
-    )
-
-
-def _coverage_path(value: object, *, python: bool) -> bool:
-    if not isinstance(value, str) or not value or "\\" in value or value.startswith("/"):
-        return False
-    parts = value.split("/")
-    if any(part in ("", ".", "..") for part in parts):
-        return False
-    return value.endswith(".py") if python else not value.endswith(".py")
-
-
 def _diff_coverage_type_errors(coverage: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    if any(not isinstance(key, str) for key in coverage):
-        return ["all diff_coverage keys must be strings"]
-    keys = frozenset(coverage)
-    measured = coverage.get("measured")
-    if measured is True:
-        if keys != _MEASURED_COVERAGE_KEYS:
-            errors.append("measured coverage must contain exactly the seven producer keys")
-        percent = coverage.get("percent")
-        executed = coverage.get("executed")
-        total = coverage.get("total")
-        if not (_is_number(percent) and 0 <= percent <= 100):
-            errors.append("percent must be a finite number in 0..100")
-        if not (_is_int(executed) and _is_int(total) and 0 <= executed <= total):
-            errors.append("executed/total must be non-negative ordered integers")
-        files = coverage.get("files")
-        file_executed = 0
-        file_total = 0
-        if not isinstance(files, dict):
-            errors.append("files must be an object")
-        else:
-            for path, detail in files.items():
-                if not _coverage_path(path, python=True):
-                    errors.append("files keys must be safe repo-relative .py paths")
-                    continue
-                if not isinstance(detail, dict) or any(
-                    not isinstance(key, str) for key in detail
-                ):
-                    errors.append(f"files[{path!r}] must be an object with string keys")
-                    continue
-                detail_keys = frozenset(detail)
-                allowed_keys = frozenset({"executed", "missed"})
-                allowed_with_note = frozenset({"executed", "missed", "note"})
-                if detail_keys not in (allowed_keys, allowed_with_note):
-                    errors.append(f"files[{path!r}] has an invalid producer shape")
-                executed_lines = detail.get("executed")
-                missed_lines = detail.get("missed")
-                if not _positive_line_array(executed_lines) or not _positive_line_array(
-                    missed_lines
-                ):
-                    errors.append(
-                        f"files[{path!r}] executed/missed must be sorted unique positive lines"
-                    )
-                    continue
-                executed_set = set(executed_lines)
-                missed_set = set(missed_lines)
-                if executed_set & missed_set:
-                    errors.append(f"files[{path!r}] executed and missed lines overlap")
-                file_executed += len(executed_lines)
-                file_total += len(executed_lines) + len(missed_lines)
-                note = detail.get("note")
-                if "note" in detail and not (isinstance(note, str) and bool(note)):
-                    errors.append(f"files[{path!r}].note must be non-empty")
-        unmeasured = coverage.get("unmeasured_files")
-        if not (
-            _is_string_list(unmeasured)
-            and unmeasured == sorted(set(unmeasured))
-            and all(_coverage_path(path, python=False) for path in unmeasured)
-        ):
-            errors.append(
-                "unmeasured_files must be sorted unique safe non-Python paths"
-            )
-        caveat = coverage.get("caveat")
-        if not (isinstance(caveat, str) and bool(caveat)):
-            errors.append("caveat must be a non-empty string")
-        if _is_int(executed) and executed != file_executed:
-            errors.append("executed does not equal the per-file executed-line total")
-        if _is_int(total) and total != file_total:
-            errors.append("total does not equal the per-file measurable-line total")
-        if _is_number(percent) and _is_int(executed) and _is_int(total):
-            calculated = round(100.0 * executed / total, 1) if total else 100.0
-            if percent != calculated:
-                errors.append(f"percent must equal the producer calculation {calculated}")
-    elif measured is False:
-        if keys not in (_UNMEASURED_COVERAGE_KEYS, _UNMEASURED_COVERAGE_DETAIL_KEYS):
-            errors.append("unmeasured coverage has an invalid producer shape")
-        note = coverage.get("note")
-        if not (isinstance(note, str) and bool(note)):
-            errors.append("unmeasured coverage note must be non-empty")
-        if keys == _UNMEASURED_COVERAGE_DETAIL_KEYS:
-            unmeasured = coverage.get("unmeasured_files")
-            if not (
-                _is_string_list(unmeasured)
-                and unmeasured == sorted(set(unmeasured))
-                and all(isinstance(path, str) and bool(path) for path in unmeasured)
-            ):
-                errors.append("unmeasured_files must be a sorted unique string array")
-            caveat = coverage.get("caveat")
-            if not (isinstance(caveat, str) and bool(caveat)):
-                errors.append("unmeasured coverage caveat must be non-empty")
-    else:
-        errors.append("measured must be a boolean")
-    return errors
+    return list(_project_diff_coverage_type_errors(coverage))
 
 
 def _baseline_type_errors(baseline: dict[str, Any]) -> list[str]:

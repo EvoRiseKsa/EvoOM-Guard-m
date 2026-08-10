@@ -3930,6 +3930,7 @@ def test_record_verification_helpers_have_classified_verifier_owners() -> None:
     assert removed_legacy_modules.isdisjoint(analysis.modules)
 
     expected_dependencies = {
+        "evoom_guard.verifiers.record_coverage_types": set(),
         "evoom_guard.verifiers.record_nested": {
             "evoom_guard.verdict_contract_v1_11",
             "evoom_guard.verifiers.junit_oracle",
