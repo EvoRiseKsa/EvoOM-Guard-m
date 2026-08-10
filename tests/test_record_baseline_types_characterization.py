@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 from record_baseline_types_characterization_harness import (
+    TrackingBaseline,
     access_traces,
     capture,
     capture_all,
@@ -22,6 +23,8 @@ from record_baseline_types_characterization_harness import (
     cases,
     generated_trace_digest,
 )
+
+from evoom_guard import record_verifier
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/refactor-safety/record-baseline-types-v1.json"
@@ -67,6 +70,32 @@ def test_generated_baseline_trace_matches_pre_extraction_digest() -> None:
 
 def test_mapping_access_order_and_early_return_are_frozen() -> None:
     assert access_traces() == _fixture()["access_traces"]
+
+
+def test_lookup_exception_identity_and_precedence_are_frozen() -> None:
+    sentinel = RuntimeError("tests_total lookup failed")
+
+    class RaisingBaseline(TrackingBaseline):
+        def get(self, key: str, default: object = None) -> object:
+            value = super().get(key, default)
+            if key == "tests_total":
+                raise sentinel
+            return value
+
+    baseline = RaisingBaseline(cases()["valid_fail"])
+    with pytest.raises(RuntimeError) as captured:
+        record_verifier._baseline_type_errors(baseline)
+
+    assert captured.value is sentinel
+    assert baseline.events == [
+        "iter",
+        "iter",
+        "get:note",
+        "get:scope",
+        "get:verdict",
+        "get:tests_passed",
+        "get:tests_total",
+    ]
 
 
 def test_simultaneous_baseline_fault_order_is_frozen() -> None:
