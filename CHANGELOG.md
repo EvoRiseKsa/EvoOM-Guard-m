@@ -32,6 +32,14 @@ retained evidence say so.
 
 ### Added
 
+- Added inert, side-by-side maintenance protocol contracts that keep trusted
+  workflow, frozen maintenance base, and target source Git identities separate:
+  Release Source Finalizer V2, producer receipt V2, Release Source Admission
+  V3, and Release Artifact Admission V2. Exact-key validators, canonical byte
+  digests, distinct signature domains, packaged schemas, cross-material byte
+  binding, replay-chain checks, and negative cross-version tests are included.
+  Published V1/V2 bytes and workflows are unchanged; no branch, tag, release,
+  provider execution, signing operation, or production authority is added.
 - Added the separate `EVOGUARD_BLAST_RADIUS_V2` materialized-change contract
   and dependency-free scorer. Explicit add/modify/delete/rename/copy/mode
   records have strict portable paths and non-negative counters, canonical JSON
@@ -65,6 +73,22 @@ retained evidence say so.
   GitHub controls.
 
 ### Changed
+
+- Hardened the unreleased maintenance contracts before publication: artifact
+  binding now parses exact canonical source-admission JSON bytes and requires
+  them to equal the supplied mapping; run IDs are pairwise distinct through the
+  five-stage evaluation-to-artifact chain; workflow roles cannot collapse by
+  ID, path, or blob; provider scalar types are exact; trusted materials cannot
+  collide or overlap; the finalizer workflow must be an exact trusted-main
+  control material; and runtime path/ref bounds are mirrored by schema tests.
+  Producer-receipt and source-admission binders now accept only bounded exact
+  canonical bytes and require those bytes to decode to the separately supplied
+  mapping before hashing descriptors. Packaged Draft 2020-12 schemas are
+  explicitly structural: the runtime canonical validators remain authoritative
+  for exact scalar types because standard schemas accept integral floats such
+  as `1.0` as integers. Artifact V2 also preserves the complete six-entry
+  source key registry, binds its seventh entry to the exact authenticated Source
+  Admission V3 key, and keeps the artifact key distinct from all seven.
 
 - Made `seal_finalizer_bundle(expected_derivation=...)` and the
   `seal-finalizer --expected-derivation` CLI contract fail closed instead of

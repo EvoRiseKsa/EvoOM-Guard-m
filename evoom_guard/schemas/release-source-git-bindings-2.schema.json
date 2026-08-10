@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-git-bindings-2.schema.json",
+  "title": "EvoGuard separated raw-Git maintenance bindings V2",
+  "$comment": "Standard Draft 2020-12 validation is structural and treats mathematically integral numbers such as 1.0 as integers; EvoGuard runtime canonical-byte validation is the security authority for exact scalar categories and encodings.",
+  "type": "object",
+  "required": ["format", "source", "trusted_inputs", "candidate_sha256"],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_GIT_BINDINGS_V2" },
+    "source": { "$ref": "release-source-2.schema.json" },
+    "trusted_inputs": { "$ref": "release-source-context-2.schema.json#/$defs/trustedInputs" },
+    "candidate_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  },
+  "additionalProperties": false
+}

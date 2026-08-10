@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/release-source-2.schema.json",
+  "title": "EvoGuard separated maintenance release source V2",
+  "$comment": "Standard Draft 2020-12 validation is structural and treats mathematically integral numbers such as 1.0 as integers; EvoGuard runtime canonical-byte validation is the security authority for exact scalar categories and encodings.",
+  "type": "object",
+  "required": [
+    "format", "repository", "repository_id", "default_branch",
+    "trusted_workflow_ref", "trusted_workflow_sha", "trusted_workflow_tree",
+    "trusted_workflow_path", "trusted_workflow_blob_sha",
+    "maintenance_base_ref", "maintenance_base_sha", "maintenance_base_tree",
+    "target_source_ref", "target_source_sha", "target_source_tree"
+  ],
+  "properties": {
+    "format": { "const": "EVOGUARD_RELEASE_SOURCE_V2" },
+    "repository": { "$ref": "#/$defs/repository" },
+    "repository_id": { "$ref": "#/$defs/numericId" },
+    "default_branch": { "const": "main" },
+    "trusted_workflow_ref": { "const": "refs/heads/main" },
+    "trusted_workflow_sha": { "$ref": "#/$defs/gitDigest" },
+    "trusted_workflow_tree": { "$ref": "#/$defs/gitDigest" },
+    "trusted_workflow_path": { "$ref": "#/$defs/workflowPath" },
+    "trusted_workflow_blob_sha": { "$ref": "#/$defs/gitDigest" },
+    "maintenance_base_ref": { "$ref": "#/$defs/branchRef" },
+    "maintenance_base_sha": { "$ref": "#/$defs/gitDigest" },
+    "maintenance_base_tree": { "$ref": "#/$defs/gitDigest" },
+    "target_source_ref": { "$ref": "#/$defs/branchRef" },
+    "target_source_sha": { "$ref": "#/$defs/gitDigest" },
+    "target_source_tree": { "$ref": "#/$defs/gitDigest" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_.-]{1,100}$", "maxLength": 140 },
+    "numericId": { "type": "string", "pattern": "^[1-9][0-9]{0,255}$" },
+    "gitDigest": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+    "branchRef": {
+      "type": "string",
+      "pattern": "^refs/heads/(?!.*//)(?!.*\\.\\.)(?!.*@\\{)(?!.*/\\.)(?!.*\/[^/]*\\.lock(?:/|$))[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,253}[A-Za-z0-9_-])?$",
+      "maxLength": 266
+    },
+    "workflowPath": { "type": "string", "pattern": "^\\.github/workflows/[A-Za-z0-9][A-Za-z0-9_.-]*\\.ya?ml$", "maxLength": 256 }
+  }
+}

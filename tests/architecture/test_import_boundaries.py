@@ -78,7 +78,10 @@ FLAT_MODULE_LAYERS = {
     "evoom_guard.change_attempt_observation": "evidence",
     "evoom_guard.evidence": "evidence",
     "evoom_guard.evidence_bundle": "evidence",
+    "evoom_guard.maintenance_bindings": "finalizer",
     "evoom_guard.release_source_finalizer": "finalizer",
+    "evoom_guard.release_source_finalizer_v2": "finalizer",
+    "evoom_guard.release_source_producer_receipt_v2": "finalizer",
     "evoom_guard.signing": "evidence",
     "evoom_guard.verdict_contract_v1_11": "domain",
     "evoom_guard.verdict_contract_v1_12": "domain",
@@ -870,7 +873,10 @@ def test_flat_evidence_admission_and_finalizer_owners_follow_declared_layers() -
         "evoom_guard.artifact_digest_admission": "admission",
         "evoom_guard.evidence": "evidence",
         "evoom_guard.evidence_bundle": "evidence",
+        "evoom_guard.maintenance_bindings": "finalizer",
         "evoom_guard.release_source_finalizer": "finalizer",
+        "evoom_guard.release_source_finalizer_v2": "finalizer",
+        "evoom_guard.release_source_producer_receipt_v2": "finalizer",
         "evoom_guard.signing": "evidence",
     }
     expected_dependencies = {
@@ -898,11 +904,20 @@ def test_flat_evidence_admission_and_finalizer_owners_follow_declared_layers() -
             "evoom_guard.signing",
             "evoom_guard.strict_json",
         },
+        "evoom_guard.maintenance_bindings": {
+            "evoom_guard.evidence_bundle",
+        },
         "evoom_guard.release_source_finalizer": {
             "evoom_guard.evidence_bundle",
             "evoom_guard.finalizer_derivation",
             "evoom_guard.record_verifier",
             "evoom_guard.signing",
+        },
+        "evoom_guard.release_source_finalizer_v2": {
+            "evoom_guard.maintenance_bindings",
+        },
+        "evoom_guard.release_source_producer_receipt_v2": {
+            "evoom_guard.maintenance_bindings",
         },
         "evoom_guard.signing": set(),
     }
