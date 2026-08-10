@@ -83,6 +83,19 @@ report digests, 20,000 deterministic traces, and focused mutations bind the
 boundary. The owner has no internal package dependencies and no I/O, hashing,
 cleanup, execution, serialization, report mutation, or policy authority.
 
+Baseline producer-shape validation has a fourth pure owner in
+`verifiers/record_baseline_types.py`. It returns an immutable ordered error
+tuple and owns only exact producer keys, supported scope/verdict/count shapes,
+repair-effect state shape, setup-fidelity coupling, and sorted-unique changed
+paths. The mixed facade retains its historical mutable-list projection,
+`baseline.shape` report identity and ordering, requested-baseline and
+repair-effect policy interpretation, and all verdict authority. A committed
+pre-extraction vector, mapping-access and exception-precedence checks, four
+public-report digests, 20,000 deterministic generated traces, and focused
+mutations bind this boundary. The owner has no internal package dependencies
+and performs no I/O, hashing, cleanup, execution, serialization, report
+mutation, or policy decision.
+
 Six cohesive stable flat modules now have explicit existing owners without a
 file move or public-identity change. `evidence.py` owns the bounded
 changed-line-coverage observation; `evidence_bundle.py` owns deterministic

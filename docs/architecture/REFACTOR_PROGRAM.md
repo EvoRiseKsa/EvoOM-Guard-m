@@ -586,6 +586,20 @@ remain in their established facades.
   extracted helper exceeds 7 and the current C901 inventory falls from 94 to
   93. This changes neither schema nor canonical bytes and adds no efficacy or
   independent-validation claim.
+- The fifth Stage-11 pure-phase extraction moves baseline producer-shape
+  validation to a stdlib-only verifier owner. The public facade retains the
+  historical mutable-list projection, `baseline.shape` check identity and
+  order, requested-baseline and repair-effect policy semantics, and verdict
+  authority. A committed pre-extraction vector freezes exact ordered errors,
+  mapping lookup and exception precedence, four public-report digests, input
+  immutability, and 20,000 deterministic traces; eight focused mutants bind
+  keys, unsupported-mode null evidence, count/verdict truth, repair-effect,
+  setup-fidelity, and changed-path rules. Measured `_baseline_type_errors`
+  complexity falls from 24 to 1, the extracted-helper maximum is 7, and the
+  repository C901 inventory falls from 93 to 92. This classified verifier
+  owner adds no cycle, private import, layer violation, or unclassified debt;
+  the mixed facade remains explicit debt and no independent-efficacy claim is
+  added.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction

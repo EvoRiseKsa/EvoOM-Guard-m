@@ -25,6 +25,9 @@ from evoom_guard.verifiers.junit_oracle import (
     JUNIT_REPORT_SET_DIGEST_FORMAT,
     JUNIT_XML_DIGEST_FORMAT,
 )
+from evoom_guard.verifiers.record_baseline_types import (
+    project_baseline_type_errors as _project_baseline_type_errors,
+)
 from evoom_guard.verifiers.record_coverage_types import (
     project_diff_coverage_type_errors as _project_diff_coverage_type_errors,
 )
@@ -91,18 +94,6 @@ _REPORT_INTEGRITY_RANK = {
     "external_process_isolated": 1,
 }
 _ISOLATION_RANK = {"not_run": -1, "subprocess": 0, "docker": 1, "gvisor": 2}
-_BASELINE_KEYS = frozenset(
-    {
-        "verdict",
-        "tests_passed",
-        "tests_total",
-        "repair_effect",
-        "scope",
-        "note",
-    }
-)
-_BASELINE_SETUP_KEYS = frozenset({"setup_fidelity", "setup_fidelity_changes"})
-
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _WINDOWS_SHORT_ALIAS = re.compile(r".*~[0-9]+(?:\..*)?\Z", re.IGNORECASE)
 _WINDOWS_INVALID_CHARACTERS = frozenset('<>:"|?*')
@@ -305,67 +296,7 @@ def _diff_coverage_type_errors(coverage: dict[str, Any]) -> list[str]:
 
 
 def _baseline_type_errors(baseline: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    if any(not isinstance(key, str) for key in baseline):
-        return ["all baseline keys must be strings"]
-    keys = frozenset(baseline)
-    if not _BASELINE_KEYS <= keys or not keys <= _BASELINE_KEYS | _BASELINE_SETUP_KEYS:
-        errors.append("baseline has missing or unknown producer keys")
-    note = baseline.get("note")
-    if not (isinstance(note, str) and bool(note)):
-        errors.append("baseline.note must be a non-empty string")
-    scope = baseline.get("scope")
-    verdict = baseline.get("verdict")
-    passed = baseline.get("tests_passed")
-    total = baseline.get("tests_total")
-    effect = baseline.get("repair_effect")
-    if scope == "unsupported_mode":
-        if keys != _BASELINE_KEYS:
-            errors.append("unsupported-mode baseline cannot contain setup fields")
-        if not (
-            verdict is None
-            and passed is None
-            and total is None
-            and effect == "unmeasured"
-        ):
-            errors.append("unsupported-mode baseline must contain only null evidence")
-        return errors
-    if scope != "repo_suite_only":
-        errors.append("baseline.scope is invalid")
-    if verdict not in ("PASS", "FAIL", "NO_CLEAN_VERDICT"):
-        errors.append("baseline.verdict is invalid")
-    if not _valid_count_pair(passed, total):
-        errors.append("baseline counts must be a null or ordered integer pair")
-    if verdict in ("PASS", "FAIL") and not (_is_int(passed) and _is_int(total)):
-        errors.append("clean baseline verdicts require integer counts")
-    if verdict == "PASS" and _is_int(passed) and _is_int(total):
-        if not (passed == total == 0 or total > 0 and passed == total):
-            errors.append("a PASS baseline must have all-passing counts")
-    if verdict == "FAIL" and _is_int(passed) and _is_int(total):
-        if not (passed == total == 0 or total > 0 and passed < total):
-            errors.append("a FAIL baseline must have zero exit-only counts or a failed test")
-    if verdict == "NO_CLEAN_VERDICT":
-        if effect != "unmeasured":
-            errors.append("NO_CLEAN_VERDICT requires an unmeasured repair effect")
-    elif effect not in ("demonstrated", "not_demonstrated"):
-        errors.append("clean baseline verdict requires a measured repair effect")
-    setup = baseline.get("setup_fidelity")
-    changes = baseline.get("setup_fidelity_changes")
-    if "setup_fidelity" in baseline:
-        if setup not in ("unverified", "setup_failed", "changed_judged_tree"):
-            errors.append("setup_fidelity is invalid")
-        if verdict != "NO_CLEAN_VERDICT" or effect != "unmeasured":
-            errors.append("setup fidelity failures require an unclean baseline")
-    if setup == "changed_judged_tree":
-        if not (
-            _is_string_list(changes)
-            and bool(changes)
-            and changes == sorted(set(changes))
-        ):
-            errors.append("changed judged tree requires sorted unique changed paths")
-    elif "setup_fidelity_changes" in baseline:
-        errors.append("setup_fidelity_changes requires changed_judged_tree")
-    return errors
+    return list(_project_baseline_type_errors(baseline))
 
 
 def _policy_sha256(policy: dict[str, Any]) -> str:
