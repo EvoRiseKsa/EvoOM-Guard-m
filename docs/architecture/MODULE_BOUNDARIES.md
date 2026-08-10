@@ -95,6 +95,9 @@ the facade's live registries into the owner so assignment-based monkeypatches
 retain their original call-time behavior. The package is classified alongside
 verification because it produces structured runner evidence but performs no
 process launch, report parsing, grading, policy decision, or evidence sealing.
+Because that closure covers the complete historical surface,
+`evoom_guard.adapters` is classified as runner-owned rather than retained as
+unclassified facade debt.
 
 The first domain slice lives in `evoom_guard/domain/verification.py`. It owns
 only dependency-free JUnit counts plus completed-run and repository/pack phase
@@ -152,6 +155,14 @@ or verdict interpretation. Historical imports through
 `verifiers.candidate_edits`, `patch_applier`, and `repo_verifier` remain exact
 aliases. Candidate tree copying and edit materialization remain effectful
 repository-verifier responsibilities until their own characterized slice.
+The complete `patch_applier.py` facade is therefore candidate-owned: it defines
+no implementation and re-exports only the four exact `candidate.patch`
+objects. The separate pure flat `patchmin.py` owner also belongs to candidate
+because both of its operations reduce or measure a candidate change; it has no
+EvoOM Guard dependency and its imports are restricted to pure standard-library
+helpers. The executable ratchet freezes that structural evidence, while the
+semantic ownership judgment remains reviewable. Neither classification moves
+behavior into the candidate package.
 
 The first workspace slice is an atomic module-to-package migration:
 `evoom_guard/workspace/__init__.py` contains the exact implementation bytes
@@ -312,7 +323,11 @@ and its `CandidateRunner` subclass delegates to the typed implementation while
 preserving the historical bounded-Docker monkeypatch seam. Actual launcher/CID
 observation sequencing is injected into
 `verifiers/blackbox_candidate_runtime.py`; the compatibility facade and verdict
-interpretation remain in `blackbox.py`.
+interpretation remain in `blackbox.py`. The complete `candidate_runner.py`
+compatibility surface is classified as isolation-owned: its exact internal
+closure is the public execution kernel plus `isolation.candidate` and
+`isolation.docker`, and its only local behavior is the characterized
+Docker-control seam and compatibility subclass.
 
 The fourth isolation slice lives in `evoom_guard/isolation/invocation.py`. It
 owns the judge-side one-way AF_UNIX datagram receiver, exact-token filtering,

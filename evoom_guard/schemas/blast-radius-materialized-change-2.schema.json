@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/main/evoom_guard/schemas/blast-radius-materialized-change-2.schema.json",
+  "title": "EvoOM Guard Blast Radius Materialized Change V2",
+  "description": "Canonical additive input contract for deterministic Blast Radius V2 measurement. It is not a verdict record and does not reinterpret verdict schemas 1.11 or 1.12.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "changes"],
+  "properties": {
+    "format": {"const": "EVOGUARD_BLAST_RADIUS_V2"},
+    "changes": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {"$ref": "#/$defs/change"}
+    }
+  },
+  "$defs": {
+    "counter": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "old_path",
+        "new_path",
+        "lines_added",
+        "lines_removed",
+        "binary"
+      ],
+      "properties": {
+        "operation": {
+          "enum": ["add", "modify", "delete", "rename", "copy", "mode"]
+        },
+        "old_path": {
+          "oneOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]
+        },
+        "new_path": {
+          "oneOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]
+        },
+        "lines_added": {"$ref": "#/$defs/counter"},
+        "lines_removed": {"$ref": "#/$defs/counter"},
+        "binary": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"operation": {"const": "add"}}},
+          "then": {
+            "properties": {
+              "old_path": {"type": "null"},
+              "new_path": {"$ref": "#/$defs/path"},
+              "lines_removed": {"const": 0}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "delete"}}},
+          "then": {
+            "properties": {
+              "old_path": {"$ref": "#/$defs/path"},
+              "new_path": {"type": "null"},
+              "lines_added": {"const": 0}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "copy"}}},
+          "then": {"properties": {"lines_removed": {"const": 0}}}
+        },
+        {
+          "if": {"properties": {"operation": {"const": "mode"}}},
+          "then": {
+            "properties": {
+              "lines_added": {"const": 0},
+              "lines_removed": {"const": 0}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"binary": {"const": true}}},
+          "then": {
+            "properties": {
+              "lines_added": {"const": 0},
+              "lines_removed": {"const": 0}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

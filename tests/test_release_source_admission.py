@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import importlib
 import json
 import os
 import zipfile
@@ -716,6 +717,42 @@ def test_plain_admitter_dict_cannot_reach_private_key_open(
         "_load_private_key_snapshot",
         lambda *_args, **_kwargs: pytest.fail(
             "plain C selector reached the admission key"
+        ),
+    )
+    with pytest.raises(
+        release_source_admission.ReleaseSourceAdmissionError,
+        match="runtime-bound admitter capability",
+    ):
+        release_source_admission.seal_release_source_admission(  # type: ignore[arg-type]
+            inputs.attested,
+            str(inputs.output),
+            admitter=inputs.admitter,
+            key_separation=inputs.key_separation,
+            git_repository=str(inputs.repo),
+            git_executable=inputs.git_executable,
+            provider_isolation=inputs.provider_isolation,
+            private_key_path=str(inputs.private),
+            signing_public_key_path=str(inputs.public),
+            expected_signing_key_id=public_key_id(str(inputs.public)),
+        )
+    assert not inputs.output.exists()
+
+
+def test_plain_admitter_error_translation_survives_producer_module_reload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imported_error = release_source_producer_receipt.ReleaseSourceProducerReceiptError
+    reloaded = importlib.reload(release_source_producer_receipt)
+    assert reloaded.ReleaseSourceProducerReceiptError is imported_error
+
+    inputs = _inputs(tmp_path, monkeypatch)
+    import evoom_guard.signing as signing
+
+    monkeypatch.setattr(
+        signing,
+        "_load_private_key_snapshot",
+        lambda *_args, **_kwargs: pytest.fail(
+            "plain C selector reached the admission key after producer reload"
         ),
     )
     with pytest.raises(

@@ -44,6 +44,31 @@ operation and is not claimed complete by the `v4.5.0` ledger. Its later signed,
 same-owner point-in-time observation is retained separately as
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
+The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
+case. The present A–H implementation authenticates a target only when it is also
+the protected `main` workflow revision and H creates a lightweight tag. Those
+properties cannot establish the distinct trusted-workflow/source identities
+and locally verified, maintainer-signed annotated tag required for `v4.5.1`.
+The Phase-0 model, negative tests, explicit blockers, and required redesign are
+recorded in [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md). The model
+does not treat a self-reported snapshot as live or closed-world proof, and it is
+not evidence that a maintenance branch, candidate, tag, or release exists. Its
+observation helper validates non-authoritative shapes only; it performs no
+GitHub authentication, cryptographic verification, F/G byte comparison, or
+canonical tag parsing. The generic DeployKey ruleset bypass additionally
+requires a future complete owner-collected listing proving one exact
+write-enabled deploy key, exact publication-secret metadata, private/public key
+binding inside trusted H, per-run temporal binding, and post-publication key,
+secret, variable, and one-shot retirement.
+The Phase-0 contract now freezes the maintainer public key at the normalized
+repository path `security/v4.5.1-maintainer-signing.pub`, mode `100644`, and
+requires its externally pinned blob to appear under that path in the pinned
+trusted-workflow tree observation. Raw annotated-tag input is limited to 32 KiB
+decoded so its Base64 form remains conservatively below GitHub's 48 KiB
+variable limit. Control-plane timestamps are real, canonical whole-second UTC
+RFC3339 values, and the activation blocker inventory is an exact closed set of
+stable IDs.
+
 ## Phase contracts
 
 | Phase | Workflow | Authority and prohibited operations |

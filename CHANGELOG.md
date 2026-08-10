@@ -40,6 +40,37 @@ retained evidence say so.
   binding, replay-chain checks, and negative cross-version tests are included.
   Published V1/V2 bytes and workflows are unchanged; no branch, tag, release,
   provider execution, signing operation, or production authority is added.
+- Added the separate `EVOGUARD_BLAST_RADIUS_V2` materialized-change contract
+  and dependency-free scorer. Explicit add/modify/delete/rename/copy/mode
+  records have strict portable paths and non-negative counters, canonical JSON
+  bytes, distinct result identity, golden vectors, and fail-closed malformed,
+  raw-diff, binary, and Git-quoted-path behavior. The frozen V1 API,
+  `risk_score` projection, and signed verdict schemas 1.11/1.12 are unchanged.
+- Added an inert Phase-0 model for a possible one-time `v4.5.1` maintenance
+  operation. It freezes literal repository, protection/check App IDs, ruleset,
+  trusted-`main` Environments, raw-Git mode/blob pins, seven-run
+  `A -> B -> CD -> E -> F -> G -> H` topology, exact pre/post-publication
+  checkpoints, sole write-enabled deploy-key identity, publication-secret
+  metadata, key-binding, signing, annotated-tag, immutable-release, temporal,
+  and retirement requirements. The helper validates explicitly
+  non-authoritative observation shapes only; it does not authenticate GitHub,
+  verify signatures/tag bytes, compare independent F/G/release bytes, bind
+  settings to run time, or prove retirement. These remain named blockers for a
+  separate external-pin implementation. The model accepts only inert state and
+  creates no branch, tag, release, key, secret, variable, or GitHub setting.
+- Hardened that Phase-0 model against hostile-input ambiguity: the decoded raw
+  annotated-tag object is capped at 32 KiB for GitHub's Base64 variable bound;
+  the maintainer signing root uses one literal safe relative POSIX path and
+  `100644` mode with a dynamic trusted-tree path-to-blob binding; blocker IDs
+  must equal an exact closed set; and owner-control timestamps are parsed as
+  real canonical UTC RFC3339 values. The validator now participates in CI's
+  strict release-and-trust mypy gate.
+- Added deterministic, no-clobber `finalizer-init` installation and static-only
+  `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
+  The kit commits a public-key-bound deployment manifest, validates the
+  trusted-base policy and verifier-pack digest, ships JSON Schemas in wheel and
+  zipapp artifacts, and explicitly does not claim to configure or inspect live
+  GitHub controls.
 
 ### Changed
 
@@ -56,12 +87,6 @@ retained evidence say so.
   explicitly structural: the runtime canonical validators remain authoritative
   for exact scalar types because standard schemas accept integral floats such
   as `1.0` as integers.
-- Added deterministic, no-clobber `finalizer-init` installation and static-only
-  `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
-  The kit commits a public-key-bound deployment manifest, validates the
-  trusted-base policy and verifier-pack digest, ships JSON Schemas in wheel and
-  zipapp artifacts, and explicitly does not claim to configure or inspect live
-  GitHub controls.
 
 - Made `seal_finalizer_bundle(expected_derivation=...)` and the
   `seal-finalizer --expected-derivation` CLI contract fail closed instead of
@@ -97,6 +122,14 @@ retained evidence say so.
   bytes.
 
 ### Fixed
+
+- Preserved `ReleaseSourceProducerReceiptError` class identity across
+  `importlib.reload()` so already-imported admission consumers continue to
+  translate producer failures deterministically regardless of test order. A
+  private validated identity anchor restores the public export and rejects
+  structurally invalid private-anchor values. This is reload/test-order
+  robustness, not a security boundary against arbitrary in-process mutation,
+  and does not add or strengthen a production trust guarantee.
 
 - Hardened the specialized black-box judge process owner so cancellation keeps
   the exact active `BaseException` through a bare re-raise, always attempts the

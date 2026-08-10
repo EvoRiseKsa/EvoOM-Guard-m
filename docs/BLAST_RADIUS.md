@@ -1,4 +1,4 @@
-# Blast Radius V1
+# Blast Radius contracts
 
 Blast Radius V1 is a deterministic description of change size and exposure. It
 counts touched paths and changed lines, marks configured protected-path hits,
@@ -75,11 +75,116 @@ Some failures happen before a candidate can be represented completely. Such
 pre-materialization errors can retain the compatibility `low`/`0.0` default;
 that value does not claim that the rejected input had a small blast radius.
 
-## V2 boundary
+## Materialized Change V2 (unreleased development source)
 
-A deletion-aware V2 is tracked in
-[#268](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/268). It requires a
-versioned materialized-change contract, explicit rename/copy/mode/binary and
-quoted-path behavior, golden vectors, and parity with Guard. V1 will not be
-changed silently to approximate that contract, and schema 1.11/1.12 will not be
-reinterpreted in place.
+Development source after `v4.5.0` adds a separate, additive contract with the
+identity `EVOGUARD_BLAST_RADIUS_V2`. It is not a patch to the V1 raw-diff
+parser. The public entry points are dependency-free domain contracts:
+
+```python
+from evoom_guard.domain import blast_radius_score_v2
+
+measurement = blast_radius_score_v2(
+    {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+            {
+                "operation": "delete",
+                "old_path": "src/retired.py",
+                "new_path": None,
+                "lines_added": 0,
+                "lines_removed": 73,
+                "binary": False,
+            }
+        ],
+    },
+    protected=("src/retired.py",),
+)
+```
+
+`blast_radius_score_v2` accepts only a validated materialized-change object or
+`MaterializedChangeSetV2`. Passing raw diff text, a Git header token, or a
+partial mapping is an error. `canonical_materialized_change_v2_bytes` emits the
+canonical UTF-8 JSON representation. The packaged JSON Schema is
+`evoom_guard/schemas/blast-radius-materialized-change-2.schema.json`; runtime
+validation is authoritative for NFC, UTF-8 byte bounds, path equality,
+cross-platform case collisions, aggregate limits that JSON Schema cannot
+express completely, and a two-million path/glob comparison ceiling. The last
+bound rejects an otherwise valid but quadratic protected-path scan before the
+scan begins.
+
+### Operation semantics
+
+The caller must derive each record from trusted base/head material. Counters
+are explicit non-negative 64-bit signed-range integers; booleans are not
+integers. A materialized set contains at most 10,000 net changes.
+
+| Operation | Required paths | Counted affected paths | Line-counter meaning |
+|---|---|---:|---|
+| `add` | new only | new (1) | full new text lines added; removed is zero |
+| `modify` | identical old/new | path (1) | exact text diff additions/removals |
+| `delete` | old only | old (1) | full old text lines removed; added is zero |
+| `rename` | distinct old/new | old and new (2) | full new text lines added plus full old text lines removed |
+| `copy` | distinct source/destination | destination (1) | full destination text lines added; source is provenance, not a modified path |
+| `mode` | identical old/new | path (1) | both counters are zero |
+
+A binary record sets `binary=true` and both line counters to zero. It still
+contributes its affected path and increments `binary_changes`; V2 does not
+pretend that zero lines means zero bytes or infer a binary-size metric it was
+not given. A mode-only record similarly contributes one affected path and
+increments `mode_only_changes`.
+
+Rename counts two paths because the old namespace entry disappears and the new
+entry appears. Copy counts only its destination because the source entry is not
+changed. Protected-glob matching follows the same affected-path rule, so a copy
+source is not a protected hit while both sides of a rename can be hits.
+
+### Paths and quoted Git output
+
+V2 paths are already decoded repository paths, not raw Git presentation
+tokens. They must be NFC-normalized, portable, forward-slash,
+repository-relative paths without controls, format characters, Git
+administrative segments, aliases, `.`/`..`, empty segments, or case-colliding
+affected spellings. For example, the decoded path `docs/café guide.md` is
+accepted. A C-quoted token such as `"docs/caf\303\251.md"` is rejected; the
+trusted materializer must decode and verify Git bytes before constructing V2.
+This avoids treating escape syntax as a real filename and avoids guessing when
+raw output is incomplete.
+
+Case-only renames and other platform-ambiguous names are deliberately
+unsupported by this portable contract. That is a fail-closed portability
+boundary, not a claim that Git itself cannot store such names.
+
+### Measurement and compatibility
+
+For text changes the default score projection retains the V1 formula so the
+same explicit add/modify/delete materialization produces the same measured
+fields in the direct V2 API and current Guard orchestration. Unlike V1, all four
+thresholds must be positive, medium thresholds cannot exceed high thresholds,
+and protected patterns are validated.
+
+The V2 result has the distinct identity `EVOGUARD_BLAST_RADIUS_SCORE_V2` and
+adds operation, binary, and mode-only counts. It remains advisory change-size
+metadata, not a probability or an admission decision. Existing
+`risk_score`/`blast_radius_score`, `RiskScore`/`BlastRadiusScore`, signed
+`risk_level`/`risk_score` fields, and verdict schemas 1.11/1.12 are unchanged.
+Guard does not silently write V2 fields into those signed records.
+
+### Migration
+
+1. Keep V1 for consumers that require the frozen API or signed verdict shape.
+2. Materialize base and head with a trusted repository reader. Do not feed raw
+   `git diff` text to V2.
+3. Emit one explicit net operation per affected path using the table above;
+   provide full old/new text counts for delete, rename, and copy.
+4. Validate the object, retain its canonical bytes when evidence continuity is
+   needed, and call `blast_radius_score_v2`.
+5. Treat the V2 result as a separate advisory measurement until a future
+   versioned verdict schema explicitly binds it.
+
+Golden vectors cover add, modify, delete, rename, copy, mode-only, decoded
+Git-quoted Unicode paths, binary changes, and malformed input. Focused parity
+and mutation tests prevent unsupported input from degrading into a partial
+`low` measurement. Issue
+[#268](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/268) records the
+design history.

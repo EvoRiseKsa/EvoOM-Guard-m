@@ -1,0 +1,104 @@
+{
+  "format": "EVOGUARD_BLAST_RADIUS_GOLDEN_V2",
+  "vectors": [
+    {
+      "id": "addition",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "add", "old_path": null, "new_path": "src/new.py", "lines_added": 3, "lines_removed": 0, "binary": false}
+        ]
+      },
+      "protected": [],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 3, "lines_removed": 0, "protected_hits": [], "operation_counts": {"add": 1, "modify": 0, "delete": 0, "rename": 0, "copy": 0, "mode": 0}, "binary_changes": 0, "mode_only_changes": 0, "score": 0.07, "level": "low"}
+    },
+    {
+      "id": "modification",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "modify", "old_path": "src/app.py", "new_path": "src/app.py", "lines_added": 2, "lines_removed": 1, "binary": false}
+        ]
+      },
+      "protected": [],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 2, "lines_removed": 1, "protected_hits": [], "operation_counts": {"add": 0, "modify": 1, "delete": 0, "rename": 0, "copy": 0, "mode": 0}, "binary_changes": 0, "mode_only_changes": 0, "score": 0.07, "level": "low"}
+    },
+    {
+      "id": "deletion",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "delete", "old_path": "src/old.py", "new_path": null, "lines_added": 0, "lines_removed": 50, "binary": false}
+        ]
+      },
+      "protected": [],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 0, "lines_removed": 50, "protected_hits": [], "operation_counts": {"add": 0, "modify": 0, "delete": 1, "rename": 0, "copy": 0, "mode": 0}, "binary_changes": 0, "mode_only_changes": 0, "score": 0.1875, "level": "medium"}
+    },
+    {
+      "id": "rename-counts-both-paths",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "rename", "old_path": "src/old_name.py", "new_path": "src/new_name.py", "lines_added": 20, "lines_removed": 20, "binary": false}
+        ]
+      },
+      "protected": [],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 2, "lines_added": 20, "lines_removed": 20, "protected_hits": [], "operation_counts": {"add": 0, "modify": 0, "delete": 0, "rename": 1, "copy": 0, "mode": 0}, "binary_changes": 0, "mode_only_changes": 0, "score": 0.225, "level": "medium"}
+    },
+    {
+      "id": "copy-counts-destination-only",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "copy", "old_path": "vendor/template.py", "new_path": "src/copied.py", "lines_added": 20, "lines_removed": 0, "binary": false}
+        ]
+      },
+      "protected": ["vendor/*"],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 20, "lines_removed": 0, "protected_hits": [], "operation_counts": {"add": 0, "modify": 0, "delete": 0, "rename": 0, "copy": 1, "mode": 0}, "binary_changes": 0, "mode_only_changes": 0, "score": 0.1125, "level": "low"}
+    },
+    {
+      "id": "mode-only",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "mode", "old_path": "bin/tool", "new_path": "bin/tool", "lines_added": 0, "lines_removed": 0, "binary": false}
+        ]
+      },
+      "protected": [],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 0, "lines_removed": 0, "protected_hits": [], "operation_counts": {"add": 0, "modify": 0, "delete": 0, "rename": 0, "copy": 0, "mode": 1}, "binary_changes": 0, "mode_only_changes": 1, "score": 0.0625, "level": "low"}
+    },
+    {
+      "id": "decoded-git-quoted-unicode-path",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "add", "old_path": null, "new_path": "docs/café guide.md", "lines_added": 1, "lines_removed": 0, "binary": false}
+        ]
+      },
+      "protected": ["docs/*"],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 1, "lines_removed": 0, "protected_hits": ["docs/café guide.md"], "operation_counts": {"add": 1, "modify": 0, "delete": 0, "rename": 0, "copy": 0, "mode": 0}, "binary_changes": 0, "mode_only_changes": 0, "score": 0.315, "level": "high"}
+    },
+    {
+      "id": "binary-modification",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "modify", "old_path": "assets/logo.png", "new_path": "assets/logo.png", "lines_added": 0, "lines_removed": 0, "binary": true}
+        ]
+      },
+      "protected": [],
+      "expected": {"format": "EVOGUARD_BLAST_RADIUS_SCORE_V2", "files_touched": 1, "lines_added": 0, "lines_removed": 0, "protected_hits": [], "operation_counts": {"add": 0, "modify": 1, "delete": 0, "rename": 0, "copy": 0, "mode": 0}, "binary_changes": 1, "mode_only_changes": 0, "score": 0.0625, "level": "low"}
+    },
+    {
+      "id": "malformed-unsupported-operation",
+      "input": {
+        "format": "EVOGUARD_BLAST_RADIUS_V2",
+        "changes": [
+          {"operation": "guess", "old_path": "src/a.py", "new_path": "src/b.py", "lines_added": 0, "lines_removed": 0, "binary": false}
+        ]
+      },
+      "protected": [],
+      "expected_error": "unsupported operation"
+    }
+  ]
+}
