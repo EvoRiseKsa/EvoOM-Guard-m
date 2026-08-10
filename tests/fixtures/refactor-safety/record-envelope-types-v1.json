@@ -1,0 +1,34 @@
+{
+  "access_trace_sha256": "ead682cb394713d9da399408b2b3757e29626c70ee6ff07dc133581f17a82b31",
+  "case_count": 38,
+  "case_errors_sha256": "3e1c7dbee93d8f3cd4b817fa1c3ce7d6441cea1ffcdfaa3e100983f0d2a0907b",
+  "format": "record-envelope-types-characterization-v1",
+  "generated_trace_count": 20000,
+  "generated_trace_sha256": "8354a4b9ff06cacd149539793c548bf6737f3557d2ec6b29abe80da86622f24d",
+  "ordered_multiple_faults": [
+    "schema_version must be a string",
+    "diagnostics must be a string",
+    "passed must be a boolean",
+    "test_command_ran must be a boolean",
+    "exit_code must be an integer",
+    "risk_score must be a number",
+    "tests_passed must be a non-boolean integer or null",
+    "tests_total must be a non-boolean integer or null",
+    "files_changed must be an array of strings",
+    "protected_violations must be an array of strings",
+    "verdict_source must be a string or null",
+    "source must be a string or null",
+    "base_reconstruction must be a string or null",
+    "diff_coverage must be an object or null",
+    "baseline must be an object or null",
+    "assurance must be an object",
+    "attestation must be an object or null"
+  ],
+  "public_report_sha256": {
+    "schema_1.11_ordered_faults": "4a0db41457074a542ca97b29dfc7e271874213b37b028c0ecfc09bdd3d4a8e94",
+    "schema_1.11_risk_boolean": "4eb9b238616af07b9faeb792a5ced1a278540e0f64fcbe86ce37c9db95060228",
+    "schema_1.12_ordered_faults": "4a0db41457074a542ca97b29dfc7e271874213b37b028c0ecfc09bdd3d4a8e94",
+    "schema_1.12_risk_boolean": "6d5db64265b7f1d822fbd32b5db5d59e68ce70b397cd531533da6edafd947401"
+  },
+  "raising_baseline_trace_sha256": "4ddb08683ca3ff56afe0fad548beea6e0397ee315552d3248a08e648f0a26977"
+}
