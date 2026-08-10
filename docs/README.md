@@ -169,6 +169,8 @@ customer configuration, and incident contacts remain private.
   change review, and release-history policy.
 - [`RELEASE_TRUST_PIPELINE.md`](RELEASE_TRUST_PIPELINE.md) — protected A–H
   pipeline and distinct decision boundaries.
+- [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md) — inert,
+  one-time stable-patch contract and the verified blockers to safe activation.
 - [`RELEASE_GATE_CHECKLIST.md`](RELEASE_GATE_CHECKLIST.md) — release hardening
   and acceptance checklist.
 - [`RELEASE_LEDGER_V2_ASSEMBLY.md`](RELEASE_LEDGER_V2_ASSEMBLY.md) — offline
