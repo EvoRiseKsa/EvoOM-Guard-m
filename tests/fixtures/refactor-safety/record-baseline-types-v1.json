@@ -1,0 +1,127 @@
+{
+  "access_traces": {
+    "non_string_key": [
+      "iter"
+    ],
+    "repo_suite": [
+      "iter",
+      "iter",
+      "get:note",
+      "get:scope",
+      "get:verdict",
+      "get:tests_passed",
+      "get:tests_total",
+      "get:repair_effect",
+      "get:setup_fidelity",
+      "get:setup_fidelity_changes",
+      "contains:setup_fidelity",
+      "contains:setup_fidelity_changes"
+    ],
+    "unsupported": [
+      "iter",
+      "iter",
+      "get:note",
+      "get:scope",
+      "get:verdict",
+      "get:tests_passed",
+      "get:tests_total",
+      "get:repair_effect"
+    ]
+  },
+  "case_errors": {
+    "all_passing_fail_counts": [
+      "a FAIL baseline must have zero exit-only counts or a failed test"
+    ],
+    "boolean_counts": [
+      "baseline counts must be a null or ordered integer pair",
+      "clean baseline verdicts require integer counts"
+    ],
+    "changed_tree_empty_paths": [
+      "changed judged tree requires sorted unique changed paths"
+    ],
+    "changed_tree_non_string_paths": [
+      "changed judged tree requires sorted unique changed paths"
+    ],
+    "changed_tree_unsorted_duplicate_paths": [
+      "changed judged tree requires sorted unique changed paths"
+    ],
+    "changes_without_changed_tree": [
+      "setup_fidelity_changes requires changed_judged_tree"
+    ],
+    "changes_without_setup_field": [
+      "setup_fidelity_changes requires changed_judged_tree"
+    ],
+    "clean_unmeasured_effect": [
+      "clean baseline verdict requires a measured repair effect"
+    ],
+    "empty_note": [
+      "baseline.note must be a non-empty string"
+    ],
+    "invalid_scope": [
+      "baseline.scope is invalid"
+    ],
+    "invalid_setup_fidelity": [
+      "setup_fidelity is invalid"
+    ],
+    "invalid_verdict": [
+      "baseline.verdict is invalid"
+    ],
+    "missing_and_unknown_keys": [
+      "baseline has missing or unknown producer keys",
+      "baseline.note must be a non-empty string"
+    ],
+    "negative_pass_counts": [
+      "baseline counts must be a null or ordered integer pair",
+      "a PASS baseline must have all-passing counts"
+    ],
+    "no_clean_measured_effect": [
+      "NO_CLEAN_VERDICT requires an unmeasured repair effect"
+    ],
+    "non_string_key": [
+      "all baseline keys must be strings"
+    ],
+    "null_clean_counts": [
+      "clean baseline verdicts require integer counts"
+    ],
+    "ordered_multiple_faults": [
+      "baseline has missing or unknown producer keys",
+      "baseline.note must be a non-empty string",
+      "baseline.scope is invalid",
+      "baseline counts must be a null or ordered integer pair",
+      "clean baseline verdicts require integer counts",
+      "clean baseline verdict requires a measured repair effect",
+      "setup fidelity failures require an unclean baseline",
+      "changed judged tree requires sorted unique changed paths"
+    ],
+    "out_of_order_pass_counts": [
+      "baseline counts must be a null or ordered integer pair",
+      "a PASS baseline must have all-passing counts"
+    ],
+    "partial_pass_counts": [
+      "a PASS baseline must have all-passing counts"
+    ],
+    "setup_failure_with_clean_verdict": [
+      "setup fidelity failures require an unclean baseline"
+    ],
+    "unsupported_non_null_evidence": [
+      "unsupported-mode baseline must contain only null evidence"
+    ],
+    "unsupported_with_setup": [
+      "unsupported-mode baseline cannot contain setup fields"
+    ],
+    "valid_changed_tree": [],
+    "valid_exit_only_fail": [],
+    "valid_fail": [],
+    "valid_no_clean": [],
+    "valid_pass": [],
+    "valid_unsupported": []
+  },
+  "format": "record-baseline-types-characterization-v1",
+  "generated_trace_sha256": "7d3dac15ceb03a6134453211ef72ba114fa32f0020c93393a0702369c70c35ca",
+  "public_report_sha256": {
+    "partial_pass_counts": "fa71f9f0a3f511eebd1834c3a23e08ab378e9711edb2921265f4108b25285114",
+    "unsupported_with_setup": "e6dc291a7038b7a9212356bbbd64ac5d2b1b52c20c393a8f5b9feb9e52236359",
+    "valid_changed_tree": "a947727809787b021e785f8e8e9b962c52f57738ee858f8e854e8784bafb04b3",
+    "valid_fail": "a947727809787b021e785f8e8e9b962c52f57738ee858f8e854e8784bafb04b3"
+  }
+}
