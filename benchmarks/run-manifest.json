@@ -50,15 +50,15 @@
   "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
   "claims": {
     "authenticated": false,
-    "content_identity": "source-git-commit-plus-content-digests",
-    "evidence_commit_bound": false,
+    "content_identity": "source-and-results-git-commits-plus-content-digests",
+    "evidence_commit_bound": true,
     "evidence_status": "self_consistent_unattributed",
     "execution_authenticity_claim": false,
     "execution_source_snapshot_bound": true,
     "final_manifest_in_evidence_commit": false,
     "general_performance_claim": false,
     "installed_environment_matches_lock": false,
-    "source_and_results_commit_bound": false,
+    "source_and_results_commit_bound": true,
     "source_commit_bound": true,
     "source_snapshot_matches_worktree_at_manifest_build": true
   },
@@ -325,7 +325,17 @@
     "tp": 10
   },
   "provenance": {
-    "evidence_commit": null,
+    "evidence_commit": {
+      "binding": "git-commit",
+      "bound": true,
+      "commit": "1be3020e7be63d94f5ab64e5d43486092a6d0e20",
+      "final_manifest_in_commit": false,
+      "observation_point": "after results commit and before final manifest publication",
+      "reason": "source_and_results_match_commit_final_manifest_excluded",
+      "results_match_commit": true,
+      "source_inventory_matches_commit": true,
+      "source_paths_match_commit": true
+    },
     "final_manifest_in_evidence_commit": false,
     "source_commit": {
       "binding": "git-commit",
