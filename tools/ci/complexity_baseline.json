@@ -303,11 +303,6 @@
       "max_complexity": 17
     },
     {
-      "path": "evoom_guard/record_verifier.py",
-      "symbol": "_top_level_type_errors",
-      "max_complexity": 17
-    },
-    {
       "path": "evoom_guard/release_source_finalizer.py",
       "symbol": "inspect_release_source_bundle",
       "max_complexity": 11

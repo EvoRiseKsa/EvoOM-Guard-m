@@ -65,9 +65,12 @@ facades remain unclassified debt.
   stdlib-only verifier projection. Baseline producer-shape validation likewise
   delegates to its own stdlib-only projection while the facade retains the
   `baseline.shape` report, downstream policy/repair-effect interpretation, and
-  verdict authority. The extracted owners only return immutable ordered shape
-  errors. Their measured facade hotspots fall from C901 26 and 24 to 1 each;
-  the current repository inventory falls from 94 through 93 to 92.
+  verdict authority. Top-level envelope-type validation now delegates to a
+  fourth stdlib-only type projection while the facade retains the historical
+  mutable-list result and `envelope.types` sequencing. The extracted owners
+  only return immutable ordered shape errors. Their measured facade hotspots
+  fall from C901 26, 24, and 17 to 1 each; the current repository inventory
+  falls from 94 through 93 and 92 to 91.
 - The broader program is still in progress: evidence/finalizer domains,
   release engineering, repository-wide strict typing, independent external
   red-team evidence, and the end-to-end protected build-to-admission chain are

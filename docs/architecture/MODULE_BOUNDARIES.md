@@ -96,6 +96,18 @@ mutations bind this boundary. The owner has no internal package dependencies
 and performs no I/O, hashing, cleanup, execution, serialization, report
 mutation, or policy decision.
 
+Top-level envelope-type validation has a fifth pure owner in
+`verifiers/record_envelope_types.py`. It returns an immutable ordered error
+tuple and owns only the historical field-presence/type projection. The mixed
+facade retains its mutable-list compatibility result, `envelope.types` check
+identity and ordering, schema selection, shape and semantic phases, and all
+verdict authority. A committed pre-extraction vector, schema-1.11/1.12 public
+report digests, mapping-access and exception-precedence checks, input
+immutability, deterministic differential traces, and focused mutations bind
+the boundary. The owner has no internal package dependencies and performs no
+I/O, hashing, cleanup, execution, serialization, report mutation, policy
+interpretation, or verdict decision.
+
 Six cohesive stable flat modules now have explicit existing owners without a
 file move or public-identity change. `evidence.py` owns the bounded
 changed-line-coverage observation; `evidence_bundle.py` owns deterministic
