@@ -40,13 +40,16 @@ retained evidence say so.
   `risk_score` projection, and signed verdict schemas 1.11/1.12 are unchanged.
 - Added an inert Phase-0 model for a possible one-time `v4.5.1` maintenance
   operation. It freezes literal repository, protection/check App IDs, ruleset,
-  Environment, raw-Git mode/blob, seven-run `A -> B -> CD -> E -> F -> G -> H`,
-  local signing-key, annotated-tag-object, immutable-release, and exact-asset
-  requirements. Live validation requires separately trusted owner-authenticated
-  control-plane, raw-Git, and local-signature observations; a self-reported
-  snapshot is not proof. Negative tests cover substitutions and authority
-  weakening. The model remains fail-closed and creates no branch, tag, release,
-  signing authority, repository variable, or GitHub setting.
+  trusted-`main` Environments, raw-Git mode/blob pins, seven-run
+  `A -> B -> CD -> E -> F -> G -> H` topology, exact pre/post-publication
+  checkpoints, sole write-enabled deploy-key identity, publication-secret
+  metadata, key-binding, signing, annotated-tag, immutable-release, temporal,
+  and retirement requirements. The helper validates explicitly
+  non-authoritative observation shapes only; it does not authenticate GitHub,
+  verify signatures/tag bytes, compare independent F/G/release bytes, bind
+  settings to run time, or prove retirement. These remain named blockers for a
+  separate external-pin implementation. The model accepts only inert state and
+  creates no branch, tag, release, key, secret, variable, or GitHub setting.
 - Added deterministic, no-clobber `finalizer-init` installation and static-only
   `finalizer-doctor` inspection for the current Trusted Finalizer workflow pair.
   The kit commits a public-key-bound deployment manifest, validates the

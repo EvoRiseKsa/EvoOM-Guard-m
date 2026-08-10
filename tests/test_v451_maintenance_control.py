@@ -4,7 +4,7 @@
 # Licensor: EvoRise Tech.
 # Source-available — see LICENSE for permitted use.
 # -----------------------------------------------------------------------------
-"""Regression tests for the inert v4.5.1 Phase-0 maintenance model."""
+"""Regressions for the inert, non-authoritative v4.5.1 Phase-0 model."""
 
 from __future__ import annotations
 
@@ -25,34 +25,115 @@ BASE_SHA = "2a8f012a8b6a5b62b9b0990207db8e0aed589795"
 BASE_TREE = "d1ae967f286dd8c70d6e0ba19748773c9e1ecc7b"
 TARGET_SHA = "3" * 40
 TARGET_TREE = "4" * 40
-KEY_BLOB = "5" * 40
-KEY_FINGERPRINT = "A" * 40
-VALIDATOR_BLOB = "6" * 40
+MAINTAINER_KEY_BLOB = "5" * 40
+MAINTAINER_FINGERPRINT = "A" * 40
+DEPLOY_KEY_ID = 45101
+DEPLOY_PUBLIC_KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH"
+)
+DEPLOY_FINGERPRINT = "SHA256:gNSIRW+2Iyiuvsdp/bgjy38bvWHw6wQm3tuoXrl3WjQ"
+READ_ONLY_PUBLIC_KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+)
+DEPLOY_CREATED = "2030-01-01T00:00:00Z"
+SECRET_CREATED = "2030-01-01T00:01:00Z"
+SECRET_UPDATED = "2030-01-01T00:02:00Z"
 
 
-def _active_contract() -> dict[str, Any]:
-    contract = validator.load_json(validator.CONTRACT_PATH)
-    contract["assurance_state"] = "ACTIVE_ONE_SHOT_V4_5_1"
-    contract["activation"]["enabled"] = True
-    pins = contract["activation"]["owner_authorized_post_merge_pins"]
-    pins["trusted_workflow_sha"] = MAIN_SHA
-    pins["trusted_workflow_tree"] = MAIN_TREE
-    pins["one_shot_enable_value"] = MAIN_SHA
-    contract["trusted_raw_git"]["trusted_workflow_sha"] = MAIN_SHA
-    contract["trusted_raw_git"]["trusted_workflow_tree"] = MAIN_TREE
-    contract["trusted_raw_git"]["required_entries"][
-        "tools/ci/validate_v451_maintenance_control.py"
-    ]["blob_sha"] = VALIDATOR_BLOB
-    signatures = contract["local_signature_verification"]
-    signatures["public_key_repository_path"] = "security/v4.5.1-maintainer-signing.pub"
-    signatures["public_key_blob_sha"] = KEY_BLOB
-    signatures["public_key_fingerprint"] = KEY_FINGERPRINT
-    contract["blockers"] = []
-    validator.validate_contract(contract, require_activated=True)
-    return contract
+def _contract() -> dict[str, Any]:
+    return validator.load_json(validator.CONTRACT_PATH)
 
 
-def _control_plane(contract: dict[str, Any]) -> dict[str, Any]:
+def _external_pins() -> dict[str, Any]:
+    return {
+        "format": "EVOGUARD_PHASE0_EXTERNAL_PIN_OBSERVATION_SHAPE_V1",
+        "trusted_workflow_sha": MAIN_SHA,
+        "trusted_workflow_tree": MAIN_TREE,
+        "one_shot_enable_value": MAIN_SHA,
+        "maintainer_signing_public_key_repository_path": ("security/v4.5.1-maintainer-signing.pub"),
+        "maintainer_signing_public_key_blob_sha": MAINTAINER_KEY_BLOB,
+        "maintainer_signing_public_key_fingerprint": MAINTAINER_FINGERPRINT,
+        "publication_deploy_key_id": DEPLOY_KEY_ID,
+        "publication_deploy_key_public_key": DEPLOY_PUBLIC_KEY,
+        "publication_deploy_key_fingerprint": DEPLOY_FINGERPRINT,
+        "publication_deploy_key_created_at": DEPLOY_CREATED,
+        "publication_secret_created_at": SECRET_CREATED,
+        "publication_secret_updated_at": SECRET_UPDATED,
+    }
+
+
+def _resolved(contract: dict[str, Any], pins: dict[str, Any]) -> dict[str, Any]:
+    return validator._resolved_contract_shape(contract, pins)
+
+
+def _runs(contract: dict[str, Any], checkpoint: str) -> list[dict[str, Any]]:
+    contracts = contract["runs"][:-1] if checkpoint == "before-publication" else contract["runs"]
+    result: list[dict[str, Any]] = []
+    prior: dict[str, Any] | None = None
+    for index, run_contract in enumerate(contracts):
+        run = {
+            "phase": run_contract["phase"],
+            "workflow_role": run_contract["workflow_role"],
+            "workflow_sha": MAIN_SHA,
+            "target_source_sha": TARGET_SHA,
+            "run_id": 1000 + index,
+            "run_attempt": 1,
+            "event": run_contract["event"],
+            "conclusion": "success",
+            "completed_jobs": copy.deepcopy(run_contract["jobs"]),
+            "upstream_run_id": None if prior is None else prior["run_id"],
+            "upstream_run_attempt": None if prior is None else prior["run_attempt"],
+        }
+        result.append(run)
+        prior = run
+    return result
+
+
+def _publication_authority(contract: dict[str, Any]) -> dict[str, Any]:
+    required = contract["required_publication_authority"]
+    write_key = required["repository_deploy_keys"]["required_write_key"]
+    secret = required["environment_secret_metadata"]["required_secret"]
+    return {
+        "format": "EVOGUARD_PUBLICATION_AUTHORITY_OBSERVATION_SHAPE_V1",
+        "deploy_keys_collection": {
+            "endpoint": required["repository_deploy_keys"]["endpoint"],
+            "page_count": 1,
+            "pagination_complete": True,
+            "raw_response_sha256": "a" * 64,
+            "items": [
+                {
+                    "id": 45100,
+                    "title": "read-only consumer",
+                    "key": READ_ONLY_PUBLIC_KEY,
+                    "created_at": "2029-12-01T00:00:00Z",
+                    "verified": True,
+                    "read_only": True,
+                    "enabled": True,
+                },
+                {
+                    "id": write_key["id"],
+                    "title": write_key["title"],
+                    "key": write_key["public_key"],
+                    "created_at": write_key["created_at"],
+                    "verified": True,
+                    "read_only": False,
+                    "enabled": True,
+                },
+            ],
+        },
+        "environment_secret_collection": {
+            "endpoint": required["environment_secret_metadata"]["endpoint"],
+            "environment": "evoguard-release-publication",
+            "environment_id": 18718846349,
+            "page_count": 1,
+            "pagination_complete": True,
+            "raw_response_sha256": "b" * 64,
+            "items": [copy.deepcopy(secret)],
+        },
+    }
+
+
+def _control_plane(contract: dict[str, Any], checkpoint: str) -> dict[str, Any]:
     pins = contract["activation"]["owner_authorized_post_merge_pins"]
     checks = [
         {
@@ -64,8 +145,8 @@ def _control_plane(contract: dict[str, Any]) -> dict[str, Any]:
         }
         for item in contract["required_branch_protection"]["required_checks"]
     ]
-    return {
-        "format": "EVOGUARD_OWNER_CONTROL_PLANE_V1",
+    value = {
+        "format": "EVOGUARD_OWNER_CONTROL_PLANE_OBSERVATION_SHAPE_V1",
         "repository": copy.deepcopy(contract["repository"]),
         "activation_variables": {
             pins["trusted_workflow_sha_variable"]: MAIN_SHA,
@@ -106,13 +187,34 @@ def _control_plane(contract: dict[str, Any]) -> dict[str, Any]:
         ],
         "rulesets": copy.deepcopy(contract["required_repository_rulesets"]),
         "environments": copy.deepcopy(contract["required_environments"]),
-        "runs": [],
+        "publication_authority": _publication_authority(contract),
+        "runs": _runs(contract, checkpoint),
         "tag": {"state": "absent"},
         "release": {"state": "absent"},
     }
+    if checkpoint == "after-publication-before-retirement":
+        value["tag"] = {
+            "state": "present",
+            "name": "v4.5.1",
+            "ref_object_type": "tag",
+            "ref_object_sha": "e" * 40,
+            "target_sha": TARGET_SHA,
+        }
+        value["release"] = {
+            "state": "published",
+            "tag": "v4.5.1",
+            "target_sha": TARGET_SHA,
+            "immutable": True,
+            "assets": [
+                {"name": "evo-guard.pyz", "sha256": "a" * 64},
+                {"name": "evo-guard.spdx.json", "sha256": "b" * 64},
+                {"name": "SHA256SUMS", "sha256": "c" * 64},
+            ],
+        }
+    return value
 
 
-def _raw_git(contract: dict[str, Any]) -> dict[str, Any]:
+def _raw_git(contract: dict[str, Any], checkpoint: str) -> dict[str, Any]:
     changes = [
         {
             "path": path,
@@ -124,8 +226,8 @@ def _raw_git(contract: dict[str, Any]) -> dict[str, Any]:
         }
         for index, path in enumerate(contract["candidate_scope"]["required_changed_paths"])
     ]
-    return {
-        "format": "EVOGUARD_TRUSTED_RAW_GIT_V1",
+    value = {
+        "format": "EVOGUARD_RAW_GIT_OBSERVATION_SHAPE_V1",
         "trusted_workflow_sha": MAIN_SHA,
         "trusted_workflow_tree": MAIN_TREE,
         "entries": copy.deepcopy(contract["trusted_raw_git"]["required_entries"]),
@@ -137,242 +239,191 @@ def _raw_git(contract: dict[str, Any]) -> dict[str, Any]:
         "changes": changes,
         "tag_object": {"state": "absent"},
     }
+    if checkpoint == "after-publication-before-retirement":
+        value["tag_object"] = {
+            "state": "present",
+            "object_type": "tag",
+            "object_sha": "e" * 40,
+            "name": "v4.5.1",
+            "target_type": "commit",
+            "target_sha": TARGET_SHA,
+            "size_bytes": 4096,
+        }
+    return value
 
 
-def _local_signatures(contract: dict[str, Any]) -> dict[str, Any]:
-    signature_contract = contract["local_signature_verification"]
-    return {
-        "format": "EVOGUARD_LOCAL_GIT_SIGNATURE_PROOF_V1",
+def _local_observations(contract: dict[str, Any], checkpoint: str) -> dict[str, Any]:
+    signature = contract["local_signature_verification"]
+    value = {
+        "format": "EVOGUARD_LOCAL_GIT_VERIFIER_OBSERVATION_SHAPE_V1",
+        "authority_status": "NON_AUTHORITATIVE_PHASE0_SHAPE_ONLY",
         "public_key": {
-            "path": signature_contract["public_key_repository_path"],
-            "blob_sha": KEY_BLOB,
-            "fingerprint": KEY_FINGERPRINT,
+            "path": signature["public_key_repository_path"],
+            "blob_sha": signature["public_key_blob_sha"],
+            "fingerprint": signature["public_key_fingerprint"],
         },
         "source_commit": {
             "object_type": "commit",
             "object_sha": TARGET_SHA,
-            "verified": True,
-            "fingerprint": KEY_FINGERPRINT,
+            "signer_fingerprint": signature["public_key_fingerprint"],
+            "raw_object_sha256": "d" * 64,
+            "verifier_receipt_sha256": "e" * 64,
         },
         "tag": {"state": "absent"},
+        "publication_secret_binding": {"state": "not-observed-before-H"},
     }
-
-
-def _runs(contract: dict[str, Any]) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    prior: dict[str, Any] | None = None
-    for index, run_contract in enumerate(contract["runs"]):
-        run = {
-            "phase": run_contract["phase"],
-            "workflow_role": run_contract["workflow_role"],
-            "workflow_sha": MAIN_SHA,
-            "target_source_sha": TARGET_SHA,
-            "run_id": 1000 + index,
-            "run_attempt": 1,
-            "event": run_contract["event"],
-            "conclusion": "success",
-            "completed_jobs": copy.deepcopy(run_contract["jobs"]),
-            "upstream_run_id": None if prior is None else prior["run_id"],
-            "upstream_run_attempt": None if prior is None else prior["run_attempt"],
+    if checkpoint == "after-publication-before-retirement":
+        write_key = contract["required_publication_authority"]["repository_deploy_keys"][
+            "required_write_key"
+        ]
+        secret = contract["required_publication_authority"]["environment_secret_metadata"][
+            "required_secret"
+        ]
+        h_run = _runs(contract, checkpoint)[-1]
+        value["tag"] = {
+            "object_type": "tag",
+            "object_sha": "e" * 40,
+            "signer_fingerprint": signature["public_key_fingerprint"],
+            "raw_object_sha256": "f" * 64,
+            "verifier_receipt_sha256": "1" * 64,
         }
-        result.append(run)
-        prior = run
-    return result
+        value["publication_secret_binding"] = {
+            "state": "observed-before-tag-mutation",
+            "source": "TRUSTED_MAIN_H_ENVIRONMENT_SECRET_PUBLIC_KEY_DERIVATION",
+            "workflow_sha": MAIN_SHA,
+            "run_id": h_run["run_id"],
+            "run_attempt": h_run["run_attempt"],
+            "environment": "evoguard-release-publication",
+            "environment_id": 18718846349,
+            "secret_name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+            "secret_created_at": secret["created_at"],
+            "secret_updated_at": secret["updated_at"],
+            "derived_public_key": write_key["public_key"],
+            "derived_fingerprint": write_key["fingerprint"],
+            "derivation_receipt_sha256": "2" * 64,
+        }
+    return value
 
 
-def _published_inputs(
-    contract: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    control = _control_plane(contract)
-    raw_git = _raw_git(contract)
-    signatures = _local_signatures(contract)
-    control["runs"] = _runs(contract)
-    tag_sha = "e" * 40
-    raw_git["tag_object"] = {
-        "state": "present",
-        "object_type": "tag",
-        "object_sha": tag_sha,
-        "name": "v4.5.1",
-        "target_type": "commit",
-        "target_sha": TARGET_SHA,
-        "size_bytes": 4096,
-    }
-    signatures["tag"] = {
-        "object_type": "tag",
-        "object_sha": tag_sha,
-        "verified": True,
-        "fingerprint": KEY_FINGERPRINT,
-    }
-    control["tag"] = {
-        "state": "present",
-        "name": "v4.5.1",
-        "ref_object_type": "tag",
-        "ref_object_sha": tag_sha,
-        "target_sha": TARGET_SHA,
-    }
-    control["release"] = {
-        "state": "published",
-        "tag": "v4.5.1",
-        "target_sha": TARGET_SHA,
-        "immutable": True,
-        "assets": [
-            {"name": "evo-guard.pyz", "sha256": "a" * 64, "admitted_sha256": "a" * 64},
-            {
-                "name": "evo-guard.spdx.json",
-                "sha256": "b" * 64,
-                "admitted_sha256": "b" * 64,
-            },
-            {"name": "SHA256SUMS", "sha256": "c" * 64, "admitted_sha256": "c" * 64},
-        ],
-    }
-    return control, raw_git, signatures
-
-
-def _validate_pre(
-    contract: dict[str, Any],
+def _validate_shape(
+    *,
+    checkpoint: str,
+    contract: dict[str, Any] | None = None,
+    pins: dict[str, Any] | None = None,
     control: dict[str, Any] | None = None,
     raw_git: dict[str, Any] | None = None,
-    signatures: dict[str, Any] | None = None,
+    local: dict[str, Any] | None = None,
 ) -> None:
-    validator.validate_trusted_observations(
-        control or _control_plane(contract),
-        raw_git or _raw_git(contract),
-        signatures or _local_signatures(contract),
+    contract = contract or _contract()
+    pins = pins or _external_pins()
+    resolved = _resolved(contract, pins)
+    validator.validate_observation_shape(
+        control or _control_plane(resolved, checkpoint),
+        raw_git or _raw_git(resolved, checkpoint),
+        local or _local_observations(resolved, checkpoint),
         contract,
+        pins,
+        checkpoint=checkpoint,
     )
 
 
-def test_checked_in_phase0_contract_is_explicitly_inert() -> None:
-    contract = validator.load_json(validator.CONTRACT_PATH)
+def test_checked_in_phase0_is_permanently_inert_and_not_self_activating() -> None:
+    contract = _contract()
     validator.validate_contract(contract)
     assert contract["assurance_state"] == "INERT_PRE_ACTIVATION_MODEL_NOT_LIVE_PROOF"
     assert contract["activation"]["enabled"] is False
     assert contract["blockers"]
     assert validator.main(["--check-inert"]) == 0
     assert validator.main([]) == 1
-    with pytest.raises(validator.MaintenanceControlError, match="intentionally inert"):
-        validator.validate_contract(contract, require_activated=True)
+
+    mutated = copy.deepcopy(contract)
+    mutated["activation"]["enabled"] = True
+    mutated["assurance_state"] = "ACTIVE_ONE_SHOT_V4_5_1"
+    with pytest.raises(validator.MaintenanceControlError, match="cannot activate itself"):
+        validator.validate_contract(mutated)
+
+    mutated = copy.deepcopy(contract)
+    mutated["activation"]["owner_authorized_post_merge_pins"]["trusted_workflow_sha"] = MAIN_SHA
+    with pytest.raises(validator.MaintenanceControlError, match="placeholders"):
+        validator.validate_contract(mutated)
 
 
-def test_topology_is_seven_runs_and_c_d_share_one_run() -> None:
-    contract = validator.load_json(validator.CONTRACT_PATH)
-    assert [item["phase"] for item in contract["runs"]] == [
-        "A",
-        "B",
-        "CD",
-        "E",
-        "F",
-        "G",
-        "H",
-    ]
-    cd = contract["runs"][2]
-    assert cd["workflow_role"] == "workflow-CD"
-    assert cd["jobs"] == ["preflight", "seal", "detached-verify"]
-    active = _active_contract()
-    assert len(_runs(active)) == 7
-    assert len({run["run_id"] for run in _runs(active)}) == 7
+def test_external_pin_shape_does_not_mutate_or_activate_checked_in_contract() -> None:
+    contract = _contract()
+    original = copy.deepcopy(contract)
+    resolved = _resolved(contract, _external_pins())
+    assert contract == original
+    assert resolved["activation"]["enabled"] is False
+    assert resolved["blockers"]
+    assert resolved["trusted_raw_git"]["trusted_workflow_sha"] == MAIN_SHA
 
 
-def test_phase0_pins_literal_control_plane_and_raw_git_baselines() -> None:
-    contract = validator.load_json(validator.CONTRACT_PATH)
+def test_topology_has_exact_two_checkpoints_and_one_cd_run() -> None:
+    contract = _contract()
+    assert [item["phase"] for item in contract["runs"]] == ["A", "B", "CD", "E", "F", "G", "H"]
+    assert contract["runs"][2]["jobs"] == ["preflight", "seal", "detached-verify"]
+    _validate_shape(checkpoint="before-publication")
+    _validate_shape(checkpoint="after-publication-before-retirement")
+
+    resolved = _resolved(contract, _external_pins())
+    control = _control_plane(resolved, "before-publication")
+    control["runs"] = []
+    with pytest.raises(validator.MaintenanceControlError, match="checkpoint"):
+        _validate_shape(checkpoint="before-publication", contract=contract, control=control)
+
+
+def test_phase0_pins_literal_baselines_and_checked_in_git_blobs() -> None:
+    contract = _contract()
     protection = contract["required_branch_protection"]
     assert len(protection["required_checks"]) == 11
     assert len({(item["context"], item["app_id"]) for item in protection["required_checks"]}) == 11
-    assert contract["required_repository_rulesets"] == [
-        {
-            "id": 19713401,
-            "name": "EvoGuard release tag authority",
-            "target": "tag",
-            "source_type": "Repository",
-            "source": "EvoRiseKsa/EvoOM-Guard-m",
-            "enforcement": "active",
-            "include": ["refs/tags/v*"],
-            "exclude": [],
-            "rules": ["creation", "update", "deletion", "non_fast_forward"],
-            "bypass_actors": [
-                {"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}
-            ],
-            "current_user_can_bypass": "never",
-        }
+    assert contract["required_repository_rulesets"][0]["bypass_actors"] == [
+        {"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}
     ]
-    assert set(contract["required_environments"]) == {
-        "evoguard-release-source-v2",
-        "evoguard-release-artifact-v1",
-        "evoguard-release-draft",
-        "evoguard-release-publication",
+    assert {item["deployment_branch"] for item in contract["required_environments"].values()} == {
+        "main"
     }
-    assert {
-        environment["deployment_branch"]
-        for environment in contract["required_environments"].values()
-    } == {"main"}
     entries = contract["trusted_raw_git"]["required_entries"]
-    workflow_entries = [
-        entry for entry in entries.values() if entry["role"].startswith("workflow-")
-    ]
-    assert len(workflow_entries) == 7
-    assert all(entry["mode"] == "100644" for entry in entries.values())
-    assert all(
-        validator.SHA_PATTERN.fullmatch(entry["blob_sha"]) for path, entry in entries.items()
-    )
+    assert len([item for item in entries.values() if item["role"].startswith("workflow-")]) == 7
     for path, entry in entries.items():
         source_bytes = (ROOT / path).read_bytes()
         source_blob = hashlib.sha1(
             f"blob {len(source_bytes)}\0".encode() + source_bytes,
             usedforsecurity=False,
         ).hexdigest()
+        assert entry["mode"] == "100644"
         assert entry["blob_sha"] == source_blob
 
 
-def test_phase0_literal_baselines_cannot_be_redefined_inside_the_contract() -> None:
-    original = validator.load_json(validator.CONTRACT_PATH)
-
-    contract = copy.deepcopy(original)
-    contract["required_branch_protection"]["required_checks"][0]["app_id"] = 1
-    with pytest.raises(validator.MaintenanceControlError, match="literal ordered 11"):
-        validator.validate_contract(contract)
-
-    contract = copy.deepcopy(original)
-    contract["required_environments"]["evoguard-release-source-v2"]["id"] = 1
-    with pytest.raises(validator.MaintenanceControlError, match="restricted to trusted main"):
-        validator.validate_contract(contract)
-
-    contract = copy.deepcopy(original)
-    contract["trusted_raw_git"]["required_entries"][
-        ".github/workflows/evoguard-release-source-reverify.yml"
-    ]["blob_sha"] = "9" * 40
-    with pytest.raises(validator.MaintenanceControlError, match="reviewed baseline"):
-        validator.validate_contract(contract)
-
-    contract = copy.deepcopy(original)
-    contract["runs"][0]["jobs"] = ["metadata"]
-    with pytest.raises(validator.MaintenanceControlError, match="job inventory is not literal"):
-        validator.validate_contract(contract)
-
-
-def test_active_model_keeps_workflow_and_target_identities_distinct() -> None:
-    contract = _active_contract()
-    assert MAIN_SHA != TARGET_SHA
-    _validate_pre(contract)
-
-
-def test_candidate_cannot_self_report_workflow_blobs_or_signer_identity() -> None:
-    contract = _active_contract()
-    control = _control_plane(contract)
-    control["workflow_blobs"] = copy.deepcopy(contract["trusted_raw_git"]["required_entries"])
-    with pytest.raises(validator.MaintenanceControlError, match="keys are not closed"):
-        _validate_pre(contract, control=control)
-
-    control = _control_plane(contract)
-    control["author_login"] = "EvoRiseKsa"
-    with pytest.raises(validator.MaintenanceControlError, match="keys are not closed"):
-        _validate_pre(contract, control=control)
+def test_literal_contract_values_cannot_be_redefined() -> None:
+    original = _contract()
+    mutations = [
+        lambda value: value["required_branch_protection"]["required_checks"][0].__setitem__(
+            "app_id", 1
+        ),
+        lambda value: value["required_environments"]["evoguard-release-source-v2"].__setitem__(
+            "id", 1
+        ),
+        lambda value: value["trusted_raw_git"]["required_entries"][
+            ".github/workflows/evoguard-release-source-reverify.yml"
+        ].__setitem__("blob_sha", "9" * 40),
+        lambda value: value["runs"][0].__setitem__("jobs", ["metadata"]),
+        lambda value: value["required_publication_authority"]["repository_deploy_keys"].__setitem__(
+            "exact_write_enabled_count", 2
+        ),
+    ]
+    for mutate in mutations:
+        contract = copy.deepcopy(original)
+        mutate(contract)
+        with pytest.raises(validator.MaintenanceControlError):
+            validator.validate_contract(contract)
 
 
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
         (
-            lambda value: value["repository"].__setitem__("full_name", "attacker/EvoOM-Guard-m"),
+            lambda value: value["repository"].__setitem__("full_name", "attacker/repo"),
             "alternate repository",
         ),
         (
@@ -384,18 +435,8 @@ def test_candidate_cannot_self_report_workflow_blobs_or_signer_identity() -> Non
             "maintenance base moved",
         ),
         (
-            lambda value: value["branches"]["release/v4.5.1"].__setitem__("sha", "9" * 40),
-            "pull request base/head",
-        ),
-        (
             lambda value: value["pull_requests"].append(copy.deepcopy(value["pull_requests"][0])),
             "exactly one",
-        ),
-        (
-            lambda value: value["pull_requests"][0].__setitem__(
-                "head_repo_full_name", "attacker/EvoOM-Guard-m"
-            ),
-            "pull request base/head",
         ),
         (
             lambda value: value["pull_requests"][0]["reviews"][0].__setitem__(
@@ -405,40 +446,186 @@ def test_candidate_cannot_self_report_workflow_blobs_or_signer_identity() -> Non
         ),
         (
             lambda value: value["pull_requests"][0]["checks"][0].__setitem__("app_id", 1),
-            "11-check/App-ID baseline",
+            "11-check/App-ID",
         ),
     ],
 )
-def test_control_plane_substitutions_fail_closed(mutator: Any, message: str) -> None:
-    contract = _active_contract()
-    control = _control_plane(contract)
+def test_control_plane_shape_substitutions_fail_closed(mutator: Any, message: str) -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "before-publication")
     mutator(control)
     with pytest.raises(validator.MaintenanceControlError, match=message):
-        _validate_pre(contract, control=control)
+        _validate_shape(
+            checkpoint="before-publication",
+            contract=contract,
+            pins=pins,
+            control=control,
+        )
 
 
-def test_both_branches_cannot_be_weakened_together() -> None:
-    contract = _active_contract()
-    control = _control_plane(contract)
+def test_candidate_cannot_expand_the_closed_observation_shape() -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "before-publication")
+    control["sole_write_enabled"] = True
+    with pytest.raises(validator.MaintenanceControlError, match="keys are not closed"):
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, control=control
+        )
+
+
+def test_branch_ruleset_and_environment_weakening_fail_closed() -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "before-publication")
     for protection in control["branch_protections"].values():
         protection["allow_force_pushes"] = True
     with pytest.raises(validator.MaintenanceControlError, match="must be false"):
-        _validate_pre(contract, control=control)
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, control=control
+        )
 
-
-def test_ruleset_and_environment_weakening_fail_closed() -> None:
-    contract = _active_contract()
-    control = _control_plane(contract)
+    control = _control_plane(resolved, "before-publication")
     control["rulesets"][0]["bypass_actors"] = []
     with pytest.raises(validator.MaintenanceControlError, match="ruleset"):
-        _validate_pre(contract, control=control)
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, control=control
+        )
 
-    control = _control_plane(contract)
+    control = _control_plane(resolved, "before-publication")
     control["environments"]["evoguard-release-publication"]["deployment_branch"] = (
         "maintenance/v4.5"
     )
     with pytest.raises(validator.MaintenanceControlError, match="Environment"):
-        _validate_pre(contract, control=control)
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, control=control
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutator", "message"),
+    [
+        (
+            lambda value: value["deploy_keys_collection"]["items"].append(
+                copy.deepcopy(value["deploy_keys_collection"]["items"][1])
+            ),
+            "duplicate",
+        ),
+        (
+            lambda value: value["deploy_keys_collection"]["items"][0].__setitem__(
+                "read_only", False
+            ),
+            "exactly one",
+        ),
+        (
+            lambda value: value["deploy_keys_collection"]["items"][1].__setitem__("id", 999),
+            "owner-pinned",
+        ),
+        (
+            lambda value: value["deploy_keys_collection"]["items"][1].__setitem__("title", "other"),
+            "owner-pinned",
+        ),
+        (
+            lambda value: value["deploy_keys_collection"]["items"][1].__setitem__(
+                "verified", False
+            ),
+            "owner-pinned",
+        ),
+        (
+            lambda value: value["deploy_keys_collection"].__setitem__("pagination_complete", False),
+            "complete",
+        ),
+    ],
+)
+def test_deploy_key_collection_enforces_one_exact_write_authority(
+    mutator: Any, message: str
+) -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "before-publication")
+    mutator(control["publication_authority"])
+    with pytest.raises(validator.MaintenanceControlError, match=message):
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, control=control
+        )
+
+
+def test_deploy_key_fingerprint_is_derived_not_a_boolean_claim() -> None:
+    pins = _external_pins()
+    pins["publication_deploy_key_fingerprint"] = "SHA256:" + ("A" * 43)
+    with pytest.raises(validator.MaintenanceControlError, match="derived"):
+        _resolved(_contract(), pins)
+
+
+@pytest.mark.parametrize(
+    ("mutator", "message"),
+    [
+        (
+            lambda value: value["environment_secret_collection"].__setitem__(
+                "environment", "other"
+            ),
+            "Environment endpoint",
+        ),
+        (
+            lambda value: value["environment_secret_collection"]["items"][0].__setitem__(
+                "name", "OTHER"
+            ),
+            "metadata/inventory",
+        ),
+        (
+            lambda value: value["environment_secret_collection"]["items"].append(
+                copy.deepcopy(value["environment_secret_collection"]["items"][0])
+            ),
+            "metadata/inventory",
+        ),
+        (
+            lambda value: value["environment_secret_collection"].__setitem__(
+                "pagination_complete", False
+            ),
+            "Environment endpoint",
+        ),
+    ],
+)
+def test_publication_secret_metadata_is_exact_collector_shape(mutator: Any, message: str) -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "before-publication")
+    mutator(control["publication_authority"])
+    with pytest.raises(validator.MaintenanceControlError, match=message):
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, control=control
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("derived_fingerprint", "SHA256:" + ("B" * 43)),
+        ("derived_public_key", READ_ONLY_PUBLIC_KEY),
+        ("run_id", 9999),
+        ("environment", "other"),
+        ("secret_created_at", "2031-01-01T00:00:00Z"),
+    ],
+)
+def test_private_secret_to_public_deploy_key_binding_shape_is_exact(field: str, value: Any) -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    local = _local_observations(resolved, "after-publication-before-retirement")
+    local["publication_secret_binding"][field] = value
+    with pytest.raises(validator.MaintenanceControlError, match="secret-binding"):
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            local=local,
+        )
 
 
 @pytest.mark.parametrize(
@@ -450,14 +637,8 @@ def test_ruleset_and_environment_weakening_fail_closed() -> None:
             ].__setitem__("blob_sha", "9" * 40),
             "workflow/control/policy/pack",
         ),
-        (
-            lambda value: value.__setitem__("target_parents", [BASE_SHA, "9" * 40]),
-            "one exact",
-        ),
-        (
-            lambda value: value["changes"][0].__setitem__("old_mode", "100755"),
-            "mode",
-        ),
+        (lambda value: value.__setitem__("target_parents", [BASE_SHA, "9" * 40]), "one exact"),
+        (lambda value: value["changes"][0].__setitem__("old_mode", "100755"), "mode"),
         (
             lambda value: value["changes"].append(
                 {
@@ -473,94 +654,163 @@ def test_ruleset_and_environment_weakening_fail_closed() -> None:
         ),
     ],
 )
-def test_raw_git_substitutions_fail_closed(mutator: Any, message: str) -> None:
-    contract = _active_contract()
-    raw_git = _raw_git(contract)
+def test_raw_git_observation_shape_substitutions_fail_closed(mutator: Any, message: str) -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    raw_git = _raw_git(resolved, "before-publication")
     mutator(raw_git)
     with pytest.raises(validator.MaintenanceControlError, match=message):
-        _validate_pre(contract, raw_git=raw_git)
-
-
-def test_source_signature_requires_local_raw_git_and_pinned_key() -> None:
-    contract = _active_contract()
-    signatures = _local_signatures(contract)
-    signatures["source_commit"]["verified"] = False
-    with pytest.raises(validator.MaintenanceControlError, match="local raw-Git"):
-        _validate_pre(contract, signatures=signatures)
-
-    signatures = _local_signatures(contract)
-    signatures["public_key"]["fingerprint"] = "B" * 40
-    with pytest.raises(validator.MaintenanceControlError, match="pinned public key"):
-        _validate_pre(contract, signatures=signatures)
-
-
-def test_stale_attempt_and_separate_d_run_are_rejected() -> None:
-    contract = _active_contract()
-    control, raw_git, signatures = _published_inputs(contract)
-    control["runs"][4]["upstream_run_attempt"] = 2
-    with pytest.raises(validator.MaintenanceControlError, match="stale upstream"):
-        validator.validate_trusted_observations(
-            control, raw_git, signatures, contract, stage="post-publication"
+        _validate_shape(
+            checkpoint="before-publication", contract=contract, pins=pins, raw_git=raw_git
         )
 
-    control, raw_git, signatures = _published_inputs(contract)
+
+def test_local_verifier_input_is_explicitly_shape_only_not_crypto_proof() -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    local = _local_observations(resolved, "before-publication")
+    local["authority_status"] = "VERIFIED"
+    with pytest.raises(validator.MaintenanceControlError, match="shape-only"):
+        _validate_shape(checkpoint="before-publication", contract=contract, pins=pins, local=local)
+
+    local = _local_observations(resolved, "before-publication")
+    local["source_commit"]["verified"] = True
+    with pytest.raises(validator.MaintenanceControlError, match="keys are not closed"):
+        _validate_shape(checkpoint="before-publication", contract=contract, pins=pins, local=local)
+
+
+def test_run_chain_rejects_stale_duplicate_and_separate_d_run_shapes() -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "after-publication-before-retirement")
+    control["runs"][4]["upstream_run_attempt"] = 2
+    with pytest.raises(validator.MaintenanceControlError, match="stale upstream"):
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            control=control,
+        )
+
+    control = _control_plane(resolved, "after-publication-before-retirement")
+    control["runs"][4]["run_id"] = control["runs"][3]["run_id"]
+    control["runs"][5]["upstream_run_id"] = control["runs"][4]["run_id"]
+    with pytest.raises(validator.MaintenanceControlError, match="globally unique"):
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            control=control,
+        )
+
+    control = _control_plane(resolved, "after-publication-before-retirement")
     control["runs"].insert(3, copy.deepcopy(control["runs"][2]))
     control["runs"][3]["phase"] = "D"
-    with pytest.raises(validator.MaintenanceControlError, match="seven-run"):
-        validator.validate_trusted_observations(
-            control, raw_git, signatures, contract, stage="post-publication"
+    with pytest.raises(validator.MaintenanceControlError, match="checkpoint"):
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            control=control,
         )
 
 
 @pytest.mark.parametrize(
     ("target", "field", "value", "message"),
     [
-        ("raw", "object_type", "commit", "raw annotated tag"),
-        ("raw", "name", "v4.5.2", "raw annotated tag"),
-        ("raw", "target_sha", "9" * 40, "raw annotated tag"),
-        ("raw", "size_bytes", 131073, "raw annotated tag"),
-        ("signature", "verified", False, "local signature"),
-        ("signature", "fingerprint", "B" * 40, "local signature"),
+        ("raw", "object_type", "commit", "raw tag observation shape"),
+        ("raw", "name", "v4.5.2", "raw tag observation shape"),
+        ("raw", "target_sha", "9" * 40, "raw tag observation shape"),
+        ("raw", "size_bytes", 131073, "raw tag observation shape"),
+        ("local", "signer_fingerprint", "B" * 40, "tag verifier observation shape"),
     ],
 )
-def test_tag_object_and_signature_mutations_fail_closed(
+def test_tag_observation_shape_mutations_fail_without_crypto_claim(
     target: str, field: str, value: Any, message: str
 ) -> None:
-    contract = _active_contract()
-    control, raw_git, signatures = _published_inputs(contract)
-    if target == "raw":
-        raw_git["tag_object"][field] = value
-    else:
-        signatures["tag"][field] = value
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    raw_git = _raw_git(resolved, "after-publication-before-retirement")
+    local = _local_observations(resolved, "after-publication-before-retirement")
+    (raw_git["tag_object"] if target == "raw" else local["tag"])[field] = value
     with pytest.raises(validator.MaintenanceControlError, match=message):
-        validator.validate_trusted_observations(
-            control, raw_git, signatures, contract, stage="post-publication"
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            raw_git=raw_git,
+            local=local,
         )
 
 
-def test_release_asset_and_immutability_mutations_fail_closed() -> None:
-    contract = _active_contract()
-    control, raw_git, signatures = _published_inputs(contract)
+def test_tag_and_release_byte_authority_remain_explicit_blockers() -> None:
+    contract = _contract()
+    assert contract["tag_contract"]["phase0_observation_shape_only"] is True
+    assert contract["tag_contract"]["canonical_raw_tag_parser_implemented"] is False
+    assert contract["release_contract"]["phase0_observation_shape_only"] is True
+    assert contract["release_contract"]["digest_authority_implemented"] is False
+    assert any("retained F/G byte receipts" in item for item in contract["blockers"])
+    assert any("canonical raw annotated-tag parser" in item for item in contract["blockers"])
+
+
+def test_release_observation_shape_rejects_mutability_inventory_and_bad_digest() -> None:
+    contract = _contract()
+    pins = _external_pins()
+    resolved = _resolved(contract, pins)
+    control = _control_plane(resolved, "after-publication-before-retirement")
     control["release"]["immutable"] = False
     with pytest.raises(validator.MaintenanceControlError, match="immutable"):
-        validator.validate_trusted_observations(
-            control, raw_git, signatures, contract, stage="post-publication"
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            control=control,
         )
 
-    control, raw_git, signatures = _published_inputs(contract)
-    control["release"]["assets"][0]["admitted_sha256"] = "f" * 64
-    with pytest.raises(validator.MaintenanceControlError, match="digest differs"):
-        validator.validate_trusted_observations(
-            control, raw_git, signatures, contract, stage="post-publication"
+    control = _control_plane(resolved, "after-publication-before-retirement")
+    control["release"]["assets"].append({"name": "extra", "sha256": "f" * 64})
+    with pytest.raises(validator.MaintenanceControlError, match="inventory"):
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            control=control,
+        )
+
+    control = _control_plane(resolved, "after-publication-before-retirement")
+    control["release"]["assets"][0]["sha256"] = "bad"
+    with pytest.raises(validator.MaintenanceControlError, match="digest shape"):
+        _validate_shape(
+            checkpoint="after-publication-before-retirement",
+            contract=contract,
+            pins=pins,
+            control=control,
         )
 
 
-def test_exact_published_model_passes() -> None:
-    contract = _active_contract()
-    control, raw_git, signatures = _published_inputs(contract)
-    validator.validate_trusted_observations(
-        control, raw_git, signatures, contract, stage="post-publication"
-    )
+def test_retirement_and_temporal_binding_are_requirements_not_claimed_results() -> None:
+    contract = _contract()
+    checkpoint = contract["checkpoint_contract"]
+    retirement = contract["retirement_contract"]
+    assert checkpoint["temporal_binding_implemented"] is False
+    assert retirement["implemented"] is False
+    assert retirement["required_actions"] == [
+        "DISABLE_ONE_SHOT_AUTHORIZATION",
+        "DELETE_RAW_TAG_OBJECT_VARIABLE",
+        "DELETE_PUBLICATION_DEPLOY_KEY",
+        "DELETE_PUBLICATION_ENVIRONMENT_SECRET",
+    ]
+    assert any("time-bound" in item for item in contract["blockers"])
+    assert any("retirement" in item for item in contract["blockers"])
+
+
+def test_exact_before_and_after_observation_shapes_pass_without_authority_claim() -> None:
+    _validate_shape(checkpoint="before-publication")
+    _validate_shape(checkpoint="after-publication-before-retirement")
 
 
 def test_duplicate_nonfinite_and_hardlinked_json_are_rejected(tmp_path: Path) -> None:

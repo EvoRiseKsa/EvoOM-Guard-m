@@ -170,6 +170,44 @@
       "deployment_branch_policy_id": 55562438
     }
   },
+  "required_publication_authority": {
+    "observation_authority": "OUT_OF_PROCESS_OWNER_AUTHENTICATED_BOUNDED_FULLY_PAGINATED_GITHUB_API_COLLECTOR",
+    "candidate_supplied": false,
+    "repository_deploy_keys": {
+      "endpoint": "/repos/EvoRiseKsa/EvoOM-Guard-m/keys",
+      "exact_write_enabled_count": 1,
+      "required_write_key": {
+        "id": "POST_MERGE_REQUIRED",
+        "title": "EvoOM Guard v4.5.1 temporary release tag authority",
+        "public_key": "POST_MERGE_REQUIRED",
+        "fingerprint": "POST_MERGE_REQUIRED",
+        "algorithm": "ssh-ed25519",
+        "created_at": "POST_MERGE_REQUIRED",
+        "verified": true,
+        "read_only": false,
+        "enabled": true
+      }
+    },
+    "environment_secret_metadata": {
+      "endpoint": "/repos/EvoRiseKsa/EvoOM-Guard-m/environments/evoguard-release-publication/secrets",
+      "environment": "evoguard-release-publication",
+      "environment_id": 18718846349,
+      "exact_secret_inventory": ["EVOGUARD_RELEASE_TAG_DEPLOY_KEY"],
+      "required_secret": {
+        "name": "EVOGUARD_RELEASE_TAG_DEPLOY_KEY",
+        "created_at": "POST_MERGE_REQUIRED",
+        "updated_at": "POST_MERGE_REQUIRED"
+      },
+      "secret_value_observable_via_github_api": false
+    },
+    "private_key_binding": {
+      "source": "TRUSTED_MAIN_H_ENVIRONMENT_SECRET_PUBLIC_KEY_DERIVATION",
+      "candidate_supplied": false,
+      "required_before_tag_mutation": true,
+      "derived_public_key_must_equal_deploy_key": true,
+      "derived_fingerprint_must_equal_deploy_key": true
+    }
+  },
   "trusted_raw_git": {
     "trusted_workflow_sha": "POST_MERGE_REQUIRED",
     "trusted_workflow_tree": "POST_MERGE_REQUIRED",
@@ -187,7 +225,7 @@
       "security/release-source-pack/pack.json": {"role": "pack", "mode": "100644", "blob_sha": "a05bb0d113cfc9675e06c9480590496dbf841b82"},
       "security/release-source-pack/test_release_protocol.py": {"role": "pack", "mode": "100644", "blob_sha": "f8f6d9369d295171ad78c87dff424840a800de3e"},
       "security/judge-requirements.lock": {"role": "control", "mode": "100644", "blob_sha": "8d173d39ba87c7a075fcac42c8fabe692263cbf6"},
-      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "dbcf6bcfa6dccd8f3546dad6ba1984d35c96d312"}
+      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "344c090f75e54c419c7d253f9863ca08e8a02c32"}
     }
   },
   "local_signature_verification": {
@@ -217,12 +255,43 @@
     "required_object_type": "tag",
     "required_name": "v4.5.1",
     "required_target_type": "commit",
-    "push_object_sha_not_target_commit": true
+    "push_object_sha_not_target_commit": true,
+    "phase0_observation_shape_only": true,
+    "canonical_raw_tag_parser_implemented": false,
+    "future_canonical_fields": ["object", "type", "tag", "tagger", "message", "signature", "encoding"]
   },
   "release_contract": {
     "immutable": true,
     "required_assets": ["evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"],
-    "digest_authority": "EXACT_RETAINED_F_G_ADMISSION_BYTES"
+    "phase0_observation_shape_only": true,
+    "digest_authority_implemented": false,
+    "required_future_digest_authorities": [
+      "RETAINED_F_BYTE_RECEIPT",
+      "RETAINED_G_BYTE_RECEIPT",
+      "DOWNLOADED_GITHUB_RELEASE_ASSET_BYTES"
+    ]
+  },
+  "checkpoint_contract": {
+    "phase0_shape_only": true,
+    "before_publication_completed_runs": ["A", "B", "CD", "E", "F", "G"],
+    "after_publication_completed_runs": ["A", "B", "CD", "E", "F", "G", "H"],
+    "required_future_temporal_binding": "FRESH_OWNER_CONTROL_PLANE_OBSERVATION_BOUND_TO_EACH_RUN_ATTEMPT_AND_EACH_ENVIRONMENT_APPROVAL_BEFORE_SECRET_ACCESS",
+    "temporal_binding_implemented": false
+  },
+  "retirement_contract": {
+    "phase0_requirement_only": true,
+    "implemented": false,
+    "required_actions": [
+      "DISABLE_ONE_SHOT_AUTHORIZATION",
+      "DELETE_RAW_TAG_OBJECT_VARIABLE",
+      "DELETE_PUBLICATION_DEPLOY_KEY",
+      "DELETE_PUBLICATION_ENVIRONMENT_SECRET"
+    ],
+    "required_surviving_state": [
+      "IMMUTABLE_V4_5_1_RELEASE",
+      "SIGNED_ANNOTATED_V4_5_1_TAG_OBJECT"
+    ],
+    "future_evidence": "SEPARATE_OWNER_COLLECTED_SIGNED_RETIREMENT_RECEIPT_BOUND_TO_RELEASE_LEDGER"
   },
   "blockers": [
     "post-merge trusted workflow commit and tree owner-authorized variables are absent",
@@ -230,8 +299,14 @@
     "release/v4.5.1 does not exist as the sole exact open pull-request head",
     "a reviewed maintainer signing public key, raw-Git blob ID, and fingerprint are not pinned",
     "an owner-authenticated bounded GitHub control-plane collector is not wired",
+    "the sole write-enabled v4.5.1 deploy-key ID, title, public key, fingerprint, and metadata are not owner-pinned",
+    "the publication Environment secret metadata and trusted private-to-public deploy-key binding are absent",
+    "independent retained F/G byte receipts and downloaded release-asset byte verification are not wired",
     "the existing A-H schemas and implementations still couple workflow SHA to target source SHA",
     "the existing H implementation still pushes a lightweight tag target",
-    "no repository variable contains a locally signed bounded raw annotated tag object"
+    "no repository variable contains a locally signed bounded raw annotated tag object",
+    "no canonical raw annotated-tag parser binds object, type, tag, tagger, message, signature, and encoding",
+    "control-plane observations are not freshly time-bound to each run attempt and Environment approval",
+    "post-publication one-shot, raw-tag variable, deploy-key, and Environment-secret retirement is not implemented or evidenced"
   ]
 }

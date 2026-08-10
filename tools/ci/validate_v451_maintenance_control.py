@@ -7,20 +7,25 @@
 # -----------------------------------------------------------------------------
 """Validate the inert Phase-0 model for the one-time v4.5.1 lane.
 
-The checked-in contract is intentionally not an operational publication gate.
-Live validation requires three independently obtained inputs: owner-authenticated
-GitHub control-plane observations, raw-Git derivation, and local signature
-verification with a pinned public key.  Candidate JSON cannot supply any of
-those authorities.  The CLI checks only that the source contract remains inert.
+The checked-in contract is intentionally not an operational publication gate
+and cannot activate itself. The optional observation helper checks closed test
+shapes only; it performs no API authentication, Git derivation, cryptography,
+artifact-byte verification, temporal binding, or retirement verification. The
+CLI checks only that the source contract remains inert.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+import copy
+import hashlib
 import json
 import os
 import re
 import stat
+import struct
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -30,6 +35,7 @@ MAX_CONTROL_BYTES = 2 * 1024 * 1024
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 FINGERPRINT_PATTERN = re.compile(r"^(?:[0-9A-F]{40}|[0-9A-F]{64}|SHA256:[A-Za-z0-9+/]{43}=?)$")
+UTC_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 PLACEHOLDER = "POST_MERGE_REQUIRED"
 RUN_PHASES = ("A", "B", "CD", "E", "F", "G", "H")
 WORKFLOW_ROLES = tuple(f"workflow-{phase}" for phase in RUN_PHASES)
@@ -110,6 +116,10 @@ ENVIRONMENT_PINS = {
     "evoguard-release-draft": (18718845676, 55562435),
     "evoguard-release-publication": (18718846349, 55562438),
 }
+PUBLICATION_ENVIRONMENT = "evoguard-release-publication"
+PUBLICATION_ENVIRONMENT_ID = 18718846349
+PUBLICATION_SECRET_NAME = "EVOGUARD_RELEASE_TAG_DEPLOY_KEY"
+PUBLICATION_KEY_TITLE = "EvoOM Guard v4.5.1 temporary release tag authority"
 
 
 class MaintenanceControlError(ValueError):
@@ -164,6 +174,49 @@ def _sha256(value: Any, label: str) -> str:
     if SHA256_PATTERN.fullmatch(value) is None:
         _fail(f"{label} must be one lowercase SHA-256 digest")
     return value
+
+
+def _timestamp(value: Any, label: str, *, allow_placeholder: bool = False) -> str:
+    value = _string(value, label)
+    if allow_placeholder and value == PLACEHOLDER:
+        return value
+    if UTC_PATTERN.fullmatch(value) is None:
+        _fail(f"{label} must be a whole-second UTC timestamp")
+    return value
+
+
+def _positive_id_or_placeholder(value: Any, label: str, *, activated: bool) -> int | str:
+    if not activated and value == PLACEHOLDER:
+        return value
+    return _integer(value, label)
+
+
+def _openssh_ed25519_fingerprint(value: Any, label: str) -> str:
+    """Derive an OpenSSH SHA256 fingerprint from one canonical Ed25519 key."""
+
+    text = _string(value, label)
+    parts = text.split()
+    if len(parts) != 2 or parts[0] != "ssh-ed25519":
+        _fail(f"{label} must be one comment-free ssh-ed25519 public key")
+    try:
+        blob = base64.b64decode(parts[1], validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise MaintenanceControlError(f"{label} is not canonical base64") from exc
+    try:
+        algorithm_length = struct.unpack(">I", blob[:4])[0]
+        offset = 4
+        algorithm = blob[offset : offset + algorithm_length]
+        offset += algorithm_length
+        key_length = struct.unpack(">I", blob[offset : offset + 4])[0]
+        offset += 4
+        key = blob[offset : offset + key_length]
+        offset += key_length
+    except (struct.error, ValueError) as exc:
+        raise MaintenanceControlError(f"{label} has an invalid SSH wire encoding") from exc
+    if algorithm != b"ssh-ed25519" or key_length != 32 or len(key) != 32 or offset != len(blob):
+        _fail(f"{label} is not one canonical 32-byte Ed25519 public key")
+    digest = hashlib.sha256(blob).digest()
+    return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
 
 
 def _exact_keys(value: dict[str, Any], expected: set[str], label: str) -> None:
@@ -389,10 +442,142 @@ def _validate_raw_entries(value: Any, *, activated: bool) -> dict[str, Any]:
     return raw_git
 
 
-def validate_contract(
-    contract: dict[str, Any], *, require_activated: bool = False
+def _validate_publication_authority_contract(value: Any, *, activated: bool) -> dict[str, Any]:
+    authority = _object(value, "publication authority contract")
+    _exact_keys(
+        authority,
+        {
+            "observation_authority",
+            "candidate_supplied",
+            "repository_deploy_keys",
+            "environment_secret_metadata",
+            "private_key_binding",
+        },
+        "publication authority contract",
+    )
+    if (
+        authority["observation_authority"]
+        != "OUT_OF_PROCESS_OWNER_AUTHENTICATED_BOUNDED_FULLY_PAGINATED_GITHUB_API_COLLECTOR"
+        or _boolean(authority["candidate_supplied"], "publication candidate authority")
+    ):
+        _fail("publication authority must come from the trusted owner collector")
+
+    deploy_keys = _object(authority["repository_deploy_keys"], "deploy-key contract")
+    _exact_keys(
+        deploy_keys,
+        {"endpoint", "exact_write_enabled_count", "required_write_key"},
+        "deploy-key contract",
+    )
+    if (
+        deploy_keys["endpoint"] != "/repos/EvoRiseKsa/EvoOM-Guard-m/keys"
+        or deploy_keys["exact_write_enabled_count"] != 1
+    ):
+        _fail("deploy-key collection/one-write-key requirement is not exact")
+    required_key = _object(deploy_keys["required_write_key"], "required write deploy key")
+    _exact_keys(
+        required_key,
+        {
+            "id",
+            "title",
+            "public_key",
+            "fingerprint",
+            "algorithm",
+            "created_at",
+            "verified",
+            "read_only",
+            "enabled",
+        },
+        "required write deploy key",
+    )
+    _positive_id_or_placeholder(required_key["id"], "write deploy-key ID", activated=activated)
+    if (
+        required_key["title"] != PUBLICATION_KEY_TITLE
+        or required_key["algorithm"] != "ssh-ed25519"
+        or _boolean(required_key["verified"], "write deploy-key verified") is not True
+        or _boolean(required_key["read_only"], "write deploy-key read-only") is not False
+        or _boolean(required_key["enabled"], "write deploy-key enabled") is not True
+    ):
+        _fail("required write deploy-key identity/capability is not exact")
+    public_key = _string(required_key["public_key"], "write deploy-key public key")
+    fingerprint = _string(required_key["fingerprint"], "write deploy-key fingerprint")
+    _timestamp(
+        required_key["created_at"],
+        "write deploy-key creation",
+        allow_placeholder=not activated,
+    )
+    if activated:
+        derived = _openssh_ed25519_fingerprint(public_key, "write deploy-key public key")
+        if fingerprint != derived:
+            _fail("write deploy-key fingerprint is not derived from its pinned public key")
+    elif (
+        required_key["id"] != PLACEHOLDER
+        or public_key != PLACEHOLDER
+        or fingerprint != PLACEHOLDER
+        or required_key["created_at"] != PLACEHOLDER
+    ):
+        _fail("inert deploy-key public identity must remain invalid placeholders")
+
+    secret = _object(
+        authority["environment_secret_metadata"], "publication secret metadata contract"
+    )
+    _exact_keys(
+        secret,
+        {
+            "endpoint",
+            "environment",
+            "environment_id",
+            "exact_secret_inventory",
+            "required_secret",
+            "secret_value_observable_via_github_api",
+        },
+        "publication secret metadata contract",
+    )
+    if (
+        secret["endpoint"]
+        != ("/repos/EvoRiseKsa/EvoOM-Guard-m/environments/evoguard-release-publication/secrets")
+        or secret["environment"] != PUBLICATION_ENVIRONMENT
+        or secret["environment_id"] != PUBLICATION_ENVIRONMENT_ID
+        or secret["exact_secret_inventory"] != [PUBLICATION_SECRET_NAME]
+        or _boolean(secret["secret_value_observable_via_github_api"], "secret API visibility")
+    ):
+        _fail("publication Environment secret authority/inventory is not exact")
+    required_secret = _object(secret["required_secret"], "required publication secret")
+    _exact_keys(
+        required_secret,
+        {"name", "created_at", "updated_at"},
+        "required publication secret",
+    )
+    if required_secret["name"] != PUBLICATION_SECRET_NAME:
+        _fail("publication Environment secret name is not exact")
+    created_at = _timestamp(
+        required_secret["created_at"],
+        "publication secret creation",
+        allow_placeholder=not activated,
+    )
+    updated_at = _timestamp(
+        required_secret["updated_at"], "publication secret update", allow_placeholder=not activated
+    )
+    if activated and created_at > updated_at:
+        _fail("publication secret metadata timestamps are inconsistent")
+    if not activated and (created_at != PLACEHOLDER or updated_at != PLACEHOLDER):
+        _fail("inert publication secret metadata must remain invalid placeholders")
+
+    binding = _object(authority["private_key_binding"], "publication key binding contract")
+    if binding != {
+        "source": "TRUSTED_MAIN_H_ENVIRONMENT_SECRET_PUBLIC_KEY_DERIVATION",
+        "candidate_supplied": False,
+        "required_before_tag_mutation": True,
+        "derived_public_key_must_equal_deploy_key": True,
+        "derived_fingerprint_must_equal_deploy_key": True,
+    }:
+        _fail("publication private/public key binding contract is not exact")
+    return authority
+
+
+def _validate_contract_model(
+    contract: dict[str, Any], *, resolved_external_shape: bool
 ) -> dict[str, Any]:
-    """Validate the source-owned Phase-0 model and its inert/active state."""
+    """Validate the inert model, optionally with external test-shape pins resolved."""
 
     _exact_keys(
         contract,
@@ -409,11 +594,14 @@ def validate_contract(
             "required_branch_protection",
             "required_repository_rulesets",
             "required_environments",
+            "required_publication_authority",
             "trusted_raw_git",
             "local_signature_verification",
             "runs",
             "tag_contract",
             "release_contract",
+            "checkpoint_contract",
+            "retirement_contract",
             "blockers",
         },
         "maintenance contract",
@@ -435,13 +623,10 @@ def validate_contract(
     enabled = _boolean(activation["enabled"], "activation enabled")
     if activation["one_shot_version"] != "4.5.1":
         _fail("maintenance contract is not literal one-shot v4.5.1")
-    expected_state = (
-        "ACTIVE_ONE_SHOT_V4_5_1" if enabled else "INERT_PRE_ACTIVATION_MODEL_NOT_LIVE_PROOF"
-    )
-    if contract["assurance_state"] != expected_state:
-        _fail("assurance state does not match activation")
-    if require_activated and (not enabled or blockers):
-        _fail("maintenance lane is intentionally inert while blockers remain")
+    if enabled or contract["assurance_state"] != "INERT_PRE_ACTIVATION_MODEL_NOT_LIVE_PROOF":
+        _fail("checked-in Phase-0 model can only be inert and cannot activate itself")
+    if not blockers:
+        _fail("inert Phase-0 model must retain explicit activation blockers")
     flags = _object(activation["current_release_flags"], "current release flags")
     if flags != {
         "EVOGUARD_RELEASE_SOURCE_V2_ENABLED": "false",
@@ -469,11 +654,16 @@ def validate_contract(
     ):
         _fail("post-merge owner authorization variable names are not literal")
     for field in ("trusted_workflow_sha", "trusted_workflow_tree"):
-        _sha(pins[field], field, allow_placeholder=not enabled)
-    if enabled and pins["one_shot_enable_value"] != pins["trusted_workflow_sha"]:
-        _fail("one-shot enable value must bind the exact trusted workflow SHA")
-    if not enabled and pins["one_shot_enable_value"] != PLACEHOLDER:
-        _fail("inert one-shot enable value must remain an invalid placeholder")
+        _sha(pins[field], field, allow_placeholder=not resolved_external_shape)
+    if resolved_external_shape:
+        if pins["one_shot_enable_value"] != pins["trusted_workflow_sha"]:
+            _fail("external one-shot shape must bind the exact trusted workflow SHA")
+    elif (
+        pins["trusted_workflow_sha"] != PLACEHOLDER
+        or pins["trusted_workflow_tree"] != PLACEHOLDER
+        or pins["one_shot_enable_value"] != PLACEHOLDER
+    ):
+        _fail("inert post-merge pins must remain invalid external placeholders")
 
     repository = _object(contract["repository"], "repository contract")
     if repository != {
@@ -591,8 +781,11 @@ def validate_contract(
             environment["deployment_branch_policy_id"],
             f"environment {name} branch-policy id",
         )
-    raw_git = _validate_raw_entries(contract["trusted_raw_git"], activated=enabled)
-    if enabled and (
+    _validate_publication_authority_contract(
+        contract["required_publication_authority"], activated=resolved_external_shape
+    )
+    raw_git = _validate_raw_entries(contract["trusted_raw_git"], activated=resolved_external_shape)
+    if resolved_external_shape and (
         raw_git["trusted_workflow_sha"] != pins["trusted_workflow_sha"]
         or raw_git["trusted_workflow_tree"] != pins["trusted_workflow_tree"]
     ):
@@ -626,9 +819,11 @@ def validate_contract(
         _fail("signature authority must be local raw Git, never REST identity fields")
     for field in ("public_key_repository_path", "public_key_blob_sha", "public_key_fingerprint"):
         value = _string(signatures[field], f"signature {field}")
-        if enabled and value == PLACEHOLDER:
-            _fail(f"active signature {field} cannot be a placeholder")
-    if enabled:
+        if resolved_external_shape and value == PLACEHOLDER:
+            _fail(f"resolved signature {field} cannot be a placeholder")
+        if not resolved_external_shape and value != PLACEHOLDER:
+            _fail(f"inert signature {field} must remain an invalid placeholder")
+    if resolved_external_shape:
         _sha(signatures["public_key_blob_sha"], "signing public-key blob")
         if FINGERPRINT_PATTERN.fullmatch(signatures["public_key_fingerprint"]) is None:
             _fail("signing public-key fingerprint is not canonical")
@@ -659,6 +854,9 @@ def validate_contract(
             "required_name",
             "required_target_type",
             "push_object_sha_not_target_commit",
+            "phase0_observation_shape_only",
+            "canonical_raw_tag_parser_implemented",
+            "future_canonical_fields",
         },
         "tag contract",
     )
@@ -671,17 +869,119 @@ def validate_contract(
         or tag["required_name"] != "v4.5.1"
         or tag["required_target_type"] != "commit"
         or not _boolean(tag["push_object_sha_not_target_commit"], "tag object push")
+        or not _boolean(tag["phase0_observation_shape_only"], "tag shape-only state")
+        or _boolean(tag["canonical_raw_tag_parser_implemented"], "tag parser state")
+        or tag["future_canonical_fields"]
+        != ["object", "type", "tag", "tagger", "message", "signature", "encoding"]
     ):
         _fail("annotated signed tag contract is not exact")
     release_contract = _object(contract["release_contract"], "release contract")
     if release_contract != {
         "immutable": True,
         "required_assets": ["evo-guard.pyz", "evo-guard.spdx.json", "SHA256SUMS"],
-        "digest_authority": "EXACT_RETAINED_F_G_ADMISSION_BYTES",
+        "phase0_observation_shape_only": True,
+        "digest_authority_implemented": False,
+        "required_future_digest_authorities": [
+            "RETAINED_F_BYTE_RECEIPT",
+            "RETAINED_G_BYTE_RECEIPT",
+            "DOWNLOADED_GITHUB_RELEASE_ASSET_BYTES",
+        ],
     }:
-        _fail("immutable release asset/digest contract is not exact")
+        _fail("Phase-0 immutable-release shape/digest blocker is not exact")
+    checkpoint = _object(contract["checkpoint_contract"], "checkpoint contract")
+    if checkpoint != {
+        "phase0_shape_only": True,
+        "before_publication_completed_runs": ["A", "B", "CD", "E", "F", "G"],
+        "after_publication_completed_runs": ["A", "B", "CD", "E", "F", "G", "H"],
+        "required_future_temporal_binding": (
+            "FRESH_OWNER_CONTROL_PLANE_OBSERVATION_BOUND_TO_EACH_RUN_ATTEMPT_AND_"
+            "EACH_ENVIRONMENT_APPROVAL_BEFORE_SECRET_ACCESS"
+        ),
+        "temporal_binding_implemented": False,
+    }:
+        _fail("Phase-0 checkpoint/temporal-binding contract is not exact")
+    retirement = _object(contract["retirement_contract"], "retirement contract")
+    if retirement != {
+        "phase0_requirement_only": True,
+        "implemented": False,
+        "required_actions": [
+            "DISABLE_ONE_SHOT_AUTHORIZATION",
+            "DELETE_RAW_TAG_OBJECT_VARIABLE",
+            "DELETE_PUBLICATION_DEPLOY_KEY",
+            "DELETE_PUBLICATION_ENVIRONMENT_SECRET",
+        ],
+        "required_surviving_state": [
+            "IMMUTABLE_V4_5_1_RELEASE",
+            "SIGNED_ANNOTATED_V4_5_1_TAG_OBJECT",
+        ],
+        "future_evidence": (
+            "SEPARATE_OWNER_COLLECTED_SIGNED_RETIREMENT_RECEIPT_BOUND_TO_RELEASE_LEDGER"
+        ),
+    }:
+        _fail("Phase-0 retirement requirement is not exact")
     _ = protection
     return contract
+
+
+def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
+    """Validate only the checked-in inert Phase-0 model."""
+
+    return _validate_contract_model(contract, resolved_external_shape=False)
+
+
+def _resolved_contract_shape(
+    contract: dict[str, Any], external_pins: dict[str, Any]
+) -> dict[str, Any]:
+    """Resolve test-only observation shapes without creating an activation path."""
+
+    validate_contract(contract)
+    _exact_keys(
+        external_pins,
+        {
+            "format",
+            "trusted_workflow_sha",
+            "trusted_workflow_tree",
+            "one_shot_enable_value",
+            "maintainer_signing_public_key_repository_path",
+            "maintainer_signing_public_key_blob_sha",
+            "maintainer_signing_public_key_fingerprint",
+            "publication_deploy_key_id",
+            "publication_deploy_key_public_key",
+            "publication_deploy_key_fingerprint",
+            "publication_deploy_key_created_at",
+            "publication_secret_created_at",
+            "publication_secret_updated_at",
+        },
+        "external Phase-0 pin observation shape",
+    )
+    if external_pins["format"] != "EVOGUARD_PHASE0_EXTERNAL_PIN_OBSERVATION_SHAPE_V1":
+        _fail("external Phase-0 pin observation shape format is not exact")
+    resolved = copy.deepcopy(contract)
+    pins = resolved["activation"]["owner_authorized_post_merge_pins"]
+    pins["trusted_workflow_sha"] = external_pins["trusted_workflow_sha"]
+    pins["trusted_workflow_tree"] = external_pins["trusted_workflow_tree"]
+    pins["one_shot_enable_value"] = external_pins["one_shot_enable_value"]
+    raw_git = resolved["trusted_raw_git"]
+    raw_git["trusted_workflow_sha"] = external_pins["trusted_workflow_sha"]
+    raw_git["trusted_workflow_tree"] = external_pins["trusted_workflow_tree"]
+    signatures = resolved["local_signature_verification"]
+    signatures["public_key_repository_path"] = external_pins[
+        "maintainer_signing_public_key_repository_path"
+    ]
+    signatures["public_key_blob_sha"] = external_pins["maintainer_signing_public_key_blob_sha"]
+    signatures["public_key_fingerprint"] = external_pins[
+        "maintainer_signing_public_key_fingerprint"
+    ]
+    publication = resolved["required_publication_authority"]
+    deploy_key = publication["repository_deploy_keys"]["required_write_key"]
+    deploy_key["id"] = external_pins["publication_deploy_key_id"]
+    deploy_key["public_key"] = external_pins["publication_deploy_key_public_key"]
+    deploy_key["fingerprint"] = external_pins["publication_deploy_key_fingerprint"]
+    deploy_key["created_at"] = external_pins["publication_deploy_key_created_at"]
+    secret = publication["environment_secret_metadata"]["required_secret"]
+    secret["created_at"] = external_pins["publication_secret_created_at"]
+    secret["updated_at"] = external_pins["publication_secret_updated_at"]
+    return _validate_contract_model(resolved, resolved_external_shape=True)
 
 
 def _validate_checks(checks_value: Any, contract: dict[str, Any], target_sha: str) -> None:
@@ -712,21 +1012,134 @@ def _validate_checks(checks_value: Any, contract: dict[str, Any], target_sha: st
         _fail("observed checks do not equal the literal 11-check/App-ID baseline")
 
 
+def _validate_publication_authority_observation_shape(value: Any, contract: dict[str, Any]) -> None:
+    """Validate normalized collector output shape, not collector authenticity."""
+
+    observation = _object(value, "publication authority observation shape")
+    _exact_keys(
+        observation,
+        {"format", "deploy_keys_collection", "environment_secret_collection"},
+        "publication authority observation shape",
+    )
+    if observation["format"] != "EVOGUARD_PUBLICATION_AUTHORITY_OBSERVATION_SHAPE_V1":
+        _fail("publication authority observation shape format is not exact")
+    required = contract["required_publication_authority"]
+
+    deploy_collection = _object(
+        observation["deploy_keys_collection"], "deploy-key collection shape"
+    )
+    _exact_keys(
+        deploy_collection,
+        {
+            "endpoint",
+            "page_count",
+            "pagination_complete",
+            "raw_response_sha256",
+            "items",
+        },
+        "deploy-key collection shape",
+    )
+    if (
+        deploy_collection["endpoint"] != required["repository_deploy_keys"]["endpoint"]
+        or _boolean(deploy_collection["pagination_complete"], "deploy-key pagination") is not True
+    ):
+        _fail("deploy-key collection shape is not complete for the literal endpoint")
+    _integer(deploy_collection["page_count"], "deploy-key page count")
+    _sha256(deploy_collection["raw_response_sha256"], "deploy-key raw response digest")
+    deploy_keys: list[dict[str, Any]] = []
+    ids: set[int] = set()
+    key_texts: set[str] = set()
+    for index, raw in enumerate(_array(deploy_collection["items"], "deploy keys")):
+        key = _object(raw, f"deploy key {index}")
+        _exact_keys(
+            key,
+            {"id", "title", "key", "created_at", "verified", "read_only", "enabled"},
+            f"deploy key {index}",
+        )
+        key_id = _integer(key["id"], "deploy-key ID")
+        key_text = _string(key["key"], "deploy-key public key")
+        if key_id in ids or key_text in key_texts:
+            _fail("deploy-key collection contains duplicate IDs or public keys")
+        ids.add(key_id)
+        key_texts.add(key_text)
+        _string(key["title"], "deploy-key title")
+        _timestamp(key["created_at"], "deploy-key creation")
+        _boolean(key["verified"], "deploy-key verified")
+        _boolean(key["read_only"], "deploy-key read-only")
+        _boolean(key["enabled"], "deploy-key enabled")
+        deploy_keys.append(key)
+    write_keys = [item for item in deploy_keys if item["read_only"] is False]
+    if len(write_keys) != 1:
+        _fail("collector items must contain exactly one write-enabled deploy key")
+    expected_key = required["repository_deploy_keys"]["required_write_key"]
+    write_key = write_keys[0]
+    if write_key != {
+        "id": expected_key["id"],
+        "title": expected_key["title"],
+        "key": expected_key["public_key"],
+        "created_at": expected_key["created_at"],
+        "verified": True,
+        "read_only": False,
+        "enabled": True,
+    }:
+        _fail("sole write-enabled deploy key differs from the owner-pinned identity")
+    if (
+        _openssh_ed25519_fingerprint(write_key["key"], "write deploy-key public key")
+        != expected_key["fingerprint"]
+    ):
+        _fail("write deploy-key public key does not match the owner-pinned fingerprint")
+
+    secret_collection = _object(
+        observation["environment_secret_collection"],
+        "publication secret collection shape",
+    )
+    _exact_keys(
+        secret_collection,
+        {
+            "endpoint",
+            "environment",
+            "environment_id",
+            "page_count",
+            "pagination_complete",
+            "raw_response_sha256",
+            "items",
+        },
+        "publication secret collection shape",
+    )
+    secret_contract = required["environment_secret_metadata"]
+    if (
+        secret_collection["endpoint"] != secret_contract["endpoint"]
+        or secret_collection["environment"] != PUBLICATION_ENVIRONMENT
+        or secret_collection["environment_id"] != PUBLICATION_ENVIRONMENT_ID
+        or _boolean(secret_collection["pagination_complete"], "secret pagination") is not True
+    ):
+        _fail("publication secret collection shape is not the exact Environment endpoint")
+    _integer(secret_collection["page_count"], "publication secret page count")
+    _sha256(secret_collection["raw_response_sha256"], "publication secret raw response digest")
+    secret_items = _array(secret_collection["items"], "publication Environment secrets")
+    if secret_items != [secret_contract["required_secret"]]:
+        _fail("publication Environment secret metadata/inventory is not exact")
+
+
 def _validate_runs(
     value: Any,
     *,
     contract: dict[str, Any],
     trusted_workflow_sha: str,
     target_source_sha: str,
-    complete: bool,
+    checkpoint: str,
 ) -> None:
-    runs = _array(value, "run observations")
-    if not runs and not complete:
-        return
-    expected = RUN_PHASES if complete else RUN_PHASES[: len(runs)]
+    runs = _array(value, "run observation shapes")
+    if checkpoint == "before-publication":
+        expected = RUN_PHASES[:-1]
+    elif checkpoint == "after-publication-before-retirement":
+        expected = RUN_PHASES
+    else:
+        _fail("observation checkpoint is not one of the two Phase-0 shapes")
     if len(runs) != len(expected):
-        _fail("observed runs are not an exact seven-run prefix")
+        _fail("run observation inventory is not exact for the named checkpoint")
     prior: dict[str, Any] | None = None
+    run_ids: set[int] = set()
     for phase, raw in zip(expected, runs, strict=True):
         run = _object(raw, f"phase {phase} run")
         _exact_keys(
@@ -752,7 +1165,10 @@ def _validate_runs(
             _fail("run did not execute the owner-pinned trusted workflow SHA")
         if _sha(run["target_source_sha"], "run target SHA") != target_source_sha:
             _fail("run target source substitution")
-        _integer(run["run_id"], "run ID")
+        run_id = _integer(run["run_id"], "run ID")
+        if run_id in run_ids:
+            _fail("A-through-H run IDs must be globally unique")
+        run_ids.add(run_id)
         _integer(run["run_attempt"], "run attempt")
         expected_event = "workflow_dispatch" if phase in {"A", "E"} else "workflow_run"
         if run["event"] != expected_event or run["conclusion"] != "success":
@@ -771,25 +1187,26 @@ def _validate_runs(
         prior = run
 
 
-def validate_trusted_observations(
+def validate_observation_shape(
     control_plane: dict[str, Any],
     raw_git: dict[str, Any],
-    local_signatures: dict[str, Any],
+    local_verifier_observations: dict[str, Any],
     contract: dict[str, Any],
+    external_pins: dict[str, Any],
     *,
-    stage: str = "pre-admission",
+    checkpoint: str,
 ) -> None:
-    """Validate three trusted inputs; none may originate in candidate JSON.
+    """Validate only a non-authoritative Phase-0 observation *shape*.
 
-    ``control_plane`` must come from an owner-authenticated, fully paginated,
-    bounded GitHub API collector. ``raw_git`` must be derived from literal Git
-    objects under the owner-pinned workflow root. ``local_signatures`` must be
-    produced by local commit/tag verification using the pinned public key.
+    This function performs no GitHub authentication, raw-object derivation,
+    cryptographic signature verification, retained F/G byte verification, or
+    temporal checkpoint binding. Its inputs are synthetic/normalized shapes
+    used to freeze a future protocol. They are never live admission proof.
     """
 
-    validate_contract(contract, require_activated=True)
-    if stage not in {"pre-admission", "post-publication"}:
-        _fail("stage must be pre-admission or post-publication")
+    contract = _resolved_contract_shape(contract, external_pins)
+    if checkpoint not in {"before-publication", "after-publication-before-retirement"}:
+        _fail("observation checkpoint is not one of the two Phase-0 shapes")
     _exact_keys(
         control_plane,
         {
@@ -801,14 +1218,15 @@ def validate_trusted_observations(
             "pull_requests",
             "rulesets",
             "environments",
+            "publication_authority",
             "runs",
             "tag",
             "release",
         },
-        "trusted control-plane observation",
+        "control-plane observation shape",
     )
-    if control_plane["format"] != "EVOGUARD_OWNER_CONTROL_PLANE_V1":
-        _fail("control-plane observation format is not exact")
+    if control_plane["format"] != "EVOGUARD_OWNER_CONTROL_PLANE_OBSERVATION_SHAPE_V1":
+        _fail("control-plane observation shape format is not exact")
     if control_plane["repository"] != contract["repository"]:
         _fail("alternate repository/owner identity")
     pins = contract["activation"]["owner_authorized_post_merge_pins"]
@@ -850,6 +1268,9 @@ def validate_trusted_observations(
         _fail("repository/tag ruleset observation differs from the literal baseline")
     if control_plane["environments"] != contract["required_environments"]:
         _fail("Environment observation differs from the literal trusted-main baseline")
+    _validate_publication_authority_observation_shape(
+        control_plane["publication_authority"], contract
+    )
 
     pulls = _array(control_plane["pull_requests"], "release pull requests")
     if len(pulls) != 1:
@@ -917,10 +1338,10 @@ def validate_trusted_observations(
             "changes",
             "tag_object",
         },
-        "trusted raw-Git observation",
+        "raw-Git observation shape",
     )
-    if raw_git["format"] != "EVOGUARD_TRUSTED_RAW_GIT_V1":
-        _fail("trusted raw-Git observation format is not exact")
+    if raw_git["format"] != "EVOGUARD_RAW_GIT_OBSERVATION_SHAPE_V1":
+        _fail("raw-Git observation shape format is not exact")
     if raw_git["trusted_workflow_sha"] != workflow_branch["sha"] or (
         raw_git["trusted_workflow_tree"] != workflow_branch["tree_sha"]
     ):
@@ -963,45 +1384,75 @@ def validate_trusted_observations(
         _fail("raw-Git candidate scope expanded or omitted required paths")
 
     _exact_keys(
-        local_signatures,
-        {"format", "public_key", "source_commit", "tag"},
-        "local signature proof",
+        local_verifier_observations,
+        {
+            "format",
+            "authority_status",
+            "public_key",
+            "source_commit",
+            "tag",
+            "publication_secret_binding",
+        },
+        "local verifier observation shape",
     )
-    if local_signatures["format"] != "EVOGUARD_LOCAL_GIT_SIGNATURE_PROOF_V1":
-        _fail("local signature proof format is not exact")
-    key = _object(local_signatures["public_key"], "verified public key")
-    _exact_keys(key, {"path", "blob_sha", "fingerprint"}, "verified public key")
+    if (
+        local_verifier_observations["format"] != "EVOGUARD_LOCAL_GIT_VERIFIER_OBSERVATION_SHAPE_V1"
+        or local_verifier_observations["authority_status"] != "NON_AUTHORITATIVE_PHASE0_SHAPE_ONLY"
+    ):
+        _fail("local verifier observation is not explicitly shape-only")
+    key = _object(local_verifier_observations["public_key"], "public-key shape")
+    _exact_keys(key, {"path", "blob_sha", "fingerprint"}, "public-key shape")
     signature_contract = contract["local_signature_verification"]
     if key != {
         "path": signature_contract["public_key_repository_path"],
         "blob_sha": signature_contract["public_key_blob_sha"],
         "fingerprint": signature_contract["public_key_fingerprint"],
     }:
-        _fail("local verifier did not use the pinned public key")
-    source_proof = _object(local_signatures["source_commit"], "source signature proof")
-    if source_proof != {
+        _fail("local verifier shape does not name the externally pinned public key")
+    source_observation = _object(
+        local_verifier_observations["source_commit"], "source verifier observation shape"
+    )
+    _exact_keys(
+        source_observation,
+        {
+            "object_type",
+            "object_sha",
+            "signer_fingerprint",
+            "raw_object_sha256",
+            "verifier_receipt_sha256",
+        },
+        "source verifier observation shape",
+    )
+    if {
+        "object_type": source_observation["object_type"],
+        "object_sha": source_observation["object_sha"],
+        "signer_fingerprint": source_observation["signer_fingerprint"],
+    } != {
         "object_type": "commit",
         "object_sha": candidate_branch["sha"],
-        "verified": True,
-        "fingerprint": key["fingerprint"],
+        "signer_fingerprint": key["fingerprint"],
     }:
-        _fail("source commit lacks a local raw-Git signature by the pinned key")
+        _fail("source verifier observation shape is not bound to the expected object/key")
+    _sha256(source_observation["raw_object_sha256"], "source raw-object digest shape")
+    _sha256(source_observation["verifier_receipt_sha256"], "source verifier-receipt digest shape")
 
     _validate_runs(
         control_plane["runs"],
         contract=contract,
         trusted_workflow_sha=workflow_branch["sha"],
         target_source_sha=candidate_branch["sha"],
-        complete=stage == "post-publication",
+        checkpoint=checkpoint,
     )
-    if stage == "pre-admission":
+    if checkpoint == "before-publication":
         if (
             control_plane["tag"] != {"state": "absent"}
             or (control_plane["release"] != {"state": "absent"})
             or raw_git["tag_object"] != {"state": "absent"}
-            or (local_signatures["tag"] != {"state": "absent"})
+            or (local_verifier_observations["tag"] != {"state": "absent"})
+            or local_verifier_observations["publication_secret_binding"]
+            != {"state": "not-observed-before-H"}
         ):
-            _fail("pre-admission requires absent tag/release observations")
+            _fail("before-publication shape requires A-through-G and absent H outputs")
         return
     tag_object = _object(raw_git["tag_object"], "raw tag object")
     _exact_keys(
@@ -1017,16 +1468,32 @@ def validate_trusted_observations(
         or tag_object["target_sha"] != candidate_branch["sha"]
         or _integer(tag_object["size_bytes"], "tag object size") > 131072
     ):
-        _fail("raw annotated tag object is noncanonical, oversized, or retargeted")
+        _fail("raw tag observation shape is oversized, retargeted, or structurally wrong")
     _sha(tag_object["object_sha"], "annotated tag object SHA")
-    tag_proof = _object(local_signatures["tag"], "tag signature proof")
-    if tag_proof != {
+    tag_observation = _object(local_verifier_observations["tag"], "tag verifier observation shape")
+    _exact_keys(
+        tag_observation,
+        {
+            "object_type",
+            "object_sha",
+            "signer_fingerprint",
+            "raw_object_sha256",
+            "verifier_receipt_sha256",
+        },
+        "tag verifier observation shape",
+    )
+    if {
+        "object_type": tag_observation["object_type"],
+        "object_sha": tag_observation["object_sha"],
+        "signer_fingerprint": tag_observation["signer_fingerprint"],
+    } != {
         "object_type": "tag",
         "object_sha": tag_object["object_sha"],
-        "verified": True,
-        "fingerprint": key["fingerprint"],
+        "signer_fingerprint": key["fingerprint"],
     }:
-        _fail("annotated tag lacks a local signature by the pinned key")
+        _fail("tag verifier observation shape is not bound to the expected object/key")
+    _sha256(tag_observation["raw_object_sha256"], "tag raw-object digest shape")
+    _sha256(tag_observation["verifier_receipt_sha256"], "tag verifier-receipt digest shape")
     if control_plane["tag"] != {
         "state": "present",
         "name": "v4.5.1",
@@ -1034,7 +1501,67 @@ def validate_trusted_observations(
         "ref_object_sha": tag_object["object_sha"],
         "target_sha": candidate_branch["sha"],
     }:
-        _fail("GitHub tag ref does not point to the verified annotated tag object")
+        _fail("GitHub tag-ref observation shape does not point to the named tag object")
+
+    binding = _object(
+        local_verifier_observations["publication_secret_binding"],
+        "publication secret-binding observation shape",
+    )
+    _exact_keys(
+        binding,
+        {
+            "state",
+            "source",
+            "workflow_sha",
+            "run_id",
+            "run_attempt",
+            "environment",
+            "environment_id",
+            "secret_name",
+            "secret_created_at",
+            "secret_updated_at",
+            "derived_public_key",
+            "derived_fingerprint",
+            "derivation_receipt_sha256",
+        },
+        "publication secret-binding observation shape",
+    )
+    h_run = _array(control_plane["runs"], "run observation shapes")[-1]
+    deploy_key = contract["required_publication_authority"]["repository_deploy_keys"][
+        "required_write_key"
+    ]
+    secret = contract["required_publication_authority"]["environment_secret_metadata"][
+        "required_secret"
+    ]
+    if {
+        "state": binding["state"],
+        "source": binding["source"],
+        "workflow_sha": binding["workflow_sha"],
+        "run_id": binding["run_id"],
+        "run_attempt": binding["run_attempt"],
+        "environment": binding["environment"],
+        "environment_id": binding["environment_id"],
+        "secret_name": binding["secret_name"],
+        "secret_created_at": binding["secret_created_at"],
+        "secret_updated_at": binding["secret_updated_at"],
+        "derived_public_key": binding["derived_public_key"],
+        "derived_fingerprint": binding["derived_fingerprint"],
+    } != {
+        "state": "observed-before-tag-mutation",
+        "source": "TRUSTED_MAIN_H_ENVIRONMENT_SECRET_PUBLIC_KEY_DERIVATION",
+        "workflow_sha": workflow_branch["sha"],
+        "run_id": h_run["run_id"],
+        "run_attempt": h_run["run_attempt"],
+        "environment": PUBLICATION_ENVIRONMENT,
+        "environment_id": PUBLICATION_ENVIRONMENT_ID,
+        "secret_name": PUBLICATION_SECRET_NAME,
+        "secret_created_at": secret["created_at"],
+        "secret_updated_at": secret["updated_at"],
+        "derived_public_key": deploy_key["public_key"],
+        "derived_fingerprint": deploy_key["fingerprint"],
+    }:
+        _fail("publication secret-binding shape is not bound to H/key/secret metadata")
+    _sha256(binding["derivation_receipt_sha256"], "key-derivation receipt digest shape")
     release = _object(control_plane["release"], "release observation")
     _exact_keys(
         release,
@@ -1054,10 +1581,8 @@ def validate_trusted_observations(
         _fail("release asset inventory is not the exact ordered three-asset set")
     for index, raw in enumerate(assets):
         asset = _object(raw, f"release asset {index}")
-        _exact_keys(asset, {"name", "sha256", "admitted_sha256"}, f"release asset {index}")
-        digest = _sha256(asset["sha256"], "release asset digest")
-        if _sha256(asset["admitted_sha256"], "admitted asset digest") != digest:
-            _fail("release asset digest differs from retained admission")
+        _exact_keys(asset, {"name", "sha256"}, f"release asset {index}")
+        _sha256(asset["sha256"], "release asset digest shape")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1079,7 +1604,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         contract = load_json(CONTRACT_PATH)
-        validate_contract(contract, require_activated=False)
+        validate_contract(contract)
         if contract["activation"]["enabled"] is not False or not contract["blockers"]:
             _fail("checked-in Phase-0 contract is not inert")
     except MaintenanceControlError as exc:

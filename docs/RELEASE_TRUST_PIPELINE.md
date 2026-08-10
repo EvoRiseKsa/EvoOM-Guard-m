@@ -52,7 +52,14 @@ and locally verified, maintainer-signed annotated tag required for `v4.5.1`.
 The Phase-0 model, negative tests, explicit blockers, and required redesign are
 recorded in [`V4.5.1_MAINTENANCE_LANE.md`](V4.5.1_MAINTENANCE_LANE.md). The model
 does not treat a self-reported snapshot as live or closed-world proof, and it is
-not evidence that a maintenance branch, candidate, tag, or release exists.
+not evidence that a maintenance branch, candidate, tag, or release exists. Its
+observation helper validates non-authoritative shapes only; it performs no
+GitHub authentication, cryptographic verification, F/G byte comparison, or
+canonical tag parsing. The generic DeployKey ruleset bypass additionally
+requires a future complete owner-collected listing proving one exact
+write-enabled deploy key, exact publication-secret metadata, private/public key
+binding inside trusted H, per-run temporal binding, and post-publication key,
+secret, variable, and one-shot retirement.
 
 ## Phase contracts
 
