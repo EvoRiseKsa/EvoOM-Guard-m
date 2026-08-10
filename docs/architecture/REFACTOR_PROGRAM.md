@@ -542,6 +542,14 @@ remain in their established facades.
   are executable contracts; mixed facades remain explicit debt. The
   unclassified-module ceiling falls from 17 to 11 while cycles, wildcard
   imports, unresolved dynamic imports, and layer violations remain zero.
+- Three complete compatibility facades plus one pure flat owner are then
+  classified by their already extracted or documented owners: `adapters.py` to
+  runners, `patch_applier.py` to candidate, `candidate_runner.py` to isolation,
+  and pure `patchmin.py` to candidate. Exact dependency-closure, purity, and
+  selected facade/public-shape tests ratchet structural drift; semantic
+  ownership remains a review obligation. The unclassified ceiling falls from
+  11 to 7 with all other violation classes still zero; package runtime bytes do
+  not change.
 - The first Stage-11 pure-phase extraction moves trusted path and harness
   policy validation behind one characterized helper. `load_config` C901
   complexity falls from 49 to 42 while exact accepted payloads, error identity,
