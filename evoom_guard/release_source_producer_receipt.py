@@ -30,7 +30,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from evoom_guard.finalizer_derivation import GitExecutablePin
@@ -135,8 +135,35 @@ _PRODUCER_KEYS = {
 }
 
 
-class ReleaseSourceProducerReceiptError(ValueError):
-    """A producer receipt, its evidence, or its provider policy is unsafe."""
+# ``importlib.reload`` deliberately retains the module dictionary while it
+# re-executes this file.  The admission owner imports this public exception by
+# identity, so replacing the class during a producer-primitive characterization
+# reload would make the already-imported boundary unable to translate errors
+# raised by the reloaded helpers.  Anchor the original class under a private
+# name, validate its structure before reuse, and always restore the public
+# export from it.  This rejects structurally invalid private-anchor values; it
+# is reload/test-order robustness, not a security boundary against arbitrary
+# in-process mutation.
+if "_RELEASE_SOURCE_PRODUCER_RECEIPT_ERROR_IDENTITY" not in globals():
+
+    class ReleaseSourceProducerReceiptError(ValueError):
+        """A producer receipt, its evidence, or its provider policy is unsafe."""
+
+    _RELEASE_SOURCE_PRODUCER_RECEIPT_ERROR_IDENTITY = ReleaseSourceProducerReceiptError
+
+_producer_receipt_error_identity = _RELEASE_SOURCE_PRODUCER_RECEIPT_ERROR_IDENTITY
+if type(_producer_receipt_error_identity) is not type:
+    raise RuntimeError("release-source producer receipt error identity anchor is not a type")
+_producer_receipt_error_type = cast(type[object], _producer_receipt_error_identity)
+if (
+    not issubclass(_producer_receipt_error_type, ValueError)
+    or _producer_receipt_error_type.__module__ != __name__
+    or _producer_receipt_error_type.__name__ != "ReleaseSourceProducerReceiptError"
+):
+    raise RuntimeError("release-source producer receipt error identity anchor is invalid")
+# Re-export from the validated anchor even if a prior caller replaced only the
+# public module attribute before requesting a reload.
+globals()["ReleaseSourceProducerReceiptError"] = _producer_receipt_error_type
 
 
 @dataclass(frozen=True)
