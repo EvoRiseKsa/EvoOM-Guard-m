@@ -136,6 +136,17 @@ retained evidence say so.
   Measured `_baseline_type_errors` complexity falls from 24 to 1, no extracted
   helper exceeds 7, and the current source C901 inventory falls from 93 to 92.
   Schemas, canonical bytes, runtime effects, and efficacy claims are unchanged.
+- Extracted top-level record-envelope type validation into a separate
+  stdlib-only verifier projection. The public facade keeps its historical list
+  result, `envelope.types` check identity and ordering, schema selection,
+  subsequent semantic phases, and all verdict authority. Thirty-eight exact
+  pre-extraction cases, four schema-1.11/1.12 public-report digests, mapping
+  access and exception precedence, 20,000 deterministic traces, and focused
+  mutations bind type, nullability, finite-number, list, and exact-dict
+  behavior. Measured `_top_level_type_errors` complexity falls from 17 to 1,
+  the extracted-helper maximum is 3, and the source C901 inventory falls from
+  92 to 91. Schemas, canonical bytes, runtime effects, and efficacy claims are
+  unchanged.
 - Made both newly extracted callable snapshots structurally immutable with
   slotted frozen dataclasses, and replaced the release-source snapshot's
   ellipsis-based callable annotations with exact Protocol signatures. Focused

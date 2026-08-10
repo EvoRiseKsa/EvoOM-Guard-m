@@ -87,6 +87,4 @@ def test_lookup_exception_identity_and_precedence_are_frozen() -> None:
 
 
 def test_simultaneous_envelope_fault_order_is_frozen() -> None:
-    assert capture(cases()["ordered_multiple_faults"]) == _fixture()[
-        "ordered_multiple_faults"
-    ]
+    assert capture(cases()["ordered_multiple_faults"]) == _fixture()["ordered_multiple_faults"]

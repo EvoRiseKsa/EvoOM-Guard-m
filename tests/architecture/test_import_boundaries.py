@@ -3932,6 +3932,7 @@ def test_record_verification_helpers_have_classified_verifier_owners() -> None:
     expected_dependencies = {
         "evoom_guard.verifiers.record_baseline_types": set(),
         "evoom_guard.verifiers.record_coverage_types": set(),
+        "evoom_guard.verifiers.record_envelope_types": set(),
         "evoom_guard.verifiers.record_nested": {
             "evoom_guard.verdict_contract_v1_11",
             "evoom_guard.verifiers.junit_oracle",

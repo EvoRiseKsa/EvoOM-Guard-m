@@ -107,9 +107,7 @@ def legacy_top_level_type_errors(record: dict[str, Any]) -> list[str]:
         if field in record and not _is_nullable_string(record[field]):
             errors.append(f"{field} must be a string or null")
     for field in _NULLABLE_OBJECT_FIELDS:
-        if field in record and record[field] is not None and not isinstance(
-            record[field], dict
-        ):
+        if field in record and record[field] is not None and not isinstance(record[field], dict):
             errors.append(f"{field} must be an object or null")
     if "assurance" in record and not isinstance(record["assurance"], dict):
         errors.append("assurance must be an object")
@@ -306,7 +304,9 @@ class TrackingRecord(dict[str, Any]):
         return super().__getitem__(key)
 
 
-def access_traces(*, projector: Projector = record_verifier._top_level_type_errors) -> dict[str, list[str]]:
+def access_traces(
+    *, projector: Projector = record_verifier._top_level_type_errors
+) -> dict[str, list[str]]:
     selected = {
         "valid_all": valid_envelope(),
         "valid_empty": {},
@@ -412,9 +412,7 @@ def generated_differential_digest(
         if observed != expected:
             raise AssertionError((record, expected, observed))
         digest.update(
-            json.dumps(observed, ensure_ascii=False, separators=(",", ":")).encode(
-                "utf-8"
-            )
+            json.dumps(observed, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         )
         digest.update(b"\n")
     return digest.hexdigest()

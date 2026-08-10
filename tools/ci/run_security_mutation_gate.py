@@ -42,6 +42,144 @@ class Mutation:
 
 MUTATIONS = (
     Mutation(
+        name="record-envelope-string-type-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            "        if field in record and not isinstance(record[field], str):\n"
+        ),
+        after=(
+            "        if False and field in record and "
+            "not isinstance(record[field], str):\n"
+        ),
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_string_and_boolean_field_families_preserve_order"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-boolean-type-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            "        if field in record and not isinstance(record[field], bool):\n"
+        ),
+        after=(
+            "        if False and field in record and "
+            "not isinstance(record[field], bool):\n"
+        ),
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_string_and_boolean_field_families_preserve_order"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-integer-boolean-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            "    return isinstance(value, int) and not isinstance(value, bool)\n"
+        ),
+        after="    return isinstance(value, int)\n",
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_integer_and_number_types_reject_boolean_and_non_finite_values"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-non-finite-number-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before="    return isinstance(value, int) or math.isfinite(value)\n",
+        after="    return isinstance(value, (int, float))\n",
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_integer_and_number_types_reject_boolean_and_non_finite_values"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-nullable-integer-boolean-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before="    return value is None or _is_int(value)\n",
+        after="    return value is None or isinstance(value, int)\n",
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_integer_and_number_types_reject_boolean_and_non_finite_values"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-string-tuple-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            "    return isinstance(value, list) and all("
+            "isinstance(item, str) for item in value)\n"
+        ),
+        after=(
+            "    return isinstance(value, (list, tuple)) and all("
+            "isinstance(item, str) for item in value)\n"
+        ),
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_string_arrays_require_real_lists_with_only_strings"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-nullable-string-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before="    return value is None or isinstance(value, str)\n",
+        after="    return value is None or True\n",
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_nullable_strings_and_objects_keep_exact_dict_semantics"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-nullable-object-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            "        if field in record and record[field] is not None and "
+            "not isinstance(record[field], dict):\n"
+        ),
+        after=(
+            "        if False and field in record and record[field] is not None "
+            "and not isinstance(record[field], dict):\n"
+        ),
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_nullable_strings_and_objects_keep_exact_dict_semantics"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-assurance-object-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            '    if "assurance" in record and not '
+            'isinstance(record["assurance"], dict):\n'
+        ),
+        after=(
+            '    if False and "assurance" in record and not '
+            'isinstance(record["assurance"], dict):\n'
+        ),
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_nullable_strings_and_objects_keep_exact_dict_semantics"
+        ),
+    ),
+    Mutation(
+        name="record-envelope-attestation-object-bypass",
+        path="evoom_guard/verifiers/record_envelope_types.py",
+        before=(
+            '        "attestation" in record\n'
+            '        and record["attestation"] is not None\n'
+            '        and not isinstance(record["attestation"], dict)\n'
+        ),
+        after=(
+            '        "attestation" in record\n'
+            '        and record["attestation"] is not None\n'
+            '        and False\n'
+        ),
+        test=(
+            "tests/test_record_envelope_types.py::"
+            "test_nullable_strings_and_objects_keep_exact_dict_semantics"
+        ),
+    ),
+    Mutation(
         name="record-baseline-non-string-key-bypass",
         path="evoom_guard/verifiers/record_baseline_types.py",
         before=(

@@ -600,6 +600,18 @@ remain in their established facades.
   owner adds no cycle, private import, layer violation, or unclassified debt;
   the mixed facade remains explicit debt and no independent-efficacy claim is
   added.
+- The sixth Stage-11 pure-phase extraction moves top-level record-envelope type
+  validation to a stdlib-only verifier owner. The public facade retains its
+  historical mutable-list projection, `envelope.types` check identity and
+  order, schema selection, subsequent shape/semantic phases, and verdict
+  authority. A committed pre-extraction vector freezes 38 exact cases,
+  mapping-access and exception precedence, four schema-1.11/1.12 public-report
+  digests, input immutability, and 20,000 deterministic traces. Measured
+  `_top_level_type_errors` complexity falls from 17 to 1, the extracted-helper
+  maximum is 3, and the repository C901 inventory falls from 92 to 91. This
+  classified verifier owner adds no cycle, private import, layer violation, or
+  unclassified debt; the seven mixed facades remain explicit debt and neither
+  schema nor verdict behavior changes.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction

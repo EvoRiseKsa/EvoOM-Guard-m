@@ -31,6 +31,9 @@ from evoom_guard.verifiers.record_baseline_types import (
 from evoom_guard.verifiers.record_coverage_types import (
     project_diff_coverage_type_errors as _project_diff_coverage_type_errors,
 )
+from evoom_guard.verifiers.record_envelope_types import (
+    project_envelope_type_errors as _project_envelope_type_errors,
+)
 from evoom_guard.verifiers.record_isolation import (
     check_isolation as _check_isolation,
 )
@@ -248,14 +251,6 @@ def _setup_output_hides_harness_input(path: str, patterns: list[str]) -> bool:
     )
 
 
-def _is_nullable_int(value: object) -> bool:
-    return value is None or _is_int(value)
-
-
-def _is_nullable_string(value: object) -> bool:
-    return value is None or isinstance(value, str)
-
-
 def _valid_count_pair(passed: object, total: object) -> bool:
     if passed is None or total is None:
         return passed is None and total is None
@@ -306,51 +301,7 @@ def _policy_sha256(policy: dict[str, Any]) -> str:
 
 
 def _top_level_type_errors(record: dict[str, Any]) -> list[str]:
-    errors: list[str] = []
-    string_fields = (
-        "schema_version",
-        "tool",
-        "tool_version",
-        "verdict",
-        "reason_code",
-        "reason",
-        "risk_level",
-        "execution_state",
-        "execution_phase",
-        "isolation",
-        "diagnostics",
-    )
-    for field in string_fields:
-        if field in record and not isinstance(record[field], str):
-            errors.append(f"{field} must be a string")
-    for field in ("passed", "test_command_ran"):
-        if field in record and not isinstance(record[field], bool):
-            errors.append(f"{field} must be a boolean")
-    if "exit_code" in record and not _is_int(record["exit_code"]):
-        errors.append("exit_code must be an integer")
-    if "risk_score" in record and not _is_number(record["risk_score"]):
-        errors.append("risk_score must be a number")
-    for field in ("tests_passed", "tests_total"):
-        if field in record and not _is_nullable_int(record[field]):
-            errors.append(f"{field} must be a non-boolean integer or null")
-    for field in ("files_changed", "protected_violations"):
-        if field in record and not _is_string_list(record[field]):
-            errors.append(f"{field} must be an array of strings")
-    for field in ("verdict_source", "source", "base_reconstruction"):
-        if field in record and not _is_nullable_string(record[field]):
-            errors.append(f"{field} must be a string or null")
-    for field in ("diff_coverage", "baseline"):
-        if field in record and record[field] is not None and not isinstance(record[field], dict):
-            errors.append(f"{field} must be an object or null")
-    if "assurance" in record and not isinstance(record["assurance"], dict):
-        errors.append("assurance must be an object")
-    if (
-        "attestation" in record
-        and record["attestation"] is not None
-        and not isinstance(record["attestation"], dict)
-    ):
-        errors.append("attestation must be an object or null")
-    return errors
+    return list(_project_envelope_type_errors(record))
 
 
 def _nested_type_checks(
