@@ -140,9 +140,10 @@ _PRODUCER_KEYS = {
 # identity, so replacing the class during a producer-primitive characterization
 # reload would make the already-imported boundary unable to translate errors
 # raised by the reloaded helpers.  Anchor the original class under a private
-# name, validate that anchor before reuse, and always restore the public export
-# from it.  A corrupted private anchor fails closed instead of silently
-# establishing a different exception identity.
+# name, validate its structure before reuse, and always restore the public
+# export from it.  This rejects structurally invalid private-anchor values; it
+# is reload/test-order robustness, not a security boundary against arbitrary
+# in-process mutation.
 if "_RELEASE_SOURCE_PRODUCER_RECEIPT_ERROR_IDENTITY" not in globals():
 
     class ReleaseSourceProducerReceiptError(ValueError):
