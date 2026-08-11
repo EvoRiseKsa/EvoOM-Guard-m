@@ -3531,6 +3531,49 @@ def test_agent_change_admission_dependencies_are_exactly_allowlisted() -> None:
     assert actual_dependencies == expected_dependencies
 
 
+def test_admission_decision_modules_are_classified_and_use_public_dependencies() -> None:
+    """Keep the proof-bound projection inside the documented admission layer."""
+
+    modules = {
+        "evoom_guard.admission.decision_envelope",
+        "evoom_guard.admission.decision_sources",
+    }
+    analysis = analyze_package(PACKAGE_ROOT)
+    assert modules <= set(analysis.modules)
+    for module in modules:
+        assert module not in analysis.violations["unclassified_modules"]
+        private_imports = tuple(
+            violation
+            for violation in analysis.violations["cross_package_private_imports"]
+            if violation.startswith(f"{module} | ")
+        )
+        assert private_imports == ()
+
+
+def test_admission_decision_dependencies_are_exactly_allowlisted() -> None:
+    """Freeze the deliberately small projection and proof-adapter surfaces."""
+
+    expected = {
+        "evoom_guard.admission.decision_envelope": {
+            "evoom_guard.evidence_bundle",
+        },
+        "evoom_guard.admission.decision_sources": {
+            "evoom_guard.admission.agent_change",
+            "evoom_guard.admission.decision_envelope",
+            "evoom_guard.evidence_bundle",
+            "evoom_guard.finalizer_derivation",
+        },
+    }
+    analysis = analyze_package(PACKAGE_ROOT)
+    for module, dependencies in expected.items():
+        actual = {
+            target
+            for source, target in analysis.internal_edges
+            if source == module and target != module
+        }
+        assert actual == dependencies
+
+
 def test_runner_instrumentation_has_classified_owners_and_a_thin_facade() -> None:
     """Keep one class owner per runner behind two acyclic compatibility facades."""
 

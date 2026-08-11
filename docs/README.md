@@ -94,6 +94,9 @@ contract does not authorize another stage such as publication or deployment.
   protected-boundary adapter for GitHub Artifact Attestations.
 - [`AGENT_CHANGE_ADMISSION.md`](AGENT_CHANGE_ADMISSION.md) — bind an untrusted
   agent proposal to signed scope, re-derived facts, and finalization.
+- [`ADMISSION_DECISION_ENVELOPE.md`](ADMISSION_DECISION_ENVELOPE.md) —
+  unreleased, proof-bound in-toto decision projection for a fully verified Agent
+  Change admission; it grants no external-action authority by itself.
 - [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) — project
   authenticated `ALLOW` and `DENY` attempts into one correlated,
   advisory-only, privacy-bounded contract.
