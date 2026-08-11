@@ -74,6 +74,22 @@ relations, and compare canonical bytes. See
 [CHANGE_ATTEMPT_OBSERVATION.md](CHANGE_ATTEMPT_OBSERVATION.md) and
 [ADR-0009](adr/0009-change-attempt-observation-v1.md).
 
+## Admission Decision Envelope contract
+
+The unreleased, library-only
+[`admission-decision-envelope-1.schema.json`](../evoom_guard/schemas/admission-decision-envelope-1.schema.json)
+defines the closed in-toto Statement shape for
+`EVOGUARD_ADMISSION_DECISION_ENVELOPE_V1`. V1 supports only a complete Agent
+Change `ALLOW` proof. The schema is structural: it does not authenticate the
+referenced evidence bundle and cannot grant merge, publication, deployment, or
+other external-action authority.
+
+The semantic verifier must snapshot and fully verify the exact `.evb` against
+external finalizer and authorization keys, expected source/context, and
+raw-Git-derived bindings; regenerate the projection; and compare canonical
+bytes exactly. See
+[`ADMISSION_DECISION_ENVELOPE.md`](ADMISSION_DECISION_ENVELOPE.md).
+
 ## Example (`PASS`)
 
 Records without a 1.12-only policy field continue to use schema 1.11. When

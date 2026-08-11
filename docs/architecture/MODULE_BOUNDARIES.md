@@ -868,3 +868,16 @@ candidate code, derive policy, or
 reinterpret the DENY-only V1 release-source decision. The package-wide schema
 remains under `evoom_guard/schemas/` until the evidence/finalizer Stage 10
 migration is performed atomically.
+
+The Admission Decision Envelope V1 slice is divided between two admission-layer
+owners. `admission.decision_envelope` owns only a closed in-toto-compatible
+wire shape, canonical JSON, and structural inspection; an inspected value is
+never authority. `admission.decision_sources` owns the only V1 proof adapter:
+it takes one stable bounded snapshot of an Agent Change `.evb`, passes a private
+copy to the existing strict Agent Change verifier with externally supplied
+keys, source/context, and raw-Git bindings, then projects the verified facts.
+Verification of a received envelope repeats that path and requires literal
+canonical-byte equality. Neither owner introduces a signature/key domain, CLI,
+workflow, generic callback, merge, publication, deployment, or external-action
+operation. New proof families require an explicit reviewed adapter rather than
+relabeling a structurally similar record.
