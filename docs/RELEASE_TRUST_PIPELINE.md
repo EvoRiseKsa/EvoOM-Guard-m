@@ -44,6 +44,12 @@ operation and is not claimed complete by the `v4.5.0` ledger. Its later signed,
 same-owner point-in-time observation is retained separately as
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
+The prospective `v4.6.0` ledger-signing public root is pinned at
+[`v4.6.0.pub.pem`](../security/release-ledger-roots/v4.6.0.pub.pem) with key ID
+`sha256:ef56c9e65a355d2956201fe8e02abb7c39857d42ee3623d09d71236341ac1da1`.
+This pins only the reviewed public identity. It does not prove private-key
+custody, offline storage, a signature, pipeline execution, or publication.
+
 The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
 case. The present A–H implementation authenticates a target only when it is also
 the protected `main` workflow revision and H creates a lightweight tag. Those
@@ -115,9 +121,9 @@ admission.
 7. Establish six mutually distinct admission Ed25519 signing public-key IDs.
    Store only their public PEM values as repository variables. Establish a
    fresh per-release seventh ledger-signing identity before the trusted
-   parent/candidate: pin its public PEM/ID in the reviewed parent tree or
-   another authenticated immutable channel, and keep its private half offline
-   and outside the admission Environments. The retained ledger copy is never
+   parent/candidate. The prospective `v4.6.0` public PEM/ID above is pinned in
+   the reviewed parent tree; keep its private half offline and outside the
+   admission Environments. The retained ledger copy is never
    its own trust anchor. C and F private keys belong
    only in their separately protected Environments. Separately create exactly one
    write-enabled deploy key for release tags; store its private half only in
