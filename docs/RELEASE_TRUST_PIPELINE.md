@@ -124,7 +124,7 @@ admission.
    `evoguard-release-publication`. H has no signing secret.
 8. Merge a distinct one-parent **source candidate**. A must consume its policy,
    pack, locks, and release-scope validator from that candidate's parent; the
-   infrastructure commit cannot authorize itself. For v4.5.0, the parent
+   infrastructure commit cannot authorize itself. For v4.6.0, the parent
    validator requires literal path case and an exact development-to-stable
    version-assignment byte replacement, in addition to Guard's protected-path
    and external verifier-pack checks. The candidate may not refresh
