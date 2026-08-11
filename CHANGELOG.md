@@ -32,6 +32,13 @@ retained evidence say so.
 
 ### Added
 
+- Added the library-only Admission Decision Envelope V1 as a deterministic,
+  in-toto Statement projection of one fully reverified Agent Change `ALLOW`
+  proof. The closed schema binds the exact Git head, candidate, policy,
+  verifier pack, source evidence bundle, finalizer key, and authorization key.
+  Structural inspection is non-authoritative, every external-action flag is
+  fixed to false, and V1 adds no key domain, CLI, workflow, merge, publication,
+  or deployment authority.
 - Added inert, side-by-side maintenance protocol contracts that keep trusted
   workflow, frozen maintenance base, and target source Git identities separate:
   Release Source Finalizer V2, producer receipt V2, Release Source Admission

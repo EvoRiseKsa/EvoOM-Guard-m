@@ -354,9 +354,9 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
     assert "sys.path.insert(0, str(base))" in source
     assert "candidate / 'benchmarks/run-manifest.json'" in source
     assert "base / 'benchmarks/run-manifest.json'" in source
-    assert "ENGINE_VERSION != '4.5.0.dev0'" in source
+    assert "ENGINE_VERSION != '4.6.0.dev0'" in source
     assert "trusted parent benchmark rejected" in source
-    assert "engine_version='4.5.0'" in source
+    assert "engine_version='4.6.0'" in source
     assert "require_release_promotion=True" in source
     assert source.count("required_history_tip='HEAD'") == 2
     assert "relation=exact-release-version-transition" in source
@@ -468,11 +468,11 @@ def test_release_scope_validator_accepts_only_the_exact_version_byte_change(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.5.0.dev0"',
+        version_assignment='__version__ = "4.6.0.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.5.0"',
+        version_assignment='__version__ = "4.6.0"',
         readme="candidate\n",
         security="candidate security policy\n",
     )
@@ -531,12 +531,12 @@ def test_release_scope_validator_rejects_an_unlisted_source_edit(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.5.0.dev0"',
+        version_assignment='__version__ = "4.6.0.dev0"',
         guard="VALUE = 1\n",
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.5.0"',
+        version_assignment='__version__ = "4.6.0"',
         guard="VALUE = 2\n",
     )
 
@@ -554,12 +554,12 @@ def test_release_scope_validator_rejects_an_unlisted_source_deletion(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.5.0.dev0"',
+        version_assignment='__version__ = "4.6.0.dev0"',
         guard="VALUE = 1\n",
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.5.0"',
+        version_assignment='__version__ = "4.6.0"',
     )
 
     with pytest.raises(
@@ -576,11 +576,11 @@ def test_release_scope_validator_rejects_an_allowed_path_deletion(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.5.0.dev0"',
+        version_assignment='__version__ = "4.6.0.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.5.0"',
+        version_assignment='__version__ = "4.6.0"',
     )
     (candidate / "README.md").unlink()
 
@@ -594,15 +594,15 @@ def test_release_scope_validator_rejects_an_allowed_path_deletion(
 @pytest.mark.parametrize(
     "candidate_init",
     (
-        '# frozen prefix\n__version__ = "4.5.0"\n# changed suffix\n',
+        '# frozen prefix\n__version__ = "4.6.0"\n# changed suffix\n',
         '# frozen prefix\n__version__ = "4.4.3"\n# frozen suffix\n',
         (
-            '# frozen prefix\n__version__ = "4.5.0"\n'
-            'SECOND_VERSION = "4.5.0"\n# frozen suffix\n'
+            '# frozen prefix\n__version__ = "4.6.0"\n'
+            'SECOND_VERSION = "4.6.0"\n# frozen suffix\n'
         ),
         (
             "# frozen prefix\n"
-            'import os\n__version__ = "4.5.0"\n# frozen suffix\n'
+            'import os\n__version__ = "4.6.0"\n# frozen suffix\n'
         ),
     ),
 )
@@ -614,11 +614,11 @@ def test_release_scope_validator_rejects_version_file_mutations(
     candidate = tmp_path / "candidate"
     _write_scope_tree(
         base,
-        version_assignment='__version__ = "4.5.0.dev0"',
+        version_assignment='__version__ = "4.6.0.dev0"',
     )
     _write_scope_tree(
         candidate,
-        version_assignment='__version__ = "4.5.0"',
+        version_assignment='__version__ = "4.6.0"',
     )
     (candidate / candidate_scope.VERSION_PATH).write_text(
         candidate_init,
