@@ -68,7 +68,7 @@ RUN_JOBS: dict[str, tuple[str, ...]] = {
 RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ".github/workflows/evoguard-release-source-reverify.yml": (
         "workflow-A",
-        "ce8aa1eeccb7e2ed06b93bfdcee34be62a1cb04e",
+        "fb6a30a4576c0cb51fa7d9cd759dafba1be59bbc",
     ),
     ".github/workflows/evoguard-produce-release-source-receipt.yml": (
         "workflow-B",
