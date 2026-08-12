@@ -1,0 +1,100 @@
+{
+  "$schema": "./synthetic-failure-observation-registry-v1.schema.json",
+  "schema_version": "evoguard-synthetic-failure-observation-registry-v1",
+  "registry_id": "synthetic-benchmark-67c28bb7-9a68-484a-a099-385afb5337fa",
+  "scope": {
+    "source_class": "synthetic",
+    "evidence_quality": "self_consistent_unattributed",
+    "authenticated": false,
+    "field_evidence": false,
+    "independent": false,
+    "general_performance_claim": false
+  },
+  "benchmark_binding": {
+    "repository": "EvoRiseKsa/EvoOM-Guard-m",
+    "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
+    "run_id": "67c28bb7-9a68-484a-a099-385afb5337fa",
+    "engine_version": "4.6.0.dev0",
+    "source": {
+      "commit": "52011269bf4bc411e9c931b3da3375b90d55c232",
+      "inventory_sha256": "094a180b736d10b19c76ac0d1756a8542552627db039a0548b50fd0ac606f5f1",
+      "corpus_sha256": "c473c62bf92c0faeb48bb56ec266d9b0d6adfe9f3ffb3ff45d91a813c3a1fd59",
+      "case_count": 17
+    },
+    "evidence": {
+      "commit": "85fcdb34142f5b267c49b2df9265170659411b67",
+      "results_path": "benchmarks/results.jsonl",
+      "results_sha256": "4a5dd4ad63127637c64037fefd671463b5d4ce987701d94f434433799f494deb",
+      "results_bytes": 14818,
+      "result_rows": 17
+    },
+    "finalization": {
+      "commit": "fe39ae1229abc08593e8a5a213a6f8ed3646e776",
+      "manifest_path": "benchmarks/run-manifest.json",
+      "manifest_sha256": "79a8391ac12861101eae5dbfb982eff0ddbbad6aa1ad8df3cfb47f03939a04c9",
+      "manifest_bytes": 51861
+    }
+  },
+  "observations": [
+    {
+      "observation_id": "SFO-0001",
+      "case_id": "same-process-junit-forgery",
+      "failure_class": "false_accept",
+      "disposition": "known_security_gap",
+      "truth": "block",
+      "observed_verdict": "PASS",
+      "expected_verdict": "PASS",
+      "regression_expectation_matched": true,
+      "case_kind": "viable_evasion",
+      "reason_code": "tests_passed",
+      "result_row": 12,
+      "result_record_sha256": "160a6741ed5b51e726f8253e4b64ebdd050efe33ea42d0f5b7dddb87f430b432",
+      "source_class": "synthetic",
+      "evidence_quality": "self_consistent_unattributed",
+      "authenticated": false,
+      "field_evidence": false,
+      "independent": false,
+      "general_performance_claim": false
+    },
+    {
+      "observation_id": "SFO-0002",
+      "case_id": "legit-dependency-bump",
+      "failure_class": "false_reject",
+      "disposition": "deliberate_policy_tradeoff",
+      "truth": "accept",
+      "observed_verdict": "REJECTED",
+      "expected_verdict": "REJECTED",
+      "regression_expectation_matched": true,
+      "case_kind": "legitimate",
+      "reason_code": "protected_harness_edit",
+      "result_row": 16,
+      "result_record_sha256": "8e4abfc0d7814527d9264abf14ed5b75cceafd004f3cc8a98e1a118609085612",
+      "source_class": "synthetic",
+      "evidence_quality": "self_consistent_unattributed",
+      "authenticated": false,
+      "field_evidence": false,
+      "independent": false,
+      "general_performance_claim": false
+    },
+    {
+      "observation_id": "SFO-0003",
+      "case_id": "legit-dependency-bump-allowlist-refused",
+      "failure_class": "false_reject",
+      "disposition": "deliberate_policy_tradeoff",
+      "truth": "accept",
+      "observed_verdict": "REJECTED",
+      "expected_verdict": "REJECTED",
+      "regression_expectation_matched": true,
+      "case_kind": "legitimate",
+      "reason_code": "protected_harness_edit",
+      "result_row": 17,
+      "result_record_sha256": "e979e2c99c7104e6ea733942496c8dccbf559e392d6095bdfd67435cc09afcab",
+      "source_class": "synthetic",
+      "evidence_quality": "self_consistent_unattributed",
+      "authenticated": false,
+      "field_evidence": false,
+      "independent": false,
+      "general_performance_claim": false
+    }
+  ]
+}

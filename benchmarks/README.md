@@ -226,6 +226,14 @@ rebase-and-merge both rewrite or discard the recorded commit IDs and invalidate
 verification in a clean clone. Merge benchmark-evidence changes with a merge
 commit that retains the three branch commits unchanged.
 
+The exact observed classification failures from the current finalized pair are
+indexed separately in the versioned
+[`synthetic failure-observation registry`](../evidence/failure-registry/README.md).
+That closed record remains explicitly synthetic, self-consistent but
+unattributed, unauthenticated, non-independent, and non-field evidence. Its
+validator derives the complete mismatch set from the result bytes, so a
+published failure cannot be hidden by omitting or obscuring its case ID.
+
 The protected stable-release candidate deliberately does not rewrite benchmark
 results or this manifest. Its parent-owned validator permits only the exact
 `X.Y.Z.dev0` to `X.Y.Z` assignment bytes in executable source and excludes both
