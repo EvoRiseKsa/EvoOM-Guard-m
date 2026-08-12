@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/main/evoom_guard/schemas/blast-radius-materialized-change-2.schema.json",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/v4.6.0/evoom_guard/schemas/blast-radius-materialized-change-2.schema.json",
   "title": "EvoOM Guard Blast Radius Materialized Change V2",
   "description": "Canonical additive input contract for deterministic Blast Radius V2 measurement. It is not a verdict record and does not reinterpret verdict schemas 1.11 or 1.12.",
   "type": "object",
