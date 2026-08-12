@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/EvoRiseKsa/EvoOM-Guard-m/blob/main/evidence/failure-registry/synthetic-failure-observation-registry-v1.schema.json",
+  "title": "EvoOM Guard synthetic failure-observation registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "registry_id",
+    "scope",
+    "benchmark_binding",
+    "observations"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "./synthetic-failure-observation-registry-v1.schema.json"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "evoguard-synthetic-failure-observation-registry-v1"
+    },
+    "registry_id": {
+      "type": "string",
+      "pattern": "^synthetic-benchmark-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "scope": {"$ref": "#/$defs/synthetic_scope"},
+    "benchmark_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "benchmark_id",
+        "run_id",
+        "engine_version",
+        "source",
+        "evidence",
+        "finalization"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "const": "EvoRiseKsa/EvoOM-Guard-m"
+        },
+        "benchmark_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "run_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "engine_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "inventory_sha256",
+            "corpus_sha256",
+            "case_count"
+          ],
+          "properties": {
+            "commit": {"$ref": "#/$defs/git_sha"},
+            "inventory_sha256": {"$ref": "#/$defs/sha256"},
+            "corpus_sha256": {"$ref": "#/$defs/sha256"},
+            "case_count": {"type": "integer", "minimum": 1}
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "results_path",
+            "results_sha256",
+            "results_bytes",
+            "result_rows"
+          ],
+          "properties": {
+            "commit": {"$ref": "#/$defs/git_sha"},
+            "results_path": {
+              "type": "string",
+              "const": "benchmarks/results.jsonl"
+            },
+            "results_sha256": {"$ref": "#/$defs/sha256"},
+            "results_bytes": {"type": "integer", "minimum": 1},
+            "result_rows": {"type": "integer", "minimum": 1}
+          }
+        },
+        "finalization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "manifest_path",
+            "manifest_sha256",
+            "manifest_bytes"
+          ],
+          "properties": {
+            "commit": {"$ref": "#/$defs/git_sha"},
+            "manifest_path": {
+              "type": "string",
+              "const": "benchmarks/run-manifest.json"
+            },
+            "manifest_sha256": {"$ref": "#/$defs/sha256"},
+            "manifest_bytes": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observation_id",
+          "case_id",
+          "failure_class",
+          "disposition",
+          "truth",
+          "observed_verdict",
+          "expected_verdict",
+          "regression_expectation_matched",
+          "case_kind",
+          "reason_code",
+          "result_row",
+          "result_record_sha256",
+          "source_class",
+          "evidence_quality",
+          "authenticated",
+          "field_evidence",
+          "independent",
+          "general_performance_claim"
+        ],
+        "properties": {
+          "observation_id": {
+            "type": "string",
+            "pattern": "^SFO-[0-9]{4}$"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,127}$"
+          },
+          "failure_class": {
+            "type": "string",
+            "enum": ["false_accept", "false_reject"]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "known_security_gap",
+              "deliberate_policy_tradeoff",
+              "unresolved"
+            ]
+          },
+          "truth": {"type": "string", "enum": ["accept", "block"]},
+          "observed_verdict": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "REJECTED", "TAMPERED", "ERROR"]
+          },
+          "expected_verdict": {
+            "type": "string",
+            "enum": ["PASS", "FAIL", "REJECTED", "TAMPERED", "ERROR"]
+          },
+          "regression_expectation_matched": {"type": "boolean"},
+          "case_kind": {"type": "string", "minLength": 1, "maxLength": 80},
+          "reason_code": {"type": "string", "minLength": 1, "maxLength": 128},
+          "result_row": {"type": "integer", "minimum": 1},
+          "result_record_sha256": {"$ref": "#/$defs/sha256"},
+          "source_class": {"type": "string", "const": "synthetic"},
+          "evidence_quality": {
+            "type": "string",
+            "const": "self_consistent_unattributed"
+          },
+          "authenticated": {"type": "boolean", "const": false},
+          "field_evidence": {"type": "boolean", "const": false},
+          "independent": {"type": "boolean", "const": false},
+          "general_performance_claim": {"type": "boolean", "const": false}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "git_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "synthetic_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_class",
+        "evidence_quality",
+        "authenticated",
+        "field_evidence",
+        "independent",
+        "general_performance_claim"
+      ],
+      "properties": {
+        "source_class": {"type": "string", "const": "synthetic"},
+        "evidence_quality": {
+          "type": "string",
+          "const": "self_consistent_unattributed"
+        },
+        "authenticated": {"type": "boolean", "const": false},
+        "field_evidence": {"type": "boolean", "const": false},
+        "independent": {"type": "boolean", "const": false},
+        "general_performance_claim": {"type": "boolean", "const": false}
+      }
+    }
+  }
+}
