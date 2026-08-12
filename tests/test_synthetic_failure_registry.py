@@ -311,26 +311,41 @@ def test_registry_release_promotion_is_exact_and_byte_scoped(
     registry_path = (
         repo / "evidence" / "failure-registry" / "synthetic-observations-v1.json"
     )
-    development_version = failure_registry.__dict__["ENGINE_VERSION"]
+    registry = _load(registry_path)
+    development_version = registry["benchmark_binding"]["engine_version"]
+    assert isinstance(development_version, str)
     assert development_version.endswith(".dev0")
+    stable_version = development_version.removesuffix(".dev0")
+    current_version = failure_registry.__dict__["ENGINE_VERSION"]
+    assert current_version in {development_version, stable_version}
     assert validate_registry(registry_path, root=repo) == 3
 
-    stable_version = development_version.removesuffix(".dev0")
     version_path = repo / "evoom_guard" / "__init__.py"
     development_assignment = f'__version__ = "{development_version}"'
     stable_assignment = f'__version__ = "{stable_version}"'
     source = version_path.read_text(encoding="utf-8")
-    assert source.count(development_assignment) == 1
-    version_path.write_text(
-        source.replace(development_assignment, stable_assignment, 1),
-        encoding="utf-8",
-        newline="\n",
+    current_assignment = f'__version__ = "{current_version}"'
+    assert source.count(current_assignment) == 1
+    development_source = source.replace(
+        current_assignment,
+        development_assignment,
+        1,
     )
+    version_path.write_text(development_source, encoding="utf-8", newline="\n")
+    monkeypatch.setattr(failure_registry, "ENGINE_VERSION", development_version)
+    assert validate_registry(registry_path, root=repo) == 3
+
+    stable_source = development_source.replace(
+        development_assignment,
+        stable_assignment,
+        1,
+    )
+    version_path.write_text(stable_source, encoding="utf-8", newline="\n")
     monkeypatch.setattr(failure_registry, "ENGINE_VERSION", stable_version)
     assert validate_registry(registry_path, root=repo) == 3
 
     version_path.write_text(
-        version_path.read_text(encoding="utf-8") + "# unrelated source drift\n",
+        stable_source + "# unrelated source drift\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -339,8 +354,8 @@ def test_registry_release_promotion_is_exact_and_byte_scoped(
 
     invalid_version = f"{stable_version}.dev1"
     version_path.write_text(
-        source.replace(
-            development_assignment,
+        stable_source.replace(
+            stable_assignment,
             f'__version__ = "{invalid_version}"',
             1,
         ),
