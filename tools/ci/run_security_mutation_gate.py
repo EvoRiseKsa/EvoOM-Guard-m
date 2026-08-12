@@ -11551,12 +11551,22 @@ MUTATIONS = (
     Mutation(
         name="cli-agent-change-entry-derive-helper-late-bound",
         path="evoom_guard/cli/__init__.py",
-        before="            derive_bindings=derive_agent_change_bindings,\n",
+        before=(
+            "            derive_bindings=(\n"
+            "                derive_agent_change_bindings_v2\n"
+            '                if args.contract_version == "2"\n'
+            "                else derive_agent_change_bindings\n"
+            "            ),\n"
+        ),
         after=(
-            "            derive_bindings=lambda **kwargs: getattr(\n"
-            '                sys.modules["evoom_guard.finalizer_derivation"],\n'
-            '                "derive_agent_change_bindings",\n'
-            "            )(**kwargs),\n"
+            "            derive_bindings=(\n"
+            "                derive_agent_change_bindings_v2\n"
+            '                if args.contract_version == "2"\n'
+            "                else (lambda **kwargs: getattr(\n"
+            '                    sys.modules["evoom_guard.finalizer_derivation"],\n'
+            '                    "derive_agent_change_bindings",\n'
+            "                )(**kwargs))\n"
+            "            ),\n"
         ),
         test=(
             "tests/test_cli_agent_change_command_characterization.py::"

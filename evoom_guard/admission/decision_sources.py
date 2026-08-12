@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from evoom_guard.admission.agent_change import (
+    AGENT_CHANGE_PROPOSAL_FORMAT_V2,
     AgentChangeAdmissionError,
     VerifiedAgentChangeAdmission,
     verify_agent_change_finalized_bundle,
@@ -78,6 +79,11 @@ def _verify_agent_change_snapshot(
             expected_finalizer_source=expected_finalizer_source,
             expected_context=expected_context,
             expected_bindings=expected_bindings,
+            required_proposal_format=(
+                AGENT_CHANGE_PROPOSAL_FORMAT_V2
+                if "candidate_identity" in expected_bindings.payload
+                else "EVOGUARD_AGENT_CHANGE_PROPOSAL_V1"
+            ),
         )
 
 
@@ -93,6 +99,18 @@ def _project_agent_change(
     finalizer_authentication = verified.finalized.bundle.manifest["authentication"]
     authorization_authentication = authorization["authentication"]
 
+    if "candidate_identity" in bindings:
+        candidate_subject: dict[str, Any] = {
+            "git_object_format": bindings["git_object_format"],
+            "candidate_selection_profile": bindings["candidate_selection_profile"],
+            "candidate_identity": bindings["candidate_identity"],
+        }
+    else:
+        candidate_subject = {
+            "candidate_sha256": bindings["candidate_sha256"],
+            "candidate_size": bindings["candidate_size"],
+        }
+
     return build_agent_change_admission_decision_envelope(
         subject={
             "kind": "git-change",
@@ -103,8 +121,7 @@ def _project_agent_change(
             "base_tree_sha": bindings["base_tree_sha"],
             "head_sha": bindings["head_sha"],
             "head_tree_sha": bindings["head_tree_sha"],
-            "candidate_sha256": bindings["candidate_sha256"],
-            "candidate_size": bindings["candidate_size"],
+            **candidate_subject,
         },
         controls={
             "policy_sha256": bindings["policy_sha256"],

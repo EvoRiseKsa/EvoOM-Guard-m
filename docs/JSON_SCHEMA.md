@@ -76,11 +76,15 @@ relations, and compare canonical bytes. See
 
 ## Admission Decision Envelope contract
 
-The unreleased, library-only
+The library-only
 [`admission-decision-envelope-1.schema.json`](../evoom_guard/schemas/admission-decision-envelope-1.schema.json)
-defines the closed in-toto Statement shape for
-`EVOGUARD_ADMISSION_DECISION_ENVELOPE_V1`. V1 supports only a complete Agent
-Change `ALLOW` proof. The schema is structural: it does not authenticate the
+and
+[`admission-decision-envelope-2.schema.json`](../evoom_guard/schemas/admission-decision-envelope-2.schema.json)
+define the closed in-toto Statement shapes for V1 and V2. V1 preserves the
+historical FILE-block digest. V2 carries the domain-separated, length-prefixed
+candidate text-map identity, frozen candidate-selection profile, and Git object
+format. Both support only a complete
+Agent Change `ALLOW` proof. The schemas are structural: they do not authenticate the
 referenced evidence bundle and cannot grant merge, publication, deployment, or
 other external-action authority.
 
@@ -89,6 +93,13 @@ external finalizer and authorization keys, expected source/context, and
 raw-Git-derived bindings; regenerate the projection; and compare canonical
 bytes exactly. See
 [`ADMISSION_DECISION_ENVELOPE.md`](ADMISSION_DECISION_ENVELOPE.md).
+
+The Agent Change Proposal V2 and raw-Git Bindings V2 schemas validate structural
+wire shape only. Runtime validators additionally enforce safe platform paths,
+versioned canonical path ordering and disjoint relations, the literal
+candidate-selection profile, Git object-format/digest-length agreement,
+candidate file-count relations, exact scalar types, and canonical JSON. Passing
+JSON Schema alone is never an admission decision.
 
 ## Example (`PASS`)
 

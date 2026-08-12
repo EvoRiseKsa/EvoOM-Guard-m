@@ -18,6 +18,7 @@ from evoom_guard.finalizer_derivation import (
     _git_command,
     _GitReader,
     context_from_verified_bindings,
+    derive_agent_change_bindings_v2,
     derive_finalizer_bindings,
     read_finalizer_bindings,
     resolve_raw_git_regular_blob,
@@ -131,6 +132,154 @@ def _create_harness_repository(tmp_path: Path) -> tuple[Path, str, str]:
     return repo, base, head
 
 
+def test_raw_git_v2_distinguishes_historical_candidate_marker_collision(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "identity-repo"
+    repo.mkdir()
+    _git(repo, "init", "--quiet")
+    (repo / ".evoguard.json").write_text("{}\n", encoding="utf-8", newline="\n")
+    base = _commit(repo, "identity base")
+
+    (repo / "a").write_text("x\n<<<END FILE>>>\n<<<FILE: b>>>\ny", encoding="utf-8", newline="\n")
+    first = _commit(repo, "embedded marker")
+    _git(repo, "checkout", "--quiet", base)
+    (repo / "a").write_text("x", encoding="utf-8", newline="\n")
+    (repo / "b").write_text("y", encoding="utf-8", newline="\n")
+    second = _commit(repo, "two files")
+
+    def derive(head: str):
+        return derive_agent_change_bindings_v2(
+            base_repo=str(repo),
+            head_repo=str(repo),
+            base_sha=base,
+            head_sha=head,
+            base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
+            head_tree_sha=_git(repo, "rev-parse", f"{head}^{{tree}}"),
+        )
+
+    embedded = derive(first)
+    split = derive(second)
+    assert embedded.legacy_guard_candidate_sha256 == split.legacy_guard_candidate_sha256
+    assert embedded.candidate_identity["sha256"] != split.candidate_identity["sha256"]
+    assert embedded.changed_paths == ("a",)
+    assert split.changed_paths == ("a", "b")
+
+
+def test_v2_candidate_identity_represents_a_deletion_only_change(tmp_path: Path) -> None:
+    repo, _initial_base, head = _create_repository(tmp_path)
+    base = head
+    (repo / "app.py").unlink()
+    deletion = _commit(repo, "delete app")
+
+    bindings = derive_agent_change_bindings_v2(
+        base_repo=str(repo),
+        head_repo=str(repo),
+        base_sha=base,
+        head_sha=deletion,
+        base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
+        head_tree_sha=_git(repo, "rev-parse", f"{deletion}^{{tree}}"),
+    )
+
+    assert bindings.candidate_identity["file_count"] == 0
+    assert bindings.changed_paths == ()
+    assert bindings.deleted_paths == ("app.py",)
+    assert bindings.candidate_size == 0
+    assert bindings.candidate_identity["size"] > 0
+
+
+def test_v2_candidate_identity_rejects_wrong_evaluable_file_count(tmp_path: Path) -> None:
+    repo, base, head = _create_repository(tmp_path)
+    bindings = derive_agent_change_bindings_v2(
+        base_repo=str(repo),
+        head_repo=str(repo),
+        base_sha=base,
+        head_sha=head,
+        base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
+        head_tree_sha=_git(repo, "rev-parse", f"{head}^{{tree}}"),
+    )
+    payload = json.loads(json.dumps(bindings.payload))
+    payload["candidate_identity"]["file_count"] = len(payload["changed_paths"]) + 1
+
+    with pytest.raises(
+        FinalizerDerivationError,
+        match="candidate_identity.file_count does not match evaluable changed_paths",
+    ):
+        finalizer_derivation.validate_agent_change_bindings(payload)
+
+
+def test_v2_selection_profile_does_not_follow_mutable_guard_copy_ignore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, base, head = _create_repository(tmp_path)
+
+    def derive():
+        return derive_agent_change_bindings_v2(
+            base_repo=str(repo),
+            head_repo=str(repo),
+            base_sha=base,
+            head_sha=head,
+            base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
+            head_tree_sha=_git(repo, "rev-parse", f"{head}^{{tree}}"),
+        )
+
+    before = derive()
+    monkeypatch.setattr(finalizer_derivation, "COPY_IGNORE", ("app.py",))
+    after = derive()
+
+    assert after.payload == before.payload
+    assert after.payload["candidate_selection_profile"] == (
+        "EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1"
+    )
+    assert after.candidate_identity["file_count"] == 1
+
+
+def test_v2_path_arrays_use_utf8_byte_order() -> None:
+    payload = {
+        "format": "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V2",
+        "git_object_format": "sha1",
+        "base_sha": "a" * 40,
+        "head_sha": "b" * 40,
+        "base_tree_sha": "c" * 40,
+        "head_tree_sha": "d" * 40,
+        "candidate_selection_profile": "EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1",
+        "candidate_identity": {
+            "format": "EVOGUARD_CANDIDATE_TEXT_MAP_V2",
+            "sha256": "e" * 64,
+            "size": 80,
+            "file_count": 2,
+        },
+        "legacy_guard_candidate_sha256": "f" * 64,
+        "legacy_guard_candidate_size": 2,
+        "changed_paths": ["\ue000", "\U00010000"],
+        "deleted_paths": [],
+        "touched_paths": ["\ue000", "\U00010000"],
+        "policy_sha256": "1" * 64,
+        "verifier_pack_sha256": None,
+    }
+    assert finalizer_derivation.validate_agent_change_bindings(payload).payload == payload
+
+    payload["changed_paths"] = ["\U00010000", "\ue000"]
+    with pytest.raises(FinalizerDerivationError, match="sorted and unique"):
+        finalizer_derivation.validate_agent_change_bindings(payload)
+
+
+def test_v2_unknown_candidate_selection_profile_fails_closed(tmp_path: Path) -> None:
+    repo, base, head = _create_repository(tmp_path)
+    bindings = derive_agent_change_bindings_v2(
+        base_repo=str(repo),
+        head_repo=str(repo),
+        base_sha=base,
+        head_sha=head,
+        base_tree_sha=_git(repo, "rev-parse", f"{base}^{{tree}}"),
+        head_tree_sha=_git(repo, "rev-parse", f"{head}^{{tree}}"),
+    )
+    payload = json.loads(json.dumps(bindings.payload))
+    payload["candidate_selection_profile"] = "UNKNOWN"
+    with pytest.raises(FinalizerDerivationError, match="selection_profile is unsupported"):
+        finalizer_derivation.validate_agent_change_bindings(payload)
+
+
 def _derived(
     repo: Path,
     base: str,
@@ -232,11 +381,9 @@ def test_hostile_node_finalizer_preserves_explicit_memory_limit() -> None:
 
 
 def test_integer_coverage_floor_is_canonical_between_api_and_finalizer() -> None:
-    finalizer_policy, pack, pin = (
-        finalizer_derivation._effective_policy_from_raw_config(
-            json.dumps({"min_diff_coverage": 80}).encode(),
-            head_has_package_json=False,
-        )
+    finalizer_policy, pack, pin = finalizer_derivation._effective_policy_from_raw_config(
+        json.dumps({"min_diff_coverage": 80}).encode(),
+        head_has_package_json=False,
     )
     api_policy = _effective_policy(
         mode="repo",
@@ -270,9 +417,7 @@ def test_integer_coverage_floor_is_canonical_between_api_and_finalizer() -> None
     assert pin is None
     assert type(api_policy["min_diff_coverage"]) is float
     assert api_policy == finalizer_policy
-    assert effective_policy_sha256(api_policy) == effective_policy_sha256(
-        finalizer_policy
-    )
+    assert effective_policy_sha256(api_policy) == effective_policy_sha256(finalizer_policy)
 
 
 @pytest.mark.parametrize(
@@ -434,9 +579,7 @@ def test_raw_git_command_scrubs_all_ambient_git_environment(
 
     environment = observed["environment"]
     assert isinstance(environment, dict)
-    assert {
-        key for key in environment if key.upper().startswith("GIT_")
-    } == {"GIT_OPTIONAL_LOCKS"}
+    assert {key for key in environment if key.upper().startswith("GIT_")} == {"GIT_OPTIONAL_LOCKS"}
     assert environment["GIT_OPTIONAL_LOCKS"] == "0"
     assert environment["EVOGUARD_ENV_SENTINEL"] == "preserved"
     assert observed["command"] == [

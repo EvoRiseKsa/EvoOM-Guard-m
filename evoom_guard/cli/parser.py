@@ -605,6 +605,12 @@ def build_parser(
         help="validate one canonical untrusted Agent Change proposal",
     )
     acp_p.add_argument("proposal", help="canonical proposal JSON")
+    acp_p.add_argument(
+        "--contract-version",
+        choices=("1", "2"),
+        default="1",
+        help="expected proposal generation to validate (default: 1)",
+    )
 
     dacb_p = sub.add_parser(
         "derive-agent-change-bindings",
@@ -622,6 +628,12 @@ def build_parser(
     dacb_p.add_argument("--head-tree-sha", required=True, help="expected head tree SHA")
     dacb_p.add_argument("--out", required=True, help="canonical Agent Change binding JSON")
     dacb_p.add_argument("--force", action="store_true", help="replace an existing output")
+    dacb_p.add_argument(
+        "--contract-version",
+        choices=("1", "2"),
+        default="1",
+        help="raw-Git binding generation to derive (default: 1)",
+    )
 
     saca_p = sub.add_parser(
         "seal-agent-change-authorization",
@@ -657,6 +669,12 @@ def build_parser(
     sacf_p.add_argument("--trusted-pub", required=True, help="matching Trusted Finalizer public key")
     sacf_p.add_argument("--out", required=True, help="signed Agent Change finalizer .evb")
     sacf_p.add_argument("--force", action="store_true", help="replace an existing output")
+    sacf_p.add_argument(
+        "--contract-version",
+        choices=("1", "2"),
+        default="1",
+        help="proposal generation the sealer must require (default: 1)",
+    )
 
     vacf_p = sub.add_parser(
         "verify-agent-change-finalized",
@@ -669,6 +687,12 @@ def build_parser(
     vacf_p.add_argument("--expected-source", required=True, help="external finalizer source JSON")
     vacf_p.add_argument("--expected-context", required=True, help="external finalizer context JSON")
     vacf_p.add_argument("--trusted-pub", required=True, help="trusted finalizer public key")
+    vacf_p.add_argument(
+        "--contract-version",
+        choices=("1", "2"),
+        default="1",
+        help="proposal generation the verifier must require (default: 1)",
+    )
 
     # ----- release-source finalizer V1 ----------------------------------- #
     rsfh_p = sub.add_parser(

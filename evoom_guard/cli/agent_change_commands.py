@@ -40,6 +40,9 @@ class _BindingsValue(Protocol):
     @property
     def verifier_pack_sha256(self) -> str | None: ...
 
+    @property
+    def payload(self) -> Mapping[str, Any]: ...
+
 
 class _GitExecutablePin(Protocol):
     def __call__(self, path: str, expected_sha256: str, /) -> Any: ...
@@ -144,6 +147,7 @@ class _SealFinalized(Protocol):
         finalizer_public_key_path: str,
         expected_derivation: Mapping[str, Any],
         force: bool,
+        required_proposal_format: str = ...,
     ) -> _SealedFinalizedValue: ...
 
 
@@ -166,6 +170,7 @@ class _VerifyFinalized(Protocol):
         expected_finalizer_source: Mapping[str, Any],
         expected_context: Mapping[str, Any],
         expected_bindings: Any,
+        required_proposal_format: str = ...,
     ) -> _VerifiedFinalizedValue: ...
 
 
@@ -239,6 +244,12 @@ def execute_validate_agent_change_proposal(
     expected_errors = services.expected_errors
     try:
         proposal = services.inspect_proposal(args.proposal)
+        actual_format = proposal.payload.get("format")
+        if actual_format in {
+            "EVOGUARD_AGENT_CHANGE_PROPOSAL_V1",
+            "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2",
+        } and actual_format != services.proposal_format:
+            raise ValueError("proposal does not match --contract-version")
     except expected_errors as exc:
         services.machine_report(
             out,
@@ -258,7 +269,18 @@ def execute_validate_agent_change_proposal(
             "status": "VALID",
             "source": proposal.payload["source"],
             "producer": proposal.payload["producer"],
-            "candidate_sha256": proposal.payload["change"]["candidate_sha256"],
+            **(
+                {
+                    "candidate_selection_profile": proposal.payload["change"][
+                        "candidate_selection_profile"
+                    ],
+                    "candidate_identity": dict(
+                        proposal.payload["change"]["candidate_identity"]
+                    ),
+                }
+                if isinstance(proposal.payload["change"].get("candidate_identity"), dict)
+                else {"candidate_sha256": proposal.payload["change"]["candidate_sha256"]}
+            ),
             "touched_paths": proposal.payload["change"]["touched_paths"],
         },
     )
@@ -306,14 +328,32 @@ def execute_derive_agent_change_bindings(
             },
         )
         return 2
+    bindings_payload = getattr(bindings, "payload", {})
     services.machine_report(
         out,
         {
-            "format": services.bindings_format,
+            "format": (
+                bindings_payload["format"]
+                if bindings_payload.get("format")
+                in {
+                    "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V1",
+                    "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V2",
+                }
+                else services.bindings_format
+            ),
             "ok": True,
             "status": "DERIVED",
             "bindings": output,
-            "candidate_sha256": bindings.candidate_sha256,
+            **(
+                {
+                    "candidate_selection_profile": bindings_payload[
+                        "candidate_selection_profile"
+                    ],
+                    "candidate_identity": dict(bindings_payload["candidate_identity"]),
+                }
+                if isinstance(bindings_payload.get("candidate_identity"), dict)
+                else {"candidate_sha256": bindings.candidate_sha256}
+            ),
             "touched_paths": list(bindings.touched_paths),
             "policy_sha256": bindings.policy_sha256,
             "verifier_pack_sha256": bindings.verifier_pack_sha256,
@@ -405,6 +445,11 @@ def execute_seal_agent_change_finalized(
             args.expected_context,
             label="expected context",
         )
+        version_kwargs = (
+            {"required_proposal_format": "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2"}
+            if args.contract_version == "2"
+            else {}
+        )
         sealed = services.seal_finalized(
             args.proposal,
             args.authorization,
@@ -424,6 +469,7 @@ def execute_seal_agent_change_finalized(
             finalizer_public_key_path=args.trusted_pub,
             expected_derivation=finalizer_bindings.payload,
             force=args.force,
+            **version_kwargs,
         )
     except expected_errors as exc:
         services.machine_report(
@@ -444,7 +490,18 @@ def execute_seal_agent_change_finalized(
             "status": "ALLOW",
             "decision": sealed.decision,
             "bundle": sealed.finalized.finalized.bundle_path,
-            "candidate_sha256": sealed.contract.bindings.candidate_sha256,
+            **(
+                {
+                    "candidate_selection_profile": sealed.contract.bindings.payload[
+                        "candidate_selection_profile"
+                    ],
+                    "candidate_identity": dict(
+                        sealed.contract.bindings.payload["candidate_identity"]
+                    ),
+                }
+                if isinstance(sealed.contract.bindings.payload.get("candidate_identity"), dict)
+                else {"candidate_sha256": sealed.contract.bindings.candidate_sha256}
+            ),
             "touched_paths": list(sealed.contract.bindings.touched_paths),
         },
     )
@@ -474,6 +531,11 @@ def execute_verify_agent_change_finalized(
             args.expected_context,
             label="expected context",
         )
+        version_kwargs = (
+            {"required_proposal_format": "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2"}
+            if args.contract_version == "2"
+            else {}
+        )
         verified = services.verify_finalized(
             args.bundle,
             trusted_finalizer_public_key_path=args.trusted_pub,
@@ -482,6 +544,7 @@ def execute_verify_agent_change_finalized(
             expected_finalizer_source=expected_source,
             expected_context=expected_context,
             expected_bindings=bindings,
+            **version_kwargs,
         )
     except expected_errors as exc:
         services.machine_report(
@@ -501,7 +564,18 @@ def execute_verify_agent_change_finalized(
             "ok": True,
             "status": "ALLOW",
             "decision": verified.decision,
-            "candidate_sha256": verified.contract.bindings.candidate_sha256,
+            **(
+                {
+                    "candidate_selection_profile": verified.contract.bindings.payload[
+                        "candidate_selection_profile"
+                    ],
+                    "candidate_identity": dict(
+                        verified.contract.bindings.payload["candidate_identity"]
+                    )
+                }
+                if isinstance(verified.contract.bindings.payload.get("candidate_identity"), dict)
+                else {"candidate_sha256": verified.contract.bindings.candidate_sha256}
+            ),
             "touched_paths": list(verified.contract.bindings.touched_paths),
             "claimed_producer": verified.contract.proposal.payload["producer"],
         },

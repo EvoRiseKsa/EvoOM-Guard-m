@@ -1,12 +1,28 @@
 # Agent Change Admission command-order reference
 
 This is a compact reference for the experimental Agent Change Admission
-profile on the v4.3 feature branch. It is not an enabled workflow, a production
-gate, or evidence that the unpublished candidate has passed a live pilot.
+profile. V1 shipped in v4.3.0; the v4.6 development line derives V2 bindings.
+This reference is not an enabled workflow or a production gate. The archived
+same-owner V1 pilot remains bounded evidence, not independent validation.
 
 Keep the roles separate: the agent writes only `proposal.json`; a protected
 control plane owns the authorization inputs and key; the finalizer independently
 derives Git facts, verifies Guard, and owns a different signing key.
+
+The proposal generation step must use the same contract generation as the
+raw-Git bindings. For V2, the producer computes `candidate_identity` directly
+from its structured path-to-text map and declares the bound
+`EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1` profile. The protected raw-Git bindings retain the
+historical Guard digest and size only as `legacy_guard_candidate_sha256` and
+`legacy_guard_candidate_size`; the producer must not calculate V2 by parsing
+the ambiguous FILE-block text. The protected side independently re-derives all
+values. V1 proposals remain verifiable with V1 bindings, but
+V1/V2 mixing is rejected.
+
+V1 remains the default CLI contract. Add `--contract-version 2` to proposal
+validation, raw-Git derivation, finalizer sealing, and offline verification
+when using V2. The command sequence below is the V1-default form; add that
+flag to those four commands for an end-to-end V2 run.
 
 ## Required inputs
 

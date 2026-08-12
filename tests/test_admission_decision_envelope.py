@@ -19,6 +19,7 @@ from test_agent_change_admission import _fixture, _seal
 
 from evoom_guard import finalizer_derivation
 from evoom_guard.admission import agent_change, decision_envelope, decision_sources
+from evoom_guard.candidate.identity import AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE
 from evoom_guard.evidence_bundle import canonical_json_bytes
 
 
@@ -28,14 +29,22 @@ def _windows_git_pin_transport(monkeypatch: pytest.MonkeyPatch) -> None:
 
     if os.name != "nt":
         return
-    real_derive = finalizer_derivation.derive_agent_change_bindings
+    real_derive_v1 = finalizer_derivation.derive_agent_change_bindings
+    real_derive_v2 = finalizer_derivation.derive_agent_change_bindings_v2
 
-    def derive_without_windows_snapshot(**kwargs: object):
+    def derive_v1_without_windows_snapshot(**kwargs: object):
         kwargs["git_executable"] = None
-        return real_derive(**kwargs)  # type: ignore[arg-type]
+        return real_derive_v1(**kwargs)  # type: ignore[arg-type]
+
+    def derive_v2_without_windows_snapshot(**kwargs: object):
+        kwargs["git_executable"] = None
+        return real_derive_v2(**kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(
-        agent_change, "derive_agent_change_bindings", derive_without_windows_snapshot
+        agent_change, "derive_agent_change_bindings", derive_v1_without_windows_snapshot
+    )
+    monkeypatch.setattr(
+        agent_change, "derive_agent_change_bindings_v2", derive_v2_without_windows_snapshot
     )
 
 
@@ -81,6 +90,26 @@ def _canonical() -> bytes:
     return decision_envelope.canonical_admission_decision_envelope_bytes(_payload())
 
 
+def _payload_v2() -> dict[str, object]:
+    payload = _payload()
+    subject = payload["predicate"]["subject"]  # type: ignore[index]
+    candidate_sha256 = subject.pop("candidate_sha256")
+    candidate_size = subject.pop("candidate_size")
+    subject["git_object_format"] = "sha1"
+    subject["candidate_selection_profile"] = AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE
+    subject["candidate_identity"] = {
+        "format": "EVOGUARD_CANDIDATE_TEXT_MAP_V2",
+        "sha256": candidate_sha256,
+        "size": candidate_size,
+        "file_count": 1,
+    }
+    return decision_envelope.build_agent_change_admission_decision_envelope(
+        subject=subject,
+        controls=payload["predicate"]["controls"],  # type: ignore[index]
+        proof=payload["predicate"]["proof"],  # type: ignore[index]
+    )
+
+
 def test_envelope_is_deterministic_canonical_in_toto_statement() -> None:
     first = _canonical()
     second = _canonical()
@@ -115,6 +144,51 @@ def test_schema_and_runtime_accept_the_same_representative_envelope() -> None:
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(_payload())
     assert schema["$id"].endswith("/admission-decision-envelope-1.schema.json")
+
+
+def test_v2_schema_and_runtime_bind_framed_candidate_identity() -> None:
+    root = Path(__file__).parents[1]
+    schema = json.loads(
+        (root / "evoom_guard/schemas/admission-decision-envelope-2.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    payload = _payload_v2()
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(payload)
+
+    checked = decision_envelope.validate_admission_decision_envelope(payload)
+    assert checked["predicateType"].endswith("/v2")
+    assert checked["predicate"]["format"] == "EVOGUARD_ADMISSION_DECISION_ENVELOPE_V2"
+    assert checked["predicate"]["subject"]["candidate_identity"] == {
+        "format": "EVOGUARD_CANDIDATE_TEXT_MAP_V2",
+        "sha256": "e" * 64,
+        "size": 4096,
+        "file_count": 1,
+    }
+    assert checked["predicate"]["subject"]["candidate_selection_profile"] == (
+        "EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1"
+    )
+
+
+def test_v2_envelope_rejects_unknown_candidate_selection_profile() -> None:
+    payload = _payload_v2()
+    payload["predicate"]["subject"]["candidate_selection_profile"] = "UNKNOWN"  # type: ignore[index]
+    with pytest.raises(
+        decision_envelope.AdmissionDecisionEnvelopeError,
+        match="candidate_selection_profile is unsupported",
+    ):
+        decision_envelope.validate_admission_decision_envelope(payload)
+
+
+def test_v2_rejects_git_object_format_mismatch() -> None:
+    payload = _payload_v2()
+    payload["predicate"]["subject"]["git_object_format"] = "sha256"  # type: ignore[index]
+    with pytest.raises(
+        decision_envelope.AdmissionDecisionEnvelopeError,
+        match="do not match git_object_format",
+    ):
+        decision_envelope.validate_admission_decision_envelope(payload)
 
 
 @pytest.mark.parametrize(
@@ -262,7 +336,6 @@ def test_structurally_valid_projection_tamper_and_proof_tamper_fail(
     for section, field in (
         ("proof", "sha256"),
         ("controls", "policy_sha256"),
-        ("subject", "candidate_sha256"),
     ):
         payload = copy.deepcopy(derived.payload)
         payload["predicate"][section][field] = "0" * 64
@@ -276,6 +349,19 @@ def test_structurally_valid_projection_tamper_and_proof_tamper_fail(
                 str(proof),
                 **arguments,  # type: ignore[arg-type]
             )
+
+    payload = copy.deepcopy(derived.payload)
+    payload["predicate"]["subject"]["candidate_identity"]["sha256"] = "0" * 64
+    forged = canonical_json_bytes(payload)
+    with pytest.raises(
+        decision_envelope.AdmissionDecisionEnvelopeError,
+        match="not the exact projection",
+    ):
+        decision_sources.verify_agent_change_admission_decision(
+            forged,
+            str(proof),
+            **arguments,  # type: ignore[arg-type]
+        )
 
     corrupted = bytearray(proof.read_bytes())
     corrupted[-1] ^= 1

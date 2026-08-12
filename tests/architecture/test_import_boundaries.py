@@ -3516,6 +3516,7 @@ def test_agent_change_admission_dependencies_are_exactly_allowlisted() -> None:
 
     module = "evoom_guard.admission.agent_change"
     expected_dependencies = {
+        "evoom_guard.candidate.identity",
         "evoom_guard.evidence_bundle",
         "evoom_guard.finalizer_derivation",
         "evoom_guard.signing",
@@ -3555,6 +3556,7 @@ def test_admission_decision_dependencies_are_exactly_allowlisted() -> None:
 
     expected = {
         "evoom_guard.admission.decision_envelope": {
+            "evoom_guard.candidate.identity",
             "evoom_guard.evidence_bundle",
         },
         "evoom_guard.admission.decision_sources": {
