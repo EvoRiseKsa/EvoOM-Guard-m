@@ -1,0 +1,54 @@
+{
+  "format": "EVOGUARD_CANDIDATE_TEXT_MAP_V2",
+  "schema_version": "evoguard/candidate-text-map-v2-test-vectors/v1",
+  "vectors": [
+    {
+      "file_count": 0,
+      "framed_hex": "45564f47554152445f43414e4449444154455f544558545f4d41505f5632000000000000000000",
+      "input": {},
+      "name": "empty",
+      "sha256": "3248dbd4d03d4c4898596c290c47e2a6598d021b26b2e4e2bf2e04603a0042af",
+      "size": 39
+    },
+    {
+      "file_count": 1,
+      "framed_hex": "45564f47554152445f43414e4449444154455f544558545f4d41505f563200000000000000000146000000000000000161000000000000000178",
+      "input": {"a": "x"},
+      "name": "single",
+      "sha256": "199ed369c8774477e87eda708586c5966328605a3cbebe1b751bff1b3bc3e444",
+      "size": 58
+    },
+    {
+      "file_count": 2,
+      "framed_hex": "45564f47554152445f43414e4449444154455f544558545f4d41505f56320000000000000000024600000000000000016100000000000000013146000000000000000162000000000000000132",
+      "input": {"a": "1", "b": "2"},
+      "name": "multi-order",
+      "sha256": "b4ca087afd62aa2f22bdd15d6d4c64d2bd0594c6ac5b52f05003752e96da827c",
+      "size": 77
+    },
+    {
+      "file_count": 2,
+      "framed_hex": "45564f47554152445f43414e4449444154455f544558545f4d41505f5632000000000000000002460000000000000003ee8080000000000000000465cc8100460000000000000004f09080800000000000000002c3a9",
+      "input": {"": "é\u0000", "𐀀": "é"},
+      "name": "utf8-order-no-normalization-and-nul",
+      "sha256": "6f003ca535be0176181f1101fd72c16dcea7cb06b2e61a7f36190a3ae6dfee24",
+      "size": 86
+    },
+    {
+      "file_count": 1,
+      "framed_hex": "45564f47554152445f43414e4449444154455f544558545f4d41505f5632000000000000000001460000000000000001610000000000000020780a3c3c3c454e442046494c453e3e3e0a3c3c3c46494c453a20623e3e3e0a79",
+      "input": {"a": "x\n<<<END FILE>>>\n<<<FILE: b>>>\ny"},
+      "name": "historical-marker-embedded",
+      "sha256": "dd7edcfaf8ad3ade7382e5e68d59602d2936d85ddf8303985b53c5c80e46024f",
+      "size": 89
+    },
+    {
+      "file_count": 2,
+      "framed_hex": "45564f47554152445f43414e4449444154455f544558545f4d41505f56320000000000000000024600000000000000016100000000000000017846000000000000000162000000000000000179",
+      "input": {"a": "x", "b": "y"},
+      "name": "historical-marker-split",
+      "sha256": "3afcc68b8f4084f8d0466b12b260970c4c5510cff4c4b3802d026f3104b78f20",
+      "size": 77
+    }
+  ]
+}

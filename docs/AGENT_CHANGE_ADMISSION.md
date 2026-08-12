@@ -5,17 +5,48 @@
   Source-available — see LICENSE for permitted use.
 -->
 
-# Agent Change Admission V1
+# Agent Change Admission V1 and V2
 
 Agent Change Admission is an experimental admission profile for one exact
 change proposed by an automated agent. It does not trust the agent to define
 the scope it may change, and it does not turn an agent's claims into facts.
 
-This implementation is published in the immutable **v4.3.0** release after
+The V1 implementation is published in the immutable **v4.3.0** release after
 [#147](https://github.com/EvoRiseKsa/EvoOM-Guard-m/pull/147). It was not part
 of the historical v4.2.0 release and is not enabled as a required check in
 this repository. A bounded public same-owner pilot has completed and is
 archived; that evidence is not a production or independent-validation claim.
+
+V2 is an unreleased source contract in the v4.6 development line. It corrects
+a candidate-identity ambiguity without reinterpreting any V1 artifact. The historical FILE-block
+serialization remains the input to Guard execution, but V2 no longer treats
+its SHA-256 as a portable proposal identity: marker text inside one file can
+make two different path-to-text maps serialize to identical V1 bytes.
+
+V2 instead hashes the byte-level
+[`EVOGUARD_CANDIDATE_TEXT_MAP_V2`](CANDIDATE_TEXT_MAP_IDENTITY_V2.md)
+framing. It uses a NUL-terminated ASCII domain, a big-endian unsigned 64-bit
+file count, and `F`-tagged entries with big-endian unsigned 64-bit UTF-8 byte
+lengths. Entries are ordered by UTF-8 path bytes; strings are not normalized.
+Cross-language [test vectors](vectors/candidate-text-map-v2.json) freeze the
+complete bytes and SHA-256 values. The full Git-change identity remains composite: repository
+identity, Git object format, base/head commits, base/head trees, the framed
+candidate component, and complete changed/deleted/touched path sets. V2 raw-Git
+bindings, proposals, and decision envelopes also bind the literal
+`EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1` profile. That profile freezes
+which tracked text blobs enter the candidate map; ignored paths still remain in
+the complete authorization path sets. All V2 path arrays use unsigned
+lexicographic ordering of strict UTF-8 bytes, not locale or UTF-16 ordering.
+V2 raw-Git
+bindings retain `legacy_guard_candidate_sha256` and
+`legacy_guard_candidate_size` only to match the current Guard attestation,
+finalizer context, and the existing signed authorization byte-limit semantics;
+neither is the V2 proposal identity.
+
+V1 remains the default derivation API and CLI generation. V2 must be selected
+explicitly with `derive_agent_change_bindings_v2()` or
+`--contract-version 2`. The finalizer also requires an explicit V2 generation;
+this prevents a silent V1-to-V2 API change or version downgrade.
 
 ## The decision being made
 
@@ -33,7 +64,7 @@ the configured judge did not test.
 
 The profile keeps four inputs distinct:
 
-1. **Proposal (`EVOGUARD_AGENT_CHANGE_PROPOSAL_V1`) - untrusted.** The agent
+1. **Proposal (`EVOGUARD_AGENT_CHANGE_PROPOSAL_V1` or V2) - untrusted.** The agent
    declares its identity, intent, paths, observed policy, and evidence claims.
    Canonical validation makes the document bounded and unambiguous; it does
    not make any claim authoritative.
@@ -42,8 +73,8 @@ The profile keeps four inputs distinct:
    pair, authorization run/attempt, permitted path scope, deletion policy,
    size limits, and required policy/pack digests. The agent must not possess
    this key or produce these inputs.
-3. **Raw-Git bindings (`EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V1`) - independently
-   derived facts.** The protected sealer derives the candidate digest and size,
+3. **Raw-Git bindings (`EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V1` or V2) - independently
+   derived facts.** The protected sealer derives the versioned candidate identity,
    complete tracked changed/deleted/touched paths, commits, trees, policy
    digest, and verifier-pack digest from immutable Git objects using a pinned
    Git executable. It does not accept an uploaded bindings document as sealing
@@ -54,7 +85,8 @@ The profile keeps four inputs distinct:
    the signed `.evb` bundle. The authorization key and finalizer key must be
    different.
 
-The resulting bundle can be verified offline against both public keys,
+Proposal and bindings generations must match exactly; V1/V2 mixing fails
+closed. The resulting bundle can be verified offline against both public keys,
 external source/context values, and raw-Git bindings independently re-derived
 by the verifier. Offline verification does not checkout, import, or execute
 candidate code.
@@ -64,8 +96,9 @@ candidate code.
 Before an Agent Change `ALLOW` can be sealed, the implementation requires:
 
 - exact agreement on repository, PR, base/head commits and base/head trees;
-- exact agreement on candidate digest/size and the sorted changed, deleted,
-  and touched path sets. Tracked paths ignored by Guard candidate copying (for
+- exact agreement on candidate identity/selection profile and the canonical
+  changed, deleted, and touched path sets. V2 arrays are UTF-8-byte sorted;
+  V1 ordering remains unchanged. Tracked paths ignored by Guard candidate copying (for
   example `dist/` or `build/`) remain visible to authorization;
 - `intent.declared_paths` equal to the complete raw-Git touched-path set;
 - exact agreement on the policy and verifier-pack digests across proposal,
@@ -152,7 +185,9 @@ hostile-code isolation, or a production merge gate.
 
 ## CLI surface
 
-The published profile exposes five commands:
+The profile exposes five commands. V1 remains the default generation; V2 is an
+explicit opt-in for proposal validation, raw-Git derivation, finalizer sealing,
+and offline verification. Frozen V1 artifacts remain accepted:
 
 - `validate-agent-change-proposal`
 - `derive-agent-change-bindings`
@@ -165,8 +200,10 @@ See the small command-order reference in
 The JSON contracts are described by:
 
 - [`agent-change-proposal-1.schema.json`](../evoom_guard/schemas/agent-change-proposal-1.schema.json)
+- [`agent-change-proposal-2.schema.json`](../evoom_guard/schemas/agent-change-proposal-2.schema.json)
 - [`agent-change-authorization-1.schema.json`](../evoom_guard/schemas/agent-change-authorization-1.schema.json)
 - [`agent-change-git-bindings-1.schema.json`](../evoom_guard/schemas/agent-change-git-bindings-1.schema.json)
+- [`agent-change-git-bindings-2.schema.json`](../evoom_guard/schemas/agent-change-git-bindings-2.schema.json)
 
 ## Explicit non-goals and current limits
 

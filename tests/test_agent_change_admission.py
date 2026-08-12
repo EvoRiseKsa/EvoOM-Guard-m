@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 from test_finalizer_derivation import (
     _commit,
     _create_repository,
@@ -17,10 +18,12 @@ from test_finalizer_derivation import (
 
 from evoom_guard import finalizer_derivation
 from evoom_guard.admission import agent_change
+from evoom_guard.candidate.identity import AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE
 from evoom_guard.cli import main as cli_main
 from evoom_guard.finalizer_derivation import (
     context_from_verified_bindings,
     derive_agent_change_bindings,
+    derive_agent_change_bindings_v2,
     write_agent_change_bindings,
     write_finalizer_bindings,
 )
@@ -46,13 +49,23 @@ def _git_pin():
 def _windows_git_pin_transport(monkeypatch):
     if os.name != "nt":
         return
-    real_derive = finalizer_derivation.derive_agent_change_bindings
+    real_derive_v1 = finalizer_derivation.derive_agent_change_bindings
+    real_derive_v2 = finalizer_derivation.derive_agent_change_bindings_v2
 
-    def derive_without_windows_snapshot(**kwargs):
+    def derive_v1_without_windows_snapshot(**kwargs):
         kwargs["git_executable"] = None
-        return real_derive(**kwargs)
+        return real_derive_v1(**kwargs)
 
-    monkeypatch.setattr(agent_change, "derive_agent_change_bindings", derive_without_windows_snapshot)
+    def derive_v2_without_windows_snapshot(**kwargs):
+        kwargs["git_executable"] = None
+        return real_derive_v2(**kwargs)
+
+    monkeypatch.setattr(
+        agent_change, "derive_agent_change_bindings", derive_v1_without_windows_snapshot
+    )
+    monkeypatch.setattr(
+        agent_change, "derive_agent_change_bindings_v2", derive_v2_without_windows_snapshot
+    )
     monkeypatch.setattr(finalizer_derivation, "git_executable_pin", lambda _path, _sha: _git_pin())
 
 
@@ -68,7 +81,7 @@ def _keys(root: Path, name: str) -> tuple[Path, Path]:
 
 
 def _agent_bindings(repo: Path, base: str, head: str):
-    return derive_agent_change_bindings(
+    return derive_agent_change_bindings_v2(
         base_repo=str(repo),
         head_repo=str(repo),
         base_sha=base,
@@ -80,7 +93,7 @@ def _agent_bindings(repo: Path, base: str, head: str):
 
 def _proposal(bindings, base: str, head: str) -> dict[str, object]:
     return {
-        "format": agent_change.AGENT_CHANGE_PROPOSAL_FORMAT,
+        "format": agent_change.CURRENT_AGENT_CHANGE_PROPOSAL_FORMAT,
         "producer": {
             "id": "repair-agent",
             "kind": "automated-repair",
@@ -97,8 +110,8 @@ def _proposal(bindings, base: str, head: str) -> dict[str, object]:
             "declared_paths": list(bindings.touched_paths),
         },
         "change": {
-            "candidate_sha256": bindings.candidate_sha256,
-            "candidate_size": bindings.payload["candidate_size"],
+            "candidate_selection_profile": AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE,
+            "candidate_identity": bindings.candidate_identity,
             "changed_paths": list(bindings.changed_paths),
             "deleted_paths": list(bindings.deleted_paths),
             "touched_paths": list(bindings.touched_paths),
@@ -136,6 +149,8 @@ def _fixture(
     *,
     failing: bool = False,
     extra_files: dict[str, str] | None = None,
+    allowed_patterns: list[str] | None = None,
+    maximum_candidate_bytes: int = 4096,
 ) -> dict[str, object]:
     repo, base, head = _create_repository(tmp_path)
     if failing:
@@ -172,9 +187,9 @@ def _fixture(
         str(authorization_path),
         source=authorization_source,
         scope={
-            "allowed_patterns": ["app.py"],
+            "allowed_patterns": allowed_patterns or ["app.py"],
             "maximum_touched_paths": len(agent_bindings.touched_paths),
-            "maximum_candidate_bytes": 4096,
+            "maximum_candidate_bytes": maximum_candidate_bytes,
             "allow_deletions": False,
         },
         required={
@@ -211,6 +226,7 @@ def _seal(
     finalizer_public_key: Path | None = None,
     force: bool = False,
 ):
+    proposal_format = json.loads(Path(case["proposal"]).read_text(encoding="utf-8"))["format"]
     return agent_change.seal_agent_change_finalizer_bundle(
         str(case["proposal"]),
         str(case["authorization"]),
@@ -227,6 +243,7 @@ def _seal(
         finalizer_private_key_path=str(case["finalizer_private"]),
         finalizer_public_key_path=str(finalizer_public_key or case["finalizer_public"]),
         expected_derivation=case["finalizer_bindings"].payload,
+        required_proposal_format=proposal_format,
         force=force,
     )
 
@@ -244,24 +261,103 @@ def test_agent_change_profile_seals_and_verifies_exact_trusted_allow(tmp_path: P
         expected_finalizer_source=case["source"],
         expected_context=case["context"],
         expected_bindings=case["bindings"],
+        required_proposal_format=case["bindings"].format.replace(
+            "GIT_BINDINGS", "PROPOSAL"
+        ),
     )
 
     assert sealed.decision == "ALLOW"
     assert verified.decision == "ALLOW"
     assert verified.contract.bindings.touched_paths == ("app.py",)
+    assert verified.contract.bindings.format == "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V2"
+    assert verified.contract.proposal.payload["format"] == "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2"
+
+
+def test_v2_schemas_accept_the_runtime_proposal_and_bindings(tmp_path: Path) -> None:
+    case = _fixture(tmp_path)
+    root = Path(__file__).parents[1]
+    for schema_name, value in (
+        ("agent-change-proposal-2.schema.json", json.loads(Path(case["proposal"]).read_text())),
+        ("agent-change-git-bindings-2.schema.json", case["bindings"].payload),
+    ):
+        schema = json.loads((root / "evoom_guard" / "schemas" / schema_name).read_text())
+        Draft202012Validator.check_schema(schema)
+        Draft202012Validator(schema).validate(value)
+
+
+def test_v1_derivation_and_sealing_remain_end_to_end_compatible(tmp_path: Path) -> None:
+    case = _fixture(tmp_path)
+    bindings = case["bindings"]
+    v1_bindings = derive_agent_change_bindings(
+        base_repo=str(case["repo"]),
+        head_repo=str(case["repo"]),
+        base_sha=str(case["base"]),
+        head_sha=str(case["head"]),
+        base_tree_sha=bindings.payload["base_tree_sha"],
+        head_tree_sha=bindings.payload["head_tree_sha"],
+    )
+    assert v1_bindings.format == "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V1"
+    assert v1_bindings.candidate_sha256 == bindings.legacy_guard_candidate_sha256
+    assert v1_bindings.candidate_size == bindings.candidate_size
+
+    v1_proposal = _proposal(bindings, str(case["base"]), str(case["head"]))
+    v1_proposal["format"] = "EVOGUARD_AGENT_CHANGE_PROPOSAL_V1"
+    v1_proposal["change"] = {
+        "candidate_sha256": bindings.legacy_guard_candidate_sha256,
+        "candidate_size": bindings.candidate_size,
+        "changed_paths": list(bindings.changed_paths),
+        "deleted_paths": list(bindings.deleted_paths),
+        "touched_paths": list(bindings.touched_paths),
+    }
+    v1_path = tmp_path / "v1-proposal.json"
+    agent_change.write_agent_change_proposal(v1_proposal, str(v1_path))
+    case["proposal"] = v1_path
+    output = tmp_path / "v1-compatible.evb"
+    sealed = _seal(case, output)
+    verified = agent_change.verify_agent_change_finalized_bundle(
+        str(output),
+        trusted_finalizer_public_key_path=str(case["finalizer_public"]),
+        authorization_public_key_path=str(case["authorization_public"]),
+        expected_authorization_source=case["authorization_source"],
+        expected_finalizer_source=case["source"],
+        expected_context=case["context"],
+        expected_bindings=v1_bindings,
+        required_proposal_format="EVOGUARD_AGENT_CHANGE_PROPOSAL_V1",
+    )
+
+    assert sealed.contract.bindings.format == "EVOGUARD_AGENT_CHANGE_GIT_BINDINGS_V1"
+    assert verified.contract.proposal.payload["format"] == "EVOGUARD_AGENT_CHANGE_PROPOSAL_V1"
+
+
+def test_v2_keeps_v1_signed_candidate_byte_limit_semantics(tmp_path: Path) -> None:
+    case = _fixture(
+        tmp_path,
+        extra_files={f"src/f{index:04d}.txt": "" for index in range(100)},
+        allowed_patterns=["app.py", "src/**"],
+        maximum_candidate_bytes=3_500,
+    )
+    bindings = case["bindings"]
+    assert bindings.candidate_identity["size"] < 3_500
+    assert bindings.candidate_size > 3_500
+
+    with pytest.raises(
+        agent_change.AgentChangeAdmissionError,
+        match="authorized candidate-size limit",
+    ):
+        _seal(case, tmp_path / "over-v1-byte-limit.evb")
 
 
 def test_unscoped_agent_change_cannot_hide_raw_git_paths(tmp_path: Path) -> None:
     case = _fixture(tmp_path)
     proposal = json.loads(Path(case["proposal"]).read_text(encoding="utf-8"))
-    proposal["change"]["candidate_sha256"] = "0" * 64
+    proposal["change"]["candidate_identity"]["sha256"] = "0" * 64
     forged = tmp_path / "forged-proposal.json"
     agent_change.write_agent_change_proposal(proposal, str(forged))
     case["proposal"] = forged
 
     with pytest.raises(
         agent_change.AgentChangeAdmissionError,
-        match="candidate_sha256 differs from raw-Git derivation",
+        match="candidate_identity differs from raw-Git derivation",
     ):
         _seal(case, tmp_path / "forged.evb")
 
@@ -280,6 +376,48 @@ def test_guard_copy_ignore_cannot_hide_tracked_path_from_authorization(tmp_path:
     ):
         _seal(case, output)
     assert not output.exists()
+
+
+def test_v2_proposal_requires_the_bound_candidate_selection_profile(tmp_path: Path) -> None:
+    case = _fixture(tmp_path)
+    proposal = json.loads(Path(case["proposal"]).read_text(encoding="utf-8"))
+    proposal["change"]["candidate_selection_profile"] = "UNKNOWN"
+
+    with pytest.raises(
+        agent_change.AgentChangeAdmissionError,
+        match="candidate_selection_profile is unsupported",
+    ):
+        agent_change.validate_agent_change_proposal(proposal)
+
+
+def test_v2_proposal_rejects_impossible_candidate_file_count(tmp_path: Path) -> None:
+    case = _fixture(tmp_path)
+    proposal = json.loads(Path(case["proposal"]).read_text(encoding="utf-8"))
+    proposal["change"]["candidate_identity"]["file_count"] = 0
+
+    with pytest.raises(
+        agent_change.AgentChangeAdmissionError,
+        match="file_count does not match the candidate-selection profile",
+    ):
+        agent_change.validate_agent_change_proposal(proposal)
+
+
+def test_v2_proposal_intent_uses_the_same_utf8_path_order(tmp_path: Path) -> None:
+    case = _fixture(tmp_path)
+    proposal = json.loads(Path(case["proposal"]).read_text(encoding="utf-8"))
+    paths = ["\ue000", "\U00010000"]
+    proposal["intent"]["declared_paths"] = paths
+    proposal["change"]["changed_paths"] = paths
+    proposal["change"]["deleted_paths"] = []
+    proposal["change"]["touched_paths"] = paths
+    proposal["change"]["candidate_identity"]["file_count"] = 2
+
+    checked = agent_change.validate_agent_change_proposal(proposal)
+    assert checked["intent"]["declared_paths"] == paths
+
+    proposal["intent"]["declared_paths"] = list(reversed(paths))
+    with pytest.raises(agent_change.AgentChangeAdmissionError, match="sorted and unique"):
+        agent_change.validate_agent_change_proposal(proposal)
 
 
 def test_guard_copy_ignore_cannot_hide_tracked_deletion(tmp_path: Path) -> None:
@@ -455,7 +593,7 @@ def test_signed_authorization_cannot_allow_judge_owned_test_path(tmp_path: Path)
         "head_sha": head,
         "base_tree_sha": auth_source["base_tree_sha"],
         "head_tree_sha": auth_source["head_tree_sha"],
-        "candidate_sha256": bindings.candidate_sha256,
+        "candidate_sha256": bindings.legacy_guard_candidate_sha256,
         "policy_sha256": bindings.policy_sha256,
         "verifier_pack_sha256": None,
         "guard_artifact_sha256": "e" * 64,
@@ -517,69 +655,91 @@ def test_agent_change_cli_profile_round_trip(tmp_path: Path, capsys) -> None:
     expected_source = tmp_path / "expected-source.json"
     expected_context = tmp_path / "expected-context.json"
     output = tmp_path / "cli-agent-change.evb"
-    write_agent_change_bindings(
-        case["bindings"], bindings_path=str(agent_bindings)
-    )
-    write_finalizer_bindings(
-        case["finalizer_bindings"], bindings_path=str(finalizer_bindings)
-    )
+    write_agent_change_bindings(case["bindings"], bindings_path=str(agent_bindings))
+    write_finalizer_bindings(case["finalizer_bindings"], bindings_path=str(finalizer_bindings))
     _json(authorization_source, case["authorization_source"])
     _json(expected_source, case["source"])
     _json(expected_context, case["context"])
 
-    assert cli_main(["validate-agent-change-proposal", str(case["proposal"])]) == 0
-    assert cli_main(
-        [
-            "seal-agent-change-finalized",
-            str(case["proposal"]),
-            str(case["authorization"]),
-            str(case["handoff"]),
-            str(case["verdict"]),
-            "--base-repo",
-            str(case["repo"]),
-            "--head-repo",
-            str(case["repo"]),
-            "--git-executable",
-            case["git_executable"].executable_path,
-            "--git-executable-sha256",
-            case["git_executable"].executable_sha256,
-            "--finalizer-bindings",
-            str(finalizer_bindings),
-            "--authorization-source",
-            str(authorization_source),
-            "--authorization-pub",
-            str(case["authorization_public"]),
-            "--expected-source",
-            str(expected_source),
-            "--expected-context",
-            str(expected_context),
-            "--sign-key",
-            str(case["finalizer_private"]),
-            "--trusted-pub",
-            str(case["finalizer_public"]),
-            "--out",
-            str(output),
-        ]
-    ) == 0
-    assert cli_main(
-        [
-            "verify-agent-change-finalized",
-            str(output),
-            "--agent-bindings",
-            str(agent_bindings),
-            "--authorization-source",
-            str(authorization_source),
-            "--authorization-pub",
-            str(case["authorization_public"]),
-            "--expected-source",
-            str(expected_source),
-            "--expected-context",
-            str(expected_context),
-            "--trusted-pub",
-            str(case["finalizer_public"]),
-        ]
-    ) == 0
+    assert (
+        cli_main(
+            [
+                "validate-agent-change-proposal",
+                str(case["proposal"]),
+                "--contract-version",
+                "2",
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            [
+                "seal-agent-change-finalized",
+                str(case["proposal"]),
+                str(case["authorization"]),
+                str(case["handoff"]),
+                str(case["verdict"]),
+                "--base-repo",
+                str(case["repo"]),
+                "--head-repo",
+                str(case["repo"]),
+                "--git-executable",
+                case["git_executable"].executable_path,
+                "--git-executable-sha256",
+                case["git_executable"].executable_sha256,
+                "--finalizer-bindings",
+                str(finalizer_bindings),
+                "--authorization-source",
+                str(authorization_source),
+                "--authorization-pub",
+                str(case["authorization_public"]),
+                "--expected-source",
+                str(expected_source),
+                "--expected-context",
+                str(expected_context),
+                "--sign-key",
+                str(case["finalizer_private"]),
+                "--trusted-pub",
+                str(case["finalizer_public"]),
+                "--out",
+                str(output),
+                "--contract-version",
+                "2",
+            ]
+        )
+        == 0
+    )
+    assert (
+        cli_main(
+            [
+                "verify-agent-change-finalized",
+                str(output),
+                "--agent-bindings",
+                str(agent_bindings),
+                "--authorization-source",
+                str(authorization_source),
+                "--authorization-pub",
+                str(case["authorization_public"]),
+                "--expected-source",
+                str(expected_source),
+                "--expected-context",
+                str(expected_context),
+                "--trusted-pub",
+                str(case["finalizer_public"]),
+                "--contract-version",
+                "2",
+            ]
+        )
+        == 0
+    )
 
     reports = capsys.readouterr().out
     assert reports.count('"status": "VALID"') == 1
     assert reports.count('"status": "ALLOW"') == 2
+    assert reports.count('"format": "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2"') == 3
+    assert reports.count('"candidate_identity": {') == 3
+    assert reports.count(
+        '"candidate_selection_profile": "EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1"'
+    ) == 3
+    assert '"candidate_sha256"' not in reports

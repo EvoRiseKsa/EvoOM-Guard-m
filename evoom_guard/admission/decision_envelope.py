@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from evoom_guard.candidate.identity import AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE
 from evoom_guard.evidence_bundle import (
     EvidenceBundleError,
     canonical_json_bytes,
@@ -26,8 +27,19 @@ from evoom_guard.evidence_bundle import (
 )
 
 IN_TOTO_STATEMENT_TYPE = "https://in-toto.io/Statement/v1"
-ADMISSION_DECISION_PREDICATE_TYPE = "https://schemas.evorise.tech/evoom-guard/admission-decision/v1"
-ADMISSION_DECISION_FORMAT = "EVOGUARD_ADMISSION_DECISION_ENVELOPE_V1"
+ADMISSION_DECISION_PREDICATE_TYPE_V1 = (
+    "https://schemas.evorise.tech/evoom-guard/admission-decision/v1"
+)
+ADMISSION_DECISION_PREDICATE_TYPE_V2 = (
+    "https://schemas.evorise.tech/evoom-guard/admission-decision/v2"
+)
+ADMISSION_DECISION_FORMAT_V1 = "EVOGUARD_ADMISSION_DECISION_ENVELOPE_V1"
+ADMISSION_DECISION_FORMAT_V2 = "EVOGUARD_ADMISSION_DECISION_ENVELOPE_V2"
+# Historical public names remain V1-compatible.
+ADMISSION_DECISION_PREDICATE_TYPE = ADMISSION_DECISION_PREDICATE_TYPE_V1
+ADMISSION_DECISION_FORMAT = ADMISSION_DECISION_FORMAT_V1
+CURRENT_ADMISSION_DECISION_PREDICATE_TYPE = ADMISSION_DECISION_PREDICATE_TYPE_V2
+CURRENT_ADMISSION_DECISION_FORMAT = ADMISSION_DECISION_FORMAT_V2
 ADMISSION_DECISION_PROFILE_AGENT_CHANGE = "agent-change"
 ADMISSION_DECISION_PROOF_FORMAT = "EVOGUARD_EVIDENCE_BUNDLE_V1"
 ADMISSION_DECISION_PROOF_MODE = "PROOF_BOUND_PROJECTION"
@@ -56,7 +68,7 @@ _PREDICATE_KEYS = {
     "proof",
     "authority",
 }
-_CHANGE_SUBJECT_KEYS = {
+_CHANGE_SUBJECT_KEYS_V1 = {
     "kind",
     "repository",
     "repository_id",
@@ -68,6 +80,21 @@ _CHANGE_SUBJECT_KEYS = {
     "candidate_sha256",
     "candidate_size",
 }
+_CHANGE_SUBJECT_KEYS_V2 = {
+    "kind",
+    "repository",
+    "repository_id",
+    "pull_request_number",
+    "git_object_format",
+    "base_sha",
+    "base_tree_sha",
+    "head_sha",
+    "head_tree_sha",
+    "candidate_identity",
+    "candidate_selection_profile",
+}
+_CANDIDATE_IDENTITY_KEYS = {"format", "sha256", "size", "file_count"}
+_CANDIDATE_IDENTITY_FORMAT = "EVOGUARD_CANDIDATE_TEXT_MAP_V2"
 _CONTROL_KEYS = {"policy_sha256", "verifier_pack_sha256"}
 _PROOF_KEYS = {"format", "sha256", "size", "authentication"}
 _PROOF_AUTHENTICATION_KEYS = {"finalizer", "change_authorization"}
@@ -169,16 +196,44 @@ def _authenticator(value: object, *, label: str, purpose: str) -> dict[str, str]
     }
 
 
-def _change_subject(value: object) -> dict[str, Any]:
+def _candidate_identity(value: object) -> dict[str, Any]:
+    identity = _object(value, "subject.candidate_identity")
+    _exact(identity, _CANDIDATE_IDENTITY_KEYS, "subject.candidate_identity")
+    if identity["format"] != _CANDIDATE_IDENTITY_FORMAT:
+        raise AdmissionDecisionEnvelopeError("subject.candidate_identity.format is unsupported")
+    return {
+        "format": _CANDIDATE_IDENTITY_FORMAT,
+        "sha256": _matched(identity["sha256"], _SHA256, "subject.candidate_identity.sha256"),
+        "size": _integer(
+            identity["size"],
+            label="subject.candidate_identity.size",
+            minimum=1,
+            maximum=MAX_CANDIDATE_BYTES,
+        ),
+        "file_count": _integer(
+            identity["file_count"],
+            label="subject.candidate_identity.file_count",
+            minimum=0,
+            maximum=10_000,
+        ),
+    }
+
+
+def _change_subject(value: object, *, envelope_format: str) -> dict[str, Any]:
     subject = _object(value, "admission predicate subject")
-    _exact(subject, _CHANGE_SUBJECT_KEYS, "admission predicate subject")
+    subject_keys = (
+        _CHANGE_SUBJECT_KEYS_V1
+        if envelope_format == ADMISSION_DECISION_FORMAT_V1
+        else _CHANGE_SUBJECT_KEYS_V2
+    )
+    _exact(subject, subject_keys, "admission predicate subject")
     if subject["kind"] != "git-change":
         raise AdmissionDecisionEnvelopeError("predicate subject.kind must be git-change")
     base_sha = _matched(subject["base_sha"], _GIT_SHA, "subject.base_sha")
     head_sha = _matched(subject["head_sha"], _GIT_SHA, "subject.head_sha")
     if base_sha == head_sha:
         raise AdmissionDecisionEnvelopeError("subject base and head revisions must differ")
-    return {
+    common = {
         "kind": "git-change",
         "repository": _matched(subject["repository"], _REPOSITORY, "subject.repository"),
         "repository_id": _matched(subject["repository_id"], _NUMERIC_ID, "subject.repository_id"),
@@ -192,15 +247,38 @@ def _change_subject(value: object) -> dict[str, Any]:
         "base_tree_sha": _matched(subject["base_tree_sha"], _GIT_SHA, "subject.base_tree_sha"),
         "head_sha": head_sha,
         "head_tree_sha": _matched(subject["head_tree_sha"], _GIT_SHA, "subject.head_tree_sha"),
-        "candidate_sha256": _matched(
-            subject["candidate_sha256"], _SHA256, "subject.candidate_sha256"
-        ),
-        "candidate_size": _integer(
-            subject["candidate_size"],
-            label="subject.candidate_size",
-            minimum=1,
-            maximum=MAX_CANDIDATE_BYTES,
-        ),
+    }
+    if envelope_format == ADMISSION_DECISION_FORMAT_V1:
+        return {
+            **common,
+            "candidate_sha256": _matched(
+                subject["candidate_sha256"], _SHA256, "subject.candidate_sha256"
+            ),
+            "candidate_size": _integer(
+                subject["candidate_size"],
+                label="subject.candidate_size",
+                minimum=1,
+                maximum=MAX_CANDIDATE_BYTES,
+            ),
+        }
+    object_format = subject["git_object_format"]
+    if object_format not in {"sha1", "sha256"}:
+        raise AdmissionDecisionEnvelopeError("subject.git_object_format is unsupported")
+    expected_length = 40 if object_format == "sha1" else 64
+    if any(
+        len(str(common[field])) != expected_length
+        for field in ("base_sha", "base_tree_sha", "head_sha", "head_tree_sha")
+    ):
+        raise AdmissionDecisionEnvelopeError("subject Git digests do not match git_object_format")
+    if subject["candidate_selection_profile"] != AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE:
+        raise AdmissionDecisionEnvelopeError(
+            "subject.candidate_selection_profile is unsupported"
+        )
+    return {
+        **common,
+        "git_object_format": object_format,
+        "candidate_selection_profile": AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE,
+        "candidate_identity": _candidate_identity(subject["candidate_identity"]),
     }
 
 
@@ -284,19 +362,27 @@ def validate_admission_decision_envelope(value: Mapping[str, Any]) -> dict[str, 
     _exact(envelope, _ENVELOPE_KEYS, "admission decision envelope")
     if envelope["_type"] != IN_TOTO_STATEMENT_TYPE:
         raise AdmissionDecisionEnvelopeError("unsupported in-toto statement type")
-    if envelope["predicateType"] != ADMISSION_DECISION_PREDICATE_TYPE:
-        raise AdmissionDecisionEnvelopeError("unsupported admission predicate type")
-
     predicate = _object(envelope["predicate"], "admission predicate")
     _exact(predicate, _PREDICATE_KEYS, "admission predicate")
-    if predicate["format"] != ADMISSION_DECISION_FORMAT:
+    envelope_format = predicate["format"]
+    if envelope_format not in {
+        ADMISSION_DECISION_FORMAT_V1,
+        ADMISSION_DECISION_FORMAT_V2,
+    }:
         raise AdmissionDecisionEnvelopeError("unsupported admission decision format")
+    expected_predicate_type = (
+        ADMISSION_DECISION_PREDICATE_TYPE_V1
+        if envelope_format == ADMISSION_DECISION_FORMAT_V1
+        else ADMISSION_DECISION_PREDICATE_TYPE_V2
+    )
+    if envelope["predicateType"] != expected_predicate_type:
+        raise AdmissionDecisionEnvelopeError("unsupported admission predicate type")
     if predicate["profile"] != ADMISSION_DECISION_PROFILE_AGENT_CHANGE:
         raise AdmissionDecisionEnvelopeError("unsupported admission decision profile")
     if predicate["decision"] != "ALLOW":
         raise AdmissionDecisionEnvelopeError("Agent Change admission decision must be ALLOW")
 
-    change_subject = _change_subject(predicate["subject"])
+    change_subject = _change_subject(predicate["subject"], envelope_format=envelope_format)
     statement_subjects = envelope["subject"]
     if not isinstance(statement_subjects, list) or len(statement_subjects) != 1:
         raise AdmissionDecisionEnvelopeError("in-toto statement must contain exactly one subject")
@@ -324,9 +410,9 @@ def validate_admission_decision_envelope(value: Mapping[str, Any]) -> dict[str, 
                 "digest": {"gitCommit": change_subject["head_sha"]},
             }
         ],
-        "predicateType": ADMISSION_DECISION_PREDICATE_TYPE,
+        "predicateType": expected_predicate_type,
         "predicate": {
-            "format": ADMISSION_DECISION_FORMAT,
+            "format": envelope_format,
             "profile": ADMISSION_DECISION_PROFILE_AGENT_CHANGE,
             "decision": "ALLOW",
             "subject": change_subject,
@@ -376,9 +462,14 @@ def build_agent_change_admission_decision_envelope(
     controls: Mapping[str, Any],
     proof: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Build the only V1 profile without accepting caller-selected authority flags."""
+    """Build the Agent Change profile without caller-selected authority flags."""
 
-    change_subject = _change_subject(subject)
+    envelope_format = (
+        ADMISSION_DECISION_FORMAT_V2
+        if "candidate_identity" in subject
+        else ADMISSION_DECISION_FORMAT_V1
+    )
+    change_subject = _change_subject(subject, envelope_format=envelope_format)
     value = {
         "_type": IN_TOTO_STATEMENT_TYPE,
         "subject": [
@@ -390,9 +481,13 @@ def build_agent_change_admission_decision_envelope(
                 "digest": {"gitCommit": change_subject["head_sha"]},
             }
         ],
-        "predicateType": ADMISSION_DECISION_PREDICATE_TYPE,
+        "predicateType": (
+            ADMISSION_DECISION_PREDICATE_TYPE_V2
+            if envelope_format == ADMISSION_DECISION_FORMAT_V2
+            else ADMISSION_DECISION_PREDICATE_TYPE_V1
+        ),
         "predicate": {
-            "format": ADMISSION_DECISION_FORMAT,
+            "format": envelope_format,
             "profile": ADMISSION_DECISION_PROFILE_AGENT_CHANGE,
             "decision": "ALLOW",
             "subject": change_subject,

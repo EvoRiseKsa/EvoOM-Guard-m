@@ -28,6 +28,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import Any
 
+from evoom_guard.candidate.identity import (
+    AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE,
+    CandidateIdentityError,
+    agent_change_candidate_path_is_ignored,
+    candidate_path_order_key,
+)
 from evoom_guard.evidence_bundle import (
     EvidenceMaterial,
     canonical_archive_bytes,
@@ -39,6 +45,8 @@ from evoom_guard.evidence_bundle import (
     validate_canonical_archive_member,
 )
 from evoom_guard.finalizer_derivation import (
+    AGENT_CHANGE_GIT_BINDINGS_FORMAT_V1,
+    AGENT_CHANGE_GIT_BINDINGS_FORMAT_V2,
     AGENT_CHANGE_GIT_BINDINGS_ROLE,
     MAX_BINDINGS_BYTES,
     DerivedAgentChangeBindings,
@@ -46,6 +54,7 @@ from evoom_guard.finalizer_derivation import (
     GitExecutablePin,
     agent_change_bindings_bytes,
     derive_agent_change_bindings,
+    derive_agent_change_bindings_v2,
     validate_agent_change_bindings,
 )
 from evoom_guard.trusted_finalizer import (
@@ -66,7 +75,11 @@ from evoom_guard.verifiers.harness_policy import (
     is_safe_relpath,
 )
 
-AGENT_CHANGE_PROPOSAL_FORMAT = "EVOGUARD_AGENT_CHANGE_PROPOSAL_V1"
+AGENT_CHANGE_PROPOSAL_FORMAT_V1 = "EVOGUARD_AGENT_CHANGE_PROPOSAL_V1"
+AGENT_CHANGE_PROPOSAL_FORMAT_V2 = "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2"
+# Historical public name: keep V1 readers and fixtures stable.
+AGENT_CHANGE_PROPOSAL_FORMAT = AGENT_CHANGE_PROPOSAL_FORMAT_V1
+CURRENT_AGENT_CHANGE_PROPOSAL_FORMAT = AGENT_CHANGE_PROPOSAL_FORMAT_V2
 AGENT_CHANGE_AUTHORIZATION_FORMAT = "EVOGUARD_AGENT_CHANGE_AUTHORIZATION_V1"
 AGENT_CHANGE_AUTHORIZATION_PURPOSE = "evoguard-agent-change-authorization-v1"
 AGENT_CHANGE_AUTHORIZATION_KEY_DOMAIN = "agent-change-authorization-v1"
@@ -111,13 +124,22 @@ _PROPOSAL_SOURCE_KEYS = {
     "head_sha",
 }
 _INTENT_KEYS = {"summary", "declared_paths"}
-_CHANGE_KEYS = {
+_CHANGE_KEYS_V1 = {
     "candidate_sha256",
     "candidate_size",
     "changed_paths",
     "deleted_paths",
     "touched_paths",
 }
+_CHANGE_KEYS_V2 = {
+    "candidate_identity",
+    "candidate_selection_profile",
+    "changed_paths",
+    "deleted_paths",
+    "touched_paths",
+}
+_CANDIDATE_IDENTITY_KEYS = {"format", "sha256", "size", "file_count"}
+_CANDIDATE_IDENTITY_FORMAT = "EVOGUARD_CANDIDATE_TEXT_MAP_V2"
 _POLICY_KEYS = {"policy_sha256", "verifier_pack_sha256"}
 _CLAIM_KEYS = {"id", "outcome", "evidence_sha256"}
 
@@ -253,7 +275,13 @@ def _git_sha(value: object, *, label: str) -> str:
     return value
 
 
-def _path_list(value: object, *, label: str, allow_empty: bool = False) -> list[str]:
+def _path_list(
+    value: object,
+    *,
+    label: str,
+    allow_empty: bool = False,
+    utf8_order: bool = False,
+) -> list[str]:
     if not isinstance(value, list) or any(
         not isinstance(path, str) or not is_safe_relpath(path) for path in value
     ):
@@ -262,7 +290,18 @@ def _path_list(value: object, *, label: str, allow_empty: bool = False) -> list[
         raise AgentChangeAdmissionError(f"{label} must not be empty")
     if len(value) > MAX_PATHS:
         raise AgentChangeAdmissionError(f"{label} exceeds the path limit")
-    if value != sorted(set(value)):
+    if utf8_order:
+        try:
+            canonical = sorted(
+                set(value), key=candidate_path_order_key
+            )
+        except CandidateIdentityError as exc:
+            raise AgentChangeAdmissionError(
+                f"{label} must contain strict UTF-8 paths"
+            ) from exc
+    else:
+        canonical = sorted(set(value))
+    if value != canonical:
         raise AgentChangeAdmissionError(f"{label} must be sorted and unique")
     return list(value)
 
@@ -288,33 +327,101 @@ def _validate_proposal_source(value: object) -> dict[str, Any]:
     }
 
 
-def _validate_change(value: object, *, label: str) -> dict[str, Any]:
+def _validate_candidate_identity(value: object, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise AgentChangeAdmissionError(f"{label} must be an object")
+    identity = dict(value)
+    _require_exact_keys(identity, _CANDIDATE_IDENTITY_KEYS, label)
+    if identity.get("format") != _CANDIDATE_IDENTITY_FORMAT:
+        raise AgentChangeAdmissionError(f"{label}.format is unsupported")
+    size = identity.get("size")
+    if type(size) is not int or not 1 <= size <= 64 * 1024 * 1024:
+        raise AgentChangeAdmissionError(f"{label}.size is outside the limit")
+    file_count = identity.get("file_count")
+    if type(file_count) is not int or not 0 <= file_count <= MAX_PATHS:
+        raise AgentChangeAdmissionError(f"{label}.file_count is outside the limit")
+    return {
+        "format": _CANDIDATE_IDENTITY_FORMAT,
+        "sha256": _sha256(identity.get("sha256"), label=f"{label}.sha256"),
+        "size": size,
+        "file_count": file_count,
+    }
+
+
+def _validate_change(value: object, *, label: str, proposal_format: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AgentChangeAdmissionError(f"{label} must be an object")
     change = dict(value)
-    _require_exact_keys(change, _CHANGE_KEYS, label)
-    size = change.get("candidate_size")
-    if type(size) is not int or not 1 <= size <= 64 * 1024 * 1024:
-        raise AgentChangeAdmissionError(f"{label}.candidate_size is outside the limit")
+    change_keys = (
+        _CHANGE_KEYS_V1 if proposal_format == AGENT_CHANGE_PROPOSAL_FORMAT_V1 else _CHANGE_KEYS_V2
+    )
+    _require_exact_keys(change, change_keys, label)
+    utf8_order = proposal_format == AGENT_CHANGE_PROPOSAL_FORMAT_V2
     changed = _path_list(
-        change.get("changed_paths"), label=f"{label}.changed_paths", allow_empty=True
+        change.get("changed_paths"),
+        label=f"{label}.changed_paths",
+        allow_empty=True,
+        utf8_order=utf8_order,
     )
     deleted = _path_list(
-        change.get("deleted_paths"), label=f"{label}.deleted_paths", allow_empty=True
+        change.get("deleted_paths"),
+        label=f"{label}.deleted_paths",
+        allow_empty=True,
+        utf8_order=utf8_order,
     )
-    touched = _path_list(change.get("touched_paths"), label=f"{label}.touched_paths")
-    if set(changed) & set(deleted) or touched != sorted(set(changed) | set(deleted)):
+    touched = _path_list(
+        change.get("touched_paths"),
+        label=f"{label}.touched_paths",
+        utf8_order=utf8_order,
+    )
+    expected_touched = (
+        sorted(
+            set(changed) | set(deleted),
+            key=candidate_path_order_key,
+        )
+        if utf8_order
+        else sorted(set(changed) | set(deleted))
+    )
+    if set(changed) & set(deleted) or touched != expected_touched:
         raise AgentChangeAdmissionError(
             f"{label}.touched_paths must be the disjoint changed/deleted union"
         )
-    return {
-        "candidate_sha256": _sha256(
-            change.get("candidate_sha256"), label=f"{label}.candidate_sha256"
-        ),
-        "candidate_size": size,
+    common = {
         "changed_paths": changed,
         "deleted_paths": deleted,
         "touched_paths": touched,
+    }
+    if proposal_format == AGENT_CHANGE_PROPOSAL_FORMAT_V1:
+        size = change.get("candidate_size")
+        if type(size) is not int or not 1 <= size <= 64 * 1024 * 1024:
+            raise AgentChangeAdmissionError(f"{label}.candidate_size is outside the limit")
+        return {
+            "candidate_sha256": _sha256(
+                change.get("candidate_sha256"), label=f"{label}.candidate_sha256"
+            ),
+            "candidate_size": size,
+            **common,
+        }
+    selection_profile = change.get("candidate_selection_profile")
+    if selection_profile != AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE:
+        raise AgentChangeAdmissionError(
+            f"{label}.candidate_selection_profile is unsupported"
+        )
+    candidate_identity = _validate_candidate_identity(
+        change.get("candidate_identity"), label=f"{label}.candidate_identity"
+    )
+    selected_count = sum(
+        not agent_change_candidate_path_is_ignored(path) for path in changed
+    )
+    if candidate_identity["file_count"] != selected_count:
+        raise AgentChangeAdmissionError(
+            f"{label}.candidate_identity.file_count does not match the "
+            "candidate-selection profile"
+        )
+    return {
+        "candidate_selection_profile": AGENT_CHANGE_CANDIDATE_SELECTION_PROFILE,
+        "candidate_identity": candidate_identity,
+        **common,
     }
 
 
@@ -338,7 +445,11 @@ def validate_agent_change_proposal(value: Mapping[str, Any]) -> dict[str, Any]:
 
     proposal = dict(value)
     _require_exact_keys(proposal, _PROPOSAL_KEYS, "agent-change proposal")
-    if proposal.get("format") != AGENT_CHANGE_PROPOSAL_FORMAT:
+    proposal_format = proposal.get("format")
+    if proposal_format not in {
+        AGENT_CHANGE_PROPOSAL_FORMAT_V1,
+        AGENT_CHANGE_PROPOSAL_FORMAT_V2,
+    }:
         raise AgentChangeAdmissionError("unsupported agent-change proposal format")
     producer_raw = proposal.get("producer")
     if not isinstance(producer_raw, dict):
@@ -356,8 +467,16 @@ def validate_agent_change_proposal(value: Mapping[str, Any]) -> dict[str, Any]:
         raise AgentChangeAdmissionError("proposal intent must be an object")
     intent = dict(intent_raw)
     _require_exact_keys(intent, _INTENT_KEYS, "proposal intent")
-    declared = _path_list(intent.get("declared_paths"), label="proposal intent.declared_paths")
-    change = _validate_change(proposal.get("change"), label="proposal change")
+    declared = _path_list(
+        intent.get("declared_paths"),
+        label="proposal intent.declared_paths",
+        utf8_order=proposal_format == AGENT_CHANGE_PROPOSAL_FORMAT_V2,
+    )
+    change = _validate_change(
+        proposal.get("change"),
+        label="proposal change",
+        proposal_format=proposal_format,
+    )
     if declared != change["touched_paths"]:
         raise AgentChangeAdmissionError(
             "proposal declared_paths must exactly equal its touched_paths"
@@ -397,7 +516,7 @@ def validate_agent_change_proposal(value: Mapping[str, Any]) -> dict[str, Any]:
     ) != len(claims):
         raise AgentChangeAdmissionError("proposal claims must be sorted by unique id")
     return {
-        "format": AGENT_CHANGE_PROPOSAL_FORMAT,
+        "format": proposal_format,
         "producer": checked_producer,
         "source": _validate_proposal_source(proposal.get("source")),
         "intent": {
@@ -859,6 +978,42 @@ def inspect_agent_change_bindings_bytes(data: bytes) -> DerivedAgentChangeBindin
     return bindings
 
 
+def _require_matching_agent_change_generations(
+    proposal_format: str,
+    binding_format: str,
+) -> None:
+    matching_formats = {
+        AGENT_CHANGE_PROPOSAL_FORMAT_V1: AGENT_CHANGE_GIT_BINDINGS_FORMAT_V1,
+        AGENT_CHANGE_PROPOSAL_FORMAT_V2: AGENT_CHANGE_GIT_BINDINGS_FORMAT_V2,
+    }
+    if matching_formats[proposal_format] != binding_format:
+        raise AgentChangeAdmissionError(
+            "proposal and raw-Git bindings use different contract generations"
+        )
+
+
+def _proposal_and_deriver_for_required_generation(
+    proposal_path: str,
+    required_format: str,
+) -> tuple[InspectedAgentChangeProposal, Any]:
+    if required_format not in {
+        AGENT_CHANGE_PROPOSAL_FORMAT_V1,
+        AGENT_CHANGE_PROPOSAL_FORMAT_V2,
+    }:
+        raise AgentChangeAdmissionError("required Agent Change proposal format is unsupported")
+    proposal = inspect_agent_change_proposal(proposal_path)
+    if proposal.payload["format"] != required_format:
+        raise AgentChangeAdmissionError(
+            "proposal format does not match the finalizer-required generation"
+        )
+    deriver = (
+        derive_agent_change_bindings_v2
+        if required_format == AGENT_CHANGE_PROPOSAL_FORMAT_V2
+        else derive_agent_change_bindings
+    )
+    return proposal, deriver
+
+
 def verify_agent_change_contract(
     proposal: InspectedAgentChangeProposal,
     authorization: VerifiedAgentChangeAuthorization,
@@ -876,6 +1031,9 @@ def verify_agent_change_contract(
     auth_source = auth["source"]
     proposal_source = proposal.payload["source"]
     binding = checked_bindings.payload
+    proposal_format = proposal.payload["format"]
+    binding_format = binding["format"]
+    _require_matching_agent_change_generations(proposal_format, binding_format)
 
     required_source = {
         "pull_request_number",
@@ -932,18 +1090,17 @@ def verify_agent_change_contract(
             )
 
     proposal_change = proposal.payload["change"]
-    for field in (
-        "candidate_sha256",
-        "candidate_size",
-        "changed_paths",
-        "deleted_paths",
-        "touched_paths",
-    ):
+    identity_fields = (
+        ("candidate_sha256", "candidate_size")
+        if proposal_format == AGENT_CHANGE_PROPOSAL_FORMAT_V1
+        else ("candidate_identity", "candidate_selection_profile")
+    )
+    for field in (*identity_fields, "changed_paths", "deleted_paths", "touched_paths"):
         if proposal_change[field] != binding[field]:
             raise AgentChangeAdmissionError(f"proposal {field} differs from raw-Git derivation")
-    if context["candidate_sha256"] != binding["candidate_sha256"]:
+    if context["candidate_sha256"] != checked_bindings.legacy_guard_candidate_sha256:
         raise AgentChangeAdmissionError(
-            "finalizer candidate digest differs from agent-change raw-Git derivation"
+            "finalizer legacy Guard candidate digest differs from raw-Git derivation"
         )
     proposal_policy = proposal.payload["observed_policy"]
     required = auth["required"]
@@ -961,7 +1118,7 @@ def verify_agent_change_contract(
     touched = checked_bindings.touched_paths
     if len(touched) > scope["maximum_touched_paths"]:
         raise AgentChangeAdmissionError("agent change exceeds the authorized path-count limit")
-    if binding["candidate_size"] > scope["maximum_candidate_bytes"]:
+    if checked_bindings.candidate_size > scope["maximum_candidate_bytes"]:
         raise AgentChangeAdmissionError("agent change exceeds the authorized candidate-size limit")
     if checked_bindings.deleted_paths and not scope["allow_deletions"]:
         raise AgentChangeAdmissionError("agent change contains unauthorized deletions")
@@ -1040,6 +1197,7 @@ def seal_agent_change_finalizer_bundle(
     finalizer_private_key_path: str,
     finalizer_public_key_path: str,
     expected_derivation: Mapping[str, Any],
+    required_proposal_format: str = AGENT_CHANGE_PROPOSAL_FORMAT_V1,
     force: bool = False,
 ) -> FinalizedAgentChangeAdmission:
     """Derive raw Git inside the sealer, then publish only a verified ALLOW.
@@ -1062,7 +1220,11 @@ def seal_agent_change_finalizer_bundle(
         context.get("head_tree_sha"), label="expected finalizer context.head_tree_sha"
     )
     try:
-        bindings = derive_agent_change_bindings(
+        proposal, derive_bindings = _proposal_and_deriver_for_required_generation(
+            proposal_path,
+            required_proposal_format,
+        )
+        bindings = derive_bindings(
             base_repo=base_repo,
             head_repo=head_repo,
             base_sha=base_sha,
@@ -1078,7 +1240,6 @@ def seal_agent_change_finalizer_bundle(
             f"could not independently derive Agent Change Git truth: {exc}"
         ) from exc
 
-    proposal = inspect_agent_change_proposal(proposal_path)
     authorization = verify_agent_change_authorization(
         inspect_agent_change_authorization(authorization_path),
         trusted_public_key_path=authorization_public_key_path,
@@ -1149,9 +1310,7 @@ def seal_agent_change_finalizer_bundle(
             except FinalizerHandoffError as exc:
                 raise AgentChangeAdmissionError(str(exc)) from exc
         if finalized.decision != "ALLOW":
-            raise AgentChangeAdmissionError(
-                "Trusted Finalizer did not produce an ALLOW admission"
-            )
+            raise AgentChangeAdmissionError("Trusted Finalizer did not produce an ALLOW admission")
         verified = verify_agent_change_finalized_bundle(
             staged_output,
             trusted_finalizer_public_key_path=finalizer_public_key_path,
@@ -1160,6 +1319,7 @@ def seal_agent_change_finalizer_bundle(
             expected_finalizer_source=expected_finalizer_source,
             expected_context=expected_context,
             expected_bindings=bindings,
+            required_proposal_format=required_proposal_format,
         )
         try:
             # Set final permissions while the artifact is still private.  No
@@ -1197,6 +1357,7 @@ def verify_agent_change_finalized_bundle(
     expected_finalizer_source: Mapping[str, Any],
     expected_context: Mapping[str, Any],
     expected_bindings: DerivedAgentChangeBindings,
+    required_proposal_format: str = AGENT_CHANGE_PROPOSAL_FORMAT_V1,
 ) -> VerifiedAgentChangeAdmission:
     """Verify the complete profile offline without executing candidate code."""
 
@@ -1214,6 +1375,10 @@ def verify_agent_change_finalized_bundle(
     proposal = inspect_agent_change_proposal_bytes(
         _material_bytes(finalized, AGENT_CHANGE_PROPOSAL_ROLE)
     )
+    if proposal.payload["format"] != required_proposal_format:
+        raise AgentChangeAdmissionError(
+            "proposal format does not match the verifier-required generation"
+        )
     authorization = verify_agent_change_authorization(
         inspect_agent_change_authorization_bytes(
             _material_bytes(finalized, AGENT_CHANGE_AUTHORIZATION_ROLE)

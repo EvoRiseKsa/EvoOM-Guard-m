@@ -341,6 +341,10 @@ def test_wheel_contains_finalizer_templates_and_schemas(tmp_path: Path) -> None:
     with zipfile.ZipFile(wheels[0]) as archive:
         names = set(archive.namelist())
     assert {
+        "evoom_guard/candidate/identity.py",
+        "evoom_guard/schemas/agent-change-proposal-2.schema.json",
+        "evoom_guard/schemas/agent-change-git-bindings-2.schema.json",
+        "evoom_guard/schemas/admission-decision-envelope-2.schema.json",
         "evoom_guard/schemas/finalizer-deployment-1.schema.json",
         "evoom_guard/schemas/finalizer-deployment-report-1.schema.json",
         "evoom_guard/templates/trusted-finalizer/v4.5.0/manifest.json",

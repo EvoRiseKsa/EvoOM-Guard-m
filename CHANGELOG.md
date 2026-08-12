@@ -32,6 +32,17 @@ retained evidence say so.
 
 ### Added
 
+- Added an opt-in Agent Change Admission V2 source contract with a
+  domain-separated, length-prefixed candidate text-map identity, normative
+  byte-level specification, cross-language golden vectors, a frozen
+  candidate-selection profile with UTF-8-byte path ordering, V2 JSON Schemas,
+  and Decision Envelope V2 projection. The historical V1 API, CLI default,
+  canonical bytes, readers, and end-to-end sealing remain available unchanged.
+  V2 preserves the legacy Guard digest and byte size only as explicit bridges
+  to the current finalizer context and signed authorization limit; it does not
+  reinterpret either value as V2 proposal identity and grants no new external
+  action authority.
+
 - Added the library-only Admission Decision Envelope V1 as a deterministic,
   in-toto Statement projection of one fully reverified Agent Change `ALLOW`
   proof. The closed schema binds the exact Git head, candidate, policy,

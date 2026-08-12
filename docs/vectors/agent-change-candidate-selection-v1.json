@@ -1,0 +1,37 @@
+{
+  "ignored_basenames": [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    ".evo_runs",
+    ".pytest_cache",
+    ".mypy_cache",
+    "dist",
+    "build"
+  ],
+  "path_order": {
+    "input": ["\ud800\udc00", "\ue000"],
+    "utf8_hex": ["f0908080", "ee8080"],
+    "expected": ["\ue000", "\ud800\udc00"]
+  },
+  "profile": "EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1",
+  "schema_version": "evoguard/agent-change-candidate-selection-v1-test-vectors/v1",
+  "selection": {
+    "changed_paths": [
+      "app.py",
+      "buildx/d",
+      "dist/a",
+      "dist2/c",
+      "nested/build/b",
+      "node_modules/pkg/x"
+    ],
+    "ignored_paths": [
+      "dist/a",
+      "nested/build/b",
+      "node_modules/pkg/x"
+    ],
+    "selected_paths": ["app.py", "buildx/d", "dist2/c"]
+  }
+}

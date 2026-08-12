@@ -1037,6 +1037,7 @@ def cmd_validate_agent_change_proposal(
 ) -> int:
     from evoom_guard.admission.agent_change import (
         AGENT_CHANGE_PROPOSAL_FORMAT,
+        AGENT_CHANGE_PROPOSAL_FORMAT_V2,
         AgentChangeAdmissionError,
         inspect_agent_change_proposal,
     )
@@ -1044,7 +1045,11 @@ def cmd_validate_agent_change_proposal(
     return _agent_change_command_owner.execute_validate_agent_change_proposal(
         args,
         services=_agent_change_command_owner.ValidateProposalServices(
-            proposal_format=AGENT_CHANGE_PROPOSAL_FORMAT,
+            proposal_format=(
+                AGENT_CHANGE_PROPOSAL_FORMAT_V2
+                if args.contract_version == "2"
+                else AGENT_CHANGE_PROPOSAL_FORMAT
+            ),
             expected_errors=(
                 AgentChangeAdmissionError,
                 OSError,
@@ -1068,8 +1073,10 @@ def cmd_derive_agent_change_bindings(
 ) -> int:
     from evoom_guard.finalizer_derivation import (
         AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+        AGENT_CHANGE_GIT_BINDINGS_FORMAT_V2,
         FinalizerDerivationError,
         derive_agent_change_bindings,
+        derive_agent_change_bindings_v2,
         git_executable_pin,
         write_agent_change_bindings,
     )
@@ -1077,7 +1084,11 @@ def cmd_derive_agent_change_bindings(
     return _agent_change_command_owner.execute_derive_agent_change_bindings(
         args,
         services=_agent_change_command_owner.DeriveBindingsServices(
-            bindings_format=AGENT_CHANGE_GIT_BINDINGS_FORMAT,
+            bindings_format=(
+                AGENT_CHANGE_GIT_BINDINGS_FORMAT_V2
+                if args.contract_version == "2"
+                else AGENT_CHANGE_GIT_BINDINGS_FORMAT
+            ),
             expected_errors=(
                 FinalizerDerivationError,
                 OSError,
@@ -1085,7 +1096,11 @@ def cmd_derive_agent_change_bindings(
                 ValueError,
             ),
             git_executable_pin=git_executable_pin,
-            derive_bindings=derive_agent_change_bindings,
+            derive_bindings=(
+                derive_agent_change_bindings_v2
+                if args.contract_version == "2"
+                else derive_agent_change_bindings
+            ),
             write_bindings=write_agent_change_bindings,
             machine_report=lambda report_out, value: _machine_report(
                 report_out,
@@ -1138,6 +1153,7 @@ def cmd_seal_agent_change_finalized(
 ) -> int:
     from evoom_guard.admission.agent_change import (
         AGENT_CHANGE_PROPOSAL_FORMAT,
+        AGENT_CHANGE_PROPOSAL_FORMAT_V2,
         AgentChangeAdmissionError,
         seal_agent_change_finalizer_bundle,
     )
@@ -1150,7 +1166,11 @@ def cmd_seal_agent_change_finalized(
     return _agent_change_command_owner.execute_seal_agent_change_finalized(
         args,
         services=_agent_change_command_owner.SealFinalizedServices(
-            proposal_format=AGENT_CHANGE_PROPOSAL_FORMAT,
+            proposal_format=(
+                AGENT_CHANGE_PROPOSAL_FORMAT_V2
+                if args.contract_version == "2"
+                else AGENT_CHANGE_PROPOSAL_FORMAT
+            ),
             expected_errors=(
                 AgentChangeAdmissionError,
                 FinalizerDerivationError,
@@ -1180,6 +1200,7 @@ def cmd_verify_agent_change_finalized(
 ) -> int:
     from evoom_guard.admission.agent_change import (
         AGENT_CHANGE_PROPOSAL_FORMAT,
+        AGENT_CHANGE_PROPOSAL_FORMAT_V2,
         AgentChangeAdmissionError,
         verify_agent_change_finalized_bundle,
     )
@@ -1191,7 +1212,11 @@ def cmd_verify_agent_change_finalized(
     return _agent_change_command_owner.execute_verify_agent_change_finalized(
         args,
         services=_agent_change_command_owner.VerifyFinalizedServices(
-            proposal_format=AGENT_CHANGE_PROPOSAL_FORMAT,
+            proposal_format=(
+                AGENT_CHANGE_PROPOSAL_FORMAT_V2
+                if args.contract_version == "2"
+                else AGENT_CHANGE_PROPOSAL_FORMAT
+            ),
             expected_errors=(
                 AgentChangeAdmissionError,
                 FinalizerDerivationError,

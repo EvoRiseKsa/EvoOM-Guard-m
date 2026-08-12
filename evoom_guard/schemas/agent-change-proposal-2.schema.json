@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/agent-change-proposal-2.schema.json",
+  "title": "EvoOM Guard Agent Change Proposal V2",
+  "description": "Canonical, untrusted producer claims using an unambiguous framed candidate text-map identity. This document never grants authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "producer", "source", "intent", "change", "observed_policy", "claims"],
+  "properties": {
+    "format": {"const": "EVOGUARD_AGENT_CHANGE_PROPOSAL_V2"},
+    "producer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "version"],
+      "properties": {"id": {"$ref": "#/$defs/boundedString"}, "kind": {"$ref": "#/$defs/boundedString"}, "version": {"$ref": "#/$defs/boundedString"}}
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository", "pull_request_number", "base_sha", "head_sha"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1, "maxLength": 512},
+        "pull_request_number": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "base_sha": {"$ref": "#/$defs/gitDigest"}, "head_sha": {"$ref": "#/$defs/gitDigest"}
+      }
+    },
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["summary", "declared_paths"],
+      "properties": {"summary": {"type": "string", "minLength": 1, "maxLength": 4096}, "declared_paths": {"$ref": "#/$defs/pathArray"}}
+    },
+    "change": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidate_selection_profile", "candidate_identity", "changed_paths", "deleted_paths", "touched_paths"],
+      "properties": {
+        "candidate_selection_profile": {"const": "EVOGUARD_AGENT_CHANGE_CANDIDATE_SELECTION_V1"},
+        "candidate_identity": {"$ref": "#/$defs/candidateIdentity"},
+        "changed_paths": {"$ref": "#/$defs/pathArrayMaybeEmpty"},
+        "deleted_paths": {"$ref": "#/$defs/pathArrayMaybeEmpty"},
+        "touched_paths": {"$ref": "#/$defs/pathArray"}
+      }
+    },
+    "observed_policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policy_sha256", "verifier_pack_sha256"],
+      "properties": {"policy_sha256": {"$ref": "#/$defs/sha256"}, "verifier_pack_sha256": {"$ref": "#/$defs/nullableSha256"}}
+    },
+    "claims": {
+      "type": "array", "minItems": 1, "maxItems": 128,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "outcome", "evidence_sha256"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{0,127}$"},
+          "outcome": {"enum": ["PASS", "FAIL", "NOT_RUN", "UNKNOWN"]},
+          "evidence_sha256": {"$ref": "#/$defs/nullableSha256"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "boundedString": {"type": "string", "minLength": 1, "maxLength": 256},
+    "gitDigest": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableSha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "candidateIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["format", "sha256", "size", "file_count"],
+      "properties": {
+        "format": {"const": "EVOGUARD_CANDIDATE_TEXT_MAP_V2"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 1, "maximum": 67108864},
+        "file_count": {"type": "integer", "minimum": 0, "maximum": 10000}
+      }
+    },
+    "safePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"},
+    "pathArray": {"type": "array", "minItems": 1, "maxItems": 10000, "uniqueItems": true, "items": {"$ref": "#/$defs/safePath"}},
+    "pathArrayMaybeEmpty": {"type": "array", "maxItems": 10000, "uniqueItems": true, "items": {"$ref": "#/$defs/safePath"}}
+  }
+}
