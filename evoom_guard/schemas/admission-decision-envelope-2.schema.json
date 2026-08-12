@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/admission-decision-envelope-2.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v4.6.0/evoom_guard/schemas/admission-decision-envelope-2.schema.json",
   "title": "EvoOM Guard Admission Decision Envelope V2",
   "description": "A canonical in-toto Statement projection with an unambiguous framed candidate identity. Structural validation alone grants no authority.",
   "$comment": "The runtime additionally enforces canonical JSON, scalar categories, cross-field equality, Git object-format consistency, and separated keys.",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/agent-change-git-bindings-2.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v4.6.0/evoom_guard/schemas/agent-change-git-bindings-2.schema.json",
   "title": "EvoOM Guard Agent Change raw-Git Bindings V2",
   "description": "Raw-Git bindings with an unambiguous framed candidate text-map identity. The legacy digest and size are retained only to bind the current Guard attestation and authorization byte-limit semantics.",
   "type": "object",

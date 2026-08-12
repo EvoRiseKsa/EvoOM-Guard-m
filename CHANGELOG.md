@@ -92,6 +92,12 @@ retained evidence say so.
 
 ### Changed
 
+- Pinned the thirteen JSON Schema contracts introduced after `v4.5.0` to their
+  prospective immutable `v4.6.0` tag URLs and added a release-identity gate.
+  The already-published `change-attempt-observation-1` bytes remain exactly
+  unchanged; its historical `/main/` identity is recorded as the sole legacy
+  exception rather than silently rewriting a shipped contract.
+
 - Hardened the unreleased maintenance contracts before publication: artifact
   binding now parses exact canonical source-admission JSON bytes and requires
   them to equal the supplied mapping; run IDs are pairwise distinct through the

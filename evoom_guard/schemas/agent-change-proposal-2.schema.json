@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/agent-change-proposal-2.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v4.6.0/evoom_guard/schemas/agent-change-proposal-2.schema.json",
   "title": "EvoOM Guard Agent Change Proposal V2",
   "description": "Canonical, untrusted producer claims using an unambiguous framed candidate text-map identity. This document never grants authority.",
   "type": "object",

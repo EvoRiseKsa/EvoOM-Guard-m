@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/main/evoom_guard/schemas/admission-decision-envelope-1.schema.json",
+  "$id": "https://raw.githubusercontent.com/EvoRiseKsa/EvoOM-Guard-m/v4.6.0/evoom_guard/schemas/admission-decision-envelope-1.schema.json",
   "title": "EvoOM Guard Admission Decision Envelope V1",
   "description": "A canonical in-toto Statement projection of one independently verified Agent Change proof. Structural schema validation alone does not grant admission authority.",
   "$comment": "The runtime validator additionally enforces exact Python scalar categories, canonical JSON bytes, cross-field equality, and finalizer/change-authorization key separation. Draft 2020-12 treats integral JSON numbers such as 1.0 as integers.",
