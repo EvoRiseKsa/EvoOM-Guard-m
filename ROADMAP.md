@@ -22,8 +22,8 @@ evidence level allowed by that blueprint.
 ## Current source capabilities and consumer-release boundary
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
-Source version `4.6.0.dev0` is **unreleased development** and is not a consumer release.
-The latest immutable consumer release recorded by the protected source tree is
+Source version `4.6.0` is a **release candidate** and is not yet a consumer release. The
+latest immutable consumer release recorded by the protected source tree is
 [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
 `6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
@@ -205,7 +205,7 @@ release asset and its provenance. Canonical ledger:
 ## Current limits (stated plainly)
 
 - The stable `v4.5.0` release contains the operating-profile and isolation
-  conformance tooling; the repository source is now `4.6.0.dev0`. Consumer
+  conformance tooling; the repository source is now the `4.6.0` release candidate. Consumer
   availability is determined by an immutable GitHub Release, not by presence in
   the repository. One exact, same-owner private run exercised the released
   zipapp with `gvisor`/`runsc` on a GitHub-hosted runner; its bounded public
