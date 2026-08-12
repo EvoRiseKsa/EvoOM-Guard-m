@@ -44,6 +44,12 @@ operation and is not claimed complete by the `v4.5.0` ledger. Its later signed,
 same-owner point-in-time observation is retained separately as
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
+The prospective `v4.6.0` ledger-signing public root is pinned at
+[`v4.6.0.pub.pem`](../security/release-ledger-roots/v4.6.0.pub.pem) with key ID
+`sha256:ef56c9e65a355d2956201fe8e02abb7c39857d42ee3623d09d71236341ac1da1`.
+This pins only the reviewed public identity. It does not prove private-key
+custody, offline storage, a signature, pipeline execution, or publication.
+
 The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
 case. The present A–H implementation authenticates a target only when it is also
 the protected `main` workflow revision and H creates a lightweight tag. Those
@@ -73,7 +79,7 @@ stable IDs.
 
 | Phase | Workflow | Authority and prohibited operations |
 | --- | --- | --- |
-| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, executable runtime, and v4.5.0 scope validator come from the parent or protected settings. Before candidate execution, the parent validator compares both fresh trees, requires an exact-case subset of the frozen existing release paths with unchanged file modes, rejects additions, deletions, ordinary unlisted changes, and benchmark evidence rewrites, and permits `evoom_guard/__init__.py` to differ only by the exact `4.5.0.dev0` to `4.5.0` assignment bytes. Fresh benchmark evidence must first bind the `4.5.0.dev0` engine actually measured; the explicit release-promotion verifier then normalizes only that proven assignment while requiring every other source byte, result digest, and Git binding. A has no secret, OIDC, attestation, or write authority. |
+| A | `evoguard-release-source-reverify.yml` | Reads the exact one-parent protected-main candidate. The policy, verifier pack, dependency lock, executable runtime, and v4.6.0 scope validator come from the parent or protected settings. Before candidate execution, the parent validator compares both fresh trees, requires an exact-case subset of the frozen existing release paths with unchanged file modes, rejects additions, deletions, ordinary unlisted changes, and benchmark evidence rewrites, and permits `evoom_guard/__init__.py` to differ only by the exact `4.6.0.dev0` to `4.6.0` assignment bytes. Fresh benchmark evidence must first bind the `4.6.0.dev0` engine actually measured; the explicit release-promotion verifier then normalizes only that proven assignment while requiring every other source byte, result digest, and Git binding. A has no secret, OIDC, attestation, or write authority. |
 | B | `evoguard-produce-release-source-receipt.yml` | Produces an unsigned canonical receipt and GitHub attestation for A. It never checks out or executes candidate source. |
 | C/D | `evoguard-admit-release-source.yml` | Preflight freezes external controls before Environment access; protected C freshly verifies B under a provider UID that cannot read the RSAE key; detached D verifies the envelope and negative mutations without a key or provider call. |
 | E-build | `evoguard-build-release-artifact.yml` | Verifies RSAE and checks out the admitted source. The executable builder and SPDX generator are literal `100644` Git blobs from its sole parent, whose commit and tree must equal A's admitted base. E extracts and hashes those blobs without filters, runs them in one exact digest-pinned container with `network: none` against the read-only candidate, records the container reference/digest/network plus parent commit/tree in `builder-controls.json`, and independently compares every packaged byte to source. F reconstructs and requires that exact controls object from trusted Git/API context and the downloaded bytes. E has no OIDC, attestation, secret, or write permission. |
@@ -115,16 +121,16 @@ admission.
 7. Establish six mutually distinct admission Ed25519 signing public-key IDs.
    Store only their public PEM values as repository variables. Establish a
    fresh per-release seventh ledger-signing identity before the trusted
-   parent/candidate: pin its public PEM/ID in the reviewed parent tree or
-   another authenticated immutable channel, and keep its private half offline
-   and outside the admission Environments. The retained ledger copy is never
+   parent/candidate. The prospective `v4.6.0` public PEM/ID above is pinned in
+   the reviewed parent tree; keep its private half offline and outside the
+   admission Environments. The retained ledger copy is never
    its own trust anchor. C and F private keys belong
    only in their separately protected Environments. Separately create exactly one
    write-enabled deploy key for release tags; store its private half only in
    `evoguard-release-publication`. H has no signing secret.
 8. Merge a distinct one-parent **source candidate**. A must consume its policy,
    pack, locks, and release-scope validator from that candidate's parent; the
-   infrastructure commit cannot authorize itself. For v4.5.0, the parent
+   infrastructure commit cannot authorize itself. For v4.6.0, the parent
    validator requires literal path case and an exact development-to-stable
    version-assignment byte replacement, in addition to Guard's protected-path
    and external verifier-pack checks. The candidate may not refresh
