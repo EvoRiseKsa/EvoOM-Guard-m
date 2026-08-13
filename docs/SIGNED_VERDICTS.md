@@ -18,14 +18,14 @@ key or whether the recorded run was honest.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 Requires the `sign` extra (the core gate stays stdlib-only). Install it from
-ledger-recorded release `v4.5.0`:
+ledger-recorded release `v4.6.0`:
 
 ```bash
-pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.5.0"
+pip install "evoom-guard[sign] @ git+https://github.com/EvoRiseKsa/EvoOM-Guard-m@v4.6.0"
 ```
 <!-- END EVOGUARD_PROJECT_STATUS:SIGNED_VERDICTS_RELEASE_PIN -->
 
-The pinned `v4.5.0` release includes the
+The pinned `v4.6.0` release includes the
 `--acknowledge-local-key-exposure` flag and the descriptor/reservation
 hardening documented below. Consult the documentation at the exact version
 you run; the release ledger authenticates bytes and provenance, not key

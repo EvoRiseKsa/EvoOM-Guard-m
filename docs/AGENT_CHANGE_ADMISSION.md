@@ -17,7 +17,7 @@ of the historical v4.2.0 release and is not enabled as a required check in
 this repository. A bounded public same-owner pilot has completed and is
 archived; that evidence is not a production or independent-validation claim.
 
-V2 is an unreleased source contract in the v4.6 development line. It corrects
+V2 is a source contract released in `v4.6.0`. It corrects
 a candidate-identity ambiguity without reinterpreting any V1 artifact. The historical FILE-block
 serialization remains the input to Guard execution, but V2 no longer treats
 its SHA-256 as a portable proposal identity: marker text inside one file can

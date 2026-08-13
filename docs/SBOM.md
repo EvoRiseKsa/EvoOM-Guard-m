@@ -10,15 +10,16 @@
 ## Exact status
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:SBOM_EXACT_STATUS -->
-Source version `4.6.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
-[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
-`6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
+Source version `4.6.0` is on the **ledger-recorded release line**; this protected source
+tree may be a post-tag descendant and is not a new consumer release. The latest
+immutable consumer release recorded by the protected source tree is
+[`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
+`d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
 its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
 release asset and its provenance. Canonical ledger:
-`evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`.
+`evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:SBOM_EXACT_STATUS -->
 
 The separate unsigned

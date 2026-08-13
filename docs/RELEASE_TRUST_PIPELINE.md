@@ -6,7 +6,7 @@
 > [`START_HERE.md`](START_HERE.md).
 
 This document describes an inert-by-default A–H release pipeline. Except for
-the exact retained `v4.4.2` and `v4.5.0` evidence named under **Current state**, its
+the exact retained `v4.4.2`, `v4.5.0`, and `v4.6.0` evidence named under **Current state**, its
 procedural sections do not claim that another release has traversed the
 pipeline, that mutable repository settings remain configured, or that any
 corresponding private signing key currently exists or remains controlled.
@@ -22,33 +22,32 @@ resulting publication. An admitted release is contracted to exactly `evo-guard.p
 assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:RELEASE_TRUST_PIPELINE_STATUS -->
 
-`v4.5.0` is the latest ledger-recorded release selected by
+`v4.6.0` is the latest ledger-recorded release selected by
 `PROJECT_STATUS.json`. Its canonical signed
-[`release-ledger-v2`](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
+[`release-ledger-v2`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json)
 records the exact protected A-through-H operation and resulting publication.
+The previous signed
+[`release-ledger-v2`](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
+remains historical evidence.
 The earlier signed [`v4.4.2` recovery ledger](../evidence/release-ledgers/v4.4.2/RELEASE_LEDGER.json)
 remains historical evidence. Both `v4.4.0` and `v4.4.1` remain
 published-unledgered under their separate errata, including the
 [`v4.4.1` release-ledger erratum](errata/V4.4.1-LEDGER.md).
 
-The reviewed `v4.5.0` ledger-signing public root is pinned at
-[`v4.5.0.pub.pem`](../security/release-ledger-roots/v4.5.0.pub.pem) with key ID
-`sha256:0d5dd1a57b8f2b4ec80a197f99bdf73908e7edba82be42ad4666a9fe485b7478`.
+The reviewed `v4.6.0` ledger-signing public root is pinned at
+[`v4.6.0.pub.pem`](../security/release-ledger-roots/v4.6.0.pub.pem) with key ID
+`sha256:ef56c9e65a355d2956201fe8e02abb7c39857d42ee3623d09d71236341ac1da1`.
 That previously authenticated root and the admitted parent are trust inputs;
 the root alone did not prove private-key custody, a signature, pipeline
 execution, or publication. The canonical signed directory plus offline
 validation now establish only the retained byte and binding claims implemented
 by the validator. They do not turn mutable GitHub state into an independent
 attestation. Publication-authority retirement remains a separate post-ledger
-operation and is not claimed complete by the `v4.5.0` ledger. Its later signed,
-same-owner point-in-time observation is retained separately as
-[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
+operation and is not claimed complete by the `v4.6.0` ledger.
 
-The prospective `v4.6.0` ledger-signing public root is pinned at
-[`v4.6.0.pub.pem`](../security/release-ledger-roots/v4.6.0.pub.pem) with key ID
-`sha256:ef56c9e65a355d2956201fe8e02abb7c39857d42ee3623d09d71236341ac1da1`.
-This pins only the reviewed public identity. It does not prove private-key
-custody, offline storage, a signature, pipeline execution, or publication.
+For `v4.5.0`, the later signed, same-owner point-in-time retirement observation
+is retained separately as
+[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).
 
 The proposed `v4.5.1` stable patch is a separate, currently inert maintenance
 case. The present A–H implementation authenticates a target only when it is also
@@ -126,7 +125,7 @@ admission.
 7. Establish six mutually distinct admission Ed25519 signing public-key IDs.
    Store only their public PEM values as repository variables. Establish a
    fresh per-release seventh ledger-signing identity before the trusted
-   parent/candidate. The prospective `v4.6.0` public PEM/ID above is pinned in
+   parent/candidate. The `v4.6.0` public PEM/ID above was pinned in
    the reviewed parent tree; keep its private half offline and outside the
    admission Environments. The retained ledger copy is never
    its own trust anchor. C and F private keys belong

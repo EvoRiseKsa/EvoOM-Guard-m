@@ -19,8 +19,7 @@ consumer release only:
 
 | Version | Status |
 | --- | --- |
-| [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) | Latest stable release; supported |
-| `4.6.0` | Release candidate; not a consumer release |
+| [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) | Latest stable release; supported |
 | Earlier published releases | Historical and unsupported; retained unchanged for reproducibility, verification, and rollback |
 | Unpublished draft candidates | Unsupported; never consumer releases |
 
@@ -47,7 +46,7 @@ fixed.
 For a non-sensitive independent-review starting point, see the historical,
 frozen [v4.1.0 review companion](audit/v4.1.0/). It names one exact historical
 release target and provides a safe evidence/report template. It does not cover
-the latest stable `v4.5.0`, which has not received an independent security
+the latest stable `v4.6.0`, which has not received an independent security
 review. Do not put a working bypass, secret, or credential-bearing artifact in
 the public [review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141);
 use the private route above for a potential vulnerability.

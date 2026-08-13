@@ -12,8 +12,8 @@ follow-on to the generic V2 artifact-digest binding. It is not part of the
 immutable v3.7.0 release and does not close the wider artifact-provenance issue
 by itself.
 
-This page primarily documents the released regular-file adapter. Current
-unreleased source also contains a separate, library-only OCI subset described
+This page primarily documents the released regular-file adapter. Release
+`v4.6.0` also contains a separate, library-only OCI subset described
 in [`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md). That path accepts only
 a digest-qualified public GHCR subject, fixes `--bundle-from-oci`, requires an
 exact direct same-revision branch build and builder run/attempt, relates the

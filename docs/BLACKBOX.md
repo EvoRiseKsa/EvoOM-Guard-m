@@ -8,7 +8,7 @@
 # The external black-box judge (`--blackbox`)
 
 > **Release boundary:** the black-box and Docker/gVisor mechanisms documented
-> here are available in the ledger-recorded `v4.5.0` release. Unprofiled
+> here are available in the ledger-recorded `v4.6.0` release. Unprofiled
 > records use the frozen schema `1.11`; explicit operating profiles use schema
 > `1.12`. The signed release ledger proves the released artifact identity and
 > provenance, not that any particular deployment delivered the requested

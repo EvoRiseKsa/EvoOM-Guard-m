@@ -1,0 +1,14 @@
+{
+  "admission": true,
+  "bundle": "/home/runner/work/_temp/source-allow.rsae",
+  "decision": "ALLOW",
+  "format": "EVOGUARD_RELEASE_SOURCE_ADMISSION_V2",
+  "key_id": "sha256:2be731c51a406d5c7c1a7c2a2768fca7f4ebc5cb94f77ec803fca5892066bc3e",
+  "ok": true,
+  "producer_receipt_sha256": "5651f76b5a1c7c2b8b89be14eca95da721156666f06210d668f8feef57c149e8",
+  "provider_verified": true,
+  "record_sha256": "9de1179a271cd075186dde779aab1a5b5063f61a9e9f9214f2b3698d4ed11d96",
+  "sealed": true,
+  "status": "SEALED",
+  "verified": true
+}

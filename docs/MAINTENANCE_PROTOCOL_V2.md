@@ -1,6 +1,6 @@
 # Maintenance release protocol V2 (inert library contracts)
 
-This document describes additive, unreleased library contracts. It is not a
+This document describes additive, inert library contracts released in `v4.6.0`. It is not a
 claim that a maintenance branch, protected workflow, tag, release, provider
 verification, signature, publication gate, or production deployment exists.
 The published V1/V2 contracts remain unchanged.

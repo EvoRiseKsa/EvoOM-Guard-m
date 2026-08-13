@@ -7,7 +7,7 @@
 
 # Admission Decision Envelope V1 and V2
 
-> **Availability:** unreleased, library-only source contract. It has no CLI,
+> **Availability:** library-only source contract released in `v4.6.0`. It has no CLI,
 > required-check workflow, hosted service, or production deployment claim.
 
 Admission Decision Envelope turns one complete Agent Change admission proof

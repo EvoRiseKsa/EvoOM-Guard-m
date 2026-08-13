@@ -75,9 +75,9 @@ Some failures happen before a candidate can be represented completely. Such
 pre-materialization errors can retain the compatibility `low`/`0.0` default;
 that value does not claim that the rejected input had a small blast radius.
 
-## Materialized Change V2 (unreleased development source)
+## Materialized Change V2 (`v4.6.0` library contract)
 
-Development source after `v4.5.0` adds a separate, additive contract with the
+Release `v4.6.0` adds a separate, additive contract with the
 identity `EVOGUARD_BLAST_RADIUS_V2`. It is not a patch to the V1 raw-diff
 parser. The public entry points are dependency-free domain contracts:
 

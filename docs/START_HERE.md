@@ -19,9 +19,9 @@ change. There are four operating paths. Pick one — you do **not** need the oth
 to start.
 
 > **Release boundary:** use [`RELEASE_STATUS.md`](RELEASE_STATUS.md) as the
-> authority. Commands below apply to the ledger-recorded `v4.5.0` consumer
+> authority. Commands below apply to the ledger-recorded `v4.6.0` consumer
 > release. Named `--operating-profile` policies and verdict schema `1.12` were
-> introduced on the `4.4.0` source line and are included in `v4.5.0`. The
+> introduced on the `4.4.0` source line and are included in `v4.6.0`. The
 > release ledger establishes artifact identity and protected publication
 > provenance, not that a particular run delivered its requested profile.
 
@@ -40,12 +40,12 @@ Quick tree:
 Want to block edits to modelled/configured judge paths? → Basic Guard
 Want to check a CLI's behaviour from outside?         → Black-box CLI
 Need a delivered container boundary?                  → add --isolation docker (fail-closed)
-Using named profiles from `v4.5.0`?                   → verify runtime evidence; see OPERATING_PROFILES.md
+Using named profiles from `v4.6.0`?                   → verify runtime evidence; see OPERATING_PROFILES.md
 Need a signed PR admission record with separated key?  → Trusted Finalizer
 ```
 
 A future/external VM-class provider is a separate deployment boundary; the
-`v4.5.0` `hostile` contract implements gVisor only,
+`v4.6.0` `hostile` contract implements gVisor only,
 and release-bound hostile evidence remains open. See
 [`OPERATING_PROFILES.md`](OPERATING_PROFILES.md) for that contract.
 
@@ -53,7 +53,7 @@ Already have a verdict and need an offline admission/audit result? Use
 `evo-guard verify-record` for internal consistency, or the authenticated
 `bundle-evidence`/`verify-bundle` path when external key and replay-resistant
 context are required. See [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) and
-[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md). The `v4.5.0` verifier accepts
+[`EVIDENCE_BUNDLES.md`](EVIDENCE_BUNDLES.md). The `v4.6.0` verifier accepts
 schemas `1.11` and `1.12`; confirm the exact installed version before verifying
 a record.
 
@@ -73,8 +73,8 @@ a record.
 > For a new consumer, use the deterministic, no-clobber setup and static
 > inspection procedure in
 > [`FINALIZER_DEPLOYMENT_KIT.md`](FINALIZER_DEPLOYMENT_KIT.md). Those commands
-> are repository-source behavior added after the immutable v4.5.0 tag; their
-> generated workflows target the v4.5.0 runtime.
+> are included in `v4.6.0`; their packaged no-clobber workflow kit remains
+> byte-bound to the `v4.5.0` runtime and is not silently rewritten.
 
 ---
 

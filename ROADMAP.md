@@ -22,20 +22,21 @@ evidence level allowed by that blueprint.
 ## Current source capabilities and consumer-release boundary
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
-Source version `4.6.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
-[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
-`6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
+Source version `4.6.0` is on the **ledger-recorded release line**; this protected source
+tree may be a post-tag descendant and is not a new consumer release. The latest
+immutable consumer release recorded by the protected source tree is
+[`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
+`d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
 its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
 release asset and its provenance. Canonical ledger:
-`evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`.
+`evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:ROADMAP_LATEST_RELEASE -->
 
 - Verdict schema `1.11` remains the frozen contract used by `v4.3.0`.
   Schema `1.12` adds the explicit `operating_profile` field and is supported by
-  the ledger-recorded `v4.5.0` consumer release. The immutable `v4.4.0` and
+  the ledger-recorded `v4.6.0` consumer release. The immutable `v4.4.0` and
   `v4.4.1` publications remain historical published-unledgered exceptions; see
   their [release-ledger errata](docs/errata/V4.4.0-LEDGER.md) and
   [v4.4.1 erratum](docs/errata/V4.4.1-LEDGER.md).
@@ -45,7 +46,7 @@ release asset and its provenance. Canonical ledger:
   from a JUnit report + exit code, never from stdout); a `TAMPERED` verdict when
   they disagree or when the judged candidate/pack snapshot drifts during a
   multi-phase run.
-- **Independent record verification** — the bounded, strict `v4.5.0` verifier
+- **Independent record verification** — the bounded, strict `v4.6.0` verifier
   checks schema-1.11/1.12 lifecycle, policy, receipt, isolation, pack, and
   verdict-source invariants without executing candidate code.
 - **Authenticated evidence envelopes** — deterministic bundles bind the exact
@@ -65,8 +66,8 @@ release asset and its provenance. Canonical ledger:
   verified pre-merge finalizer `ALLOW`. Its format and verification order are
   deliberately small; it is not a build, OCI, release, registry, or deployment
   provenance system.
-- **Unreleased provider-specific OCI relation** — current development source
-  adds a library-only `EVOGUARD_ARTIFACT_PROVIDER_RECEIPT_V3` path for one
+- **`v4.6.0` provider-specific OCI relation** — the released source
+  includes a library-only `EVOGUARD_ARTIFACT_PROVIDER_RECEIPT_V3` path for one
   canonical digest-qualified public GHCR subject. It requires an exact GitHub
   Artifact Attestation direct same-revision branch build and builder
   run/attempt, relates it to externally supplied finalizer repository/head
@@ -204,8 +205,8 @@ release asset and its provenance. Canonical ledger:
 
 ## Current limits (stated plainly)
 
-- The stable `v4.5.0` release contains the operating-profile and isolation
-  conformance tooling; the repository source is now the `4.6.0` release candidate. Consumer
+- The stable `v4.6.0` release contains the operating-profile and isolation
+  conformance tooling; the repository source is on that ledger-recorded release line. Consumer
   availability is determined by an immutable GitHub Release, not by presence in
   the repository. One exact, same-owner private run exercised the released
   zipapp with `gvisor`/`runsc` on a GitHub-hosted runner; its bounded public
@@ -259,13 +260,13 @@ assets were published.
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
-1. **Current artifact boundary.** The `v4.5.0` signed ledger records a bounded,
+1. **Current artifact boundary.** The `v4.6.0` signed ledger records a bounded,
    completed protected A-H operation over the actual zipapp, SPDX SBOM,
    checksum manifest, and resulting publication. This advances the recorded
    release boundary beyond the earlier descriptor-only pilot, but it does not
    establish reproducibility, correctness, production readiness, deployment
-   authorization, or independent review. Current unreleased source now
-   contains one separate versioned, library-only public-GHCR OCI provider
+   authorization, or independent review. Release `v4.6.0` also contains one
+   separate versioned, library-only public-GHCR OCI provider
    relation, but it has no CLI, protected workflow, or live manifest/index
    pilot. Therefore neither that implementation, the current `.raae`, nor the
    release ledger grants production OCI or deployment authority.
@@ -276,7 +277,7 @@ needs — not feature accumulation. The order matters:
    remains a frozen historical target whose exact release artifacts remain
    immutable. The current
    [security-review request #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
-   instead targets the immutable `v4.5.0` release; neither record is evidence
+   must be retargeted to the immutable `v4.6.0` release; neither record is evidence
    that an independent review occurred. The separate
    [current field-pilot #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
    must pre-register **64–96 total cases**, including at least **48 held-out**
@@ -286,7 +287,7 @@ needs — not feature accumulation. The order matters:
    unit, duplicate rule, label balance, exclusions, per-track policy/profile,
    verifier pack, runtime and baseline, declared label/execution/finalizer
    authorities, distinct key identities, and ownership/control relationships
-   before execution. Bind the exact `v4.5.0` release commit, asset, and signed
+   before execution. Bind the exact `v4.6.0` release commit, asset, and signed
    ledger bytes. Report Guard errors, unsupported/incomplete cases, timeouts,
    and infrastructure failures outside the confusion matrix rather than
    converting abstentions into decision errors. That round measures protocol,

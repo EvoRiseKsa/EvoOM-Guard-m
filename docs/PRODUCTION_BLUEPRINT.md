@@ -216,7 +216,7 @@ Until all gates close, release notes must use **release candidate**, **beta**, o
 
 ## Release sequence
 
-1. **v4.5.0 release foundation — completed, bounded:** the latest protected A-H
+1. **v4.6.0 release foundation — completed, bounded:** the latest protected A-H
    publication record extends the release-chain foundation first established by
    the historical `v4.4.2` recovery ledger. It
    does not establish reproducibility, independent efficacy, hostile-code

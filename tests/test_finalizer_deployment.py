@@ -200,17 +200,22 @@ def test_finalizer_init_refuses_a_windows_reparse_parent(tmp_path: Path) -> None
         os.rmdir(junction)
 
 
-def test_packaged_templates_are_exact_current_workflows_and_manifest_contract() -> None:
+def test_packaged_templates_match_manifest_and_current_release_pin_contract() -> None:
     kit = load_finalizer_kit()
     by_resource = {entry["resource"]: entry for entry in kit["templates"]}
     pairs = {
         "reverify.yml": ROOT / ".github/workflows/evoguard-reverify.yml",
         "seal.yml": ROOT / ".github/workflows/evoguard-seal.yml",
     }
+    packaged_pin = b"/releases/download/v4.5.0/evo-guard.pyz"
+    current_pin = b"/releases/download/v4.6.0/evo-guard.pyz"
     for resource, workflow in pairs.items():
         template_bytes = (TEMPLATES / resource).read_bytes()
-        assert template_bytes == workflow.read_bytes()
         assert hashlib.sha256(template_bytes).hexdigest() == by_resource[resource]["sha256"]
+        current_bytes = workflow.read_bytes()
+        assert template_bytes.count(packaged_pin) == 1
+        assert current_bytes.count(current_pin) == 1
+        assert template_bytes.replace(packaged_pin, current_pin) == current_bytes
 
     reverify = (TEMPLATES / "reverify.yml").read_text(encoding="utf-8")
     seal = (TEMPLATES / "seal.yml").read_text(encoding="utf-8")

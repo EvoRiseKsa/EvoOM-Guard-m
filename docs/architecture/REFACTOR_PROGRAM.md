@@ -616,11 +616,11 @@ remain in their established facades.
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
 is **complete**; the overall refactor program is **in-progress**. Source version `4.6.0`
-remains unreleased.
+is on the ledger-recorded release line.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. The
-  `v4.5.0` release ledger and SPDX SBOM asset exist; a general offline mode
+  `v4.6.0` release ledger and SPDX SBOM asset exist; a general offline mode
   remains incomplete.
 - Add strict type/architecture/mutation gates and external red-team stage.
   Architecture, bounded mutation, and strict `domain/` plus `application/`

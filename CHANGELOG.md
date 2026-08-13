@@ -19,8 +19,8 @@ retained evidence say so.
 ## Release status and support
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
-- [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest stable and supported consumer release.
-- Source `4.6.0`: release candidate; not a consumer release.
+- [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) is the latest stable and supported consumer release.
+- Source `4.6.0`: source on the latest ledger-recorded release line.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -30,8 +30,28 @@ retained evidence say so.
 
 ## [Unreleased]
 
+No unreleased product changes are recorded.
+
+## [4.6.0] — published 2026-08-13; signed protected-tree ledger
+
+[`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0)
+is the latest stable and supported consumer release. Its signed
+[`release-ledger-v2`](evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json)
+binds candidate commit `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`, the protected
+A-through-H operation, and the exact three-asset immutable publication. This
+same-owner retained evidence does not establish independent review,
+reproducibility, production readiness, deployment authorization, or completion
+of the separate publication-authority retirement operation. The ledger records
+that operation as `pending-post-ledger`; a later signed retirement receipt is
+required after the committed ledger bytes are revalidated.
+
 ### Fixed
 
+- Corrected the post-publication source documentation and repository-level
+  Trusted Finalizer workflow copies to select ledger-recorded `v4.6.0`, while
+  preserving the packaged no-clobber `v4.5.0` workflow kit. The immutable tag's
+  pre-ledger README mismatch is retained in an explicit documentation erratum;
+  no tag, release asset, checksum, attestation, or ledger byte was rewritten.
 - Kept the release-artifact attestation adapter and release-ledger validator
   compatible with the two exact GitHub CLI verified-identity encodings observed
   across the pinned transition from `gh` 2.90 to 2.97. The newer CLI quotes
@@ -43,6 +63,10 @@ retained evidence say so.
 
 ### Added
 
+- Added the signed 59-file `v4.6.0` release-ledger directory with the canonical
+  detached signature, exact A–H run identities and attempts, source/artifact
+  admission evidence, build/SBOM/release attestations, tag CI, repository
+  controls, release assets, and seven public trust roots.
 - Added an opt-in Agent Change Admission V2 source contract with a
   domain-separated, length-prefixed candidate text-map identity, normative
   byte-level specification, cross-language golden vectors, a frozen

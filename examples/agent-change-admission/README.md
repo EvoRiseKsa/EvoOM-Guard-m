@@ -1,7 +1,7 @@
 # Agent Change Admission command-order reference
 
 This is a compact reference for the experimental Agent Change Admission
-profile. V1 shipped in v4.3.0; the v4.6 development line derives V2 bindings.
+profile. V1 shipped in v4.3.0; `v4.6.0` ships the V2 bindings.
 This reference is not an enabled workflow or a production gate. The archived
 same-owner V1 pilot remains bounded evidence, not independent validation.
 

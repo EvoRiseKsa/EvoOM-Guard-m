@@ -407,28 +407,28 @@ def test_parent_owned_policy_and_verifier_pack_are_exactly_pinned() -> None:
         public_key_id(str(ledger_root))
         == "sha256:2b6a4dee04814bed2003f1582ca17aef0fb9de75c765d92aed355bf01483148b"
     )
-    latest_ledger_root = ROOT / "security/release-ledger-roots/v4.5.0.pub.pem"
-    latest_ledger_key_id = (
+    previous_ledger_root = ROOT / "security/release-ledger-roots/v4.5.0.pub.pem"
+    previous_ledger_key_id = (
         "sha256:0d5dd1a57b8f2b4ec80a197f99bdf73908e7edba82be42ad4666a9fe485b7478"
+    )
+    assert previous_ledger_root.is_file()
+    assert public_key_id(str(previous_ledger_root)) == previous_ledger_key_id
+    assert public_key_id(str(previous_ledger_root)) != public_key_id(str(ledger_root))
+    latest_ledger_root = ROOT / "security/release-ledger-roots/v4.6.0.pub.pem"
+    latest_ledger_key_id = (
+        "sha256:ef56c9e65a355d2956201fe8e02abb7c39857d42ee3623d09d71236341ac1da1"
     )
     assert latest_ledger_root.is_file()
     assert public_key_id(str(latest_ledger_root)) == latest_ledger_key_id
-    assert public_key_id(str(latest_ledger_root)) != public_key_id(str(ledger_root))
-    prospective_root = ROOT / "security/release-ledger-roots/v4.6.0.pub.pem"
-    prospective_key_id = (
-        "sha256:ef56c9e65a355d2956201fe8e02abb7c39857d42ee3623d09d71236341ac1da1"
-    )
-    assert prospective_root.is_file()
-    assert public_key_id(str(prospective_root)) == prospective_key_id
     historical_key_ids = {
         public_key_id(str(path))
         for path in (ROOT / "security/release-ledger-roots").glob("v*.pub.pem")
-        if path != prospective_root
+        if path != latest_ledger_root
     }
-    assert prospective_key_id not in historical_key_ids
+    assert latest_ledger_key_id not in historical_key_ids
     release_contract = _text(ROOT / "docs/RELEASE_TRUST_PIPELINE.md")
     assert "release-ledger-roots/v4.6.0.pub.pem" in release_contract
-    assert prospective_key_id in release_contract
+    assert latest_ledger_key_id in release_contract
     pack_test = _text(pack / "test_release_protocol.py")
     assert "object_pairs_hook=reject_duplicate_keys" in pack_test
     assert "len(names) == len(set(names))" in pack_test

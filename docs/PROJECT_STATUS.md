@@ -27,15 +27,16 @@ validated security service.
 ## Public repository map
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
-Source version `4.6.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
-[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
-`6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
+Source version `4.6.0` is on the **ledger-recorded release line**; this protected source
+tree may be a post-tag descendant and is not a new consumer release. The latest
+immutable consumer release recorded by the protected source tree is
+[`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
+`d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`, while
 its build-provenance attestation binds `evo-guard.pyz`. The ledger records the SPDX SBOM
 release asset and its provenance. Canonical ledger:
-`evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`.
+`evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json`.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
 
 Verified live facts and separate frozen-validator defects for `v4.4.0` and
@@ -88,8 +89,8 @@ assets were published.
 <!-- END EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_PIPELINE -->
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_RELEASE_EVIDENCE_ROWS -->
-Release evidence: validated ledger `evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json`
-records `v4.5.0` assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
+Release evidence: validated ledger `evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json`
+records `v4.6.0` assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
 release attestation binds `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`; its
 build-provenance attestation binds `evo-guard.pyz` under
 `.github/workflows/evoguard-build-release-artifact.yml`. It also records the SPDX SBOM
@@ -106,11 +107,11 @@ correctness, security, deployment, or independent review.
 | Trusted Finalizer reference | Separates untrusted re-verification from a signing job that re-derives specified raw-Git bindings before key access. | It is a reference template and pilot, not enabled as this repository's merge requirement or proof of an unbreakable runner boundary. |
 | Artifact admission V1 | Can bind one observed regular-file digest and size to a verified finalizer `ALLOW`. The v4 pilot exercised this with a fresh, identity-constrained GitHub provider check and retained evidence. | It does not prove how that file was built, published, deployed, or secured, and the completed round is PR-head-bound rather than protected-main release authorization. |
 | GitHub-attestation admission adapter | The experimental `v3.8.0` baseline constrains `gh attestation verify` to explicit repository/workflow/digest/source bindings. Published `v4.1.0` additionally parses the returned statement/certificate semantics and offers opt-in pinned, lowered-identity provider execution. Release Source Admission V2 Round 1 exercised that path for one authenticated producer receipt; Release Artifact Admission Round 2 later freshly verified one exact 290-byte JSON descriptor before sealing. | The adapter remains same-repository only. The observed objects are not evidence for an arbitrary package, image, release asset, general supply-chain guarantee, production gate, or independent provider implementation. |
-| Artifact Provider V3 *(unreleased source only)* | Implements a library-only relation for one canonical digest-qualified public GHCR subject. It requires one exact GitHub Artifact Attestation direct same-revision branch build and builder run/attempt, matches provider repository/source to external Trusted Finalizer context, enforces provider isolation/key separation when sealing, retains canonical evidence, and binds the exact subject/receipt/finalizer relation through unchanged V2. | There is no CLI, protected reference workflow, live OCI pilot, or independent validation. GitHub CLI requires registry authentication, while isolated mode inherits no ambient Docker config; no compatible protected auth path has been demonstrated. Retained verification is byte continuity only; no SLSA compliance, reproducibility, safety, vulnerability, registry retention, publication, deployment, or runtime identity is established. [Issue #78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78) remains open. |
+| Artifact Provider V3 *(`v4.6.0`, library only)* | Implements a library-only relation for one canonical digest-qualified public GHCR subject. It requires one exact GitHub Artifact Attestation direct same-revision branch build and builder run/attempt, matches provider repository/source to external Trusted Finalizer context, enforces provider isolation/key separation when sealing, retains canonical evidence, and binds the exact subject/receipt/finalizer relation through unchanged V2. | There is no CLI, protected reference workflow, live OCI pilot, or independent validation. GitHub CLI requires registry authentication, while isolated mode inherits no ambient Docker config; no compatible protected auth path has been demonstrated. Retained verification is byte continuity only; no SLSA compliance, reproducibility, safety, vulnerability, registry retention, publication, deployment, or runtime identity is established. [Issue #78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78) remains open. |
 | Authenticated producer receipt pilot | In the clean round, B created one bounded receipt and C freshly verified one GitHub Artifact Attestation for its exact bytes. The moved-`main` control failed before receipt creation/download. The final matrix then rejected wrong-workflow, wrong-run-attempt, and altered-receipt substitutions; the altered-byte control included a positive provider baseline for the original bytes on the same runner. | These are non-admitting observations only. They do not independently prove A executed Guard and do not authorize a release, deployment, merge, artifact admission, or `ALLOW`. |
 | Release Source Admission V2 | Implements a signed protected-main source `ALLOW` binding A/B/C workflow blobs and run attempts, strong receipt evidence, semantic provider output, externally checked Git/`gh` digests and UID/GID pins, a provider-inaccessible signing-key path, and five distinct key domains. The separate pilot completed one source-only Round 1 and the A/B/C/D source phase of Round 2 with separately frozen targets and fail-closed observations. | Each observed `ALLOW` applies only to its recorded source and attempts. A source result alone does not bind a release artifact or publication, is not a production gate, and has no independent review. |
 | Release Artifact Admission V1 | The published `v4.2.0` bootstrap implements a separately keyed `.raae` contract that re-verifies an exact `.rsae`, binds one external regular artifact to protected E/F workflow blobs and run identities, freshly constrains its GitHub Artifact Attestation, and supports detached verification over retained evidence without a fresh provider call. The later public same-owner pilot completed one exact protected-main E/F/G round: E `29963621119/1`, protected F `29963656590/1` (`SEALED/ALLOW`), and detached G `29963877837/1` (`VERIFIED/ALLOW`) with five retained-evidence mutations rejected. | The admitted object was a 290-byte JSON descriptor, not a package, binary, image, published release, or deployed runtime. The round does not establish reproducibility, publication/deployment authorization, production readiness, or independent review. |
-| Agent Change Admission V1 and V2 *(V2 unreleased source only)* | The published v4.3.0 V1 bootstrap separates an untrusted proposal from a signed exact-change authorization, raw-Git binding derivation, and a Trusted Finalizer `ALLOW`. The archived public same-owner V1 pilot admitted one bounded change, rejected an ignored tracked path before signing, and reproduced the same exact binding under a fresh run identity. The v4.6 development line adds a domain-separated, length-prefixed V2 candidate text-map identity, a bound candidate-selection profile, and cross-language UTF-8-byte path ordering while preserving V1 verification; the legacy Guard digest remains only as a bridge to the current attestation context. | V2 is not released or field-evaluated. Neither version is an enabled merge gate, heals or judges code beyond the configured pack, provides single-use authorization, or has independent validation or general hostile-runner proof. |
+| Agent Change Admission V1 and V2 *(V2 released in `v4.6.0`)* | The published v4.3.0 V1 bootstrap separates an untrusted proposal from a signed exact-change authorization, raw-Git binding derivation, and a Trusted Finalizer `ALLOW`. The archived public same-owner V1 pilot admitted one bounded change, rejected an ignored tracked path before signing, and reproduced the same exact binding under a fresh run identity. Release `v4.6.0` adds a domain-separated, length-prefixed V2 candidate text-map identity, a bound candidate-selection profile, and cross-language UTF-8-byte path ordering while preserving V1 verification; the legacy Guard digest remains only as a bridge to the current attestation context. | V2 is released but not field-evaluated. Neither version is an enabled merge gate, heals or judges code beyond the configured pack, provides single-use authorization, or has independent validation or general hostile-runner proof. |
 
 For exact threat models and non-guarantees, read [ASSURANCE.md](ASSURANCE.md),
 [TRUSTED_FINALIZER.md](TRUSTED_FINALIZER.md), and
@@ -133,7 +134,7 @@ depending on them. The following boundary is intentional.
 The public source is not a trade secret. Historical releases through v3.8.0
 remain governed by the licenses shipped with those exact releases. The current
 published immutable
-[`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0)
+[`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0)
 release ships the EvoRise Source-Available License 1.0 and is the latest
 protected-tree ledger-recorded consumer release. The immutable `v4.4.0` and
 `v4.4.1` publications remain the historical unledgered exceptions documented
@@ -167,8 +168,8 @@ does **not** yet have evidence for any of the following:
 - the Release Artifact Admission negative-matrix rows that were not executed in
   the bounded public round; or
 - a live OCI/registry admission or production-deployment record. The
-  unreleased Artifact Provider V3 library path has no protected workflow or
-  live OCI pilot. The `v4.5.0` ledger records a bounded protected A-H source,
+  `v4.6.0` Artifact Provider V3 library path has no protected workflow or
+  live OCI pilot. The `v4.6.0` ledger records a bounded protected A-H source,
   zipapp/SBOM artifact, and publication operation; neither record is evidence
   of deployment authorization, reproducibility, software correctness,
   production readiness, or independent review; or
