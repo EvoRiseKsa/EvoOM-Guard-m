@@ -48,7 +48,11 @@ tag CI, and the bounded repository-control observation. Its canonical bytes
 validate against the admitted parent and the independently pinned `v4.6.0`
 ledger public root. The ledger records publication-authority retirement as
 `pending-post-ledger`; it does not claim that the later retirement operation
-has completed.
+has completed. After the committed ledger bytes were independently revalidated,
+the exact temporary authority was removed and the later operation was retained
+in the separately signed
+[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.6.0/KEY_RETIREMENT.json)
+receipt. The immutable ledger remains unchanged.
 
 On Python 3.10, the immutable `v4.4.2` parent validator needs the
 hash-locked `importlib-resources` compatibility backport because that frozen

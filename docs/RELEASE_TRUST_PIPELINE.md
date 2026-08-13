@@ -45,6 +45,13 @@ by the validator. They do not turn mutable GitHub state into an independent
 attestation. Publication-authority retirement remains a separate post-ledger
 operation and is not claimed complete by the `v4.6.0` ledger.
 
+After those committed ledger bytes were independently revalidated, the exact
+temporary `v4.6.0` publication authority was removed. The later signed,
+same-owner point-in-time absence observation is retained separately as
+[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.6.0/KEY_RETIREMENT.json).
+It does not alter the ledger's correct `pending-post-ledger` state or prove
+secure erasure, absence of external copies, or prevention of later re-addition.
+
 For `v4.5.0`, the later signed, same-owner point-in-time retirement observation
 is retained separately as
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json).

@@ -29,10 +29,14 @@ receipt. This same-owner point-in-time record is not proof of secure erasure,
 absence of external copies, or prevention of later re-addition; the immutable
 ledger correctly remains unchanged at `pending-post-ledger`.
 
-The signed `v4.6.0` ledger likewise records publication-authority retirement as
-`pending-post-ledger`. It does not claim that the later retirement operation has
-completed; that authority remains until the committed ledger bytes are merged,
-revalidated, and followed by a separate signed retirement receipt.
+For `v4.6.0`, the committed ledger bytes were independently revalidated before
+the exact temporary publication deploy key and publication Environment secret
+were removed. Their later successful, fully paginated HTTP 200 absence
+observations are bound by the separately signed
+[`KEY_RETIREMENT.json`](../evidence/release-operations/v4.6.0/KEY_RETIREMENT.json)
+receipt. This same-owner point-in-time record has the same bounded non-claims as
+the `v4.5.0` receipt above. The immutable `v4.6.0` ledger correctly remains
+unchanged at `pending-post-ledger`, which was its state at ledger creation time.
 
 For re-queried live publication facts and the separate frozen-validator failure
 boundaries, see the

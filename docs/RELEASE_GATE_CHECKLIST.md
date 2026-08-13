@@ -224,8 +224,11 @@ any retained evidence set.
   observation because its offline ledger private key was unavailable. `v4.5.0`
   retains the later separately signed and validated
   [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
-  receipt. The `v4.6.0` receipt remains a required post-ledger operation and is
-  not present or claimed complete in its signed ledger.
+  receipt. `v4.6.0` likewise retains its later separately signed and validated
+  [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.6.0/KEY_RETIREMENT.json)
+  receipt after removal of the exact temporary authority. Neither immutable
+  ledger is rewritten: each correctly records `pending-post-ledger` as the
+  state known at ledger creation time.
 - E must have produced three independently verified receipts: pyz SLSA
   provenance, SPDX-file SLSA provenance, and the pyz-subject SPDX predicate.
   A pyz-subject SBOM attestation cannot authorize F to seal the SPDX file.
