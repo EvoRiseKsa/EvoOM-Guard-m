@@ -7,6 +7,14 @@ on:
 
 permissions: {}
 
+env:
+  EVOGUARD_PINNED_GH_VERSION: "2.97.0"
+  EVOGUARD_PINNED_GH_ARCHIVE_SHA256: a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112
+  EVOGUARD_PINNED_GH_ARCHIVE_SIZE: "14770812"
+  EVOGUARD_PINNED_GH_EXECUTABLE: /opt/evoguard-tools/gh-2.97.0/bin/gh
+  EVOGUARD_PINNED_GH_EXECUTABLE_SHA256: 141507c337e8b202ad398550c3b73d72f5af92e86f71665214538a81efd4c409
+  EVOGUARD_PINNED_GH_EXECUTABLE_SIZE: "40992930"
+
 concurrency:
   group: evoguard-release-artifact-admit-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
   cancel-in-progress: false
@@ -429,6 +437,43 @@ jobs:
           name: evoguard-release-artifact-v1-preflight-controls-${{ github.run_attempt }}
           path: ${{ runner.temp }}/f-sbom-controls-download
 
+      - name: Materialize the exact GitHub CLI bytes for attestation verification
+        env:
+          EXPECTED_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EVOGUARD_PINNED_GH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_GH_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$EXPECTED_GH_SHA256" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SHA256"
+          archive="$RUNNER_TEMP/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          candidate="$RUNNER_TEMP/gh-${EVOGUARD_PINNED_GH_VERSION}"
+          member="gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64/bin/gh"
+          prefix="${EVOGUARD_PINNED_GH_EXECUTABLE%/bin/gh}"
+          test ! -e "$archive" -a ! -e "$candidate"
+          sudo test ! -e "$prefix"
+          cleanup_materialized_gh() { rm -f -- "$archive" "$candidate"; }
+          trap cleanup_materialized_gh EXIT
+          umask 077
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 15 --max-time 120 --retry 2 --retry-connrefused \
+            --max-filesize "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE" \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${EVOGUARD_PINNED_GH_VERSION}/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" "$archive" | sha256sum --check
+          test "$(stat -c %s "$archive")" = "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"
+          test "$(tar -tzf "$archive" | grep -Fxc -- "$member")" -eq 1
+          tar -xOzf "$archive" "$member" > "$candidate"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$candidate" | sha256sum --check
+          test "$(stat -c %s "$candidate")" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SIZE"
+          sudo install -d -m 0755 -o root -g root "$prefix/bin"
+          sudo install -m 0555 -o root -g root "$candidate" "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a' "$prefix")" = "root:root:755"
+          test "$(stat -c '%U:%G:%a' "$prefix/bin")" = "root:root:755"
+          test -f "$EVOGUARD_PINNED_GH_EXECUTABLE" -a ! -L "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a:%h' "$EVOGUARD_PINNED_GH_EXECUTABLE")" = "root:root:555:1"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$EVOGUARD_PINNED_GH_EXECUTABLE" | sha256sum --check
+
       - name: Snapshot and verify the E SPDX attestation without signing authority
         env:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
@@ -514,7 +559,7 @@ jobs:
           done
           test "$PROVIDER_UID" = "60002"
           test "$PROVIDER_GID" = "60002"
-          gh_executable="$(readlink -f "$(command -v gh)")"
+          gh_executable="$EVOGUARD_PINNED_GH_EXECUTABLE"
           test -f "$gh_executable" -a ! -L "$gh_executable"
           printf '%s  %s\n' "$OUTER_GH_SHA256" "$gh_executable" | sha256sum --check
           curl --fail --location --proto '=https' --tlsv1.2 \
@@ -969,6 +1014,43 @@ jobs:
           verify_slsa_receipt evo-guard.pyz build-provenance
           verify_slsa_receipt evo-guard.spdx.json spdx-provenance
 
+      - name: Materialize the exact GitHub CLI bytes for the protected seal
+        env:
+          EXPECTED_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EVOGUARD_PINNED_GH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_GH_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$EXPECTED_GH_SHA256" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SHA256"
+          archive="$RUNNER_TEMP/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          candidate="$RUNNER_TEMP/gh-${EVOGUARD_PINNED_GH_VERSION}"
+          member="gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64/bin/gh"
+          prefix="${EVOGUARD_PINNED_GH_EXECUTABLE%/bin/gh}"
+          test ! -e "$archive" -a ! -e "$candidate"
+          sudo test ! -e "$prefix"
+          cleanup_materialized_gh() { rm -f -- "$archive" "$candidate"; }
+          trap cleanup_materialized_gh EXIT
+          umask 077
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 15 --max-time 120 --retry 2 --retry-connrefused \
+            --max-filesize "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE" \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${EVOGUARD_PINNED_GH_VERSION}/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" "$archive" | sha256sum --check
+          test "$(stat -c %s "$archive")" = "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"
+          test "$(tar -tzf "$archive" | grep -Fxc -- "$member")" -eq 1
+          tar -xOzf "$archive" "$member" > "$candidate"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$candidate" | sha256sum --check
+          test "$(stat -c %s "$candidate")" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SIZE"
+          sudo install -d -m 0755 -o root -g root "$prefix/bin"
+          sudo install -m 0555 -o root -g root "$candidate" "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a' "$prefix")" = "root:root:755"
+          test "$(stat -c '%U:%G:%a' "$prefix/bin")" = "root:root:755"
+          test -f "$EVOGUARD_PINNED_GH_EXECUTABLE" -a ! -L "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a:%h' "$EVOGUARD_PINNED_GH_EXECUTABLE")" = "root:root:555:1"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$EVOGUARD_PINNED_GH_EXECUTABLE" | sha256sum --check
+
       - name: Bind the outer toolchain and E/F raw Git blobs
         env:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
@@ -980,7 +1062,7 @@ jobs:
           OUTER_GIT_SHA256="$(jq -er '.external_settings.toolchain.git_sha256 | select(type == "string")' "$manifest")"
           OUTER_GH_SHA256="$(jq -er '.external_settings.toolchain.gh_sha256 | select(type == "string")' "$manifest")"
           git_executable="$(readlink -f "$(command -v git)")"
-          gh_executable="$(readlink -f "$(command -v gh)")"
+          gh_executable="$EVOGUARD_PINNED_GH_EXECUTABLE"
           test -f "$git_executable" -a ! -L "$git_executable"
           test -f "$gh_executable" -a ! -L "$gh_executable"
           printf '%s  %s\n' "$OUTER_GIT_SHA256" "$git_executable" | sha256sum --check

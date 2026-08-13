@@ -124,6 +124,16 @@ and checked separately. A legitimate GitHub runner or tool rotation between
 the two phases must not invalidate the source decision merely because the
 outer artifact phase used a newer exact tool identity.
 
+Within F itself, each job that executes GitHub CLI independently materializes
+one exact reviewed CLI binary. The workflow blob pins the official archive
+URL, archive SHA-256 and size, one exact member, executable SHA-256 and size,
+and a root-owned `0555` installation path. The bounded download and streamed
+single-member extraction are verified before installation and after it; F then
+uses only that absolute path. The external F executable digest must equal the
+workflow pin. Consequently, a mixed hosted-runner image rollout fails before
+provider verification or protected signing-key access rather than changing
+the CLI identity between jobs.
+
 The `.raae` manifest signs only its own Git/`gh` pins and provider isolation.
 The embedded `.rsae` retains and verifies its historical toolchain in its own
 signed manifest.

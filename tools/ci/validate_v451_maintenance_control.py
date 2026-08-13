@@ -76,7 +76,7 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ),
     ".github/workflows/evoguard-admit-release-source.yml": (
         "workflow-CD",
-        "e92f8ae8cd4281520b346a021d6f9d78d43b6e2d",
+        "8b38f5d2a7957782f3945b671bd877e047f8598d",
     ),
     ".github/workflows/evoguard-build-release-artifact.yml": (
         "workflow-E",
@@ -84,7 +84,7 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ),
     ".github/workflows/evoguard-admit-release-artifact.yml": (
         "workflow-F",
-        "2845d56f3e0f184246d15b27af1d63937e39dc2a",
+        "c85117813d93d8d1e148345ed444994ace4be468",
     ),
     ".github/workflows/evoguard-verify-release-artifact.yml": (
         "workflow-G",
@@ -92,7 +92,7 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ),
     ".github/workflows/evoguard-publish-admitted-release.yml": (
         "workflow-H",
-        "8d0e695cfda1023b0d3729e3a2e558152bb4564e",
+        "8edab2e322e0d94aa2732596099624e7760809cc",
     ),
     ".github/CODEOWNERS": ("control", "db526d147dc07ce36518af4a20aabdf2a16dfe56"),
     ".evoguard.json": ("policy", "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"),

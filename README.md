@@ -34,8 +34,8 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.6.0` is a **release candidate** and is not yet a consumer release. The
-latest immutable consumer release recorded by the protected source tree is
+Source version `4.6.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) at commit
 `6bb4c328e56661b661e50532886802c6ba36a997`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
