@@ -3089,6 +3089,61 @@ def test_gh_2_90_provider_metadata_shape_is_accepted() -> None:
     )
 
 
+@pytest.mark.parametrize("attestation_name", ["build_provenance", "sbom_provenance"])
+def test_gh_2_97_go_quoted_identity_prefix_is_accepted(
+    attestation_name: str,
+) -> None:
+    ledger = _valid_ledger()
+    attestation = ledger["attestations"][attestation_name]
+    artifact = ledger["artifacts"][0]
+    data = _raw_attestation(
+        ledger,
+        attestation_name,
+        subject_sha256=artifact["sha256"],
+    )
+    decoded = json.loads(data)
+    workflow = (
+        f"{ledger['release']['repository']}/{attestation['signer_workflow']}"
+    )
+    patterns = validator._github_identity_regexp_candidates(
+        f"https://github.com/{workflow}"
+    )
+    decoded[0]["verificationResult"]["verifiedIdentity"][
+        "subjectAlternativeName"
+    ]["regexp"] = patterns[1]
+    quoted = (
+        json.dumps(decoded, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    common = {
+        "repository": ledger["release"]["repository"],
+        "repository_id": ledger["release"]["repository_id"],
+        "repository_owner_id": ledger["release"]["repository_owner_id"],
+        "workflow_path": attestation["signer_workflow"],
+        "source_digest": ledger["source"]["candidate_commit_sha"],
+        "run_id": attestation["run_id"],
+        "run_attempt": attestation["run_attempt"],
+        "expected_event": "workflow_dispatch",
+        "subject_name": attestation["subject_name"],
+        "subject_sha256": artifact["sha256"],
+    }
+    if attestation_name == "build_provenance":
+        validator._validate_slsa_raw_output(
+            quoted,
+            **common,
+            subject_size=artifact["size_bytes"],
+            label="gh 2.97 representative SLSA output",
+        )
+    else:
+        validator._validate_spdx_raw_output(
+            quoted,
+            **common,
+            spdx_predicate=decoded[0]["verificationResult"]["statement"][
+                "predicate"
+            ],
+            label="gh 2.97 representative SPDX output",
+        )
+
+
 def test_strict_spdx_attestation_binds_exact_predicate_bytes() -> None:
     ledger = _valid_ledger()
     attestation = ledger["attestations"]["sbom_provenance"]

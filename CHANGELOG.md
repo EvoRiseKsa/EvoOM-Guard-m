@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest stable and supported consumer release.
-- Source `4.6.0`: release candidate; not a consumer release.
+- Source `4.6.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -29,6 +29,17 @@ retained evidence say so.
 <!-- END EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 
 ## [Unreleased]
+
+### Fixed
+
+- Kept the release-artifact attestation adapter and release-ledger validator
+  compatible with the two exact GitHub CLI verified-identity encodings observed
+  across the pinned transition from `gh` 2.90 to 2.97. The newer CLI quotes
+  regexp metacharacters in its reported signer prefix; both representations
+  remain constrained by the independently exact certificate signer, workflow,
+  repository, source, run, hosted-runner, subject, and predicate bindings. The
+  compatibility failure and its lack of release authority are retained in the
+  [aborted `v4.6.0` artifact-admission record](evidence/release-operations/v4.6.0/ABORTED_ARTIFACT_ADMISSION_ATTEMPT.md).
 
 ### Added
 

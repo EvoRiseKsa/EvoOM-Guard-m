@@ -140,6 +140,7 @@ _CANONICAL_UTC = re.compile(
     r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
     r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z\Z"
 )
+_GO_REGEXP_META = frozenset(r"\.+*?()|[]{}^$")
 
 EXPECTED_REPOSITORY = "EvoRiseKsa/EvoOM-Guard-m"
 EXPECTED_REPOSITORY_ID = 1293651176
@@ -4967,6 +4968,16 @@ def _validate_artifact_result(
         _fail(f"{label} does not equal the actual F/G success report contract")
 
 
+def _github_identity_regexp_candidates(literal_prefix: str) -> tuple[str, str]:
+    """Return exact identity-prefix encodings emitted before and after gh 2.97."""
+
+    quoted = "".join(
+        f"\\{character}" if character in _GO_REGEXP_META else character
+        for character in literal_prefix
+    )
+    return f"^{literal_prefix}", f"^{quoted}"
+
+
 def _strict_attestation_parts(
     data: bytes,
     *,
@@ -5100,11 +5111,13 @@ def _strict_attestation_parts(
         _fail(f"{label} certificate issuer metadata must be a string")
     if certificate.get("sourceRepositoryOwnerIdentifier") != repository_owner_id:
         _fail(f"{label} certificate repository owner ID is not exact")
-    expected_san_pattern = f"^https://github.com/{workflow}"
-    san_matches = identity_san == {
-        "subjectAlternativeName": "",
-        "regexp": expected_san_pattern,
-    }
+    expected_san_patterns = _github_identity_regexp_candidates(
+        f"https://github.com/{workflow}"
+    )
+    san_matches = (
+        identity_san.get("subjectAlternativeName") == ""
+        and identity_san.get("regexp") in expected_san_patterns
+    )
     issuer_matches = identity_issuer == {
         "issuer": "",
         "regexp": ".*",
