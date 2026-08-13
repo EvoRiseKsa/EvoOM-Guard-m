@@ -38,6 +38,17 @@ G = WORKFLOWS / "evoguard-verify-release-artifact.yml"
 H = WORKFLOWS / "evoguard-publish-admitted-release.yml"
 LEGACY = WORKFLOWS / "release.yml"
 
+PINNED_GH_VERSION = "2.97.0"
+PINNED_GH_ARCHIVE_SHA256 = (
+    "a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112"
+)
+PINNED_GH_ARCHIVE_SIZE = "14770812"
+PINNED_GH_EXECUTABLE = "/opt/evoguard-tools/gh-2.97.0/bin/gh"
+PINNED_GH_EXECUTABLE_SHA256 = (
+    "141507c337e8b202ad398550c3b73d72f5af92e86f71665214538a81efd4c409"
+)
+PINNED_GH_EXECUTABLE_SIZE = "40992930"
+
 
 def _text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -113,6 +124,14 @@ def _python_heredocs(path: Path) -> list[str]:
     return sources
 
 
+def _gh_materialization_blocks(path: Path) -> list[str]:
+    return [
+        run
+        for run in _literal_run_blocks(path)
+        if 'archive="$RUNNER_TEMP/gh_${EVOGUARD_PINNED_GH_VERSION}' in run
+    ]
+
+
 def _working_bash() -> str | None:
     """Return a Bash executable that can run workflow control-flow tests."""
 
@@ -157,6 +176,101 @@ def test_release_workflow_python_heredocs_are_exact_and_compile() -> None:
             compile(source, f"{path.name}:heredoc:{source_index}", "exec")
             count += 1
     assert count == 33
+
+
+def test_sensitive_release_jobs_materialize_one_exact_github_cli() -> None:
+    workflows = (C, F, H)
+    expected_counts = {C: 2, F: 2, H: 3}
+    all_blocks: list[str] = []
+    for path in workflows:
+        whole = _text(path)
+        expected_env = (
+            f'  EVOGUARD_PINNED_GH_VERSION: "{PINNED_GH_VERSION}"\n'
+            f"  EVOGUARD_PINNED_GH_ARCHIVE_SHA256: "
+            f"{PINNED_GH_ARCHIVE_SHA256}\n"
+            f'  EVOGUARD_PINNED_GH_ARCHIVE_SIZE: "{PINNED_GH_ARCHIVE_SIZE}"\n'
+            f"  EVOGUARD_PINNED_GH_EXECUTABLE: {PINNED_GH_EXECUTABLE}\n"
+            f"  EVOGUARD_PINNED_GH_EXECUTABLE_SHA256: "
+            f"{PINNED_GH_EXECUTABLE_SHA256}\n"
+            f'  EVOGUARD_PINNED_GH_EXECUTABLE_SIZE: "'
+            f'{PINNED_GH_EXECUTABLE_SIZE}"'
+        )
+        assert whole.count(expected_env) == 1
+        blocks = _gh_materialization_blocks(path)
+        assert len(blocks) == expected_counts[path]
+        all_blocks.extend(blocks)
+        assert "command -v gh" not in whole
+        assert re.search(r"(?m)^\s*gh (?:api|release)\b", whole) is None
+
+    assert len(all_blocks) == 7
+    assert len(set(all_blocks)) == 1
+    materialize = all_blocks[0]
+    expected_url = (
+        '"https://github.com/cli/cli/releases/download/'
+        'v${EVOGUARD_PINNED_GH_VERSION}/'
+        'gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"'
+    )
+    assert expected_url in materialize
+    assert "--proto '=https' --proto-redir '=https' --tlsv1.2" in materialize
+    assert '--max-filesize "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"' in materialize
+    assert (
+        "printf '%s  %s\\n' \"$EVOGUARD_PINNED_GH_ARCHIVE_SHA256\" "
+        '"$archive" | sha256sum --check'
+    ) in materialize
+    assert 'test "$(stat -c %s "$archive")" = "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"' in materialize
+    assert 'test "$(tar -tzf "$archive" | grep -Fxc -- "$member")" -eq 1' in materialize
+    assert 'tar -xOzf "$archive" "$member" > "$candidate"' in materialize
+    assert 'tar -xzf' not in materialize
+    assert (
+        "printf '%s  %s\\n' \"$EXPECTED_GH_SHA256\" \"$candidate\" "
+        "| sha256sum --check"
+    ) in materialize
+    assert 'test "$(stat -c %s "$candidate")" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SIZE"' in materialize
+    assert (
+        'sudo install -m 0555 -o root -g root "$candidate" '
+        '"$EVOGUARD_PINNED_GH_EXECUTABLE"'
+    ) in materialize
+    assert 'cleanup_materialized_gh() { rm -f -- "$archive" "$candidate"; }' in materialize
+    assert "trap cleanup_materialized_gh EXIT" in materialize
+    assert 'test "$(stat -c \'%U:%G:%a\' "$prefix")" = "root:root:755"' in materialize
+    assert 'test "$(stat -c \'%U:%G:%a\' "$prefix/bin")" = "root:root:755"' in materialize
+    assert (
+        "root:root:555:1" in materialize
+        and materialize.index('tar -xOzf "$archive" "$member"')
+        < materialize.index('sudo install -m 0555')
+    )
+    assert "GH_TOKEN" not in materialize
+    assert "secrets." not in materialize
+    assert "GITHUB_PATH" not in materialize
+
+    ordered_steps = (
+        (C, "preflight", "Materialize the exact GitHub CLI bytes", "Create canonical external controls"),
+        (C, "seal", "Materialize the exact GitHub CLI bytes", "Bind raw Git, A/B/C identities"),
+        (F, "verify-attestations", "Materialize the exact GitHub CLI bytes", "Snapshot and verify the E SPDX attestation"),
+        (F, "seal", "Materialize the exact GitHub CLI bytes", "Bind the outer toolchain"),
+        (H, "preflight", "Materialize the exact GitHub CLI bytes", "Bind all public roots"),
+        (H, "draft", "Materialize the exact GitHub CLI bytes", "Recheck the closed release set"),
+        (H, "publish", "Materialize the exact GitHub CLI bytes", "Recheck the closed release set"),
+    )
+    for path, job_name, materialize_name, consumer_name in ordered_steps:
+        job = _job(path, job_name)
+        assert job.count(materialize_name) == 1
+        assert job.index(materialize_name) < job.index(consumer_name)
+        expected_variable = (
+            "vars.EVOGUARD_GH_EXECUTABLE_SHA256"
+            if path == C
+            else "vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256"
+        )
+        other_variable = (
+            "vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256"
+            if path == C
+            else "vars.EVOGUARD_GH_EXECUTABLE_SHA256"
+        )
+        materialize_step = job[
+            job.index(materialize_name) : job.index(consumer_name)
+        ]
+        assert expected_variable in materialize_step
+        assert other_variable not in materialize_step
 
 
 def test_bootstrap_is_inert_and_contains_only_invalid_post_merge_placeholders() -> None:
@@ -1067,7 +1181,9 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "set +e\n            release_id=" not in publish
     assert publish.count("raise SystemExit(75)") == 2
     assert "sleep 2" in publish
-    assert publish.count("gh release create") == 1
+    assert publish.count(
+        '"$EVOGUARD_PINNED_GH_EXECUTABLE" release create'
+    ) == 1
     assert "did not become visible within the bounded window" in publish
     assert "the visible draft is not uniquely attributable; preserving it" in publish
     assert "release pagination page is outside bounds" in publish
@@ -1105,9 +1221,13 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
     assert "tag-deploy-key-authentication.txt" not in publish
     assert 'local trapped_failure=$?' in publish
     assert 'local failure="${1:-$trapped_failure}"' in publish
-    assert 'if gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"' in publish
     assert (
-        'set +e\n          gh api --include '
+        'if "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include '
+        '"repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"'
+        in publish
+    )
+    assert (
+        'set +e\n          "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include '
         '"repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"'
     ) not in publish
     assert publish.count("cleanup_verified_unpublished_draft 1") == 2
@@ -1135,7 +1255,7 @@ def test_h_reverifies_then_writes_only_an_exact_draft() -> None:
         "printf '%s\\n' '{\"draft\":false}'"
     )
     assert publish.index("trap cleanup_verified_unpublished_draft ERR") < publish.index(
-        "trap - ERR\n          gh api"
+        'trap - ERR\n          "$EVOGUARD_PINNED_GH_EXECUTABLE" api'
     )
     assert publish.count("release.get('author', {}).get('id')") >= 4
     assert publish.count("41898282") >= 4
@@ -1378,6 +1498,7 @@ body={body!r}
 RUNNER_TEMP=.
 GITHUB_REPOSITORY=EvoRiseKsa/EvoOM-Guard-m
 GITHUB_OUTPUT=github-output
+EVOGUARD_PINNED_GH_EXECUTABLE=gh
 {retry_loop}
 printf 'success:%s\n' "$release_id"
 """
@@ -1489,6 +1610,7 @@ record=record.json
 body=deterministic
 RUNNER_TEMP=.
 GITHUB_REPOSITORY=EvoRiseKsa/EvoOM-Guard-m
+EVOGUARD_PINNED_GH_EXECUTABLE=gh
 {cleanup_function}
 false
 cleanup_partial_draft
@@ -1580,7 +1702,10 @@ def test_h_tag_absence_probe_is_err_trap_safe_and_fail_closed(
         for block in _literal_run_blocks(H)
         if "tag-before-publication.response" in block
     )
-    start = run.index('if gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"')
+    start = run.index(
+        'if "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include '
+        '"repos/$GITHUB_REPOSITORY/git/ref/tags/$tag"'
+    )
     end = run.index("\nRELEASE_BODY=", start)
     probe_block = run[start:end]
     harness = rf"""
@@ -1597,6 +1722,7 @@ trap cleanup_verified_unpublished_draft ERR
 GITHUB_REPOSITORY=EvoRiseKsa/EvoOM-Guard-m
 tag=v4.4.0
 RUNNER_TEMP=.
+EVOGUARD_PINNED_GH_EXECUTABLE=gh
 {probe_block}
 printf 'probe:%s:%s\n' "$tag_probe_rc" "$tag_status"
 """

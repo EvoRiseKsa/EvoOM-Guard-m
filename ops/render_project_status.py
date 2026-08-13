@@ -285,7 +285,7 @@ _WORKFLOW_SPECS = (
         ),
         "preflight",
         _SOURCE_GATE,
-        reviewed_sha256="3267183f42a817b9e4ab1842f61c1bb94ea7b2974bd5e49e885e3a2324acee1b",
+        reviewed_sha256="27e68139e900d70f9829b4194675bae63135082196ee80d55a6367e5919bd508",
     ),
     _WorkflowSpec(
         "E",
@@ -311,7 +311,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _ARTIFACT_GATE,
         ("preflight", "verify-attestations", "seal"),
-        "619f9754c6825af99aefbf2f4c8950f08bdd8a843f8d9fdccee37e2eba642b05",
+        "9741fef62ef1460ecaf40e17f55e5fde505bd62b362695a18372de019a21923f",
     ),
     _WorkflowSpec(
         "G",
@@ -333,7 +333,7 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "98c58f6205e4a63b8e163bf2d6c73ac164acdf4f935adcb28e275537559847e7",
+        "e7cf6d8de764ca48cc7baab7a7d3b20d768e2edf34363bc6e691cc2b779b0b35",
     ),
 )
 _LEGACY_FALSE_GATE = (

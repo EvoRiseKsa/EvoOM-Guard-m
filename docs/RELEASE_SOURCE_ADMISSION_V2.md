@@ -59,6 +59,19 @@ plane, the reviewed A/B/C workflow definitions, the GitHub-hosted runner, the
 immutable prior Guard runtime, the pinned Git and GitHub CLI binaries, and the
 protected signing key remain trust roots.
 
+Every C job that executes GitHub CLI now materializes the same reviewed CLI
+bytes independently instead of discovering `/usr/bin/gh` from the mutable
+hosted-runner image. The workflow blob pins the official release archive URL,
+archive SHA-256 and size, one exact archive member, the executable SHA-256 and
+size, and a root-owned `0555` path. Downloading is time- and size-bounded; only
+the named member is streamed from the archive; the bytes are verified before
+installation and again afterward. C invokes that absolute path explicitly.
+The separately configured executable digest must equal the workflow pin, so a
+runner image rollout or configuration mismatch fails before protected key
+access. This removes image-version drift as a source of those CLI bytes; it
+does not make the download origin, GitHub, the runner, or the reviewed workflow
+independent trust roots.
+
 `RUNNER_ENVIRONMENT` is a GitHub default variable. GitHub documents
 `GITHUB_*` and `RUNNER_*` defaults as non-overridable; C requires its exact
 `github-hosted` value in addition to the workflow/run/source bindings.
@@ -71,8 +84,9 @@ protected signing key remain trust roots.
    GitHub policy, and the exact named cross-domain key registry;
 2. preflight every input/output path and reject aliases or provider-evidence
    overwrite attempts;
-3. bind a canonical absolute Git executable to an external SHA-256 and use a
-   private stable snapshot for all raw-Git reads;
+3. bind a canonical absolute Git executable to an external SHA-256, bind the
+   independently materialized GitHub CLI to the identical external/workflow
+   SHA-256 pin, and use a private stable snapshot for all raw-Git reads;
 4. verify C's raw workflow blob, current GitHub Actions context, and exact B
    `workflow_run` event;
 5. re-derive the protected-main commit/tree, its single parent, candidate,

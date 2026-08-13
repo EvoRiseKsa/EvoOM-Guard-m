@@ -214,18 +214,18 @@
     "required_entries": {
       ".github/workflows/evoguard-release-source-reverify.yml": {"role": "workflow-A", "mode": "100644", "blob_sha": "fb6a30a4576c0cb51fa7d9cd759dafba1be59bbc"},
       ".github/workflows/evoguard-produce-release-source-receipt.yml": {"role": "workflow-B", "mode": "100644", "blob_sha": "ae6c2ecda3e7b29223db69b33b9135949e0ad567"},
-      ".github/workflows/evoguard-admit-release-source.yml": {"role": "workflow-CD", "mode": "100644", "blob_sha": "e92f8ae8cd4281520b346a021d6f9d78d43b6e2d"},
+      ".github/workflows/evoguard-admit-release-source.yml": {"role": "workflow-CD", "mode": "100644", "blob_sha": "8b38f5d2a7957782f3945b671bd877e047f8598d"},
       ".github/workflows/evoguard-build-release-artifact.yml": {"role": "workflow-E", "mode": "100644", "blob_sha": "ffdbc343f7331551a6f69361c8091a517d7dff7e"},
-      ".github/workflows/evoguard-admit-release-artifact.yml": {"role": "workflow-F", "mode": "100644", "blob_sha": "2845d56f3e0f184246d15b27af1d63937e39dc2a"},
+      ".github/workflows/evoguard-admit-release-artifact.yml": {"role": "workflow-F", "mode": "100644", "blob_sha": "c85117813d93d8d1e148345ed444994ace4be468"},
       ".github/workflows/evoguard-verify-release-artifact.yml": {"role": "workflow-G", "mode": "100644", "blob_sha": "3fd1aa0f274900c5aa877d473f6fdb6f87e8bc4c"},
-      ".github/workflows/evoguard-publish-admitted-release.yml": {"role": "workflow-H", "mode": "100644", "blob_sha": "8d0e695cfda1023b0d3729e3a2e558152bb4564e"},
+      ".github/workflows/evoguard-publish-admitted-release.yml": {"role": "workflow-H", "mode": "100644", "blob_sha": "8edab2e322e0d94aa2732596099624e7760809cc"},
       ".github/CODEOWNERS": {"role": "control", "mode": "100644", "blob_sha": "db526d147dc07ce36518af4a20aabdf2a16dfe56"},
       ".evoguard.json": {"role": "policy", "mode": "100644", "blob_sha": "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"},
       "security/release-pipeline-bootstrap.json": {"role": "control", "mode": "100644", "blob_sha": "97d5283661874dc68b9535b37b7a74e47bb9421b"},
       "security/release-source-pack/pack.json": {"role": "pack", "mode": "100644", "blob_sha": "a05bb0d113cfc9675e06c9480590496dbf841b82"},
       "security/release-source-pack/test_release_protocol.py": {"role": "pack", "mode": "100644", "blob_sha": "f8f6d9369d295171ad78c87dff424840a800de3e"},
       "security/judge-requirements.lock": {"role": "control", "mode": "100644", "blob_sha": "8d173d39ba87c7a075fcac42c8fabe692263cbf6"},
-      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "819731f7e213a4b91b20e09388123e0fae7d09d9"}
+      "tools/ci/validate_v451_maintenance_control.py": {"role": "control-validator", "mode": "100644", "blob_sha": "19700a7224b75746e4ac525b7450580393ca2248"}
     }
   },
   "local_signature_verification": {

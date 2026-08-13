@@ -7,6 +7,14 @@ on:
 
 permissions: {}
 
+env:
+  EVOGUARD_PINNED_GH_VERSION: "2.97.0"
+  EVOGUARD_PINNED_GH_ARCHIVE_SHA256: a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112
+  EVOGUARD_PINNED_GH_ARCHIVE_SIZE: "14770812"
+  EVOGUARD_PINNED_GH_EXECUTABLE: /opt/evoguard-tools/gh-2.97.0/bin/gh
+  EVOGUARD_PINNED_GH_EXECUTABLE_SHA256: 141507c337e8b202ad398550c3b73d72f5af92e86f71665214538a81efd4c409
+  EVOGUARD_PINNED_GH_EXECUTABLE_SIZE: "40992930"
+
 concurrency:
   group: evoguard-release-publication
   cancel-in-progress: false
@@ -456,6 +464,43 @@ jobs:
           )
           test "$(jq -r .target_commit_sha "$RUNNER_TEMP/publication-inputs/source.json")" = "$TARGET_SHA"
 
+      - name: Materialize the exact GitHub CLI bytes before publication review
+        env:
+          EXPECTED_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EVOGUARD_PINNED_GH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_GH_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$EXPECTED_GH_SHA256" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SHA256"
+          archive="$RUNNER_TEMP/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          candidate="$RUNNER_TEMP/gh-${EVOGUARD_PINNED_GH_VERSION}"
+          member="gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64/bin/gh"
+          prefix="${EVOGUARD_PINNED_GH_EXECUTABLE%/bin/gh}"
+          test ! -e "$archive" -a ! -e "$candidate"
+          sudo test ! -e "$prefix"
+          cleanup_materialized_gh() { rm -f -- "$archive" "$candidate"; }
+          trap cleanup_materialized_gh EXIT
+          umask 077
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 15 --max-time 120 --retry 2 --retry-connrefused \
+            --max-filesize "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE" \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${EVOGUARD_PINNED_GH_VERSION}/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" "$archive" | sha256sum --check
+          test "$(stat -c %s "$archive")" = "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"
+          test "$(tar -tzf "$archive" | grep -Fxc -- "$member")" -eq 1
+          tar -xOzf "$archive" "$member" > "$candidate"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$candidate" | sha256sum --check
+          test "$(stat -c %s "$candidate")" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SIZE"
+          sudo install -d -m 0755 -o root -g root "$prefix/bin"
+          sudo install -m 0555 -o root -g root "$candidate" "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a' "$prefix")" = "root:root:755"
+          test "$(stat -c '%U:%G:%a' "$prefix/bin")" = "root:root:755"
+          test -f "$EVOGUARD_PINNED_GH_EXECUTABLE" -a ! -L "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a:%h' "$EVOGUARD_PINNED_GH_EXECUTABLE")" = "root:root:555:1"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$EVOGUARD_PINNED_GH_EXECUTABLE" | sha256sum --check
+
       - name: Bind all public roots and freeze publication inputs before execution
         env:
           RAAE_PUBLIC_KEY_B64: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_PUBLIC_KEY_B64 }}
@@ -499,7 +544,7 @@ jobs:
           )" -eq 6
 
           git_executable="$(readlink -f "$(command -v git)")"
-          gh_executable="$(readlink -f "$(command -v gh)")"
+          gh_executable="$EVOGUARD_PINNED_GH_EXECUTABLE"
           ssh_executable="$(readlink -f "$(command -v ssh)")"
           ssh_keygen_executable="$(readlink -f "$(command -v ssh-keygen)")"
           for executable in "$git_executable" "$gh_executable" "$ssh_executable" "$ssh_keygen_executable"; do
@@ -997,6 +1042,43 @@ jobs:
           name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_id }}-${{ needs.preflight.outputs.g_run_attempt }}
           path: ${{ runner.temp }}/publication-ready
 
+      - name: Materialize the exact GitHub CLI bytes for draft approval
+        env:
+          EXPECTED_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EVOGUARD_PINNED_GH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_GH_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$EXPECTED_GH_SHA256" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SHA256"
+          archive="$RUNNER_TEMP/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          candidate="$RUNNER_TEMP/gh-${EVOGUARD_PINNED_GH_VERSION}"
+          member="gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64/bin/gh"
+          prefix="${EVOGUARD_PINNED_GH_EXECUTABLE%/bin/gh}"
+          test ! -e "$archive" -a ! -e "$candidate"
+          sudo test ! -e "$prefix"
+          cleanup_materialized_gh() { rm -f -- "$archive" "$candidate"; }
+          trap cleanup_materialized_gh EXIT
+          umask 077
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 15 --max-time 120 --retry 2 --retry-connrefused \
+            --max-filesize "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE" \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${EVOGUARD_PINNED_GH_VERSION}/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" "$archive" | sha256sum --check
+          test "$(stat -c %s "$archive")" = "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"
+          test "$(tar -tzf "$archive" | grep -Fxc -- "$member")" -eq 1
+          tar -xOzf "$archive" "$member" > "$candidate"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$candidate" | sha256sum --check
+          test "$(stat -c %s "$candidate")" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SIZE"
+          sudo install -d -m 0755 -o root -g root "$prefix/bin"
+          sudo install -m 0555 -o root -g root "$candidate" "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a' "$prefix")" = "root:root:755"
+          test "$(stat -c '%U:%G:%a' "$prefix/bin")" = "root:root:755"
+          test -f "$EVOGUARD_PINNED_GH_EXECUTABLE" -a ! -L "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a:%h' "$EVOGUARD_PINNED_GH_EXECUTABLE")" = "root:root:555:1"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$EVOGUARD_PINNED_GH_EXECUTABLE" | sha256sum --check
+
       - name: Recheck the closed release set without checkout, rebuild, or execution
         env:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
@@ -1059,7 +1141,11 @@ jobs:
               'git': 'git', 'gh': 'gh', 'ssh': 'ssh', 'ssh_keygen': 'ssh-keygen',
           }
           for name, command in commands.items():
-              located = shutil.which(command)
+              located = (
+                  os.environ['EVOGUARD_PINNED_GH_EXECUTABLE']
+                  if name == 'gh'
+                  else shutil.which(command)
+              )
               if located is None:
                   raise SystemExit(f'publication host tool is missing: {name}')
               path = pathlib.Path(located).resolve(strict=True)
@@ -1110,7 +1196,7 @@ jobs:
           record="$RUNNER_TEMP/publication-ready/publication-ready.json"
           tag="$(jq -er '.tag | select(type == "string")' "$record")"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          current="$("$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
           # GITHUB_TOKEN cannot receive repository Administration:read, which
           # GitHub requires for GET /immutable-releases. The repository owner
@@ -1120,7 +1206,7 @@ jobs:
           # immutable=true before H can succeed.
           test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
           set +e
-          gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
             > "$RUNNER_TEMP/draft-approval-tag.response" \
             2> "$RUNNER_TEMP/draft-approval-tag.error"
           tag_probe_rc=$?
@@ -1138,7 +1224,7 @@ jobs:
             cat "$RUNNER_TEMP/draft-approval-tag.error" >&2
             exit 1
           fi
-          if gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+          if "$EVOGUARD_PINNED_GH_EXECUTABLE" api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$tag\") | .id" | grep -q .; then
             echo "the approval refuses an existing release for $tag" >&2
             exit 1
@@ -1157,6 +1243,43 @@ jobs:
         with:
           name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_id }}-${{ needs.preflight.outputs.g_run_attempt }}
           path: ${{ runner.temp }}/publication-final
+
+      - name: Materialize the exact GitHub CLI bytes for final publication
+        env:
+          EXPECTED_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EVOGUARD_PINNED_GH_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_GH_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$EXPECTED_GH_SHA256" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SHA256"
+          archive="$RUNNER_TEMP/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          candidate="$RUNNER_TEMP/gh-${EVOGUARD_PINNED_GH_VERSION}"
+          member="gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64/bin/gh"
+          prefix="${EVOGUARD_PINNED_GH_EXECUTABLE%/bin/gh}"
+          test ! -e "$archive" -a ! -e "$candidate"
+          sudo test ! -e "$prefix"
+          cleanup_materialized_gh() { rm -f -- "$archive" "$candidate"; }
+          trap cleanup_materialized_gh EXIT
+          umask 077
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 15 --max-time 120 --retry 2 --retry-connrefused \
+            --max-filesize "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE" \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${EVOGUARD_PINNED_GH_VERSION}/gh_${EVOGUARD_PINNED_GH_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$EVOGUARD_PINNED_GH_ARCHIVE_SHA256" "$archive" | sha256sum --check
+          test "$(stat -c %s "$archive")" = "$EVOGUARD_PINNED_GH_ARCHIVE_SIZE"
+          test "$(tar -tzf "$archive" | grep -Fxc -- "$member")" -eq 1
+          tar -xOzf "$archive" "$member" > "$candidate"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$candidate" | sha256sum --check
+          test "$(stat -c %s "$candidate")" = "$EVOGUARD_PINNED_GH_EXECUTABLE_SIZE"
+          sudo install -d -m 0755 -o root -g root "$prefix/bin"
+          sudo install -m 0555 -o root -g root "$candidate" "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a' "$prefix")" = "root:root:755"
+          test "$(stat -c '%U:%G:%a' "$prefix/bin")" = "root:root:755"
+          test -f "$EVOGUARD_PINNED_GH_EXECUTABLE" -a ! -L "$EVOGUARD_PINNED_GH_EXECUTABLE"
+          test "$(stat -c '%U:%G:%a:%h' "$EVOGUARD_PINNED_GH_EXECUTABLE")" = "root:root:555:1"
+          printf '%s  %s\n' "$EXPECTED_GH_SHA256" "$EVOGUARD_PINNED_GH_EXECUTABLE" | sha256sum --check
 
       - name: Recheck the closed release set without checkout, rebuild, or execution
         env:
@@ -1220,7 +1343,11 @@ jobs:
               'git': 'git', 'gh': 'gh', 'ssh': 'ssh', 'ssh_keygen': 'ssh-keygen',
           }
           for name, command in commands.items():
-              located = shutil.which(command)
+              located = (
+                  os.environ['EVOGUARD_PINNED_GH_EXECUTABLE']
+                  if name == 'gh'
+                  else shutil.which(command)
+              )
               if located is None:
                   raise SystemExit(f'publication host tool is missing: {name}')
               path = pathlib.Path(located).resolve(strict=True)
@@ -1274,7 +1401,7 @@ jobs:
           record="$RUNNER_TEMP/publication-final/publication-ready.json"
           tag="$(jq -er '.tag | select(type == "string")' "$record")"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          current="$("$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
           test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
           prove_tag_absent() {
@@ -1284,7 +1411,7 @@ jobs:
             local probe_rc status
             [[ "$phase" =~ ^(before|after)$ ]]
             set +e
-            gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
               >"$response" 2>"$error"
             probe_rc=$?
             set -e
@@ -1303,7 +1430,7 @@ jobs:
             fi
           }
           prove_tag_absent before
-          if gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+          if "$EVOGUARD_PINNED_GH_EXECUTABLE" api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             --jq ".[] | select(.tag_name == \"$tag\") | .id" | grep -q .; then
             echo "a release for $tag already exists; H never mutates an existing release" >&2
             exit 1
@@ -1403,7 +1530,7 @@ jobs:
             set +e
             cleanup_id=""
             for cleanup_attempt in {1..10}; do
-              if ! gh api --paginate --slurp \
+              if ! "$EVOGUARD_PINNED_GH_EXECUTABLE" api --paginate --slurp \
                 "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
                 > "$RUNNER_TEMP/cleanup-release-pages.json"; then
                 echo "could not enumerate releases while cleaning the incomplete draft" >&2
@@ -1501,12 +1628,12 @@ jobs:
               fi
             done
             if [[ "$cleanup_id" =~ ^[1-9][0-9]*$ ]]; then
-              if ! gh api --method DELETE \
+              if ! "$EVOGUARD_PINNED_GH_EXECUTABLE" api --method DELETE \
                 "repos/$GITHUB_REPOSITORY/releases/$cleanup_id" >/dev/null; then
                 echo "failed to delete the uniquely attributable incomplete draft" >&2
               else
                 cleanup_confirmation="$RUNNER_TEMP/cleanup-delete-confirmation.txt"
-                gh api --include \
+                "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include \
                   "repos/$GITHUB_REPOSITORY/releases/$cleanup_id" \
                   > "$cleanup_confirmation" 2>&1
                 cleanup_get_status=$?
@@ -1531,7 +1658,7 @@ jobs:
             exit "$failure"
           }
           trap cleanup_partial_draft ERR
-          gh release create "$tag" \
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" release create "$tag" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$TARGET_SHA" \
             --title "$tag" \
@@ -1543,7 +1670,7 @@ jobs:
           prove_tag_absent after
           release_id=""
           for discovery_attempt in {1..10}; do
-            gh api --paginate --slurp \
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api --paginate --slurp \
               "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
               > "$RUNNER_TEMP/created-release-pages.json"
             if release_id="$(
@@ -1784,12 +1911,12 @@ jobs:
             local release_ok=false tag_absent=false tag_exact=false
             trap - ERR
             set +e
-            gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
               > "$RUNNER_TEMP/cleanup-exact-release.json"
             if test "$?" -eq 0; then
               release_ok=true
             fi
-            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
               > "$RUNNER_TEMP/cleanup-exact-tag.json" \
               2> "$RUNNER_TEMP/cleanup-exact-tag.error"
             tag_rc=$?
@@ -1860,7 +1987,7 @@ jobs:
                   echo "could not remove the exact deploy-key-created tag; preserving the draft for manual recovery" >&2
                   exit "$failure"
                 fi
-                gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+                "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
                   > "$RUNNER_TEMP/tag-after-cleanup.json" \
                   2> "$RUNNER_TEMP/tag-after-cleanup.error"
                 tag_after_cleanup_rc=$?
@@ -1873,7 +2000,7 @@ jobs:
                 fi
                 echo "removed the exact deploy-key-created tag after a pre-PATCH failure: $tag" >&2
               fi
-              if ! gh api --method DELETE \
+              if ! "$EVOGUARD_PINNED_GH_EXECUTABLE" api --method DELETE \
                 "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" >/dev/null; then
                 echo "tag cleanup succeeded but exact draft deletion failed; manual recovery is required" >&2
                 exit "$failure"
@@ -1921,12 +2048,12 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY.git" \
             "refs/heads/main:refs/remotes/origin/main"
           test "$(git -C "$tag_repo" rev-parse refs/remotes/origin/main)" = "$TARGET_SHA"
-          current="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          current="$("$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
           test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
-          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             > "$RUNNER_TEMP/release-before-publication.json"
-          if gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+          if "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
             > "$RUNNER_TEMP/tag-before-publication.response" \
             2> "$RUNNER_TEMP/tag-before-publication.error"; then
             tag_probe_rc=0
@@ -2020,14 +2147,14 @@ jobs:
               raise SystemExit('deploy-key push did not prove a newly created tag')
           PY
           tag_created=true
-          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
             > "$RUNNER_TEMP/tag-created-by-deploy-key.json"
           jq -e \
             --arg tag "refs/tags/$tag" \
             --arg target "$TARGET_SHA" \
             '.ref == $tag and .object.type == "commit" and .object.sha == $target' \
             "$RUNNER_TEMP/tag-created-by-deploy-key.json" >/dev/null
-          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             > "$RUNNER_TEMP/release-immediately-before-patch.json"
           RELEASE_BODY="$body" python - \
             "$record" \
@@ -2083,7 +2210,7 @@ jobs:
           # GitHub documents no conditional/CAS precondition for this PATCH.
           # Correctness therefore still depends on the frozen publication window.
           trap - ERR
-          gh api \
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" api \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             --method PATCH \
             --input "$RUNNER_TEMP/publish-request.json" \
@@ -2092,11 +2219,11 @@ jobs:
           publication_ready=false
           for attempt in {1..10}; do
             : "$attempt"
-            if gh api \
+            if "$EVOGUARD_PINNED_GH_EXECUTABLE" api \
                 -H "X-GitHub-Api-Version: 2026-03-10" \
                 "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
                 > "$RUNNER_TEMP/release-after-publication.json" \
-              && gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+              && "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
                 > "$RUNNER_TEMP/tag-after-publication.json" \
               && jq -e '.draft == false and .immutable == true' \
                 "$RUNNER_TEMP/release-after-publication.json" >/dev/null; then

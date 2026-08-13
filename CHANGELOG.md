@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0) is the latest stable and supported consumer release.
-- Source `4.6.0`: release candidate; not a consumer release.
+- Source `4.6.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -91,6 +91,17 @@ retained evidence say so.
   GitHub controls.
 
 ### Changed
+
+- Made the protected C/F/H release jobs independent of the mutable
+  hosted-runner GitHub CLI installation. Each of the seven jobs that executes
+  `gh` now performs a bounded download of the reviewed 2.97.0 archive, verifies
+  the exact archive hash/size and single member, verifies the executable
+  hash/size before and after root-owned installation, and invokes only the
+  absolute pinned path. This closes the mixed-runner rollout defect recorded
+  by the fail-closed
+  [`v4.6.0` source-admission attempt](evidence/release-operations/v4.6.0/ABORTED_SOURCE_ADMISSION_ATTEMPT.md);
+  that aborted attempt produced no signed `ALLOW`, detached verification, tag,
+  release, publication, or deployment authority.
 
 - Pinned the thirteen JSON Schema contracts introduced after `v4.5.0` to their
   prospective immutable `v4.6.0` tag URLs and added a release-identity gate.

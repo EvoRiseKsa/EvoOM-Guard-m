@@ -115,9 +115,14 @@ admission.
 5. Pin one previously published Guard runtime that already implements RSAE and
    RAAE. The URL and SHA-256 are separate trust roots; a checksum fetched from
    the same URL is not a pin.
-6. Review the canonical Git and `gh` executable hashes on `ubuntu-24.04`.
-   Source admission uses UID/GID 60001; artifact admission uses 60002. The
-   identities must not be root or `65534`.
+6. Review the canonical Git executable hash on `ubuntu-24.04`. For GitHub CLI,
+   review the official pinned archive, archive size, one exact member, and the
+   resulting executable hash/size embedded in each C/F/H workflow. Every job
+   that executes `gh` independently materializes those bytes at the fixed
+   root-owned path and invokes that path explicitly; it must not discover the
+   runner's preinstalled `/usr/bin/gh`. The externally configured `gh` digest
+   must equal the embedded executable pin. Source admission uses UID/GID 60001;
+   artifact admission uses 60002. The identities must not be root or `65534`.
 7. Establish six mutually distinct admission Ed25519 signing public-key IDs.
    Store only their public PEM values as repository variables. Establish a
    fresh per-release seventh ledger-signing identity before the trusted
