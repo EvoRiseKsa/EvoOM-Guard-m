@@ -123,6 +123,31 @@ def test_exact_spdx_relation_produces_closed_receipt() -> None:
     }
 
 
+def test_gh_2_97_quoted_identity_prefix_is_accepted_exactly() -> None:
+    raw, artifact, spdx = _fixture()
+    value = json.loads(raw)
+    patterns = verifier._github_identity_regexp_candidates(
+        f"https://github.com/{REPOSITORY}/{WORKFLOW}"
+    )
+    assert patterns == (
+        f"^https://github.com/{REPOSITORY}/{WORKFLOW}",
+        (
+            r"^https://github\.com/EvoRiseKsa/EvoOM-Guard-m/"
+            r"\.github/workflows/evoguard-build-release-artifact\.yml"
+        ),
+    )
+    value[0]["verificationResult"]["verifiedIdentity"][
+        "subjectAlternativeName"
+    ]["regexp"] = patterns[1]
+    quoted = (
+        json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+
+    assert _verify(quoted, artifact, spdx)["verification_policy"][
+        "deny_self_hosted_runners"
+    ] is True
+
+
 def test_generator_and_spdx_adapter_share_one_canonical_byte_contract() -> None:
     raw, artifact, expected_spdx = _fixture()
     spdx_value = {
@@ -164,6 +189,19 @@ def test_generator_and_spdx_adapter_share_one_canonical_byte_contract() -> None:
             lambda value: value[0]["verificationResult"]["verifiedIdentity"][
                 "subjectAlternativeName"
             ].update({"regexp": "^https://github.com/attacker/.*$"}),
+            "verified identity",
+        ),
+        (
+            lambda value: value[0]["verificationResult"]["verifiedIdentity"][
+                "subjectAlternativeName"
+            ].update(
+                {
+                    "regexp": (
+                        r"^https://github\.com/EvoRiseKsa/EvoOM-Guard-m/"
+                        r".github/workflows/evoguard-build-release-artifact.yml"
+                    )
+                }
+            ),
             "verified identity",
         ),
     ],

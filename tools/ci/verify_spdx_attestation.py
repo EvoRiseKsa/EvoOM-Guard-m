@@ -27,6 +27,7 @@ PREDICATE_TYPE = "https://spdx.dev/Document/v2.3"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 FORMAT = "EVOGUARD_GITHUB_SPDX_ATTESTATION_RECEIPT_V1"
 MAX_JSON_BYTES = 16 * 1024 * 1024
+_GO_REGEXP_META = frozenset(r"\.+*?()|[]{}^$")
 
 
 class VerificationError(ValueError):
@@ -132,6 +133,23 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _github_identity_regexp_candidates(literal_prefix: str) -> tuple[str, str]:
+    """Return the exact legacy and Go-quoted ``gh`` identity constraints.
+
+    GitHub CLI 2.97.0 began quoting regexp metacharacters in the reported
+    verified-identity prefix.  Earlier retained outputs expose the same prefix
+    without quoting.  The certificate is still checked independently against
+    the exact signer URI; accepting these two representations does not broaden
+    the admitted signer identity.
+    """
+
+    quoted = "".join(
+        f"\\{character}" if character in _GO_REGEXP_META else character
+        for character in literal_prefix
+    )
+    return f"^{literal_prefix}", f"^{quoted}"
+
+
 def verify(
     raw_data: bytes,
     artifact_data: bytes,
@@ -229,10 +247,13 @@ def verify(
         {"issuer", "regexp"},
         label="verified identity issuer",
     )
-    san_matches = identity_san == {
-        "subjectAlternativeName": "",
-        "regexp": f"^https://github.com/{repository}/{workflow_path}",
-    }
+    san_patterns = _github_identity_regexp_candidates(
+        f"https://github.com/{repository}/{workflow_path}"
+    )
+    san_matches = (
+        identity_san.get("subjectAlternativeName") == ""
+        and identity_san.get("regexp") in san_patterns
+    )
     issuer_matches = identity_issuer == {
         "issuer": "",
         "regexp": ".*",
