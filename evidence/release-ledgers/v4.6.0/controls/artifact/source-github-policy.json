@@ -1,0 +1,1 @@
+{"cert_oidc_issuer":"https://token.actions.githubusercontent.com","repository":"EvoRiseKsa/EvoOM-Guard-m","signer_digest":"d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4","signer_workflow":"EvoRiseKsa/EvoOM-Guard-m/.github/workflows/evoguard-produce-release-source-receipt.yml","source_digest":"d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4","source_ref":"refs/heads/main"}

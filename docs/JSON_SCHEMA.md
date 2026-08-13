@@ -35,9 +35,9 @@ report. Pin `schema_version`, then key decisions off `verdict` and
   published; release-candidate consumers must use and pin the checked-in schema
   bytes. A newer runtime carrying an unchanged released shape does not move its
   reference.
-- The thirteen packaged contracts introduced after `v4.5.0` carry prospective
-  `v4.6.0` tag identities. Those URLs remain unreachable until the immutable
-  release tag exists; pre-release consumers must pin the checked-in bytes. The
+- The thirteen packaged contracts introduced after `v4.5.0` carry immutable
+  `v4.6.0` tag identities. Those URLs now resolve to the published release-tag
+  bytes. The
   release-identity gate rejects a return to branch-mutable `/main/` identities.
   `change-attempt-observation-1` is the sole documented legacy exception: it
   shipped in `v4.5.0` with a `/main/` `$id`, so its exact published bytes and

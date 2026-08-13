@@ -8,16 +8,15 @@
 # Trusted Finalizer deployment kit
 
 The deployment kit turns the reviewed Trusted Finalizer reference into a
-deterministic, no-clobber consumer installation. It installs the current
-workflow pair, a public verification key, and a machine-readable manifest; it
-then checks those committed inputs and the finalizer policy without contacting
-GitHub.
+deterministic, no-clobber consumer installation. It installs the packaged
+`v4.5.0` workflow pair, a public verification key, and a machine-readable
+manifest; it then checks those committed inputs and the finalizer policy
+without contacting GitHub.
 
-This command set is repository-source behavior added after the immutable
-`v4.5.0` tag. The generated workflows deliberately download the reviewed
-`v4.5.0` runtime and bind its published zipapp SHA-256. Do not claim that the
-kit itself shipped in `v4.5.0`; use the exact source commit or a later release
-that contains this page and these commands.
+This command set was added after the immutable `v4.5.0` tag and is included in
+release `v4.6.0`. The generated workflows deliberately remain byte-bound to
+the reviewed `v4.5.0` runtime and its published zipapp SHA-256; installing the
+`v4.6.0` command does not silently upgrade that packaged workflow pair.
 
 ## Install into a new consumer repository
 

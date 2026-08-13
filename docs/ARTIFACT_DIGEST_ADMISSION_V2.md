@@ -129,7 +129,7 @@ non-regular provenance inputs, a finalizer DENY, finalizer replay, a different
 admission key, a reused finalizer/admission key, payload mutation, and
 non-canonical archive bytes.
 
-It does not close Issue 78 by itself. Current unreleased source now contains
+It does not close Issue 78 by itself. Release `v4.6.0` contains
 one narrowly defined public-GHCR provider adapter, but no protected reference
 workflow, CLI, or live OCI pilot exists, and the separate release-asset and
 production acceptance criteria remain open.
@@ -144,10 +144,10 @@ a constrained policy before it creates a V2 binding. The record must retain
 both its canonical receipt and the exact raw GitHub CLI output. Its recheck is
 byte continuity, not a new online signature verification.
 
-## Unreleased OCI provider follow-on
+## `v4.6.0` OCI provider follow-on
 
 [`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md) specifies a separate
-unreleased library path for one digest-qualified public GHCR subject. It fixes
+`v4.6.0` library path for one digest-qualified public GHCR subject. It fixes
 the provider bundle source to the OCI registry, validates an exact statement
 subject and direct same-revision branch build with an exact run/attempt,
 relates repository/source pins to externally supplied Trusted Finalizer

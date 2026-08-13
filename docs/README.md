@@ -12,11 +12,11 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
 
 ## Version boundary
 
-- **Latest published stable release:** [`v4.5.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.5.0).
-- **Ledger-recorded consumer pin:** `v4.5.0`, or commit
-  `6bb4c328e56661b661e50532886802c6ba36a997` for the strictest immutable
+- **Latest published stable release:** [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0).
+- **Ledger-recorded consumer pin:** `v4.6.0`, or commit
+  `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4` for the strictest immutable
   identity. Its canonical signed ledger is
-  [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json).
+  [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json).
 - **Repository source:** use the exact checked-out commit; its lifecycle is
   reported by the status authorities below.
 - **Status authority:** [`PROJECT_STATUS.md`](PROJECT_STATUS.md) and
@@ -25,6 +25,9 @@ product, `evo-guard` is the CLI, and `evoom_guard` is the Python package.
   and [`errata/V4.4.1-LEDGER.md`](errata/V4.4.1-LEDGER.md) record the separate
   verified publication facts, frozen validator defects, and new-release
   recovery boundaries without claiming to be ledgers.
+- **Documentation erratum:** [`errata/V4.6.0-MARKETPLACE-README.md`](errata/V4.6.0-MARKETPLACE-README.md)
+  records the pre-ledger README text frozen in the immutable `v4.6.0` tag; it
+  does not invalidate or amend the signed release ledger.
 
 Repository documentation follows the source tree and may describe behavior
 absent from the latest ledger-recorded consumer release. Advanced pages state
@@ -82,20 +85,20 @@ contract does not authorize another stage such as publication or deployment.
 
 - [`JSON_SCHEMA.md`](JSON_SCHEMA.md) — stable verdict JSON fields,
   `schema_version`, reason codes, and execution-state semantics.
-- [`BLAST_RADIUS.md`](BLAST_RADIUS.md) — frozen advisory V1 plus the unreleased,
-  explicit materialized-change V2 contract, migration, and non-claims.
+- [`BLAST_RADIUS.md`](BLAST_RADIUS.md) — frozen advisory V1 plus the
+  `v4.6.0` materialized-change V2 contract, migration, and non-claims.
 - [`ARTIFACT_ADMISSION.md`](ARTIFACT_ADMISSION.md) — narrow file-artifact
   admission V1.
 - [`ARTIFACT_DIGEST_ADMISSION_V2.md`](ARTIFACT_DIGEST_ADMISSION_V2.md) —
   digest-bound artifact admission V2.
-- [`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md) — unreleased,
+- [`ARTIFACT_PROVIDER_V3.md`](ARTIFACT_PROVIDER_V3.md) — `v4.6.0`
   library-only public-GHCR OCI provider relation layered over V2.
 - [`GITHUB_ATTESTATION_ADMISSION.md`](GITHUB_ATTESTATION_ADMISSION.md) —
   protected-boundary adapter for GitHub Artifact Attestations.
 - [`AGENT_CHANGE_ADMISSION.md`](AGENT_CHANGE_ADMISSION.md) — bind an untrusted
   agent proposal to signed scope, re-derived facts, and finalization.
 - [`ADMISSION_DECISION_ENVELOPE.md`](ADMISSION_DECISION_ENVELOPE.md) —
-  unreleased, proof-bound in-toto decision projection for a fully verified Agent
+  `v4.6.0` library-only, proof-bound in-toto decision projection for a fully verified Agent
   Change admission; it grants no external-action authority by itself.
 - [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) — project
   authenticated `ALLOW` and `DENY` attempts into one correlated,

@@ -22,7 +22,8 @@ REFERENCE_PAIRS = (
 )
 
 FROZEN_EXAMPLE_RELEASE = "v3.7.0"
-CURRENT_REFERENCE_RELEASE = "v4.5.0"
+PACKAGED_REFERENCE_RELEASE = "v4.5.0"
+CURRENT_REFERENCE_RELEASE = "v4.6.0"
 
 
 def _text(path: Path) -> str:
@@ -174,6 +175,8 @@ def test_reference_finalizer_documents_the_immutable_executable_root() -> None:
     documentation = _text(ROOT / "docs" / "TRUSTED_FINALIZER.md")
     assert "Round 1 audit" in documentation
     assert CURRENT_REFERENCE_RELEASE in documentation
+    assert PACKAGED_REFERENCE_RELEASE in documentation
+    assert "packaged no-clobber deployment kit" in documentation
     assert "SHA256SUMS" in documentation
     assert "EVOGUARD_GUARD_ARTIFACT_SHA256" in documentation
 
@@ -184,8 +187,8 @@ def test_reference_finalizer_release_downloads_are_explicit_and_versioned() -> N
         EXAMPLES_SEAL: FROZEN_EXAMPLE_RELEASE,
         WORKFLOW_REVERIFY: CURRENT_REFERENCE_RELEASE,
         WORKFLOW_SEAL: CURRENT_REFERENCE_RELEASE,
-        PACKAGED_REVERIFY: CURRENT_REFERENCE_RELEASE,
-        PACKAGED_SEAL: CURRENT_REFERENCE_RELEASE,
+        PACKAGED_REVERIFY: PACKAGED_REFERENCE_RELEASE,
+        PACKAGED_SEAL: PACKAGED_REFERENCE_RELEASE,
     }
     pattern = re.compile(
         r"https://github\.com/EvoRiseKsa/EvoOM-Guard-m/releases/download/"

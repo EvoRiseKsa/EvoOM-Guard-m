@@ -39,21 +39,24 @@ They are not enforced as required merge gates by default in this repository.
 Each consumer must apply its own branch protection, Environment/reviewer
 controls, protected Guard-artifact digest, and audit.
 
-The implementation-ready workflows download ledger-recorded release `v4.5.0`.
-Before enabling them, download that release's `evo-guard.pyz` and
+The repository-level implementation-ready workflow copies download
+ledger-recorded release `v4.6.0`. Before enabling those copies, download
+that release's `evo-guard.pyz` and
 `SHA256SUMS`, verify the manifest and release attestation, and copy the
 reviewed runtime digest into protected variable
 `EVOGUARD_GUARD_ARTIFACT_SHA256`. The workflow must not derive its trust root
 from the downloaded executable or a mutable URL.
 
 The `examples/trusted-finalizer/` pair remains a frozen v3.7.0 reference and
-must not be silently rewritten. New exercises should use `v4.5.0` (version
-`4.5.0`) or its exact commit pin and complete the audit before
-enforcement.
+must not be silently rewritten. The packaged no-clobber deployment kit
+remains byte-bound to release `v4.5.0`; `finalizer-init` does not silently
+upgrade that kit. New deployments built directly from the repository-level
+workflow copies should use `v4.6.0` (version `4.6.0`) or its exact commit
+pin and complete the audit before enforcement.
 <!-- END EVOGUARD_PROJECT_STATUS:TRUSTED_FINALIZER_RELEASE_PIN -->
-The `finalizer-init`/`finalizer-doctor` commands are post-v4.5.0 repository
-source behavior: they target the v4.5.0 runtime but must not be described as
-commands already present in the immutable v4.5.0 tag.
+The `finalizer-init`/`finalizer-doctor` commands are included in `v4.6.0`; their
+packaged kit targets the `v4.5.0` runtime and must not be described as commands
+already present in the immutable `v4.5.0` tag or as a silent kit upgrade.
 The raw-Git derivation contract is specified in
 [`TRUSTED_FINALIZER_HARDENING.md`](TRUSTED_FINALIZER_HARDENING.md). A consumer
 must deploy a release that contains this command set and update the protected
@@ -146,9 +149,9 @@ workflows do not create or publish artifact bindings. Those integrations require
 independent canonical finalizer derivation and a separately reviewed,
 provider-specific build-provenance boundary.
 
-### Unreleased public-GHCR provider relation
+### `v4.6.0` public-GHCR provider relation
 
-Current development source includes the library-only
+Release `v4.6.0` includes the library-only
 [`Artifact Provider V3`](ARTIFACT_PROVIDER_V3.md) follow-on for one canonical,
 digest-qualified public GHCR subject. It requires the attested repository and
 source digest to equal the externally supplied finalizer repository and
@@ -300,7 +303,7 @@ reserves both `trusted-finalizer-handoff` and
 bytes it verified under those roles. Callers cannot supply either reserved
 material themselves.
 
-### Python API migration for 4.6 development source
+### Python API migration in v4.6.0
 
 The high-assurance Python API now makes that raw-Git comparison impossible to
 omit accidentally:

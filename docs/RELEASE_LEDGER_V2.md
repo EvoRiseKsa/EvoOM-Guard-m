@@ -25,8 +25,7 @@ assets, admission and attestation evidence, tag CI, and repository-control
 observations. Its canonical bytes validate against the admitted parent and an
 externally supplied copy of the parent-pinned ledger public root.
 
-`v4.5.0` is the latest ledger-recorded release selected by
-[`PROJECT_STATUS.json`](../PROJECT_STATUS.json). Its canonical signed
+`v4.5.0` is retained as the previous ledger-recorded release. Its canonical signed
 [`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.5.0/RELEASE_LEDGER.json)
 binds release commit `6bb4c328e56661b661e50532886802c6ba36a997`, its sole admitted parent,
 the protected A–H run chain, the exact three-asset publication, attestations,
@@ -40,6 +39,17 @@ in the separately signed
 [`KEY_RETIREMENT.json`](../evidence/release-operations/v4.5.0/KEY_RETIREMENT.json)
 receipt. The immutable ledger remains unchanged.
 
+`v4.6.0` is the latest ledger-recorded release selected by
+[`PROJECT_STATUS.json`](../PROJECT_STATUS.json). Its canonical signed
+[`RELEASE_LEDGER.json`](../evidence/release-ledgers/v4.6.0/RELEASE_LEDGER.json)
+binds release commit `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`, its sole admitted parent,
+the protected A–H run chain, the exact three-asset publication, attestations,
+tag CI, and the bounded repository-control observation. Its canonical bytes
+validate against the admitted parent and the independently pinned `v4.6.0`
+ledger public root. The ledger records publication-authority retirement as
+`pending-post-ledger`; it does not claim that the later retirement operation
+has completed.
+
 On Python 3.10, the immutable `v4.4.2` parent validator needs the
 hash-locked `importlib-resources` compatibility backport because that frozen
 validator removes CPython's originless `typing.io` alias before loading
@@ -48,7 +58,7 @@ validator removes CPython's originless `typing.io` alias before loading
 release-promoted benchmark's exact `requirements/ci.lock` source binding. The
 post-`v4.4.2` validator rebuilds the trusted `typing` aliases and preserves the
 already inventoried PyO3 cryptography extension across its nested first-party
-boundary. These prospective compatibility repairs do not rewrite the release,
+boundary. These compatibility repairs do not rewrite the release,
 ledger, signature, or parent validator.
 
 The pre-pinned public roots alone did not establish those facts; each was only a
@@ -328,7 +338,7 @@ retirement remains intentionally pending until that ordering has completed.
    external copy exists, do not prove simultaneous repository state, and do not
    prevent a later re-addition. The release
    ledger must record publication authority retirement as pending, never as
-   already completed. The signed `v4.4.2` and `v4.5.0` ledgers record
+   already completed. The signed `v4.4.2`, `v4.5.0`, and `v4.6.0` ledgers record
    `pending-post-ledger`. As an operator procedure, commit and revalidate the
    signed ledger before removing the publication deploy-key secret and exact
    write deploy key. Then create and validate the separately signed

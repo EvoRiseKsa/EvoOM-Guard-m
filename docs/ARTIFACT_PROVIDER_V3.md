@@ -1,8 +1,8 @@
 # Artifact Provider V3 — public GHCR OCI admission
 
-`EVOGUARD_ARTIFACT_PROVIDER_RECEIPT_V3` is an **unreleased, library-only**
-provider adapter in the current development source. It is not present in the
-latest immutable consumer release, has no CLI command or reference protected
+`EVOGUARD_ARTIFACT_PROVIDER_RECEIPT_V3` is a **library-only contract released
+in `v4.6.0`**. It is present in the latest immutable consumer release but has no
+CLI command or reference protected
 workflow, and has not completed a live OCI pilot.
 
 The implementation is
