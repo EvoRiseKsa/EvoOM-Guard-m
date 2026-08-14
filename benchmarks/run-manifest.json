@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-14T18:51:40.765223Z",
+    "captured_at_utc": "2026-08-14T20:09:36.896310Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "ef08dcb440171ae3d982d4a0bebb930e2da05b98",
+    "head": "bf3eb1e4d8ee5295c82d168c01ab2c4d15cead8b",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "1eb61e791f2bb1ad173842d773b3de02a75e323f",
+      "commit": "b63f0e84f08fccabbe2897e39dbe4a4e1b73c0e3",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "ef08dcb440171ae3d982d4a0bebb930e2da05b98",
+      "commit": "bf3eb1e4d8ee5295c82d168c01ab2c4d15cead8b",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14816,
+    "bytes": 14812,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "3a3351cb2179d5f2ca2a0584fde1c49e8cf8ca46a00cd2dc868f0b9655d7172b"
+    "sha256": "f0cb9838afa6e89cc51b5e0fb063504df1f5b2bb00e03e642f2d37183e68f92e"
   },
-  "run_id": "98c394b1-cc11-44c4-b0a2-2de41efce9f4",
+  "run_id": "730a3421-4836-4230-af5a-188c0e2a3a23",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -710,9 +710,9 @@
         "sha256": "0764f5ddbdc0fbb09611de188edfff4fc4fe33ea770dfbb4df1581be52a661c9"
       },
       {
-        "bytes": 13716,
+        "bytes": 13805,
         "path": "evoom_guard/cli/init_command.py",
-        "sha256": "46e3af100a8da18e5c0c0d315f6bdc5b9992c11d64479ada1b5e5fcc144c4f2c"
+        "sha256": "ff3e391efcd69de19baea3bad46fc57e095df673c6093dc560a7c39a402f2843"
       },
       {
         "bytes": 72514,
@@ -840,9 +840,9 @@
         "sha256": "4290d22c306cf1ee7512fb839dac6b2409adeb956855378160c0351a0d1565d6"
       },
       {
-        "bytes": 5714,
+        "bytes": 8520,
         "path": "evoom_guard/execution/command.py",
-        "sha256": "e39583803d3947a3c259f53c24d05582f66fea84276e68ba77c87700168caecd"
+        "sha256": "e05c6e03834b44f0a44050542921a93f87f326074c6fa91fa8ef3fa45d53abd8"
       },
       {
         "bytes": 19898,
@@ -955,9 +955,9 @@
         "sha256": "805821d027e87957ca13011dfc57b061d67fdd7bebcecc2278a1bc38bd33b650"
       },
       {
-        "bytes": 37793,
+        "bytes": 39631,
         "path": "evoom_guard/policy/preflight.py",
-        "sha256": "3f4a3c40c841af8c417d4a87bf063eadc0806c07be27f70cd48f1f8cc9216125"
+        "sha256": "046ff8af0ebf9fa3cd3cad37703d4bc402785e8740af32716f6264b330c9c031"
       },
       {
         "bytes": 76219,
@@ -1340,9 +1340,9 @@
         "sha256": "bb799e49bf59d4fefd646722a2fc28da6d50c4103473d5c02dd24da96e074287"
       },
       {
-        "bytes": 16493,
+        "bytes": 16517,
         "path": "evoom_guard/verifiers/repo_baseline.py",
-        "sha256": "2ce1a97cd440225eba9dba44bd6864e6eab0a0f2d050cd93d21c5c94781b1b89"
+        "sha256": "c29a79fa1921e5b2a5c9a639a86ddf01a8ed4a164e21ccaec26eab5abd1bc0bb"
       },
       {
         "bytes": 14026,
@@ -1400,9 +1400,9 @@
         "sha256": "4309459242f21384b2dac486cafbaf97b26e5f4cfe6d6152e70123a460e1c5ef"
       },
       {
-        "bytes": 20533,
+        "bytes": 22315,
         "path": "evoom_guard/verifiers/repo_setup.py",
-        "sha256": "c7bc4897ef4eb7c46787a436f4d14fbdfa0e4068c206b387823d2526c1f72ef0"
+        "sha256": "8740a155a38762e9f387be7ac43a6db8cd822bea46e658635de2baa5052b972d"
       },
       {
         "bytes": 21554,
@@ -1459,13 +1459,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "9cf960d38c43172a212b05bfa50c7a1ef80a2e34a753eb30243bb5b8ae6acad0",
-    "total_bytes": 3042275
+    "sha256": "02d8065bd124564e29fb43156f434d3c6653db2b1e1b03d3b0601f54eb4dc56d",
+    "total_bytes": 3048814
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.171,
-    "guard_full_run_median_s": 0.271,
-    "guard_full_run_p95_s": 0.358,
+    "controlled_direct_pytest_median_s": 0.17,
+    "guard_full_run_median_s": 0.279,
+    "guard_full_run_p95_s": 0.283,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
