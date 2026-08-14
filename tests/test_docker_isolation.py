@@ -294,6 +294,11 @@ def test_host_setup_requires_explicit_opt_in_and_is_recorded(tmp_path, monkeypat
         setup_command=["trusted-setup", "--offline"], trust_setup_on_host=True,
     )
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
+    monkeypatch.setattr(
+        repo_verifier_module,
+        "_resolve_host_command",
+        lambda command, **_kwargs: command,
+    )
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}
