@@ -99,7 +99,7 @@
   },
   "engine_version": "4.7.0.dev0",
   "environment": {
-    "captured_at_utc": "2026-08-14T11:13:22.267558Z",
+    "captured_at_utc": "2026-08-14T18:51:40.765223Z",
     "case_interpreter": {
       "build": [
         "tags/v3.12.10:0cc8128",
@@ -277,7 +277,7 @@
     "bound_paths_match_head": false,
     "bound_paths_tracked_at_head": true,
     "dirty": true,
-    "head": "72c1b7cd99e86746732c5e4d871ea1e5801efbaf",
+    "head": "ef08dcb440171ae3d982d4a0bebb930e2da05b98",
     "observation_point": "after result assembly and before pair publication",
     "porcelain_dirty": false,
     "reason": "one_or_more_bound_paths_differ_from_head",
@@ -328,7 +328,7 @@
     "evidence_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "19281e17d0afa7c6cd806ed7516320b616b2d090",
+      "commit": "1eb61e791f2bb1ad173842d773b3de02a75e323f",
       "final_manifest_in_commit": false,
       "observation_point": "after results commit and before final manifest publication",
       "reason": "source_and_results_match_commit_final_manifest_excluded",
@@ -340,7 +340,7 @@
     "source_commit": {
       "binding": "git-commit",
       "bound": true,
-      "commit": "72c1b7cd99e86746732c5e4d871ea1e5801efbaf",
+      "commit": "ef08dcb440171ae3d982d4a0bebb930e2da05b98",
       "observation_point": "after result assembly and before pair publication",
       "reason": "clean_worktree_and_source_matches_commit",
       "source_inventory_matches_commit": true,
@@ -352,13 +352,13 @@
   },
   "results": {
     "algorithm": "sha256",
-    "bytes": 14814,
+    "bytes": 14816,
     "format": "exact file bytes",
     "path": "benchmarks/results.jsonl",
     "rows": 17,
-    "sha256": "e54a970a33a7eeeba80c7b879ec8679098f8fd478d622021e6af8762598514d3"
+    "sha256": "3a3351cb2179d5f2ca2a0584fde1c49e8cf8ca46a00cd2dc868f0b9655d7172b"
   },
-  "run_id": "0520f076-6161-423a-abe9-34085b6125ba",
+  "run_id": "98c394b1-cc11-44c4-b0a2-2de41efce9f4",
   "schema_version": "evoguard-benchmark-run-v5",
   "security_evasion_metrics": {
     "abstain": 0,
@@ -710,9 +710,9 @@
         "sha256": "0764f5ddbdc0fbb09611de188edfff4fc4fe33ea770dfbb4df1581be52a661c9"
       },
       {
-        "bytes": 12835,
+        "bytes": 13716,
         "path": "evoom_guard/cli/init_command.py",
-        "sha256": "faa8e0613741d48e0f1463e57c581406a820d75f0012923f5ebfc0a958278fae"
+        "sha256": "46e3af100a8da18e5c0c0d315f6bdc5b9992c11d64479ada1b5e5fcc144c4f2c"
       },
       {
         "bytes": 72514,
@@ -840,9 +840,9 @@
         "sha256": "4290d22c306cf1ee7512fb839dac6b2409adeb956855378160c0351a0d1565d6"
       },
       {
-        "bytes": 5194,
+        "bytes": 5714,
         "path": "evoom_guard/execution/command.py",
-        "sha256": "0b4d0c6b367527739dddb931b25b45f4b708574ab182b1b8d920993876fbbab3"
+        "sha256": "e39583803d3947a3c259f53c24d05582f66fea84276e68ba77c87700168caecd"
       },
       {
         "bytes": 19898,
@@ -955,9 +955,9 @@
         "sha256": "805821d027e87957ca13011dfc57b061d67fdd7bebcecc2278a1bc38bd33b650"
       },
       {
-        "bytes": 35624,
+        "bytes": 37793,
         "path": "evoom_guard/policy/preflight.py",
-        "sha256": "9ff58954054eff0339c7e16b19058401d37178977d676f20c4567964055baff6"
+        "sha256": "3f4a3c40c841af8c417d4a87bf063eadc0806c07be27f70cd48f1f8cc9216125"
       },
       {
         "bytes": 76219,
@@ -1459,13 +1459,13 @@
         "evoom_guard/**/*.json"
       ]
     },
-    "sha256": "e109b656b697429a00511b1e142eb00b930ec3b3ffcaf430c9e949884b61a8e8",
-    "total_bytes": 3038705
+    "sha256": "9cf960d38c43172a212b05bfa50c7a1ef80a2e34a753eb30243bb5b8ae6acad0",
+    "total_bytes": 3042275
   },
   "timing": {
-    "controlled_direct_pytest_median_s": 0.172,
-    "guard_full_run_median_s": 0.238,
-    "guard_full_run_p95_s": 0.28,
+    "controlled_direct_pytest_median_s": 0.171,
+    "guard_full_run_median_s": 0.271,
+    "guard_full_run_p95_s": 0.358,
     "pre_gate_only_median_s": 0.002,
     "scope": "diagnostic wall time for this environment; cases are not a statistically controlled performance sample"
   }
