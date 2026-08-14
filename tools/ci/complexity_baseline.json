@@ -93,11 +93,6 @@
       "max_complexity": 13
     },
     {
-      "path": "evoom_guard/cli/__init__.py",
-      "symbol": "main",
-      "max_complexity": 45
-    },
-    {
       "path": "evoom_guard/cli/guard_command.py",
       "symbol": "execute_guard_command",
       "max_complexity": 38
@@ -245,7 +240,7 @@
     {
       "path": "evoom_guard/guard.py",
       "symbol": "guard",
-      "max_complexity": 21
+      "max_complexity": 18
     },
     {
       "path": "evoom_guard/integrations/guard_output.py",

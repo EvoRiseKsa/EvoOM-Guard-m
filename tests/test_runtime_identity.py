@@ -47,6 +47,27 @@ def test_content_addition_and_deletion_have_deterministic_change_paths(tmp_path)
     assert changes == ["a.txt", "z.txt"]
 
 
+def test_cache_and_temp_names_remain_part_of_runtime_identity(tmp_path) -> None:
+    (tmp_path / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    expected = capture_runtime_identity(str(tmp_path))
+
+    generated = (
+        ("pkg/__pycache__/module.cpython-312.pyc", b"bytecode"),
+        (".pytest_cache/v/cache/lastfailed", b"{}"),
+        (".cache/tool/state", b"state"),
+        ("tmp/runtime.tmp", b"temporary"),
+    )
+    for relative_path, payload in generated:
+        path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+
+    _observed, changes = verify_runtime_identity(str(tmp_path), expected)
+
+    for relative_path, _payload in generated:
+        assert relative_path in changes
+
+
 def test_runtime_change_details_are_memory_bounded(tmp_path, monkeypatch) -> None:
     (tmp_path / "a.txt").write_text("before-a", encoding="utf-8")
     (tmp_path / "b.txt").write_text("before-b", encoding="utf-8")

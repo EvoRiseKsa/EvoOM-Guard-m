@@ -33,6 +33,36 @@ The no-Action alternative is `git diff | evo-guard guard --diff -`.
 Use `evo-guard init --ref v4.6.0 --stdout` to review the workflow first.
 <!-- END EVOGUARD_PROJECT_STATUS:ADOPTION_CURRENT_RELEASE -->
 
+### Post-v4.6.0 source: observe before enforcing
+
+Current repository source adds `preflight` and two `init` presets. They are not
+part of the immutable `v4.6.0` CLI. On an exact later build that contains them:
+
+```bash
+evo-guard preflight . --json
+evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
+  --path <workflow-path> --policy-path <trusted-policy-path>
+```
+
+The advisory scaffold keeps Guard itself on `fail-on: any-non-pass`, gives the
+candidate job read-only permissions, and uploads the actual JSON/Markdown
+evidence. A separate completeness step requires both files to be non-empty, so
+a missing or empty JSON verdict/Markdown report makes the job red. A completed
+non-`PASS` Guard step is observational when both non-empty files exist;
+checkout/setup, Action-crash, or upload failures can still make the job red.
+Keep that check non-required because requiring it admits completed non-`PASS`
+verdicts by design. After reviewing representative outcomes, promote through a
+trusted policy PR:
+
+```bash
+evo-guard init --ref <same-immutable-ref> --preset blocking --force \
+  --path <same-workflow-path> --policy-path <same-trusted-policy-path>
+```
+
+`blocking` remains the default. Preflight never executes candidate code and a
+ready report is not a `PASS`. Detailed boundary and Python/pytest cache guidance:
+[`PREFLIGHT.md`](PREFLIGHT.md).
+
 > **No repo access / no pip?** Download the single-file `evo-guard.pyz` from the
 > release assets and run `python evo-guard.pyz …` — the core is stdlib-only, so it
 > needs no clone and no install (see the README "Install" section).

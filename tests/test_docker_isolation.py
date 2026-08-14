@@ -80,6 +80,18 @@ def test_docker_command_is_isolated_and_mounts_report_separately():
     assert "--memory" in dc and dc[dc.index("--memory") + 1] == "512m"
     # the repo copy and the judge-owned report dir are separate bind mounts
     assert "-v" in dc and "/copy:/work:ro" in dc and "/out:/out:rw" in dc
+    for environment_binding in (
+        "HOME=/tmp",
+        "TMPDIR=/tmp",
+        "TEMP=/tmp",
+        "TMP=/tmp",
+        "XDG_CACHE_HOME=/tmp",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "PYTHONNOUSERSITE=1",
+    ):
+        index = dc.index(environment_binding)
+        assert dc[index - 1] == "-e"
+    assert not any(token.startswith("PYTHONPYCACHEPREFIX=") for token in dc)
     # image then the command, in order
     assert dc[-4:] == [_IMAGE_ID, "node", "--test", "x.mjs"]
 
@@ -282,6 +294,11 @@ def test_host_setup_requires_explicit_opt_in_and_is_recorded(tmp_path, monkeypat
         setup_command=["trusted-setup", "--offline"], trust_setup_on_host=True,
     )
     monkeypatch.setattr(verifier, "_resolve_docker_image", lambda: _IMAGE_ID)
+    monkeypatch.setattr(
+        repo_verifier_module,
+        "_resolve_host_command",
+        lambda command, **_kwargs: command,
+    )
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
     result = verifier.verify(
         "<<<FILE: app.py>>>\nx = 2\n<<<END FILE>>>", {"repo_path": str(tmp_path)}

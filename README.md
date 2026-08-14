@@ -34,9 +34,8 @@ Use an immutable release tag or full commit SHA in consumer repositories. Do
 not use `@main` as a production release channel.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:README_RELEASE_CHANNEL -->
-Source version `4.6.0` is on the **ledger-recorded release line**; this protected source
-tree may be a post-tag descendant and is not a new consumer release. The latest
-immutable consumer release recorded by the protected source tree is
+Source version `4.7.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
 `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its
@@ -161,6 +160,35 @@ Protect the workflow with repository rules, required checks, and appropriate
 review controls. A candidate job should not receive secrets or PR-write
 permissions. If comments are required, use a separate metadata-only job that
 never checks out or executes candidate code.
+
+### Stage a new rollout safely (current source)
+
+Repository source after `v4.6.0` adds a static readiness command and explicit
+workflow presets. Confirm they exist in the exact installed build before use:
+
+```bash
+git clone https://github.com/EvoRiseKsa/EvoOM-Guard-m.git
+cd EvoOM-Guard-m
+git checkout <reviewed-40-hex-SHA>
+python -m pip install .
+evo-guard version  # expect 4.7.0.dev0 on this source line
+evo-guard preflight . --strict --json
+evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
+  --path <workflow-path> --policy-path <trusted-policy-path>
+```
+
+The advisory workflow preserves the real fail-closed verdict and uploads its
+JSON/Markdown evidence. Both files must be non-empty: an explicit completeness
+step makes the job red if either the JSON verdict or Markdown report is absent
+or empty. A completed non-`PASS` Guard step remains observational when both
+non-empty files exist; checkout/setup failures, crashes, or upload failures can
+also make the job red.
+It is not an admission check and must not be required in branch protection,
+because requiring it admits completed non-`PASS` verdicts by design. After the
+reported prerequisites are fixed and representative outcomes are reviewed,
+regenerate with the same `--ref`, `--path`, and `--policy-path` plus
+`--preset blocking --force`, review the diff, and then require that check. See
+[Preflight and staged adoption](docs/PREFLIGHT.md).
 
 ## Choose an assurance path
 

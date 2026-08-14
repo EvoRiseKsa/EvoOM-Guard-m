@@ -112,6 +112,7 @@ from evoom_guard.domain import (
     GuardRequest,
     RepositoryInput,
     SourceIdentity,
+    unsupported_policy_requirements,
 )
 from evoom_guard.domain.decision import GuardDecision
 from evoom_guard.domain.evidence import VerificationEvidence
@@ -809,13 +810,13 @@ def guard(
     # checked X is exactly the silent-degradation failure the policy contract
     # exists to prevent. (Evidence-only requests degrade EXPLICITLY instead:
     # see the unmeasured/note records attached further down.)
-    _unsupported: list[str] = []
-    if require_demonstrated_fix and (blackbox or isolation != "subprocess"):
-        _unsupported.append("require_demonstrated_fix")
-    if min_diff_coverage is not None and (blackbox or isolation != "subprocess"):
-        _unsupported.append("min_diff_coverage")
-    if blackbox and setup_command:
-        _unsupported.append("setup_command")
+    _unsupported = unsupported_policy_requirements(
+        require_demonstrated_fix=require_demonstrated_fix,
+        min_diff_coverage=min_diff_coverage,
+        blackbox=blackbox,
+        isolation=isolation,
+        setup_command_present=bool(setup_command),
+    )
     if _unsupported:
         _mode_desc = "the black-box judge" if blackbox else f"isolation {isolation!r}"
         return GuardResult(

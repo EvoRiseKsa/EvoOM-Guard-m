@@ -24,10 +24,13 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Callable
+from types import TracebackType
 
 from evoom_guard.guard import PASS, blocks_from_dirs, guard, guard_from_diff
 
@@ -57,6 +60,23 @@ TRICKY_TEST = (
 TEST_CMD = [sys.executable, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider"]
 
 
+def _remove_test_tree(path: str) -> None:
+    """Remove Git fixtures without hiding Windows read-only object failures."""
+
+    def retry_writable(
+        operation: Callable[[str], object],
+        failed_path: str,
+        exc_info: tuple[type[BaseException], BaseException, TracebackType | None],
+    ) -> None:
+        error = exc_info[1]
+        if not isinstance(error, PermissionError):
+            raise error
+        os.chmod(failed_path, os.stat(failed_path).st_mode | stat.S_IWRITE)
+        operation(failed_path)
+
+    shutil.rmtree(path, onerror=retry_writable)
+
+
 def _make_repo(root: str) -> None:
     os.makedirs(os.path.join(root, "pkg"))
     os.makedirs(os.path.join(root, "tests"))
@@ -79,8 +99,8 @@ class MarkerCollisionTests(unittest.TestCase):
             f.write("EXTRA = 'honest edit'\n")
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.base, ignore_errors=True)
-        shutil.rmtree(self.head, ignore_errors=True)
+        _remove_test_tree(self.base)
+        _remove_test_tree(self.head)
 
     def test_blocks_from_dirs_returns_intact_content(self) -> None:
         blocks, deleted = blocks_from_dirs(self.base, self.head)
@@ -133,8 +153,8 @@ class MarkerCollisionTests(unittest.TestCase):
             self.assertEqual(deleted, [])
         finally:
             tempfile.tempdir = old_tempdir
-            shutil.rmtree(repo, ignore_errors=True)
-            shutil.rmtree(nested_tmp, ignore_errors=True)
+            _remove_test_tree(repo)
+            _remove_test_tree(nested_tmp)
 
 
 if __name__ == "__main__":

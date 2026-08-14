@@ -83,6 +83,100 @@ def test_setup_operation_order_is_frozen(tmp_path: Path) -> None:
     ]
 
 
+def test_container_setup_preparation_preserves_live_provider_order() -> None:
+    events: list[str] = []
+
+    class Trace:
+        execution_phase = "not_started"
+        execution_state = "not_started"
+        setup_isolation_evidence = None
+
+    def unavailable(*_args: Any, **_kwargs: Any) -> Any:
+        pytest.fail("unused setup service was called")
+
+    def container_name(phase: str) -> str:
+        events.append("container-name")
+        assert phase == "setup"
+        return "evoguard-setup"
+
+    def build_command(*_args: Any, **_kwargs: Any) -> list[str]:
+        events.append("build-command")
+        return ["docker", "run"]
+
+    services = repo_setup.RepoSetupServices(
+        trace=Trace(),
+        requested_isolation=lambda: events.append("requested-isolation") or "docker",
+        trust_setup_on_host=unavailable,
+        setup_output_globs=unavailable,
+        timeout=unavailable,
+        strict_harness=unavailable,
+        docker_network=unavailable,
+        docker_runtime=unavailable,
+        resolve_host_command=unavailable,
+        capture_setup_before=unavailable,
+        capture_setup_after=unavailable,
+        setup_fidelity_changes=unavailable,
+        run_host_setup=unavailable,
+        container_name=lambda: container_name,
+        build_docker_command=lambda: build_command,
+        run_docker_setup=unavailable,
+        limits=unavailable,
+        phase_isolation_evidence=unavailable,
+        distill_diagnostics=unavailable,
+    )
+
+    prepared = repo_setup._prepare_setup_execution(
+        repo_setup.RepoSetupRequest(
+            configured_command=("setup",),
+            candidate_copy="candidate",
+            files_changed=(),
+            environment={},
+            container_mode=True,
+            resolved_image="sha256:" + "a" * 64,
+        ),
+        services,
+        setup_tokens=["setup"],
+        setup_in_container=True,
+    )
+
+    assert events == ["requested-isolation", "container-name", "build-command"]
+    assert prepared.isolation == "docker"
+
+
+def test_container_setup_builder_file_not_found_is_not_relabelled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-container-builder-missing"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = repo_verifier.RepoVerifier(
+        setup_command=["setup"],
+        test_command=["suite"],
+        isolation="docker",
+        docker_image="judge:latest",
+        mem_limit_mb=0,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_resolve_docker_image",
+        lambda: "sha256:" + "a" * 64,
+    )
+    monkeypatch.setattr(
+        verifier,
+        "_docker_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            FileNotFoundError("BUILDER_FILE_MISSING")
+        ),
+    )
+
+    with pytest.raises(FileNotFoundError, match="BUILDER_FILE_MISSING"):
+        verifier.verify(
+            "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+            {"repo_path": str(source)},
+        )
+
+
 def test_trusted_launcher_failure_keeps_setup_not_started(
     tmp_path: Path,
 ) -> None:
@@ -307,6 +401,42 @@ def test_host_resolver_can_change_setup_output_globs_before_snapshot(
     assert observed == [("late/**",)]
 
 
+def test_host_setup_resolution_failure_is_a_structured_terminal_result(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source-missing-host-setup"
+    source.mkdir()
+    (source / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    verifier = repo_verifier.RepoVerifier(
+        setup_command=["missing-setup"],
+        test_command=["suite"],
+        mem_limit_mb=0,
+    )
+    monkeypatch.setattr(
+        repo_verifier,
+        "_resolve_host_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            FileNotFoundError("trusted Windows command missing")
+        ),
+    )
+    monkeypatch.setattr(
+        repo_verifier,
+        "_setup_fidelity_snapshot",
+        lambda *_args, **_kwargs: pytest.fail(
+            "resolution failure must stop before setup snapshot or execution"
+        ),
+    )
+
+    result = verifier.verify(
+        "<<<FILE: app.py>>>\nVALUE = 2\n<<<END FILE>>>",
+        {"repo_path": str(source)},
+    )
+
+    assert result.artifact["outcome"] == "setup_failed"
+    assert "setup command not found: 'missing-setup'" in result.diagnostics
+
+
 def test_pre_snapshot_can_change_timeout_but_not_effective_strict_policy(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -334,6 +464,11 @@ def test_pre_snapshot_can_change_timeout_but_not_effective_strict_policy(
         raise FileNotFoundError("controlled setup stop")
 
     monkeypatch.setattr(repo_verifier, "_setup_fidelity_snapshot", snapshot)
+    monkeypatch.setattr(
+        repo_verifier,
+        "_resolve_host_command",
+        lambda command, **_kwargs: command,
+    )
     monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", runner)
 
     result = verifier.verify(
@@ -723,6 +858,11 @@ def test_setup_keyboard_interrupt_reaches_outer_workspace_cleanup(
         return original_cleanup(workspaces, primary=primary)
 
     monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", interrupt)
+    monkeypatch.setattr(
+        repo_verifier,
+        "_resolve_host_command",
+        lambda command, **_kwargs: command,
+    )
     monkeypatch.setattr(
         repo_verifier,
         "_cleanup_repo_workspaces",

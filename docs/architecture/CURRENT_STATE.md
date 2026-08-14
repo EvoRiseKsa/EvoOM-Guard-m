@@ -41,7 +41,7 @@ facades remain unclassified debt.
 ## Refactor status
 
 - The behavior-preserving R2 extraction is complete.
-- All 44 CLI handlers delegate through typed command-family owners.
+- All 45 CLI handlers delegate through typed command-family owners.
 - The public CLI and API compatibility facades remain intentionally stable.
 - The import ratchet currently permits zero dependency cycles and zero
   cross-package private-symbol imports, with 7 mixed or not-yet-classified

@@ -168,6 +168,11 @@ def _capture(
         )
 
     monkeypatch.setattr(repo_verifier, "_run_bounded_subprocess", fake_run)
+    monkeypatch.setattr(
+        repo_verifier,
+        "_resolve_host_command",
+        lambda command, **_kwargs: command,
+    )
     result = RepoVerifier(
         test_command=list(case.test_command),
         mem_limit_mb=0,

@@ -27,9 +27,8 @@ validated security service.
 ## Public repository map
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:PROJECT_STATUS_CORE_RELEASE -->
-Source version `4.6.0` is on the **ledger-recorded release line**; this protected source
-tree may be a post-tag descendant and is not a new consumer release. The latest
-immutable consumer release recorded by the protected source tree is
+Source version `4.7.0.dev0` is **unreleased development** and is not a consumer release.
+The latest immutable consumer release recorded by the protected source tree is
 [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) at commit
 `d65f25f386fe6f4646ea8dd3cbbe1d5d889f73d4`. Its `evoguard-release-ledger-v2` ledger
 records the release assets `evo-guard.pyz`, `evo-guard.spdx.json`, `SHA256SUMS`. Its

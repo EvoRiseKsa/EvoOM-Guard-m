@@ -326,7 +326,7 @@ class ProjectStatusTests(unittest.TestCase):
         context = render_project_status.load_context(ROOT, verify_git=False)
         self.assertEqual(
             (context.status.lifecycle, context.source_version),
-            ("release-line", "4.6.0"),
+            ("unreleased-development", "4.7.0.dev0"),
         )
         self.assertEqual(context.status.relation, "descendant")
         self.assertEqual(
@@ -555,7 +555,7 @@ class ProjectStatusTests(unittest.TestCase):
         context = render_project_status.load_context(ROOT, verify_git=False)
         self.assertEqual(
             (context.status.lifecycle, context.source_version),
-            ("release-line", "4.6.0"),
+            ("unreleased-development", "4.7.0.dev0"),
         )
         self.assertEqual(context.ledger.version, "4.6.0")
         self.assertEqual(

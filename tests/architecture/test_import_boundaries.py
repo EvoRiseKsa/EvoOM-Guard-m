@@ -1276,8 +1276,11 @@ def test_cli_init_command_has_one_stdlib_owner_and_public_facades() -> None:
     owner_tree = ast.parse(owner_path.read_text(encoding="utf-8"))
     owner_functions = {node.name for node in owner_tree.body if isinstance(node, ast.FunctionDef)}
     assert owner_functions == {
+        "_advisory_ref_supported",
+        "_select_workflow",
         "execute_init_command",
         "infer_default_policy_path",
+        "render_advisory_workflow",
         "render_private_workflow",
         "render_public_workflow",
         "validate_github_actions_credential_key",
@@ -1316,6 +1319,7 @@ def test_cli_init_command_has_one_stdlib_owner_and_public_facades() -> None:
         "_github_actions_credential_key",
         "_init_command_services",
         "_workflow_yaml",
+        "_workflow_yaml_advisory",
         "_workflow_yaml_private",
         "cmd_init",
     } <= facade_functions

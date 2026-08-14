@@ -20,7 +20,7 @@ retained evidence say so.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:CHANGELOG_RELEASE_SUPPORT -->
 - [`v4.6.0`](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/v4.6.0) is the latest stable and supported consumer release.
-- Source `4.6.0`: source on the latest ledger-recorded release line.
+- Source `4.7.0.dev0`: unreleased development source; not a consumer release.
 - Earlier published versions are historical and unsupported. Their tags,
   release assets, checksums, attestations, and records remain available
   unchanged for reproducibility, verification, and rollback.
@@ -30,7 +30,36 @@ retained evidence say so.
 
 ## [Unreleased]
 
-No unreleased product changes are recorded.
+### Added
+
+- Added a non-executing `evo-guard preflight` command with typed JSON findings
+  for trusted-policy, launcher, shell-portability, Python isolated-mode,
+  pytest-cache, container-client, and common project-output risks. It never
+  runs candidate code or weakens fail-closed runtime-tree identity.
+- Added `evo-guard init --preset advisory|blocking`. The default `blocking`
+  preset preserves the existing scaffold bytes. The advisory scaffold keeps
+  Guard on `fail-on: any-non-pass`, uses read-only permissions, uploads the
+  actual JSON/Markdown evidence, requires both files to be non-empty before the
+  job can succeed, and limits non-blocking behavior to a completed Guard verdict so
+  no verdict is relabelled as `PASS`.
+
+### Fixed
+
+- Aligned `preflight` with Guard's black-box POSIX-host requirement and actual
+  `/usr/bin/env python3` launcher dependencies, including native-Windows
+  refusal for subprocess, Docker, and gVisor black-box modes.
+- Hardened preflight command and image checks against candidate-tree aliases,
+  non-native Windows `PATHEXT` scripts, non-lowercase or malformed digest pins,
+  and invalid or missing image names.
+- Added separate judge-owned scratch environments for setup, repository-suite,
+  and verifier-pack host subprocesses. Common home/temp/cache paths are now
+  directed outside the candidate copy, while the complete candidate runtime
+  tree remains bound and any persistent in-tree drift still fails closed.
+- Added actionable diagnostics for Python `-I`/`-E` commands that would ignore
+  `PYTHONDONTWRITEBYTECODE` and write `__pycache__` before a verifier-pack phase,
+  plus pytest cache and common build-output diagnostics. Runtime caches remain
+  part of the exact post-execution identity check; they are not ignored or
+  deleted.
 
 ## [4.6.0] — published 2026-08-13; signed protected-tree ledger
 

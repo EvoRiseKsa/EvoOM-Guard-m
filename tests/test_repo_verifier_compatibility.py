@@ -19,6 +19,8 @@ import subprocess
 import sys
 from unittest.mock import Mock
 
+import pytest
+
 import evoom_guard.execution.command as execution_command
 import evoom_guard.verifiers as verifiers
 import evoom_guard.verifiers.candidate_edits as candidate_edits
@@ -218,17 +220,17 @@ def test_windows_host_command_does_not_search_relative_path_entries(monkeypatch)
 
     monkeypatch.setattr(repo_verifier.os.path, "isfile", record_candidate)
 
-    resolved = repo_verifier._resolve_host_command(
-        ["python", "-m", "pytest"],
-        cwd=r"C:\candidate",
-        env={
-            "PATH": r".;candidate-tools;C:\trusted-tools",
-            "PATHEXT": ".CMD;.EXE",
-        },
-        platform="nt",
-    )
+    with pytest.raises(FileNotFoundError, match="trusted Windows host command"):
+        repo_verifier._resolve_host_command(
+            ["python", "-m", "pytest"],
+            cwd=r"C:\candidate",
+            env={
+                "PATH": r".;candidate-tools;C:\trusted-tools",
+                "PATHEXT": ".CMD;.EXE",
+            },
+            platform="nt",
+        )
 
-    assert resolved == ["python", "-m", "pytest"]
     assert checked
     assert all(path.startswith("C:\\trusted-tools\\") for path in checked)
 

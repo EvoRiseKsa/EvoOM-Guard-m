@@ -66,6 +66,9 @@ class RepoExecutionTraceTests(unittest.TestCase):
     def test_suite_timeout_records_started_but_incomplete(self) -> None:
         timeout = subprocess.TimeoutExpired(["judge"], 1)
         with mock.patch(
+            "evoom_guard.verifiers.repo_verifier._resolve_host_command",
+            side_effect=lambda command, **_kwargs: command,
+        ), mock.patch(
             "evoom_guard.verifiers.repo_verifier._run_bounded_subprocess",
             side_effect=timeout,
         ):

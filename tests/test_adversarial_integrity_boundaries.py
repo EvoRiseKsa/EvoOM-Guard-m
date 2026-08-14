@@ -222,6 +222,11 @@ def test_maven_report_set_and_pack_are_both_bound_into_composite_evidence(
             return subprocess.CompletedProcess(command, 0, "pack passed", "")
         raise AssertionError(f"unexpected command: {command!r}")
 
+    monkeypatch.setattr(
+        repo_verifier_module,
+        "_resolve_host_command",
+        lambda command, **_kwargs: command,
+    )
     monkeypatch.setattr(repo_verifier_module, "_run_bounded_subprocess", fake_run)
 
     result = RepoVerifier(test_command=["mvn", "test"], mem_limit_mb=0).verify(

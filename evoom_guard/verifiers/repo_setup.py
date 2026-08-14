@@ -191,6 +191,21 @@ class RepoSetupOutcome:
     terminal_result: VerdictResult | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedRepoSetup:
+    """Resolved execution inputs captured before the fidelity snapshot."""
+
+    command: list[str]
+    cwd: str | None
+    environment: Mapping[str, str]
+    isolation: str | None
+    container_name: str | None
+
+
+class _HostSetupCommandNotFound(Exception):
+    """Internal marker for a host setup resolver miss."""
+
+
 def _artifact(
     request: RepoSetupRequest,
     *,
@@ -232,6 +247,86 @@ def _terminal(
     )
 
 
+def _command_not_found(
+    request: RepoSetupRequest,
+    services: RepoSetupServices,
+    *,
+    setup_tokens: Sequence[str],
+    setup_in_container: bool,
+) -> RepoSetupOutcome:
+    services.trace.setup_isolation_evidence = services.phase_isolation_evidence()(
+        "unavailable" if setup_in_container else "not_run",
+        request.resolved_image,
+    )
+    return _terminal(
+        request,
+        diagnostics=(
+            f"{services.requested_isolation()} isolation requested but the "
+            "docker CLI was not found while starting setup_command"
+            if setup_in_container
+            else f"setup command not found: {setup_tokens[0]!r}"
+        ),
+        outcome=("isolation_unavailable" if setup_in_container else "setup_failed"),
+        setup_isolation=("unavailable" if setup_in_container else None),
+        isolation_evidence=(
+            {
+                "requested": services.requested_isolation(),
+                "delivered": "unavailable",
+                "image_digest": request.resolved_image,
+                "network": services.docker_network(),
+                "runtime": services.docker_runtime(),
+            }
+            if setup_in_container
+            else None
+        ),
+    )
+
+
+def _prepare_setup_execution(
+    request: RepoSetupRequest,
+    services: RepoSetupServices,
+    *,
+    setup_tokens: list[str],
+    setup_in_container: bool,
+) -> _PreparedRepoSetup:
+    """Resolve the live setup command before any fidelity observation."""
+
+    if setup_in_container:
+        setup_isolation = services.requested_isolation()
+        container_name = services.container_name()("setup")
+        return _PreparedRepoSetup(
+            command=services.build_docker_command()(
+                setup_tokens,
+                request.candidate_copy,
+                None,
+                container_name,
+                work_writable=True,
+            ),
+            cwd=None,
+            environment=os.environ.copy(),
+            isolation=setup_isolation,
+            container_name=container_name,
+        )
+
+    setup_cwd = request.candidate_copy
+    setup_environment = dict(request.environment)
+    try:
+        resolved_command = services.resolve_host_command()(
+            setup_tokens,
+            cwd=setup_cwd,
+            env=setup_environment,
+        )
+    except FileNotFoundError as exc:
+        raise _HostSetupCommandNotFound from exc
+    return _PreparedRepoSetup(
+        command=resolved_command,
+        cwd=setup_cwd,
+        environment=setup_environment,
+        isolation=("subprocess_host_opt_in" if request.container_mode else "subprocess"),
+        container_name=None,
+    )
+
+
 def execute_repo_setup(
     request: RepoSetupRequest,
     *,
@@ -249,29 +344,21 @@ def execute_repo_setup(
         setup_cmd_raw = setup_cmd_raw.split()
     setup_tokens = [str(token) for token in setup_cmd_raw]
     setup_in_container = request.container_mode and not services.trust_setup_on_host()
-    setup_name: str | None = None
-    if setup_in_container:
-        setup_isolation: str | None = services.requested_isolation()
-        setup_name = services.container_name()("setup")
-        setup_run_cmd = services.build_docker_command()(
-            setup_tokens,
-            request.candidate_copy,
-            None,
-            setup_name,
-            work_writable=True,
+    try:
+        prepared = _prepare_setup_execution(
+            request,
+            services,
+            setup_tokens=setup_tokens,
+            setup_in_container=setup_in_container,
         )
-        setup_cwd = None
-        setup_env = os.environ.copy()
-    else:
-        setup_isolation = "subprocess_host_opt_in" if request.container_mode else "subprocess"
-        setup_run_cmd = setup_tokens
-        setup_cwd = request.candidate_copy
-        setup_env = dict(request.environment)
-        setup_run_cmd = services.resolve_host_command()(
-            setup_run_cmd,
-            cwd=setup_cwd,
-            env=setup_env,
+    except _HostSetupCommandNotFound:
+        return _command_not_found(
+            request,
+            services,
+            setup_tokens=setup_tokens,
+            setup_in_container=setup_in_container,
         )
+    setup_isolation = prepared.isolation
 
     try:
         setup_before = services.capture_setup_before()(
@@ -288,13 +375,16 @@ def execute_repo_setup(
 
     try:
         if setup_in_container:
-            assert setup_name is not None
-            r_setup = services.run_docker_setup()(setup_run_cmd, setup_name)
+            assert prepared.container_name is not None
+            r_setup = services.run_docker_setup()(
+                prepared.command,
+                prepared.container_name,
+            )
         else:
             r_setup = services.run_host_setup()(
-                setup_run_cmd,
-                cwd=setup_cwd,
-                env=setup_env,
+                prepared.command,
+                cwd=prepared.cwd,
+                env=prepared.environment,
                 timeout=services.timeout(),
                 preexec_fn=(services.limits() if os.name == "posix" else None),
                 require_process_group_cleanup_proof=services.strict_harness(),
@@ -437,31 +527,11 @@ def execute_repo_setup(
             elapsed=services.timeout(),
         )
     except FileNotFoundError:
-        trace.setup_isolation_evidence = services.phase_isolation_evidence()(
-            "unavailable" if setup_in_container else "not_run",
-            request.resolved_image,
-        )
-        return _terminal(
+        return _command_not_found(
             request,
-            diagnostics=(
-                f"{services.requested_isolation()} isolation requested but the "
-                "docker CLI was not found while starting setup_command"
-                if setup_in_container
-                else f"setup command not found: {setup_tokens[0]!r}"
-            ),
-            outcome=("isolation_unavailable" if setup_in_container else "setup_failed"),
-            setup_isolation=("unavailable" if setup_in_container else None),
-            isolation_evidence=(
-                {
-                    "requested": services.requested_isolation(),
-                    "delivered": "unavailable",
-                    "image_digest": request.resolved_image,
-                    "network": services.docker_network(),
-                    "runtime": services.docker_runtime(),
-                }
-                if setup_in_container
-                else None
-            ),
+            services,
+            setup_tokens=setup_tokens,
+            setup_in_container=setup_in_container,
         )
     except OSError as exc:
         if getattr(exc, "target_exec_failed", None) is not True:

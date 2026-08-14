@@ -132,6 +132,7 @@ from evoom_guard.execution import (
 from evoom_guard.execution import (
     ProcessOutputLimitExceeded as _SubprocessOutputLimitExceeded,
 )
+from evoom_guard.execution.judge_environment import create_judge_phase_environment
 from evoom_guard.isolation import (
     DOCKER_CLEANUP_RECONCILE_ATTEMPTS as _DOCKER_CLEANUP_RECONCILE_ATTEMPTS,
 )
@@ -833,7 +834,14 @@ class RepoVerifier:
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--ulimit", "nofile=1024:1024",
             "--tmpfs", "/tmp:rw,exec",
-            "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1", "-e", "LANG=C.UTF-8",
+            "-e", "HOME=/tmp",
+            "-e", "TMPDIR=/tmp",
+            "-e", "TEMP=/tmp",
+            "-e", "TMP=/tmp",
+            "-e", "XDG_CACHE_HOME=/tmp",
+            "-e", "PYTHONDONTWRITEBYTECODE=1",
+            "-e", "PYTHONNOUSERSITE=1",
+            "-e", "LANG=C.UTF-8",
             "-v", f"{copy}:/work:{'rw' if work_writable else 'ro'}",
         ]
         if outdir is not None:
@@ -1308,8 +1316,6 @@ class RepoVerifier:
                     },
                 )
 
-            env = judge_subprocess_env(workdir)
-
             container_mode = self.isolation in ("docker", "gvisor")
             if container_mode and not self.docker_image:
                 return VerdictResult(
@@ -1363,12 +1369,13 @@ class RepoVerifier:
             setup_cmd_raw = self.setup_command or problem.get("setup_command")
             setup_isolation: str | None = None
             if setup_cmd_raw:
+                setup_env = create_judge_phase_environment(workdir, "setup")
                 setup_outcome = execute_repo_setup(
                     RepoSetupRequest(
                         configured_command=setup_cmd_raw,
                         candidate_copy=copy,
                         files_changed=tuple(changed),
-                        environment=env,
+                        environment=setup_env,
                         container_mode=container_mode,
                         resolved_image=resolved_image,
                     ),
@@ -1466,12 +1473,13 @@ class RepoVerifier:
 
             # Execute the repository suite first, but preserve runtime identity
             # verification below before any JUnit report is interpreted.
+            suite_env = create_judge_phase_environment(workdir, "repo-suite")
             suite_execution = execute_repo_suite(
                 RepoSuiteExecutionRequest(
                     candidate_copy=copy,
                     workdir=workdir,
                     files_changed=tuple(changed),
-                    environment=env,
+                    environment=suite_env,
                     container_mode=container_mode,
                     resolved_image=resolved_image,
                     pack_configured=bool(pack_dir),
@@ -1603,18 +1611,6 @@ class RepoVerifier:
             if pack_dir:
                 trace.execution_phase = "verifier_pack"
                 assert pack_snapshot is not None and pack_continuity is not None
-                pack_execution_request = RepoPackExecutionRequest(
-                    candidate_copy=copy,
-                    workdir=workdir,
-                    pack_snapshot=pack_snapshot,
-                    files_changed=tuple(changed),
-                    environment=env,
-                    container_mode=container_mode,
-                    resolved_image=resolved_image,
-                    setup_isolation=setup_isolation,
-                    suite_isolation_evidence=suite_isolation_evidence,
-                    strict_harness=strict_harness,
-                )
                 pack_execution_services = RepoPackExecutionServices(
                     trace=trace,
                     requested_isolation=lambda: self.isolation,
@@ -1658,6 +1654,22 @@ class RepoVerifier:
                             **runtime_evidence(),
                         },
                     )
+                pack_env = create_judge_phase_environment(
+                    workdir,
+                    "verifier-pack",
+                )
+                pack_execution_request = RepoPackExecutionRequest(
+                    candidate_copy=copy,
+                    workdir=workdir,
+                    pack_snapshot=pack_snapshot,
+                    files_changed=tuple(changed),
+                    environment=pack_env,
+                    container_mode=container_mode,
+                    resolved_image=resolved_image,
+                    setup_isolation=setup_isolation,
+                    suite_isolation_evidence=suite_isolation_evidence,
+                    strict_harness=strict_harness,
+                )
                 pack_execution = execute_repo_pack(
                     pack_execution_request,
                     services=pack_execution_services,
