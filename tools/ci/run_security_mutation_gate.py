@@ -7209,11 +7209,11 @@ MUTATIONS = (
         path="evoom_guard/verifiers/repo_setup.py",
         before=(
             "    if setup_in_container:\n"
-            "        setup_isolation: str | None = services.requested_isolation()\n"
+            "        setup_isolation = services.requested_isolation()\n"
         ),
         after=(
             "    if False and setup_in_container:\n"
-            "        setup_isolation: str | None = services.requested_isolation()\n"
+            "        setup_isolation = services.requested_isolation()\n"
         ),
         test=(
             "tests/test_repo_setup_characterization.py::"
