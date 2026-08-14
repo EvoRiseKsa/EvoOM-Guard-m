@@ -39,11 +39,17 @@ retained evidence say so.
 - Added `evo-guard init --preset advisory|blocking`. The default `blocking`
   preset preserves the existing scaffold bytes. The advisory scaffold keeps
   Guard on `fail-on: any-non-pass`, uses read-only permissions, uploads the
-  actual JSON/Markdown evidence, and limits non-blocking behavior to the
-  observation step so no verdict is relabelled as `PASS`.
+  actual JSON/Markdown evidence, requires both evidence files before the job
+  can succeed, and limits non-blocking behavior to a completed Guard verdict so
+  no verdict is relabelled as `PASS`.
 
 ### Fixed
 
+- Aligned `preflight` with Guard's black-box POSIX-host requirement and actual
+  `/usr/bin/env python3` launcher dependencies, including native-Windows
+  refusal for subprocess, Docker, and gVisor black-box modes.
+- Hardened preflight command and image checks against candidate-tree aliases,
+  Windows files outside `PATHEXT`, and digest syntax with no image name.
 - Added separate judge-owned scratch environments for setup, repository-suite,
   and verifier-pack host subprocesses. Common home/temp/cache paths are now
   directed outside the candidate copy, while the complete candidate runtime

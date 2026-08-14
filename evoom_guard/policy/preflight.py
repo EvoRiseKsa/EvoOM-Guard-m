@@ -170,20 +170,26 @@ def _path_is_within(root: str, path: str) -> bool:
     """Return whether one resolved executable is inside the candidate root."""
 
     try:
-        normalized_root = os.path.normcase(os.path.abspath(root))
-        normalized_path = os.path.normcase(os.path.abspath(path))
+        normalized_root = os.path.normcase(os.path.realpath(root))
+        normalized_path = os.path.normcase(os.path.realpath(path))
         return os.path.commonpath((normalized_root, normalized_path)) == normalized_root
     except ValueError:
         return False
 
 
 def _container_image_is_digest_pinned(image: str) -> bool:
-    _name, separator, digest = image.rpartition("@sha256:")
+    name, separator, digest = image.rpartition("@sha256:")
     return bool(
-        separator
+        name.strip()
+        and separator
         and len(digest) == 64
         and all(character in "0123456789abcdefABCDEF" for character in digest)
     )
+
+
+def _container_image_has_reference_name(image: str) -> bool:
+    name, separator, _digest = image.rpartition("@sha256:")
+    return bool((name if separator else image).strip())
 
 
 def _command_after_known_launcher(command: Sequence[str]) -> tuple[str, ...]:
@@ -548,6 +554,17 @@ def _policy_checks(
                 remediation="configure a digest-pinned verifier_pack",
             )
         )
+    if blackbox and windows:
+        checks.append(
+            PreflightCheck(
+                code="policy.blackbox_posix_host_required",
+                status="error",
+                message=(
+                    "black-box candidate launching currently requires a POSIX host"
+                ),
+                remediation="use GitHub Actions/Linux or WSL on Windows",
+            )
+        )
     if isolation in {"docker", "gvisor"}:
         checks.extend(_container_policy_checks(isolation, docker_image))
     host_strict_harness = isolation == "subprocess" or (
@@ -591,6 +608,16 @@ def _container_policy_checks(
             message="container isolation has a configured image reference",
         )
     ]
+    if not _container_image_has_reference_name(docker_image):
+        checks.append(
+            PreflightCheck(
+                code="policy.container_image_invalid_reference",
+                status="error",
+                message="container image reference has no image name",
+                remediation="use <registry>/<image>@sha256:<64-hex-digest>",
+            )
+        )
+        return checks
     if not _container_image_is_digest_pinned(docker_image):
         checks.append(
             PreflightCheck(
@@ -869,6 +896,8 @@ def analyze_preflight(
     operating_profile: str | None = None,
     profile_violations: Sequence[str] = (),
     platform_name: str | None = None,
+    blackbox_launcher_env_executable: str = "/usr/bin/env",
+    blackbox_launcher_python_executable: str = "python3",
     which: Callable[[str], str | None] | None = None,
     is_directory: Callable[[str], bool] | None = None,
 ) -> PreflightReport:
@@ -920,37 +949,65 @@ def analyze_preflight(
             ),
         )
     )
-    checks.append(
-        PreflightCheck(
-            code="test_command.nonempty",
-            status="pass" if normalized else "error",
-            message=(
-                "the effective test command is non-empty"
-                if normalized
-                else "the effective test command is empty"
-            ),
-            remediation=None if normalized else "configure a non-empty argv test_command",
+    repo_suite_enabled = not blackbox_only
+    if repo_suite_enabled:
+        checks.append(
+            PreflightCheck(
+                code="test_command.nonempty",
+                status="pass" if normalized else "error",
+                message=(
+                    "the effective test command is non-empty"
+                    if normalized
+                    else "the effective test command is empty"
+                ),
+                remediation=(
+                    None if normalized else "configure a non-empty argv test_command"
+                ),
+            )
         )
-    )
-    checks.extend(_raw_command_checks(raw_command))
-    if normalized:
-        executable = normalized[0]
-        if isolation == "subprocess":
-            checks.extend(_platform_launcher_checks(executable, windows=windows))
+        checks.extend(_raw_command_checks(raw_command))
+        if normalized:
+            executable = normalized[0]
+            if isolation == "subprocess":
+                checks.extend(_platform_launcher_checks(executable, windows=windows))
+                checks.extend(
+                    _host_command_checks(
+                        repository=repository,
+                        executable=executable,
+                        locate=locate,
+                        code_prefix="test_command",
+                    )
+                )
+            else:
+                checks.extend(
+                    _container_command_checks(
+                        repository=repository,
+                        executable=executable,
+                        locate=locate,
+                    )
+                )
+    else:
+        checks.append(
+            PreflightCheck(
+                code="test_command.not_used_blackbox_only",
+                status="info",
+                message=(
+                    "blackbox-only skips the repository suite, so its test_command "
+                    "is not analyzed"
+                ),
+            )
+        )
+    if blackbox and not windows:
+        for executable, code_prefix in (
+            (blackbox_launcher_env_executable, "blackbox_launcher_env"),
+            (blackbox_launcher_python_executable, "blackbox_launcher_python"),
+        ):
             checks.extend(
                 _host_command_checks(
                     repository=repository,
                     executable=executable,
                     locate=locate,
-                    code_prefix="test_command",
-                )
-            )
-        else:
-            checks.extend(
-                _container_command_checks(
-                    repository=repository,
-                    executable=executable,
-                    locate=locate,
+                    code_prefix=code_prefix,
                 )
             )
     checks.extend(
@@ -962,7 +1019,6 @@ def analyze_preflight(
             locate=locate,
         )
     )
-    repo_suite_enabled = not blackbox_only
     runtime_continuity_required = verifier_pack_configured and repo_suite_enabled
     checks.extend(
         _runtime_continuity_checks(

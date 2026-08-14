@@ -21,6 +21,7 @@ _POSIX_JOIN = posixpath.join
 
 SCHEMA_VERSION = "cli-init-command-characterization-v1"
 CASE_NAMES = (
+    "advisory_stdout",
     "conventional_final_dirname_rebinds_join",
     "custom_path_existing_policy",
     "existing_workflow_refused",
@@ -117,13 +118,17 @@ def _args_for(case_name: str) -> argparse.Namespace:
         github_actions_credential_key="EVOGUARD_TOKEN",
         path="/repo/.github/workflows/evoguard.yml",
         policy_path=None,
+        preset="blocking",
         private_evoguard=False,
         ref="v9.9.9",
         stdout=False,
         test_command="python -m pytest -q",
     )
     args._property_side_effects = {}
-    if case_name == "custom_path_existing_policy":
+    if case_name == "advisory_stdout":
+        args.preset = "advisory"
+        args.stdout = True
+    elif case_name == "custom_path_existing_policy":
         args.path = "/repo/custom/guard.yml"
     elif case_name == "explicit_policy_path":
         args.policy_path = "/trusted/policy.json"
@@ -172,6 +177,7 @@ def capture_case(case_name: str) -> dict[str, object]:
     original_open = getattr(cli, "open", missing)
     originals = {
         "abspath": cli.os.path.abspath,
+        "advisory_workflow": cli._workflow_yaml_advisory,
         "basename": cli.os.path.basename,
         "credential": cli._github_actions_credential_key,
         "default_policy": cli._default_policy_path,
@@ -283,6 +289,10 @@ def capture_case(case_name: str) -> dict[str, object]:
         events.append({"op": "public-workflow", "ref": ref})
         return originals["public_workflow"](ref)
 
+    def advisory_workflow(ref: str) -> str:
+        events.append({"op": "advisory-workflow", "ref": ref})
+        return originals["advisory_workflow"](ref)
+
     def private_workflow(ref: str, credential_key: str = "EVOGUARD_TOKEN") -> str:
         events.append(
             {
@@ -308,6 +318,7 @@ def capture_case(case_name: str) -> dict[str, object]:
     cli.open = open_text
     cli._github_actions_credential_key = validate_credential
     cli._default_policy_path = default_policy
+    cli._workflow_yaml_advisory = advisory_workflow
     cli._workflow_yaml = public_workflow
     cli._workflow_yaml_private = private_workflow
 
@@ -523,6 +534,7 @@ def capture_case(case_name: str) -> dict[str, object]:
         cli.json.dump = originals["dump"]
         cli._github_actions_credential_key = originals["credential"]
         cli._default_policy_path = originals["default_policy"]
+        cli._workflow_yaml_advisory = originals["advisory_workflow"]
         cli._workflow_yaml = originals["public_workflow"]
         cli._workflow_yaml_private = originals["private_workflow"]
         if original_open is missing:

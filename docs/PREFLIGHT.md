@@ -31,6 +31,8 @@ problems such as:
 
 - a missing test launcher or container client;
 - a POSIX-shell command on a standard Windows host;
+- black-box mode on native Windows, or a missing `/usr/bin/env`/`python3`
+  launcher dependency on a POSIX host;
 - quoted string commands whose arguments would be lost by compatibility
   whitespace splitting;
 - Python `-I`/`-E` without explicit `-B` when a repository suite must preserve
@@ -83,8 +85,9 @@ evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
 The generated workflow still invokes the Action with
 `fail-on: "any-non-pass"`. Step-level `continue-on-error` makes a *completed*
 Guard non-`PASS` observational, then the workflow uploads the actual JSON and
-Markdown evidence. Checkout/setup failures, Action crashes, missing evidence,
-or upload failures can still make the job red. It has read-only permissions,
+Markdown evidence. A separate completeness step requires both files; missing
+either the JSON verdict or Markdown report makes the job red. Checkout/setup
+failures, Action crashes, or upload failures can also make the job red. It has read-only permissions,
 does not comment, and receives no credential. Do not make this check required
 in branch protection: doing so admits completed non-`PASS` verdicts by design.
 

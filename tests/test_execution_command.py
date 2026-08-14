@@ -128,3 +128,25 @@ def test_locate_windows_command_does_not_accept_relative_path_shadow(
         env={"PATH": r".;candidate-tools", "PATHEXT": ".CMD;.EXE"},
         platform="nt",
     ) is None
+
+
+def test_locate_windows_explicit_script_requires_pathex_support(monkeypatch) -> None:
+    script = r"C:\trusted-tools\runner.py"
+    monkeypatch.setattr(command_module.os.path, "isfile", lambda path: path == script)
+
+    assert command_module.locate_host_command(
+        script,
+        env={"PATH": r"C:\trusted-tools", "PATHEXT": ".CMD;.EXE"},
+        platform="nt",
+    ) is None
+
+
+def test_locate_windows_explicit_script_accepts_declared_pathex(monkeypatch) -> None:
+    script = r"C:\trusted-tools\runner.py"
+    monkeypatch.setattr(command_module.os.path, "isfile", lambda path: path == script)
+
+    assert command_module.locate_host_command(
+        script,
+        env={"PATH": r"C:\trusted-tools", "PATHEXT": "CMD;EXE;PY"},
+        platform="nt",
+    ) == script

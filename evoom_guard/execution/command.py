@@ -14,6 +14,17 @@ from __future__ import annotations
 
 import ntpath
 import os
+from collections.abc import Mapping
+
+
+def _windows_executable_extensions(search_env: Mapping[str, str]) -> tuple[str, ...]:
+    """Return the normalized executable suffixes honored by this resolver."""
+
+    return tuple(
+        extension if extension.startswith(".") else f".{extension}"
+        for item in search_env.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";")
+        if (extension := item.strip())
+    )
 
 
 def resolve_host_command(
@@ -43,12 +54,7 @@ def resolve_host_command(
 
     executable = command[0]
     search_env = os.environ if env is None else env
-    raw_extensions = search_env.get("PATHEXT", ".COM;.EXE;.BAT;.CMD")
-    extensions = tuple(
-        ext if ext.startswith(".") else f".{ext}"
-        for item in raw_extensions.split(";")
-        if (ext := item.strip())
-    )
+    extensions = _windows_executable_extensions(search_env)
 
     def existing_candidate(base: str) -> str | None:
         direct = (
@@ -115,7 +121,14 @@ def locate_host_command(
                 if ntpath.isabs(executable)
                 else ntpath.join(active_cwd, executable)
             )
-            return candidate if os.path.isfile(candidate) else None
+            extensions = _windows_executable_extensions(search_env)
+            suffix = ntpath.splitext(candidate)[1].casefold()
+            return (
+                candidate
+                if suffix in {extension.casefold() for extension in extensions}
+                and os.path.isfile(candidate)
+                else None
+            )
         return None
 
     if "/" in executable:

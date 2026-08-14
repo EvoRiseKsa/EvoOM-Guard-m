@@ -178,9 +178,11 @@ evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
 ```
 
 The advisory workflow preserves the real fail-closed verdict and uploads its
-JSON/Markdown evidence. A completed non-`PASS` Guard step is observational;
-checkout/setup failures, crashes, or missing evidence can still make the job
-red. It is not an admission check and must not be required in branch protection,
+JSON/Markdown evidence. Both files are required: an explicit completeness step
+makes the job red if either the JSON verdict or Markdown report is absent. A
+completed non-`PASS` Guard step remains observational when both files exist;
+checkout/setup failures, crashes, or upload failures can also make the job red.
+It is not an admission check and must not be required in branch protection,
 because requiring it admits completed non-`PASS` verdicts by design. After the
 reported prerequisites are fixed and representative outcomes are reviewed,
 regenerate with the same `--ref`, `--path`, and `--policy-path` plus

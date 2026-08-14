@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from evoom_guard.policy.preflight import analyze_preflight, normalize_test_command
 
 
@@ -284,6 +286,98 @@ def test_blackbox_only_suppresses_irrelevant_repo_suite_write_blockers(
     assert "runtime_write.continuity_not_required" in _codes(report, "pass")
 
 
+def test_blackbox_only_skips_unused_test_command_and_checks_candidate_launcher(
+    tmp_path: Path,
+) -> None:
+    located: list[str] = []
+
+    def locate(executable: str) -> str | None:
+        located.append(executable)
+        return {
+            "/usr/bin/env": "/usr/bin/env",
+            "python3": "/trusted/bin/python3",
+        }.get(executable)
+
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("missing-repo-runner",),
+        raw_command='missing-repo-runner "quoted argument"',
+        blackbox=True,
+        blackbox_only=True,
+        verifier_pack_configured=True,
+        platform_name="linux",
+        which=locate,
+    )
+
+    assert report.ready
+    assert located == ["/usr/bin/env", "python3"]
+    assert "test_command.not_used_blackbox_only" in _codes(report, "info")
+    assert "test_command.executable_available" not in _codes(report)
+    assert "test_command.lossy_string_split" not in _codes(report)
+    assert "blackbox_launcher_env.executable_available" in _codes(report, "pass")
+    assert "blackbox_launcher_python.executable_available" in _codes(
+        report,
+        "pass",
+    )
+
+
+@pytest.mark.parametrize(
+    ("missing", "expected_code"),
+    (
+        ("/usr/bin/env", "blackbox_launcher_env.executable_available"),
+        ("python3", "blackbox_launcher_python.executable_available"),
+    ),
+)
+def test_blackbox_only_missing_actual_candidate_launcher_dependency_is_a_blocker(
+    tmp_path: Path,
+    missing: str,
+    expected_code: str,
+) -> None:
+    resolved: dict[str, str | None] = {
+        "/usr/bin/env": "/usr/bin/env",
+        "python3": "/trusted/bin/python3",
+    }
+    resolved[missing] = None
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("unused-repo-runner",),
+        blackbox=True,
+        blackbox_only=True,
+        verifier_pack_configured=True,
+        platform_name="linux",
+        which=resolved.get,
+    )
+
+    assert not report.ready
+    assert expected_code in _codes(report, "error")
+
+
+@pytest.mark.parametrize("isolation", ("subprocess", "docker", "gvisor"))
+def test_windows_blackbox_matches_guard_posix_host_refusal(
+    tmp_path: Path,
+    isolation: str,
+) -> None:
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("unused-repo-runner",),
+        isolation=isolation,
+        docker_image=(
+            "python@sha256:" + "a" * 64
+            if isolation in {"docker", "gvisor"}
+            else None
+        ),
+        blackbox=True,
+        blackbox_only=True,
+        verifier_pack_configured=True,
+        platform_name="win32",
+        which=_which("docker"),
+    )
+
+    assert not report.ready
+    assert "policy.blackbox_posix_host_required" in _codes(report, "error")
+    assert "test_command.executable_available" not in _codes(report)
+
+
 def test_project_output_runner_is_blocked_under_exact_continuity(
     tmp_path: Path,
 ) -> None:
@@ -359,6 +453,43 @@ def test_bare_command_resolved_inside_candidate_is_warned(tmp_path: Path) -> Non
         report,
         "warning",
     )
+
+
+def test_resolved_alias_into_candidate_is_warned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alias = tmp_path.parent / "trusted-alias"
+    candidate_runner = tmp_path / "runner"
+    original_realpath = __import__("os").path.realpath
+
+    def resolve_alias(path: str) -> str:
+        return str(candidate_runner) if path == str(alias) else original_realpath(path)
+
+    monkeypatch.setattr("evoom_guard.policy.preflight.os.path.realpath", resolve_alias)
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("runner",),
+        which=lambda _executable: str(alias),
+    )
+
+    assert "test_command.candidate_relative_executable" in _codes(
+        report,
+        "warning",
+    )
+
+
+def test_container_digest_pin_requires_nonempty_image_name(tmp_path: Path) -> None:
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("python",),
+        isolation="docker",
+        docker_image="@sha256:" + "a" * 64,
+        which=_which("docker"),
+    )
+
+    assert "policy.container_image_invalid_reference" in _codes(report, "error")
+    assert not report.ready
 
 
 def test_policy_compatibility_and_windows_strict_harness_are_blockers(
