@@ -80,6 +80,18 @@ def test_docker_command_is_isolated_and_mounts_report_separately():
     assert "--memory" in dc and dc[dc.index("--memory") + 1] == "512m"
     # the repo copy and the judge-owned report dir are separate bind mounts
     assert "-v" in dc and "/copy:/work:ro" in dc and "/out:/out:rw" in dc
+    for environment_binding in (
+        "HOME=/tmp",
+        "TMPDIR=/tmp",
+        "TEMP=/tmp",
+        "TMP=/tmp",
+        "XDG_CACHE_HOME=/tmp",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "PYTHONNOUSERSITE=1",
+    ):
+        index = dc.index(environment_binding)
+        assert dc[index - 1] == "-e"
+    assert not any(token.startswith("PYTHONPYCACHEPREFIX=") for token in dc)
     # image then the command, in order
     assert dc[-4:] == [_IMAGE_ID, "node", "--test", "x.mjs"]
 

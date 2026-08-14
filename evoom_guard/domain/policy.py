@@ -21,6 +21,30 @@ def is_verifier_pack_sha256(value: object) -> bool:
     return isinstance(value, str) and _SHA256_HEX.fullmatch(value) is not None
 
 
+def unsupported_policy_requirements(
+    *,
+    require_demonstrated_fix: bool,
+    min_diff_coverage: float | None,
+    blackbox: bool,
+    isolation: str,
+    setup_command_present: bool,
+) -> tuple[str, ...]:
+    """Return gates that the selected judge path cannot enforce.
+
+    Guard and the static preflight command share this predicate so preflight
+    cannot report a policy ready when Guard will deterministically refuse it.
+    """
+
+    unsupported: list[str] = []
+    if require_demonstrated_fix and (blackbox or isolation != "subprocess"):
+        unsupported.append("require_demonstrated_fix")
+    if min_diff_coverage is not None and (blackbox or isolation != "subprocess"):
+        unsupported.append("min_diff_coverage")
+    if blackbox and setup_command_present:
+        unsupported.append("setup_command")
+    return tuple(unsupported)
+
+
 @dataclass(frozen=True, slots=True)
 class EffectivePolicy:
     """Immutable policy values that shape one Guard judgment.
@@ -137,4 +161,5 @@ __all__ = [
     "OPERATING_PROFILES",
     "is_verifier_pack_sha256",
     "operating_profile_violations",
+    "unsupported_policy_requirements",
 ]

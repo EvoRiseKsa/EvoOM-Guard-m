@@ -6,7 +6,7 @@
       "main"
     ],
     "exit_code": 2,
-    "stderr_sha256": "54092e63d445431545c055c005a2bd27b12d3ec6451224266465db514d7067e1",
+    "stderr_sha256": "70cf1984cfecb567e334d29d5aa35a0b9b51d74f370d611c1be6ec35a8d5df0e",
     "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "live_helper_contract": {
@@ -99,10 +99,10 @@
     }
   },
   "program": "evo-guard",
-  "root_help_sha256": "10d73e2c5fb367287080d6f7c1a61adb9e2ae6777e7602e2d27b70b46a648657",
+  "root_help_sha256": "82c512aa1a41eb233719bacac4ca3e2c49ab8f8c1f19e131c608524f8c73547d",
   "schema": 1,
-  "structure_sha256": "c9f439c7af4cc739e5dff7a5818d262ab51aa27f4aa0c81dca5a80fd88440ddb",
-  "subcommand_count": 44,
+  "structure_sha256": "401cec02e8a008b31540422c1af730fedb7c7b9e741a1112777a82554ce3b7e6",
+  "subcommand_count": 45,
   "subcommand_help_sha256": {
     "bundle-evidence": "caa11579b59a4566c1a710c84d1b5344db0bf8a8fb88a3ccd96afb19b1329b6d",
     "create-release-source-producer-receipt": "2f98fd6826cab1e4c14c085911d238a1ab81b42f46cc2fca6a95e0d661b8cb9c",
@@ -116,9 +116,10 @@
     "finalizer-init": "c35ed3015fa0f9f7e4b146e9bc30f81d853718d937381f6e74a9f5a4ad1d28aa",
     "github-attestation-receipt": "8dc64e35a591c954ff298107edd3a715ee4173bb23b234d2c66aaa22e224e88d",
     "guard": "f5fffbdaadeae404d71334b8cbcdd8733d5d99fe6889427fa33087c0e864a06e",
-    "init": "d0ada6eefa63aea75d7cae5af84dfd64fe2a0774a7d2ee9b56450854400c875a",
+    "init": "38c21a12ac93bc04632bedab03949fed8a2e3434b8cebd6654a776e332211da9",
     "keygen": "ec54bd619f261d096d2934989cd4abfe124e8027476e3a49d74dad3ff24bad18",
     "pack-doctor": "7f436467312daa810c729888830922387ed9e6109199123a5bb506f715884c9d",
+    "preflight": "94457a9fb4015dde575d0345b9c25ddc34aabb1ca83e952ae639718ce438b654",
     "project-change-attempt-observation": "c3d8af16cb2cd2e6ee900290f7034846f0bdc94356ff8f3cd410ae8ac8971d1f",
     "release-source-handoff": "428b6c756eca37af82472e43bf56ff5af750d1a210d6d281a013cd2c88c0877e",
     "reverify-attested-release-source-producer-receipt": "c3787dc7fcff2b921a95c1685674473bc4328e034d5576126a2223161bfdf453",
@@ -165,6 +166,7 @@
     "init",
     "keygen",
     "pack-doctor",
+    "preflight",
     "project-change-attempt-observation",
     "release-source-handoff",
     "reverify-attested-release-source-producer-receipt",

@@ -117,7 +117,7 @@ toward these owned packages:
 4. Finish migration of flat compatibility modules into their owning packages.
    Keep flat modules as import-only facades during one documented deprecation
    window; do not add new behavior to them.
-5. Group the 44 CLI handlers into stable command families:
+5. Group the 45 CLI handlers into stable command families:
    `guard`, `evidence`, `finalize`, `artifact`, `release`, and `diagnose`.
    Release commands remain an advanced extension rather than the onboarding
    surface.

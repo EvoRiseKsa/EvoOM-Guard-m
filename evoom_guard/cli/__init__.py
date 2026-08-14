@@ -11,6 +11,8 @@ Subcommands:
   * ``evo-guard guard`` — verify a candidate change against a repo's selected
     judge, rejecting edits/deletions to the active protected path set.
   * ``evo-guard verify-record`` — verify a verdict's structural/semantic contract.
+  * ``evo-guard preflight`` — inspect policy and runner readiness without
+    executing candidate code.
   * ``evo-guard verify-bundle`` — authenticate a portable verdict envelope.
   * ``evo-guard finalize-record`` — seal a semantic record against trusted context.
   * ``evo-guard finalizer-handoff`` — bind a re-verification record to source metadata.
@@ -92,6 +94,7 @@ from evoom_guard.cli import (
 from evoom_guard.cli import guard_command as _guard_command_owner
 from evoom_guard.cli import init_command as _init_command_owner
 from evoom_guard.cli import parser as _parser_owner
+from evoom_guard.cli import preflight_commands as _preflight_command_owner
 from evoom_guard.cli import record_commands as _record_command_owner
 from evoom_guard.cli import (
     release_artifact_admission_commands as _release_artifact_admission_command_owner,
@@ -111,6 +114,7 @@ from evoom_guard.domain import (
     is_verifier_pack_sha256,
     operating_profile_violations,
 )
+from evoom_guard.execution import locate_host_command
 from evoom_guard.pack_manifest import (
     PACK_DIGEST_FORMAT,
     PackManifestError,
@@ -121,6 +125,7 @@ from evoom_guard.pack_manifest import (
 from evoom_guard.policy.config import ConfigError
 from evoom_guard.policy.config import load_config as _load_config
 from evoom_guard.policy.harness import HarnessInputPolicyError
+from evoom_guard.policy.preflight import analyze_preflight, normalize_test_command
 
 if TYPE_CHECKING:
     from evoom_guard.evidence_bundle import EvidenceMaterial
@@ -650,6 +655,34 @@ def cmd_doctor(args: argparse.Namespace, *, out: Callable[[str], None] = print) 
     )
 
 
+def cmd_preflight(
+    args: argparse.Namespace,
+    *,
+    out: Callable[[str], None] = print,
+) -> int:
+    """Inspect trusted policy and runner risks without executing candidate code."""
+
+    return _preflight_command_owner.execute_preflight(
+        args,
+        services=_preflight_command_owner.PreflightServices(
+            load_config=_load_config,
+            config_error_type=lambda: ConfigError,
+            normalize_command=normalize_test_command,
+            analyze=analyze_preflight,
+            validate_pack=validate_pack,
+            is_pack_sha256=is_verifier_pack_sha256,
+            locate_executable=lambda executable, cwd: locate_host_command(
+                executable,
+                cwd=cwd,
+                env=dict(os.environ),
+                platform=os.name,
+            ),
+            operating_profile_violations=operating_profile_violations,
+        ),
+        out=out,
+    )
+
+
 def cmd_finalizer_init(
     args: argparse.Namespace, *, out: Callable[[str], None] = print
 ) -> int:
@@ -694,6 +727,11 @@ def _workflow_yaml(ref: str) -> str:
     return _init_command_owner.render_public_workflow(ref)
 
 
+def _workflow_yaml_advisory(ref: str) -> str:
+    """The non-blocking, evidence-preserving workflow scaffold."""
+    return _init_command_owner.render_advisory_workflow(ref)
+
+
 def _workflow_yaml_private(ref: str, credential_key: str = "EVOGUARD_TOKEN") -> str:
     """Refuse the historical secret-bearing private pull-request scaffold."""
     return _init_command_owner.render_private_workflow(ref, credential_key)
@@ -719,6 +757,7 @@ def _init_command_services() -> _init_command_owner.InitCommandServices:
     return _init_command_owner.InitCommandServices(
         validate_credential_key_provider=lambda: _github_actions_credential_key,
         render_public_workflow_provider=lambda: _workflow_yaml,
+        render_advisory_workflow_provider=lambda: _workflow_yaml_advisory,
         render_private_workflow_provider=lambda: _workflow_yaml_private,
         default_policy_path_provider=lambda: _default_policy_path,
         path_exists_provider=lambda: os.path.exists,
@@ -2470,95 +2509,65 @@ def main(argv: list[str] | None = None) -> int:
     """The ``evo-guard`` entry point. Returns a process exit code."""
     _configure_stdio()
     args = build_parser().parse_args(argv)
-    if args.command == "guard":
-        return cmd_guard(args)
-    if args.command == "doctor":
-        return cmd_doctor(args)
-    if args.command == "finalizer-init":
-        return cmd_finalizer_init(args)
-    if args.command == "finalizer-doctor":
-        return cmd_finalizer_doctor(args)
-    if args.command == "init":
-        return cmd_init(args)
-    if args.command == "keygen":
-        return cmd_keygen(args)
-    if args.command == "verify-verdict":
-        return cmd_verify_verdict(args)
-    if args.command == "verify-record":
-        return cmd_verify_record(args)
-    if args.command == "bundle-evidence":
-        return cmd_bundle_evidence(args)
-    if args.command == "finalize-record":
-        return cmd_finalize_record(args)
-    if args.command == "finalizer-handoff":
-        return cmd_finalizer_handoff(args)
-    if args.command == "derive-finalizer-bindings":
-        return cmd_derive_finalizer_bindings(args)
-    if args.command == "verify-finalizer-bindings":
-        return cmd_verify_finalizer_bindings(args)
-    if args.command == "seal-finalizer":
-        return cmd_seal_finalizer(args)
-    if args.command == "verify-finalized":
-        return cmd_verify_finalized(args)
-    if args.command == "project-change-attempt-observation":
-        return cmd_project_change_attempt_observation(args)
-    if args.command == "validate-agent-change-proposal":
-        return cmd_validate_agent_change_proposal(args)
-    if args.command == "derive-agent-change-bindings":
-        return cmd_derive_agent_change_bindings(args)
-    if args.command == "seal-agent-change-authorization":
-        return cmd_seal_agent_change_authorization(args)
-    if args.command == "seal-agent-change-finalized":
-        return cmd_seal_agent_change_finalized(args)
-    if args.command == "verify-agent-change-finalized":
-        return cmd_verify_agent_change_finalized(args)
-    if args.command == "release-source-handoff":
-        return cmd_release_source_handoff(args)
-    if args.command == "seal-release-source-finalizer":
-        return cmd_seal_release_source_finalizer(args)
-    if args.command == "verify-release-source-finalized":
-        return cmd_verify_release_source_finalized(args)
-    if args.command == "derive-release-source-controls":
-        return cmd_derive_release_source_controls(args)
-    if args.command == "create-release-source-producer-receipt":
-        return cmd_create_release_source_producer_receipt(args)
-    if args.command == "verify-release-source-producer-receipt":
-        return cmd_verify_release_source_producer_receipt(args)
-    if args.command == "reverify-attested-release-source-producer-receipt":
-        return cmd_reverify_attested_release_source_producer_receipt(args)
-    if args.command == "seal-release-source-admission":
-        return cmd_seal_release_source_admission(args)
-    if args.command == "verify-release-source-admission":
-        return cmd_verify_release_source_admission(args)
-    if args.command == "seal-github-release-artifact-admission":
-        return cmd_seal_github_release_artifact_admission(args)
-    if args.command == "verify-github-release-artifact-admission":
-        return cmd_verify_github_release_artifact_admission(args)
-    if args.command == "seal-artifact-admission":
-        return cmd_seal_artifact_admission(args)
-    if args.command == "verify-artifact-admission":
-        return cmd_verify_artifact_admission(args)
-    if args.command == "seal-artifact-digest-admission":
-        return cmd_seal_artifact_digest_admission(args)
-    if args.command == "verify-artifact-digest-admission":
-        return cmd_verify_artifact_digest_admission(args)
-    if args.command == "github-attestation-receipt":
-        return cmd_github_attestation_receipt(args)
-    if args.command == "verify-github-attestation-receipt":
-        return cmd_verify_github_attestation_receipt(args)
-    if args.command == "reverify-github-attestation-receipt":
-        return cmd_reverify_github_attestation_receipt(args)
-    if args.command == "seal-github-attestation-admission":
-        return cmd_seal_github_attestation_admission(args)
-    if args.command == "verify-github-attestation-admission":
-        return cmd_verify_github_attestation_admission(args)
-    if args.command == "verify-bundle":
-        return cmd_verify_bundle(args)
-    if args.command == "pack-doctor":
-        return cmd_pack_doctor(args)
-    if args.command == "version":
-        return cmd_version(args)
-    return 2  # unreachable: subparser is required
+    handlers: dict[str, Callable[[argparse.Namespace], int]] = {
+        "guard": cmd_guard,
+        "doctor": cmd_doctor,
+        "preflight": cmd_preflight,
+        "finalizer-init": cmd_finalizer_init,
+        "finalizer-doctor": cmd_finalizer_doctor,
+        "init": cmd_init,
+        "keygen": cmd_keygen,
+        "verify-verdict": cmd_verify_verdict,
+        "verify-record": cmd_verify_record,
+        "bundle-evidence": cmd_bundle_evidence,
+        "finalize-record": cmd_finalize_record,
+        "finalizer-handoff": cmd_finalizer_handoff,
+        "derive-finalizer-bindings": cmd_derive_finalizer_bindings,
+        "verify-finalizer-bindings": cmd_verify_finalizer_bindings,
+        "seal-finalizer": cmd_seal_finalizer,
+        "verify-finalized": cmd_verify_finalized,
+        "project-change-attempt-observation": cmd_project_change_attempt_observation,
+        "validate-agent-change-proposal": cmd_validate_agent_change_proposal,
+        "derive-agent-change-bindings": cmd_derive_agent_change_bindings,
+        "seal-agent-change-authorization": cmd_seal_agent_change_authorization,
+        "seal-agent-change-finalized": cmd_seal_agent_change_finalized,
+        "verify-agent-change-finalized": cmd_verify_agent_change_finalized,
+        "release-source-handoff": cmd_release_source_handoff,
+        "seal-release-source-finalizer": cmd_seal_release_source_finalizer,
+        "verify-release-source-finalized": cmd_verify_release_source_finalized,
+        "derive-release-source-controls": cmd_derive_release_source_controls,
+        "create-release-source-producer-receipt": cmd_create_release_source_producer_receipt,
+        "verify-release-source-producer-receipt": cmd_verify_release_source_producer_receipt,
+        "reverify-attested-release-source-producer-receipt": (
+            cmd_reverify_attested_release_source_producer_receipt
+        ),
+        "seal-release-source-admission": cmd_seal_release_source_admission,
+        "verify-release-source-admission": cmd_verify_release_source_admission,
+        "seal-github-release-artifact-admission": (
+            cmd_seal_github_release_artifact_admission
+        ),
+        "verify-github-release-artifact-admission": (
+            cmd_verify_github_release_artifact_admission
+        ),
+        "seal-artifact-admission": cmd_seal_artifact_admission,
+        "verify-artifact-admission": cmd_verify_artifact_admission,
+        "seal-artifact-digest-admission": cmd_seal_artifact_digest_admission,
+        "verify-artifact-digest-admission": cmd_verify_artifact_digest_admission,
+        "github-attestation-receipt": cmd_github_attestation_receipt,
+        "verify-github-attestation-receipt": cmd_verify_github_attestation_receipt,
+        "reverify-github-attestation-receipt": (
+            cmd_reverify_github_attestation_receipt
+        ),
+        "seal-github-attestation-admission": cmd_seal_github_attestation_admission,
+        "verify-github-attestation-admission": (
+            cmd_verify_github_attestation_admission
+        ),
+        "verify-bundle": cmd_verify_bundle,
+        "pack-doctor": cmd_pack_doctor,
+        "version": cmd_version,
+    }
+    handler = handlers.get(args.command)
+    return handler(args) if handler is not None else 2
 
 
 if __name__ == "__main__":

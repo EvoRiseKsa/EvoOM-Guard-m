@@ -26,6 +26,12 @@ exact base-owned `harness_inputs` path, or an ancestor of that path is rejected
 before the suite runs. Platform-ambiguous candidate spellings are unsafe, and
 existing filesystem aliases are checked where the host can compare identity.
 
+Before spending a real attempt on an unfamiliar repository, post-`v4.6.0`
+source builds provide `evo-guard preflight`. It statically checks trusted policy,
+launcher portability, and common runtime-write hazards without applying a patch
+or running candidate code. It cannot produce `PASS` and does not weaken the
+runtime identity check. See [`PREFLIGHT.md`](PREFLIGHT.md).
+
 ## What it checks
 
 | Verdict | Meaning |
@@ -543,7 +549,12 @@ snapshot drift is `TAMPERED verifier_pack_snapshot_changed`; persistent prepared
 candidate-runtime drift across the repo/pack phases is
 `TAMPERED candidate_tree_changed_during_run`. In host subprocess mode these are
 pre/post observations, **not** an OS sandbox or secrecy guarantee. Repo-native
-pack pytest may import candidate code and retains
+setup, suite, and pack subprocesses receive separate judge-owned home/temp/cache
+directories outside the candidate copy. This reduces incidental writes but does
+not exempt any in-tree cache, temporary file, or build output from runtime
+identity. Python `-I`/`-E` may ignore `PYTHON*` environment settings; use the
+static `preflight` command and an explicit `-B` where it reports that risk.
+Repo-native pack pytest may import candidate code and retains
 `report_integrity: same_process_candidate_writable`; only black-box mode moves
 the verdict producer outside the candidate process.
 

@@ -96,3 +96,35 @@ def test_posix_and_empty_commands_are_unchanged(monkeypatch) -> None:
     ) == ["vitest", "run"]
     assert command_module.resolve_host_command([], platform="nt") == []
     isfile.assert_not_called()
+
+
+def test_locate_windows_command_uses_absolute_path_entries_only(monkeypatch) -> None:
+    concrete = r"C:\trusted-tools\shadow.CMD"
+    monkeypatch.setattr(
+        command_module.os.path,
+        "isfile",
+        lambda path: path == concrete,
+    )
+
+    assert command_module.locate_host_command(
+        "shadow",
+        cwd=r"C:\candidate",
+        env={
+            "PATH": r".;candidate-tools;C:\trusted-tools",
+            "PATHEXT": ".CMD;.EXE",
+        },
+        platform="nt",
+    ) == concrete
+
+
+def test_locate_windows_command_does_not_accept_relative_path_shadow(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(command_module.os.path, "isfile", lambda _path: True)
+
+    assert command_module.locate_host_command(
+        "shadow",
+        cwd=r"C:\candidate",
+        env={"PATH": r".;candidate-tools", "PATHEXT": ".CMD;.EXE"},
+        platform="nt",
+    ) is None

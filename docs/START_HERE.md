@@ -12,6 +12,13 @@ For a merge-blocking or hostile-input deployment, read
 below demonstrate mechanisms; only the documented operating profile and
 separate finalizer determine whether a result is advisory or admissible.
 
+For a new rollout using a post-`v4.6.0` build, first run the non-executing
+[`preflight`](PREFLIGHT.md) check and use the generated advisory preset to
+observe real verdicts without making them merge authority. Promote to the
+blocking preset only through a trusted policy change after the evidence is
+understood. The immutable `v4.6.0` CLI itself predates `preflight` and the new
+`init --preset` option; the base `init` command existed earlier.
+
 EvoOM Guard has one job: *did this software change satisfy the selected judge
 without gaming the evidence?* AI-generated patches are the primary use case, but
 the mechanism does not depend on whether an AI, a human, or a bot authored the

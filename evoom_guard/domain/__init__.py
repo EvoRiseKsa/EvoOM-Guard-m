@@ -40,6 +40,7 @@ from evoom_guard.domain.policy import (
     EffectivePolicy,
     is_verifier_pack_sha256,
     operating_profile_violations,
+    unsupported_policy_requirements,
 )
 from evoom_guard.domain.request import (
     CandidateInput,
@@ -86,6 +87,7 @@ __all__ = [
     "canonical_materialized_change_v2_bytes",
     "materialized_change_set_v2",
     "operating_profile_violations",
+    "unsupported_policy_requirements",
     "PackPhaseResult",
     "RepositoryInput",
     "RepositorySuiteEvidence",

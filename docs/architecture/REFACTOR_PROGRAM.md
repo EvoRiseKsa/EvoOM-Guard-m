@@ -422,7 +422,7 @@ remain in their established facades.
   behavior.
 - Declarative parser construction is now owned by dependency-free
   `cli/parser.py` behind the unchanged public facade. A frozen snapshot binds
-  all 44 subcommands, help pages, representative defaults, immutable-ref
+  all 45 subcommands, help pages, representative defaults, immutable-ref
   validation, and live injected helper lookups.
 - The first command-family extraction moves only the public `guard` command's
   policy resolution, input routing, and output publication into the typed,
@@ -520,7 +520,7 @@ remain in their established facades.
    The detached verifier contract has no environment, Git/gh executable,
    repository, provider-isolation, private-key, signing-operation, or
    output-mutation capability.
-- All 44 CLI handlers now delegate through typed owners; this behavior-preserving
+- All 45 CLI handlers now delegate through typed owners; this behavior-preserving
   command-family extraction phase is complete.
 - The first Stage-10 ownership-classification slice assigns four cohesive,
   stdlib-only flat modules without moving their established import paths:
@@ -615,8 +615,8 @@ remain in their established facades.
 
 <!-- BEGIN EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 Machine-readable status: behavior-preserving R2 is **complete**; CLI handler extraction
-is **complete**; the overall refactor program is **in-progress**. Source version `4.6.0`
-is on the ledger-recorded release line.
+is **complete**; the overall refactor program is **in-progress**. Source version
+`4.7.0.dev0` remains unreleased.
 <!-- END EVOGUARD_PROJECT_STATUS:REFACTOR_PROGRAM_STATUS -->
 - Extract evidence primitives and finalizer/admission domain packages.
 - Expand action scripts, offline mode, release ledger and SBOM assets. The

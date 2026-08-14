@@ -76,3 +76,68 @@ def resolve_host_command(
         if resolved:
             return [resolved, *command[1:]]
     return list(command)
+
+
+def locate_host_command(
+    executable: str,
+    *,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    platform: str | None = None,
+) -> str | None:
+    """Locate one executable using the same search boundary as execution.
+
+    On Windows this delegates to :func:`resolve_host_command`, so bare
+    commands never inherit ``shutil.which``'s candidate-working-directory
+    behavior and relative ``PATH`` entries remain ignored.  On POSIX it mirrors
+    ``execvpe`` lookup, including relative ``PATH`` entries resolved from the
+    subprocess working directory.
+    """
+
+    if not executable:
+        return None
+    active_platform = os.name if platform is None else platform
+    search_env = dict(os.environ if env is None else env)
+    active_cwd = os.getcwd() if cwd is None else cwd
+
+    if active_platform == "nt":
+        resolved = resolve_host_command(
+            [executable],
+            cwd=active_cwd,
+            env=search_env,
+            platform="nt",
+        )[0]
+        if resolved != executable:
+            return resolved
+        if "/" in executable or "\\" in executable:
+            candidate = (
+                executable
+                if ntpath.isabs(executable)
+                else ntpath.join(active_cwd, executable)
+            )
+            return candidate if os.path.isfile(candidate) else None
+        return None
+
+    if "/" in executable:
+        candidate = (
+            executable
+            if os.path.isabs(executable)
+            else os.path.join(active_cwd, executable)
+        )
+        return (
+            candidate
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK)
+            else None
+        )
+
+    for item in search_env.get("PATH", "").split(os.pathsep):
+        directory = item or active_cwd
+        if not os.path.isabs(directory):
+            directory = os.path.join(active_cwd, directory)
+        candidate = os.path.join(directory, executable)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+__all__ = ["locate_host_command", "resolve_host_command"]

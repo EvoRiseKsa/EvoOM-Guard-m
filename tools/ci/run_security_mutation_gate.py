@@ -7187,14 +7187,8 @@ MUTATIONS = (
     Mutation(
         name="repo-setup-no-command-guard-bypass",
         path="evoom_guard/verifiers/repo_verifier.py",
-        before=(
-            "            if setup_cmd_raw:\n"
-            "                setup_outcome = execute_repo_setup(\n"
-        ),
-        after=(
-            "            if True:\n"
-            "                setup_outcome = execute_repo_setup(\n"
-        ),
+        before="            if setup_cmd_raw:\n",
+        after="            if True:\n",
         test=(
             "tests/test_repo_setup_characterization.py::"
             "test_no_setup_command_performs_no_setup_specific_attribute_lookups"

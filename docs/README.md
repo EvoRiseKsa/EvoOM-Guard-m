@@ -41,6 +41,7 @@ production channel.
 |---|---|---|
 | Evaluate the product quickly | [`START_HERE.md`](START_HERE.md) | [`ASSURANCE.md`](ASSURANCE.md) |
 | Add the gate to a repository | [`ADOPTION.md`](ADOPTION.md) | [`GUARD.md`](GUARD.md) |
+| Check readiness and stage a non-blocking rollout | [`PREFLIGHT.md`](PREFLIGHT.md) | [`ADOPTION.md`](ADOPTION.md) |
 | Judge a CLI externally | [`BLACKBOX.md`](BLACKBOX.md) | [`VERIFIER_PACKS.md`](VERIFIER_PACKS.md) |
 | Design a production deployment | [`PRODUCTION_BLUEPRINT.md`](PRODUCTION_BLUEPRINT.md) | [`PRODUCTION_OPERATIONS.md`](PRODUCTION_OPERATIONS.md) |
 | Review security claims | [`ASSURANCE.md`](ASSURANCE.md) | [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) |
@@ -56,6 +57,8 @@ production channel.
   Trusted Finalizer path.
 - [`ADOPTION.md`](ADOPTION.md) — install, configure, and interpret the gate in a
   consumer repository.
+- [`PREFLIGHT.md`](PREFLIGHT.md) — statically diagnose runner risks and move
+  from read-only observation to a required blocking check.
 - [`CASE-STUDY.md`](CASE-STUDY.md) — reconstruct a bounded historical upstream
   bug-fix demonstration.
 - [`../SUPPORT.md`](../SUPPORT.md) — route product questions, bug reports,

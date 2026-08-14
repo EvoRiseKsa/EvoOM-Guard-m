@@ -1588,6 +1588,98 @@ def build_parser(
         help="emit the environment report as JSON instead of human text",
     )
 
+    # ----- preflight ----------------------------------------------------- #
+    pf_p = sub.add_parser(
+        "preflight",
+        help="inspect repository policy and runner readiness without executing code",
+    )
+    pf_p.add_argument(
+        "repo",
+        nargs="?",
+        default=".",
+        help="trusted repository root to inspect (default: current directory)",
+    )
+    pf_config = pf_p.add_mutually_exclusive_group()
+    pf_config.add_argument(
+        "--config",
+        default=None,
+        help="trusted policy path (default: <repo>/.evoguard.json when present)",
+    )
+    pf_config.add_argument(
+        "--no-config",
+        action="store_true",
+        help="inspect built-in defaults without reading repository policy",
+    )
+    pf_p.add_argument(
+        "--test-command",
+        default=None,
+        help="override the policy command for static analysis only",
+    )
+    pf_p.add_argument(
+        "--isolation",
+        choices=("subprocess", "docker", "gvisor"),
+        default=None,
+        help="override the configured runner boundary for static analysis",
+    )
+    pf_p.add_argument(
+        "--verifier-pack",
+        default=None,
+        help="declare that a verifier pack will follow the repository suite",
+    )
+    pf_p.add_argument(
+        "--expect-verifier-pack-sha256",
+        default=None,
+        help="expected EVOGUARD_PACK_V2 identity for the selected verifier pack",
+    )
+    pf_blackbox = pf_p.add_mutually_exclusive_group()
+    pf_blackbox.add_argument(
+        "--blackbox",
+        dest="blackbox",
+        action="store_const",
+        const=True,
+        default=None,
+        help="model the external black-box judge path",
+    )
+    pf_blackbox.add_argument(
+        "--no-blackbox",
+        dest="blackbox",
+        action="store_const",
+        const=False,
+        help="override blackbox=true from policy for this static analysis",
+    )
+    pf_p.add_argument(
+        "--docker-image",
+        default=None,
+        help="override the configured image used for docker/gVisor readiness",
+    )
+    pf_suite = pf_p.add_mutually_exclusive_group()
+    pf_suite.add_argument(
+        "--blackbox-only",
+        dest="blackbox_only",
+        action="store_const",
+        const=True,
+        default=None,
+        help="model a run that skips the repository suite",
+    )
+    pf_suite.add_argument(
+        "--repo-suite",
+        dest="blackbox_only",
+        action="store_const",
+        const=False,
+        help="model a run that keeps the repository suite",
+    )
+    pf_p.add_argument(
+        "--strict",
+        action="store_true",
+        help="return nonzero for unresolved warnings as well as deterministic errors",
+    )
+    pf_p.add_argument(
+        "--json",
+        dest="preflight_json",
+        action="store_true",
+        help="emit the typed preflight report as JSON",
+    )
+
     # ----- pack-doctor ---------------------------------------------------- #
     pd_p = sub.add_parser(
         "pack-doctor",
@@ -1612,6 +1704,13 @@ def build_parser(
         "--test-command", dest="test_command", default="python -m pytest -q",
         help="test command to write into the trusted .evoguard.json policy "
         "(default: python -m pytest -q; the -m form puts the repo root on sys.path)",
+    )
+    i_p.add_argument(
+        "--preset",
+        choices=("blocking", "advisory"),
+        default=argparse.SUPPRESS,
+        help="generated workflow posture: blocking (default, admission check) or "
+        "advisory (non-blocking observation with uploaded evidence)",
     )
     i_p.add_argument(
         "--policy-path", default=None,

@@ -295,7 +295,7 @@ The second CLI slice gives declarative parser construction a dependency-free
 owner in `evoom_guard/cli/parser.py`. The public `cli.build_parser` facade
 injects the current immutable-release validator and four argument-group helpers
 for each invocation, so no callable is snapshotted across monkeypatches. A
-re-runnable frozen characterization binds parser structure, 44 subcommands,
+re-runnable frozen characterization binds parser structure, 45 subcommands,
 all help output, representative defaults, and immutable-ref rejection.
 Handlers, dispatch, file/process effects, and command-family ownership remain
 in `cli/__init__.py`.
@@ -307,9 +307,10 @@ dependency-injected `evoom_guard/cli/diagnostic_commands.py`. The public
 
 Initialization and workflow generation are owned by the stdlib-only,
 dependency-injected `evoom_guard/cli/init_command.py`. It owns the exact public
-and private workflow templates, credential-name validation, policy-path
+blocking/advisory workflow templates, refusal of the unsafe private scaffold,
+credential-name validation, policy-path
 inference, and the established non-transactional write sequence. The public
-`_github_actions_credential_key`, `_workflow_yaml`,
+`_github_actions_credential_key`, `_workflow_yaml`, `_workflow_yaml_advisory`,
 `_workflow_yaml_private`, `_default_policy_path`, and `cmd_init` facades remain
 at their historical import path. They inject providers that return the live
 callable for every path, filesystem, template, and JSON operation. The owner
@@ -320,6 +321,12 @@ workflow and policy bytes, short-circuits, output order, propagated open,
 write, dump, and context-exit failures, nested path lookup order, property-read
 side effects, and all those lookup points. Parser ref validation and command
 dispatch remain outside this owner.
+
+Static repository readiness is split deliberately: read-only, effect-injected
+policy analysis lives in `evoom_guard/policy/preflight.py`, while trusted config/override resolution,
+verifier-pack validation, and CLI rendering live in the dependency-injected
+`evoom_guard/cli/preflight_commands.py` owner. Neither owner executes candidate
+code or changes Guard's runtime identity boundary.
 
 Signing-key generation is owned by the stdlib-only, dependency-injected
 `evoom_guard/cli/signing_commands.py`. The public `cmd_keygen` facade keeps the
