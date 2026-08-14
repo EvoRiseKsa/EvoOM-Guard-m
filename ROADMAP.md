@@ -260,6 +260,13 @@ assets were published.
 Future work is driven by verified adoption, real threat cases, and observed user
 needs — not feature accumulation. The order matters:
 
+For this evidence cycle, feature and protocol growth is frozen. Until the
+independent-evidence gates below are closed, repository work is limited to
+security fixes, release/support maintenance, compatibility corrections, and
+evidence or evaluation tooling that does not widen the product authority
+boundary. A proposed exception must be documented and reviewed before it is
+implemented; an issue or prototype alone does not lift the freeze.
+
 1. **Current artifact boundary.** The `v4.6.0` signed ledger records a bounded,
    completed protected A-H operation over the actual zipapp, SPDX SBOM,
    checksum manifest, and resulting publication. This advances the recorded
@@ -272,13 +279,12 @@ needs — not feature accumulation. The order matters:
    release ledger grants production OCI or deployment authority.
    [Issue #78](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/78) remains
    open pending the real OCI evidence and its other acceptance paths.
-2. **Independent evidence.** The
-   [`review-v4.1.0-r1` companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.1.0-r1)
-   remains a frozen historical target whose exact release artifacts remain
-   immutable. The current
+2. **Independent evidence.** The immutable
+   [`review-v4.5.0-r1` companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.5.0-r1)
+   remains a frozen historical aid for the unsupported `v4.5.0` release. The
    [security-review request #141](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
-   must be retargeted to the immutable `v4.6.0` release; neither record is evidence
-   that an independent review occurred. The separate
+   targets the immutable `v4.6.0` release. Neither the historical companion nor
+   the open request is evidence that an independent review occurred. The separate
    [current field-pilot #266](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/266)
    must pre-register **64–96 total cases**, including at least **48 held-out**
    and **16 tuning** cases. Each subset must span at least four repositories

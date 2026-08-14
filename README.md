@@ -63,11 +63,12 @@ The repository documentation follows the repository source and may describe
 features not present in the latest ledger-recorded consumer release. Confirm
 each page's version and evidence boundary before copying a command.
 
-For external review of the frozen `v4.5.0` target, use the immutable
+The open [independent-review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141)
+targets the immutable `v4.6.0` release. It is a request for external review,
+not evidence that such a review has occurred. The immutable
 [`review-v4.5.0-r1` reviewer companion](https://github.com/EvoRiseKsa/EvoOM-Guard-m/releases/tag/review-v4.5.0-r1)
-and the open [independent-review request](https://github.com/EvoRiseKsa/EvoOM-Guard-m/issues/141).
-The companion contains review metadata and instructions, not an audit result
-or a product update, and it does not cover `v4.6.0`. `EvoRiseKsa` and `MANA-awam` are controlled by the same
+remains a historical review aid for the now-unsupported `v4.5.0` release and
+does not cover `v4.6.0`. `EvoRiseKsa` and `MANA-awam` are controlled by the same
 owner; their cross-account evidence is not independent validation.
 
 The immutable `v4.6.0` tag preserves the README bytes that existed before its

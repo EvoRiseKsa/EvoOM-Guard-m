@@ -44,6 +44,7 @@ production channel.
 | Judge a CLI externally | [`BLACKBOX.md`](BLACKBOX.md) | [`VERIFIER_PACKS.md`](VERIFIER_PACKS.md) |
 | Design a production deployment | [`PRODUCTION_BLUEPRINT.md`](PRODUCTION_BLUEPRINT.md) | [`PRODUCTION_OPERATIONS.md`](PRODUCTION_OPERATIONS.md) |
 | Review security claims | [`ASSURANCE.md`](ASSURANCE.md) | [`REWARD_HACKING_CATALOG.md`](REWARD_HACKING_CATALOG.md) |
+| Inspect the prospective semantic extraction boundary | [`SEMANTIC_CORE_EXTRACTION_PLAN.md`](SEMANTIC_CORE_EXTRACTION_PLAN.md) | [`CANDIDATE_TEXT_MAP_IDENTITY_V2.md`](CANDIDATE_TEXT_MAP_IDENTITY_V2.md) |
 | Integrate machine-readable evidence | [`JSON_SCHEMA.md`](JSON_SCHEMA.md) | [`RECORD_VERIFICATION.md`](RECORD_VERIFICATION.md) |
 | Consume signed positive and negative attempts | [`CHANGE_ATTEMPT_OBSERVATION.md`](CHANGE_ATTEMPT_OBSERVATION.md) | [`adr/0009-change-attempt-observation-v1.md`](adr/0009-change-attempt-observation-v1.md) |
 | Maintain or release the project | [`GOVERNANCE.md`](GOVERNANCE.md) | [`RELEASE_TRUST_PIPELINE.md`](RELEASE_TRUST_PIPELINE.md) |
