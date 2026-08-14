@@ -762,8 +762,8 @@ def test_candidate_can_create_a_readonly_git_object():
     original_mkdtemp = repo_verifier.tempfile.mkdtemp
     allocations: list[str] = []
 
-    def recording_mkdtemp(*, prefix: str) -> str:
-        path = original_mkdtemp(prefix=prefix)
+    def recording_mkdtemp(*, prefix: str, dir: str | None = None) -> str:
+        path = original_mkdtemp(prefix=prefix, dir=dir)
         allocations.append(path)
         return path
 
