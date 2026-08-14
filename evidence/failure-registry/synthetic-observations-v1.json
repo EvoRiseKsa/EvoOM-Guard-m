@@ -1,7 +1,7 @@
 {
   "$schema": "./synthetic-failure-observation-registry-v1.schema.json",
   "schema_version": "evoguard-synthetic-failure-observation-registry-v1",
-  "registry_id": "synthetic-benchmark-0520f076-6161-423a-abe9-34085b6125ba",
+  "registry_id": "synthetic-benchmark-98c394b1-cc11-44c4-b0a2-2de41efce9f4",
   "scope": {
     "source_class": "synthetic",
     "evidence_quality": "self_consistent_unattributed",
@@ -13,26 +13,26 @@
   "benchmark_binding": {
     "repository": "EvoRiseKsa/EvoOM-Guard-m",
     "benchmark_id": "live-labelled-corpus-global-phases-contained-worker-v5",
-    "run_id": "0520f076-6161-423a-abe9-34085b6125ba",
+    "run_id": "98c394b1-cc11-44c4-b0a2-2de41efce9f4",
     "engine_version": "4.7.0.dev0",
     "source": {
-      "commit": "72c1b7cd99e86746732c5e4d871ea1e5801efbaf",
-      "inventory_sha256": "e109b656b697429a00511b1e142eb00b930ec3b3ffcaf430c9e949884b61a8e8",
+      "commit": "ef08dcb440171ae3d982d4a0bebb930e2da05b98",
+      "inventory_sha256": "9cf960d38c43172a212b05bfa50c7a1ef80a2e34a753eb30243bb5b8ae6acad0",
       "corpus_sha256": "c473c62bf92c0faeb48bb56ec266d9b0d6adfe9f3ffb3ff45d91a813c3a1fd59",
       "case_count": 17
     },
     "evidence": {
-      "commit": "19281e17d0afa7c6cd806ed7516320b616b2d090",
+      "commit": "1eb61e791f2bb1ad173842d773b3de02a75e323f",
       "results_path": "benchmarks/results.jsonl",
-      "results_sha256": "e54a970a33a7eeeba80c7b879ec8679098f8fd478d622021e6af8762598514d3",
-      "results_bytes": 14814,
+      "results_sha256": "3a3351cb2179d5f2ca2a0584fde1c49e8cf8ca46a00cd2dc868f0b9655d7172b",
+      "results_bytes": 14816,
       "result_rows": 17
     },
     "finalization": {
-      "commit": "e223d12afe50300729608ec72652d2a6987334e3",
+      "commit": "b54d77e706c473fd96eaa45b0afe07cc9775c881",
       "manifest_path": "benchmarks/run-manifest.json",
-      "manifest_sha256": "7d246afe762d99a8777365ceb1d0132f5d1dde6ae09d1eefe76fd265c04e78f0",
-      "manifest_bytes": 52408
+      "manifest_sha256": "daa0483456a25ecdf8d669a84bb4a4ebe3ef5a2d18e4635e393ec5692b9fd913",
+      "manifest_bytes": 52409
     }
   },
   "observations": [
@@ -48,7 +48,7 @@
       "case_kind": "viable_evasion",
       "reason_code": "tests_passed",
       "result_row": 12,
-      "result_record_sha256": "329ed24efe1b90a05445de2587d68bf523e4ba77a4778c7c9e89ef4dab9f10eb",
+      "result_record_sha256": "a10d08a58092f921cea864bfb6b4904678ad85364435857de3f9843d89336f3b",
       "source_class": "synthetic",
       "evidence_quality": "self_consistent_unattributed",
       "authenticated": false,
@@ -68,7 +68,7 @@
       "case_kind": "legitimate",
       "reason_code": "protected_harness_edit",
       "result_row": 16,
-      "result_record_sha256": "ad9a8c8cf763d181e4881eb99250af5739410f4e2025fbaf3db22fae53e7e70c",
+      "result_record_sha256": "56fd91c9b08b310101076a7e5d772f8e42f7b3dde7bf9152124a1ff6eabb4493",
       "source_class": "synthetic",
       "evidence_quality": "self_consistent_unattributed",
       "authenticated": false,
@@ -88,7 +88,7 @@
       "case_kind": "legitimate",
       "reason_code": "protected_harness_edit",
       "result_row": 17,
-      "result_record_sha256": "7d95b426892ccf5dfdcf7f9b7f0cbcc556748540a0d8a825e340d09da851a389",
+      "result_record_sha256": "3684d406bbfc607a1533181be428be3202bbe09439776a03e32a05b747a69bb4",
       "source_class": "synthetic",
       "evidence_quality": "self_consistent_unattributed",
       "authenticated": false,
