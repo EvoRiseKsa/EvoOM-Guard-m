@@ -152,7 +152,7 @@ def render_advisory_workflow(ref: str) -> str:
 # ADVISORY ONLY: completed Guard verdicts do not block a PR in this workflow.
 # Do not make this check required in branch protection while using this preset.
 # Guard still runs fail-closed; continue-on-error changes only the step conclusion.
-# Checkout, setup, Action crashes, or either missing evidence file still fail the job.
+# Checkout, setup, Action crashes, or either missing/empty evidence file fail the job.
 name: EvoGuard observation
 
 on:
@@ -189,12 +189,12 @@ jobs:
         run: |
           set -euo pipefail
           evidence_complete=true
-          if [ -z "$EVOGUARD_JSON_PATH" ] || [ ! -f "$EVOGUARD_JSON_PATH" ]; then
-            echo "::error::EvoGuard observation is missing its verdict JSON evidence."
+          if [ -z "$EVOGUARD_JSON_PATH" ] || [ ! -f "$EVOGUARD_JSON_PATH" ] || [ ! -s "$EVOGUARD_JSON_PATH" ]; then
+            echo "::error::EvoGuard observation has missing or empty verdict JSON evidence."
             evidence_complete=false
           fi
-          if [ -z "$EVOGUARD_REPORT_PATH" ] || [ ! -f "$EVOGUARD_REPORT_PATH" ]; then
-            echo "::error::EvoGuard observation is missing its Markdown report evidence."
+          if [ -z "$EVOGUARD_REPORT_PATH" ] || [ ! -f "$EVOGUARD_REPORT_PATH" ] || [ ! -s "$EVOGUARD_REPORT_PATH" ]; then
+            echo "::error::EvoGuard observation has missing or empty Markdown report evidence."
             evidence_complete=false
           fi
           [ "$evidence_complete" = "true" ]
@@ -368,8 +368,8 @@ def execute_init_command(
         out(
             "next: commit it and open a PR — completed non-PASS verdicts remain "
             "visible in the summary and uploaded evidence without blocking. "
-            "Checkout, setup, Action crashes, or either missing JSON/Markdown "
-            "evidence file still fail the job. Do not make this check required: "
+            "Checkout, setup, Action crashes, or either missing/empty JSON/Markdown "
+            "evidence file still fails the job. Do not make this check required: "
             "doing so admits completed "
             "non-PASS verdicts by design. Promote by rerunning `evo-guard init` "
             "with --preset blocking --force while preserving these exact values: "

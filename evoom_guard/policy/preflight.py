@@ -19,8 +19,10 @@ changing that contract.
 
 from __future__ import annotations
 
+import ipaddress
 import ntpath
 import os
+import re
 import shutil
 import sys
 from collections.abc import Callable, Sequence
@@ -42,6 +44,21 @@ _PROJECT_OUTPUT_RUNNERS = {
     "mvn": "target/",
     "mvnw": "target/",
 }
+_CONTAINER_IMAGE_PATH_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*"
+_CONTAINER_IMAGE_DOMAIN_COMPONENT = (
+    r"(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])"
+)
+_CONTAINER_IMAGE_DOMAIN = (
+    rf"(?:{_CONTAINER_IMAGE_DOMAIN_COMPONENT}"
+    rf"(?:\.{_CONTAINER_IMAGE_DOMAIN_COMPONENT})*|\[[a-fA-F0-9:]+\])"
+    r"(?::[0-9]+)?"
+)
+_CONTAINER_IMAGE_REFERENCE_NAME = re.compile(
+    rf"(?P<repository>(?:(?P<domain>{_CONTAINER_IMAGE_DOMAIN})/)?"
+    rf"{_CONTAINER_IMAGE_PATH_COMPONENT}(?:/{_CONTAINER_IMAGE_PATH_COMPONENT})*)"
+    r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?",
+    re.ASCII,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +176,7 @@ def _executable_name(token: object) -> str:
 
 
 def _is_windows(platform_name: str) -> bool:
-    return platform_name.casefold().startswith(("win", "cygwin", "msys"))
+    return platform_name == "nt"
 
 
 def _is_explicit_executable(token: str) -> bool:
@@ -177,19 +194,33 @@ def _path_is_within(root: str, path: str) -> bool:
         return False
 
 
+def _container_image_has_valid_reference_name(image: str) -> bool:
+    name, separator, _digest = image.rpartition("@sha256:")
+    reference_name = name if separator else image
+    if not reference_name or "@" in reference_name:
+        return False
+    match = _CONTAINER_IMAGE_REFERENCE_NAME.fullmatch(reference_name)
+    if match is None or len(match.group("repository")) > 255:
+        return False
+    domain = match.group("domain")
+    if domain and domain.startswith("["):
+        closing_bracket = domain.find("]")
+        try:
+            ipaddress.IPv6Address(domain[1:closing_bracket])
+        except ValueError:
+            return False
+    return True
+
+
 def _container_image_is_digest_pinned(image: str) -> bool:
     name, separator, digest = image.rpartition("@sha256:")
     return bool(
-        name.strip()
-        and separator
+        separator
+        and _container_image_has_valid_reference_name(image)
+        and name
         and len(digest) == 64
-        and all(character in "0123456789abcdefABCDEF" for character in digest)
+        and all(character in "0123456789abcdef" for character in digest)
     )
-
-
-def _container_image_has_reference_name(image: str) -> bool:
-    name, separator, _digest = image.rpartition("@sha256:")
-    return bool((name if separator else image).strip())
 
 
 def _command_after_known_launcher(command: Sequence[str]) -> tuple[str, ...]:
@@ -608,13 +639,24 @@ def _container_policy_checks(
             message="container isolation has a configured image reference",
         )
     ]
-    if not _container_image_has_reference_name(docker_image):
+    if not _container_image_has_valid_reference_name(docker_image):
         checks.append(
             PreflightCheck(
                 code="policy.container_image_invalid_reference",
                 status="error",
-                message="container image reference has no image name",
+                message="container image reference has an invalid or missing image name",
                 remediation="use <registry>/<image>@sha256:<64-hex-digest>",
+            )
+        )
+        return checks
+    _name, digest_separator, _digest = docker_image.rpartition("@sha256:")
+    if digest_separator and not _container_image_is_digest_pinned(docker_image):
+        checks.append(
+            PreflightCheck(
+                code="policy.container_image_invalid_digest",
+                status="error",
+                message="container image sha256 digest must be exactly 64 lowercase hex characters",
+                remediation="use <registry>/<image>@sha256:<64-lowercase-hex-digest>",
             )
         )
         return checks
@@ -764,10 +806,9 @@ def _host_command_checks(
     return checks
 
 
-def _container_command_checks(
+def _container_runtime_checks(
     *,
     repository: str,
-    executable: str,
     locate: Callable[[str], str | None],
 ) -> list[PreflightCheck]:
     docker = locate("docker")
@@ -780,34 +821,35 @@ def _container_command_checks(
     )
     if candidate_check is not None:
         checks.append(candidate_check)
-    checks.extend(
-        (
-            PreflightCheck(
-                code="container_runtime.available",
-                status="pass" if docker else "error",
-                message=(
-                    f"container client resolved to {docker}"
-                    if docker
-                    else "docker client is unavailable for the requested isolation"
-                ),
-                remediation=(
-                    None
-                    if docker
-                    else "install Docker and make its trusted client available on PATH"
-                ),
+    checks.append(
+        PreflightCheck(
+            code="container_runtime.available",
+            status="pass" if docker else "error",
+            message=(
+                f"container client resolved to {docker}"
+                if docker
+                else "docker client is unavailable for the requested isolation"
             ),
-            PreflightCheck(
-                code="test_command.container_executable",
-                status="info",
-                message=(
-                    f"availability of {executable!r} inside the selected image cannot "
-                    "be proven without starting the container"
-                ),
-                remediation="pin an image that contains the configured runner/interpreter",
+            remediation=(
+                None
+                if docker
+                else "install Docker and make its trusted client available on PATH"
             ),
         )
     )
     return checks
+
+
+def _container_test_command_check(executable: str) -> PreflightCheck:
+    return PreflightCheck(
+        code="test_command.container_executable",
+        status="info",
+        message=(
+            f"availability of {executable!r} inside the selected image cannot "
+            "be proven without starting the container"
+        ),
+        remediation="pin an image that contains the configured runner/interpreter",
+    )
 
 
 def _setup_command_checks(
@@ -909,7 +951,7 @@ def analyze_preflight(
     it is used only to diagnose lossy string normalization.
     """
 
-    active_platform = sys.platform if platform_name is None else platform_name
+    active_platform = os.name if platform_name is None else platform_name
     locate = shutil.which if which is None else which
     directory_exists = os.path.isdir if is_directory is None else is_directory
     repository_available = directory_exists(repository)
@@ -980,12 +1022,12 @@ def analyze_preflight(
                 )
             else:
                 checks.extend(
-                    _container_command_checks(
+                    _container_runtime_checks(
                         repository=repository,
-                        executable=executable,
                         locate=locate,
                     )
                 )
+                checks.append(_container_test_command_check(executable))
     else:
         checks.append(
             PreflightCheck(
@@ -997,6 +1039,13 @@ def analyze_preflight(
                 ),
             )
         )
+        if isolation in {"docker", "gvisor"}:
+            checks.extend(
+                _container_runtime_checks(
+                    repository=repository,
+                    locate=locate,
+                )
+            )
     if blackbox and not windows:
         for executable, code_prefix in (
             (blackbox_launcher_env_executable, "blackbox_launcher_env"),

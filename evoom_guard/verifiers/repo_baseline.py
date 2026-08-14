@@ -381,13 +381,13 @@ def run_repo_baseline(
             **environment,
             **report_environment,
         }
-        resolve_host_command = services.resolve_host_command_provider()
-        command = resolve_host_command(
-            command,
-            cwd=candidate_copy,
-            env=run_environment,
-        )
         try:
+            resolve_host_command = services.resolve_host_command_provider()
+            command = resolve_host_command(
+                command,
+                cwd=candidate_copy,
+                env=run_environment,
+            )
             run_bounded_subprocess = (
                 services.run_bounded_subprocess_provider()
             )

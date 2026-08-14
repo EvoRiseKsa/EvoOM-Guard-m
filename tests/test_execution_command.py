@@ -8,7 +8,12 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from unittest.mock import Mock
+
+import pytest
 
 import evoom_guard.execution.command as command_module
 
@@ -38,19 +43,78 @@ def test_windows_bare_command_ignores_relative_path_entries(monkeypatch) -> None
 
     monkeypatch.setattr(command_module.os.path, "isfile", record_candidate)
 
-    resolved = command_module.resolve_host_command(
-        ["python", "-m", "pytest"],
-        cwd=r"C:\candidate",
-        env={
-            "PATH": r".;candidate-tools;C:\trusted-tools",
-            "PATHEXT": ".CMD;.EXE",
-        },
-        platform="nt",
-    )
+    with pytest.raises(FileNotFoundError, match="trusted Windows host command"):
+        command_module.resolve_host_command(
+            ["python", "-m", "pytest"],
+            cwd=r"C:\candidate",
+            env={
+                "PATH": r".;candidate-tools;C:\trusted-tools",
+                "PATHEXT": ".CMD;.EXE",
+            },
+            platform="nt",
+        )
 
-    assert resolved == ["python", "-m", "pytest"]
     assert checked
     assert all(path.startswith("C:\\trusted-tools\\") for path in checked)
+
+
+def test_windows_bare_command_prefers_native_exe_before_pathex_shims(
+    monkeypatch,
+) -> None:
+    executable = r"C:\trusted-tools\probe.EXE"
+    shim = r"C:\trusted-tools\probe.CMD"
+    monkeypatch.setattr(
+        command_module.os.path,
+        "isfile",
+        lambda path: path in {executable, shim},
+    )
+
+    assert command_module.resolve_host_command(
+        ["probe"],
+        env={"PATH": r"C:\trusted-tools", "PATHEXT": ".CMD;.EXE"},
+        platform="nt",
+    ) == [executable]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires real Windows launch semantics")
+def test_windows_unresolved_bare_command_cannot_execute_candidate_cmd(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    candidate = tmp_path / "candidate"
+    checkout.mkdir()
+    candidate.mkdir()
+    script = "candidate-runner.cmd"
+    for root in (checkout, candidate):
+        (root / script).write_text(
+            "@echo CANDIDATE_SHADOW_EXECUTED>shadow-ran.txt\r\n",
+            encoding="utf-8",
+        )
+
+    monkeypatch.chdir(checkout)
+    environment = dict(os.environ)
+    environment["PATH"] = ""
+    environment["PATHEXT"] = ".CMD;.EXE"
+
+    def resolve_then_launch() -> None:
+        command = command_module.resolve_host_command(
+            [script],
+            cwd=str(candidate),
+            env=environment,
+            platform="nt",
+        )
+        subprocess.run(
+            command,
+            cwd=candidate,
+            env=environment,
+            check=True,
+            timeout=10,
+        )
+
+    with pytest.raises(FileNotFoundError, match="trusted Windows host command"):
+        resolve_then_launch()
+    assert not (candidate / "shadow-ran.txt").exists()
 
 
 def test_windows_explicit_relative_command_uses_cwd(monkeypatch) -> None:
@@ -130,23 +194,111 @@ def test_locate_windows_command_does_not_accept_relative_path_shadow(
     ) is None
 
 
-def test_locate_windows_explicit_script_requires_pathex_support(monkeypatch) -> None:
+@pytest.mark.parametrize("pathext", (".CMD;.EXE", "CMD;EXE;PY"))
+def test_locate_windows_explicit_non_native_script_is_not_accepted(
+    monkeypatch,
+    pathext: str,
+) -> None:
     script = r"C:\trusted-tools\runner.py"
     monkeypatch.setattr(command_module.os.path, "isfile", lambda path: path == script)
 
     assert command_module.locate_host_command(
         script,
-        env={"PATH": r"C:\trusted-tools", "PATHEXT": ".CMD;.EXE"},
+        env={"PATH": r"C:\trusted-tools", "PATHEXT": pathext},
         platform="nt",
     ) is None
+    with pytest.raises(FileNotFoundError, match="unsupported explicit Windows"):
+        command_module.resolve_host_command(
+            [script],
+            env={"PATH": r"C:\trusted-tools", "PATHEXT": pathext},
+            platform="nt",
+        )
 
 
-def test_locate_windows_explicit_script_accepts_declared_pathex(monkeypatch) -> None:
-    script = r"C:\trusted-tools\runner.py"
+def test_locate_windows_explicit_exe_does_not_depend_on_pathex(monkeypatch) -> None:
+    executable = r"C:\trusted-tools\runner.exe"
+    monkeypatch.setattr(
+        command_module.os.path,
+        "isfile",
+        lambda path: path == executable,
+    )
+
+    assert command_module.locate_host_command(
+        executable,
+        env={"PATH": r"C:\trusted-tools", "PATHEXT": ".CMD;.PY"},
+        platform="nt",
+    ) == executable
+
+
+def test_windows_arbitrary_pathex_does_not_resolve_bare_script(monkeypatch) -> None:
+    script = r"C:\trusted-tools\runner.PY"
     monkeypatch.setattr(command_module.os.path, "isfile", lambda path: path == script)
 
     assert command_module.locate_host_command(
-        script,
-        env={"PATH": r"C:\trusted-tools", "PATHEXT": "CMD;EXE;PY"},
+        "runner",
+        env={"PATH": r"C:\trusted-tools", "PATHEXT": ".PY"},
         platform="nt",
-    ) == script
+    ) is None
+    with pytest.raises(FileNotFoundError, match="trusted Windows host command"):
+        command_module.resolve_host_command(
+            ["runner"],
+            env={"PATH": r"C:\trusted-tools", "PATHEXT": ".PY"},
+            platform="nt",
+        )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires real Windows launch semantics")
+def test_windows_explicit_exe_runs_when_pathex_omits_exe(tmp_path) -> None:
+    executable = tmp_path / "runner.exe"
+    shutil.copy2(os.path.join(os.environ["SystemRoot"], "System32", "cmd.exe"), executable)
+    environment = dict(os.environ)
+    environment["PATHEXT"] = ".CMD;.PY"
+
+    located = command_module.locate_host_command(
+        str(executable),
+        cwd=str(tmp_path),
+        env=environment,
+        platform="nt",
+    )
+    assert located == str(executable)
+    completed = subprocess.run(
+        command_module.resolve_host_command(
+            [str(executable), "/d", "/c", "echo EXPLICIT_EXE_EXECUTED"],
+            cwd=str(tmp_path),
+            env=environment,
+            platform="nt",
+        ),
+        cwd=tmp_path,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.stdout.strip() == "EXPLICIT_EXE_EXECUTED"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires real Windows launch semantics")
+def test_windows_explicit_extensionless_pe_is_rejected(tmp_path) -> None:
+    executable = tmp_path / "runner"
+    shutil.copy2(os.path.join(os.environ["SystemRoot"], "System32", "cmd.exe"), executable)
+    environment = dict(os.environ)
+
+    # CreateProcess can execute this PE image despite the absent suffix, so the
+    # resolver must reject rather than return the explicit token unchanged.
+    unguarded = subprocess.run(
+        [str(executable), "/d", "/c", "echo EXTENSIONLESS_PE_EXECUTED"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert unguarded.stdout.strip() == "EXTENSIONLESS_PE_EXECUTED"
+
+    with pytest.raises(FileNotFoundError, match="native executable"):
+        command_module.resolve_host_command(
+            [str(executable)],
+            cwd=str(tmp_path),
+            env=environment,
+            platform="nt",
+        )

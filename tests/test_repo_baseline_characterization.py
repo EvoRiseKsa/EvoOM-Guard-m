@@ -260,6 +260,41 @@ def test_baseline_effect_order_trust_boundary_and_cleanup_are_frozen(
     assert type(cleanup_path) is not str
 
 
+def test_baseline_suite_resolver_failure_returns_no_clean_verdict(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events, workspace = _install_successful_baseline(monkeypatch, tmp_path)
+    source = tmp_path / "source-resolver-missing"
+    source.mkdir()
+
+    def missing_resolver(*_args: object, **_kwargs: object) -> list[str]:
+        raise FileNotFoundError("trusted suite command missing")
+
+    monkeypatch.setattr(guard_module, "_resolve_host_command", missing_resolver)
+
+    result = guard_module._run_baseline_suite(
+        str(source),
+        test_command=["missing-suite"],
+        setup_command=None,
+        setup_output_globs=(),
+        timeout=17,
+        mem_limit_mb=23,
+        strict_harness=True,
+    )
+
+    assert result == {
+        "verdict": "NO_CLEAN_VERDICT",
+        "tests_passed": None,
+        "tests_total": None,
+    }
+    assert not any(
+        isinstance(event, tuple) and event[0] == "run" for event in events
+    )
+    assert events[-1] == ("cleanup", str(workspace))
+    assert not workspace.exists()
+
+
 def test_baseline_resolves_host_effects_at_each_historical_operation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

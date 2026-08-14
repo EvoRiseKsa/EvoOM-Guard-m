@@ -46,10 +46,10 @@ evo-guard init --ref <immutable-release-tag-or-40-hex-SHA> --preset advisory \
 
 The advisory scaffold keeps Guard itself on `fail-on: any-non-pass`, gives the
 candidate job read-only permissions, and uploads the actual JSON/Markdown
-evidence. A separate completeness step requires both files, so a missing JSON
-verdict or Markdown report makes the job red. A completed non-`PASS` Guard step
-is observational when both files exist; checkout/setup, Action-crash, or upload
-failures can still make the job red.
+evidence. A separate completeness step requires both files to be non-empty, so
+a missing or empty JSON verdict/Markdown report makes the job red. A completed
+non-`PASS` Guard step is observational when both non-empty files exist;
+checkout/setup, Action-crash, or upload failures can still make the job red.
 Keep that check non-required because requiring it admits completed non-`PASS`
 verdicts by design. After reviewing representative outcomes, promote through a
 trusted policy PR:

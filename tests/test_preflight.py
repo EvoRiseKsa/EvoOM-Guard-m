@@ -152,7 +152,7 @@ def test_value_options_and_py_launcher_preserve_later_isolation_flags(
         repository=str(tmp_path),
         command=("py", "-3.12", "-X", "dev", "-I", "-m", "pytest"),
         verifier_pack_configured=True,
-        platform_name="win32",
+        platform_name="nt",
         which=_which("py"),
     )
 
@@ -201,7 +201,7 @@ def test_shell_string_reports_windows_portability_and_missing_sh(
         repository=str(tmp_path),
         command=normalize_test_command(raw),
         raw_command=raw,
-        platform_name="win32",
+        platform_name="nt",
         which=_which(),
     )
 
@@ -244,7 +244,7 @@ def test_container_command_is_not_judged_against_host_platform(tmp_path: Path) -
         command=("sh", "-c", "python -m pytest"),
         isolation="docker",
         docker_image="python:3.12@sha256:" + "a" * 64,
-        platform_name="win32",
+        platform_name="nt",
         which=_which("docker"),
     )
 
@@ -305,7 +305,7 @@ def test_blackbox_only_skips_unused_test_command_and_checks_candidate_launcher(
         blackbox=True,
         blackbox_only=True,
         verifier_pack_configured=True,
-        platform_name="linux",
+        platform_name="posix",
         which=locate,
     )
 
@@ -319,6 +319,29 @@ def test_blackbox_only_skips_unused_test_command_and_checks_candidate_launcher(
         report,
         "pass",
     )
+
+
+@pytest.mark.parametrize("isolation", ("docker", "gvisor"))
+def test_blackbox_only_container_still_requires_docker_client(
+    tmp_path: Path,
+    isolation: str,
+) -> None:
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("unused-repo-runner",),
+        isolation=isolation,
+        docker_image="python@sha256:" + "a" * 64,
+        blackbox=True,
+        blackbox_only=True,
+        verifier_pack_configured=True,
+        platform_name="posix",
+        which=_which("/usr/bin/env", "python3"),
+    )
+
+    assert not report.ready
+    assert "container_runtime.available" in _codes(report, "error")
+    assert "test_command.container_executable" not in _codes(report)
+    assert "test_command.executable_available" not in _codes(report)
 
 
 @pytest.mark.parametrize(
@@ -344,7 +367,7 @@ def test_blackbox_only_missing_actual_candidate_launcher_dependency_is_a_blocker
         blackbox=True,
         blackbox_only=True,
         verifier_pack_configured=True,
-        platform_name="linux",
+        platform_name="posix",
         which=resolved.get,
     )
 
@@ -369,13 +392,32 @@ def test_windows_blackbox_matches_guard_posix_host_refusal(
         blackbox=True,
         blackbox_only=True,
         verifier_pack_configured=True,
-        platform_name="win32",
+        platform_name="nt",
         which=_which("docker"),
     )
 
     assert not report.ready
     assert "policy.blackbox_posix_host_required" in _codes(report, "error")
     assert "test_command.executable_available" not in _codes(report)
+
+
+@pytest.mark.parametrize("posix_name", ("posix", "cygwin", "msys"))
+def test_blackbox_platform_gate_rejects_only_native_windows(
+    tmp_path: Path,
+    posix_name: str,
+) -> None:
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("unused-repo-runner",),
+        blackbox=True,
+        blackbox_only=True,
+        verifier_pack_configured=True,
+        platform_name=posix_name,
+        which=_which("/usr/bin/env", "python3"),
+    )
+
+    assert report.ready
+    assert "policy.blackbox_posix_host_required" not in _codes(report)
 
 
 def test_project_output_runner_is_blocked_under_exact_continuity(
@@ -492,6 +534,57 @@ def test_container_digest_pin_requires_nonempty_image_name(tmp_path: Path) -> No
     assert not report.ready
 
 
+@pytest.mark.parametrize(
+    "image",
+    (
+        "python@sha256:" + "A" * 64,
+        "python@sha256:" + "a" * 63,
+    ),
+)
+def test_container_digest_pin_rejects_malformed_digest(
+    tmp_path: Path,
+    image: str,
+) -> None:
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("python",),
+        isolation="docker",
+        docker_image=image,
+        which=_which("docker"),
+    )
+
+    assert "policy.container_image_invalid_digest" in _codes(report, "error")
+    assert "policy.container_image_mutable_reference" not in _codes(report)
+    assert not report.ready
+
+
+@pytest.mark.parametrize(
+    "image",
+    (
+        "python@@sha256:" + "a" * 64,
+        "python$bad@sha256:" + "a" * 64,
+        "registry.example/Upper@sha256:" + "a" * 64,
+        "registry.example/foo//bar@sha256:" + "a" * 64,
+        "a" * 256 + "@sha256:" + "a" * 64,
+        "[:]:5000/foo@sha256:" + "a" * 64,
+    ),
+)
+def test_container_digest_pin_rejects_invalid_image_name(
+    tmp_path: Path,
+    image: str,
+) -> None:
+    report = analyze_preflight(
+        repository=str(tmp_path),
+        command=("python",),
+        isolation="docker",
+        docker_image=image,
+        which=_which("docker"),
+    )
+
+    assert "policy.container_image_invalid_reference" in _codes(report, "error")
+    assert not report.ready
+
+
 def test_policy_compatibility_and_windows_strict_harness_are_blockers(
     tmp_path: Path,
 ) -> None:
@@ -504,7 +597,7 @@ def test_policy_compatibility_and_windows_strict_harness_are_blockers(
         require_demonstrated_fix=True,
         min_diff_coverage=80.0,
         strict_harness=True,
-        platform_name="win32",
+        platform_name="nt",
         which=_which("python"),
     )
 

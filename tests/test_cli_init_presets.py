@@ -49,11 +49,11 @@ def test_advisory_preset_is_read_only_fail_closed_and_evidence_preserving() -> N
     assert "EVOGUARD_JSON_PATH: ${{ steps.guard.outputs.json-path }}" in workflow
     assert "EVOGUARD_REPORT_PATH: ${{ steps.guard.outputs.report-path }}" in workflow
     assert (
-        'if [ -z "$EVOGUARD_JSON_PATH" ] || [ ! -f "$EVOGUARD_JSON_PATH" ]; then'
+        'if [ -z "$EVOGUARD_JSON_PATH" ] || [ ! -f "$EVOGUARD_JSON_PATH" ] || [ ! -s "$EVOGUARD_JSON_PATH" ]; then'
         in workflow
     )
     assert (
-        'if [ -z "$EVOGUARD_REPORT_PATH" ] || [ ! -f "$EVOGUARD_REPORT_PATH" ]; then'
+        'if [ -z "$EVOGUARD_REPORT_PATH" ] || [ ! -f "$EVOGUARD_REPORT_PATH" ] || [ ! -s "$EVOGUARD_REPORT_PATH" ]; then'
         in workflow
     )
     assert '[ "$evidence_complete" = "true" ]' in workflow
@@ -96,7 +96,7 @@ def test_init_advisory_writes_workflow_and_trusted_policy(
     message = capsys.readouterr().out
     assert "uploaded evidence" in message
     assert "completed non-PASS verdicts" in message
-    assert "either missing JSON/Markdown evidence file still fail" in message
+    assert "either missing/empty JSON/Markdown evidence file still fails" in message
     assert "--preset blocking --force" in message
     assert f"ref=[{REF}]" in message
     assert f"workflow path=[{workflow_path}]" in message
