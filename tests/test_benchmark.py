@@ -827,12 +827,14 @@ def test_windows_worker_waits_for_job_assignment_and_kills_descendants(
         "subprocess.Popen([sys.executable,'-c',sys.argv[3],sys.argv[1],sys.argv[2]],"
         "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,"
         "stderr=subprocess.DEVNULL,close_fds=True); "
-        "deadline=time.monotonic()+3; "
+        "deadline=time.monotonic()+10; "
         "\nwhile not Path(sys.argv[1]).exists() and "
         "time.monotonic()<deadline: time.sleep(.01); "
         "\nraise SystemExit(0 if Path(sys.argv[1]).exists() else 2)"
     )
 
+    # Leave headroom for Windows scheduling pressure on this success path; the
+    # adjacent test independently proves timeout enforcement.
     completed = _run_windows_job_worker(
         [
             sys.executable,
@@ -844,7 +846,7 @@ def test_windows_worker_waits_for_job_assignment_and_kills_descendants(
         ],
         cwd=ROOT,
         env=os.environ.copy(),
-        timeout=5,
+        timeout=15,
     )
 
     assert completed.returncode == 0
