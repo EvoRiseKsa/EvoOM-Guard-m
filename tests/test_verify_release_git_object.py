@@ -37,10 +37,26 @@ SSH_ARMOR_FOOTER = b"-----END SSH SIGNATURE-----"
 def _find_gpg() -> str | None:
     # Git-for-Windows' MSYS-only gpg.exe cannot consume native temporary paths
     # reliably from a native Python process; use a directly callable GPG only.
-    return shutil.which("gpg")
+    executable = shutil.which("gpg")
+    if executable is None:
+        return None
+    normalized = executable.replace("\\", "/").casefold()
+    if os.name == "nt" and normalized.endswith("/usr/bin/gpg.exe"):
+        return None
+    return executable
 
 
 GPG = _find_gpg()
+
+
+def test_find_gpg_skips_git_for_windows_msys_binary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    msys_gpg = r"C:\Program Files\Git\usr\bin\gpg.EXE"
+    monkeypatch.setattr(shutil, "which", lambda _name: msys_gpg)
+    monkeypatch.setattr(os, "name", "nt")
+
+    assert _find_gpg() is None
 
 
 def _commit_raw(*, parents: tuple[str, ...] = (PARENT,), extra: bytes = b"") -> bytes:
