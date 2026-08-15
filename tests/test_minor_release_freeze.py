@@ -6,7 +6,7 @@ import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,7 @@ from tools.ci import validate_minor_release_freeze as freeze
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / freeze.FREEZE_PATH
 SCHEMA = ROOT / "tests/baseline/schema/minor-release-freeze-v1.schema.json"
-DECLARATION_TIME = datetime(2026, 8, 15, 0, 0, tzinfo=UTC)
+DECLARATION_TIME = datetime(2026, 8, 15, 0, 0, tzinfo=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -60,7 +60,7 @@ def _write_record(root: Path, record: dict[str, object]) -> None:
 
 
 def _commit(root: Path, message: str, timestamp: datetime) -> str:
-    canonical = timestamp.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    canonical = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     environment = os.environ.copy()
     environment.update(
         {
