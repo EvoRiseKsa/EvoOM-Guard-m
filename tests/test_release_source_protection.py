@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -26,7 +26,7 @@ PUBLIC_KEY = (
     "fixture"
 )
 FINGERPRINT = "SHA256:gNSIRW+2Iyiuvsdp/bgjy38bvWHw6wQm3tuoXrl3WjQ"
-NOW = datetime(2026, 8, 15, 12, 0, 30, tzinfo=UTC)
+NOW = datetime(2026, 8, 15, 12, 0, 30, tzinfo=timezone.utc)
 
 
 def _parameters() -> tuple[dict[str, object], dict[str, object]]:

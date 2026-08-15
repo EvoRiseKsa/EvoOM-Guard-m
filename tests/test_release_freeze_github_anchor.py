@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -19,7 +19,7 @@ DECLARATION_TREE = "b" * 40
 PARENT_SHA = "c" * 40
 PARENT_TREE = "d" * 40
 REPOSITORY_ID = "123456"
-NOW = datetime(2026, 8, 29, 0, 0, 30, tzinfo=UTC)
+NOW = datetime(2026, 8, 29, 0, 0, 30, tzinfo=timezone.utc)
 WORKFLOW_IDS = {
     "windows": "2001",
     "codeql": "2002",
@@ -230,7 +230,7 @@ def test_fourteen_day_boundary_is_enforced(tmp_path: Path) -> None:
         _validate(
             tmp_path,
             _snapshot(),
-            now=datetime(2026, 8, 28, 23, 59, 59, tzinfo=UTC),
+            now=datetime(2026, 8, 28, 23, 59, 59, tzinfo=timezone.utc),
         )
 
 
