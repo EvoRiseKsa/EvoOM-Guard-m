@@ -36,6 +36,7 @@
 /docs/GITHUB_ARTIFACT_ATTESTATIONS.md @MANA-awam @EvoRiseKsa
 /docs/RELEASE_TRUST_PIPELINE.md @MANA-awam @EvoRiseKsa
 /docs/V4.5.1_MAINTENANCE_LANE.md @MANA-awam @EvoRiseKsa
+/docs/V4.7.0_SIGNED_RELEASE_LANE.md @MANA-awam @EvoRiseKsa
 /tests/test_action_security.py @MANA-awam @EvoRiseKsa
 /tests/test_dependency_lock_policy.py @MANA-awam @EvoRiseKsa
 /tests/test_release_security.py @MANA-awam @EvoRiseKsa

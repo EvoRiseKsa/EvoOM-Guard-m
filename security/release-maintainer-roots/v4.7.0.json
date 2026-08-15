@@ -1,0 +1,14 @@
+{
+  "format": "EVOGUARD_RELEASE_MAINTAINER_SIGNING_ROOT_V1",
+  "version": "4.7.0",
+  "github_login": "EvoRiseKsa",
+  "github_user_id": 231647061,
+  "key_type": "ssh-ed25519",
+  "public_key_path": "security/release-maintainer-roots/v4.7.0.pub",
+  "public_key_sha256": "f5a137810263756bcfbee4ebb020ca3c26a40d6876a5972ff2baa4d0ef7b0cab",
+  "provided_source_file_sha256_crlf": "28aab7bd2c33f6c737e8b062be764c943326a2c810a7bdc5098912941bace96d",
+  "public_key_fingerprint": "SHA256:iCn7wa6HgKdu7luf/16rrKZzSk5FygJoA8EKNl3LJ24",
+  "signature_namespace": "git",
+  "private_key_location": "OUTSIDE_REPOSITORY_AND_GITHUB_ACTIONS",
+  "github_verification_required": true
+}

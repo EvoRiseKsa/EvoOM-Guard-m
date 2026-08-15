@@ -208,6 +208,7 @@ class _WorkflowSpec:
     gate_expression: str
     asset_jobs: tuple[str, ...] = ()
     reviewed_sha256: str | None = None
+    job_gates: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -258,6 +259,10 @@ _PUBLICATION_GATE = (
     "vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED == "
     "github.event.workflow_run.head_sha"
 )
+_SIGNED_PROMOTION_GATE = (
+    "github.ref == 'refs/heads/main' && "
+    "vars.EVOGUARD_RELEASE_SOURCE_PROMOTION_ENABLED == inputs.candidate_sha"
+)
 _WORKFLOW_SPECS = (
     _WorkflowSpec(
         "A",
@@ -265,7 +270,7 @@ _WORKFLOW_SPECS = (
         (("metadata", ()), ("reverify", ("metadata",))),
         "metadata",
         _MAIN_SOURCE_GATE,
-        reviewed_sha256="09105b15eb8472f2035f6ca568877b496b65ba9ef75979ded8a44ad697b247b2",
+        reviewed_sha256="249f0b475d48054f36f2a6812f73e91b0d7918c64a9eb24c03ec4723da42f12e",
     ),
     _WorkflowSpec(
         "B",
@@ -333,7 +338,30 @@ _WORKFLOW_SPECS = (
         "preflight",
         _PUBLICATION_GATE,
         ("preflight", "draft", "publish"),
-        "e7cf6d8de764ca48cc7baab7a7d3b20d768e2edf34363bc6e691cc2b779b0b35",
+        "6f8e593f3a6d264211b3d72fdebad33cf4ddd6eb9b30bfd4f19b02a3fb65a249",
+    ),
+    _WorkflowSpec(
+        "P",
+        ".github/workflows/evoguard-promote-signed-release-source.yml",
+        (
+            ("preflight", ()),
+            ("promote", ("preflight",)),
+            ("prove-source-authority-retired", ("preflight", "promote")),
+            (
+                "enforce-source-promotion-closure",
+                ("promote", "prove-source-authority-retired"),
+            ),
+        ),
+        "preflight",
+        _SIGNED_PROMOTION_GATE,
+        reviewed_sha256="148860cfad16686d8b04aa8c792c30411e8cc6effe0e6930817e7a4f4c90c7ca",
+        job_gates=(
+            (
+                "prove-source-authority-retired",
+                "always() && needs.preflight.result == 'success'",
+            ),
+            ("enforce-source-promotion-closure", "always()"),
+        ),
     ),
 )
 _LEGACY_FALSE_GATE = (
@@ -3167,6 +3195,11 @@ def _verify_workflow_text(
         )
     jobs = _parse_workflow_jobs(text, spec.path)
     expected_jobs = {name: frozenset(needs) for name, needs in spec.jobs}
+    job_gates = dict(spec.job_gates)
+    if len(job_gates) != len(spec.job_gates) or not set(job_gates) <= set(expected_jobs):
+        raise ProjectStatusError(
+            f"phase {spec.phase} job-gate contract is invalid"
+        )
     if set(jobs) != set(expected_jobs):
         raise ProjectStatusError(
             f"phase {spec.phase} job set differs; "
@@ -3179,11 +3212,13 @@ def _verify_workflow_text(
                 f"phase {spec.phase} job {name} needs {sorted(job.needs)!r}; "
                 f"expected {sorted(expected_needs)!r}"
             )
-        expected_gate = (
-            spec.gate_expression
-            if spec.phase == "legacy" or name == spec.gate_job
-            else None
-        )
+        expected_gate = job_gates.get(name)
+        if spec.phase == "legacy" or name == spec.gate_job:
+            if expected_gate is not None:
+                raise ProjectStatusError(
+                    f"phase {spec.phase} gate job has two structural gates"
+                )
+            expected_gate = spec.gate_expression
         if job.gate != expected_gate:
             raise ProjectStatusError(
                 f"phase {spec.phase} job {name} has an unexpected structural gate"
@@ -3213,6 +3248,7 @@ def _verify_pipeline(root: Path, status: Status) -> None:
     )
     activation = _mapping(bootstrap.get("activation"), "release pipeline activation")
     expected_flags = {
+        "EVOGUARD_RELEASE_SOURCE_PROMOTION_ENABLED",
         "EVOGUARD_RELEASE_SOURCE_V2_ENABLED",
         "EVOGUARD_RELEASE_ARTIFACT_ADMISSION_V1_ENABLED",
         "EVOGUARD_RELEASE_PUBLICATION_ENABLED",

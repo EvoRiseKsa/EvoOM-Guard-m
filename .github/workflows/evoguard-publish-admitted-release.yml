@@ -8,6 +8,8 @@ on:
 permissions: {}
 
 env:
+  EVOGUARD_RELEASE_VERSION: "4.7.0"
+  EVOGUARD_MAINTAINER_ROOT: security/release-maintainer-roots/v4.7.0.json
   EVOGUARD_PINNED_GH_VERSION: "2.97.0"
   EVOGUARD_PINNED_GH_ARCHIVE_SHA256: a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112
   EVOGUARD_PINNED_GH_ARCHIVE_SIZE: "14770812"
@@ -36,6 +38,7 @@ jobs:
       g_workflow_id: ${{ steps.bind.outputs.g_workflow_id }}
       g_workflow_blob: ${{ steps.bind.outputs.g_workflow_blob }}
       target_sha: ${{ steps.bind.outputs.target_sha }}
+      parent_sha: ${{ steps.bind.outputs.parent_sha }}
       f_run_id: ${{ steps.selector.outputs.f_run_id }}
       f_run_attempt: ${{ steps.selector.outputs.f_run_attempt }}
     steps:
@@ -67,6 +70,22 @@ jobs:
             const commit = (await github.rest.git.getCommit({
               owner, repo, commit_sha: run.head_sha,
             })).data;
+            const repositoryCommit = (await github.rest.repos.getCommit({
+              owner, repo, ref: run.head_sha,
+            })).data;
+            const verification = repositoryCommit.commit?.verification;
+            if (!Array.isArray(commit.parents) || commit.parents.length !== 1 ||
+                repositoryCommit.parents?.length !== 1 ||
+                repositoryCommit.parents[0].sha !== commit.parents[0].sha ||
+                verification?.verified !== true || verification.reason !== 'valid' ||
+                typeof verification.signature !== 'string' || !verification.signature ||
+                typeof verification.payload !== 'string' || !verification.payload ||
+                repositoryCommit.author?.login !== 'EvoRiseKsa' ||
+                repositoryCommit.author?.id !== 231647061 ||
+                repositoryCommit.committer?.login !== 'EvoRiseKsa' ||
+                repositoryCommit.committer?.id !== 231647061) {
+              throw new Error('release source is not the exact GitHub-verified one-parent maintainer-signed commit');
+            }
             const tree = (await github.rest.git.getTree({
               owner, repo, tree_sha: commit.tree.sha, recursive: 'true',
             })).data.tree;
@@ -105,6 +124,69 @@ jobs:
             core.setOutput('h_workflow_id', String(h.id));
             core.setOutput('h_workflow_blob', blobs.get(paths[1]));
             core.setOutput('target_sha', run.head_sha);
+            core.setOutput('parent_sha', commit.parents[0].sha);
+
+      - name: Checkout exact parent-owned signed-release verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.bind.outputs.parent_sha }}
+          path: trusted-release-control
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Decode and verify the exact pre-signed annotated tag object
+        env:
+          SIGNED_TAG_OBJECT_B64: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_B64 }}
+          SIGNED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
+          TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SIGNED_TAG_OBJECT_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$SIGNED_TAG_OBJECT_B64"
+          python -I - "$RUNNER_TEMP/signed-tag-object" <<'PY'
+          import base64
+          import binascii
+          import os
+          import pathlib
+          import re
+          import sys
+
+          encoded = os.environ['SIGNED_TAG_OBJECT_B64']
+          if not encoded or len(encoded) > 44_000 or not re.fullmatch(
+              r'[A-Za-z0-9+/]+={0,2}', encoded
+          ):
+              raise SystemExit('signed tag Base64 is empty, non-canonical, or unbounded')
+          try:
+              raw = base64.b64decode(encoded, validate=True)
+          except (ValueError, binascii.Error) as exc:
+              raise SystemExit('signed tag Base64 is invalid') from exc
+          if not raw or len(raw) > 32_768:
+              raise SystemExit('decoded signed tag object is empty or exceeds 32768 bytes')
+          if base64.b64encode(raw).decode('ascii') != encoded:
+              raise SystemExit('signed tag Base64 is not canonical')
+          path = pathlib.Path(sys.argv[1])
+          descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          try:
+              with os.fdopen(descriptor, 'wb') as output:
+                  output.write(raw)
+          except BaseException:
+              path.unlink(missing_ok=True)
+              raise
+          PY
+          objects="$RUNNER_TEMP/signed-tag-objects.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$objects" fetch --quiet --no-tags origin "$TARGET_SHA"
+          observed="$(git -C "$objects" hash-object -t tag -w --stdin < "$RUNNER_TEMP/signed-tag-object")"
+          test "$observed" = "$SIGNED_TAG_OBJECT_SHA"
+          python -I \
+            "$GITHUB_WORKSPACE/trusted-release-control/tools/ci/verify_release_git_object.py" tag \
+            --repository "$objects" \
+            --object "$SIGNED_TAG_OBJECT_SHA" \
+            --root "$GITHUB_WORKSPACE/trusted-release-control/$EVOGUARD_MAINTAINER_ROOT" \
+            --expected-tag "v$EVOGUARD_RELEASE_VERSION" \
+            --expected-target "$TARGET_SHA" \
+            --receipt "$RUNNER_TEMP/local-tag-signature.json"
 
       - name: Download G detached verification results
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -883,11 +965,92 @@ jobs:
                   raise SystemExit(f'host executable changed after binding: {name}')
           PY
 
-      - name: Stage the exact three draft assets and a no-clobber publication record
+      - id: source_promotion
+        name: Resolve the authenticated source-promotion run from admitted source bytes
+        env:
+          EXPECTED_TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          python -I - \
+            /run/evoguard-publication-approved/inputs/source.json \
+            "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import sys
+
+          def reject_constant(value: str) -> None:
+              raise ValueError(f'non-finite JSON constant is forbidden: {value}')
+
+          def reject_duplicates(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f'duplicate JSON key: {key}')
+                  result[key] = value
+              return result
+
+          source_path = pathlib.Path(sys.argv[1])
+          source = json.loads(
+              source_path.read_text(encoding='utf-8'),
+              object_pairs_hook=reject_duplicates,
+              parse_constant=reject_constant,
+          )
+          run_id = source.get('promotion_run_id')
+          run_attempt = source.get('promotion_run_attempt')
+          target = source.get('target_commit_sha')
+          if (
+              not isinstance(run_id, str)
+              or re.fullmatch(r'[1-9][0-9]*', run_id) is None
+              or not isinstance(run_attempt, int)
+              or isinstance(run_attempt, bool)
+              or run_attempt < 1
+              or not isinstance(target, str)
+              or re.fullmatch(r'[0-9a-f]{40}', target) is None
+              or target != os.environ['EXPECTED_TARGET_SHA']
+          ):
+              raise SystemExit('admitted source has no canonical promotion identity')
+          with open(sys.argv[2], 'a', encoding='utf-8', newline='\n') as output:
+              output.write(f'run_id={run_id}\n')
+              output.write(f'run_attempt={run_attempt}\n')
+              output.write(f'target_sha={target}\n')
+          PY
+
+      - name: Download the exact terminal P retirement artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evoguard-signed-source-retirement-${{ steps.source_promotion.outputs.run_attempt }}
+          path: ${{ runner.temp }}/source-retirement
+          run-id: ${{ steps.source_promotion.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Bind the exact retired source transport identity from P evidence
+        env:
+          TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
+          PARENT_SHA: ${{ steps.bind.outputs.parent_sha }}
+          PROMOTION_RUN_ID: ${{ steps.source_promotion.outputs.run_id }}
+          PROMOTION_RUN_ATTEMPT: ${{ steps.source_promotion.outputs.run_attempt }}
+        run: |
+          set -euo pipefail
+          python -I \
+            "$GITHUB_WORKSPACE/trusted-release-control/tools/ci/validate_release_source_retirement_artifact.py" \
+            --artifact "$RUNNER_TEMP/source-retirement" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-base-sha "$PARENT_SHA" \
+            --expected-candidate-sha "$TARGET_SHA" \
+            --expected-promotion-run-id "$PROMOTION_RUN_ID" \
+            --expected-promotion-run-attempt "$PROMOTION_RUN_ATTEMPT" \
+            --binding-out "$RUNNER_TEMP/source-retirement-binding.json"
+          test "$(jq -er '.target.promotion_completed | select(type == "boolean")' "$RUNNER_TEMP/source-retirement-binding.json")" = true
+
+      - name: Stage the exact three draft assets, signed tag, and publication record
         env:
           TARGET_SHA: ${{ steps.bind.outputs.target_sha }}
           G_RUN_ID: ${{ steps.bind.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ steps.bind.outputs.g_run_attempt }}
+          SIGNED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
         run: |
           set -euo pipefail
           mkdir -m 0700 "$RUNNER_TEMP/publication-ready"
@@ -895,6 +1058,12 @@ jobs:
             "/run/evoguard-publication-approved/inputs/evo-guard.spdx.json" \
             "/run/evoguard-publication-approved/inputs/SHA256SUMS" \
             "$RUNNER_TEMP/publication-ready/"
+          install -m 0600 "$RUNNER_TEMP/signed-tag-object" \
+            "$RUNNER_TEMP/publication-ready/signed-tag-object"
+          install -m 0600 "$RUNNER_TEMP/local-tag-signature.json" \
+            "$RUNNER_TEMP/publication-ready/local-tag-signature.json"
+          install -m 0600 "$RUNNER_TEMP/source-retirement-binding.json" \
+            "$RUNNER_TEMP/publication-ready/source-retirement-binding.json"
           python - \
             "$RUNNER_TEMP/publication-ready" \
             "$RUNNER_TEMP/publication-ready/publication-ready.json" \
@@ -987,16 +1156,46 @@ jobs:
           def descriptor(name):
               data = (root / name).read_bytes()
               return {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
+          source_retirement = json.loads(
+              (root / 'source-retirement-binding.json').read_text(encoding='utf-8')
+          )
+          if (
+              source_retirement.get('format')
+              != 'EVOGUARD_RELEASE_SOURCE_RETIREMENT_BINDING_V1'
+              or source_retirement.get('repository', {}).get('full_name')
+              != os.environ['GITHUB_REPOSITORY']
+              or source_retirement.get('target', {}).get('main_sha')
+              != os.environ['TARGET_SHA']
+          ):
+              raise SystemExit('source-retirement binding is not exact')
+          promotion = source_retirement.get('promotion_run')
+          retired_key = source_retirement.get('retired_source_deploy_key')
+          if not isinstance(promotion, dict) or not isinstance(retired_key, dict):
+              raise SystemExit('source-retirement binding identity is incomplete')
           value = {
-              'format': 'EVOGUARD_RELEASE_PUBLICATION_READY_V1',
+              'format': 'EVOGUARD_RELEASE_PUBLICATION_READY_V2',
               'repository': os.environ['GITHUB_REPOSITORY'],
               'target_sha': os.environ['TARGET_SHA'],
               'tag': f'v{version}',
+              'signed_tag': {
+                  'object_sha': os.environ['SIGNED_TAG_OBJECT_SHA'],
+                  'object': descriptor('signed-tag-object'),
+                  'local_signature_receipt': descriptor(
+                      'local-tag-signature.json'
+                  ),
+              },
               'g_run_id': os.environ['G_RUN_ID'],
               'g_run_attempt': int(os.environ['G_RUN_ATTEMPT']),
               'tag_deploy_key_fingerprint': publication[
                   'tag_deploy_key_fingerprint'
               ],
+              'source_promotion': {
+                  'run_id': promotion['run_id'],
+                  'run_attempt': promotion['run_attempt'],
+                  'retired_deploy_key_id': retired_key['id'],
+                  'retired_deploy_key_fingerprint': retired_key['fingerprint'],
+                  'binding': descriptor('source-retirement-binding.json'),
+              },
               'host_tools': host_tools,
               'assets': {
                   name: descriptor(name)
@@ -1084,6 +1283,7 @@ jobs:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
+          AUTHORIZED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
         run: |
           set -euo pipefail
           python - "$RUNNER_TEMP/publication-ready" <<'PY'
@@ -1099,7 +1299,8 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           expected = {
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
-              'publication-ready.json',
+              'signed-tag-object', 'local-tag-signature.json',
+              'publication-ready.json', 'source-retirement-binding.json',
           }
           if {item.name for item in root.iterdir()} != expected:
               raise SystemExit('publication-ready set is not closed')
@@ -1115,13 +1316,36 @@ jobs:
           if set(record) != {
               'format', 'repository', 'target_sha', 'tag',
               'g_run_id', 'g_run_attempt',
-              'tag_deploy_key_fingerprint', 'host_tools', 'assets',
-          } or record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
+              'tag_deploy_key_fingerprint', 'source_promotion',
+              'host_tools', 'assets', 'signed_tag',
+          } or record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V2':
               raise SystemExit('unsupported publication-ready record')
           if record.get('repository') != os.environ['GITHUB_REPOSITORY']:
               raise SystemExit('publication-ready repository mismatch')
           if record.get('target_sha') != os.environ['TARGET_SHA']:
               raise SystemExit('publication-ready target mismatch')
+          signed_tag = record.get('signed_tag')
+          if (
+              not isinstance(signed_tag, dict)
+              or set(signed_tag) != {
+                  'object_sha', 'object', 'local_signature_receipt',
+              }
+              or signed_tag.get('object_sha')
+              != os.environ['AUTHORIZED_TAG_OBJECT_SHA']
+          ):
+              raise SystemExit('publication-ready signed tag identity mismatch')
+          for key, name, limit in (
+              ('object', 'signed-tag-object', 32_768),
+              ('local_signature_receipt', 'local-tag-signature.json', 64 * 1024),
+          ):
+              data = (root / name).read_bytes()
+              if (
+                  not data or len(data) > limit
+                  or signed_tag.get(key) != {
+                      'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data),
+                  }
+              ):
+                  raise SystemExit(f'publication-ready signed tag descriptor mismatch: {name}')
           if (
               record.get('g_run_id') != os.environ['G_RUN_ID']
               or record.get('g_run_attempt') != int(os.environ['G_RUN_ATTEMPT'])
@@ -1132,6 +1356,36 @@ jobs:
               str(record.get('tag_deploy_key_fingerprint', '')),
           ):
               raise SystemExit('publication-ready tag authority is invalid')
+          source_promotion = record.get('source_promotion')
+          if not isinstance(source_promotion, dict) or set(source_promotion) != {
+              'run_id', 'run_attempt', 'retired_deploy_key_id',
+              'retired_deploy_key_fingerprint', 'binding',
+          }:
+              raise SystemExit('publication-ready source promotion is not exact')
+          binding_bytes = (root / 'source-retirement-binding.json').read_bytes()
+          if (
+              not isinstance(source_promotion.get('run_id'), str)
+              or re.fullmatch(
+                  r'[1-9][0-9]*', source_promotion.get('run_id', '')
+              ) is None
+              or not isinstance(source_promotion.get('run_attempt'), int)
+              or isinstance(source_promotion.get('run_attempt'), bool)
+              or source_promotion['run_attempt'] < 1
+              or not isinstance(source_promotion.get('retired_deploy_key_id'), int)
+              or isinstance(source_promotion.get('retired_deploy_key_id'), bool)
+              or source_promotion['retired_deploy_key_id'] < 1
+              or re.fullmatch(
+                  r'SHA256:[A-Za-z0-9+/]{43}',
+                  str(source_promotion.get('retired_deploy_key_fingerprint', '')),
+              ) is None
+              or source_promotion['retired_deploy_key_fingerprint']
+              == record['tag_deploy_key_fingerprint']
+              or source_promotion.get('binding') != {
+                  'sha256': hashlib.sha256(binding_bytes).hexdigest(),
+                  'size': len(binding_bytes),
+              }
+          ):
+              raise SystemExit('publication-ready source promotion binding is invalid')
           expected_tools = record.get('host_tools')
           if not isinstance(expected_tools, dict) or set(expected_tools) != {
               'git', 'gh', 'ssh', 'ssh_keygen',
@@ -1191,11 +1445,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
           PUBLICATION_AUTHORIZED_TARGET: ${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}
+          AUTHORIZED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
         run: |
           set -euo pipefail
           record="$RUNNER_TEMP/publication-ready/publication-ready.json"
           tag="$(jq -er '.tag | select(type == "string")' "$record")"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag_object_sha="$(jq -er '.signed_tag.object_sha | select(type == "string")' "$record")"
+          [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$tag_object_sha" = "$AUTHORIZED_TAG_OBJECT_SHA"
           current="$("$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
           # GITHUB_TOKEN cannot receive repository Administration:read, which
@@ -1244,6 +1502,14 @@ jobs:
           name: evoguard-release-publication-ready-${{ needs.preflight.outputs.g_run_id }}-${{ needs.preflight.outputs.g_run_attempt }}
           path: ${{ runner.temp }}/publication-final
 
+      - name: Checkout exact parent-owned signed-release verifier for publication
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.parent_sha }}
+          path: trusted-release-control
+          persist-credentials: false
+          fetch-depth: 0
+
       - name: Materialize the exact GitHub CLI bytes for final publication
         env:
           EXPECTED_GH_SHA256: ${{ vars.EVOGUARD_RELEASE_ARTIFACT_GH_EXECUTABLE_SHA256 }}
@@ -1286,6 +1552,7 @@ jobs:
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
+          AUTHORIZED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
         run: |
           set -euo pipefail
           python - "$RUNNER_TEMP/publication-final" <<'PY'
@@ -1301,7 +1568,8 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           expected = {
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
-              'publication-ready.json',
+              'signed-tag-object', 'local-tag-signature.json',
+              'publication-ready.json', 'source-retirement-binding.json',
           }
           if {item.name for item in root.iterdir()} != expected:
               raise SystemExit('publication-ready set is not closed')
@@ -1317,13 +1585,36 @@ jobs:
           if set(record) != {
               'format', 'repository', 'target_sha', 'tag',
               'g_run_id', 'g_run_attempt',
-              'tag_deploy_key_fingerprint', 'host_tools', 'assets',
-          } or record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1':
+              'tag_deploy_key_fingerprint', 'source_promotion',
+              'host_tools', 'assets', 'signed_tag',
+          } or record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V2':
               raise SystemExit('unsupported publication-ready record')
           if record.get('repository') != os.environ['GITHUB_REPOSITORY']:
               raise SystemExit('publication-ready repository mismatch')
           if record.get('target_sha') != os.environ['TARGET_SHA']:
               raise SystemExit('publication-ready target mismatch')
+          signed_tag = record.get('signed_tag')
+          if (
+              not isinstance(signed_tag, dict)
+              or set(signed_tag) != {
+                  'object_sha', 'object', 'local_signature_receipt',
+              }
+              or signed_tag.get('object_sha')
+              != os.environ['AUTHORIZED_TAG_OBJECT_SHA']
+          ):
+              raise SystemExit('publication-ready signed tag identity mismatch')
+          for key, name, limit in (
+              ('object', 'signed-tag-object', 32_768),
+              ('local_signature_receipt', 'local-tag-signature.json', 64 * 1024),
+          ):
+              data = (root / name).read_bytes()
+              if (
+                  not data or len(data) > limit
+                  or signed_tag.get(key) != {
+                      'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data),
+                  }
+              ):
+                  raise SystemExit(f'publication-ready signed tag descriptor mismatch: {name}')
           if (
               record.get('g_run_id') != os.environ['G_RUN_ID']
               or record.get('g_run_attempt') != int(os.environ['G_RUN_ATTEMPT'])
@@ -1334,6 +1625,36 @@ jobs:
               str(record.get('tag_deploy_key_fingerprint', '')),
           ):
               raise SystemExit('publication-ready tag authority is invalid')
+          source_promotion = record.get('source_promotion')
+          if not isinstance(source_promotion, dict) or set(source_promotion) != {
+              'run_id', 'run_attempt', 'retired_deploy_key_id',
+              'retired_deploy_key_fingerprint', 'binding',
+          }:
+              raise SystemExit('publication-ready source promotion is not exact')
+          binding_bytes = (root / 'source-retirement-binding.json').read_bytes()
+          if (
+              not isinstance(source_promotion.get('run_id'), str)
+              or re.fullmatch(
+                  r'[1-9][0-9]*', source_promotion.get('run_id', '')
+              ) is None
+              or not isinstance(source_promotion.get('run_attempt'), int)
+              or isinstance(source_promotion.get('run_attempt'), bool)
+              or source_promotion['run_attempt'] < 1
+              or not isinstance(source_promotion.get('retired_deploy_key_id'), int)
+              or isinstance(source_promotion.get('retired_deploy_key_id'), bool)
+              or source_promotion['retired_deploy_key_id'] < 1
+              or re.fullmatch(
+                  r'SHA256:[A-Za-z0-9+/]{43}',
+                  str(source_promotion.get('retired_deploy_key_fingerprint', '')),
+              ) is None
+              or source_promotion['retired_deploy_key_fingerprint']
+              == record['tag_deploy_key_fingerprint']
+              or source_promotion.get('binding') != {
+                  'sha256': hashlib.sha256(binding_bytes).hexdigest(),
+                  'size': len(binding_bytes),
+              }
+          ):
+              raise SystemExit('publication-ready source promotion binding is invalid')
           expected_tools = record.get('host_tools')
           if not isinstance(expected_tools, dict) or set(expected_tools) != {
               'git', 'gh', 'ssh', 'ssh_keygen',
@@ -1387,6 +1708,31 @@ jobs:
             test "$(wc -l < SHA256SUMS)" -eq 2
             sha256sum --check --strict SHA256SUMS
           )
+
+      - name: Cryptographically reverify the signed tag immediately before draft creation
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          AUTHORIZED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
+        run: |
+          set -euo pipefail
+          record="$RUNNER_TEMP/publication-final/publication-ready.json"
+          object_sha="$(jq -er '.signed_tag.object_sha | select(type == "string")' "$record")"
+          test "$object_sha" = "$AUTHORIZED_TAG_OBJECT_SHA"
+          objects="$RUNNER_TEMP/final-signed-tag-objects.git"
+          git init --bare "$objects"
+          git -C "$objects" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          GIT_TERMINAL_PROMPT=0 git -C "$objects" fetch --quiet --no-tags origin "$TARGET_SHA"
+          observed="$(git -C "$objects" hash-object -t tag -w --stdin \
+            < "$RUNNER_TEMP/publication-final/signed-tag-object")"
+          test "$observed" = "$object_sha"
+          python -I \
+            "$GITHUB_WORKSPACE/trusted-release-control/tools/ci/verify_release_git_object.py" tag \
+            --repository "$objects" \
+            --object "$object_sha" \
+            --root "$GITHUB_WORKSPACE/trusted-release-control/$EVOGUARD_MAINTAINER_ROOT" \
+            --expected-tag "v$EVOGUARD_RELEASE_VERSION" \
+            --expected-target "$TARGET_SHA" \
+            --receipt "$RUNNER_TEMP/final-local-tag-signature.json"
 
       - name: Create one draft release with the exact admitted bytes
         id: create
@@ -1760,12 +2106,55 @@ jobs:
           printf 'release_id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
           trap - ERR
 
+      - name: Capture live tag authority immediately before exposing the transport key
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/pre-publication-tag-authority.json
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/trusted-release-control/tools/ci/capture_release_tag_authority.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+            });
+
+      - name: Fail closed unless source authority is retired and tag authority is exact
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          EXPECTED_MAIN_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_MAIN_RULESET_ID }}
+          EXPECTED_TAG_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_TAG_RULESET_ID }}
+          EXPECTED_TAG_DEPLOY_KEY_ID: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_ID }}
+          EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          source_binding="$RUNNER_TEMP/publication-final/source-retirement-binding.json"
+          retired_source_id="$(jq -er '.retired_source_deploy_key.id | select(type == "number" and . >= 1 and floor == .)' "$source_binding")"
+          retired_source_fingerprint="$(jq -er '.retired_source_deploy_key.fingerprint | select(type == "string")' "$source_binding")"
+          python -I "$GITHUB_WORKSPACE/trusted-release-control/tools/ci/validate_release_tag_authority.py" \
+            --snapshot "$RUNNER_TEMP/pre-publication-tag-authority.json" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$TARGET_SHA" \
+            --expected-main-ruleset-id "$EXPECTED_MAIN_RULESET_ID" \
+            --expected-tag-ruleset-id "$EXPECTED_TAG_RULESET_ID" \
+            --expected-tag-deploy-key-id "$EXPECTED_TAG_DEPLOY_KEY_ID" \
+            --expected-tag-deploy-key-fingerprint "$EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT" \
+            --retired-source-deploy-key-id "$retired_source_id" \
+            --retired-source-deploy-key-fingerprint "$retired_source_fingerprint" \
+            --maintainer-signing-root "$GITHUB_WORKSPACE/trusted-release-control/$EVOGUARD_MAINTAINER_ROOT" \
+            --receipt "$RUNNER_TEMP/pre-publication-tag-authority-receipt.json"
+
       - name: Revalidate the draft and publish the immutable admitted release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_DEPLOY_KEY: ${{ secrets.EVOGUARD_RELEASE_TAG_DEPLOY_KEY }}
           TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
           PUBLICATION_AUTHORIZED_TARGET: ${{ vars.EVOGUARD_RELEASE_PUBLICATION_ENABLED }}
+          AUTHORIZED_TAG_OBJECT_SHA: ${{ vars.EVOGUARD_V470_SIGNED_TAG_OBJECT_SHA }}
           G_RUN_ID: ${{ needs.preflight.outputs.g_run_id }}
           G_RUN_ATTEMPT: ${{ needs.preflight.outputs.g_run_attempt }}
           RELEASE_ID: ${{ steps.create.outputs.release_id }}
@@ -1789,7 +2178,8 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           expected_names = {
               'evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS',
-              'publication-ready.json',
+              'signed-tag-object', 'local-tag-signature.json',
+              'publication-ready.json', 'source-retirement-binding.json',
           }
           if {item.name for item in root.iterdir()} != expected_names:
               raise SystemExit('final publication set is not closed')
@@ -1799,11 +2189,44 @@ jobs:
                   raise SystemExit(f'unsafe final publication input: {item.name}')
           record = json.loads((root / 'publication-ready.json').read_text(encoding='utf-8'))
           if (
-              record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V1'
+              record.get('format') != 'EVOGUARD_RELEASE_PUBLICATION_READY_V2'
               or record.get('repository') != os.environ['GITHUB_REPOSITORY']
               or record.get('target_sha') != os.environ['TARGET_SHA']
           ):
               raise SystemExit('final publication record identity mismatch')
+          source_promotion = record.get('source_promotion')
+          binding = (root / 'source-retirement-binding.json').read_bytes()
+          if (
+              not isinstance(source_promotion, dict)
+              or set(source_promotion) != {
+                  'run_id', 'run_attempt', 'retired_deploy_key_id',
+                  'retired_deploy_key_fingerprint', 'binding',
+              }
+              or source_promotion.get('binding') != {
+                  'sha256': hashlib.sha256(binding).hexdigest(),
+                  'size': len(binding),
+              }
+              or source_promotion.get('retired_deploy_key_fingerprint')
+              == record.get('tag_deploy_key_fingerprint')
+          ):
+              raise SystemExit('final source-retirement binding mismatch')
+          signed_tag = record.get('signed_tag')
+          if not isinstance(signed_tag, dict) or set(signed_tag) != {
+              'object_sha', 'object', 'local_signature_receipt',
+          }:
+              raise SystemExit('final signed tag record is not exact')
+          for key, name, limit in (
+              ('object', 'signed-tag-object', 32_768),
+              ('local_signature_receipt', 'local-tag-signature.json', 64 * 1024),
+          ):
+              data = (root / name).read_bytes()
+              if (
+                  not data or len(data) > limit
+                  or signed_tag.get(key) != {
+                      'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data),
+                  }
+              ):
+                  raise SystemExit(f'final signed tag descriptor mismatch: {name}')
           for name in ('evo-guard.pyz', 'evo-guard.spdx.json', 'SHA256SUMS'):
               data = (root / name).read_bytes()
               if record['assets'].get(name) != {
@@ -1819,6 +2242,9 @@ jobs:
           )
           tag="$(jq -er '.tag | select(type == "string")' "$record")"
           [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag_object_sha="$(jq -er '.signed_tag.object_sha | select(type == "string")' "$record")"
+          [[ "$tag_object_sha" =~ ^[0-9a-f]{40}$ ]]
+          test "$tag_object_sha" = "$AUTHORIZED_TAG_OBJECT_SHA"
           tag_created=false
           marker="<!-- EVOGUARD_RELEASE_DRAFT_V1 h_run=$GITHUB_RUN_ID h_attempt=$GITHUB_RUN_ATTEMPT g_run=$G_RUN_ID g_attempt=$G_RUN_ATTEMPT target=$TARGET_SHA -->"
           body="$(
@@ -1928,8 +2354,8 @@ jobs:
             elif test "$tag_rc" -eq 0 \
               && jq -e \
                 --arg tag "refs/tags/$tag" \
-                --arg target "$TARGET_SHA" \
-                '.ref == $tag and .object.type == "commit" and .object.sha == $target' \
+                --arg object_sha "$tag_object_sha" \
+                '.ref == $tag and .object.type == "tag" and .object.sha == $object_sha' \
                 "$RUNNER_TEMP/cleanup-exact-tag.json" >/dev/null; then
               tag_exact=true
             fi
@@ -1980,7 +2406,7 @@ jobs:
                 if ! GIT_SSH_COMMAND="$tag_ssh_command" \
                   git -C "$tag_repo" push \
                     --porcelain \
-                    --force-with-lease="refs/tags/$tag:$TARGET_SHA" \
+                    --force-with-lease="refs/tags/$tag:$tag_object_sha" \
                     "$tag_remote" \
                     ":refs/tags/$tag" \
                     > "$RUNNER_TEMP/tag-delete-by-deploy-key.txt" 2>&1; then
@@ -2048,6 +2474,10 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY.git" \
             "refs/heads/main:refs/remotes/origin/main"
           test "$(git -C "$tag_repo" rev-parse refs/remotes/origin/main)" = "$TARGET_SHA"
+          observed_tag_object="$(git -C "$tag_repo" hash-object -t tag -w --stdin \
+            < "$root/signed-tag-object")"
+          test "$observed_tag_object" = "$tag_object_sha"
+          test "$(git -C "$tag_repo" rev-parse "$tag_object_sha^{commit}")" = "$TARGET_SHA"
           current="$("$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
           test "$current" = "$TARGET_SHA"
           test "$PUBLICATION_AUTHORIZED_TARGET" = "$TARGET_SHA"
@@ -2114,7 +2544,7 @@ jobs:
             git -C "$tag_repo" push \
               --porcelain \
               "$tag_remote" \
-              "$TARGET_SHA:refs/tags/$tag" \
+              "$tag_object_sha:refs/tags/$tag" \
               > "$RUNNER_TEMP/tag-create-by-deploy-key.txt" 2>&1; then
             :
           else
@@ -2123,6 +2553,9 @@ jobs:
             cat "$RUNNER_TEMP/tag-create-by-deploy-key.txt" >&2
             cleanup_verified_unpublished_draft "$tag_push_rc"
           fi
+          # The remote accepted the push.  Mark mutation before parsing stdout so
+          # any later parser/API failure uses the exact lease-bounded cleanup path.
+          tag_created=true
           TAG="$tag" python - "$RUNNER_TEMP/tag-create-by-deploy-key.txt" <<'PY'
           import os
           import pathlib
@@ -2146,14 +2579,26 @@ jobs:
           ):
               raise SystemExit('deploy-key push did not prove a newly created tag')
           PY
-          tag_created=true
           "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
             > "$RUNNER_TEMP/tag-created-by-deploy-key.json"
           jq -e \
             --arg tag "refs/tags/$tag" \
-            --arg target "$TARGET_SHA" \
-            '.ref == $tag and .object.type == "commit" and .object.sha == $target' \
+            --arg object_sha "$tag_object_sha" \
+            '.ref == $tag and .object.type == "tag" and .object.sha == $object_sha' \
             "$RUNNER_TEMP/tag-created-by-deploy-key.json" >/dev/null
+          "$EVOGUARD_PINNED_GH_EXECUTABLE" api \
+            "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" \
+            > "$RUNNER_TEMP/annotated-tag-created-by-deploy-key.json"
+          jq -e \
+            --arg tag "$tag" \
+            --arg target "$TARGET_SHA" \
+            --arg object_sha "$tag_object_sha" \
+            '.sha == $object_sha and .tag == $tag and .object.type == "commit" and
+             .object.sha == $target and .verification.verified == true and
+             .verification.reason == "valid" and
+             (.verification.signature | type == "string" and length > 0) and
+             (.verification.payload | type == "string" and length > 0)' \
+            "$RUNNER_TEMP/annotated-tag-created-by-deploy-key.json" >/dev/null
           "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             > "$RUNNER_TEMP/release-immediately-before-patch.json"
           RELEASE_BODY="$body" python - \
@@ -2182,8 +2627,9 @@ jobs:
               or release.get('author', {}).get('login') != 'github-actions[bot]'
               or release.get('author', {}).get('id') != 41898282
               or ref.get('ref') != f"refs/tags/{record['tag']}"
-              or ref.get('object', {}).get('type') != 'commit'
-              or ref.get('object', {}).get('sha') != record['target_sha']
+              or ref.get('object', {}).get('type') != 'tag'
+              or ref.get('object', {}).get('sha')
+              != record['signed_tag']['object_sha']
           ):
               raise SystemExit('draft or tag changed immediately before PATCH')
           assets = release.get('assets')
@@ -2210,6 +2656,8 @@ jobs:
           # GitHub documents no conditional/CAS precondition for this PATCH.
           # Correctness therefore still depends on the frozen publication window.
           trap - ERR
+          umask 077
+          printf 'release_id=%s\n' "$RELEASE_ID" > "$RUNNER_TEMP/publication-patch-started"
           "$EVOGUARD_PINNED_GH_EXECUTABLE" api \
             -H "X-GitHub-Api-Version: 2026-03-10" \
             --method PATCH \
@@ -2225,6 +2673,19 @@ jobs:
                 > "$RUNNER_TEMP/release-after-publication.json" \
               && "$EVOGUARD_PINNED_GH_EXECUTABLE" api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
                 > "$RUNNER_TEMP/tag-after-publication.json" \
+              && "$EVOGUARD_PINNED_GH_EXECUTABLE" api \
+                "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" \
+                > "$RUNNER_TEMP/annotated-tag-after-publication.json" \
+              && jq -e \
+                --arg tag "$tag" \
+                --arg target "$TARGET_SHA" \
+                --arg object_sha "$tag_object_sha" \
+                '.sha == $object_sha and .tag == $tag and .object.type == "commit" and
+                 .object.sha == $target and .verification.verified == true and
+                 .verification.reason == "valid" and
+                 (.verification.signature | type == "string" and length > 0) and
+                 (.verification.payload | type == "string" and length > 0)' \
+                "$RUNNER_TEMP/annotated-tag-after-publication.json" >/dev/null \
               && jq -e '.draft == false and .immutable == true' \
                 "$RUNNER_TEMP/release-after-publication.json" >/dev/null; then
               publication_ready=true
@@ -2267,8 +2728,8 @@ jobs:
           if (
               ref.get('ref') != f"refs/tags/{record['tag']}"
               or not isinstance(ref_object, dict)
-              or ref_object.get('type') != 'commit'
-              or ref_object.get('sha') != record['target_sha']
+              or ref_object.get('type') != 'tag'
+              or ref_object.get('sha') != record['signed_tag']['object_sha']
           ):
               raise SystemExit('published tag does not bind the admitted target')
           assets = release.get('assets')
@@ -2285,3 +2746,211 @@ jobs:
               ):
                   raise SystemExit(f"published asset is not admitted: {asset.get('name')}")
           PY
+
+      - name: Remove only an exact unpublished draft after a pre-PATCH step failure
+        if: ${{ failure() && steps.create.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.create.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/publication-final"
+          record="$root/publication-ready.json"
+          body_path="$RUNNER_TEMP/release-body.md"
+          marker="$RUNNER_TEMP/publication-patch-started"
+          cleanup_release="$RUNNER_TEMP/pre-patch-cleanup-release.json"
+          cleanup_release_recheck="$RUNNER_TEMP/pre-patch-cleanup-release-recheck.json"
+
+          manual_recovery() {
+            echo "::error::pre-PATCH cleanup preserved the draft; manual recovery is required: $1" >&2
+            exit 0
+          }
+
+          if test -e "$marker"; then
+            manual_recovery "the publication PATCH boundary may have been crossed"
+          fi
+          [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]] \
+            || manual_recovery "the exact created release ID is unavailable"
+          test -f "$record" && test -f "$body_path" \
+            || manual_recovery "the frozen release record or exact body is unavailable"
+          tag="$(jq -er '.tag | select(type == "string")' "$record")" \
+            || manual_recovery "the frozen release tag is invalid"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || manual_recovery "the frozen release tag is invalid"
+
+          validate_exact_unpublished_draft() {
+            python - "$record" "$1" "$body_path" "$RELEASE_ID" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          record_path, release_path, body_path = map(pathlib.Path, sys.argv[1:4])
+          expected_id = int(sys.argv[4])
+          record = json.loads(record_path.read_text(encoding='utf-8'))
+          release = json.loads(release_path.read_text(encoding='utf-8'))
+          body = body_path.read_text(encoding='utf-8')
+          if (
+              release.get('id') != expected_id
+              or release.get('tag_name') != record['tag']
+              or release.get('name') != record['tag']
+              or release.get('target_commitish') != record['target_sha']
+              or release.get('draft') is not True
+              or release.get('prerelease') is not False
+              or release.get('immutable') is not False
+              or release.get('published_at') is not None
+              or release.get('body') != body
+              or release.get('author', {}).get('login') != 'github-actions[bot]'
+              or release.get('author', {}).get('id') != 41898282
+          ):
+              raise SystemExit('cleanup release metadata is not the exact unpublished draft')
+          assets = release.get('assets')
+          if not isinstance(assets, list) or len(assets) != len(record['assets']):
+              raise SystemExit('cleanup release asset count is not exact')
+          by_name = {
+              asset.get('name'): asset
+              for asset in assets
+              if isinstance(asset, dict) and isinstance(asset.get('name'), str)
+          }
+          if set(by_name) != set(record['assets']):
+              raise SystemExit('cleanup release asset names are not exact')
+          for name, expected in record['assets'].items():
+              asset = by_name[name]
+              if (
+                  asset.get('state') != 'uploaded'
+                  or asset.get('size') != expected['size']
+                  or asset.get('digest') != f"sha256:{expected['sha256']}"
+              ):
+                  raise SystemExit(f'cleanup release asset is not exact: {name}')
+          PY
+          }
+
+          fetch_release() {
+            local destination="$1"
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$destination"
+          }
+
+          prove_release_absent() {
+            local phase="$1"
+            local response="$RUNNER_TEMP/pre-patch-release-$phase.response"
+            local error="$RUNNER_TEMP/pre-patch-release-$phase.error"
+            local probe_rc status
+            set +e
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              > "$response" 2> "$error"
+            probe_rc=$?
+            set -e
+            status="$(
+              awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
+                "$response"
+            )"
+            test "$probe_rc" -ne 0 && test "$status" = 404
+          }
+
+          prove_tag_absent_for_cleanup() {
+            local response="$RUNNER_TEMP/pre-patch-cleanup-tag.response"
+            local error="$RUNNER_TEMP/pre-patch-cleanup-tag.error"
+            local probe_rc status
+            set +e
+            "$EVOGUARD_PINNED_GH_EXECUTABLE" api --include \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" \
+              > "$response" 2> "$error"
+            probe_rc=$?
+            set -e
+            status="$(
+              awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { value = $2 } END { print value }' \
+                "$response"
+            )"
+            test "$probe_rc" -ne 0 && test "$status" = 404
+          }
+
+          if ! fetch_release "$cleanup_release"; then
+            if prove_release_absent already-absent; then
+              echo "the exact draft was already absent after the earlier failure" >&2
+              exit 0
+            fi
+            manual_recovery "the release could not be read or proven absent"
+          fi
+          if ! validate_exact_unpublished_draft "$cleanup_release"; then
+            manual_recovery "the visible release state is not exact"
+          fi
+          if ! prove_tag_absent_for_cleanup; then
+            manual_recovery "the release tag exists or its absence is not an exact HTTP 404"
+          fi
+          if ! fetch_release "$cleanup_release_recheck" \
+            || ! validate_exact_unpublished_draft "$cleanup_release_recheck"; then
+            manual_recovery "the exact draft changed before deletion"
+          fi
+          if ! prove_tag_absent_for_cleanup; then
+            manual_recovery "the release tag appeared before deletion"
+          fi
+          if ! "$EVOGUARD_PINNED_GH_EXECUTABLE" api --method DELETE \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" >/dev/null; then
+            manual_recovery "the exact draft deletion request failed"
+          fi
+          if ! prove_release_absent after-delete; then
+            manual_recovery "draft deletion was not proven by an exact HTTP 404"
+          fi
+          echo "removed the exact unpublished draft after a failure before PATCH: $RELEASE_ID" >&2
+
+      - name: Capture live tag authority after immutable publication
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUTPUT_PATH: ${{ runner.temp }}/post-publication-tag-authority.json
+        with:
+          github-token: ${{ secrets.EVOGUARD_RELEASE_SOURCE_CONTROL_PLANE_TOKEN }}
+          script: |
+            const capture = require(
+              `${process.env.GITHUB_WORKSPACE}/trusted-release-control/tools/ci/capture_release_tag_authority.js`
+            );
+            await capture({
+              github,
+              context,
+              outputPath: process.env.OUTPUT_PATH,
+            });
+
+      - name: Revalidate unchanged tag authority after publication
+        if: always()
+        env:
+          TARGET_SHA: ${{ needs.preflight.outputs.target_sha }}
+          EXPECTED_MAIN_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_MAIN_RULESET_ID }}
+          EXPECTED_TAG_RULESET_ID: ${{ vars.EVOGUARD_RELEASE_TAG_RULESET_ID }}
+          EXPECTED_TAG_DEPLOY_KEY_ID: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_ID }}
+          EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT: ${{ vars.EVOGUARD_RELEASE_TAG_DEPLOY_KEY_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          source_binding="$RUNNER_TEMP/publication-final/source-retirement-binding.json"
+          retired_source_id="$(jq -er '.retired_source_deploy_key.id | select(type == "number" and . >= 1 and floor == .)' "$source_binding")"
+          retired_source_fingerprint="$(jq -er '.retired_source_deploy_key.fingerprint | select(type == "string")' "$source_binding")"
+          python -I "$GITHUB_WORKSPACE/trusted-release-control/tools/ci/validate_release_tag_authority.py" \
+            --snapshot "$RUNNER_TEMP/post-publication-tag-authority.json" \
+            --expected-repository "EvoRiseKsa/EvoOM-Guard-m" \
+            --expected-repository-id "$GITHUB_REPOSITORY_ID" \
+            --expected-main-sha "$TARGET_SHA" \
+            --expected-main-ruleset-id "$EXPECTED_MAIN_RULESET_ID" \
+            --expected-tag-ruleset-id "$EXPECTED_TAG_RULESET_ID" \
+            --expected-tag-deploy-key-id "$EXPECTED_TAG_DEPLOY_KEY_ID" \
+            --expected-tag-deploy-key-fingerprint "$EXPECTED_TAG_DEPLOY_KEY_FINGERPRINT" \
+            --retired-source-deploy-key-id "$retired_source_id" \
+            --retired-source-deploy-key-fingerprint "$retired_source_fingerprint" \
+            --maintainer-signing-root "$GITHUB_WORKSPACE/trusted-release-control/$EVOGUARD_MAINTAINER_ROOT" \
+            --receipt "$RUNNER_TEMP/post-publication-tag-authority-receipt.json"
+
+      - name: Upload closed tag-authority evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evoguard-release-tag-authority-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/pre-publication-tag-authority.json
+            ${{ runner.temp }}/pre-publication-tag-authority-receipt.json
+            ${{ runner.temp }}/post-publication-tag-authority.json
+            ${{ runner.temp }}/post-publication-tag-authority-receipt.json
+          if-no-files-found: error
+          retention-days: 90

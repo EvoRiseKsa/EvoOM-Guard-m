@@ -68,7 +68,7 @@ RUN_JOBS: dict[str, tuple[str, ...]] = {
 RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ".github/workflows/evoguard-release-source-reverify.yml": (
         "workflow-A",
-        "fb6a30a4576c0cb51fa7d9cd759dafba1be59bbc",
+        "4b5e18ee0e3da1bfe67900d19c6aa2074e1177c0",
     ),
     ".github/workflows/evoguard-produce-release-source-receipt.yml": (
         "workflow-B",
@@ -92,13 +92,13 @@ RAW_ENTRY_PINS: dict[str, tuple[str, str]] = {
     ),
     ".github/workflows/evoguard-publish-admitted-release.yml": (
         "workflow-H",
-        "8edab2e322e0d94aa2732596099624e7760809cc",
+        "bc6e41645b151775c339af17e3941851c15e2d3f",
     ),
-    ".github/CODEOWNERS": ("control", "db526d147dc07ce36518af4a20aabdf2a16dfe56"),
+    ".github/CODEOWNERS": ("control", "68acf1fdc0e53c882fa7e1a256ce060ad9dac99d"),
     ".evoguard.json": ("policy", "7988a6a7d6f1df0ebd14028eba29f2257b2b1d2c"),
     "security/release-pipeline-bootstrap.json": (
         "control",
-        "97d5283661874dc68b9535b37b7a74e47bb9421b",
+        "1f4a9d3382a66f7c11c9f77a27af8851b12cda83",
     ),
     "security/release-source-pack/pack.json": (
         "pack",
